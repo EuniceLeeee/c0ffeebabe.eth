@@ -1,0 +1,178 @@
+import { ethers } from "ethers";
+import { BLOCKSCAN_MULTICALL3, blockScanMulticallIface } from "../../../blockscan-multicall.js";
+import { MIN_TICK, MAX_TICK, MIN_SQRT_RATIO, MAX_SQRT_RATIO, getSqrtRatioAtTick } from "../../../solver/v3-math.js";
+import type { ExactQuoteInput } from "../../adapter-family-plugin.js";
+import type { AdapterRequest, AdapterRequestResult } from "../../adapter-request-program.js";
+import { UNIV4_STATE_VIEW_INTERFACE } from "../univ4-abi.js";
+import { assertSameSource, sameAddress } from "./codec.js";
+import type { UniV4Descriptor, UniV4Route } from "./types.js";
+import type { UniV4LocalState } from "./local-math.js";
+
+type Input = ExactQuoteInput<UniV4Descriptor, UniV4Route>;
+export const UNIV4_LOCAL_WORD_RADIUS = 24;
+export const UNIV4_LOCAL_MAX_TICKS = 4_096;
+const TICKS_PER_REQUEST = 128;
+const SLOT0 = "v4-local:slot0";
+const LIQUIDITY = "v4-local:liquidity";
+const BALANCE = "v4-local:output-balance";
+const BITMAP = "v4-local:bitmap";
+const TICKS = "v4-local:ticks:";
+export const UNIV4_LOCAL_TICK_INTERFACE = new ethers.Interface([
+  "function getTickBitmap(bytes32 poolId,int16 tick) view returns (uint256)",
+  "function getTickLiquidity(bytes32 poolId,int24 tick) view returns (uint128 liquidityGross,int128 liquidityNet)",
+]);
+const BALANCE_INTERFACE = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
+  "function getEthBalance(address account) view returns (uint256)",
+]);
+
+export interface UniV4LocalSnapshot extends UniV4LocalState {
+  readonly outputBalance: bigint;
+}
+
+function call(id: string, to: string, data: string): AdapterRequest {
+  return Object.freeze({ id, kind: "eth-call", to, data, completion: "return-data" });
+}
+
+/** State reads share the existing source-pinned transport memo, never a
+ * Family-owned cache. The shared manager balance MUST NOT carry under just
+ * this pool's touched key, so the Exact method does not set stateOnlyReads. */
+export function localV4StateRequests(input: Input): readonly AdapterRequest[] {
+  const d = input.descriptor;
+  const currency = input.route.direction === "zero-for-one" ? d.poolKey.currency1 : d.poolKey.currency0;
+  const native = sameAddress(currency, ethers.ZeroAddress);
+  return Object.freeze([
+    call(SLOT0, d.managerBinding.stateView, UNIV4_STATE_VIEW_INTERFACE.encodeFunctionData("getSlot0", [d.poolId])),
+    call(LIQUIDITY, d.managerBinding.stateView, UNIV4_STATE_VIEW_INTERFACE.encodeFunctionData("getLiquidity", [d.poolId])),
+    call(BALANCE, native ? BLOCKSCAN_MULTICALL3 : currency,
+      BALANCE_INTERFACE.encodeFunctionData(native ? "getEthBalance" : "balanceOf", [d.managerBinding.manager])),
+  ]);
+}
+
+function result(input: Input, results: readonly AdapterRequestResult[], id: string): string {
+  const found = results.filter(r => r.id === id);
+  const selected = found[0];
+  if (found.length !== 1 || selected === undefined || !selected.ok || selected.completion !== "returned") {
+    throw new Error(`univ4 local state result missing, duplicate or failed: ${id}`);
+  }
+  assertSameSource(selected.source, input.source);
+  return selected.data;
+}
+
+function canonical(iface: ethers.Interface, method: string, data: string): ethers.Result {
+  const decoded = iface.decodeFunctionResult(method, data);
+  if (iface.encodeFunctionResult(method, decoded).toLowerCase() !== data.toLowerCase()) {
+    throw new Error(`univ4 non-canonical local ${method} result`);
+  }
+  return decoded;
+}
+
+function core(input: Input, results: readonly AdapterRequestResult[]) {
+  const slot = canonical(UNIV4_STATE_VIEW_INTERFACE, "getSlot0", result(input, results, SLOT0));
+  const liquidity = canonical(UNIV4_STATE_VIEW_INTERFACE, "getLiquidity", result(input, results, LIQUIDITY));
+  const balance = result(input, results, BALANCE);
+  if (!ethers.isHexString(balance, 32)) throw new Error("univ4 invalid local output balance");
+  const tick = Number(slot[1]), tickSpacing = input.descriptor.poolKey.tickSpacing;
+  if (!Number.isSafeInteger(tick) || tick < MIN_TICK || tick > MAX_TICK ||
+      !Number.isSafeInteger(tickSpacing) || tickSpacing < 1 || tickSpacing > 32_767) {
+    throw new Error("univ4 invalid local tick or spacing");
+  }
+  const sqrtPriceX96 = BigInt(slot[0]), protocolFee = BigInt(slot[2]), lpFee = BigInt(slot[3]);
+  if ((protocolFee & 4095n) > 1_000n || (protocolFee >> 12n) > 1_000n || lpFee > 1_000_000n) {
+    throw new Error("univ4 invalid local fee");
+  }
+  // At a downward tick crossing the stored tick is boundary-1 while the
+  // sqrt price equals that boundary. The upper equality is intentional.
+  if (sqrtPriceX96 !== 0n && (sqrtPriceX96 < MIN_SQRT_RATIO || sqrtPriceX96 >= MAX_SQRT_RATIO ||
+      tick >= MAX_TICK || sqrtPriceX96 < getSqrtRatioAtTick(tick) || sqrtPriceX96 > getSqrtRatioAtTick(tick + 1))) {
+    throw new Error("univ4 inconsistent local price/tick");
+  }
+  return { sqrtPriceX96, tick, protocolFee, lpFee,
+    liquidity: BigInt(liquidity[0]), tickSpacing, outputBalance: BigInt(balance) };
+}
+
+function words(tick: number, spacing: number): readonly number[] {
+  const center = Math.floor(tick / spacing) >> 8;
+  const first = Math.max(center - UNIV4_LOCAL_WORD_RADIUS, Math.floor(MIN_TICK / spacing) >> 8);
+  const last = Math.min(center + UNIV4_LOCAL_WORD_RADIUS, Math.floor(MAX_TICK / spacing) >> 8);
+  return Array.from({ length: last - first + 1 }, (_, i) => first + i);
+}
+
+function aggregate(input: Input, id: string, method: string, indexes: readonly number[]): AdapterRequest {
+  return call(id, BLOCKSCAN_MULTICALL3, blockScanMulticallIface.encodeFunctionData("aggregate3", [
+    indexes.map(index => ({ target: input.descriptor.managerBinding.stateView, allowFailure: false,
+      callData: UNIV4_LOCAL_TICK_INTERFACE.encodeFunctionData(method, [input.descriptor.poolId, index]) })),
+  ]));
+}
+
+function aggregateResults(input: Input, results: readonly AdapterRequestResult[], id: string, expected: number): readonly string[] {
+  const decoded = canonical(blockScanMulticallIface, "aggregate3", result(input, results, id))[0];
+  if (decoded.length !== expected) throw new Error("univ4 incomplete local aggregate state");
+  return decoded.map((entry: { success: boolean; returnData: string }) => {
+    if (entry.success !== true) throw new Error("univ4 failed local aggregate state item");
+    return entry.returnData;
+  });
+}
+
+function bitmap(input: Input, results: readonly AdapterRequestResult[], state: ReturnType<typeof core>) {
+  const indexes = words(state.tick, state.tickSpacing);
+  const values = aggregateResults(input, results, BITMAP, indexes.length);
+  const tickBitmap = new Map<number, bigint>(), initialized: number[] = [];
+  for (let i = 0; i < indexes.length; i++) {
+    const value = BigInt(canonical(UNIV4_LOCAL_TICK_INTERFACE, "getTickBitmap", values[i]!)[0]);
+    const word = indexes[i]!;
+    tickBitmap.set(word, value); // Only explicitly returned words, including known-zero.
+    // Iterate only set bits; most of the verified words are empty. Keep all
+    // explicit zero words in tickBitmap for the swap's per-word boundaries.
+    for (let remaining = value; remaining !== 0n; remaining &= remaining - 1n) {
+      const bit = (remaining & -remaining).toString(2).length - 1;
+      const tick = (word * 256 + bit) * state.tickSpacing;
+      if (tick < MIN_TICK || tick > MAX_TICK) throw new Error("univ4 initialized tick outside legal range");
+      initialized.push(tick);
+    }
+  }
+  return { tickBitmap, initialized };
+}
+
+/** Two bounded amount-independent rounds. Oversized tick sets deliberately
+ * return no local state: the owning Exact program uses its original Quoter
+ * for the unchanged full amount, rather than truncating the tick set. */
+export function localV4DependentRequests(input: Input, results: readonly AdapterRequestResult[]): readonly AdapterRequest[] | null {
+  const state = core(input, results);
+  if (state.sqrtPriceX96 === 0n) return null;
+  if (!results.some(r => r.id === BITMAP)) {
+    return [aggregate(input, BITMAP, "getTickBitmap", words(state.tick, state.tickSpacing))];
+  }
+  const { initialized } = bitmap(input, results, state);
+  if (initialized.length > UNIV4_LOCAL_MAX_TICKS || initialized.length === 0) return null;
+  const count = Math.ceil(initialized.length / TICKS_PER_REQUEST);
+  const found = results.filter(r => r.id.startsWith(TICKS));
+  if (found.length !== 0) {
+    if (found.length !== count || new Set(found.map(r => r.id)).size !== count) {
+      throw new Error("univ4 incomplete or duplicate local tick batches");
+    }
+    for (let i = 0; i < count; i++) result(input, results, TICKS + i);
+    return null;
+  }
+  return Array.from({ length: count }, (_, i) => aggregate(input, TICKS + i, "getTickLiquidity",
+    initialized.slice(i * TICKS_PER_REQUEST, (i + 1) * TICKS_PER_REQUEST)));
+}
+
+export function readLocalV4State(input: Input, results: readonly AdapterRequestResult[]): UniV4LocalSnapshot | null {
+  const state = core(input, results);
+  if (state.sqrtPriceX96 === 0n) return null;
+  const { tickBitmap, initialized } = bitmap(input, results, state);
+  if (initialized.length > UNIV4_LOCAL_MAX_TICKS) return null;
+  const ticks = new Map<number, bigint>();
+  for (let start = 0; start < initialized.length; start += TICKS_PER_REQUEST) {
+    const group = initialized.slice(start, start + TICKS_PER_REQUEST);
+    const values = aggregateResults(input, results, TICKS + start / TICKS_PER_REQUEST, group.length);
+    for (let i = 0; i < group.length; i++) {
+      const decoded = canonical(UNIV4_LOCAL_TICK_INTERFACE, "getTickLiquidity", values[i]!);
+      const gross = BigInt(decoded[0]), net = BigInt(decoded[1]);
+      if (gross === 0n || net > gross || -net > gross) throw new Error("univ4 invalid initialized liquidity");
+      ticks.set(group[i]!, net);
+    }
+  }
+  return Object.freeze({ ...state, tickBitmap, ticks });
+}

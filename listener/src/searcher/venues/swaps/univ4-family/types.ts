@@ -98,7 +98,7 @@ export interface UniV4PricingSnapshot {
 }
 
 export interface UniV4ExactEvidence {
-  readonly kind: "univ4-no-hook-quoter";
+  readonly kind: "univ4-no-hook-quoter" | "univ4-no-hook-local";
   readonly source: CanonicalSource;
   readonly poolId: string;
   readonly poolKeyFingerprint: string;
@@ -107,6 +107,7 @@ export interface UniV4ExactEvidence {
   readonly tokenOut: string;
   readonly amountIn: bigint;
   readonly amountOut: bigint;
+  /** Zero for local quotes; only final simulation measures execution gas. */
   readonly gasEstimate: bigint;
   readonly hookData: "0x";
 }

@@ -425,6 +425,22 @@ interface Pending {
   pin?: Readonly<RevmSourcePin>;
   blockNumber?: number;
   strictRequest?: StrictSimulateRequest;
+  signal?: AbortSignal;
+  deadline: number;
+  pairKey?: string;
+  pairFirstId?: string;
+}
+
+// Only context-identical prefix reads can share a physical validation bridge.
+// Main calls still execute independently. No target/selector/Family knowledge.
+function prefixReadPairKey(req: StrictSimulateRequest | undefined): string | undefined {
+  if (!req?.sourcePin || !req.trialPrefix || req.callerMode !== "impersonated-call-frame"
+    || req.nativeBalanceWei !== undefined || req.executorRuntimeCode !== undefined
+    || req.preCalls?.length || req.tokenDeals?.length || req.observeLogs
+    || req.observeTokenBalances?.length || req.observeNativeBalances?.length
+    || req.observeTokens?.length || req.observeAccounts?.length || req.observeTotalSupply?.length) return undefined;
+  return JSON.stringify([req.rpcUrl, req.blockNumber, req.sourcePin, req.trialPrefix,
+    req.from, req.transactionOrigin, req.callerMode, req.gasLimit, req.executionGasLimit]);
 }
 
 /**
@@ -433,7 +449,9 @@ interface Pending {
  * a single hint reuse fetched state instead of re-spawning a cold process each
  * time (which is what made every prior sim pay full RPC latency).
  *
- * Epoch/ID-correlated JSON lines, with only one physical request outstanding.
+ * Epoch/ID-correlated JSON lines, with one physical envelope outstanding. Two
+ * already queued, context-identical prefix reads may share that envelope;
+ * each response still settles at its own independently checked boundary.
  * Cancellation invalidates the owned daemon and its prepared state permanently;
  * callers must explicitly create a new client, never replay implicitly.
  */
@@ -442,10 +460,11 @@ export class RevmSimClient {
   private buffer = "";
   private readonly queue: Pending[] = [];
   private active?: Pending;
+  private dispatchedSibling?: Pending;
   private readonly epoch = randomUUID();
   private nextId = 0n;
   private terminal?: Error;
-  private retiredActiveId?: string;
+  private retiredActiveIds?: string[];
   private fatalReported = false;
   private drained: Promise<void> = Promise.resolve();
   private killTimer?: NodeJS.Timeout;
@@ -501,7 +520,7 @@ export class RevmSimClient {
       const check = () => {
         if (!childClosed || !proc.stdin.closed || !proc.stdout.closed) return;
         this.fullyClosed = true;
-        this.retiredActiveId = undefined;
+        this.retiredActiveIds = undefined;
         this.buffer = "";
         clearTimeout(this.killTimer);
         resolveDrain();
@@ -562,7 +581,8 @@ export class RevmSimClient {
       }
       const expired = pending.expired();
       if (expired) { this.fail(expired); return; }
-      this.active = undefined;
+      this.active = this.dispatchedSibling;
+      this.dispatchedSibling = undefined;
       pending.cleanup();
       pending.resolve(resp);
     }
@@ -586,14 +606,14 @@ export class RevmSimClient {
     try { this.onFatal?.(reason); } catch { /* Observers cannot undo evidence. */ }
   }
 
-  private diagnose(stage: RevmFaultStage, reason: RevmFatalReason): void {
+  private diagnose(stage: RevmFaultStage, reason: RevmFatalReason, issuedId?: string): void {
     logRevmFault(stage, reason, { daemonPid: this.proc?.pid,
-      requestId: this.active?.id ?? this.retiredActiveId,
+      requestId: issuedId ?? this.active?.id ?? this.retiredActiveIds?.[0],
       candidateKey: this.diagnosticCandidateKey, blockNumber: this.active?.blockNumber });
   }
 
   private onRetiredData(chunk: string): void {
-    if (this.fullyClosed || this.retiredActiveId === undefined || this.fatalReported) return;
+    if (this.fullyClosed || this.retiredActiveIds === undefined || this.fatalReported) return;
     this.buffer += chunk;
     let end: number;
     while ((end = this.buffer.indexOf("\n")) >= 0) {
@@ -601,13 +621,15 @@ export class RevmSimClient {
       if (!line) continue;
       try {
         const response = JSON.parse(line);
-        if (!response || response.epoch !== this.epoch || response.requestId !== this.retiredActiveId
+        if (!response || response.epoch !== this.epoch || !this.retiredActiveIds.includes(response.requestId)
           || typeof response.ok !== "boolean") throw new Error("retired identity");
         const fatal = normalizedFatal(response.fatal);
-        if (fatal) { this.diagnose("client-retired-daemon", fatal); this.reportFatal(fatal); }
+        if (fatal) { this.diagnose("client-retired-daemon", fatal, response.requestId); this.reportFatal(fatal); }
         // Never accept late success/attestation/effects, resolve a promise or
         // dispatch queued work. Only already-issued physical fatal evidence
-        // survives local cancellation until the actual child/stdio drain.
+        // survives local cancellation until the actual child/stdio drain. Both
+        // paired IDs were physically issued; duplicate late successes retain
+        // the scalar policy of being ignored, never accepted or reassigned.
       } catch {
         this.diagnose("client-retired-response", { kind: "protocol-fault" });
         this.reportFatal(Object.freeze({ kind: "protocol-fault" }));
@@ -621,14 +643,16 @@ export class RevmSimClient {
       return;
     }
     this.terminal = err;
-    this.retiredActiveId = this.active?.id;
-    const pending = [...(this.active ? [this.active] : []), ...this.queue];
+    const dispatched = [this.active, this.dispatchedSibling].filter((p): p is Pending => p !== undefined);
+    this.retiredActiveIds = dispatched.length ? dispatched.map(p => p.id) : undefined;
+    const pending = [...dispatched, ...this.queue];
     this.active = undefined;
+    this.dispatchedSibling = undefined;
     this.queue.length = 0;
     // Terminalize and detach work before invoking an owner that may reenter
     // request/stop/drain. Still report fatal evidence before rejecting work.
     if (err instanceof RevmFatalError && !this.fullyClosed) this.reportFatal(err.fatal);
-    if (this.retiredActiveId === undefined || this.fatalReported) this.buffer = "";
+    if (this.retiredActiveIds === undefined || this.fatalReported) this.buffer = "";
     // Expiry can be noticed midway through a chunk. Validate its remaining
     // complete frames now, not on another data event or as truncation on exit.
     // Incomplete frames retain the retired identity through child/stdio drain.
@@ -649,9 +673,26 @@ export class RevmSimClient {
     if (expired) { pending.cleanup(); pending.reject(expired); this.pump(); return; }
     this.active = pending;
     pending.dispatchedAtMs = Date.now();
+    let line = pending.line;
+    const next = this.queue[0];
+    if (next && pending.pairKey !== undefined && pending.pairKey === next.pairKey
+      && pending.signal === next.signal && pending.deadline === next.deadline && !next.expired()) {
+      const bodies = [pending, next].map(p => {
+        const { op: _op, epoch: _epoch, ...body } = JSON.parse(p.line);
+        return body;
+      });
+      const grouped = JSON.stringify({ op: "strictPair", epoch: this.epoch, requests: bodies }) + "\n";
+      if (Buffer.byteLength(grouped, "utf8") <= 1_048_576) {
+        this.queue.shift();
+        this.dispatchedSibling = next;
+        next.dispatchedAtMs = pending.dispatchedAtMs;
+        pending.pairFirstId = next.pairFirstId = pending.id;
+        line = grouped;
+      }
+    }
     try {
       const proc = this.ensureProc();
-      proc.stdin.write(pending.line, (err) => {
+      proc.stdin.write(line, (err) => {
         if (err) this.fail(new Error("revm-sim request write failed"));
       });
     } catch { this.fail(new Error("revm-sim daemon start/write failed")); }
@@ -685,6 +726,7 @@ export class RevmSimClient {
           console.log(`[revm-request-timing] ${JSON.stringify({
             sourceBlock: pending.blockNumber, sourceBlockHash: pin.blockHash, epoch: this.epoch, requestId: id,
             target: pending.strictRequest?.to, enqueuedAtMs, dispatchedAtMs: pending.dispatchedAtMs ?? null,
+            ...(pending.pairFirstId === undefined ? {} : { pairFirstId: pending.pairFirstId }),
             queueMs: (pending.dispatchedAtMs ?? finishedAtMs) - enqueuedAtMs,
             serviceMs: pending.dispatchedAtMs === undefined ? null : finishedAtMs - pending.dispatchedAtMs,
             status, aborted: signal?.aborted === true,
@@ -698,17 +740,18 @@ export class RevmSimClient {
       const cancel = () => {
         const err = expired();
         if (!err) { arm(); return; }
-        if (this.active === pending) { this.fail(err); return; }
+        if (this.active === pending || this.dispatchedSibling === pending) { this.fail(err); return; }
         const idx = this.queue.indexOf(pending);
         if (idx < 0) return;
         this.queue.splice(idx, 1); pending.cleanup(); pending.reject(err);
       };
       const arm = () => { timer = setTimeout(cancel, Math.min(2_147_483_647, Math.max(1, deadline - Date.now()))); };
-      const pending: Pending = { id, line,
+      const strictSnapshot = payload.op === "strictSimulate" ? JSON.parse(line) : undefined;
+      const pending: Pending = { id, line, signal, deadline, pairKey: prefixReadPairKey(strictSnapshot),
         resolve: response => { timing(response.ok ? "returned" : "not-ok", response); resolveP(response); },
         reject: error => { timing("rejected"); rejectP(error); }, expired,
         pin, blockNumber: payload.blockNumber as number | undefined,
-        strictRequest: payload.op === "strictSimulate" ? JSON.parse(line) : undefined,
+        strictRequest: strictSnapshot,
         cleanup: () => { clearTimeout(timer); signal?.removeEventListener("abort", cancel); } };
       this.queue.push(pending);
       signal?.addEventListener("abort", cancel, { once: true });

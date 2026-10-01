@@ -22,6 +22,7 @@ import {
 } from "../venues/swaps/univ4-abi.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
 import { BLOCKSCAN_MULTICALL3 } from "../blockscan-multicall.js";
+import { createUniV4Exact } from "../venues/swaps/univ4-family/exact.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_700_000,
@@ -279,7 +280,9 @@ const exactInput = {
   executor: EXECUTOR,
   runtimeEvidence: [],
 };
-const exactRequestMethod = univ4StrictFamilyPlugin.exact.methods(exactInput)[1];
+// Preserve the explicit reference Quoter contract. Default local and fallback
+// behavior have their own state/amount tests in the owning Family.
+const exactRequestMethod = createUniV4Exact("quoter").methods(exactInput)[1];
 assert.equal(exactRequestMethod.kind, "request-program");
 if (exactRequestMethod.kind !== "request-program") {
   throw new Error("univ4 exact request program missing");

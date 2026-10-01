@@ -7,7 +7,11 @@ import ts from "typescript";
 import { ethers } from "ethers";
 import { BlockScanRuntimeLoop, SourceSimulationWork, type BlockScanRuntimeLoopDependencies,
   type SourceSimulationFactory } from "../blockscan-runtime-loop.js";
-import { createLiveRuntimeStop, createLiveSourceSimulationFactory } from "../main.js";
+import { createLiveRuntimeStop, createLiveSourceSimulationFactory, maybeSubmitBlockScanAtomic,
+  resolveBlockScanAtomicPolicy } from "../main.js";
+import { BlockScanSimRejectCache } from "../blockscan-sim-reject-cache.js";
+import { blockScanRouteId } from "../blockscan-route-identity.js";
+import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import { RevmFatalError, RevmStrictError, type RevmFatalReason, type StrictSimulateRequest } from "../revm-sim-client.js";
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
 import { BlockActivityRangeInvalidatedError } from "../blockscan-touched-state.js";
@@ -726,6 +730,253 @@ function twoWayPoolEdges(pools: readonly string[]) {
   })));
 }
 
+function completeRuntimeFixture(graph: VerifiedGraphView): any {
+  const pricing = pricingFixture(graph), empty = exactSetHash([]);
+  const funding = { generation: graph.generation, sourceBlock: graph.sourceBlock, sourceBlockHash: graph.sourceBlockHash,
+    coverage: { expectedKeys: [], resolvedKeys: [], unresolvedKeys: [], expectedHash: empty, resolvedHash: empty, unresolvedHash: empty },
+    coverageByFundingId: new Map(), freshnessByFundingId: new Map(), sources: new Map(), borrowable: () => 0n, source: () => null };
+  return { status: "complete", pricing: { ...pricing, status: "complete", issues: [] }, issues: [], timing: {},
+    snapshot: { completeness: "complete", graph, pricing, funding, generation: graph.generation,
+      sourceBlock: graph.sourceBlock, sourceBlockHash: graph.sourceBlockHash } };
+}
+
+function pendingEvidenceFixture(number: number) {
+  const txHash = hash(999), canonicalPayload = "0x", payloadHash = ethers.keccak256(canonicalPayload);
+  const now = Date.now(), mono = performance.now();
+  return { txHash, head: { number, hash: hash(number) }, observedAtMs: now, observedAtMonotonicMs: mono,
+    evidenceReadyAtMs: now, evidenceReadyAtMonotonicMs: mono,
+    evidence: [{ familyId: "fixture" as any, txHash, headBlockNumber: number, headHash: hash(number), canonicalPayload, payloadHash,
+      evidenceHash: ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+        ["string", "bytes32", "uint256", "bytes32", "bytes32"], ["fixture", txHash, number, hash(number), payloadHash])) }] };
+}
+
+test("periodic Source-N settles its original budget, publishes the baseline, drains, then searches only the newest head", async context => {
+  const activity = deferred(), preparation = deferred(), drain = deferred();
+  const contexts: Parameters<SourceSimulationFactory>[0][] = [], closing: number[] = [], logs: string[] = [];
+  context.mock.method(console, "log", (line: string) => logs.push(line));
+  const f = loopFixture(input => { contexts.push(input); return {
+    transport: { async simulate() { throw new Error("unexpected simulation"); } },
+    async closeAndDrain() { closing.push(input.source.number); if (input.source.number === 101) await drain.promise; },
+  }; });
+  const consumers: Array<[string, number]> = [], activityRanges: Array<[number, number | undefined]> = [];
+  const edges = twoWayPoolEdges([target, `0x${"dd".repeat(20)}`]);
+  let latest: any = { sourceBlock: 100, sourceBlockHash: hash(100) }, sourceActivity: any;
+  const published: number[] = [];
+  f.coordinator.latestPricingSnapshot = () => latest;
+  f.coordinator.prepare = async (input: any) => {
+    f.inputs.push({ kind: "runtime", ...input });
+    if (input.graph.sourceBlock === 101) {
+      await preparation.promise;
+      input.signal.throwIfAborted();
+      assert.equal(input.deadlineAtMs, observedAt + f.deps.passBudgetMs);
+      assert.equal(input.preparationSettleDeadlineAtMs, input.deadlineAtMs - 1500);
+      assert.equal(input.pricingFamilySettleDeadlineAtMs, familyDeadline);
+      // Observe another head at the actual preparation/backend-drain handoff.
+      const realDrain = input.pricingCallBackend.drain.bind(input.pricingCallBackend);
+      let once = false;
+      context.mock.method(input.pricingCallBackend, "drain", async () => {
+        await realDrain();
+        if (!once) { once = true; f.loop.schedule(104); }
+      });
+    }
+    assert(Date.now() < input.deadlineAtMs);
+    assert.equal(input.graph.sourceBlockHash, hash(input.graph.sourceBlock));
+    const result = completeRuntimeFixture(input.graph);
+    latest = result.snapshot.pricing; published.push(latest.sourceBlock);
+    return result;
+  };
+  Object.assign(f.deps, {
+    blockScanGraph: () => edges,
+    blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0,
+      pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
+    readBlockSwapTouched: async (number: number, _header: unknown, range: any) => {
+      activityRanges.push([number, range?.previousSource.number]);
+      if (number === 101) { sourceActivity = range; await activity.promise; }
+      return new Set();
+    },
+    backrunStatePublisher: { publish(pricing: any) { consumers.push(["backrun", pricing.sourceBlock]); } },
+    blockScanPlanner: () => ({ setFlashLiquidity(funding: any) { consumers.push(["planner", funding.sourceBlock]); } }),
+    sharedPlanner: { setFlashLiquidity(funding: any) { consumers.push(["shared-planner", funding.sourceBlock]); } },
+    strictSession: async (input: any) => {
+      consumers.push(["exact", input.source.number]);
+      assert.equal(input.control.signal.aborted, false);
+      // Once search starts, head supersession must again abort immediately.
+      (f.loop as any).advanceLatestHead(105);
+      assert(input.control.signal.aborted);
+      throw input.control.signal.reason;
+    },
+    submitAtomic: async () => { consumers.push(["final-sim", 101]); throw new Error("unexpected final sim"); },
+  });
+  context.mock.method(AnvilSolver.prototype, "solve", async () => {
+    consumers.push(["solver", 101]); throw new Error("unexpected Solver");
+  });
+  const observedAt = Date.now(); let familyDeadline: number;
+  try {
+    f.loop.schedule(101, { sourceHeadSeenAtMs: observedAt, sourceHeadSeenAtMonotonicMs: performance.now() });
+    await until(() => sourceActivity !== undefined && contexts.length === 1);
+    f.loop.schedule(102);
+    assert.equal(sourceActivity.signal.aborted, false, "activity catch-up belongs to preparation");
+    assert.equal(sourceActivity.deadlineAtMs, observedAt + f.deps.passBudgetMs);
+    activity.resolve();
+    await until(() => f.inputs.some(input => input.kind === "runtime"));
+    familyDeadline = f.inputs.find(input => input.kind === "runtime").pricingFamilySettleDeadlineAtMs;
+    f.loop.schedule(103);
+    assert.equal(contexts[0]!.control.signal.aborted, false);
+    assert.equal(contexts[0]!.control.deadlineAtMs, sourceActivity.deadlineAtMs);
+    preparation.resolve();
+    await until(() => closing.includes(101));
+    assert.deepEqual(published, [101]); assert.equal(latest.sourceBlockHash, hash(101));
+    assert.deepEqual(consumers, [], "no obsolete snapshot reaches backrun, planner, Exact, Solver or final sim");
+    assert(!logs.some(line => line.startsWith("[searcher/blockscan-enumeration]")), "no obsolete enumeration");
+    assert(contexts[0]!.control.signal.aborted, "stale pass is retired only after publication");
+    assert.equal(contexts.length, 1, "successor waits for physical source drain");
+    drain.resolve();
+    await until(() => closing.includes(104) && (f.loop as any).activePass === null);
+    assert.deepEqual(contexts.map(c => c.source.number), [101, 104]);
+    assert.deepEqual(activityRanges, [[101, 100], [104, 101]], "successor consumes the settled baseline");
+    assert.deepEqual(published, [101, 104]);
+    assert.deepEqual(consumers, [["backrun", 104], ["planner", 104], ["shared-planner", 104], ["exact", 104]]);
+    const timing = logs.filter(line => line.includes('"type":"block_scan_timing"'));
+    assert(timing.some(line => line.includes("source_head_superseded")));
+  } finally { activity.resolve(); preparation.resolve(); drain.resolve(); await f.loop.shutdown(); }
+});
+
+test("superseded preparation never hands a snapshot to diagnostic search consumers", async context => {
+  context.mock.method(console, "log", () => {});
+  const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } }, async closeAndDrain() {} }));
+  let published = false, snapshots = 0, enumerations = 0, reason: string | undefined;
+  f.coordinator.prepare = async (input: any) => {
+    const result = completeRuntimeFixture(input.graph);
+    published = true;
+    (f.loop as any).advanceLatestHead(102);
+    return result;
+  };
+  try {
+    await f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }, {
+      through: "enumerate", onSnapshot() { snapshots++; }, onEnumeration() { enumerations++; },
+      onComplete(result) { reason = result.reason; },
+    });
+    assert(published); assert.equal(snapshots, 0); assert.equal(enumerations, 0);
+    assert.equal(reason, "source_head_superseded");
+  } finally { await f.loop.shutdown(); }
+});
+
+for (const cause of ["runtime", "fatal", "shutdown", "evidence", "source-invalid"] as const)
+test(`deferred Source-N preparation still aborts immediately for ${cause}`, async context => {
+  context.mock.method(console, "log", () => {});
+  context.mock.method(console, "warn", () => {});
+  const drain = deferred(); let request: any, closing = false, published = false;
+  const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } },
+    async closeAndDrain() { closing = true; await drain.promise; } }));
+  f.coordinator.prepare = async (input: any) => {
+    request = input;
+    await new Promise<void>((_, reject) => input.signal.addEventListener("abort", () => reject(input.signal.reason), { once: true }));
+    published = true; return completeRuntimeFixture(input.graph);
+  };
+  let stopped: Promise<void> | undefined;
+  try {
+    f.loop.schedule(101);
+    await until(() => request !== undefined);
+    f.loop.schedule(102); assert.equal(request.signal.aborted, false);
+    if (cause === "runtime") f.runtimeAbort.abort(new Error("fixture runtime abort"));
+    if (cause === "fatal") f.runtimeAbort.abort(new RevmFatalError({ kind: "source-fault" }));
+    if (cause === "shutdown") stopped = f.loop.shutdown();
+    if (cause === "evidence") assert(f.loop.schedulePendingEvidence(pendingEvidenceFixture(102)));
+    if (cause === "source-invalid") {
+      const error = Object.assign(new Error("hash is not currently canonical"), { code: -32000 });
+      // Drive the real source-unavailable callback without dispatching RPC.
+      assert.throws(() => request.pricingCallBackend.abortForRpcFailure(error), e => e === error);
+      assert.equal(request.signal.reason, error);
+    }
+    assert(request.signal.aborted, "only head supersession may be deferred");
+    await until(() => closing);
+    assert.equal(published, false);
+    stopped ??= f.loop.shutdown();
+    let done = false; void stopped.then(() => { done = true; });
+    await turn(); assert.equal(done, false);
+    drain.resolve(); await stopped; assert.equal(done, true);
+  } finally { drain.resolve(); await f.loop.shutdown(); }
+});
+
+for (const mode of ["blind", "n-minus-one", "combined", "evidence-only", "startup"] as const)
+test(`preparation head-cancellation policy leaves ${mode} unchanged`, async context => {
+  context.mock.method(console, "log", () => {});
+  const header = deferred(); let headerControl: any;
+  const f = loopFixture(() => { throw new Error("header must not reach source preparation"); }, mode === "startup");
+  if (mode === "blind") Object.assign(f.deps.blind, { enabled: true });
+  if (mode === "n-minus-one") Object.assign(f.deps, { nMinusOneFallbackEnabled: true });
+  f.deps.frozenTopology.observeHeader = async (number, control) => {
+    headerControl = control; await header.promise; control!.signal!.throwIfAborted();
+    return { number, hash: hash(number), parentHash: hash(number - 1) };
+  };
+  let running: Promise<unknown> | undefined;
+  try {
+    if (mode === "combined" || mode === "evidence-only") {
+      if (mode === "evidence-only") (f.loop as any).completedOrdinaryHeads.set(101, hash(101));
+      assert(f.loop.schedulePendingEvidence(pendingEvidenceFixture(101)));
+    } else {
+      running = f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() })
+        .catch(error => error);
+    }
+    await until(() => headerControl !== undefined);
+    const active = (f.loop as any).activePass;
+    assert.equal(active.sourceNPreparation, false);
+    assert.equal(active.mode, mode === "combined" || mode === "evidence-only" ? mode : "periodic");
+    (f.loop as any).advanceLatestHead(102);
+    assert.equal(headerControl.signal.aborted, mode !== "startup");
+    // This header-only fixture has no blind audit graph/artifacts. The policy
+    // assertions are complete; omit audit serialization during fixture cleanup.
+    if (mode === "blind") Object.assign(f.deps.blind, { enabled: false });
+    f.runtimeAbort.abort(new Error("fixture stop")); header.resolve();
+    await running;
+    await f.loop.shutdown();
+    assert.equal(f.inputs.length, 0);
+  } finally { header.resolve(); await f.loop.shutdown(); }
+});
+
+test("deferred preparation deadline still aborts queued quote work and drains before its successor", async context => {
+  context.mock.method(console, "log", () => {});
+  const physicalDrain = deferred(); const starts: number[] = [], requests: any[] = [];
+  let transportSignal: AbortSignal | undefined, published = false, transportCalls = 0;
+  const f = loopFixture(input => { starts.push(input.source.number); return {
+    transport: { async simulate() { return { data: "0x" }; } }, async closeAndDrain() {},
+  }; });
+  Object.assign(f.deps, { passBudgetMs: 120, runtimePublicationReserveMs: 10,
+    rethTransportScheduler: { async run(_lane: unknown, signal: AbortSignal) {
+      transportCalls++; transportSignal = signal;
+      // Do not invoke the network callback. Model physically pending work
+      // which observes cancellation immediately but drains only on release.
+      await physicalDrain.promise; signal.throwIfAborted();
+      throw new Error("fixture expected deadline cancellation");
+    } } });
+  f.coordinator.prepare = async (input: any) => {
+    requests.push(input);
+    if (input.graph.sourceBlock !== 101) throw new Error("fixture successor reached");
+    await input.pricingCallBackend.call({ to: target, data: "0x1234" });
+    published = true; return completeRuntimeFixture(input.graph);
+  };
+  const observedAt = Date.now();
+  try {
+    f.loop.schedule(101, { sourceHeadSeenAtMs: observedAt, sourceHeadSeenAtMonotonicMs: performance.now() });
+    await until(() => transportSignal !== undefined);
+    f.loop.schedule(102);
+    assert.equal(requests[0].signal.aborted, false);
+    assert.equal(requests[0].deadlineAtMs, observedAt + 120);
+    assert.equal(requests[0].preparationSettleDeadlineAtMs, observedAt + 110);
+    await until(() => transportSignal!.aborted);
+    assert(transportSignal!.reason instanceof StateCallAbortedError);
+    assert.equal(published, false); assert.deepEqual(starts, [101]);
+    assert.equal(requests.length, 1); assert.equal(transportCalls, 1, "no renewed budget or retry");
+    // Latest observation owns a fresh head budget; no pass may start before drain.
+    f.loop.schedule(103); await turn(); assert.deepEqual(starts, [101]);
+    physicalDrain.resolve();
+    await until(() => starts.includes(103) && (f.loop as any).activePass === null);
+    assert.deepEqual(starts, [101, 103]);
+    assert.deepEqual(requests.map(input => input.graph.sourceBlock), [101, 103]);
+    assert.equal(published, false);
+  } finally { physicalDrain.resolve(); await f.loop.shutdown(); }
+});
+
 for (const nMinusOne of [false, true]) test(`${nMinusOne ? "N-1 enumeration" : "source-N pass"} Exact retains current-N source and selected generation despite newer publication`, async () => {
   const contexts: Parameters<SourceSimulationFactory>[0][] = []; const transports: unknown[] = []; let closes = 0;
   const f = loopFixture(input => { contexts.push(input); const transport = { async simulate() { return { data: "0x" }; } };
@@ -771,7 +1022,33 @@ for (const nMinusOne of [false, true]) test(`${nMinusOne ? "N-1 enumeration" : "
   } finally { await f.loop.shutdown(); }
 });
 
-test("disabled independent Exact keeps Solver strict-session wiring without pre-Solver quotes", async () => {
+// Execute main's actual dependency expression with an isolated cache. This
+// catches wiring/key drift as well as exercising the real runtime dispatch.
+function liveSimRejectPredicate(cache: BlockScanSimRejectCache):
+  NonNullable<BlockScanRuntimeLoopDependencies["isRouteSimRejected"]> {
+  const text = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+  const ast = ts.createSourceFile("main.ts", text, ts.ScriptTarget.Latest, true);
+  let expression: ts.Expression | undefined;
+  function visit(node: ts.Node): void {
+    if (ts.isNewExpression(node) && node.expression.getText(ast) === "BlockScanRuntimeLoop") {
+      const deps = node.arguments?.[0];
+      assert(deps && ts.isObjectLiteralExpression(deps));
+      const property = deps.properties.find(p => p.name?.getText(ast) === "isRouteSimRejected");
+      assert(property && ts.isPropertyAssignment(property));
+      expression = property.initializer;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert(expression, "main must wire the existing rejection cache into runtime dependencies");
+  return runInNewContext(ts.transpileModule(`(${expression.getText(ast)})`, {}).outputText,
+    { blockScanSimRejects: cache, blockScanRouteId });
+}
+
+for (const cacheCase of ["absent", "known", "unknown", "queued", "in-flight", "fresh-cache", "cleared-cache"] as const)
+for (const historicalExecutionMode of cacheCase === "known" || cacheCase === "in-flight"
+  ? [undefined, "source-block"] as const : [undefined])
+test(`disabled independent Exact keeps Solver strict-session wiring; sim reject policy ${cacheCase} ${historicalExecutionMode ?? "next-block"}`, async () => {
   const contexts: Parameters<SourceSimulationFactory>[0][] = []; const transports: unknown[] = []; let closes = 0;
   const f = loopFixture(input => { contexts.push(input); const transport = { async simulate() { return { data: "0x" }; } };
     transports.push(transport); return { transport, async closeAndDrain() { closes++; } }; });
@@ -781,9 +1058,25 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
     `0x${"ee".repeat(20)}`,
     `0x${"ff".repeat(20)}`,
   ]);
+  const simRejects = new BlockScanSimRejectCache();
+  const productionPredicate = liveSimRejectPredicate(simRejects);
+  const retiredCache = new BlockScanSimRejectCache();
+  const revert: SimulationResult = {
+    success: false, profitToken: priceFundingToken, grossProfit: 0n, netProfit: 0n,
+    gasUsed: 0n, calldata: "0x", scriptHex: "0x", revertReason: "fixture revert",
+    failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: new Error("fixture revert") },
+  };
+  const plannedRoutes: string[] = [], solvedRoutes: string[] = [], simulatedRoutes: string[] = [];
+  const enumeratedRoutes: string[] = [];
+  const predicateChecks: Array<{ routeId: string; rejected: boolean }> = [];
+  const atomicResults: Awaited<ReturnType<typeof maybeSubmitBlockScanAtomic>>[] = [];
+  let quoteCalls = 0, finalSimCalls = 0, sourceChecks = 0;
+  let activeRoute = "";
   const exactQuoteState = Object.freeze({
     async call() {
-      throw new Error("disabled independent Exact must not issue pre-Solver quotes");
+      assert(solvedRoutes.length > quoteCalls, "no pre-Solver amount quote is allowed");
+      quoteCalls++;
+      return "0x";
     },
   });
   const empty = exactSetHash([]);
@@ -827,6 +1120,22 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
     setGraph() {},
     async planBlockScanFromSeedEdges(opp: any) {
       plannerCenters.push(opp.searchSeed.searchCenter);
+      const routeId = blockScanRouteId(opp.seedEdges);
+      plannedRoutes.push(routeId);
+      if (cacheCase === "known" || cacheCase === "absent" || cacheCase === "cleared-cache") {
+        assert(simRejects.record(routeId, revert));
+        if (cacheCase === "cleared-cache") simRejects.clear();
+      }
+      if (cacheCase === "fresh-cache") {
+        assert(retiredCache.record(routeId, revert));
+        assert(retiredCache.has(routeId));
+        assert(!simRejects.has(routeId), "new process cache must start empty");
+      }
+      if (cacheCase === "unknown") {
+        const otherRoute = blockScanRouteId([...opp.seedEdges].reverse());
+        assert.notEqual(otherRoute, routeId);
+        assert(simRejects.record(otherRoute, revert));
+      }
       return [{
         templateName: "fixture",
         root: {},
@@ -843,26 +1152,89 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
   const originalSolve = AnvilSolver.prototype.solve;
   const originalLog = console.log;
   const logs: string[] = [];
-  (AnvilSolver.prototype.solve as any) = async function(_plan: any, state: any, _probe: any, opts: any) {
+  (AnvilSolver.prototype.solve as any) = async function(plan: any, state: any, _probe: any, opts: any) {
     solverCalls++;
     assert.equal(state, exactQuoteState, "Solver must receive the source-pinned quote backend");
     assert.equal(opts.strictSession, strictSessionFixture, "Solver must receive the strict session");
     assert.equal(opts.quoteToleranceRawUnits, 1n, "live loop must forward the one-raw-unit tolerance");
     assert.equal(opts.quoteSafetyBps, undefined, "live must not add a percentage haircut");
     assert.deepEqual(opts.runtimeEvidence, []);
-    return { netProfit: 0n };
+    const routeId = blockScanRouteId(plan.tokenPath.edges);
+    solvedRoutes.push(routeId);
+    await state.call();
+    opts.timing.quoteMs += 1;
+    opts.timing.amountPoints += 1;
+    opts.timing.hopExactCalls += 2;
+    opts.timing.gssPoints += 1;
+    if (cacheCase === "queued") {
+      assert.equal(solverCalls, 1, "the second queued route must never enter Solver");
+      assert.equal(plannedRoutes.length, 2);
+      assert.notEqual(routeId, plannedRoutes[1]);
+      assert(!simRejects.has(plannedRoutes[1]!));
+      await turn();
+      assert(simRejects.record(plannedRoutes[1]!, revert));
+    }
+    if (cacheCase === "in-flight") {
+      assert(!simRejects.has(routeId), "the route was eligible when Solver began");
+      await turn();
+      assert(simRejects.record(routeId, revert));
+    }
+    // Keep the original absent-dependency harness's non-positive result.
+    if (cacheCase === "absent") return { netProfit: 0n };
+    return { root: { adapterId: "skip", target: actor, children: [],
+      tokenIn: priceFundingToken, tokenOut: priceFundingToken, amount: 123n, params: {} },
+      profitToken: priceFundingToken, netProfit: 1n, flashAmount: 123n, templateName: "fixture" };
   };
   console.log = (...args: unknown[]) => {
     logs.push(args.map(String).join(" "));
   };
   const sourceHeadSeenAtMs = Date.now();
   Object.assign(f.deps, {
+    historicalExecutionMode,
     exactRefineEnabled: false,
     exactRefineHardBudgetMs: 1_000,
     solverQuoteToleranceRawUnits: 1n,
     passBudgetMs: 5_000,
     blockScanGraph: () => edges,
     blockScanPlanner: () => fakePlanner,
+    formatRouteKey: (opp: any) => blockScanRouteId(opp.seedEdges),
+    ...(cacheCase === "absent" ? {} : {
+      isRouteSimRejected: (opp: any) => {
+        const routeId = blockScanRouteId(opp.seedEdges), rejected = productionPredicate(opp);
+        predicateChecks.push({ routeId, rejected });
+        return rejected;
+      },
+    }),
+    frozenTopology: { topologyKey: "fixture", async observeHeader(number: number) {
+      return { number, hash: hash(number), parentHash: hash(number - 1), timestamp: 1,
+        baseFeePerGas: 1n, gasUsed: 0n, gasLimit: 30_000_000n, transactionHashes: [] };
+    } },
+    directFinalSimulation: { concurrency: 1, async simulate(_plan: unknown, context: any) {
+      assert.deepEqual(context.source, source(1));
+      assert(!context.signal.aborted);
+      finalSimCalls++;
+      simulatedRoutes.push(activeRoute);
+      return revert;
+    } },
+    async submitAtomic(input: Parameters<BlockScanRuntimeLoopDependencies["submitAtomic"]>[0]) {
+      activeRoute = blockScanRouteId(input.opp.seedEdges);
+      const result = await maybeSubmitBlockScanAtomic({ ...input,
+        historicalReadOnly: historicalExecutionMode === "source-block", historicalExecutionMode,
+        config: { ...resolveBlockScanAtomicPolicy({}), dryRun: true, blockScanSubmit: false, finalVerifyFloorBps: 0n },
+        provider: { async send(method: string, params: unknown[]) {
+          sourceChecks++;
+          assert.equal(method, "eth_getBlockByNumber");
+          assert.deepEqual(params, [historicalExecutionMode === "source-block" ? "0x65" : "latest", false]);
+          return { number: "0x65", hash: hash(101) };
+        } } as any,
+        simRejects, collectBlindAudit: true,
+        bundleRouter: { async submit() { throw new Error("fixture must never submit"); } },
+        submissionCoordinator: { offer() { throw new Error("fixture must never submit"); } },
+        strategyVersions: { strategy_view_version: "fixture", blockscan_view_hash: hash(101) },
+      });
+      atomicResults.push(result);
+      return result;
+    },
     exactQuoteStateFactory: (input: any) => {
       exactFactoryDeadlineAtMs = input.deadlineAtMs;
       return exactQuoteState;
@@ -871,7 +1243,8 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
       beginPass(sourceBlock: number) {
         assert.equal(sourceBlock, 101);
         return {
-          recordEnumeration(opportunities: readonly unknown[], coarse?: readonly unknown[], selected?: number) {
+          recordEnumeration(opportunities: readonly any[], coarse?: readonly unknown[], selected?: number) {
+            enumeratedRoutes.push(...opportunities.map(opp => blockScanRouteId(opp.seedEdges)));
             telemetryEnumeration = opportunities.length;
             telemetryCoarseEnumeration = coarse?.length ?? 0;
             telemetryCoarseSelected = selected ?? opportunities.length;
@@ -907,7 +1280,8 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
       // Keep enough fixture routes to test downstream selection independently
       // of the production hop-width defaults.
       hopTokensPerStep: 3, hopPoolsPerPair: 3,
-      maxCandidates: 1, pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
+      maxCandidates: cacheCase === "queued" ? 2 : 1,
+      pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
     refineCandidates: 10,
     strictSession: async (input: any) => {
       strictSessionCalls++;
@@ -925,7 +1299,10 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
     });
     assert.equal(strictSessionCalls, 1);
     assert.equal(issueExactCalls, 0);
-    assert(solverCalls > 0, "disabled refinement must still enter Solver");
+    assert.equal(solverCalls, cacheCase === "known" ? 0 : 1);
+    assert.equal(quoteCalls, solverCalls, "skipped routes must issue zero amount quotes");
+    assert.equal(finalSimCalls, ["known", "in-flight", "absent"].includes(cacheCase) ? 0 : 1);
+    assert.equal(sourceChecks, cacheCase === "known" || cacheCase === "absent" ? 0 : 1);
     assert(plannerCenters.length > 0);
     assert(plannerCenters.every(center => center === 123n), "Solver candidates must be anchored at prepared P");
     assert(strictSessionDeadlineAtMs - sourceHeadSeenAtMs >= 4_500,
@@ -936,13 +1313,15 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
     assert(skip, "disabled mode must emit an explicit skip log");
     const skipPayload = JSON.parse(skip.slice(skip.indexOf("{")));
     assert.equal(skipPayload.enabled, false);
-    assert.equal(skipPayload.selected, 1);
+    assert.equal(skipPayload.selected, cacheCase === "queued" ? 2 : 1);
     assert.equal(skipPayload.rejectedOverCap, 1);
-    assert(skipPayload.eligibleNotSelected > 0, "disabled mode must preserve coarse order and cap without promoting every valid route");
+    if (cacheCase !== "queued") assert(skipPayload.eligibleNotSelected > 0,
+      "disabled mode must preserve coarse order and cap without promoting every valid route");
+    assert.deepEqual(plannedRoutes, enumeratedRoutes.filter((_, index) => index !== 1).slice(0, skipPayload.selected),
+      "cache policy must not alter natural selection, rank or refill from outside selected candidates");
     assert.equal(skipPayload.amountSource, "effective-first-edge");
     assert.equal(telemetryExact, 0, "disabled mode must not record compact Exact diagnostics");
-    assert(telemetryEnumeration > skipPayload.selected + skipPayload.rejectedOverCap,
-      "runtime fixture must enumerate more valid candidates than the off-mode cap");
+    assert(telemetryEnumeration >= skipPayload.selected + skipPayload.rejectedOverCap);
     assert.equal(telemetryCoarseSelected, telemetryEnumeration);
     assert(telemetryCoarseEnumeration >= telemetryEnumeration);
     assert.equal(telemetryPlanner, plannerCenters.length);
@@ -959,6 +1338,49 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
     const timingPayload = JSON.parse(timing.slice(timing.indexOf("{")));
     assert.equal(timingPayload.stages.exact_refine.status, "not-run");
     assert.equal(timingPayload.stage_timing_ms.exact_refine, 0);
+    assert.equal(timingPayload.planned, plannedRoutes.length);
+    assert.equal(timingPayload.planner_solver_detail.solverPlans, solverCalls);
+    assert.equal(timingPayload.planner_solver_detail.solverQuoteMs, quoteCalls);
+    assert.equal(timingPayload.planner_solver_detail.solverAmountPoints, quoteCalls);
+    assert.equal(timingPayload.planner_solver_detail.solverHopExactCalls, quoteCalls * 2);
+    assert.equal(timingPayload.planner_solver_detail.solverGssPoints, quoteCalls);
+    assert.equal(timingPayload.quote_positive, cacheCase === "absent" ? 0 : solverCalls);
+    const solverSkips = logs.filter(line => line.startsWith("[searcher/blockscan-solver-skip]"))
+      .map(line => JSON.parse(line.slice(line.indexOf("{"))));
+    assert.equal(solverSkips.length, cacheCase === "known" || cacheCase === "queued" ? 1 : 0);
+    if (solverSkips.length > 0) {
+      const index = cacheCase === "queued" ? 1 : 0;
+      assert.deepEqual(solverSkips[0], { block: 101, sourceBlockHash: hash(101),
+        targetBlock: historicalExecutionMode === "source-block" ? 101 : 102, solverIndex: index,
+        routeId: plannedRoutes[index], stage: "planner_solver", reason: "sim_revert_seen_this_live" });
+      assert(!solvedRoutes.includes(plannedRoutes[index]!));
+      assert(!simulatedRoutes.includes(plannedRoutes[index]!));
+    }
+    if (cacheCase === "absent") {
+      assert.equal(f.deps.isRouteSimRejected, undefined);
+      assert(simRejects.has(plannedRoutes[0]!));
+    } else {
+      assert.deepEqual(predicateChecks, plannedRoutes.map((routeId, index) => ({ routeId,
+        rejected: cacheCase === "known" || (cacheCase === "queued" && index === 1) })));
+    }
+    assert.equal(atomicResults.length, sourceChecks);
+    if (cacheCase === "known") {
+      // Existing aggregate fallback reports absence of positive quotes, not
+      // the per-route policy cause. No Solver/sim/EV execution is implied.
+      assert.equal(timingPayload.decision, "no_positive_quote");
+      assert.equal(timingPayload.first_solver_started_at_ms, null);
+      assert.equal(timingPayload.stages.planner_solver.status, "ran");
+      assert.equal(timingPayload.stages.final_sim.status, "not-run");
+      assert.equal(timingPayload.stages.ev.status, "not-run");
+    }
+    for (const result of atomicResults) {
+      assert(!result.submitted);
+      assert.equal(result.decision, cacheCase === "in-flight" ? "sim_revert_seen_this_live" : "sim_revert");
+      assert.equal(result.finalSimStatus, cacheCase === "in-flight" ? "not-run" : "failed");
+      assert.equal(result.audit?.simulation.executed, cacheCase !== "in-flight");
+      assert.equal(result.audit?.ev.executionStatus, "not_run");
+      assert.equal(result.audit?.ev.reason, result.decision);
+    }
     assert.equal(closes, 1);
   } finally {
     (AnvilSolver.prototype.solve as any) = originalSolve;

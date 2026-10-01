@@ -30,6 +30,7 @@ use revm::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 mod diagnostic;
+use diagnostic::Phase;
 
 const BALANCE_OF_SELECTOR: [u8; 4] = [0x70, 0xa0, 0x82, 0x31];
 const TOTAL_SUPPLY_SELECTOR: [u8; 4] = [0x18, 0x16, 0x0d, 0xdd];
@@ -405,6 +406,7 @@ impl RpcClient {
             if !delay.is_zero() { std::thread::sleep(delay); }
             let can_retry = attempt + 1 < RPC_ATTEMPT_DELAYS.len();
             self.round_trips.set(self.round_trips.get() + 1);
+            let _attempt_progress = diagnostic::rpc_attempt_scope(body);
             let response = match self.client.post(&self.url).json(body).send() {
                 Ok(response) => response,
                 Err(error) if can_retry && retryable_rpc_transport_error(&error) => {
@@ -810,13 +812,16 @@ fn verified_header(header: &Value, number: u64, pin: &SourcePin) -> Result<Verif
 fn verify_source(rpc: &RpcClient, number: u64, pin: &SourcePin) -> Result<VerifiedSource> {
     let result = (|| {
         // Context::mainnet below is chain 1. Do not mislabel another chain.
-        if pin.chain_id != 1 || parse_u64(strict_quantity(&rpc.call("eth_chainId", json!([]))?, 16)?)? != pin.chain_id {
-            bail!("pinned chain mismatch");
-        }
+        if pin.chain_id != 1 { bail!("pinned chain mismatch"); }
         let hash = strict_hex(&json!(pin.block_hash), Some(32))?.to_owned();
-        let header = rpc.call("eth_getBlockByHash", json!([hash, false]))?;
-        let source = verified_header(&header, number, pin)?;
-        verify_canonical(rpc, &source)?;
+        let results = rpc.batch_call(&[
+            ("eth_chainId", json!([])),
+            ("eth_getBlockByHash", json!([hash, false])),
+            ("eth_getBlockByNumber", json!([hex_quantity_u64(number), false])),
+        ])?.into_iter().collect::<Result<Vec<_>>>()?;
+        if parse_u64(strict_quantity(&results[0], 16)?)? != pin.chain_id { bail!("pinned chain mismatch"); }
+        let source = verified_header(&results[1], number, pin)?;
+        if verified_header(&results[2], number, pin)? != source { bail!("pinned canonical header changed"); }
         Ok(source)
     })();
     rpc.checked_source(result)
@@ -842,6 +847,32 @@ fn build_http_client() -> Result<Client> {
         .pool_idle_timeout(Duration::from_secs(300))
         .build()
         .context("failed to build blocking rpc client")
+}
+
+// All four checks are fresh and identity-bound. Even the equal-looking number
+// lookups are separate logical calls: post(A) is never reused as pre(B).
+fn verify_pair_bridge(rpc: &RpcClient, first: &VerifiedSource, number: u64, pin: &SourcePin) -> Result<VerifiedSource> {
+    let result = (|| {
+        if pin.chain_id != 1 { bail!("pinned chain mismatch"); }
+        let hash = strict_hex(&json!(pin.block_hash), Some(32))?.to_owned();
+        let att = &first.attestation;
+        let results = rpc.batch_call(&[
+            ("eth_getBlockByNumber", json!([hex_quantity_u64(att.block_number), false])),
+            ("eth_chainId", json!([])),
+            ("eth_getBlockByHash", json!([hash, false])),
+            ("eth_getBlockByNumber", json!([hex_quantity_u64(number), false])),
+        ])?.into_iter().collect::<Result<Vec<_>>>()?;
+        let first_pin = SourcePin { chain_id: att.chain_id, block_hash: format!("{:#x}", att.block_hash),
+            state_root: Some(format!("{:#x}", att.state_root)) };
+        if verified_header(&results[0], att.block_number, &first_pin)? != *first {
+            bail!("pinned canonical header changed");
+        }
+        if parse_u64(strict_quantity(&results[1], 16)?)? != pin.chain_id { bail!("pinned chain mismatch"); }
+        let second = verified_header(&results[2], number, pin)?;
+        if verified_header(&results[3], number, pin)? != second { bail!("pinned canonical header changed"); }
+        Ok(second)
+    })();
+    rpc.checked_source(result)
 }
 
 /// Legacy unpinned calls retain their daemon-lifetime bytecode cache. Address
@@ -1506,7 +1537,7 @@ fn simulate(req: SimRequest, started: Instant) -> Result<SimResponse> {
 // ─── Resident daemon ──────────────────────────────────────────────
 //
 // Protocol: one JSON request object per stdin line, one JSON response per
-// stdout line. The daemon holds a per-block warm `RemoteRevmDb` (shared chain
+// stdout line (strictPair streams two child responses). The daemon holds a per-block warm `RemoteRevmDb` (shared chain
 // reads) and a `prepared` `CacheDB` carrying the victim overlay for the current
 // hint. `quote`/`simulate` clone the prepared base so each call is isolated but
 // every chain read after the first is served from the warm cache.
@@ -1608,6 +1639,70 @@ struct StrictRequest {
     #[serde(default)]
     token_deals: Vec<TokenDeal>,
     caller_mode: Option<String>,
+}
+
+const STRICT_PAIR_MAX_BYTES: usize = 1_048_576;
+
+struct StrictPair {
+    epoch: String,
+    ids: [u64; 2],
+    requests: [StrictRequest; 2],
+    plans: [StrictPlan; 2],
+}
+
+impl StrictPair {
+    fn validate(mut value: Value, bytes: usize) -> Result<Self> {
+        fn has_null(value: &Value) -> bool {
+            match value {
+                Value::Null => true,
+                Value::Array(items) => items.iter().any(has_null),
+                Value::Object(fields) => fields.values().any(has_null),
+                _ => false,
+            }
+        }
+        if bytes > STRICT_PAIR_MAX_BYTES || has_null(&value) { bail!("bad strict pair"); }
+        let object = value.as_object_mut().ok_or_else(|| anyhow!("bad strict pair"))?;
+        if object.len() != 3 || object.get("op").and_then(Value::as_str) != Some("strictPair") {
+            bail!("bad strict pair");
+        }
+        let epoch = object.get("epoch").and_then(Value::as_str)
+            .filter(|s| !s.is_empty() && s.len() <= 128).ok_or_else(|| anyhow!("bad strict pair"))?.to_owned();
+        let children = object.remove("requests").and_then(|v| v.as_array().cloned())
+            .ok_or_else(|| anyhow!("bad strict pair"))?;
+        let [mut a, mut b]: [Value; 2] = children.try_into().map_err(|_| anyhow!("bad strict pair"))?;
+        // Conservative equality of the entire shared wire context. Only main
+        // target/data/stateRead and child identity may differ.
+        for key in ["blockNumber", "rpcUrl", "sourcePin", "trialPrefix", "from", "transactionOrigin",
+            "callerMode", "gasLimit", "executionGasLimit"] {
+            if a.get(key) != b.get(key) { bail!("bad strict pair"); }
+        }
+        let parse = |child: &mut Value| -> Result<(u64, StrictRequest, StrictPlan)> {
+            let object = child.as_object_mut().ok_or_else(|| anyhow!("bad strict pair"))?;
+            let id = object.remove("requestId").and_then(|v| v.as_str().map(str::to_owned))
+                .ok_or_else(|| anyhow!("bad strict pair"))?;
+            let number = id.parse::<u64>()?;
+            if number == 0 || number.to_string() != id { bail!("bad strict pair"); }
+            let req: StrictRequest = serde_json::from_value(child.take())?;
+            let plan = StrictPlan::validate(&req)?;
+            let pin = req.source_pin.as_ref().ok_or_else(|| anyhow!("bad strict pair"))?;
+            if pin.chain_id != 1 || req.rpc_url.as_ref().is_none_or(|s| s.trim().is_empty()) {
+                bail!("bad strict pair");
+            }
+            strict_hex(&json!(pin.block_hash), Some(32))?;
+            if let Some(root) = &pin.state_root { strict_hex(&json!(root), Some(32))?; }
+            if !plan.inner || req.trial_prefix.is_none() || !req.pre_calls.is_empty() || !req.token_deals.is_empty()
+                || req.native_balance_wei.is_some() || req.executor_runtime_code.is_some() || req.observe_logs
+                || !req.observe_total_supply.is_empty() || !plan.native.is_empty() || !plan.pairs.is_empty()
+                || !req.observe_accounts.as_deref().unwrap_or(&[]).is_empty() {
+                bail!("bad strict pair");
+            }
+            Ok((number, req, plan))
+        };
+        let (a_id, a, a_plan) = parse(&mut a)?;
+        let (b_id, b, b_plan) = parse(&mut b)?;
+        if a_id >= b_id { bail!("bad strict pair"); }
+        Ok(Self { epoch, ids: [a_id, b_id], requests: [a, b], plans: [a_plan, b_plan] })
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -1823,6 +1918,13 @@ struct Daemon {
     http: Option<Client>,
 }
 
+fn write_daemon_response(out: &mut impl IoWrite, response: &DaemonResponseEnvelope) -> Result<()> {
+    serde_json::to_writer(&mut *out, response)?;
+    out.write_all(b"\n")?;
+    out.flush()?;
+    Ok(())
+}
+
 fn serve() -> Result<()> {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -1833,20 +1935,49 @@ fn serve() -> Result<()> {
         if line.trim().is_empty() {
             continue;
         }
-        let response = daemon.handle_line(&line);
-        serde_json::to_writer(&mut stdout, &response)?;
-        stdout.write_all(b"\n")?;
-        stdout.flush()?;
+        daemon.handle_line_streaming(&line,
+            env::var("SEARCHER_STATE_LATENCY_DIAGNOSTICS").is_ok_and(|value| value == "1"), &mut stdout)?;
     }
     Ok(())
 }
 
 impl Daemon {
+    #[cfg(test)]
     fn handle_line(&mut self, line: &str) -> DaemonResponseEnvelope {
+        self.handle_line_with_diagnostics(line,
+            env::var("SEARCHER_STATE_LATENCY_DIAGNOSTICS").is_ok_and(|value| value == "1"))
+    }
+
+    #[cfg(test)]
+    fn handle_line_with_diagnostics(&mut self, line: &str, diagnostics: bool) -> DaemonResponseEnvelope {
+        let started = Instant::now();
+        self.handle_value_with_diagnostics(serde_json::from_str::<Value>(line).unwrap_or(Value::Null), diagnostics, started)
+    }
+
+    fn handle_line_streaming(&mut self, line: &str, diagnostics: bool, out: &mut impl IoWrite) -> Result<()> {
+        let started = Instant::now();
+        let value = serde_json::from_str::<Value>(line).unwrap_or(Value::Null);
+        if value.get("op").and_then(Value::as_str) == Some("strictPair") {
+            let epoch = value.get("epoch").and_then(Value::as_str)
+                .filter(|s| !s.is_empty() && s.len() <= 128).map(str::to_owned);
+            match StrictPair::validate(value, line.len()) {
+                Ok(pair) if self.epoch.as_ref().is_none_or(|bound| bound == &pair.epoch)
+                    && pair.ids[0] > self.last_request_id => {
+                    self.epoch = Some(pair.epoch.clone());
+                    self.last_request_id = pair.ids[1]; // Reserve both once, before any I/O.
+                    self.strict_pair(pair, started, diagnostics, out)
+                }
+                _ => write_daemon_response(out, &self.pair_response(epoch, None,
+                    Err(StrictFailure(StrictFailureKind::Validation).into()), None, started)),
+            }
+        } else {
+            write_daemon_response(out, &self.handle_value_with_diagnostics(value, diagnostics, started))
+        }
+    }
+
+    fn handle_value_with_diagnostics(&mut self, mut value: Value, diagnostics: bool, started: Instant) -> DaemonResponseEnvelope {
         self.last_source_attestation = None;
         self.last_strict_error = None;
-        let started = Instant::now();
-        let mut value = serde_json::from_str::<Value>(line).unwrap_or(Value::Null);
         let strict_request = value.get("op").and_then(Value::as_str) == Some("strictSimulate");
         let epoch = value
             .get("epoch")
@@ -1861,6 +1992,17 @@ impl Daemon {
                     .is_ok_and(|id| id > 0 && id.to_string() == *s)
             })
             .map(str::to_owned);
+        diagnostic::begin_strict(diagnostics && strict_request, started);
+        let timing_identity = (diagnostics && strict_request).then(|| diagnostic::StrictTimingIdentity {
+            request_id: request_id.as_deref().and_then(|id| id.parse().ok()),
+            source_block: value.get("blockNumber").and_then(Value::as_u64),
+            prefix_present: value.get("trialPrefix").is_some(),
+            prefix_calldata_bytes: value.get("trialPrefix").and_then(|prefix| prefix.get("calldata"))
+                .and_then(Value::as_str).and_then(|data| data.strip_prefix("0x"))
+                .filter(|data| data.len() % 2 == 0 && data.bytes().all(|b| b.is_ascii_hexdigit()))
+                .map(|data| data.len() / 2),
+        });
+        if let Some(identity) = &timing_identity { diagnostic::bind_strict_identity(identity, started); }
         let response = match (&epoch, &request_id) {
             (Some(epoch), Some(id)) => {
                 let id = id.parse::<u64>().expect("validated above");
@@ -1898,6 +2040,10 @@ impl Daemon {
             // Numeric request identity only; epoch is caller-provided text.
             diagnostic::emit("daemon-response", json!({"requestId":request_id.as_deref().and_then(|id| id.parse::<u64>().ok()),
                 "fatal":fatal}));
+        }
+        if let Some(identity) = timing_identity {
+            diagnostic::finish_strict(identity, fatal.is_none() && response.ok,
+                if fatal.is_none() { response.success } else { None }, fatal.is_some());
         }
         DaemonResponseEnvelope {
             epoch,
@@ -2560,28 +2706,19 @@ impl Daemon {
             if let Some(root) = &pin.state_root { strict_hex(&json!(root), Some(32))?; }
             let mut rpc = RpcClient::new(url.clone(), self.http_client()?, Rc::clone(&self.fatal))?;
             rpc.pinned = true;
-            let source = verify_source(&rpc, req.block_number, pin)?;
-            let mut session = match self.pinned.take() {
-                Some(session) if session.remote.rpc.url == *url
-                    && session.remote.source.as_ref() == Some(&source) => session,
-                _ => {
-                    let mut inner = RemoteRevmDbInner::default();
-                    inner.ancestors.insert(req.block_number,
-                        (source.attestation.block_hash, source.attestation.parent_hash));
-                    PinnedSession { remote: Rc::new(RemoteRevmDb {
-                        rpc,
-                        block_tag: json!({"blockHash": source.attestation.block_hash, "requireCanonical": true}),
-                        source: Some(source.clone()), funded: HashSet::new(),
-                        persist: Rc::new(RefCell::new(PersistentCache::default())),
-                        inner: RefCell::new(inner),
-                    }), balance_slots: HashMap::new(), allowance_slots: HashMap::new() }
-                }
+            let source = {
+                let _phase = diagnostic::phase(Phase::SourcePrecheck);
+                verify_source(&rpc, req.block_number, pin)?
             };
+            let mut session = self.take_pinned_session(rpc, &source);
             let result = Self::strict_simulate_at(Rc::clone(&session.remote), source.env.clone(),
                 &mut session.balance_slots, &mut session.allowance_slots, &req, &plan, started);
             // All outcomes (including probe failure, Revert and Halt) retain the
             // canonical post-check. Optional paths cannot clear the fatal latch.
-            verify_canonical(&session.remote.rpc, &source)?;
+            {
+                let _phase = diagnostic::phase(Phase::CanonicalPostcheck);
+                verify_canonical(&session.remote.rpc, &source)?;
+            }
             self.pinned = Some(session);
             let response = result?;
             self.last_source_attestation = Some(source.attestation);
@@ -2593,6 +2730,106 @@ impl Daemon {
         Self::strict_simulate_at(remote, env, &mut self.balance_slots, &mut self.allowance_slots, &req, &plan, started)
     }
 
+    fn take_pinned_session(&mut self, rpc: RpcClient, source: &VerifiedSource) -> PinnedSession {
+        match self.pinned.take() {
+            Some(session) if session.remote.rpc.url == rpc.url
+                && session.remote.source.as_ref() == Some(source) => session,
+            _ => {
+                let mut inner = RemoteRevmDbInner::default();
+                inner.ancestors.insert(source.attestation.block_number,
+                    (source.attestation.block_hash, source.attestation.parent_hash));
+                PinnedSession { remote: Rc::new(RemoteRevmDb {
+                    rpc, block_tag: json!({"blockHash":source.attestation.block_hash,"requireCanonical":true}),
+                    source: Some(source.clone()), funded: HashSet::new(),
+                    persist: Rc::new(RefCell::new(PersistentCache::default())), inner: RefCell::new(inner),
+                }), balance_slots: HashMap::new(), allowance_slots: HashMap::new() }
+            }
+        }
+    }
+
+    fn pair_response(&self, epoch: Option<String>, id: Option<u64>, result: Result<DaemonResponse>,
+        source: Option<SourceAttestation>, started: Instant) -> DaemonResponseEnvelope {
+        let fatal = self.fatal.get();
+        let (response, error_kind) = match (fatal, result) {
+            (Some(reason), _) => (DaemonResponse::err(reason.to_string(), started), None),
+            (None, Ok(response)) => (response, None),
+            (None, Err(error)) => {
+                let kind = error.downcast_ref::<StrictFailure>().map(|e| e.0).unwrap_or(StrictFailureKind::Validation);
+                (DaemonResponse::err(error.to_string(), started), Some(kind))
+            }
+        };
+        DaemonResponseEnvelope { epoch, request_id: id.map(|id| id.to_string()), fatal,
+            source_attestation: if response.ok && fatal.is_none() { source } else { None }, response, error_kind }
+    }
+
+    fn strict_pair(&mut self, pair: StrictPair, started: Instant, diagnostics: bool, out: &mut impl IoWrite) -> Result<()> {
+        let [a, b] = &pair.requests;
+        let [a_plan, b_plan] = &pair.plans;
+        let mut timing = diagnostic::PairTiming::begin(diagnostics, pair.ids, a.block_number, started);
+        let first = (|| -> Result<_> {
+            if let Some(reason) = self.fatal.get() { return Err(reason.into()); }
+            let mut rpc = RpcClient::new(a.rpc_url.clone().expect("validated pair"), self.http_client()?, Rc::clone(&self.fatal))?;
+            rpc.pinned = true;
+            let source = {
+                let _phase = diagnostic::phase(Phase::SourcePrecheck);
+                verify_source(&rpc, a.block_number, a.source_pin.as_ref().expect("validated pair"))?
+            };
+            let mut session = self.take_pinned_session(rpc, &source);
+            let result = Self::strict_simulate_at(Rc::clone(&session.remote), source.env.clone(),
+                &mut session.balance_slots, &mut session.allowance_slots, a, a_plan, started);
+            Ok((source, session, result))
+        })();
+        // B's response latency includes its bridge precheck; pair diagnostics
+        // still charge that shared interval only once, outside both children.
+        let second_started = Instant::now();
+        let first = match first {
+            Ok((source, session, result)) => {
+                timing.advance(); // A's execution interval ends; bridge is group-owned.
+                match verify_pair_bridge(&session.remote.rpc, &source, b.block_number, b.source_pin.as_ref().expect("validated pair")) {
+                    Ok(second_source) => Ok((source, second_source, session, result)),
+                    Err(error) => Err(error),
+                }
+            }
+            Err(error) => Err(error),
+        };
+        let (source, second_source, session, result) = match first {
+            Ok(first) => first,
+            Err(error) => {
+                write_daemon_response(out, &self.pair_response(Some(pair.epoch.clone()), Some(pair.ids[0]), Err(error), None, started))?;
+                write_daemon_response(out, &self.pair_response(Some(pair.epoch), Some(pair.ids[1]),
+                    Err(StrictFailure(StrictFailureKind::Execution).into()), None, started))?;
+                timing.finish(2, self.fatal.get().is_some());
+                return Ok(());
+            }
+        };
+        // A is terminal and physically flushed BEFORE any B execution. A broken
+        // output pipe returns here; it cannot cause unobservable sibling work.
+        write_daemon_response(out, &self.pair_response(Some(pair.epoch.clone()), Some(pair.ids[0]),
+            result, Some(source.attestation), started))?;
+        timing.advance();
+        self.pinned = Some(session);
+        let result = (|| -> Result<_> {
+            if let Some(reason) = self.fatal.get() { return Err(reason.into()); }
+            let mut rpc = RpcClient::new(b.rpc_url.clone().expect("validated pair"), self.http_client()?, Rc::clone(&self.fatal))?;
+            rpc.pinned = true;
+            // Fresh, one-use bridge evidence, not A's verified source. Only the
+            // existing immutable source-value cache may be reused.
+            let mut session = self.take_pinned_session(rpc, &second_source);
+            let result = Self::strict_simulate_at(Rc::clone(&session.remote), second_source.env.clone(),
+                &mut session.balance_slots, &mut session.allowance_slots, b, b_plan, second_started);
+            {
+                let _phase = diagnostic::phase(Phase::CanonicalPostcheck);
+                verify_canonical(&session.remote.rpc, &second_source)?;
+            }
+            self.pinned = Some(session);
+            result
+        })();
+        write_daemon_response(out, &self.pair_response(Some(pair.epoch), Some(pair.ids[1]),
+            result, Some(second_source.attestation), second_started))?;
+        timing.finish(2, self.fatal.get().is_some());
+        Ok(())
+    }
+
     fn strict_simulate_at(
         remote: Rc<RemoteRevmDb>, env: BlockEnv, balance_slots: &mut HashMap<Address, u64>,
         allowance_slots: &mut HashMap<Address, u64>,
@@ -2600,6 +2837,7 @@ impl Daemon {
     ) -> Result<DaemonResponse> {
         // Hydrate only source values before local overrides and deal-slot trials.
         // Remote cache warmth is separate from EVM transaction warmth.
+        let hydration_phase = diagnostic::phase(Phase::Hydration);
         let mut accounts: Vec<_> = plan.calls.iter().flat_map(|c| [c.from, c.to])
             .chain([Address::ZERO, plan.actor, plan.origin])
             .chain(plan.native.iter().copied())
@@ -2629,6 +2867,7 @@ impl Daemon {
         storage.sort_unstable(); storage.dedup();
         let warmed = remote.warm_batch(&accounts, &storage, None).is_ok();
         remote.rpc.check_fatal()?;
+        drop(hydration_phase);
 
         // Each request owns a fresh source view. The only trial funding is its
         // explicitly declared root input; never replenish a later route leg.
@@ -2644,8 +2883,11 @@ impl Daemon {
             info.balance = balance;
             db.insert_account_info(plan.actor, info);
         }
-        apply_token_deals(&mut db, &env, token_deals, balance_slots, Some(&remote), true)
-            .map_err(|_| StrictFailure(StrictFailureKind::Observation))?;
+        {
+            let _phase = diagnostic::phase(Phase::TokenDeal);
+            apply_token_deals(&mut db, &env, token_deals, balance_slots, Some(&remote), true)
+                .map_err(|_| StrictFailure(StrictFailureKind::Observation))?;
+        }
         for call in &plan.calls[..plan.calls.len() - 1] {
             if decode_approve_spender(&call.calldata).is_some() {
                 if let Some(slot) = call.allowance_slot { allowance_slots.insert(call.to, slot); }
@@ -2658,6 +2900,7 @@ impl Daemon {
             // The legacy warm-hint overlay has no code field. Do not trace old
             // chain code for a counterfactual request; normal lazy reads suffice.
             if plan.executor_code.is_none() {
+                let _phase = diagnostic::phase(Phase::TraceHints);
                 let refs: Vec<_> = plan.calls.iter().collect();
                 let _ = trace_prefetch(&remote, &db, &refs);
             }
@@ -2668,9 +2911,11 @@ impl Daemon {
         // own setup/main. Prefix execution captures this baseline without
         // ending the transaction or changing its warm/transient state.
         let mut before = if req.trial_prefix.is_none() {
+            let _phase = diagnostic::phase(Phase::EffectsObservations);
             Some(strict_observation_baseline(&db, &env, plan)?)
         } else { None };
         let (outcome, gas_used, logs) = strict_execute_observed(&mut db, &env, req, plan, &mut before)?;
+        let _phase = diagnostic::phase(Phase::EffectsObservations);
         let success = matches!(outcome, StrictOutcome::Success { .. });
         let output = match &outcome {
             StrictOutcome::Success { output, .. } | StrictOutcome::Revert { output, .. } => Some(output.clone()),
@@ -2931,6 +3176,9 @@ fn strict_execute_observed<D: ExecutionProfile>(db: &mut CacheDB<D>, env: &Block
     let mut used = 0u64;
     let mut logs = Vec::new();
     for (index, call) in plan.calls.iter().enumerate() {
+        let _phase = diagnostic::phase(if index == 0 && req.trial_prefix.is_some() {
+            Phase::PrefixExecution
+        } else { Phase::MainReadSetup });
         let stage = if index + 1 == plan.calls.len() { StrictStage::Main } else { StrictStage::PreCall { index } };
         if index + 1 == plan.calls.len() {
             if let Some(read) = &plan.state_read {
@@ -3003,6 +3251,7 @@ fn strict_execute_observed<D: ExecutionProfile>(db: &mut CacheDB<D>, env: &Block
         };
         if !result.is_success() { return Ok((outcome, used, Vec::new())); }
         if index == 0 && req.trial_prefix.is_some() {
+            let _phase = diagnostic::phase(Phase::EffectsObservations);
             // Detached observation snapshot: commit a COPY of current writes
             // over a read-only view, never finalize/replace the live journal.
             // Probes cannot change its transient storage, access warmth or gas.
@@ -3345,7 +3594,10 @@ where
             continue;
         }
         if let Some(remote) = remote { remote.rpc.check_fatal()?; }
-        let current = deal_balance(db, block_env, token, to, strict);
+        let current = {
+            let _phase = diagnostic::phase(Phase::TokenDealInitialProbe);
+            deal_balance(db, block_env, token, to, strict)
+        };
         if let Some(remote) = remote { remote.rpc.check_fatal()?; }
         if current? >= amount {
             continue;
@@ -3371,6 +3623,7 @@ where
             // and its EIP-1967 implementation (proxy tokens keep balances in
             // the implementation's storage).
             if let Some(remote) = remote {
+                let _phase = diagnostic::phase(Phase::TokenDealFallback);
                 let implementation = read_eip1967_implementation(remote, token)?;
                 let mut owners: Vec<Address> = vec![token];
                 if let Some(impl_addr) = implementation {
@@ -3394,6 +3647,7 @@ where
         }
         if !applied {
             if let Some(remote) = remote {
+                let _phase = diagnostic::phase(Phase::TokenDealFallback);
                 for (storage_owner, slot) in
                     discover_erc20_balance_storage_candidates(remote, token, to)?
                 {
@@ -3433,6 +3687,7 @@ fn try_token_deal_slot<D: ExecutionProfile>(
     owner: Address, slot: U256, amount: U256, remote: Option<&RemoteRevmDb>,
     strict: bool, attempts: usize,
 ) -> Result<bool> {
+    let _phase = diagnostic::phase(Phase::TokenDealTrials);
     if let Some(remote) = remote { remote.rpc.check_fatal()?; }
     let original = db.cache.accounts.get(&owner).cloned();
     let result = (|| -> Result<bool> {
@@ -4616,6 +4871,867 @@ mod tests {
         }
     }
 
+    fn source_batch_reply() -> Value {
+        json!([{"jsonrpc":"2.0","id":0,"result":"0x1"},
+            {"jsonrpc":"2.0","id":1,"result":pinned_header()},
+            {"jsonrpc":"2.0","id":2,"result":pinned_header()}])
+    }
+
+    #[test]
+    fn verify_source_batch_matches_serial_precheck_in_one_round_trip() {
+        let header = pinned_header();
+        for root in [None, Some(header["stateRoot"].as_str().unwrap().to_owned())] {
+            let pin = SourcePin { chain_id: 1, block_hash: header["hash"].as_str().unwrap().into(), state_root: root };
+            // Measure the former three-call precheck against the same source.
+            let (mut serial, thread) = rpc_fixture_steps(vec![
+                (200, json!({"jsonrpc":"2.0","id":1,"result":"0x1"})),
+                (200, json!({"jsonrpc":"2.0","id":1,"result":header})),
+                (200, json!({"jsonrpc":"2.0","id":1,"result":header})),
+            ]);
+            serial.pinned = true;
+            assert_eq!(parse_u64(strict_quantity(&serial.call("eth_chainId", json!([])).unwrap(), 16).unwrap()).unwrap(), pin.chain_id);
+            let source = verified_header(&serial.call("eth_getBlockByHash", json!([pin.block_hash, false])).unwrap(), 300, &pin).unwrap();
+            verify_canonical(&serial, &source).unwrap();
+            assert_eq!(serial.round_trips(), 3);
+            assert_eq!(thread.join().unwrap().len(), 3);
+
+            for order in [[0, 1, 2], [2, 0, 1], [1, 2, 0]] {
+                let body = source_batch_reply();
+                let (mut rpc, thread) = rpc_fixture(200, json!(order.map(|id| body[id].clone())));
+                rpc.pinned = true;
+                assert_eq!(verify_source(&rpc, 300, &pin).unwrap(), source);
+                assert_eq!(rpc.fatal.get(), None);
+                assert_eq!(rpc.round_trips(), 1);
+                assert_eq!(thread.join().unwrap(), vec![json!([
+                    {"jsonrpc":"2.0","id":0,"method":"eth_chainId","params":[]},
+                    {"jsonrpc":"2.0","id":1,"method":"eth_getBlockByHash","params":[pin.block_hash, false]},
+                    {"jsonrpc":"2.0","id":2,"method":"eth_getBlockByNumber","params":["0x12c", false]},
+                ])]);
+            }
+        }
+    }
+
+    // Full strict requests against deterministic loopback replies, never chain
+    // RPC. Request 1 creates the pinned session; request 2 reuses it. Explicit
+    // diagnostics injection avoids reading or changing environment in this test.
+    fn strict_phase_fixture(enabled: bool, code: &str, observation_failure: bool, changed: bool)
+        -> (Vec<Value>, Vec<Value>, Vec<Value>) {
+        let hydration: Vec<_> = (0..9).map(|id| json!({"jsonrpc":"2.0","id":id,
+            "result":if id % 3 == 2 { "0x" } else { "0x0" }})).collect();
+        let mut last_header = pinned_header();
+        if changed { last_header["baseFeePerGas"] = json!("0x2"); }
+        let (rpc, peer) = rpc_fixture_steps(vec![
+            (200, source_batch_reply()), (200, json!(hydration)),
+            (200, json!({"jsonrpc":"2.0","id":1,"result":pinned_header()})),
+            (200, source_batch_reply()),
+            (200, json!({"jsonrpc":"2.0","id":1,"result":last_header})),
+        ]);
+        let mut daemon = daemon_fixture(&rpc);
+        let mut responses = Vec::new();
+        let mut metrics = Vec::new();
+        assert!(diagnostic::take_strict_record().is_none());
+        for id in 1u64..=2 {
+            diagnostic::capture_progress();
+            let mut wire = json!({"op":"strictSimulate","epoch":"must-not-echo","requestId":id.to_string(),
+                "blockNumber":300,"rpcUrl":rpc.url,
+                "sourcePin":{"chainId":1,"blockHash":pinned_header()["hash"]},
+                "from":format!("{:#x}", Address::repeat_byte(0xaa)),
+                "to":format!("{:#x}", Address::repeat_byte(0xbb)),"data":"0x","gasLimit":100000,
+                "executorRuntimeCode":{"code":code,"keccak256":format!("{:#x}", keccak256(parse_hex_bytes(code).unwrap()))}});
+            if observation_failure { wire["observeTotalSupply"] = json!([wire["to"]]); }
+            let mut response = serde_json::to_value(daemon.handle_line_with_diagnostics(&wire.to_string(), enabled)).unwrap();
+            let progress = diagnostic::take_progress();
+            if enabled {
+                assert_eq!(progress.first().unwrap()["event"], "interval-begin");
+                assert_eq!(progress.last().unwrap()["event"], "interval-end");
+                assert!(progress.iter().all(|r| r["identity"]["requestId"] == id &&
+                    r["identity"]["sourceBlock"] == 300 && r["identity"]["interval"] == "scalar"));
+                assert_eq!(progress.iter().filter(|r| r["event"] == "rpc-attempt-begin").count(), if id == 1 { 3 } else { 2 });
+                assert!(!json!(progress).to_string().contains("must-not-echo"));
+            } else { assert!(progress.is_empty()); }
+            // Wall time is the only intentionally nondeterministic response field.
+            response.as_object_mut().unwrap().remove("latencyMs");
+            responses.push(response);
+            if let Some(record) = diagnostic::take_strict_record() {
+                assert!(!record.to_string().contains(&rpc.url));
+                assert!(!record.to_string().contains("must-not-echo"));
+                assert_eq!(record["identity"]["requestId"], id);
+                assert_eq!(record["identity"]["sourceBlock"], 300);
+                assert_eq!(record["identity"]["prefixPresent"], false);
+                assert_eq!(record["rpcAttempts"], if id == 1 { 3 } else { 2 });
+                assert_eq!(record["phases"]["source-precheck"]["rpcAttempts"], 1);
+                assert_eq!(record["phases"]["hydration"]["rpcAttempts"], if id == 1 { 1 } else { 0 });
+                assert_eq!(record["phases"]["canonical-postcheck"]["rpcAttempts"], 1);
+                let sum: u64 = record["phases"].as_object().unwrap().values()
+                    .map(|p| p["rpcAttempts"].as_u64().unwrap()).sum();
+                assert_eq!(sum, record["rpcAttempts"].as_u64().unwrap());
+                metrics.push(record);
+            }
+        }
+        (responses, peer.join().unwrap(), metrics)
+    }
+
+    #[test]
+    fn strict_phase_diagnostics_preserve_results_rpc_order_and_first_reused_session_totals() {
+        for (code, observation_failure, changed) in [
+            ("0x00", false, false), ("0x60006000fd", false, false), ("0xfe", false, false),
+            ("0x00", true, false), ("0x00", false, true),
+        ] {
+            let (plain, plain_rpc, off) = strict_phase_fixture(false, code, observation_failure, changed);
+            let (timed, timed_rpc, on) = strict_phase_fixture(true, code, observation_failure, changed);
+            assert_eq!(plain, timed);
+            assert_eq!(plain_rpc, timed_rpc);
+            assert_eq!(timed_rpc.len(), 5);
+            assert!(off.is_empty()); assert_eq!(on.len(), 2);
+            assert_eq!(on[1]["fatal"], changed);
+            assert_eq!(on[1]["ok"], !changed && !observation_failure);
+            if changed {
+                assert_eq!(timed[1]["fatal"]["kind"], "source-fault");
+                assert!(timed[1].get("strict").is_none());
+            } else if observation_failure {
+                assert_eq!(timed[1]["errorKind"], "observation");
+            } else {
+                assert_eq!(timed[1]["strict"]["outcome"]["kind"],
+                    if code == "0x00" { "Success" } else if code == "0xfe" { "Halt" } else { "Revert" });
+            }
+        }
+    }
+
+    #[test]
+    fn strict_phase_diagnostics_preserve_prefix_gas_transient_state_and_outputs() {
+        let mut outputs = Vec::new();
+        for enabled in [false, true] {
+            let (mut db, mut req) = local_strict(true, &trial_state_code());
+            trial_prefix(&mut req);
+            let plan = StrictPlan::validate(&req).unwrap();
+            diagnostic::begin_strict(enabled, Instant::now());
+            let (outcome, gas, logs) = strict_execute(&mut db, &test_source().env, &req, &plan).unwrap();
+            diagnostic::finish_strict(diagnostic::StrictTimingIdentity { request_id: Some(1), source_block: Some(300),
+                prefix_present: true, prefix_calldata_bytes: Some(1) }, true, Some(true), false);
+            let StrictOutcome::Success { output, .. } = &outcome else { panic!("{outcome:?}"); };
+            let words = parse_hex_bytes(output).unwrap().chunks_exact(32).map(U256::from_be_slice).collect::<Vec<_>>();
+            assert_eq!(&words[4..], &[U256::from(42), U256::from(43)]);
+            // CacheDB has no PartialEq; compare ordered structural projections,
+            // including code/account_id omitted by AccountInfo's PartialEq.
+            let accounts = db.cache.accounts.iter().map(|(address, account)| (*address,
+                (account.info.balance, account.info.nonce, account.info.code_hash,
+                    account.info.account_id.map(|id| id.get()), account.info.code.clone(),
+                    account.account_state.clone(), account.storage.iter().map(|(k, v)| (*k, *v))
+                        .collect::<std::collections::BTreeMap<_, _>>())))
+                .collect::<std::collections::BTreeMap<_, _>>();
+            let contracts = db.cache.contracts.iter().map(|(hash, code)| (*hash, code.clone()))
+                .collect::<std::collections::BTreeMap<_, _>>();
+            let blocks = db.cache.block_hashes.iter().map(|(number, hash)| (*number, *hash))
+                .collect::<std::collections::BTreeMap<_, _>>();
+            outputs.push((serde_json::to_value(outcome).unwrap(), gas, serde_json::to_value(logs).unwrap(),
+                (accounts, contracts, db.cache.logs.clone(), blocks)));
+            let record = diagnostic::take_strict_record();
+            if enabled {
+                let record = record.unwrap();
+                assert_eq!(record["rpcAttempts"], 0);
+                assert_eq!(record["phases"]["prefix-execution"]["entries"], 1);
+                assert_eq!(record["phases"]["main-read-setup"]["entries"], 1);
+                assert_eq!(record["phases"]["effects-observations"]["entries"], 1);
+            } else { assert!(record.is_none()); }
+        }
+        assert_eq!(outputs[0], outputs[1]);
+    }
+
+    #[test]
+    fn strict_phase_physical_attempts_include_retries_across_distinct_clients() {
+        diagnostic::begin_strict(true, Instant::now());
+        let (first, peer) = rpc_transport_fixture(vec![RpcFixtureReply::Disconnect,
+            RpcFixtureReply::Http(200, json!({"jsonrpc":"2.0","id":1,"result":"0x1"}).to_string())]);
+        {
+            let _phase = diagnostic::phase(Phase::SourcePrecheck);
+            first.call("eth_chainId", json!([])).unwrap();
+        }
+        assert_eq!(peer.join().unwrap().len(), 2);
+        let (second, peer) = rpc_fixture(200, json!({"jsonrpc":"2.0","id":1,"result":"0x1"}));
+        {
+            let _phase = diagnostic::phase(Phase::CanonicalPostcheck);
+            second.call("eth_chainId", json!([])).unwrap();
+        }
+        peer.join().unwrap();
+        diagnostic::finish_strict(diagnostic::StrictTimingIdentity { request_id: Some(1), source_block: Some(300),
+            prefix_present: false, prefix_calldata_bytes: None }, true, Some(true), false);
+        let record = diagnostic::take_strict_record().unwrap();
+        assert_eq!(record["rpcAttempts"], first.round_trips() + second.round_trips());
+        assert_eq!(record["rpcAttempts"], 3);
+        assert_eq!(record["phases"]["source-precheck"]["rpcAttempts"], 2);
+        assert_eq!(record["phases"]["canonical-postcheck"]["rpcAttempts"], 1);
+    }
+
+    #[test]
+    fn strict_progress_attempt_scopes_cover_success_error_and_retry_without_changing_io() {
+        for case in 0..4 {
+            let mut runs = Vec::new();
+            for enabled in [false, true] {
+                let success = || RpcFixtureReply::Http(200,
+                    json!({"jsonrpc":"2.0","id":1,"result":"0x1"}).to_string());
+                let replies = match case {
+                    0 => vec![success()],
+                    1 => vec![RpcFixtureReply::Http(200, "not-json".into())],
+                    2 => vec![RpcFixtureReply::Disconnect, success()],
+                    _ => vec![RpcFixtureReply::Http(429, "not-json".into())],
+                };
+                let (rpc, peer) = rpc_transport_fixture(replies);
+                diagnostic::capture_progress();
+                let started = Instant::now();
+                diagnostic::begin_strict(enabled, started);
+                let identity = diagnostic::StrictTimingIdentity { request_id: Some(71), source_block: Some(300),
+                    prefix_present: true, prefix_calldata_bytes: Some(1) };
+                if enabled { diagnostic::bind_strict_identity(&identity, started); }
+                let result = {
+                    let _phase = diagnostic::phase(Phase::SourcePrecheck);
+                    rpc.call("eth_chainId", json!([]))
+                };
+                let fatal = rpc.fatal.get();
+                diagnostic::finish_strict(identity, result.is_ok(), None, fatal.is_some());
+                let records = diagnostic::take_progress();
+                let terminal = diagnostic::take_strict_record();
+                let calls = peer.join().unwrap();
+                let count = if case == 2 { 2 } else { 1 };
+                assert_eq!(calls.len(), count);
+                assert_eq!(result.is_ok(), case == 0 || case == 2);
+                if enabled {
+                    let attempts: Vec<_> = records.iter().filter(|r| r["attemptId"].is_number()).collect();
+                    assert_eq!(attempts.len(), 2 * count);
+                    for (index, pair) in attempts.chunks_exact(2).enumerate() {
+                        assert_eq!(pair[0]["event"], "rpc-attempt-begin");
+                        assert_eq!(pair[1]["event"], "rpc-attempt-end");
+                        assert_eq!(pair[0]["attemptId"], index + 1);
+                        assert_eq!(pair[1]["attemptId"], index + 1);
+                        assert_eq!(pair[0]["identity"]["requestId"], 71);
+                        assert_eq!(pair[1]["identity"]["sourceBlock"], 300);
+                        assert!(pair[1].get("success").is_none(), "end cannot imply success");
+                    }
+                    assert_eq!(terminal.unwrap()["rpcAttempts"], count);
+                    assert!(!json!(records).to_string().contains(&rpc.url));
+                } else { assert!(records.is_empty()); assert!(terminal.is_none()); }
+                runs.push((result.ok(), fatal, calls));
+            }
+            assert_eq!(runs[0], runs[1]);
+        }
+    }
+
+    #[test]
+    fn strict_progress_begin_is_available_while_actual_rpc_response_is_held() {
+        let (arrived, wait_arrived) = std::sync::mpsc::channel();
+        let (release, wait_release) = std::sync::mpsc::channel();
+        let (progress, progress_rx) = std::sync::mpsc::sync_channel(128);
+        let worker = std::thread::spawn(move || {
+            let (rpc, peer) = rpc_transport_fixture(vec![RpcFixtureReply::Held(arrived, wait_release)]);
+            diagnostic::observe_progress(progress);
+            let started = Instant::now();
+            diagnostic::begin_strict(true, started);
+            let identity = diagnostic::StrictTimingIdentity { request_id: Some(72), source_block: Some(300),
+                prefix_present: true, prefix_calldata_bytes: Some(1) };
+            diagnostic::bind_strict_identity(&identity, started);
+            {
+                let _phase = diagnostic::phase(Phase::PrefixExecution);
+                assert_eq!(rpc.call("eth_chainId", json!([])).unwrap(), json!("0x1"));
+            }
+            diagnostic::finish_strict(identity, true, Some(true), false);
+            assert_eq!(diagnostic::take_strict_record().unwrap()["rpcAttempts"], 1);
+            assert_eq!(peer.join().unwrap().len(), 1);
+        });
+        wait_arrived.recv_timeout(Duration::from_secs(5)).unwrap();
+        let before: Vec<_> = progress_rx.try_iter().collect();
+        assert!(before.iter().any(|r| r["event"] == "rpc-attempt-begin" &&
+            r["identity"]["requestId"] == 72 && r["phase"] == "prefix-execution"));
+        assert!(!before.iter().any(|r| r["event"] == "rpc-attempt-end" || r["event"] == "interval-end"));
+        release.send(()).unwrap();
+        worker.join().unwrap();
+        let after: Vec<_> = progress_rx.try_iter().collect();
+        assert_eq!(after.iter().filter(|r| r["event"] == "rpc-attempt-end").count(), 1);
+        assert_eq!(after.last().unwrap()["event"], "interval-end");
+    }
+
+    #[test]
+    fn strict_phase_separates_funding_probe_prefix_and_main_cold_reads() {
+        let mut runs = Vec::new();
+        for enabled in [false, true] {
+            let (rpc, peer) = rpc_fixture_steps([100u64, 7, 9].into_iter()
+                .map(|value| (200, json!({"jsonrpc":"2.0","id":1,"result":format!("0x{value:064x}")}))).collect());
+            let source = test_source();
+            let mut remote = RemoteRevmDb::new(rpc.url.clone(), 300, HashSet::new(),
+                Rc::new(RefCell::new(PersistentCache::default())), rpc.client.clone(), Rc::clone(&rpc.fatal)).unwrap();
+            remote.rpc.pinned = true;
+            remote.block_tag = json!({"blockHash":source.attestation.block_hash,"requireCanonical":true});
+            remote.source = Some(source.clone());
+            let actor = Address::repeat_byte(0xaa);
+            let executor = Address::repeat_byte(0xbb);
+            let target = Address::repeat_byte(0xcc);
+            let origin = Address::repeat_byte(0xdd);
+            let token = Address::repeat_byte(0xee);
+            let prefix_code = "0x602a5460005260206000f3";
+            for (address, code) in [(Address::ZERO, "0x"), (actor, "0x"), (origin, "0x"),
+                (executor, "0x"), (token, "0x60ff5460005260206000f3"), (target, "0x602b5460005260206000f3")] {
+                remote.seed_account(address, U256::ZERO, 0, Some(Bytecode::new_raw(Bytes::from(parse_hex_bytes(code).unwrap()))));
+            }
+            for index in mapping_slot_candidates(None, None) {
+                remote.seed_storage(token, erc20_balance_slot(executor, index), U256::ZERO);
+            }
+            let req: StrictRequest = serde_json::from_value(json!({"blockNumber":300,
+                "sourcePin":{"chainId":1,"blockHash":source.attestation.block_hash},
+                "from":actor,"to":target,"data":"0x","gasLimit":100000,
+                "callerMode":"impersonated-call-frame","transactionOrigin":origin,"executionGasLimit":200000,
+                "trialPrefix":{"executor":executor,"calldata":"0x01","inputToken":token,"inputAmount":"100",
+                    "executorRuntimeCode":{"code":prefix_code,"keccak256":format!("{:#x}", keccak256(parse_hex_bytes(prefix_code).unwrap()))}}})).unwrap();
+            let plan = StrictPlan::validate(&req).unwrap();
+            let started = Instant::now();
+            diagnostic::begin_strict(enabled, started);
+            let response = Daemon::strict_simulate_at(Rc::new(remote), source.env, &mut HashMap::new(),
+                &mut HashMap::new(), &req, &plan, started).unwrap();
+            diagnostic::finish_strict(diagnostic::StrictTimingIdentity { request_id: Some(1), source_block: Some(300),
+                prefix_present: true, prefix_calldata_bytes: Some(1) }, response.ok, response.success, false);
+            assert_eq!(response.success, Some(true));
+            assert_eq!(parse_u256(response.output.as_deref().unwrap()).unwrap(), U256::from(9));
+            let requests = peer.join().unwrap();
+            assert_eq!(requests.len(), 3);
+            for (request, (address, slot)) in requests.iter().zip([(token, "0xff"), (executor, "0x2a"), (target, "0x2b")]) {
+                assert_eq!(request["method"], "eth_getStorageAt");
+                assert_eq!(request["params"][0], format!("{address:#x}"));
+                assert_eq!(request["params"][1], slot);
+            }
+            if enabled {
+                let record = diagnostic::take_strict_record().unwrap();
+                assert_eq!(record["rpcAttempts"], 3);
+                for phase in ["token-deal-initial-probe", "prefix-execution", "main-read-setup"] {
+                    assert_eq!(record["phases"][phase]["rpcAttempts"], 1, "{phase}");
+                }
+                assert_eq!(record["phases"]["hydration"]["rpcAttempts"], 0);
+                assert_eq!(record["phases"]["token-deal"]["rpcAttempts"], 0, "child probe is exclusive");
+            } else { assert!(diagnostic::take_strict_record().is_none()); }
+            let mut response = serde_json::to_value(response).unwrap();
+            response.as_object_mut().unwrap().remove("latencyMs");
+            runs.push((response, requests));
+        }
+        assert_eq!(runs[0], runs[1]);
+    }
+
+    fn pair_bridge_reply() -> Value {
+        json!([{"jsonrpc":"2.0","id":0,"result":pinned_header()},
+            {"jsonrpc":"2.0","id":1,"result":"0x1"},
+            {"jsonrpc":"2.0","id":2,"result":pinned_header()},
+            {"jsonrpc":"2.0","id":3,"result":pinned_header()}])
+    }
+
+    fn pair_post_reply() -> Value { json!({"jsonrpc":"2.0","id":1,"result":pinned_header()}) }
+
+    fn pair_wire(url: &str, code: &str) -> Value {
+        let child = |id: &str| json!({"requestId":id,"blockNumber":300,"rpcUrl":url,
+            "sourcePin":{"chainId":1,"blockHash":pinned_header()["hash"],"stateRoot":pinned_header()["stateRoot"]},
+            "from":Address::repeat_byte(0xaa),"to":Address::repeat_byte(0xbb),"data":"0x","gasLimit":100000,
+            "callerMode":"impersonated-call-frame","transactionOrigin":Address::repeat_byte(0xdd),"executionGasLimit":200000,
+            "trialPrefix":{"executor":Address::repeat_byte(0xbb),"calldata":"0x01",
+                "inputToken":Address::repeat_byte(0xee),"inputAmount":"100",
+                "executorRuntimeCode":{"code":code,"keccak256":format!("{:#x}", keccak256(parse_hex_bytes(code).unwrap()))}}});
+        json!({"op":"strictPair","epoch":"pair-test","requests":[child("1"),child("2")]})
+    }
+
+    fn pair_daemon(rpc: &RpcClient, token_code: &str) -> (Daemon, Rc<RemoteRevmDb>) {
+        let mut daemon = daemon_fixture(rpc);
+        let source = test_source();
+        let mut remote = RemoteRevmDb::new(rpc.url.clone(), 300, HashSet::new(),
+            Rc::new(RefCell::new(PersistentCache::default())), rpc.client.clone(), Rc::clone(&rpc.fatal)).unwrap();
+        remote.rpc.pinned = true;
+        remote.block_tag = json!({"blockHash":source.attestation.block_hash,"requireCanonical":true});
+        remote.source = Some(source.clone());
+        for address in [Address::ZERO, source.env.beneficiary, Address::repeat_byte(0xaa),
+            Address::repeat_byte(0xbb), Address::repeat_byte(0xcc), Address::repeat_byte(0xdd), Address::repeat_byte(0xee)] {
+            let code = if address == Address::repeat_byte(0xee) { token_code } else { "0x" };
+            remote.seed_account(address, U256::from(1000), 0,
+                Some(Bytecode::new_raw(Bytes::from(parse_hex_bytes(code).unwrap()))));
+            for slot in 0..4 { remote.seed_storage(address, U256::from(slot), U256::ZERO); }
+        }
+        for index in mapping_slot_candidates(None, None) {
+            remote.seed_storage(Address::repeat_byte(0xee), erc20_balance_slot(Address::repeat_byte(0xbb), index), U256::ZERO);
+        }
+        let remote = Rc::new(remote);
+        daemon.pinned = Some(PinnedSession { remote: Rc::clone(&remote), balance_slots: HashMap::new(), allowance_slots: HashMap::new() });
+        (daemon, remote)
+    }
+
+    fn pair_responses(bytes: &[u8]) -> Vec<Value> {
+        std::str::from_utf8(bytes).unwrap().lines().map(|line| {
+            let mut value: Value = serde_json::from_str(line).unwrap();
+            value.as_object_mut().unwrap().remove("latencyMs");
+            value
+        }).collect()
+    }
+
+    #[test]
+    fn strict_pair_matches_scalar_outcomes_gas_attestations_and_isolation_with_eight_checks() {
+        // Increment both storage and transient state in prefix, return both in
+        // main, and emit logs. A reused journal would return 2 instead of 1.
+        let mut isolated = parse_hex_bytes("0x361560005760005460010160005560005c60010160005d60006000a000").unwrap();
+        isolated[3] = isolated.len() as u8;
+        isolated.extend(parse_hex_bytes("0x5b60005460005260005c60205260006000a060406000f3").unwrap());
+        let isolated = format!("0x{}", hex::encode(isolated));
+        // Prefix success writes storage/transient state. Revert, Halt, failed
+        // initial balance probe, and admitted-but-invalid EVM gas also retain postchecks.
+        for (code, token, evm_validation) in [
+            (trial_state_code(), "0x606460005260206000f3", false),
+            (isolated.clone(), "0x606460005260206000f3", false),
+            ("0x3615600657005b60006000fd".into(), "0x606460005260206000f3", false),
+            ("0x3615600657005bfe".into(), "0x606460005260206000f3", false),
+            ("0x60006000fd".into(), "0x606460005260206000f3", false),
+            ("0xfe".into(), "0x606460005260206000f3", false),
+            (trial_state_code(), "0x00", false),
+            (trial_state_code(), "0x606460005260206000f3", true),
+        ] {
+            let mut runs = Vec::new();
+            for (paired, enabled) in [(false, false), (true, false), (true, true)] {
+                let replies = if paired { vec![source_batch_reply(), pair_bridge_reply(), pair_post_reply()] }
+                    else { vec![source_batch_reply(), pair_post_reply(), source_batch_reply(), pair_post_reply()] };
+                let (rpc, peer) = rpc_fixture_steps(replies.into_iter().map(|v| (200, v)).collect());
+                let (mut daemon, remote) = pair_daemon(&rpc, token);
+                let mut wire = pair_wire(&rpc.url, &code);
+                if evm_validation { for child in wire["requests"].as_array_mut().unwrap() { child["executionGasLimit"] = json!(100_000_000); } }
+                let mut bytes = Vec::new();
+                if paired { daemon.handle_line_streaming(&wire.to_string(), enabled, &mut bytes).unwrap(); }
+                else {
+                    for mut child in wire["requests"].as_array().unwrap().clone() {
+                        child["op"] = json!("strictSimulate"); child["epoch"] = wire["epoch"].clone();
+                        daemon.handle_line_streaming(&child.to_string(), enabled, &mut bytes).unwrap();
+                    }
+                }
+                let responses = pair_responses(&bytes);
+                assert_eq!(responses.len(), 2);
+                if evm_validation { assert_eq!(responses[0]["errorKind"], "validation"); }
+                else if token == "0x00" { assert_eq!(responses[0]["errorKind"], "observation"); }
+                else {
+                    let kind = if code.ends_with("fe") { "Halt" } else if code.ends_with("fd") { "Revert" } else { "Success" };
+                    assert_eq!(responses[0]["strict"]["outcome"]["kind"], kind, "{responses:?}");
+                    assert_eq!(responses[0]["strict"], responses[1]["strict"], "fresh warm/transient/gas state per request");
+                    assert_eq!(responses[0]["sourceAttestation"], serde_json::to_value(&test_source().attestation).unwrap());
+                    if code == isolated {
+                        let bytes = parse_hex_bytes(responses[0]["output"].as_str().unwrap()).unwrap();
+                        assert_eq!(bytes.chunks_exact(32).map(U256::from_be_slice).collect::<Vec<_>>(), vec![U256::from(1); 2]);
+                    }
+                }
+                assert!(remote.inner.borrow().storage.values().all(|v| v.is_zero()), "no request-local writes escape");
+                let calls = peer.join().unwrap();
+                assert_eq!(calls.len(), if paired { 3 } else { 4 });
+                let logical: Vec<_> = calls.iter().flat_map(|v| v.as_array().cloned().unwrap_or_else(|| vec![v.clone()]))
+                    .map(|mut v| { v.as_object_mut().unwrap().remove("id"); v }).collect();
+                assert_eq!(logical.len(), 8);
+                if paired { assert_eq!(calls[1].as_array().unwrap().len(), 4); }
+                let record = diagnostic::take_pair_record();
+                if enabled {
+                    let record = record.unwrap();
+                    assert_eq!(record["rpcAttempts"], 3);
+                    assert_eq!(record["first"]["rpcAttempts"], 1);
+                    assert_eq!(record["bridge"]["rpcAttempts"], 1);
+                    assert_eq!(record["second"]["rpcAttempts"], 1);
+                    assert_eq!(record["bridgeChecks"]["logicalCount"], 4);
+                    assert_eq!(record["childRequestIds"], json!([1,2]));
+                    assert!(!record.to_string().contains(&rpc.url));
+                    assert!(!record.to_string().contains("pair-test"));
+                    assert!(diagnostic::take_strict_record().is_none());
+                } else { assert!(record.is_none()); }
+                runs.push((responses, logical));
+            }
+            assert_eq!(runs[0], runs[1]); assert_eq!(runs[1], runs[2]);
+        }
+    }
+
+    struct PairFlushFence {
+        bytes: Vec<u8>,
+        flushes: usize,
+        remote: Rc<RemoteRevmDb>,
+        fail_first: bool,
+    }
+    impl IoWrite for PairFlushFence {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> { self.bytes.extend_from_slice(bytes); Ok(bytes.len()) }
+        fn flush(&mut self) -> io::Result<()> {
+            self.flushes += 1;
+            if self.flushes == 1 {
+                assert_eq!(pair_responses(&self.bytes).len(), 1);
+                assert!(!self.remote.inner.borrow().storage.contains_key(&(Address::repeat_byte(0xcc), U256::from(42))),
+                    "B must not begin its main state read before A flush");
+                if self.fail_first { return Err(io::Error::from(io::ErrorKind::BrokenPipe)); }
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn strict_pair_flushes_a_before_b_reads_and_broken_flush_never_executes_b() {
+        for fail_first in [false, true] {
+            let mut replies = vec![source_batch_reply(), pair_bridge_reply()];
+            if !fail_first { replies.extend([json!({"jsonrpc":"2.0","id":1,"result":format!("0x{:064x}", 9)}), pair_post_reply()]); }
+            let (rpc, peer) = rpc_fixture_steps(replies.into_iter().map(|v| (200, v)).collect());
+            let (mut daemon, remote) = pair_daemon(&rpc, "0x606460005260206000f3");
+            let mut wire = pair_wire(&rpc.url, &trial_state_code());
+            wire["requests"][1]["to"] = json!(Address::repeat_byte(0xcc));
+            wire["requests"][1]["stateRead"] = json!({"kind":"get-storage","address":Address::repeat_byte(0xcc),"slot":format!("0x{:064x}",42)});
+            let mut out = PairFlushFence { bytes: Vec::new(), flushes: 0, remote, fail_first };
+            assert_eq!(daemon.handle_line_streaming(&wire.to_string(), false, &mut out).is_err(), fail_first);
+            assert_eq!(out.flushes, if fail_first { 1 } else { 2 });
+            let replies = pair_responses(&out.bytes);
+            assert_eq!(replies[0]["ok"], true, "{replies:?}");
+            if !fail_first { assert_eq!(parse_u256(replies[1]["output"].as_str().unwrap()).unwrap(), U256::from(9)); }
+            assert_eq!(peer.join().unwrap().len(), if fail_first { 2 } else { 4 });
+            assert_eq!(daemon.last_request_id, 2);
+        }
+    }
+
+    #[test]
+    fn strict_pair_invalid_groups_and_context_mismatches_do_no_io_or_reserve_ids() {
+        let valid = pair_wire("http://127.0.0.1:1", &trial_state_code());
+        let mut invalid = Vec::new();
+        for (key, value) in [("epoch", json!("")), ("requestId", json!("1")), ("extra", json!(1)),
+            ("requests", json!([])), ("requests", json!([valid["requests"][0]])),
+            ("requests", json!([valid["requests"][0],valid["requests"][1],valid["requests"][1]]))] {
+            let mut wire = valid.clone(); wire[key] = value; invalid.push(wire);
+        }
+        for id in [json!(null),json!(2),json!("0"),json!("01"),json!("1"),json!("18446744073709551616")] {
+            let mut wire = valid.clone(); wire["requests"][1]["requestId"] = id; invalid.push(wire);
+        }
+        for (key, value) in [("op", json!("strictSimulate")), ("epoch", json!("pair-test")), ("extra", json!(1)),
+            ("rpcUrl", json!(null)), ("blockNumber", json!(301)), ("from", json!(Address::repeat_byte(0xcc))),
+            ("transactionOrigin", json!(Address::repeat_byte(0xcc))), ("callerMode", json!("top-level")),
+            ("gasLimit", json!(100001)), ("executionGasLimit", json!(200001)),
+            ("trialPrefix", json!(null)), ("sourcePin", json!(null)), ("nativeBalanceWei", json!("1")),
+            ("observeLogs", json!(true)), ("observeAccounts", json!([Address::repeat_byte(0xaa)])),
+            ("observeTotalSupply", json!([Address::repeat_byte(0xee)])),
+            ("observeNativeBalances", json!([Address::repeat_byte(0xaa)])),
+            ("preCalls", json!([{"from":Address::repeat_byte(0xaa),"to":Address::repeat_byte(0xbb),"calldata":"0x"}])),
+            ("tokenDeals", json!([{"token":Address::repeat_byte(0xee),"to":Address::repeat_byte(0xaa),"amount":"1"}]))] {
+            let mut wire = valid.clone(); wire["requests"][1][key] = value; invalid.push(wire);
+        }
+        for field in ["inputAmount", "calldata", "executor", "inputToken"] {
+            let mut wire = valid.clone(); wire["requests"][1]["trialPrefix"][field] = json!("different"); invalid.push(wire);
+        }
+        for (key, value) in [("chainId",json!(2)), ("blockHash",json!("0x12")), ("stateRoot",json!(null))] {
+            let mut wire = valid.clone();
+            for child in wire["requests"].as_array_mut().unwrap() { child["sourcePin"][key] = value.clone(); }
+            invalid.push(wire);
+        }
+        for wire in invalid {
+            let mut daemon = Daemon::default(); let mut bytes = Vec::new();
+            daemon.handle_line_streaming(&wire.to_string(), false, &mut bytes).unwrap();
+            let responses = pair_responses(&bytes);
+            assert_eq!(responses.len(), 1); assert_eq!(responses[0]["requestId"], Value::Null);
+            assert_eq!(responses[0]["errorKind"], "validation"); assert_eq!(responses[0]["ok"], false);
+            assert_eq!(daemon.last_request_id, 0); assert!(daemon.epoch.is_none());
+            assert!(daemon.http.is_none()); assert!(daemon.pinned.is_none()); assert!(daemon.fatal.get().is_none());
+        }
+        let line = valid.to_string();
+        assert!(StrictPair::validate(valid.clone(), STRICT_PAIR_MAX_BYTES).is_ok());
+        let oversized = format!("{line}{}", " ".repeat(STRICT_PAIR_MAX_BYTES + 1 - line.len()));
+        let mut daemon = Daemon::default(); let mut bytes = Vec::new();
+        daemon.handle_line_streaming(&oversized, false, &mut bytes).unwrap();
+        assert_eq!(pair_responses(&bytes)[0]["errorKind"], "validation"); assert!(daemon.http.is_none());
+        for (epoch, last_id) in [("different",0), ("pair-test",1), ("pair-test",2)] {
+            let mut daemon = Daemon { epoch: Some(epoch.into()), last_request_id: last_id, ..Daemon::default() };
+            let mut bytes = Vec::new(); daemon.handle_line_streaming(&line, false, &mut bytes).unwrap();
+            assert_eq!(pair_responses(&bytes)[0]["requestId"], Value::Null);
+            assert!(daemon.http.is_none()); assert_eq!(daemon.last_request_id, last_id);
+        }
+    }
+
+    #[test]
+    fn strict_pair_bridge_uses_fresh_second_evidence_and_accepts_reordered_rpc_items() {
+        for order in [[0,1,2,3], [3,1,0,2], [2,0,3,1]] {
+            let mut body = pair_bridge_reply();
+            // Same fixed source identity, separately obtained complete B header.
+            // Returning A's evidence instead would fail this regression.
+            for id in [2,3] { body[id]["result"]["baseFeePerGas"] = json!("0x2"); }
+            let (mut rpc, peer) = rpc_fixture(200, json!(order.map(|id| body[id].clone())));
+            rpc.pinned = true;
+            let first = test_source();
+            let pin = SourcePin { chain_id: 1, block_hash: pinned_header()["hash"].as_str().unwrap().into(), state_root: None };
+            let second = verify_pair_bridge(&rpc, &first, 300, &pin).unwrap();
+            assert_eq!(first.env.basefee, 1); assert_eq!(second.env.basefee, 2);
+            let mut daemon = daemon_fixture(&rpc);
+            let session = daemon.take_pinned_session(rpc, &second);
+            assert_eq!(session.remote.source.as_ref(), Some(&second));
+            let calls = peer.join().unwrap();
+            assert_eq!(calls.len(), 1); assert_eq!(calls[0].as_array().unwrap().len(), 4);
+            assert_eq!(calls[0][0]["method"], "eth_getBlockByNumber");
+            assert_eq!(calls[0][3]["method"], "eth_getBlockByNumber");
+            assert_ne!(calls[0][0]["id"], calls[0][3]["id"]);
+        }
+    }
+
+    #[test]
+    fn strict_pair_bridge_faults_bar_b_and_override_completed_a() {
+        let mut faults = Vec::new();
+        for id in 0..4 {
+            for fault in ["missing", "duplicate", "unknown-id", "no-id", "version", "no-result", "error", "quota"] {
+                let mut body = pair_bridge_reply();
+                match fault {
+                    "missing" => { body.as_array_mut().unwrap().remove(id); }
+                    "duplicate" => { let item = body[id].clone(); body.as_array_mut().unwrap().push(item); }
+                    "unknown-id" => body[id]["id"] = json!(99),
+                    "no-id" => { body[id].as_object_mut().unwrap().remove("id"); }
+                    "version" => body[id]["jsonrpc"] = json!("1.0"),
+                    "no-result" => { body[id].as_object_mut().unwrap().remove("result"); }
+                    "error" | "quota" => body[id] = json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,
+                        "message":if fault == "quota" { "quota exceeded" } else { "ordinary failure" }}}),
+                    _ => unreachable!(),
+                }
+                body.as_array_mut().unwrap().reverse();
+                faults.push((body, fault == "quota"));
+            }
+        }
+        for id in [0,2,3] {
+            for (key, value) in [("number",json!("0x12d")), ("hash",json!(format!("0x{}","ff".repeat(32)))),
+                ("stateRoot",json!(format!("0x{}","ff".repeat(32)))), ("timestamp",json!("0x1")),
+                ("gasLimit",json!("0x0")), ("baseFeePerGas",json!("0x2"))] {
+                let mut body = pair_bridge_reply(); body[id]["result"][key] = value;
+                faults.push((body, false));
+            }
+        }
+        let mut chain = pair_bridge_reply(); chain[1]["result"] = json!("0x2"); faults.push((chain, false));
+        faults.push((json!({}), false));
+        for (body, throttle) in faults {
+            let (rpc, peer) = rpc_fixture_steps(vec![(200, source_batch_reply()),(200, body)]);
+            let (mut daemon, remote) = pair_daemon(&rpc, "0x606460005260206000f3");
+            let mut bytes = Vec::new();
+            daemon.handle_line_streaming(&pair_wire(&rpc.url, &trial_state_code()).to_string(), false, &mut bytes).unwrap();
+            let responses = pair_responses(&bytes);
+            assert_eq!(responses.len(), 2);
+            for (index, response) in responses.iter().enumerate() {
+                assert_eq!(response["requestId"], (index + 1).to_string());
+                assert_eq!(response["ok"], false); assert!(response.get("strict").is_none());
+                assert!(response.get("sourceAttestation").is_none());
+                assert_eq!(response["fatal"]["kind"], if throttle { "rpc-throttle" } else { "source-fault" });
+            }
+            assert!(daemon.pinned.is_none());
+            assert!(remote.inner.borrow().storage.values().all(|v| v.is_zero()));
+            // Later reset/health cannot clear physical fatal evidence or send.
+            assert!(request_line(&mut daemon, 3, json!({"op":"reset"})).get("fatal").is_some());
+            assert_eq!(peer.join().unwrap().len(), 2);
+        }
+    }
+
+    #[test]
+    fn strict_pair_keeps_a_settled_on_b_postcheck_fault_and_precheck_fault_never_executes() {
+        for precheck in [false,true] {
+            for throttle in [false,true] {
+                let mut post = pair_post_reply(); post["result"]["baseFeePerGas"] = json!("0x2");
+                let fault = if throttle { json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"quota exceeded"}}) }
+                    else if precheck { json!([]) } else { post };
+                let replies = if precheck { vec![(200,fault)] }
+                    else { vec![(200,source_batch_reply()),(200,pair_bridge_reply()),(200,fault)] };
+                let (rpc, peer) = rpc_fixture_steps(replies);
+                let (mut daemon, _) = pair_daemon(&rpc, "0x606460005260206000f3");
+                let mut bytes = Vec::new();
+                daemon.handle_line_streaming(&pair_wire(&rpc.url, &trial_state_code()).to_string(), true, &mut bytes).unwrap();
+                let responses = pair_responses(&bytes);
+                assert_eq!(responses.len(),2); assert_eq!(responses[0]["ok"], !precheck);
+                assert_eq!(responses[1]["ok"],false); assert!(responses[1].get("strict").is_none());
+                assert!(responses[1].get("sourceAttestation").is_none());
+                assert_eq!(responses[1]["fatal"]["kind"], if throttle { "rpc-throttle" } else { "source-fault" });
+                let record = diagnostic::take_pair_record().unwrap();
+                assert_eq!(record["rpcAttempts"], if precheck { 1 } else { 3 });
+                assert_eq!(record["fatal"],true);
+                if precheck { assert_eq!(record["first"]["phases"]["prefix-execution"]["entries"],0); }
+                assert_eq!(peer.join().unwrap().len(), if precheck { 1 } else { 3 });
+            }
+        }
+    }
+
+    #[test]
+    fn strict_pair_first_and_reused_sessions_attribute_hydration_separately() {
+        let hydration: Vec<_> = (0..15 + mapping_slot_candidates(None, None).len()).map(|id| {
+            let result = if id >= 15 { format!("0x{:064x}",0) }
+                else if id == 14 { "0x606460005260206000f3".into() }
+                else if id % 3 == 2 { "0x".into() } else { "0x0".into() };
+            json!({"jsonrpc":"2.0","id":id,"result":result})
+        }).collect();
+        let (rpc, peer) = rpc_fixture_steps(vec![(200,source_batch_reply()), (200,json!(hydration)),
+            (200,pair_bridge_reply()), (200,pair_post_reply()),
+            (200,source_batch_reply()), (200,pair_bridge_reply()), (200,pair_post_reply())]);
+        let mut daemon = daemon_fixture(&rpc);
+        for (a,b) in [(1,2),(3,4)] {
+            let mut wire = pair_wire(&rpc.url, "0x00");
+            wire["requests"][0]["requestId"] = json!(a.to_string());
+            wire["requests"][1]["requestId"] = json!(b.to_string());
+            let mut bytes = Vec::new(); daemon.handle_line_streaming(&wire.to_string(), true, &mut bytes).unwrap();
+            assert!(pair_responses(&bytes).iter().all(|response| response["ok"] == true));
+            let record = diagnostic::take_pair_record().unwrap();
+            assert_eq!(record["rpcAttempts"], if a == 1 { 4 } else { 3 });
+            assert_eq!(record["first"]["phases"]["hydration"]["rpcAttempts"], if a == 1 { 1 } else { 0 });
+            assert_eq!(record["second"]["phases"]["hydration"]["rpcAttempts"],0);
+            assert_eq!(record["bridge"]["rpcAttempts"],1);
+        }
+        let calls = peer.join().unwrap(); assert_eq!(calls.len(),7);
+        assert_eq!(calls[1].as_array().unwrap().len(), hydration.len());
+    }
+
+    #[test]
+    fn strict_pair_physical_throttle_during_a_or_bridge_bars_every_later_execution() {
+        for in_prefix in [false,true] {
+            let quota = json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"quota exceeded"}});
+            let rate: Vec<_> = (0..4).map(|id| json!({"jsonrpc":"2.0","id":id,
+                "error":{"code":429,"message":"rate limit"}})).collect();
+            let steps = vec![RpcFixtureReply::Http(200,source_batch_reply().to_string()),
+                if in_prefix { RpcFixtureReply::Http(200,quota.to_string()) }
+                else { RpcFixtureReply::RetryAfter(json!(rate).to_string(),"60") }];
+            let (rpc, peer) = rpc_transport_fixture(steps);
+            let (mut daemon, _) = pair_daemon(&rpc, "0x606460005260206000f3");
+            let mut bytes = Vec::new();
+            let code = if in_prefix { "0x602a5460005260206000f3" } else { "0x00" };
+            daemon.handle_line_streaming(&pair_wire(&rpc.url,code).to_string(), true, &mut bytes).unwrap();
+            for response in pair_responses(&bytes) {
+                assert_eq!(response["ok"],false); assert_eq!(response["fatal"]["kind"],"rpc-throttle");
+                assert!(response.get("strict").is_none());
+            }
+            let record = diagnostic::take_pair_record().unwrap();
+            assert_eq!(record["rpcAttempts"],2); assert!(record["second"].is_null());
+            assert_eq!(record["bridge"]["rpcAttempts"], if in_prefix { 0 } else { 1 });
+            assert_eq!(record["bridgeChecks"]["logicalCount"], if in_prefix { 0 } else { 4 });
+            assert_eq!(peer.join().unwrap().len(),2);
+        }
+    }
+
+    fn assert_source_batch_fault(body: Value, pin: &SourcePin, expected: FatalReason) {
+        let (mut rpc, thread) = rpc_fixture(200, body);
+        rpc.pinned = true;
+        let error = verify_source(&rpc, 300, pin).unwrap_err();
+        assert_eq!(error.downcast_ref::<FatalReason>(), Some(&expected));
+        assert_eq!(rpc.fatal.get(), Some(expected));
+        // A later precheck and reset cannot recover or dispatch after the fault.
+        assert!(verify_source(&rpc, 300, pin).is_err());
+        let mut daemon = daemon_fixture(&rpc);
+        for (id, op) in ["health", "reset"].iter().enumerate() {
+            let response = request_line(&mut daemon, id as u64 + 1, json!({"op":op}));
+            assert_eq!(response["ok"], false);
+            assert_eq!(response["fatal"], serde_json::to_value(expected).unwrap());
+            assert!(response.get("sourceAttestation").is_none());
+        }
+        assert_eq!(rpc.round_trips(), 1);
+        assert_eq!(thread.join().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn verify_source_batch_rejects_chain_and_full_header_faults() {
+        let header = pinned_header();
+        let pin = SourcePin { chain_id: 1, block_hash: header["hash"].as_str().unwrap().into(), state_root: None };
+        for chain in [json!("0x2"), json!("0x01"), json!("0x10000000000000000"), Value::Null] {
+            let mut body = source_batch_reply(); body[0]["result"] = chain;
+            assert_source_batch_fault(body, &pin, FatalReason::SourceFault);
+        }
+        for id in [1, 2] {
+            for key in header.as_object().unwrap().keys() {
+                let mut body = source_batch_reply();
+                body[id]["result"].as_object_mut().unwrap().remove(key);
+                assert_source_batch_fault(body, &pin, FatalReason::SourceFault);
+            }
+            for (key, value) in [
+                ("number", json!("0x12d")), ("hash", json!(format!("0x{}", "ff".repeat(32)))),
+                ("stateRoot", json!(format!("0x{}", "ff".repeat(32)))),
+                ("parentHash", json!(format!("0x{}", "ff".repeat(32)))),
+                ("timestamp", json!("0x6b49d201")), ("gasLimit", json!("0x1c9c381")),
+                ("baseFeePerGas", json!("0x2")), ("miner", json!(format!("0x{}", "ff".repeat(20)))),
+                ("mixHash", json!(format!("0x{}", "ff".repeat(32)))), ("excessBlobGas", json!("0x1")),
+                ("gasUsed", json!("0xffffffffffffffff")), ("blobGasUsed", json!("0x1")),
+                ("difficulty", json!("0x1")), ("transactionsRoot", json!("0x00")),
+            ] {
+                let mut body = source_batch_reply(); body[id]["result"][key] = value;
+                assert_source_batch_fault(body, &pin, FatalReason::SourceFault);
+            }
+        }
+        // Matching returned roots still must agree with an explicitly supplied pin.
+        let pin = SourcePin { state_root: Some(format!("0x{}", "ff".repeat(32))), ..pin };
+        assert_source_batch_fault(source_batch_reply(), &pin, FatalReason::SourceFault);
+    }
+
+    #[test]
+    fn verify_source_batch_missing_or_failed_items_latch_without_retry() {
+        let pin = SourcePin { chain_id: 1, block_hash: pinned_header()["hash"].as_str().unwrap().into(), state_root: None };
+        for id in 0..3 {
+            for fault in ["missing", "error", "no-result", "quota", "duplicate", "unknown-id", "version"] {
+                let mut body = source_batch_reply();
+                let mut expected = FatalReason::SourceFault;
+                match fault {
+                    "missing" => { body.as_array_mut().unwrap().remove(id); }
+                    "error" | "quota" => {
+                        body[id] = json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,
+                            "message":if fault == "quota" { "quota exceeded" } else { "ordinary failure" }}});
+                        if fault == "quota" {
+                            expected = FatalReason::RpcThrottle { category: ThrottleCategory::RpcQuota,
+                                http_status: None, rpc_code: Some(-32000) };
+                        }
+                    }
+                    "no-result" => { body[id].as_object_mut().unwrap().remove("result"); }
+                    "duplicate" => { let item = body[id].clone(); body.as_array_mut().unwrap().push(item); }
+                    "unknown-id" => { body[id]["id"] = json!(99); }
+                    "version" => { body[id]["jsonrpc"] = json!("1.0"); }
+                    _ => unreachable!(),
+                }
+                body.as_array_mut().unwrap().reverse();
+                assert_source_batch_fault(body, &pin, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn verify_source_batch_keeps_strict_canonical_postcheck_on_every_outcome() {
+        for (outcome, code) in [("Success", "0x00"), ("Revert", "0x60006000fd"),
+            ("Halt", "0xfe"), ("observation-failure", "0x00")] {
+            for changed in [false, true] {
+                let mut canonical = pinned_header();
+                if changed { canonical["baseFeePerGas"] = json!("0x2"); }
+                let (rpc, thread) = rpc_fixture_steps(vec![
+                    (200, source_batch_reply()),
+                    (200, json!([{"jsonrpc":"2.0","id":0,"result":{}}])),
+                    (200, json!({"jsonrpc":"2.0","id":1,"result":canonical})),
+                ]);
+                let mut daemon = daemon_fixture(&rpc);
+                let source = test_source();
+                let mut remote = RemoteRevmDb::new(rpc.url.clone(), 300, HashSet::new(),
+                    Rc::new(RefCell::new(PersistentCache::default())), rpc.client.clone(), Rc::clone(&rpc.fatal)).unwrap();
+                remote.rpc.pinned = true;
+                remote.block_tag = json!({"blockHash":source.attestation.block_hash,"requireCanonical":true});
+                remote.source = Some(source.clone());
+                let caller = Address::repeat_byte(0xaa);
+                let target = Address::repeat_byte(0xbb);
+                for address in [Address::ZERO, caller, source.env.beneficiary] {
+                    remote.seed_account(address, U256::MAX, 0, None);
+                }
+                remote.seed_account(target, U256::ZERO, 1,
+                    Some(Bytecode::new_raw(Bytes::from(parse_hex_bytes(code).unwrap()))));
+                let remote = Rc::new(remote);
+                daemon.pinned = Some(PinnedSession { remote: Rc::clone(&remote),
+                    balance_slots: HashMap::new(), allowance_slots: HashMap::new() });
+                let mut req = json!({"op":"strictSimulate","blockNumber":300,"rpcUrl":rpc.url,
+                    "sourcePin":{"chainId":1,"blockHash":source.attestation.block_hash},
+                    "from":caller,"to":target,"data":"0x","gasLimit":100000});
+                if outcome == "observation-failure" { req["observeTotalSupply"] = json!([target]); }
+                let response = request_line(&mut daemon, 1, req);
+                if changed {
+                    assert_eq!(response["ok"], false);
+                    assert_eq!(response["fatal"]["kind"], "source-fault");
+                    assert!(response.get("sourceAttestation").is_none());
+                    assert!(response.get("strict").is_none());
+                } else if outcome == "observation-failure" {
+                    assert_eq!(response["ok"], false);
+                    assert_eq!(response["errorKind"], "observation");
+                    assert_eq!(rpc.fatal.get(), None);
+                } else {
+                    assert_eq!(response["ok"], true, "{response}");
+                    assert_eq!(response["strict"]["outcome"]["kind"], outcome);
+                    assert_eq!(response["sourceAttestation"], serde_json::to_value(&source.attestation).unwrap());
+                    assert_eq!(rpc.fatal.get(), None);
+                }
+                assert_eq!(remote.rpc.round_trips(), 2, "trace and postcheck for {outcome}");
+                let requests = thread.join().unwrap();
+                assert_eq!(requests.len(), 3, "precheck, trace, postcheck for {outcome}");
+                assert_eq!(requests[0].as_array().unwrap().len(), 3);
+                assert_eq!(requests[1][0]["method"], "debug_traceCall");
+                assert_eq!(requests[2], json!({"jsonrpc":"2.0","id":1,
+                    "method":"eth_getBlockByNumber","params":["0x12c",false]}));
+            }
+        }
+    }
+
     #[test]
     fn malformed_pins_never_dispatch_or_use_environment_endpoint() {
         for pin in [Value::Null, json!({}), json!({"chainId":1}),
@@ -4752,6 +5868,7 @@ mod tests {
     }
 
     enum RpcFixtureReply {
+        Held(std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>),
         Http(u16, String),
         ContentType(u16, String, Option<&'static str>),
         RetryAfter(String, &'static str),
@@ -4805,6 +5922,12 @@ mod tests {
                 stream.read_exact(&mut request).unwrap();
                 requests.push(serde_json::from_slice(&request).unwrap());
                 match reply {
+                    RpcFixtureReply::Held(arrived, release) => {
+                        arrived.send(()).unwrap();
+                        release.recv_timeout(Duration::from_secs(5)).unwrap();
+                        let body = json!({"jsonrpc":"2.0","id":1,"result":"0x1"}).to_string();
+                        write!(stream, "HTTP/1.1 200 Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                    }
                     RpcFixtureReply::Http(status, body) => {
                         write!(stream, "HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
                     }

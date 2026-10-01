@@ -185,7 +185,7 @@ function assertExecutionEvidence(input: {
 }): void {
   const evidence = input.exactEvidence;
   if (
-    evidence.kind !== "univ4-no-hook-quoter" ||
+    (evidence.kind !== "univ4-no-hook-quoter" && evidence.kind !== "univ4-no-hook-local") ||
     evidence.poolId !== input.descriptor.poolId ||
     evidence.poolKeyFingerprint !== poolKeyFingerprint(input.descriptor.poolKey) ||
     !sameAddress(evidence.quoter, input.descriptor.managerBinding.quoter) ||

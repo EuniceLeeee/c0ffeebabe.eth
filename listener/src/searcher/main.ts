@@ -2691,6 +2691,7 @@ async function main(): Promise<void> {
     readBlockHash,
     formatRouteKey: formatBlockScanRouteKey,
     formatRing: formatBlockScanRing,
+    isRouteSimRejected: (opp) => blockScanSimRejects.has(blockScanRouteId(opp.seedEdges)),
     submitAtomic(input) {
       return maybeSubmitBlockScanAtomic({
         ...input,

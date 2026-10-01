@@ -164,7 +164,7 @@ export function createStrictCentralAdapterRuntime(input: {
 }): CentralAdapterRuntime {
   let now = Date.now();
   const maxRequestsPerBatch = input.maxRequestsPerBatch ?? 512;
-  const sharedCodeReads = createSharedCodeReadCache();
+  const sharedSourceReads = createSharedSourceReadCache();
   const verifiedActors = Object.freeze({ ...(input.verifiedActors ?? {}) });
   const transactionOrigin = input.transactionOrigin === undefined
     ? undefined
@@ -221,7 +221,7 @@ export function createStrictCentralAdapterRuntime(input: {
               }
               assertTransportControl(control);
             } catch (error) {
-              sharedCodeReads.retire(source, control);
+              sharedSourceReads.retire(source, control);
               throw error;
             }
           };
@@ -237,7 +237,7 @@ export function createStrictCentralAdapterRuntime(input: {
           const callBackend = rethLane === "exact"
             ? input.exactCallBackend
             : producerCallBackend;
-          const codeReads = new Map<AdapterRequest, SharedCodeRead>();
+          const sourceReads = new Map<AdapterRequest, SharedSourceRead>();
           /*
            * Simulation requests hit the revm-sim daemon (not reth) and must
            * NOT consume a reth transport permit; only eth-call / get-code /
@@ -292,7 +292,7 @@ export function createStrictCentralAdapterRuntime(input: {
                   rethLane === "producer-critical" || rethLane === "exact"
                   ? input.producerCallCache
                   : undefined,
-                codeReads.get(request)?.promise,
+                sourceReads.get(request)?.promise,
                 input.exactPrefixContext?.prefix,
               );
               requestStatus = result.ok ? "returned" : "not-ok";
@@ -364,24 +364,28 @@ export function createStrictCentralAdapterRuntime(input: {
           const directReth = callBatchOwned
             ? rethBound.filter((request) => request.kind !== "eth-call")
             : rethBound;
-          // Reserve raw code reads before queueing the physical group. Only
+          // Reserve raw source reads before queueing the physical group. Only
           // misses belong to its permit; hits/joiners issue their own results.
           for (const request of directReth) {
-            if (request.kind !== "get-code") continue;
-            const address = request.address;
-            const shared = sharedCodeReads.reserve(source, rethLane, address, control, async () => {
+            if (request.kind !== "get-code" && request.kind !== "get-storage") continue;
+            // Production declarations are frozen; direct executor harnesses
+            // can still mutate their request while this physical read queues.
+            const read = Object.freeze({ ...request });
+            const shared = sharedSourceReads.reserve(source, rethLane, read, control, async () => {
               assertCurrent();
-              const data = await withRpcRetry(() => input.provider.getCode(address, source.number, control), control);
+              const data = await withRpcRetry(() => read.kind === "get-code"
+                ? input.provider.getCode(read.address, source.number, control)
+                : input.provider.getStorage(read.address, read.slot, source.number, control), control);
               assertCurrent();
               return data;
             });
-            if (shared !== undefined) codeReads.set(request, shared);
+            if (shared !== undefined) sourceReads.set(request, shared);
           }
           const physicalRequests = directReth.filter(request =>
-            !codeReads.has(request) || codeReads.get(request)!.owner !== undefined);
+            !sourceReads.has(request) || sourceReads.get(request)!.owner !== undefined);
           const runPhysicalRequests = async (): Promise<AdapterRequestResult[]> =>
             (await awaitAllDrained(physicalRequests.map(async request => {
-              const owner = codeReads.get(request)?.owner;
+              const owner = sourceReads.get(request)?.owner;
               if (owner !== undefined) { await owner.run(); return []; }
               return [await runRequest(request)];
             }))).flat();
@@ -405,13 +409,13 @@ export function createStrictCentralAdapterRuntime(input: {
                   },
                 );
             } catch (error) {
-              for (const shared of codeReads.values()) shared.owner?.reject(error);
+              for (const shared of sourceReads.values()) shared.owner?.reject(error);
               throw error;
             }
           };
           const [directResults, sharedResults, batchedResults] = await awaitAllDrained([
             directWork(),
-            awaitAllDrained([...codeReads.keys()].map(runRequest)),
+            awaitAllDrained([...sourceReads.keys()].map(runRequest)),
             awaitAllDrained(batchedCalls.map(runRequest)),
           ]);
           const rethResults = [...directResults, ...sharedResults, ...batchedResults];
@@ -558,13 +562,13 @@ async function awaitAllDrained<T>(work: readonly Promise<T>[]): Promise<T[]> {
   }
 }
 
-interface SharedCodeRead {
+interface SharedSourceRead {
   readonly promise: Promise<string>;
   readonly owner?: { run(): Promise<void>; reject(error: unknown): void };
 }
 
-/** Runtime-local raw bytes only: at most 256 entries, each <=32 KiB of code. */
-function createSharedCodeReadCache() {
+/** Runtime-local raw bytes: 256 combined entries, code <=32 KiB or one storage word. */
+function createSharedSourceReadCache() {
   const entries = new Map<string, {
     sourceKey: string; signal: AbortSignal; deadlineAtMs: number;
     settled: boolean; promise: Promise<string>;
@@ -583,8 +587,9 @@ function createSharedCodeReadCache() {
         }
       }
     },
-    reserve(source: CanonicalSource, lane: string, address: string,
-      control: AdapterWorkControl | undefined, load: () => Promise<string>): SharedCodeRead | undefined {
+    reserve(source: CanonicalSource, lane: string,
+      request: Extract<AdapterRequest, { kind: "get-code" | "get-storage" }>,
+      control: AdapterWorkControl | undefined, load: () => Promise<string>): SharedSourceRead | undefined {
       // A shared AbortSignal plus a finite deadline is an explicit lifetime.
       // Uncontrolled or partially controlled harnesses retain the old path.
       const signal = control?.signal;
@@ -593,7 +598,8 @@ function createSharedCodeReadCache() {
       let signalId = signalIds.get(signal);
       if (signalId === undefined) signalIds.set(signal, signalId = ++nextSignalId);
       const pin = sourceKey(source);
-      const key = JSON.stringify([pin, lane, address.toLowerCase(), signalId, deadlineAtMs]);
+      const key = JSON.stringify([pin, lane, request.kind, request.address.toLowerCase(),
+        request.kind === "get-storage" ? request.slot.toLowerCase() : null, signalId, deadlineAtMs]);
       const existing = entries.get(key);
       if (existing !== undefined) {
         entries.delete(key); entries.set(key, existing);
@@ -625,7 +631,8 @@ function createSharedCodeReadCache() {
             const data = await load();
             entry.settled = true;
             if (signal.aborted || Date.now() >= deadlineAtMs || typeof data !== "string" ||
-                data.length > 2 + 2 * 32_768 || !/^0x(?:[0-9a-fA-F]{2})*$/.test(data)) forget();
+                (request.kind === "get-storage" ? !/^0x[0-9a-fA-F]{64}$/.test(data)
+                  : data.length > 2 + 2 * 32_768 || !/^0x(?:[0-9a-fA-F]{2})*$/.test(data))) forget();
             resolve(data);
           } catch (error) { fail(error); }
         },
@@ -644,7 +651,7 @@ async function executeRequest(
   control?: AdapterWorkControl,
   exactCallBackend?: Pick<StateBackend, "call">,
   producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">,
-  sharedCodeRead?: Promise<string>,
+  sharedSourceRead?: Promise<string>,
   prefix?: CompiledExactPrefix,
 ): Promise<AdapterRequestResult> {
   assertTransportControl(control);
@@ -713,7 +720,7 @@ async function executeRequest(
       });
     }
     if (request.kind === "get-code") {
-      const data = await (sharedCodeRead ?? withRpcRetry(
+      const data = await (sharedSourceRead ?? withRpcRetry(
         () => provider.getCode(request.address, source.number, control),
         control,
       ));
@@ -727,12 +734,12 @@ async function executeRequest(
       });
     }
     if (request.kind === "get-storage") {
-      const data = await withRpcRetry(() => provider.getStorage(
+      const data = await (sharedSourceRead ?? withRpcRetry(() => provider.getStorage(
         request.address,
         request.slot,
         source.number,
         control,
-      ), control);
+      ), control));
       return issueResult({
         id: request.id,
         source,

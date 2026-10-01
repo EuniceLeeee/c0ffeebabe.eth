@@ -71,6 +71,146 @@ const prefixRequest = (): StrictSimulateRequest => ({ ...pinnedRequest(),
   callerMode: "impersonated-call-frame", transactionOrigin: `0x${"dd".repeat(20)}`, executionGasLimit: 100000,
   trialPrefix: { executor: `0x${"cc".repeat(20)}`, calldata: "0x1234", inputToken: `0x${"ee".repeat(20)}`, inputAmount: "100" } });
 
+function pairReply(f: Fixture, child: number, changes: Record<string, unknown> = {}, index = 1): string {
+  const pair = f.requests[index]!;
+  const body = JSON.stringify({ epoch: pair.epoch, requestId: pair.requests[child].requestId,
+    ok: true, success: true, latencyMs: 0, output: "0x", gasUsed: "0", sourceAttestation: attestation(),
+    strict: { outcome: { kind: "Success", phase: "main", output: "0x" }, executionGasUsed: "0",
+      nativeDeltas: [], tokenDeltas: [], totalSupplyDeltas: [], logs: [] }, ...changes }) + "\n";
+  return body;
+}
+
+test("queued prefix siblings pair without collection delay, snapshot input and stream first result", async () => {
+  const f = new Fixture(), c = new FixtureClient(f, { timeoutMs: 120000 });
+  const hold = c.health(); assert.equal(f.requests.length, 1, "no collection delay");
+  const controller = new AbortController(), control = { signal: controller.signal, deadlineAtMs: Date.now() + 60000 };
+  const req = prefixRequest();
+  const a = c.strictSimulate(req, control), b = c.strictSimulate({ ...prefixRequest(), data: "0x1234" }, control);
+  req.trialPrefix!.calldata = "0xbeef";
+  let bSettled = false; void b.then(() => { bSettled = true; });
+  f.reply(0); await hold; await tick();
+  assert.equal(f.requests[1]!.op, "strictPair");
+  assert.deepEqual(f.requests[1]!.requests.map((r: any) => r.requestId), ["2", "3"]);
+  assert.equal(f.requests[1]!.requests[0].trialPrefix.calldata, "0x1234");
+  assert.equal("op" in f.requests[1]!.requests[0], false);
+  assert.equal("epoch" in f.requests[1]!.requests[0], false);
+  f.stdout.write(pairReply(f, 0)); await a; assert.equal(bSettled, false);
+  const tail = c.health(); assert.equal(f.requests.length, 2, "pair already owns second dispatch");
+  f.stdout.write(pairReply(f, 1)); await b; await tick();
+  f.reply(2); await tail;
+  c.stop(); f.close(); await c.closeAndDrain();
+});
+
+for (const mismatch of ["signal", "deadline", "source", "endpoint", "prefix", "actor", "origin", "gas", "setup", "effects", "oversize"] as const) {
+  test(`prefix pair excludes ${mismatch} mismatch without reordering`, async () => {
+    const f = new Fixture(), c = new FixtureClient(f, { timeoutMs: 120000 });
+    const hold = c.health(), controller = new AbortController();
+    const control = { signal: controller.signal, deadlineAtMs: Date.now() + 60000 };
+    const req = prefixRequest(), other = prefixRequest();
+    let nextControl = control;
+    if (mismatch === "signal") nextControl = { ...control, signal: new AbortController().signal };
+    if (mismatch === "deadline") nextControl = { ...control, deadlineAtMs: control.deadlineAtMs - 1 };
+    if (mismatch === "source") other.sourcePin = { ...other.sourcePin!, stateRoot: PIN_PARENT };
+    if (mismatch === "endpoint") other.rpcUrl += "/different";
+    if (mismatch === "prefix") other.trialPrefix!.inputAmount = "101";
+    if (mismatch === "actor") other.from = `0x${"01".repeat(20)}`;
+    if (mismatch === "origin") other.transactionOrigin = `0x${"02".repeat(20)}`;
+    if (mismatch === "gas") other.gasLimit = 1000;
+    if (mismatch === "setup") other.preCalls = [{ from: other.from, to: other.to, calldata: "0x" }];
+    if (mismatch === "effects") other.observeLogs = true;
+    if (mismatch === "oversize") other.data = "0x" + "00".repeat(524288);
+    const settled = Promise.allSettled([c.strictSimulate(req, control), c.strictSimulate(other, nextControl)]);
+    f.reply(0); await hold; await tick();
+    assert.equal(f.requests[1]!.op, "strictSimulate");
+    assert.equal(f.requests[1]!.requestId, "2");
+    c.stop(); f.close(); await settled; await c.closeAndDrain();
+  });
+}
+
+test("prefix pairing compares enqueue-time effective timeout, not just supplied deadline", async t => {
+  const f = new Fixture(), c = new FixtureClient(f, { timeoutMs: 60000 });
+  const hold = c.health(); let now = Date.now(); t.mock.method(Date, "now", () => now);
+  const control = { signal: new AbortController().signal, deadlineAtMs: now + 120000 };
+  const a = c.strictSimulate(prefixRequest(), control); now++;
+  const b = c.strictSimulate(prefixRequest(), control), settled = Promise.allSettled([a, b]);
+  f.reply(0); await hold; await tick();
+  assert.equal(f.requests[1]!.op, "strictSimulate");
+  c.stop(); f.close(); await settled; await c.closeAndDrain();
+});
+
+test("pair retains ordinary per-item execution error and allows the checked sibling", async () => {
+  const f = new Fixture(), c = new FixtureClient(f, { timeoutMs: 120000 });
+  const hold = c.health(), control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60000 };
+  const a = assert.rejects(c.strictSimulate(prefixRequest(), control), RevmStrictError);
+  const b = c.strictSimulate(prefixRequest(), control);
+  f.reply(0); await hold; await tick();
+  f.stdout.write(pairReply(f, 0, { ok: false, success: undefined, sourceAttestation: undefined,
+    output: undefined, gasUsed: undefined, strict: undefined, errorKind: "execution", error: "fixture failure" }));
+  await a; assert.equal(c.isTerminal, false);
+  f.stdout.write(pairReply(f, 1)); await b;
+  c.stop(); f.close(); await c.closeAndDrain();
+});
+
+test("pair leaves unrelated queued cancellation isolated and retains both late fatal identities", async () => {
+  const f = new Fixture(), faults: RevmFatalReason[] = [];
+  const c = new FixtureClient(f, { timeoutMs: 120000, onFatal: reason => faults.push(reason) });
+  const hold = c.health(), controller = new AbortController();
+  const control = { signal: controller.signal, deadlineAtMs: Date.now() + 60000 };
+  const a = assert.rejects(c.strictSimulate(prefixRequest(), control));
+  const b = assert.rejects(c.strictSimulate(prefixRequest(), control));
+  f.reply(0); await hold; await tick();
+  const unrelated = new AbortController();
+  const tail = assert.rejects(c.strictSimulate(prefixRequest(), { ...control, signal: unrelated.signal }));
+  unrelated.abort(); await tail; assert.equal(c.isTerminal, false); assert.equal(f.requests.length, 2);
+  controller.abort(); await Promise.all([a, b]); assert.equal(c.isTerminal, true);
+  f.stdout.write(pairReply(f, 0));
+  f.stdout.write(pairReply(f, 1, { fatal: { kind: "source-fault" } }));
+  assert.deepEqual(faults, [{ kind: "source-fault" }]);
+  f.close(); await c.closeAndDrain();
+});
+
+test("duplicate first paired response poisons second and cannot dispatch external queued work", async () => {
+  const f = new Fixture(), c = new FixtureClient(f, { timeoutMs: 120000 });
+  const hold = c.health(), control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60000 };
+  const a = c.strictSimulate(prefixRequest(), control);
+  const b = assert.rejects(c.strictSimulate(prefixRequest(), control), RevmFatalError);
+  const tail = assert.rejects(c.health(), RevmFatalError);
+  f.reply(0); await hold; await tick();
+  f.stdout.write(pairReply(f, 0) + pairReply(f, 0));
+  await a; await b; await tail; assert.equal(f.requests.length, 2);
+  f.close(); await c.closeAndDrain();
+});
+
+test("paired first result remains available when second reaches the shared deadline", async t => {
+  const f = new Fixture(), c = new FixtureClient(f, { timeoutMs: 120000 });
+  const hold = c.health(); let now = Date.now(); const clock = t.mock.method(Date, "now", () => now);
+  const control = { signal: new AbortController().signal, deadlineAtMs: now + 60000 };
+  const a = c.strictSimulate(prefixRequest(), control);
+  const b = assert.rejects(c.strictSimulate(prefixRequest(), control), /deadline/);
+  try {
+    f.reply(0); await hold; await tick();
+    f.stdout.write(pairReply(f, 0)); assert.equal((await a).ok, true);
+    now += 60001; f.stdout.write(pairReply(f, 1)); await b;
+    assert.equal(c.isTerminal, true); assert.equal(f.requests.length, 2);
+  } finally {
+    clock.mock.restore(); c.stop(); f.close(); await c.closeAndDrain();
+  }
+});
+
+test("source owner normalizes only the same original abort domain for queued pairing", async () => {
+  const f = new Fixture(), c = new FixtureClient(f, { timeoutMs: 120000 });
+  const owner = new RevmStrictSourceOwner({ createClient: () => c, onFatal() {} });
+  const lease = await owner.acquire({ source: { number: 300, hash: PIN_HASH, generation: 1 },
+    chainId: 1, rpcUrl: pinnedRequest().rpcUrl, stateRoot: PIN_ROOT });
+  const hold = c.health(), common = new AbortController();
+  const control = { signal: common.signal, deadlineAtMs: Date.now() + 60000 };
+  const a = lease.strictSimulate(prefixRequest(), control), b = lease.strictSimulate(prefixRequest(), control);
+  f.reply(0); await hold; await tick(); assert.equal(f.requests[1]!.op, "strictPair");
+  f.stdout.write(pairReply(f, 0)); await a;
+  f.stdout.write(pairReply(f, 1)); await b;
+  const closing = lease.closeAndDrain(); f.close(); await closing; await owner.shutdown();
+});
+
 test("trial prefix rejects malformed, unpinned and conflicting execution context before dispatch", async () => {
   const f = new Fixture(); const c = new FixtureClient(f);
   const base = prefixRequest();
@@ -875,6 +1015,136 @@ async function pinnedFixture(run: (f: PinnedRpcFixture, c: PinnedDirectClient, f
 }
 
 if (process.env.REVM_SIM_TEST_BINARY) {
+  for (const heldPhase of ["main-read", "postcheck"] as const) {
+    test(`pinned direct pair: scalar parity and A streams before held B ${heldPhase}`, async t => {
+      type Result = Awaited<ReturnType<RevmSimClient["strictSimulate"]>>;
+      const runs: { results: Result[]; validations: RpcWire[][] }[] = [];
+      for (const paired of [false, true]) await pinnedFixture(async (f, c, fatal) => {
+        const token = `0x${"ee".repeat(20)}`, coldTarget = `0x${"99".repeat(20)}`;
+        // Nonempty prefix writes persistent and transient state; A reads both.
+        // Funding is already satisfied, so this fixture needs no balance-slot search.
+        const code = "0x3615601057602a600055602b60005d005b60005460005260005c60205260406000f3";
+        f.hook = call => call.method === "eth_getCode" && call.params[0] === token
+          ? { result: returnCode(100) }
+          : call.method === "eth_getCode" && call.params[0] === coldTarget ? { result: storageCode } : undefined;
+        const aRequest: StrictSimulateRequest = { ...f.request(), ...innerContext,
+          trialPrefix: { executor: target, calldata: "0x01", inputToken: token, inputAmount: "100",
+            executorRuntimeCode: { code, keccak256: keccak256(code) } } };
+        const bRequest: StrictSimulateRequest = { ...aRequest, to: coldTarget,
+          stateRead: { kind: "get-storage", address: coldTarget, slot: word(0) } };
+
+        // Transparent spies only: actual production writes go to the real binary.
+        const spawned = t.mock.method(c as unknown as { spawnDaemon:
+          (command: string, args: string[], detached: boolean) => ChildProcessByStdio<Writable, Readable, null> }, "spawnDaemon");
+        await c.health();
+        const writes = t.mock.method(spawned.mock.calls[0]!.result!.stdin, "write");
+        await c.strictSimulate(aRequest); // identical source-cache warmup in both modes
+        writes.mock.resetCalls();
+        const responseStart = c.responses.length;
+        const validations: RpcWire[][] = [];
+        const isValidation = (call: RpcWire) => ["eth_chainId", "eth_getBlockByHash", "eth_getBlockByNumber"].includes(call.method);
+        let markHeld!: () => void;
+        const held = new Promise<void>(resolve => { markHeld = resolve; });
+        let release: (() => void) | undefined;
+        let heldCount = 0;
+        f.server.prependListener("request", (req, res) => {
+          let body = "";
+          req.on("data", chunk => { body += chunk.toString(); });
+          req.on("end", () => {
+            const wire = JSON.parse(body) as RpcWire | RpcWire[];
+            const calls = Array.isArray(wire) ? wire : [wire];
+            if (calls.some(isValidation)) {
+              assert(calls.every(isValidation), "validation envelopes contain only logical checks");
+              validations.push(calls);
+            }
+            const hold = paired && (heldPhase === "main-read"
+              ? calls.some(call => call.method === "eth_getStorageAt" && call.params[0] === coldTarget)
+              : !Array.isArray(wire) && calls[0]!.method === "eth_getBlockByNumber"
+                && validations.flat().length === 8);
+            if (!hold) return;
+            const end = res.end;
+            t.mock.method(res, "end", (...args: any[]) => {
+              heldCount++;
+              release = () => { Reflect.apply(end, res, args); };
+              markHeld();
+              return res;
+            });
+          });
+        });
+
+        const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 10_000 };
+        let bSettled = false;
+        let a: Promise<Result> | undefined, b: Promise<Result> | undefined;
+        let barrier: Promise<unknown> | undefined;
+        let results: Result[];
+        try {
+          if (paired) {
+            // Health owns the pipe while both siblings enter the normal queue.
+            // No copied pairing algorithm or collection delay in the test.
+            barrier = c.health();
+            a = c.strictSimulate(aRequest, control);
+            b = c.strictSimulate(bRequest, control);
+            void a.catch(() => {});
+            void b.then(() => { bSettled = true; }, () => { bSettled = true; });
+            await barrier;
+            const watchdog = new AbortController();
+            try {
+              await Promise.race([
+                Promise.all([held, a]),
+                b.then(() => { throw new Error("B settled before the deliberate hold"); }),
+                delay(5_000, undefined, { signal: watchdog.signal }).then(() => {
+                  throw new Error("A was not streamed while B was held");
+                }),
+              ]);
+            } finally { watchdog.abort(); }
+            assert.equal(heldCount, 1);
+            assert.equal(bSettled, false);
+            assert.equal(c.responses.slice(responseStart).filter(r => r.sourceAttestation).length, 1,
+              "A is attested and delivered before B's held response is released");
+            release!(); release = undefined;
+            results = await Promise.all([a, b]);
+          } else {
+            results = [await c.strictSimulate(aRequest, control), await c.strictSimulate(bRequest, control)];
+          }
+          const wire = writes.mock.calls.map(call => JSON.parse(String(call.arguments[0])));
+          const strictWire = wire.filter(row => row.op !== "health");
+          assert.deepEqual(strictWire.map(row => row.op), paired ? ["strictPair"] : ["strictSimulate", "strictSimulate"]);
+          const issued = paired ? strictWire[0].requests : strictWire;
+          const responses = c.responses.slice(responseStart).filter(row => row.sourceAttestation);
+          assert.deepEqual(responses.map(row => row.requestId), issued.map((row: any) => row.requestId));
+          assert.equal(new Set(issued.map((row: any) => row.requestId)).size, 2);
+          assert(responses.every(row => row.ok && row.epoch === strictWire[0].epoch));
+          assert.equal(results[0]!.output, `0x${word(42).slice(2)}${word(43).slice(2)}`);
+          assert.equal(results[1]!.output, word(7));
+          for (const result of results) {
+            assert.equal(result.success, true);
+            assert(BigInt(result.gasUsed!) > 0n);
+            assert.equal(result.strict!.outcome.kind, "Success");
+            assert.deepEqual(result.sourceAttestation, { kind: "node-attested", chainId: 1, blockNumber: 300,
+              blockHash: f.canonical.hash, stateRoot: f.canonical.stateRoot, parentHash: f.canonical.parentHash });
+          }
+          assert.deepEqual(validations.map(batch => batch.length), paired ? [3, 4, 1] : [3, 1, 3, 1]);
+          for (const batch of validations) assert.equal(new Set(batch.map(call => call.id)).size, batch.length);
+          assert.deepEqual(validations.flat().map(call => call.method), [
+            "eth_chainId", "eth_getBlockByHash", "eth_getBlockByNumber", "eth_getBlockByNumber",
+            "eth_chainId", "eth_getBlockByHash", "eth_getBlockByNumber", "eth_getBlockByNumber",
+          ], "both complete prechecks and both canonical postchecks remain distinct logical calls");
+          assert.deepEqual(fatal, []);
+          runs.push({ results, validations });
+        } finally {
+          release?.();
+          await c.closeAndDrain();
+          await Promise.allSettled([a, b, barrier]);
+        }
+      });
+      const semantics = (result: Result) => ({ success: result.success, output: result.output,
+        gasUsed: result.gasUsed, strict: result.strict, sourceAttestation: result.sourceAttestation });
+      assert.deepEqual(runs[1]!.results.map(semantics), runs[0]!.results.map(semantics));
+      const logical = (batches: RpcWire[][]) => batches.flat().map(({ method, params }) => ({ method, params }));
+      assert.deepEqual(logical(runs[1]!.validations), logical(runs[0]!.validations));
+    });
+  }
+
   test("pinned direct: connection diagnostics explain bounded retries without exposing the endpoint", async () => pinnedFixture(async (f, c, fatal) => {
     const closed = createServer(); closed.listen(0, "127.0.0.1"); await once(closed, "listening");
     const address = closed.address(); assert(address && typeof address === "object");

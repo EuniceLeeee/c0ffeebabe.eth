@@ -63,11 +63,11 @@ test("unsupported sequential composition is not attributed to an entire Family",
   assert.equal(budget.blockingCircuit(unrelated.tokenPath.edges), null);
 });
 
-test("different logical pools retain trial context for generic dependency checks", async () => {
+test("different logical pools omit trial state and propagate quoted amounts", async () => {
   const plan = makePlans(1)[0]!;
   plan.tokenPath.edges.forEach((e, i) => { e.instanceKey = `logical-pool-${i}`; });
   const fixture = sharedSession([plan], { async quote(input, leg) {
-    assert.equal(input.priorQuotes!.length, leg);
+    assert.equal(input.priorQuotes, undefined);
     return leg ? input.amountIn / 2n + 1n : input.amountIn * 2n;
   } });
   const result = await propagateAmountsWithRawOutputs(plan.tokenPath, 100n, noState,
@@ -75,12 +75,29 @@ test("different logical pools retain trial context for generic dependency checks
   assert.deepEqual(result.amounts, [100n, 200n, 101n]);
 });
 
-test("shared dependencies retain the route from its first hop without an opt-in", async () => {
+test("distinct instances behind one target are not mistaken for a repeated pool", async () => {
   const plan = makePlans(1)[0]!;
-  plan.tokenPath.edges.forEach((e, i) => { e.instanceKey = `distinct-instance-${i}`; });
+  plan.tokenPath.edges.forEach((e, i) => {
+    e.instanceKey = `distinct-instance-${i}`;
+    e.target = plan.tokenPath.edges[0]!.target;
+  });
   const fixture = sharedSession([plan], { async quote(input, leg) {
-    assert.equal(input.priorQuotes!.length, leg,
-      "even the first hop must retain state before the composite dependency is reached");
+    assert.equal(input.priorQuotes, undefined);
+    return leg ? input.amountIn / 2n + 1n : input.amountIn * 2n;
+  } });
+  const result = await propagateAmountsWithRawOutputs(plan.tokenPath, 100n, noState,
+    { executor: EXECUTOR, strictSession: fixture.session, toleranceRawUnits: 0n });
+  assert.deepEqual(result.amounts, [100n, 200n, 101n]);
+});
+
+test("legacy address identity is case-insensitive and retains repeated-pool prefixes", async () => {
+  const plan = makePlans(1)[0]!;
+  plan.tokenPath.edges.forEach((edge, i) => {
+    delete edge.instanceKey;
+    edge.target = i ? plan.tokenPath.edges[0]!.target.toUpperCase() : plan.tokenPath.edges[0]!.target;
+  });
+  const fixture = sharedSession([plan], { async quote(input, leg) {
+    assert.equal(input.priorQuotes!.length, leg);
     return leg ? input.amountIn / 2n + 1n : input.amountIn * 2n;
   } });
   const result = await propagateAmountsWithRawOutputs(plan.tokenPath, 100n, noState,

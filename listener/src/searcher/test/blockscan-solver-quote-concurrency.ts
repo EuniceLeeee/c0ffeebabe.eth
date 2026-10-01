@@ -116,11 +116,12 @@ export function sharedSession(
     StrictProductionRuntimeSession["issueExact"]
   >>;
 
-  const planByTarget = new Map<string, { planIndex: number; leg: number }>();
+  // Different logical pools and opposite directions may share one target.
+  const planByEdge = new Map<object, { planIndex: number; leg: number }>();
   for (let planIndex = 0; planIndex < plans.length; planIndex++) {
     for (let leg = 0; leg < plans[planIndex]!.tokenPath.edges.length; leg++) {
-      planByTarget.set(
-        plans[planIndex]!.tokenPath.edges[leg]!.target.toLowerCase(),
+      planByEdge.set(
+        plans[planIndex]!.tokenPath.edges[leg]!,
         { planIndex, leg },
       );
     }
@@ -138,7 +139,7 @@ export function sharedSession(
     creditDebtBpsCandidates: () => options.debtBps ?? Object.freeze([0n]),
     fundingActionIds: () => Object.freeze(["morpho-flash"]),
     async issueExact(input: ExactInput): Promise<ExactHandle> {
-      const location = planByTarget.get(input.edge.target.toLowerCase());
+      const location = planByEdge.get(input.edge);
       assert.ok(location, `unknown exact target ${input.edge.target}`);
       const outputKey = (amount: bigint): string =>
         `${location.planIndex}:${input.creditDebtBps ?? 0n}:${amount}`;

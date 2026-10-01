@@ -32,6 +32,9 @@ interface Slot {
   readonly ready: ReturnType<typeof deferred<void>>;
   readonly pending: Set<Promise<DaemonResponse>>;
   readonly control: Readonly<RevmRequestControl>;
+  // Equal quote cancellation domains stay equal at the physical client. This
+  // does not combine distinct signals or extend any request's deadline.
+  quoteSignals: WeakMap<AbortSignal, AbortSignal>;
   detach: () => void;
   client?: OwnedClient;
   terminal?: Error;
@@ -73,7 +76,7 @@ export class RevmStrictSourceOwner {
     // cannot be retried under the same generation, even if no client was created.
     this.highestGeneration = binding.source.generation;
     const slot: Slot = { binding, control: capturedControl, controller: new AbortController(),
-      ready: deferred<void>(), pending: new Set(), detach() {} };
+      ready: deferred<void>(), pending: new Set(), quoteSignals: new WeakMap(), detach() {} };
     this.admission = slot;
     slot.detach = watchControl(capturedControl, error => { void this.retire(slot, error); });
     if (slot.terminal) slot.detach();
@@ -157,8 +160,12 @@ export class RevmStrictSourceOwner {
     try {
       this.assertLeaseOpen(slot);
       assertControl(capturedControl);
-      const signal = capturedControl.signal === undefined ? slot.controller.signal
-        : AbortSignal.any([slot.controller.signal, capturedControl.signal]);
+      let signal = slot.controller.signal;
+      if (capturedControl.signal !== undefined) {
+        const existing = slot.quoteSignals.get(capturedControl.signal);
+        signal = existing ?? AbortSignal.any([slot.controller.signal, capturedControl.signal]);
+        if (!existing) slot.quoteSignals.set(capturedControl.signal, signal);
+      }
       const callControl = Object.freeze({ signal,
         deadlineAtMs: Math.min(slot.control.deadlineAtMs ?? Infinity, capturedControl.deadlineAtMs ?? Infinity) });
       const pending = slot.client!.strictSimulate({ ...request, blockNumber: binding.source.number,
@@ -188,6 +195,7 @@ export class RevmStrictSourceOwner {
     slot.terminal = reason;
     slot.detach();
     slot.controller.abort(reason);
+    slot.quoteSignals = new WeakMap();
     void (async () => {
       await slot.ready.promise;
       await slot.client?.closeAndDrain();

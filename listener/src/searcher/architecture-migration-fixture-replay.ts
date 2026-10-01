@@ -45,7 +45,7 @@ import {
 } from "./venues/swaps/univ4-abi.js";
 import { v4PoolId } from "./venues/swaps/univ4-common.js";
 import { ADDR } from "../shared/constants/addresses.js";
-import { univ4Exact } from "./venues/swaps/univ4-family/exact.js";
+import { createUniV4Exact } from "./venues/swaps/univ4-family/exact.js";
 import { univ4Execution } from "./venues/swaps/univ4-family/execution.js";
 import {
   v3SwapExactInput,
@@ -1924,6 +1924,9 @@ function univ4SuccessResult(
     : request.id.startsWith("univ4-precision:") ||
         request.id === "exact-univ4-quote"
     ? univ4QuoteResult(request, canonical, ctx).data
+    : request.id === "exact-univ4-output-balance"
+    // Synthetic capacity for this fixture, never chain/reserve evidence.
+    ? ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [(1n << 256n) - 1n])
     : (() => {
         throw new Error(`unexpected univ4 fixture request ${request.id}`);
       })();
@@ -2267,13 +2270,8 @@ async function buildUniv4CaseCapture(input: {
         order,
       }),
     }));
-  const exactMethod = univ4Exact.methods().find(
-    (method) => method.kind === "request-program" && method.id === "univ4-quoter",
-  );
-  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
-    throw new Error("univ4 exact request program is missing");
-  }
-  const program = exactMethod.program;
+  // This legacy fixture supplies Quoter responses, not a verified tick snapshot.
+  const referenceExact = createUniV4Exact("quoter");
   const exactByRouteKey = new Map<
     string,
     { readonly amountOut: bigint; readonly evidence: UniV4ExactEvidence }
@@ -2297,6 +2295,13 @@ async function buildUniv4CaseCapture(input: {
         executor: MIGRATION_CAPTURE_EXECUTOR,
         runtimeEvidence: Object.freeze([]),
       });
+      const exactMethod = referenceExact.methods(exactInput).find(
+        (method) => method.kind === "request-program" && method.id === "univ4-quoter-with-output-balance",
+      );
+      if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+        throw new Error("univ4 exact request program is missing");
+      }
+      const program = exactMethod.program;
       const requests = program.buildRequests(exactInput);
       const results = requests.map((request) =>
         univ4SuccessResult(request, input.source, ctx)

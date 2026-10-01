@@ -17,6 +17,7 @@ import {
 import type { RuntimeEvidence } from
   "../venues/adapter-family-plugin.js";
 import type { AdapterWorkControl } from "../adapter-work-intent.js";
+import { edgeInstanceKey } from "../venues/route-instance-identity.js";
 
 export interface PropagatedAmounts {
   /** Nominal per-edge amounts in raw-unit mode; legacy BPS retains its haircut. */
@@ -85,6 +86,17 @@ export async function propagateAmountsWithRawOutputs(
   const amounts: bigint[] = [flashAmount];
   const rawOutputs: bigint[] = [];
   const exactHandles: StrictProductionExactHandle[] = [];
+  // Route-level quote policy: independent instances use source-state quotes.
+  // Any repeated instance retains the complete trial from the first hop, not
+  // just the repeated edge. Instance identity comes from the verified Graph;
+  // singleton execution targets and per-direction state keys are not pool IDs.
+  const instances = new Set<string>();
+  const needsPriorState = path.edges.some(edge => {
+    const key = edgeInstanceKey(edge);
+    if (instances.has(key)) return true;
+    instances.add(key);
+    return false;
+  });
   let cur = flashAmount;
   const toleranceRawUnits = options.toleranceRawUnits;
   if (toleranceRawUnits !== undefined && toleranceRawUnits !== 0n && toleranceRawUnits !== 1n) {
@@ -109,9 +121,9 @@ export async function propagateAmountsWithRawOutputs(
         amountIn: cur,
         executor: options.executor,
         runtimeEvidence: options.runtimeEvidence ?? Object.freeze([]),
-        // Carry this amount's trial from its first hop, including across distinct
-        // instances. No repeated-pool heuristic or Family opt-in is needed.
-        priorQuotes: [...exactHandles],
+        // This is a Solver search policy, not a proof that distinct instances
+        // cannot share state. The independent final sim remains mandatory.
+        ...(needsPriorState ? { priorQuotes: [...exactHandles] } : {}),
         ...(options.adapterWorkControl === undefined
           ? {}
           : { control: options.adapterWorkControl }),

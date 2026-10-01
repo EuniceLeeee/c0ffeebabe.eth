@@ -39,7 +39,8 @@ import { blockScanGrossProfitWeth } from "./blockscan-profit-priority.js";
 import { createScannedProfitTokenValuation } from "./scanned-profit-token-valuation.js";
 import type { ProfitTokenValuation } from "./profit-token-valuation.js";
 import { effectiveEthPricing } from "./blockscan-eth-view.js";
-import { emitEvent } from "./events.js";
+import { edgeInstanceKey } from "./venues/route-instance-identity.js";
+import { emitEvent, makeBlockScanOpportunityId } from "./events.js";
 import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
 import { type TokenEdge } from "./planner/token-graph.js";
 import {
@@ -842,6 +843,10 @@ export interface BlockScanRuntimeLoopDependencies {
   formatRing(
     opportunity: Pick<BlockScanOpportunity, "seedEdges" | "affectedTokens">,
   ): string;
+  /** Existing process-local final-sim rejection policy; checked at Solver dispatch. */
+  readonly isRouteSimRejected?: (opportunity: Pick<BlockScanOpportunity, "seedEdges">) => boolean;
+  /** Diagnostics only: match submitAtomic's historical mode; omitted means next-block. */
+  readonly historicalExecutionMode?: "source-block";
   submitAtomic(input: BlockScanAtomicExecutionInput): Promise<BlockScanAtomicResult>;
 }
 
@@ -911,6 +916,7 @@ export class BlockScanRuntimeLoop {
     readonly mode: BlockScanExecutionPassMode;
     readonly startupWarm: boolean;
     readonly controller: AbortController;
+    sourceNPreparation: boolean;
   } | null = null;
 
   constructor(
@@ -1068,12 +1074,15 @@ export class BlockScanRuntimeLoop {
       this.latestScheduledHead = blockNumber;
       this.pruneEvidenceContexts(blockNumber);
       const active = this.activePass;
-      // The one-time periodic startup warm must publish once. The scheduler
-      // already coalesces newer heads; steady-state/evidence passes stay abortable.
+      // Let periodic Source-N preparation settle within its existing budget
+      // so the next head can inherit its pricing baseline. Only head changes
+      // are deferred; the preparation/search fence discards superseded work.
+      // The one-time periodic startup warm retains its existing exemption.
       if (
         active !== null &&
         active.blockNumber < blockNumber &&
         !(active.mode === "periodic" && active.startupWarm) &&
+        !active.sourceNPreparation &&
         !active.controller.signal.aborted
       ) {
         active.controller.abort(
@@ -2071,12 +2080,14 @@ export class BlockScanRuntimeLoop {
     );
     const passSignal = passController.signal;
     const simulationWork = new SourceSimulationWork(this.deps.sourceSimulationFactory);
-    this.activePass = Object.freeze({
+    const activePass = this.activePass = {
       blockNumber,
       mode: passMode,
       startupWarm: startupWarmAttempt && passMode === "periodic",
       controller: passController,
-    });
+      sourceNPreparation: !startupWarmAttempt && passMode === "periodic" &&
+        !this.deps.blind.enabled && this.deps.nMinusOneFallbackEnabled !== true,
+    };
 
     // Strict latency begins when the production block listener observed the
     // head, not when this single-worker scheduler eventually began running.
@@ -2933,6 +2944,18 @@ export class BlockScanRuntimeLoop {
           return;
         }
 
+        if (activePass.sourceNPreparation) {
+          activePass.sourceNPreparation = false;
+          passSignal.throwIfAborted();
+          // prepare() has published the source-pinned pricing baseline and
+          // its backend has drained. Keep that baseline, but never hand an
+          // obsolete runtime to diagnostics, backrun, planners or enumeration.
+          if (this.latestScheduledHead !== null && this.latestScheduledHead > blockNumber) {
+            passController.abort(new BlockScanHeadSupersededInterruption(this.latestScheduledHead));
+            passSignal.throwIfAborted();
+          }
+        }
+
         const snapshot = runtime.snapshot;
         diagnostic?.onSnapshot(snapshot);
         if (diagnostic?.through === "prices") return;
@@ -3746,7 +3769,42 @@ export class BlockScanRuntimeLoop {
         if (this.deps.isShuttingDown()) throw new Error("block-scan shutdown");
         const { item } = solverQueue[index]!;
         if (solverFamilyBudget.blocks(item.opp.seedEdges)) return [];
+        // Read at worker dispatch: another route may have reverted while this
+        // plan was queued. The late final-sim guard still owns in-flight races.
+        if (this.deps.isRouteSimRejected?.(item.opp)) {
+          const reason = "sim_revert_seen_this_live";
+          const routeId = this.deps.formatRouteKey(item.opp);
+          const targetBlock = blockNumber + (this.deps.historicalExecutionMode === "source-block" ? 0 : 1);
+          const evidenceKey = blindOpportunityEvidenceKey(item.opp);
+          const evidence = auditOpportunities?.get(evidenceKey);
+          if (evidence) {
+            auditOpportunities!.set(evidenceKey, {
+              ...evidence,
+              ev: { executionStatus: "not_run", decision: "reject", reason },
+            });
+          }
+          console.log(`[searcher/blockscan-solver-skip] ${JSON.stringify({
+            block: blockNumber, sourceBlockHash, targetBlock, solverIndex: index,
+            routeId, stage: "planner_solver", reason,
+          })}`);
+          emitEvent({
+            type: "pipeline_dropped",
+            opportunity_id: makeBlockScanOpportunityId({
+              sourceBlock: blockNumber, cycleId: item.opp.cycleId,
+              startToken: item.opp.flashToken,
+              seedPools: item.opp.seedEdges.map(edge => edge.target),
+            }),
+            route_id: routeId, source_block: blockNumber, target_block: targetBlock,
+            opportunity_kind: "block-scan-arb", cycle_id: item.opp.cycleId,
+            cycle_fingerprint: item.opp.cycleFingerprint, strategy_view_used: "blockscan",
+            stage: "planner_solver", reason, plans: item.planCount,
+          });
+          return [];
+        }
         const completed: QuotedBlockScanPlan[] = [];
+        const solveStartedAtMs = Date.now();
+        const solveStartedAt = performance.now();
+        let solveOutcome = "failed";
         const solverTiming: SolverTiming = {
           quoteMs: 0,
           planBuildMs: 0,
@@ -3787,6 +3845,7 @@ export class BlockScanRuntimeLoop {
             },
           );
           solverFamilyBudget.recordSuccess(item.opp.seedEdges);
+          solveOutcome = "completed";
           const resolvedCandidates = deferredCandidates.length > 0
             ? deferredCandidates
             : [solved];
@@ -3841,6 +3900,7 @@ export class BlockScanRuntimeLoop {
             }
           }
         } catch (error) {
+          solveOutcome = signal.aborted ? "aborted" : "failed";
           solverFamilyBudget.recordFailure(item.opp.seedEdges, error);
           const evidence = auditOpportunities?.get(
             blindOpportunityEvidenceKey(item.opp),
@@ -3865,6 +3925,20 @@ export class BlockScanRuntimeLoop {
           solverAmountPoints += solverTiming.amountPoints;
           solverHopExactCalls += solverTiming.hopExactCalls;
           solverGssPoints += solverTiming.gssPoints;
+          if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1") {
+            try {
+              const instances = item.plan.tokenPath.edges.map(edgeInstanceKey);
+              console.log(`[searcher/solver-route-timing] ${JSON.stringify({
+                sourceBlock: blockNumber, solverIndex: index,
+                quoteMode: new Set(instances).size < instances.length
+                  ? "ordered-prefix" : "source-state",
+                instances, hops: instances.length,
+                startedAtMs: solveStartedAtMs, wallMs: performance.now() - solveStartedAt,
+                ...solverTiming, outcome: solveOutcome, aborted: signal.aborted,
+                positiveCandidates: completed.length,
+              })}`);
+            } catch { /* Observability cannot change Solver results or draining. */ }
+          }
         }
         return completed;
       };
@@ -4110,6 +4184,7 @@ export class BlockScanRuntimeLoop {
       skippedReason = `runtime_error:${blockScanErrorMessage(error)}`;
       throw error;
     } finally {
+      activePass.sourceNPreparation = false;
       try {
         try {
           const cleanupStartedAtMs = Date.now();
