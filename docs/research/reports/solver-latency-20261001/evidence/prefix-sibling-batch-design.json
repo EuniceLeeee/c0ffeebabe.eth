@@ -1,0 +1,44 @@
+{
+  "status": "plan review required; not implementation approval yet",
+  "searcherBehaviorChange": true,
+  "hypothesis": "Repeated-prefix sibling read requests are logically parallel but client serializes them. Combine post(A)+full pre(B) into one physical HTTP batch while retaining all logical checks, original order and isolated execution.",
+  "scope": "Local generic strict source transport; no Family, Solver search, final sim policy, source authority or live configuration changes",
+  "baseTrackedDiffSha256": "75d97cb2be70fc49217c64f9ebedb6cb075ede7c4532237fbe45ad049940b5c6",
+  "requirements": [
+    "Eligibility must prove identical immutable source endpoint/hash/root, prefix, caller environment, and effective cancellation/deadline ownership. Noneligible ordinary paths keep single-request behavior.",
+    "Do not promote an independently cancellable queued request into shared active work. Batch only siblings whose cancel signal and effective absolute deadline are identical; no IDs/address/selector protocol branches.",
+    "No longer deadline, retry owner or queue reordering. Validate and snapshot all request bodies before yield; bound grouping and payload size; late arrivals remain normal queued work.",
+    "Wire group keeps independently authenticated request IDs, responses, source attestations, ordinary errors and ordered execution. Duplicate/malformed/out-of-order/unexpected frames fail closed. Fatal precedence and physical child/stdio drain retained.",
+    "All three prechecks and canonical postcheck remain for EVERY logical request; only physical HTTP batching changes. No cached source result and no logical check deduplication.",
+    "Full original prefix execution per request from fresh request-local state; no EVM journal/transient/gas/warmth sharing. Existing source-value cache may remain.",
+    "Combined post(A)+pre(B) validates A before accepting its response and B before any B execution. Source faults remain fatal for whole lease, including cancelled/late responses.",
+    "Diagnostics distinguish logical validations and physical requests; no apparent per-request speedup merely from moving time between requests. Measure full sibling group and full hop from common start.",
+    "If grouping cannot be implemented without changing cancellation/source invariants, reject this design and report; do not relax safeguards to force eligibility."
+  ],
+  "anticipatedFiles": [
+    "listener/src/searcher/revm-strict-source-owner.ts",
+    "listener/src/searcher/revm-sim-client.ts",
+    "listener/revm-sim/src/main.rs",
+    "corresponding existing TS tests and inline Rust tests"
+  ],
+  "gates": [
+    "Identical successful/reverting output, gas, effects and source attestations",
+    "All logical checks retained with fewer physical batches",
+    "One sibling cancellation/deadline isolation including queued/active boundaries",
+    "Fatal/source mismatch/late reply/duplicate IDs/partial result/drain",
+    "No grouping for different source/prefix/caller/deadline/signal",
+    "Full Rust and relevant strict-client/owner/transport/prefix regressions",
+    "Non-author executed checks before bounded same-input benchmark"
+  ],
+  "nextNetworkExperiment": "Not yet declared. Must freeze reviewed source/binary first; no live or RPC before then.",
+  "notDoing": [
+    "Prefetch traces",
+    "Removing source checks",
+    "Reusing validation results",
+    "Continuation caches",
+    "Parallel mutable EVM",
+    "Route/search/amount-count cuts",
+    "Deadline increases",
+    "Deployment/signing/broadcast/push/merge"
+  ]
+}

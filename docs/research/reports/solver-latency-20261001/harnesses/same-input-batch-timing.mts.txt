@@ -1,0 +1,626 @@
+// Thin post-selection diagnostic. All authority, planning and amount search are production imports.
+// Offline is the default. --run is reserved for main after live has ended and independent review.
+import fs from "node:fs";
+import path from "node:path";
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire, syncBuiltinESMExports } from "node:module";
+import { AsyncLocalStorage } from "node:async_hooks";
+import net from "node:net";
+import childProcess from "node:child_process";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repo = path.resolve(here, "../..");
+const amountFile = "searcher/solver/amount-propagation.ts";
+const json = (value: unknown) => JSON.stringify(value, (_, v) => typeof v === "bigint" ? v.toString()
+  : v instanceof Map ? { $type: "map", entries: [...v] } : v, 2);
+const shaBytes = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+const sha = (file: string) => shaBytes(fs.readFileSync(file));
+const read = (file: string, tagged = false): any => JSON.parse(fs.readFileSync(file, "utf8"),
+  tagged ? (_, v) => v?.$type === "bigint" ? BigInt(v.value) : v?.$type === "map" ? new Map(v.entries) : v : undefined);
+const specOption = process.argv.indexOf("--spec");
+const specPath = specOption < 0 ? path.join(here, "same-input-timing.json")
+  : path.resolve(String(process.argv[specOption + 1] ?? ""));
+assert.equal(path.dirname(specPath), here, "spec must remain in this task's experiment directory");
+assert.equal(path.extname(specPath), ".json", "spec must be JSON");
+const spec = read(specPath);
+let logicalIssuances = 0;
+const reserveRead = (stop: AbortController) => {
+  if (++logicalIssuances > spec.resourceCaps.maxLogicalIssuances) {
+    stop.abort(new Error("experiment logical read cap exhausted"));
+    throw stop.signal.reason;
+  }
+};
+let secret = "<redacted-secret>";
+const clean = (error: unknown) => {
+  let text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  if (secret) text = text.replaceAll(secret, "[rpc]");
+  return text.replace(/https?://[^\s"'`]+/g, "[rpc]").slice(0, 1200);
+};
+
+// Deny sockets/child processes during imports, validation and all offline modes.
+// No provider credential is even read until the declaration is durably written.
+function offlineFence() {
+  const connect = net.Socket.prototype.connect;
+  const saved = new Map<string, any>();
+  const deny = () => { throw new Error("offline fence: network/process operation forbidden"); };
+  net.Socket.prototype.connect = deny as any;
+  for (const key of ["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"]) {
+    saved.set(key, (childProcess as any)[key]); (childProcess as any)[key] = deny;
+  }
+  syncBuiltinESMExports();
+  return () => {
+    net.Socket.prototype.connect = connect;
+    for (const [key, value] of saved) (childProcess as any)[key] = value;
+    syncBuiltinESMExports();
+  };
+}
+
+function args() {
+  const result: Record<string, string | boolean> = {};
+  const flags = new Set(["--run", "--fixture-check", "--self-test"]);
+  const values = new Set(["--spec", "--baseline-runtime", "--candidate-runtime", "--binary-a", "--binary-b", "--experiment", "--out"]);
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const key = argv[i]!;
+    assert(!(key in result), `duplicate option ${key}`);
+    if (flags.has(key)) result[key] = true;
+    else { assert(values.has(key), `unsupported option ${key}`); const value = argv[++i];
+      assert(value && !value.startsWith("--"), `missing value ${key}`); result[key] = value; }
+  }
+  assert(!(result["--run"] && (result["--fixture-check"] || result["--self-test"])), "offline and run modes are exclusive");
+  return result;
+}
+
+function sourceTree(root: string) {
+  assert(path.isAbsolute(root), "runtime must be absolute");
+  assert.equal(fs.realpathSync(root), root, "runtime root must be a real directory");
+  assert.notEqual(root, repo, "working checkout is not a frozen runtime");
+  const base = path.join(root, "listener/src");
+  assert.equal(fs.realpathSync(base), base, "source root cannot be symlinked");
+  const files: Record<string, string> = {};
+  const walk = (relative: string) => {
+    for (const entry of fs.readdirSync(path.join(base, relative), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const name = path.posix.join(relative, entry.name);
+      if (entry.isDirectory()) walk(name);
+      else { assert(entry.isFile(), `non-regular source entry ${name}`); files[name] = sha(path.join(base, name)); }
+    }
+  };
+  walk("");
+  const runtimeAssets: Record<string, string> = {};
+  const assets = (relative: string) => {
+    const file = path.join(root, relative), stat = fs.lstatSync(file);
+    if (stat.isDirectory()) for (const name of fs.readdirSync(file).sort()) assets(path.posix.join(relative, name));
+    else { assert(stat.isFile(), `non-regular runtime asset ${relative}`); runtimeAssets[relative] = sha(file); }
+  };
+  assets("listener/searcher"); assets("listener/tsconfig.json"); assets("listener/tsconfig.live.json");
+  const require = createRequire(path.join(root, "listener/package.json"));
+  return { root, files, runtimeAssets, sha256: shaBytes(json(files)),
+    packageSha256: sha(path.join(root, "listener/package.json")),
+    dependencyRoot: fs.realpathSync(path.join(root, "listener/node_modules")),
+    ethersEntry: require.resolve("ethers"), artifactSha256: sha(path.join(root, "out/BotVM.sol/BotVM.json")) };
+}
+function compareTree(actual: ReturnType<typeof sourceTree>, basis: ReturnType<typeof sourceTree>, policy: "A" | "B") {
+  assert.deepEqual(Object.keys(actual.files), Object.keys(basis.files), "runtime file sets differ");
+  const deltas = policy === "B" ? spec.runtimeDeltaSha256B ?? {} : {};
+  if (Object.keys(deltas).length) assert.deepEqual(Object.keys(deltas).sort(), [
+    "searcher/revm-sim-client.ts", "searcher/revm-strict-source-owner.ts", "searcher/test/revm-sim-client.ts",
+  ], "only declared strict-pair transport files may differ");
+  for (const key of Object.keys(basis.files)) assert.equal(actual.files[key], key === amountFile
+    ? spec.amountPropagation[policy] : deltas[key] ?? basis.files[key], `unexpected runtime difference: ${key}`);
+  assert.equal(actual.packageSha256, basis.packageSha256, "runtime package differs");
+  assert.deepEqual(actual.runtimeAssets, basis.runtimeAssets, "runtime assets differ");
+  assert.equal(actual.dependencyRoot, basis.dependencyRoot, "require identical shared installed dependencies");
+  assert.equal(actual.artifactSha256, spec.artifactSha256, "executor artifact differs");
+}
+
+async function loadRuntime(root: string) {
+  // Match main.ts's side-effect bootstrap in THIS frozen runtime's registry.
+  // Importing the catalog alone does not register its compiler actions.
+  await import(pathToFileURL(path.join(root, "listener/src/shared/adapters/index.ts")).href);
+  const files = {
+    checkpoint: "searcher/universe-rebuild-checkpoint.ts", rebuild: "searcher/universe-rebuild-production.ts",
+    ready: "searcher/strict-ready-runtime.ts", session: "searcher/strict-production-runtime-session.ts",
+    composition: "searcher/venues/production-family-composition.ts", identifiers: "searcher/venues/adapter-family-identifiers.ts",
+    central: "searcher/strict-central-adapter-runtime.ts", cache: "searcher/adapter-family-exact-quote-cache.ts",
+    scheduler: "searcher/reth-transport-scheduler.ts", backend: "searcher/pinned-reth-quote-backend.ts",
+    amount: "searcher/blockscan-amount-reference.ts", refinement: "searcher/detector/blockscan-candidate-refinement.ts",
+    planner: "searcher/planner/planner.ts", templates: "searcher/templates/path-template.ts",
+    solver: "searcher/solver/solver.ts", propagation: amountFile,
+    valuation: "searcher/scanned-profit-token-valuation.ts", sourceSim: "searcher/revm-strict-source-simulation.ts",
+    client: "searcher/revm-sim-client.ts", state: "shared/state/state-backend.ts",
+    actors: "searcher/venues/production-verified-actors.ts", identity: "searcher/venues/route-instance-identity.ts",
+    executor: "shared/executor/botvm-executor.ts", registry: "shared/adapters/registry.ts",
+  };
+  const modules: any = {};
+  for (const [key, file] of Object.entries(files)) modules[key] = await import(pathToFileURL(path.join(root, "listener/src", file)).href);
+  return modules;
+}
+
+async function offlineRegistrationRegression(root: string, m: any, f: any) {
+  // Compiler/registration regression, NOT a historical quote or latency trial.
+  // Use existing Ready directions, real issuers/Family fragments/compiler, and
+  // synthetic ABI responses only at the transport boundary. No custom adapters.
+  const { ethers } = createRequire(path.join(root, "listener/package.json"))("ethers");
+  const { UNIV4_QUOTER_INTERFACE: quoter } = await import(pathToFileURL(path.join(root,
+    "listener/src/searcher/venues/swaps/univ4-abi.ts")).href);
+  const token = new ethers.Interface(["function balanceOf(address) view returns (uint256)",
+    "function getEthBalance(address) view returns (uint256)"]);
+  const subscript = new ethers.Interface(["function execSubscript(bytes)"]);
+  const { root: runtimeRoot, cases } = rehydrate(m, f);
+  const saved = cases.find((item: any) => item.rank === 8);
+  const edges = [saved.edges[0], saved.edges.at(-1)];
+  assert.equal(edges[0].instanceKey, edges[1].instanceKey);
+  let sourceReads = 0;
+  const compiled: string[] = [];
+  const respond = (data: string) => {
+    if (data.startsWith(quoter.getFunction("quoteExactInputSingle").selector)) {
+      quoter.decodeFunctionData("quoteExactInputSingle", data);
+      return quoter.encodeFunctionResult("quoteExactInputSingle", [1000n, 123n]);
+    }
+    const call = token.parseTransaction({ data }); assert(call, "unexpected offline balance request");
+    return token.encodeFunctionResult(call.name, [1n << 128n]);
+  };
+  const runtime = m.central.createStrictCentralAdapterRuntime({
+    executor: f.input.executor, transactionOrigin: f.input.owner,
+    exactQuoteCache: m.cache.createAdapterFamilyExactQuoteCache(),
+    generationFence: { assertCurrent(generation: number, source: any) {
+      assert.equal(generation, spec.source.generation); assert.deepEqual(source, spec.source);
+    } },
+    provider: {
+      async call(tx: any) { sourceReads++; return respond(tx.data); },
+      async getCode() { throw new Error("unexpected offline code read"); },
+      async getStorage() { throw new Error("unexpected offline storage read"); },
+    },
+    simulator: {
+      async simulate() { throw new Error("offline regression must use prefix transport"); },
+      async simulatePrefix(input: any) {
+        assert.deepEqual(input.source, spec.source);
+        assert.equal(input.prefix.executor, f.input.executor.toLowerCase());
+        assert.equal(input.prefix.inputToken, edges[0].tokenIn.toLowerCase());
+        assert.equal(input.prefix.inputAmount, BigInt(saved.P));
+        const bytes = ethers.getBytes(subscript.decodeFunctionData("execSubscript", input.prefix.calldata)[0]);
+        assert(bytes.length > 38, "compiled prefix must contain real action bytes");
+        assert.equal(bytes[0], 0x09, "actual-amount-flow opcode");
+        assert.equal(bytes[36], 0, "exact prefix retains zero tolerance");
+        assert.equal(bytes[37], 1, "one authenticated earlier quote is compiled");
+        assert.equal(input.request.kind, "eth-call");
+        compiled.push(input.prefix.calldata);
+        return { data: respond(input.request.data), completion: "returned" };
+      },
+    },
+  });
+  const session = await runtimeRoot.createSession({ source: spec.source, runtime, kind: "exact", fundingAssets: [],
+    requiredEdgeIds: new Set(edges.map((edge: any) => edge.canonicalEdgeId)) });
+  const quote = (edge: any, amountIn: bigint, priorQuotes: any[]) => session.issueExact({
+    edge: session.edges.find((item: any) => item.canonicalEdgeId === edge.canonicalEdgeId),
+    amountIn, priorQuotes, executor: f.input.executor, runtimeEvidence: [],
+  });
+  const first = await quote(edges[0], BigInt(saved.P), []);
+  assert.equal(sourceReads, 2); assert.equal(first.amountOut, 1000n);
+  const second = await quote(edges[1], first.amountOut, [first]);
+  assert.equal(second.amountOut, 1000n);
+  assert.equal(sourceReads, 2, "nonempty-prefix reads cannot silently use source state");
+  assert.equal(compiled.length, 2, "quote and payout-balance reads both receive the compiled prefix");
+  assert.equal(compiled[0], compiled[1]);
+  const registered = m.registry.listAll();
+  const expected = m.composition.PRODUCTION_STRICT_SHADOW_ACTION_ADAPTERS;
+  assert.deepEqual(registered.map((a: any) => a.id).sort(), expected.map((a: any) => a.id).sort());
+  for (const action of expected) assert.equal(m.registry.get(action.id), action, "wrong runtime's adapter registry");
+  const wrappers = ["actual-amount-flow", "actual-amount-step", "actual-amount-case"];
+  for (const id of wrappers) assert.equal(m.registry.get(id).isWrapper, true);
+  m.registry.assertDescriptorCoverage();
+  return { runtime: root, registeredActionIds: registered.map((a: any) => a.id).sort(), wrappers,
+    sourceReads, prefixReads: compiled.length, compiledPrefixSha256: shaBytes(compiled[0]!),
+    compiledPrefixBytes: (compiled[0]!.length - 2) / 2,
+    scope: "offline registration/compilation only; synthetic transport responses; no RPC or EVM execution" };
+}
+
+function fixtures() {
+  const loaded: any = {}, hashes: any = {};
+  for (const [key, pin] of Object.entries(spec.inputs) as [string, any][]) {
+    const file = path.resolve(repo, pin.path); assert.equal(sha(file), pin.sha256, `${key} SHA mismatch`);
+    hashes[key] = { path: file, sha256: pin.sha256 }; loaded[key] = read(file, key !== "ready");
+  }
+  const { input, prices, enumeration } = loaded;
+  assert.equal(input.broadcast, false); assert.equal(input.policy.dryRun, true); assert.equal(input.policy.blockScanSubmit, false);
+  assert.equal(input.executionMode, "source-block"); assert.equal(input.stateSource.number, spec.source.number);
+  assert.equal(input.stateSource.hash, spec.source.hash); assert.equal(input.sourceHeader.stateRoot, spec.stateRoot);
+  assert.equal(input.fixedEffectiveWethInput, 2_000_000_000_000_000n);
+  assert.deepEqual(JSON.parse(json(input.search)), spec.search);
+  assert.equal(prices.readySha256, spec.inputs.ready.sha256);
+  assert.equal(prices.runtime.sourceBlock, spec.source.number); assert.equal(prices.runtime.sourceBlockHash, spec.source.hash);
+  assert.equal(prices.runtime.generation, spec.source.generation); assert.equal(enumeration.stateBlock, spec.source.number);
+  assert.equal(enumeration.selectionProvenance.kind, "natural_coarse_ranked");
+  assert.equal(enumeration.selectionMode, "production"); assert.equal(enumeration.forcedSelectionCount, 0);
+  assert.equal(enumeration.opportunities.length, 512);
+  for (const item of spec.cases) {
+    const opp = enumeration.opportunities[item.rank - 1]; assert.equal(opp.cycleFingerprint, item.cycleFingerprint);
+    assert.equal(opp.seedEdges.length, item.hops); assert.equal(opp.searchSeed.searchCenter, BigInt(item.P));
+    assert.equal(new Set(opp.seedEdges.map((edge: any) => edge.canonicalEdgeId)).size, item.hops,
+      "this instrumentation requires unique directed edge IDs, not unique instances");
+  }
+  return { ...loaded, hashes };
+}
+
+// Full saved publication is rehydrated. Required edges only scope normal session preparation.
+function rehydrate(m: any, f: any) {
+  const envelope = f.ready;
+  assert(!envelope.inProgressRun, "Ready has unfinished rebuild");
+  assert.equal(m.checkpoint.envelopeFingerprint(envelope), envelope.checkpointFingerprint, "checkpoint fingerprint mismatch");
+  const { ready, graph } = m.ready.resolveStrictReadyRuntime(envelope.readyGeneration);
+  assert.deepEqual(ready.cutoff, f.input.topologySource);
+  const catalog = m.composition.PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+  // Rehydration uses no transport: deliberately do not give the wiring the real credential.
+  const wiring = m.rebuild.createRebuildWiring({ rpcUrl: "<redacted-endpoint>",
+    executionIdentity: { executor: f.input.executor, transactionOrigin: f.input.owner } });
+  const instances: any[] = [], funding: any[] = [];
+  const memos = m.checkpoint.activeReadyMemos(envelope);
+  for (const memo of memos) {
+    assert(wiring.isReadyMemoDefinitionCurrent(memo), `stale Ready definition: ${memo.familyId}`);
+    const id = m.identifiers.familyId(memo.familyId), family = catalog.forStrictFamily(id);
+    const item = wiring.rehydrateVerifiedInstance({ memo, cutoff: ready.cutoff });
+    if (family.plugin.manifest.domain === "funding") funding.push({ familyId: id, asset: item.asset });
+    else instances.push(item);
+  }
+  const root = new m.session.StrictProductionRuntimeRoot({ catalog, readySource: ready.cutoff,
+    readyGraph: graph, readyInstances: instances, readyFundingAssets: funding });
+  const cases = spec.cases.map((item: any) => {
+    const original = f.enumeration.opportunities[item.rank - 1];
+    const edges = original.seedEdges.map((saved: any) => {
+      const edge = graph.find((entry: any) => entry.canonicalEdgeId === saved.canonicalEdgeId);
+      assert(edge, `canonical edge missing at rank ${item.rank}`);
+      for (const key of ["adapterId", "instanceKey", "executionVariantKey"]) assert.equal(edge[key], saved[key]);
+      for (const key of ["target", "tokenIn", "tokenOut"]) assert.equal(edge[key].toLowerCase(), saved[key].toLowerCase());
+      return edge;
+    });
+    assert.equal(new Set(edges.map(m.identity.edgeInstanceKey)).size < edges.length, item.repeated);
+    const refs = new m.amount.BlockScanAmountReference().prepare({ pricing: f.prices.runtime.pricing, opportunities: [original] });
+    const prepared = m.refinement.prepareBlockScanCandidatesWithoutExactRefinement([original], 1,
+      { probeAmountsByOpportunity: refs, admissionSpreadBps: 0 });
+    assert.equal(prepared.opportunities.length, 1, "saved amount reference rejected");
+    const opportunity = prepared.opportunities[0]; assert.equal(opportunity.searchSeed.searchCenter, BigInt(item.P));
+    assert.equal(opportunity.searchSeed.maxInput, original.searchSeed.maxInput, "cap changed");
+    return { ...item, edges, opportunity };
+  });
+  return { root, cases, receipt: { instances: instances.length, funding: funding.length, graphEdges: graph.length,
+    cutoff: ready.cutoff, publicationSetHash: ready.publicationSetHash, graphHash: ready.graphHash,
+    activations: m.composition.PRODUCTION_FAMILY_ACTIVATIONS,
+    cases: cases.map((c: any) => ({ rank: c.rank, P: c.P, cap: c.opportunity.searchSeed.maxInput,
+      repeated: c.repeated, edges: c.edges.map((e: any) => ({ canonicalEdgeId: e.canonicalEdgeId, instance: m.identity.edgeInstanceKey(e) })) })) } };
+}
+
+const hopContext = new AsyncLocalStorage<number>();
+function expectedPrefix(policy: string, repeated: boolean, hop: number) {
+  return policy === "A" || repeated ? hop : null;
+}
+function watch<T>(pending: Set<Promise<any>>, task: Promise<T>): Promise<T> {
+  pending.add(task); void task.then(() => pending.delete(task), () => pending.delete(task)); return task;
+}
+
+async function invocation(m: any, f: any, item: any, experiment: any, code: any, globalAbort: AbortController) {
+  const started = performance.now(), controller = new AbortController();
+  const deadlineAtMs = Date.now() + 30_000, control = { signal: controller.signal, deadlineAtMs };
+  const r: any = { ...item, status: "preparing", stage: "preparation", solverEntered: false,
+    preparationMs: null, solverMs: null, propagationMs: null, drainMs: null, hops: [], prefixes: [], scheduler: [], directRpc: [],
+    revmRequests: [], revmTiming: [], revmProcesses: [], suppressedLogLines: 0, timing: { quoteMs: 0, planBuildMs: 0, simMs: 0, amountPoints: 0, gssPoints: 0, hopExactCalls: 0 } };
+  const abort = () => controller.abort(globalAbort.signal.reason);
+  globalAbort.signal.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(() => { r.cancelCause ??= "deadline"; controller.abort(new Error("30s invocation deadline")); }, 30_000);
+  const pending = new Set<Promise<any>>();
+  const guard = () => { if (Date.now() >= deadlineAtMs) { r.cancelCause ??= "deadline"; controller.abort(new Error("30s invocation deadline")); }
+    controller.signal.throwIfAborted(); };
+  const fatal = (reason: any) => { r.fatalKind = reason.kind; globalAbort.abort(new Error(`strict simulator fatal: ${reason.kind}`)); };
+  const transportFailure = (error: any) => { if (error?.code !== "CALL_EXCEPTION") {
+    r.cancelCause ??= "transport-failure-no-retry"; controller.abort(error); } throw error; };
+  const originalConsole = { log: console.log, warn: console.warn, error: console.error };
+  const capture = (...parts: any[]) => {
+    const line = parts.length === 1 && typeof parts[0] === "string" ? parts[0] : "";
+    if (line.startsWith("[revm-request-timing] ")) {
+      try { const v = JSON.parse(line.slice("[revm-request-timing] ".length));
+        r.revmTiming.push(Object.fromEntries(["sourceBlock", "sourceBlockHash", "epoch", "requestId", "pairFirstId", "target", "enqueuedAtMs",
+          "dispatchedAtMs", "queueMs", "serviceMs", "status", "aborted", "daemonLatencyMs", "warmHits", "coldMisses", "traceMs", "traceRoundTrips"]
+          .filter(key => v[key] !== undefined).map(key => [key, v[key]]))); } catch { r.suppressedLogLines++; }
+    } else if (line.startsWith("[searcher/quote-batch-dispatch] ") || line.startsWith("[searcher/quote-batch-timing] ")) {
+      const v = JSON.parse(line.slice(line.indexOf("] ") + 2));
+      (r.transportEvents ??= []).push({ kind: line.startsWith("[searcher/quote-batch-dispatch]") ? "dispatch" : "settled", ...v });
+    } else r.suppressedLogLines++;
+  };
+  console.log = console.warn = console.error = capture;
+  let backend: any, simulation: any, canonical: (() => Promise<void>) | undefined;
+  let solverStart: number | undefined;
+  try {
+    guard();
+    const { root, cases, receipt } = rehydrate(m, f); r.ready = receipt;
+    const selected = cases.find((c: any) => c.rank === item.rank); assert(selected);
+    const scheduler = new m.scheduler.RethTransportScheduler({ capacity: 12, producerReserved: 4, transportTimeoutMs: 30_000 });
+    const shared = { run: (lane: any, signal: AbortSignal, work: any) => {
+      const metric: any = { lane, exactCallId: hopContext.getStore() ?? null, atMs: performance.now() - started };
+      r.scheduler.push(metric);
+      return scheduler.run(lane, signal, async (lease: any) => {
+        const serviceStart = performance.now(); metric.queueMs = lease.queueWaitMs;
+        metric.activeTotal = lease.activeTotal; metric.activeByLane = lease.activeByLane;
+        try { return await work({ ...lease, load: lease.load && { ...lease.load, retry: () => false } }); }
+        finally { metric.serviceMs = performance.now() - serviceStart; }
+      });
+    } };
+    backend = new m.backend.PinnedRethQuoteBackend(secret, spec.source.hash, { ...control,
+      maxBatchSize: item.maxBatchSize, maxConcurrentBatches: 8, transportScheduler: shared, retryRpcThrottle: false,
+      allowSingleCallFallback: false, onSourceUnavailable: (error: any) => controller.abort(error),
+      onRpcThrottle: (error: any) => controller.abort(error) });
+    // Preserve the real batching/memo backend; fail the scope before central's bounded retry.
+    const safeBackend = new Proxy(backend, { get(target, key) {
+      const value = Reflect.get(target, key, target);
+      if (key === "call" || key === "callCached") return (...input: any[]) => {
+        // A cache miss is synchronously undefined, NOT a fulfilled Promise of undefined.
+        if (key === "call") reserveRead(globalAbort);
+        const result = value.apply(target, input);
+        return result === undefined ? undefined : watch(pending, result.catch(transportFailure));
+      };
+      return typeof value === "function" ? value.bind(target) : value;
+    } });
+    let nextRpcId = 0;
+    const rpc = (method: string, params: any[]) => watch(pending, (async () => {
+      guard(); reserveRead(globalAbort); const start = performance.now();
+      const metric: any = { id: ++nextRpcId, method, exactCallId: hopContext.getStore() ?? null };
+      r.directRpc.push(metric);
+      try {
+        const response = await m.state.postJsonRpc(secret, { jsonrpc: "2.0", id: metric.id, method, params }, controller.signal);
+        if (response.statusCode !== 200 || response.body?.error || response.body?.result === undefined) {
+          throw new Error(`pinned RPC failed: ${method}; status=${response.statusCode}; code=${response.body?.error?.code ?? "none"}`);
+        }
+        metric.status = "returned"; return response.body.result;
+      } catch (error) { metric.status = "failed"; transportFailure(error); }
+      finally { metric.wallMs = performance.now() - start; }
+    })());
+    canonical = async () => {
+      assert.equal(BigInt(await rpc("eth_chainId", [])), 1n);
+      const header = await rpc("eth_getBlockByNumber", [`0x${spec.source.number.toString(16)}`, false]);
+      assert.equal(header.hash, spec.source.hash); assert.equal(header.stateRoot, spec.stateRoot);
+      for (const key of ["number", "timestamp", "baseFeePerGas"]) assert.equal(header[key], f.input.sourceHeader[key]);
+    };
+    await canonical(); r.canonicalBefore = true;
+    const pin = { blockHash: spec.source.hash, requireCanonical: true };
+    const provider = { call: (tx: any, _block: any, work: any) => safeBackend.call(tx, work ?? control),
+      getCode: (address: string) => rpc("eth_getCode", [address, pin]),
+      getStorage: (address: string, slot: string) => rpc("eth_getStorageAt", [address, slot, pin]) };
+    simulation = m.sourceSim.createRevmStrictSourceSimulation({
+      identity: { source: spec.source, chainId: 1, rpcUrl: secret, stateRoot: spec.stateRoot }, control,
+      executionGasLimit: 0x1000000, executorRuntimeCode: code, onFatal: fatal,
+      createClient: ({ onFatal }: any) => {
+        // Observe the actual production-owned process; no separate daemon or
+        // inferred join from request ordering. This binds Rust phase records.
+        class ObservedClient extends m.client.RevmSimClient {
+          spawnDaemon(command: string, argv: string[], detached: boolean) {
+            const proc = super.spawnDaemon(command, argv, detached);
+            r.revmProcesses.push({ pid: proc.pid ?? null, atMs: performance.now() - started });
+            return proc;
+          }
+        }
+        const client = new ObservedClient({ executablePath: item.binary, timeoutMs: 30_000, onFatal });
+        return { get isTerminal() { return client.isTerminal; }, closeAndDrain: (reason: any) => client.closeAndDrain(reason),
+          strictSimulate: (request: any, work: any) => {
+            globalAbort.abort(new Error("batch-split diagnostic must not issue Rust requests"));
+            throw globalAbort.signal.reason;
+            const metric: any = { exactCallId: hopContext.getStore() ?? null, atMs: performance.now() - started,
+              requestKind: request.kind ?? null, target: request.to ?? null };
+            r.revmRequests.push(metric); const start = performance.now();
+            return watch(pending, client.strictSimulate(request, work).then((value: any) => {
+              metric.ok = value.ok; metric.epoch = value.epoch; metric.requestId = value.requestId;
+              metric.daemonLatencyMs = value.latencyMs; metric.cacheStats = value.cacheStats;
+              metric.seedStats = value.seedStats; return value;
+            }).finally(() => { metric.wallMs = performance.now() - start; }));
+          } };
+      },
+    });
+    const underlying = simulation.transport;
+    const transport = { ...underlying, simulatePrefix: (input: any) => {
+      globalAbort.abort(new Error("unexpected prefix in no-repeat diagnostic"));
+      throw globalAbort.signal.reason;
+      const metric: any = { exactCallId: hopContext.getStore() ?? null, requestId: input.request.id,
+        kind: input.request.kind, atMs: performance.now() - started };
+      r.prefixes.push(metric); const start = performance.now();
+      return watch(pending, underlying.simulatePrefix(input).then((value: any) => {
+        metric.status = "returned"; metric.completion = value.completion; return value;
+      }, (error: any) => { metric.status = "failed"; metric.error = clean(error); throw error; })
+        .finally(() => { metric.wallMs = performance.now() - start; }));
+    } };
+    const runtime = m.central.createStrictCentralAdapterRuntime({ provider, exactCallBackend: safeBackend,
+      simulator: transport, exactQuoteCache: m.cache.createAdapterFamilyExactQuoteCache(),
+      executor: f.input.executor, transactionOrigin: f.input.owner,
+      verifiedActors: m.actors.PRODUCTION_STRICT_VERIFIED_ACTORS, transportScheduler: shared,
+      generationFence: { assertCurrent(generation: number, source: any) {
+        assert.equal(generation, spec.source.generation); assert.deepEqual(source, spec.source); guard();
+      } } });
+    const actualSession = await root.createSession({ source: spec.source, runtime, kind: "exact", control,
+      fundingAssets: [selected.opportunity.flashToken], requiredEdgeIds: new Set(selected.edges.map((e: any) => e.canonicalEdgeId)) });
+    const indices = new Map(selected.edges.map((e: any, i: number) => [e.canonicalEdgeId, i]));
+    const session = new Proxy(actualSession, { get(target, key) {
+      if (key === "issueExact") return (input: any) => {
+        guard(); const hop = indices.get(input.edge.canonicalEdgeId) as number; assert.notEqual(hop, undefined);
+        const metric: any = { id: r.hops.length + 1, hop, canonicalEdgeId: input.edge.canonicalEdgeId,
+          amountIn: input.amountIn, prefixLength: input.priorQuotes === undefined ? null : input.priorQuotes.length,
+          atMs: performance.now() - started, status: "running" };
+        r.hops.push(metric);
+        assert.equal(metric.prefixLength, expectedPrefix(item.policy, selected.repeated, hop), "propagation prefix policy mismatch");
+        const start = performance.now();
+        return hopContext.run(metric.id, () => watch(pending, target.issueExact(input).then((value: any) => {
+          metric.amountOut = value.amountOut; metric.status = "quoted"; return value;
+        }, (error: any) => { metric.status = "failed"; metric.error = clean(error); throw error; })
+          .finally(() => { metric.wallMs = performance.now() - start; })));
+      };
+      const value = Reflect.get(target, key, target); return typeof value === "function" ? value.bind(target) : value;
+    } });
+    const opportunity = { ...selected.opportunity, seedEdges: selected.edges.map((edge: any) => {
+      const found = session.edges.find((e: any) => e.canonicalEdgeId === edge.canonicalEdgeId); assert(found); return found;
+    }) };
+    const planner = new m.planner.TemplatePlanner(); planner.setGraph(opportunity.seedEdges);
+    planner.setFlashLiquidity(session.fundingLiquidityView());
+    planner.setProfitTokenValuation(m.valuation.createScannedProfitTokenValuation(f.prices.runtime.pricing, spec.source));
+    const plans = await planner.planBlockScanFromSeedEdges(opportunity,
+      [m.templates.FLASH_LEND_SWAP_REPAY, m.templates.FLASH_SWAP_REPAY], { deadlineAtMs });
+    r.planCount = plans.length; assert(plans.length, "no plan for saved candidate"); r.planIndex = 0;
+    assert.deepEqual(plans[0].tokenPath.edges.map((e: any) => e.canonicalEdgeId),
+      opportunity.seedEdges.map((e: any) => e.canonicalEdgeId), "Planner changed saved route/order");
+    r.sessionCreationTiming = actualSession.creationTiming;
+    r.planSha256 = shaBytes(json(plans[0]));
+    guard(); r.preparationMs = performance.now() - started; solverStart = performance.now();
+    r.stage = experiment.phase; r.solverEntered = experiment.phase === "solver";
+    if (experiment.phase === "p-only") {
+      const value = await m.propagation.propagateAmountsWithRawOutputs({ edges: opportunity.seedEdges }, BigInt(selected.P), safeBackend,
+        { executor: f.input.executor, strictSession: session, runtimeEvidence: [], adapterWorkControl: control,
+          toleranceRawUnits: 0n, shouldStop: () => { guard(); return false; } });
+      r.pTrial = { amounts: value.amounts, rawOutputs: value.rawOutputs, profit: value.amounts.at(-1) - BigInt(selected.P) };
+    } else {
+      await new m.solver.AnvilSolver().solve(plans[0], safeBackend, { executor: f.input.executor,
+        simulate: async () => { throw new Error("final simulation forbidden in quote-only diagnostic"); } },
+      { ...control, deferPhase2Sim: true, finalSimTopN: 3, gridHalfWidth: 2, blockScanAmountGrid: "multiples", gssMaxTries: 8,
+        quoteProfitFloorBps: 0n, quoteToleranceRawUnits: 0n, strictSession: session, runtimeEvidence: [], timing: r.timing,
+        onDeferredCandidates: (values: any[]) => { r.candidates = values.map(v => ({ amount: v.flashAmount, profit: v.netProfit, profitToken: v.profitToken })); } });
+    }
+    r[experiment.phase === "solver" ? "solverMs" : "propagationMs"] = performance.now() - solverStart; solverStart = undefined;
+    assert.equal(r.timing.amountPoints, 12); assert.equal(r.timing.gssPoints, 8);
+    assert.equal(r.timing.hopExactCalls, 24); assert.equal(r.hops.length, 24);
+    assert(r.hops.every((hop: any) => hop.status === "quoted" && hop.prefixLength === null));
+    assert.equal(r.prefixes.length, 0); assert.equal(r.revmRequests.length, 0);
+    guard(); r.status = "returned";
+  } catch (error) {
+    r.status = controller.signal.aborted ? "cancelled" : "failed"; r.error = clean(error);
+    // Semantic P rejection remains a failed economic search, not a completed full search.
+  } finally {
+    if (solverStart !== undefined) r[experiment.phase === "solver" ? "solverMs" : "propagationMs"] = performance.now() - solverStart;
+    r.preparationMs ??= performance.now() - started;
+    // Recheck the source even after a semantic P/quote rejection, if budget remains.
+    if (canonical && r.canonicalBefore && !controller.signal.aborted) {
+      const checkStart = performance.now();
+      try { guard(); await canonical(); r.canonicalAfter = true; }
+      catch (error) { r.canonicalAfter = false; r.canonicalError = clean(error);
+        r.status = controller.signal.aborted ? "cancelled" : "failed"; }
+      r.canonicalAfterMs = performance.now() - checkStart;
+    }
+    r.measuredMs = performance.now() - started; r.aborted = controller.signal.aborted;
+    clearTimeout(timer); globalAbort.signal.removeEventListener("abort", abort);
+    const drainStarted = performance.now(); controller.abort(new Error("invocation settled"));
+    const drains = await Promise.allSettled([backend?.closeAndDrain(), simulation?.closeAndDrain()]);
+    while (pending.size) await Promise.allSettled([...pending]);
+    r.drainMs = performance.now() - drainStarted; r.totalWithDrainMs = performance.now() - started;
+    r.backend = backend?.stats(); r.drainErrors = drains.filter(d => d.status === "rejected").map((d: any) => clean(d.reason));
+    if (r.drainErrors.length) { r.status = "drain-failed"; globalAbort.abort(new Error("physical drain failed")); }
+    Object.assign(console, originalConsole);
+  }
+  return r;
+}
+
+async function main() {
+  const options = args(), restore = offlineFence();
+  assert.equal(spec.schemaVersion, 1); assert.equal(spec.budgetMs, 30_000);
+  assert.equal(spec.executionMode, "source-block");
+  assert.deepEqual(spec.resourceCaps, { maxLogicalIssuances: 2000, additionalTaskDailyCalls: 2000, invocations: 12, maximumWorkMs: 360000 });
+  assert.deepEqual(spec.runtimeDeltaSha256B, {});
+  assert.deepEqual(spec.transport, { maxBatchSize: 64, maxConcurrentBatches: 8, capacity: 12, producerReserved: 4,
+    transportTimeoutMs: 30_000, jsRetries: 0, singleCallFallback: false });
+  if (options["--self-test"]) {
+    assert.throws(() => net.connect(1), /offline fence/);
+    assert.throws(() => childProcess.spawn("unreachable"), /offline fence/);
+    assert.equal(expectedPrefix("B", false, 1), null); assert.equal(expectedPrefix("A", false, 1), 1);
+    assert.equal(expectedPrefix("B", true, 5), 5);
+    const seen = await Promise.all([1, 2].map(id => hopContext.run(id, async () => { await Promise.resolve(); return hopContext.getStore(); })));
+    assert.deepEqual(seen, [1, 2]);
+    const basis = sourceTree(path.resolve(repo, spec.runtimeBasis));
+    assert.equal(basis.sha256, spec.runtimeBasisSourceSha256);
+    const targets = [{ root: String(options["--candidate-runtime"] ?? basis.root), policy: "B" as const },
+      ...(options["--baseline-runtime"] ? [{ root: String(options["--baseline-runtime"]), policy: "A" as const }] : [])];
+    const regressions = [], registries = [];
+    for (const target of targets) {
+      compareTree(sourceTree(target.root), basis, target.policy);
+      const m = await loadRuntime(target.root);
+      registries.push(m.registry.get);
+      regressions.push(await offlineRegistrationRegression(target.root, m, fixtures()));
+    }
+    assert.equal(new Set(registries).size, targets.length, "isolated runtimes must own separate registries");
+    console.log(json({ offlineSelfTests: "passed", checks: ["network/process fence", "prefix rules", "concurrent attribution",
+      "real strict-session nonempty prefix compilation", "full production registry identity/descriptor coverage", "isolated registries"], regressions })); return;
+  }
+  const experimentName = String(options["--experiment"] ?? "batch-split");
+  assert.equal(experimentName, "batch-split");
+  const experiment = spec.experiments[experimentName];
+  assert.deepEqual(experiment, { phase: "solver", ranks: [477],
+    order: ["A","B","B","A","A","B","B","A","A","B","B","A"],
+    runtimePolicies: { A: "B", B: "B" }, binaries: { A: "current", B: "current" },
+    maxBatchSize: { A: 64, B: 1 } });
+  const basis = sourceTree(path.resolve(repo, spec.runtimeBasis)); compareTree(basis, basis, "B");
+  assert.equal(basis.sha256, spec.runtimeBasisSourceSha256, "frozen basis source changed");
+  const candidate = sourceTree(String(options["--candidate-runtime"] ?? basis.root)); compareTree(candidate, basis, "B");
+  const f = fixtures(), mB = await loadRuntime(candidate.root), b = rehydrate(mB, f);
+  const code = mB.executor.loadBotVmRuntimeCode(f.input.owner);
+  const codeReceipt = { keccak256: code.keccak256, counterfactual: true, address: f.input.executor, owner: f.input.owner,
+    note: "same owner-bound frozen BotVM code-only override for prefix quotation; not deployed-code or final-simulation proof" };
+  if (options["--fixture-check"]) {
+    console.log(json({ offline: true, pairedRuntimeValidated: false, sourceTreeSha256: candidate.sha256,
+      fixtureHashes: f.hashes, ready: b.receipt, executor: codeReceipt,
+      importedProductionPlannerSolverAndPinnedBackend: true, rpcCalls: 0, solverEntered: false })); return;
+  }
+  const baseline = candidate, mA = mB;
+  assert(!options["--baseline-runtime"], "config comparison uses identical frozen runtime on both arms");
+  const binaryB = String(options["--binary-b"] ?? path.join(basis.root, "revm-sim"));
+  const binaryA = String(options["--binary-a"] ?? binaryB);
+  assert.equal(binaryA, binaryB, "batch comparison cannot vary the binary");
+  const binaries: any = { A: binaryA, B: binaryB };
+  for (const arm of ["A", "B"] as const) {
+    assert(path.isAbsolute(binaries[arm]), `${arm} binary must be absolute`);
+    assert.equal(sha(binaries[arm]), spec.binarySha256[experiment.binaries[arm]], `${arm} binary SHA mismatch`);
+  }
+  const order = experiment.ranks.flatMap((rank: number) => experiment.order.map((arm: string) => ({ rank, arm,
+    maxBatchSize: experiment.maxBatchSize[arm as "A" | "B"], policy: experiment.runtimePolicies[arm as "A" | "B"], runtime: arm === "A" ? baseline.root : candidate.root,
+    binary: binaries[arm], binarySha256: sha(binaries[arm]) })));
+  const declaration = { schemaVersion: 1, claim: spec.claim, experiment: experimentName, phase: experiment.phase,
+    createdAt: new Date().toISOString(), source: spec.source, stateRoot: spec.stateRoot, executionMode: spec.executionMode,
+    runnerSha256: sha(fileURLToPath(import.meta.url)), specSha256: sha(specPath), spec, inputs: f.hashes,
+    snapshots: { A: baseline, B: candidate }, executor: codeReceipt, ready: b.receipt, order,
+    budgetMsPerInvocation: 30_000, maximumMeasuredMs: order.length * 30_000, invocationReruns: 0, warmups: 0,
+    rustWireRetries: "existing binary-internal bounded recovery; no disable switch; NOT guaranteed zero",
+    revmQueueServiceAvailable: process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1",
+    timingAttribution: "exactCallId via AsyncLocalStorage; hop from unique canonical edge ID; batched scheduler context is batch initiator only, not every item; daemon queue/service keyed by epoch/requestId, deliberately not heuristically joined to hop",
+    noRpcYet: true, finalSimulation: "not-run", ev: "not-run" };
+  if (!options["--run"]) { assert(!options["--out"], "--out is run-only");
+    console.log(json({ offline: true, pairedRuntimeValidated: true, experiment: experimentName,
+      snapshots: { A: { root: baseline.root, sha256: baseline.sha256 }, B: { root: candidate.root, sha256: candidate.sha256 } },
+      executor: codeReceipt, order, budgetMsPerInvocation: 30_000, rpcCalls: 0 })); return; }
+  const out = String(options["--out"] ?? ""); assert(path.isAbsolute(out), "--run requires --out ABS_NEW_DIRECTORY");
+  assert(out.startsWith(here + path.sep), "outputs must stay within this task's ignored logs directory");
+  // One pre-RPC declaration, then one result flush after all measured work/drains. Never overwrite.
+  fs.mkdirSync(out, { recursive: false, mode: 0o700 });
+  fs.writeFileSync(path.join(out, "declaration.json"), json(declaration), { flag: "wx", mode: 0o600 });
+  secret = "<redacted-secret>" ?? ""; assert(secret, "MAINNET_RPC_URL must be injected externally");
+  assert(["http:", "https:"].includes(new URL(secret).protocol), "HTTP transport required");
+  restore();
+  const globalAbort = new AbortController(), results: any[] = [];
+  const stop = () => globalAbort.abort(new Error("diagnostic interrupted"));
+  process.once("SIGINT", stop); process.once("SIGTERM", stop);
+  try {
+    for (const item of order) {
+      if (globalAbort.signal.aborted) { results.push({ ...item, status: "not-run", reason: "fatal-or-external-cancellation" }); continue; }
+      results.push(await invocation(item.arm === "A" ? mA : mB, f, item, experiment, code, globalAbort));
+    }
+  } finally {
+    process.removeListener("SIGINT", stop); process.removeListener("SIGTERM", stop);
+    const unchanged = { A: sourceTree(baseline.root).sha256 === baseline.sha256, B: sourceTree(candidate.root).sha256 === candidate.sha256,
+      runtimeAssetsA: json(sourceTree(baseline.root).runtimeAssets) === json(baseline.runtimeAssets),
+      runtimeAssetsB: json(sourceTree(candidate.root).runtimeAssets) === json(candidate.runtimeAssets),
+      binaryA: sha(binaryA) === spec.binarySha256[experiment.binaries.A], binaryB: sha(binaryB) === spec.binarySha256[experiment.binaries.B],
+      inputs: Object.values(f.hashes).every((pin: any) => sha(pin.path) === pin.sha256),
+      runner: sha(fileURLToPath(import.meta.url)) === declaration.runnerSha256, spec: sha(specPath) === declaration.specSha256,
+      executorA: sha(path.join(baseline.root, "out/BotVM.sol/BotVM.json")) === spec.artifactSha256,
+      executorB: sha(path.join(candidate.root, "out/BotVM.sol/BotVM.json")) === spec.artifactSha256 };
+    fs.writeFileSync(path.join(out, "results.json"), json({ declarationSha256: sha(path.join(out, "declaration.json")),
+      experiment: experimentName, phase: experiment.phase, unchanged, results, logicalIssuances, claim: spec.claim,
+      complete: results.length === order.length && results.every(r => r.status === "returned") && Object.values(unchanged).every(Boolean) }),
+    { flag: "wx", mode: 0o600 });
+    console.log(json({ out, experiment: experimentName, outcomes: results.map(r => ({ rank: r.rank, arm: r.arm,
+      status: r.status, solverEntered: r.solverEntered, preparationMs: r.preparationMs,
+      solverMs: r.solverMs, propagationMs: r.propagationMs, drainMs: r.drainMs })) }));
+  }
+}
+
+main().catch(error => { console.error(clean(error)); process.exitCode = 1; });

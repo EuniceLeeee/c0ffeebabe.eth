@@ -1,0 +1,37 @@
+// One declared ABBA diagnostic; no credentials in arguments or output.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repo = path.resolve(here, '../..');
+const out = path.join(here, 'same-input-gzip-1');
+assert(!fs.existsSync(out), 'never overwrite earlier evidence');
+const logPath = path.join(here, 'same-input-gzip-1.log');
+const fd = fs.openSync(logPath, 'wx', 0o600);
+let rpc = '';
+for (const line of fs.readFileSync('<user>/src/MEV/.env', 'utf8').split(/\r?\n/)) {
+  const match = line.trim().match(/^(?:export\s+)?MAINNET_RPC_URL=(.*)$/);
+  if (match) rpc = match[1].trim().replace(/^(['"])(.*)\1$/, '$2');
+}
+assert.equal(createHash('sha256').update(rpc).digest('hex'),
+  '860a9610cd135f044f125b2364ad22718483029de2022075cd8619cbd8ba6b4a');
+const argv = [path.join(here, 'same-input-gzip-timing.mts'), '--spec', path.join(here, 'gzip-transport-timing.json'),
+  '--experiment', 'gzip-transport',
+  '--candidate-runtime', path.join(here, 'gzip-runtime-complete'),
+  '--binary-b', path.join(here, 'prefix-pair-binary/revm-sim'), '--run', '--out', out];
+const child = spawn(path.join(repo, 'listener/node_modules/.bin/tsx'), argv, {
+  cwd: repo, stdio: ['ignore', fd, fd],
+  env: { PATH: process.env.PATH, MAINNET_RPC_URL: rpc,
+    SEARCHER_STATE_LATENCY_DIAGNOSTICS: '1', SEARCHER_DRY_RUN: '1' },
+});
+fs.closeSync(fd);
+const timeout = setTimeout(() => child.kill('SIGTERM'), 650000);
+child.once('error', () => { clearTimeout(timeout); console.error('diagnostic launcher failed'); process.exitCode = 1; });
+child.once('exit', (code, signal) => {
+  clearTimeout(timeout);
+  console.log(JSON.stringify({ code, signal, out, logPath }));
+  process.exitCode = code ?? 1;
+});

@@ -1,0 +1,460 @@
+{
+  "schemaVersion": 1,
+  "reviewRole": "independent non-author raw-result reviewer",
+  "verdict": "reject retention of the cold-source hydration candidate: frozen whole-first-prefix-hop benefit criterion failed",
+  "mechanismVerdict": "one fewer physical RPC attempt observed for the completed cold scalar request",
+  "correctnessVerdict": "common completed quote amounts, route identity/order, prefix lengths and plan hash match; no observed primary fatal/source/drain regression",
+  "performanceAcceptance": false,
+  "wholeSolverOrLiveAcceptance": false,
+  "goalComplete": false,
+  "scope": "Read only the five named raw evidence files. No main assessment, source code, snapshots, other experiment results, RPC, credentials, reruns or process operations.",
+  "evidenceDirectory": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk",
+  "inputSha256": {
+    "same-input-cold-source-1/declaration.json": "f152d1ff98ff79715df3f35a731dfe7ada34c0325d837b9df26a8b29cfac7f0e",
+    "same-input-cold-source-1/results.json": "5fd407eff9eb99ec141c74ae1ebaac6ef81a91dc8ea5a716f9ffff32217e02af",
+    "same-input-cold-source-1.log": "6836269a94d6dba1b57b10a64f76c8e13eac9120ab289ec623ae71e2629b19bd",
+    "cold-source-launch-receipt.json": "95972280df341ba02bb18e673b2aac5ae0ac8e2a8f9ca42e0edb608695ae460c",
+    "cold-source-timing.json": "4a5842e407c74b70c341f57efe2e109accc18269ec0ffee9c2fdac94ca817a65"
+  },
+  "frozenContract": {
+    "order": "ABBA",
+    "attempts": 4,
+    "rank": 8,
+    "phase": "p-only",
+    "P": "5195442",
+    "workDeadlineMs": 30000,
+    "sourceNumber": 26029536,
+    "sourceHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+    "stateRoot": "0xa8c4eb4a5b7d2a90ee1ffa7ca44d1f90394210a46c77e4bf3fb76f68cfb64afe",
+    "runnerSha256": "d3d036dbc10ef7d6151ab04c61a4e75403130ab2dfeee8044e771ac313c7eac9",
+    "runtimeBothArms": "prefix-pair-runtime-complete",
+    "runtimeSourceTreeSha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01",
+    "binaryA": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1",
+    "binaryB": "8993d08bd501af9c4c7555bb93b76a9286ca8d1f420652f806709f2a305f1e74",
+    "criterion": "Both B completed hop-index1 durations strictly below both A; neither B completes fewer quoted hops than either A; combined phase and one-exchange reduction observed; missing primary/retry asymmetry inconclusive.",
+    "reruns": 0,
+    "warmups": 0,
+    "finalSimulation": "not-run",
+    "ev": "not-run"
+  },
+  "decision": {
+    "firstHopMsInOrder": [
+      {
+        "ordinal": 1,
+        "arm": "A",
+        "ms": 9318.253499999999,
+        "completedHops": 2
+      },
+      {
+        "ordinal": 2,
+        "arm": "B",
+        "ms": 9274.156541999997,
+        "completedHops": 2
+      },
+      {
+        "ordinal": 3,
+        "arm": "B",
+        "ms": 8851.134374999994,
+        "completedHops": 2
+      },
+      {
+        "ordinal": 4,
+        "arm": "A",
+        "ms": 8737.300333000007,
+        "completedHops": 2
+      }
+    ],
+    "tests": {
+      "bothBLessThanBothA": false,
+      "completedHopNonRegression": true,
+      "oneColdAttemptReduction": true,
+      "primaryCensoring": false,
+      "observedRetryAsymmetry": false
+    },
+    "explanation": "All four primary hops completed, so this is a failed declared timing screen, not merely an absent-primary result. Both B durations (9274.156542ms,8851.134375ms) exceed the faster A (8737.300333ms). The slower A is9318.253500ms. All runs complete exactly hops0 and1; no completed-hop-count regression.",
+    "action": "Preserve frozen candidate/evidence and withdraw only the cold-source candidate delta under the predeclared policy. Reviewer made no source change and requested no new measurement."
+  },
+  "equality": {
+    "allCommonCompletedQuotesEqual": true,
+    "planSha256": "a3552bd126bd6b699ea1b10e9ca1942484b649c5f5e8bc9c6565e9f6c1dc0d6b",
+    "quotes": [
+      {
+        "hop": 0,
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f67da6fc5994c96d758f7f7bfee5562ed43b6d511a2959c17c751cd1e0e8d9903",
+        "amountIn": "5195442",
+        "amountOut": "1874606836943428",
+        "prefixLength": 0
+      },
+      {
+        "hop": 1,
+        "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+        "amountIn": "1874606836943428",
+        "amountOut": "378740087141681349621649",
+        "prefixLength": 1
+      }
+    ],
+    "completedCommonHops": 2,
+    "observedPrefixLengths": [
+      0,
+      1,
+      2
+    ],
+    "attemptedHopStatuses": [
+      "quoted",
+      "quoted",
+      "failed"
+    ],
+    "savedRouteHops": 6,
+    "notes": [
+      "All four result Ready receipts are identical; attempted canonical edge IDs match the same ordered rank8 route. P=5195442 and the second-hop input equals the first-hop output in every arm.",
+      "Each complete cold request records prefixPresent=true,prefixCalldataBytes1092 and one prefix-execution entry. Warm pair children each also record one prefix-execution entry, with zero prefix RPC attempts rather than omitted prefix execution.",
+      "Results retain the common quoted amount outputs and a plan hash, not full raw per-RPC return bytes, gas/effects or attestation payloads. This review does not claim independent byte/gas equality for unrecorded data or any completed full-route output."
+    ]
+  },
+  "phaseLinkage": {
+    "method": "Use captured invocation daemon PID, then scalar identity.requestId1 and pair childRequestIds[2,3]; cross-check returned TS epoch/requestId, exactCallId2, targets, pairFirstId2, dispatch/return timestamps and source block/hash. No ordering heuristic.",
+    "matchedPids": [
+      61900,
+      61914,
+      61927,
+      61948
+    ],
+    "matchedTerminalRecords": 8,
+    "scalarRecords": 4,
+    "pairRecords": 4,
+    "matchedSuccessfulChildReplies": 12,
+    "uniquePids": 4,
+    "uniqueEpochs": 4,
+    "exclusivePhaseWallAndAttemptSums": "All validated, including first+bridge+second pair totals.",
+    "bridgeAccounting": "Each pair has exactly one physical bridge attempt and logicalCount4 (post child2 plus full pre child3); charge it once, not to both children.",
+    "postcheckEvidence": "Every complete scalar has one canonical-postcheck attempt; every complete pair has the bridge and one second-child canonical-postcheck attempt. All complete records are nonfatal, scalar success=true, pair emittedChildren=2."
+  },
+  "envelopeAndRetryAccounting": {
+    "coldScalarAttemptsByArm": {
+      "A": [
+        17,
+        17
+      ],
+      "B": [
+        16,
+        16
+      ]
+    },
+    "coldSourceAndHydration": {
+      "A": "one precheck batch plus one hydration batch",
+      "B": "one combined precheck/hydration batch; hydration revisit zero attempts"
+    },
+    "unchangedColdOtherAttempts": {
+      "initialBalanceProbe": 3,
+      "prefixExecution": 10,
+      "mainRead": 1,
+      "canonicalPostcheck": 1
+    },
+    "warmPairAttemptsEach": 6,
+    "warmPairBreakdown": {
+      "firstChild": 2,
+      "bridge": 1,
+      "secondChild": 3
+    },
+    "completedPrimaryRustAttemptsInOrder": [
+      23,
+      22,
+      22,
+      23
+    ],
+    "directJsAttemptsPerInvocation": 2,
+    "sourceBackendBatchesPerInvocation": 2,
+    "sourceBackendLogicalItemsPerInvocation": 3,
+    "completedObservedAttemptsInOrder": [
+      27,
+      26,
+      26,
+      27
+    ],
+    "counts": {
+      "primaryRust": 90,
+      "directJs": 8,
+      "backendBatches": 8,
+      "allCompletedObserved": 106,
+      "censoredDispatchedRustRequests": 4,
+      "undispatchedQueuedRequests": 8
+    },
+    "retryEvidence": {
+      "jsRetries": 0,
+      "explicitRustRetryEvents": 0,
+      "qualification": "No retries observed for completed primary requests; later request4 has no terminal record and its attempt total is unknown."
+    },
+    "qualification": "These are phase/transport-counter observations, not a saved wire packet dump. The physical reduction is supported for the matched completed requests; exact logical-method/parameter parity remains the prior offline implementation gate rather than a new on-wire proof. Four later dispatched Rust requests have unknown terminal totals, so106 is an observed completed-work subtotal/lower bound, never the complete run's RPC/CU total."
+  },
+  "timingInterpretation": {
+    "sourceAndHydrationMsInOrder": [
+      1916.398291,
+      1736.544501,
+      2017.7398349999999,
+      2010.6070410000002
+    ],
+    "primaryRustScalarWallMsInOrder": [
+      7240.587792,
+      6844.248875,
+      6945.957082999999,
+      6744.231917
+    ],
+    "prefixExecutionMsInOrder": [
+      3712.148458,
+      3240.205208,
+      3185.4043340000003,
+      3072.662833
+    ],
+    "pairWallMsInOrder": [
+      2047.161375,
+      1858.168083,
+      1885.6098740000002,
+      1972.206168
+    ],
+    "scope": "A first source+hydration1916.398291ms, last2010.607041ms; B1736.544501ms and2017.739835ms. Grouping is not uniformly faster even within this phase scope.",
+    "caveats": [
+      "Whole-hop time includes queueing, process/stdio/client delays and every sibling read. B's first client-service interval exceeds its Rust terminal phase wall by approximately560.751ms; other runs differ by9.043–13.412ms. This interval is included in the primary result and cannot be discarded or assigned a cause from these records.",
+      "Cold-prefix RPC counts remain10 in every run while their walls vary3072.663–3712.148ms. Equal work with varying wall time is observable; provider service, network, host scheduling and cache warming are not separately measured here.",
+      "No header/body/byte telemetry is present in these raw Rust phase records. Do not attribute the observed differences specifically to provider serialization or body transfer, or credit shifted service medians as a whole-hop gain.",
+      "Four selected historical attempts do not support a systemic/whole-Solver/live latency claim, regardless of the verified one-exchange mechanism."
+    ]
+  },
+  "censoringAndResources": {
+    "invocationStatuses": [
+      "cancelled",
+      "cancelled",
+      "cancelled",
+      "cancelled"
+    ],
+    "reason": "30s invocation deadline on later hop-index2, not censoring of the completed primary hop-index1",
+    "censoredPerInvocation": {
+      "dispatchedRustRequestId": 4,
+      "neverDispatchedQueuedIds": [
+        5,
+        6
+      ]
+    },
+    "unknownCensoredRpcAttempts": true,
+    "routeCompletions": 0,
+    "solverEntered": 0,
+    "solverCompletions": 0,
+    "canonicalBeforeAll": true,
+    "runnerCanonicalAfter": "First A records false with deadline error; the other three omit it on cancellation. No final runner canonical-after success is claimed. Completed primary Rust replies have separately observed postcheck phases.",
+    "drainErrors": 0,
+    "backendAfterDrain": "All four show zero pendingItems,liveItems,inFlightBatches,activeTransports,completedAfterScopeAbort; no JS retries/fallback/batch failures.",
+    "sumWorkAndDrainMs": 120021.90125000001,
+    "timingQualification": "Measured work reports30002.231–30005.812ms: small timer/settlement overshoot is retained, not a widened work deadline. Per-invocation drain1.075–2.571ms; aggregate work+drain120021.901ms.",
+    "launcherReceipt": {
+      "code": 0,
+      "signal": null,
+      "pid": 61898,
+      "softStop": false,
+      "forcedStop": false,
+      "residualGroupStopped": false,
+      "out": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-cold-source-1",
+      "logPath": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-cold-source-1.log",
+      "resultCompleteForAssessment": true,
+      "qualification": "A forced/soft stop or residual group is censored/inconclusive; zero exit alone is not a timing win."
+    },
+    "resultsComplete": false,
+    "interpretation": "Launcher exit0 and clean drain permit assessment; they do not change the failed timing criterion or make timed-out full routes complete."
+  },
+  "runDetails": [
+    {
+      "ordinal": 1,
+      "arm": "A",
+      "pid": 61900,
+      "epoch": "b33940cd-f4f4-4862-9e3f-2a53b9d4ff6b",
+      "firstHopMs": 9318.253499999999,
+      "completedHops": 2,
+      "preparationMs": 2370.3654589999996,
+      "measuredMs": 30005.811834,
+      "drainMs": 1.2769590000025346,
+      "totalWithDrainMs": 30007.121209,
+      "scalar": {
+        "requestId": 1,
+        "wallMs": 7240.587792,
+        "rpcAttempts": 17,
+        "sourceAndHydrationMs": 1916.398291,
+        "prefixMs": 3712.148458,
+        "initialProbeMs": 994.5594580000001,
+        "mainMs": 306.512041,
+        "postcheckMs": 305.408542,
+        "phaseOutsideClientServiceMs": 13.412207999999737
+      },
+      "pair": {
+        "requestIds": [
+          2,
+          3
+        ],
+        "rpcAttempts": 6,
+        "wallMs": 2047.161375,
+        "bridgeAttempts": 1,
+        "bridgeLogicalChecks": 4,
+        "prefixMs": [
+          0.285875,
+          0.2745
+        ]
+      },
+      "completedPrimaryRustAttempts": 23,
+      "observedCompleteAttemptsIncludingJs": 27,
+      "censoredRustRequestIds": [
+        4
+      ],
+      "neverDispatchedIds": [
+        5,
+        6
+      ]
+    },
+    {
+      "ordinal": 2,
+      "arm": "B",
+      "pid": 61914,
+      "epoch": "626b65bf-87f8-40a0-afd4-98a1b59b3728",
+      "firstHopMs": 9274.156541999997,
+      "completedHops": 2,
+      "preparationMs": 1118.524290999998,
+      "measuredMs": 30002.936958000002,
+      "drainMs": 2.5706669999999576,
+      "totalWithDrainMs": 30005.522999999997,
+      "scalar": {
+        "requestId": 1,
+        "wallMs": 6844.248875,
+        "rpcAttempts": 16,
+        "sourceAndHydrationMs": 1736.544501,
+        "prefixMs": 3240.205208,
+        "initialProbeMs": 1324.9303750000001,
+        "mainMs": 260.500542,
+        "postcheckMs": 275.955709,
+        "phaseOutsideClientServiceMs": 560.7511249999998
+      },
+      "pair": {
+        "requestIds": [
+          2,
+          3
+        ],
+        "rpcAttempts": 6,
+        "wallMs": 1858.168083,
+        "bridgeAttempts": 1,
+        "bridgeLogicalChecks": 4,
+        "prefixMs": [
+          0.442709,
+          0.397542
+        ]
+      },
+      "completedPrimaryRustAttempts": 22,
+      "observedCompleteAttemptsIncludingJs": 26,
+      "censoredRustRequestIds": [
+        4
+      ],
+      "neverDispatchedIds": [
+        5,
+        6
+      ]
+    },
+    {
+      "ordinal": 3,
+      "arm": "B",
+      "pid": 61927,
+      "epoch": "e7f0f5bc-906d-4811-9a75-372895ee9dd7",
+      "firstHopMs": 8851.134374999994,
+      "completedHops": 2,
+      "preparationMs": 999.8921249999985,
+      "measuredMs": 30004.642541999994,
+      "drainMs": 1.0751249999884749,
+      "totalWithDrainMs": 30005.7275,
+      "scalar": {
+        "requestId": 1,
+        "wallMs": 6945.957082999999,
+        "rpcAttempts": 16,
+        "sourceAndHydrationMs": 2017.7398349999999,
+        "prefixMs": 3185.4043340000003,
+        "initialProbeMs": 1122.337584,
+        "mainMs": 309.12725,
+        "postcheckMs": 306.85258300000004,
+        "phaseOutsideClientServiceMs": 9.04291700000067
+      },
+      "pair": {
+        "requestIds": [
+          2,
+          3
+        ],
+        "rpcAttempts": 6,
+        "wallMs": 1885.6098740000002,
+        "bridgeAttempts": 1,
+        "bridgeLogicalChecks": 4,
+        "prefixMs": [
+          0.538083,
+          0.15341700000000003
+        ]
+      },
+      "completedPrimaryRustAttempts": 22,
+      "observedCompleteAttemptsIncludingJs": 26,
+      "censoredRustRequestIds": [
+        4
+      ],
+      "neverDispatchedIds": [
+        5,
+        6
+      ]
+    },
+    {
+      "ordinal": 4,
+      "arm": "A",
+      "pid": 61948,
+      "epoch": "b306e9b1-0c65-4c94-8a34-40590e0eb6e7",
+      "firstHopMs": 8737.300333000007,
+      "completedHops": 2,
+      "preparationMs": 1101.0503750000062,
+      "measuredMs": 30002.230750000002,
+      "drainMs": 1.2863749999960419,
+      "totalWithDrainMs": 30003.52954100001,
+      "scalar": {
+        "requestId": 1,
+        "wallMs": 6744.231917,
+        "rpcAttempts": 17,
+        "sourceAndHydrationMs": 2010.6070410000002,
+        "prefixMs": 3072.662833,
+        "initialProbeMs": 1045.6617079999999,
+        "mainMs": 331.829209,
+        "postcheckMs": 278.516792,
+        "phaseOutsideClientServiceMs": 9.768082999999933
+      },
+      "pair": {
+        "requestIds": [
+          2,
+          3
+        ],
+        "rpcAttempts": 6,
+        "wallMs": 1972.206168,
+        "bridgeAttempts": 1,
+        "bridgeLogicalChecks": 4,
+        "prefixMs": [
+          0.266959,
+          0.29879100000000003
+        ]
+      },
+      "completedPrimaryRustAttempts": 23,
+      "observedCompleteAttemptsIncludingJs": 27,
+      "censoredRustRequestIds": [
+        4
+      ],
+      "neverDispatchedIds": [
+        5,
+        6
+      ]
+    }
+  ],
+  "independentlyExecutedChecks": {
+    "command": "Read-only Node stdin audit over exactly the five authorized evidence files; exit0",
+    "assertions": [
+      "Result declaration hash matches declaration bytes; embedded spec and spec hash match frozen spec; expected runner/spec hashes and ABBA/order/deadline/binary identities match.",
+      "A/B declaration snapshot metadata are identical; source-tree SHA recomputed from declared file-hash map; input hashes match declared spec. Producer unchanged flags all true. No actual source/binary/fixture files were opened for this restricted outcome review.",
+      "Exact ordered common quote fields and plan hashes compare equal; observed prefix lengths and route edge IDs match saved Ready receipt.",
+      "All four PID/requestId/epoch/target/source joins are unique and consistent; phase and bridge attempt/wall sums balance.",
+      "Primary attempt counts, queued versus dispatched cancellation records, retry events/counters, drains and receipt status checked.",
+      "Frozen both-B-below-both-A predicate evaluated false; completed-hop non-regression and one-exchange mechanism predicates true."
+    ]
+  },
+  "onlyReviewerWrite": "cold-source-result-review.json"
+}

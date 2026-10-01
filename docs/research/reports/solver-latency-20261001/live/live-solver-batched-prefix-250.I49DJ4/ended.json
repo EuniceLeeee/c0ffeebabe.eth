@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-30T12:59:04.710Z",
+  "stopReason": "user_or_task_stop",
+  "first": null,
+  "last": 26090448,
+  "code": 0,
+  "signal": null,
+  "cleanup": {
+    "pgid": 27643,
+    "remaining": [],
+    "terminated": []
+  }
+}

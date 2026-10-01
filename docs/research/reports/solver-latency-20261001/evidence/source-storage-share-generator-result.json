@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "searcher_behavior_change": "yes",
+  "reviewPass": 1,
+  "status": "implemented-offline-gates-passed; awaiting non-author review; no latency claim",
+  "nativeGeneration": "Existing native fallback reused after previously recorded unsupported CLI model; no global config/dependency changes.",
+  "allowedFiles": [
+    {
+      "path": "listener/src/searcher/strict-central-adapter-runtime.ts",
+      "sha256": "cd5ad6ed30b147903d5c18f99110afc09c7f4a93ac58f72dbcb72da22f2baeba"
+    },
+    {
+      "path": "listener/src/searcher/test/strict-central-adapter-runtime.ts",
+      "sha256": "b73cfa9848e5981c33df3413a4ee008b14e5d86cf834cef9faf96baebbb8a2ff"
+    }
+  ],
+  "sliceDiffSha256": "8fadffc4cbd65bf1c8f8f48fd38d6316ef1070ad6f54391c8f84fa88084f84ad",
+  "fullTrackedDiffSha256": "793568b69413b2778fcdb63b9199c9528abfddda43fb7e5019e58c3ae94d7427",
+  "other11DirtyFilesPreservedByteForByte": [
+    {
+      "path": "listener/revm-sim/src/diagnostic.rs",
+      "sha256": "8aaef92ce3ebbebfc8588c255d34ec528b63f25affc5d3a8c2c05ec5721d9e1e"
+    },
+    {
+      "path": "listener/revm-sim/src/main.rs",
+      "sha256": "c0c05e20bc4c2b571794bd37a592232c6f15dd1e2f445d6f68f0de16f9a29ba6"
+    },
+    {
+      "path": "listener/src/searcher/blockscan-runtime-loop.ts",
+      "sha256": "a7e5c5be5cd471d54e66b6fbb240dc980e854aa5aa71b1276e409615b460ee79"
+    },
+    {
+      "path": "listener/src/searcher/main.ts",
+      "sha256": "8478ba02204c7b82174411508feab8b28c25b0b6dcc5d45d7a37a1c01169db58"
+    },
+    {
+      "path": "listener/src/searcher/revm-sim-client.ts",
+      "sha256": "f7c60295c9d0dd3f880811eedf6589e3cc9f3e62744bd35bf2d8eccca8be6cfd"
+    },
+    {
+      "path": "listener/src/searcher/revm-strict-source-owner.ts",
+      "sha256": "09a07fe5a9ecb89a25a7d1b80569dc121fe3d9ab45dd61a46ac3f774af427ab1"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-propagation.ts",
+      "sha256": "bb19c5245f011b09a0695bc4f5dc4695333ed7533436bb2854338e244ccf371a"
+    },
+    {
+      "path": "listener/src/searcher/test/blockscan-runtime-loop.ts",
+      "sha256": "8b04b9c7552d20b7f59e0ea7de81917c472a54dcdae93e6485d78b134e603e4f"
+    },
+    {
+      "path": "listener/src/searcher/test/blockscan-solver-quote-concurrency.ts",
+      "sha256": "29f2894447c8ca738312a012f84fc9bc8d822e6e1dd4f3560c75c5266d32c1e6"
+    },
+    {
+      "path": "listener/src/searcher/test/revm-sim-client.ts",
+      "sha256": "99d2743666a4da777161fa5b80677732f435a144fdb7363e3c4943693eb73611"
+    },
+    {
+      "path": "listener/src/searcher/test/solver-sequential-prefix.ts",
+      "sha256": "acde503ad27fbf5d53d14d0fb7a458aca1342ec096e9816bc780989c79ed5f84"
+    }
+  ],
+  "implementation": [
+    "Reused the existing raw source-read owner/joiner cache for get-code/get-storage, with one combined256-entry cap.",
+    "Key binds kind/address/canonical slot and existing source number/hash/generation/lane/signal/deadline; fixed runtime binds provider.",
+    "Retain only canonical32-byte storage strings; existing code32KiB bound and failure/overflow/retirement semantics retained.",
+    "Prefix-context simulator path bypasses all raw source reuse; per-request result/provenance issuance and fences remain.",
+    "Private frozen request snapshot keeps queued key, provider load and retention consistent despite direct-harness mutation."
+  ],
+  "tests": [
+    {
+      "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node --import tsx --test src/searcher/test/strict-central-adapter-runtime.ts",
+      "cwd": "<repo>/listener",
+      "exit": 0,
+      "passed": 166,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node --import tsx --test src/searcher/test/adapter-request-program.ts src/searcher/test/adapter-work-intent.ts src/searcher/test/exact-prefix-plan.ts src/searcher/test/solver-sequential-prefix.ts src/searcher/test/pinned-reth-quote-backend.ts src/searcher/test/revm-sim-client.ts",
+      "cwd": "<repo>/listener",
+      "exit": 0,
+      "passed": 126,
+      "failed": 0,
+      "skipped": 0,
+      "note": "Existing mock/local-loopback tests only; optional real-binary gate unset. No external RPC."
+    },
+    {
+      "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node --import tsx src/searcher/test/blockscan-solver-quote-concurrency.ts",
+      "cwd": "<repo>/listener",
+      "exit": 0,
+      "result": "24plans/72candidates/384exactcalls; peaks1/4/16"
+    },
+    {
+      "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node node_modules/typescript/bin/tsc -p tsconfig.live.json --noEmit --pretty false",
+      "cwd": "<repo>/listener",
+      "exit": 0
+    },
+    {
+      "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node node_modules/typescript/bin/tsc --noEmit --pretty false",
+      "cwd": "<repo>/listener",
+      "exit": 2,
+      "note": "8 known errors, all in untouched tests: pinned-reth-quote-backend.ts1518; ready-activity-classification.ts97/122(3)/132; curve-plain-family/test/cached-refresh-scope.ts23/93. No current two-file error."
+    },
+    {
+      "command": "git diff --check",
+      "cwd": "<repo>",
+      "exit": 0
+    }
+  ],
+  "productionShapedProof": {
+    "entry": "Actual AnvilSolver.solve -> actual amount propagation -> existing test session quote seam -> executeAdapterWork request programs -> actual strict central runtime/scheduler/provider mock.",
+    "lifetimeAnchors": [
+      "solver/solver.ts249 creates one adapterWorkControl per solve",
+      "solver/solver.ts359-366 forwards it to every amount propagation",
+      "solver/amount-propagation.ts128-129 forwards it unchanged",
+      "strict-production-runtime-session.ts1379 forwards control to Family exact"
+    ],
+    "trials": "Two fresh solves per baseline/candidate. Each solve12amounts/8GSS/24hops; first hop has3value-dependent storage rounds, second hop local.",
+    "baseline": "Separate runtime per trial, unchanged real Solver controls:72physical and72logical storage reads.",
+    "candidate": "Shared runtime with real unchanged Solver controls:6physical and72logical storage reads; exactly3per solve, no cross-solve signal reuse.",
+    "parity": "Same complete resolved outputs, selected amount sets and all72decoded source words; independently issued evidence and source fences. Retired-source work rejected.",
+    "limitation": "Generic fixture at session/Family boundary, not a recorded xWin replay or full real-session proof. New ignored recorded-response harness is separately authorized and not yet executed."
+  },
+  "repairedDuringGeneration": [
+    "Two completed-retirement tests initially tried to observe private-cache retirement through executeAdapterWork, which fences before entering that cache. Added direct-executor stale access as in existing code tests; no production behavior changed.",
+    "Solver fixture initially supplied an empty StateBackend incompatible with real control wrapping; replaced with the existing deny-on-I/O proxy pattern.",
+    "Resolved test-only TypeScript inference/narrowing errors.",
+    "Initial related-suite invocation incorrectly included the CLI-only solver-grid-quote-concurrency.ts without mandatory baseline argument; usage failure only. Corrected six-file suite126/126 passes; no edit to that diagnostic."
+  ],
+  "limitations": [
+    "No external performance experiment, latency claim, live run or replay acceptance.",
+    "Full tsc remains blocked by8 unrelated known test errors.",
+    "No docs, Family, Rust, simulator, budgets, configs, credentials, commits or pushes changed."
+  ],
+  "productionEditsFrozen": true
+}

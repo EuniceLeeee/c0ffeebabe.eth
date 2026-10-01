@@ -1,0 +1,13 @@
+{
+  "source": "<repo>/logs/live-solver-batched-prefix-250.I49DJ4/live.log",
+  "sourceBytes": 533493705,
+  "sourceSha256": "1ab62daed68a27285a5a024542657a054f75bfc66ce11a0f560da7d67fd5dc9f",
+  "projection": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/second-prewindow-latency.log",
+  "projectionSha256": "07a96c9ac9d223e339230b100cd064e3e5925a476e184cee358f59c2c97b4191",
+  "from": 26090329,
+  "to": 26090448,
+  "lines": 716245,
+  "anchors": 2,
+  "timings": 103,
+  "rule": "original process and commit anchors; all non-startup timing rows in inclusive window; all remaining original line positions blank; no invented anchors or timings"
+}

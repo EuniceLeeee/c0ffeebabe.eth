@@ -1,0 +1,419 @@
+{
+  "goal": "incomplete; work resumed after explicit user approval (好) of V4 Family local amount quotation. Previous authorization blocker resolved; reset recurrence audit. Preserve all prior evidence and 13-file patch. No task-owned external process at resumption. Goal status API cannot resume a blocked goal; continuation follows the new human authorization.",
+  "resumedV4Slice": {
+    "authorization": "<redacted-secret>",
+    "blockerRecurrencesSinceResume": 0,
+    "plan": "v4-local-plan.json",
+    "status": "design and implementation; prior completed experiments remain closed"
+  },
+  "currentScopeBlockerAudit": {
+    "consecutiveGoalTurnsWithoutFurtherInScopeProgressAfterStorageClosure": 3,
+    "previousTurnClassification": "no progress: repeated state/scope audit only; no active job to wait on",
+    "currentTurnClassification": "no progress: same blocker revalidated, no new authority or appropriate representative direct-provider workload",
+    "revalidation": "Current HEADbaca79b03384a93fb656482c09a5e4de026f5fbc,13filepatch793568b69413b2778fcdb63b9199c9528abfddda43fb7e5019e58c3ae94d7427 and offline-result5571bf7021ac803ad5c0411418a1beb2934eae97cc8a073d4605a53c4348d341 unchanged. Lastlive ended code0 at26090831 with cleanupempty. V4 nonzero exact quote is still remote; no local mode switch exists. No human scope approval received.",
+    "condition": "Next evidence-backed dominant-latency change is V4 Family local amount quotation, already asked but not approved. Generic storage slice completed; xWin fork timing rejected as unrepresentative of direct-provider storage. Same blocker has recurred three consecutive goal turns. Mark blocked, not complete; no repeated blind runs. On explicit resume, restart the blocked audit rather than inheriting this count."
+  },
+  "workspace": "<repo>",
+  "branch": "codex/s1-unified-adapter-architecture-impl",
+  "baseHead": "baca79b03384a93fb656482c09a5e4de026f5fbc",
+  "beforeStorageSlicePatchSha256": "0621702191948ea1142792abc84f65ab1d864dd6b6cc68cf6dbbeedd540a78b7",
+  "currentSourceStorageCandidate": {
+    "status": "IMPLEMENTED pass1 and recorded real-route resource/parity contract PASS. Main nonauthor code review/gates and independent raw comparison complete. Mencius independent raw-result cross-check PASS54assertions. No external RPC/live.",
+    "plan": "source-storage-share-plan.json",
+    "designReview": "source-storage-share-design-review.json",
+    "brief": "source-storage-share-brief.json",
+    "agent": "01a0f250-e06b-7c23-bfec-995ec4aae807",
+    "files": [
+      "listener/src/searcher/strict-central-adapter-runtime.ts",
+      "listener/src/searcher/test/strict-central-adapter-runtime.ts"
+    ],
+    "mechanism": "Extend existing raw code cache to canonical storage; combined256cap; source/lane/kind/address/slot/signal/deadline identity; no prefix-mutated reuse; independent results/fences/drain preserved.",
+    "newOfflineResource": "six-family-ev-20260930.Pc1Pv8/xwin-environment/environment-reads.jsonl has actual source-pinned raw responses. SHA07a0a3eca1e63e200ce8cc33d11c37943cf29ceb61b1624c04eaca63d3a6e255.1427 eligible code/storage/call records,229 distinct keys,zero conflicting responses. Enables no-external-RPC request-replay diagnostic, not live speed proof.",
+    "limitation": "Saved continue.mts lacked production PinnedRethQuoteBackend. Future diagnostic must retain production call memo/batching rather than repeat that stripped transport. Solver uses one linked signal/deadline per solve; no across-solve lifetime widening.",
+    "mainReview": "source-storage-main-review.json",
+    "generatorResult": "source-storage-share-generator-result.json",
+    "checks": "main287/287,livebuild pass,actualRustclient259/259; all0skip/0cancel. Initial unrelated CLI usage failure retained and corrected, no source fix required. Fulltypecheck8known untouched-test errors, no full-pass claim.",
+    "candidateSnapshot": "storage-share-runtime.8WzAK5; centralcd5ad6ed30b147903d5c18f99110afc09c7f4a93ac58f72dbcb72da22f2baeba;testb73cfa9848e5981c33df3413a4ee008b14e5d86cf834cef9faf96baebbb8a2ff",
+    "offlineResult": "source-storage-offline-2/results.json SHA5571bf7021ac803ad5c0411418a1beb2934eae97cc8a073d4605a53c4348d341; A/B/B/A allcomplete; storage108/9/9/108,9unique identical words; exact12amounts/8GSS/24hops/fullprefix/allcandidatehashes. Zero network escapes, residual transports/sockets and drift.",
+    "offlineFailurePreserved": "source-storage-offline-1 baseline completed search then harness close-event race falsely failed drain; B arms not run. Harness-only repair awaited bounded socket close events and new output offline-2. Main reviewed pass2 hash013318f162ef7a6771df269d0ddb16f5bbfc71fdd28ab2fc73dfa0228cbfa9ff; no production changes.",
+    "mainAssessment": "source-storage-offline-main-assessment.json",
+    "reconciliation": "source-storage-offline-reconciliation.json; indexed latency tool correctly reports0livepasses, not toolingdefect",
+    "fullCurrentPatchSha256": "793568b69413b2778fcdb63b9199c9528abfddda43fb7e5019e58c3ae94d7427",
+    "independentResultReview": "source-storage-offline-result-review.json;all4complete,108->9storage;54assertions,638physicalitems verified; canonical tool agrees0livepasses. xWin archive222storage records allmode local-fork, so real fork timing cannot establish direct-provider savings.",
+    "next": "No new external timing/live declared. V4 local amount quotation needs pending user scope decision. Sample inventory and live logs do not establish an appropriate successful direct-provider repeated-state cohort. Preserve partial outcome and request scope direction; do not repeat completed offline or failed experiments."
+  },
+  "currentColdSourceCandidate": {
+    "status": "COMPLETED AND WITHDRAWN. All4 attempts retained; cold exchange removed but first-prefix-hop criterion FAILED. Source draft restored via apply_patch; original pair baseline patch/binary hashes verified. No live/RPC process running; never rerun this experiment.",
+    "design": "cold-source-hydration-plan.json; scalar pinned trialPrefix with no existing session combines full source precheck and identical hash-pinned hydration; no authentication or ordered prefix omitted",
+    "scope": "Only existing dirty main.rs and diagnostic.rs; 256 outgoing items fast-path bound, original pre-send fallback; warm, pair, final-sim and legacy paths unchanged",
+    "sourceHashes": {
+      "main.rs": "f4d831191a2934ee99b103f04dc3a421470dc74548ce50be42d7c562bbb613f2",
+      "diagnostic.rs": "67a0d33c13ac70368a6061220e541157e2aa85ac135df3aa7e54144e31837482"
+    },
+    "frozenBinaryDirectory": "cold-source-binary.KD2Xff",
+    "binarySha256": "8993d08bd501af9c4c7555bb93b76a9286ca8d1f420652f806709f2a305f1e74",
+    "checks": "main: Rust82/82 and release build; actual TS/candidate Rust/loopback259/259; git diffcheck passes. No production typecheck pass claim.",
+    "testLogs": [
+      "cold-source-full-tests.log",
+      "cold-source-build.log",
+      "cold-source-ts-rust-integration.log"
+    ],
+    "reviewer": "Mencius implementation review passed; experiment pass1 found soft-only launcher watchdog; pass2 verifies directNode isolated group with graceful150s/hard160s termination and receipt qualification. Review files cold-source-implementation-review.json and cold-source-experiment-review-2.json. Main and reviewer local watchdog tests pass.",
+    "outcome": "ABBA first-prefix-hop9.318/9.274/8.851/8.737seconds; both B slower than A2, criterion fails. Common2 completed quotes/plan exact; cold physical17->16, completed-hop23->22. All four full P routes cancelled30s at next hop; no Solver entry. No fatal/drain/forcedstop/residual process; hashes stable. Observed completed-hop attempts90; censored work and billedCU unknown.",
+    "restoration": "Restored main.rs/diagnostic.rs exactly to prefix-pair-binary frozen sources. main reran Rust78/78 and release build; binary1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1; patch071044e25429a6ac9142b6751a068dee08fae15f70f9061456b978436b52b641. Full candidate snapshot/evidence preserved.",
+    "next": "Closed and reconciled: cold-source-reconciliation.json. Independent raw reviewer agrees criterion failed; indexed tool correctly finds0 eligible live passes (not a tool defect). Do not rerun. New quote-cohort-batching-investigation.json is READ-ONLY design only; Mencius review pending, no new production patch or RPC launched."
+  },
+  "currentGzipOptimization": {
+    "status": "COMPLETED AND WITHDRAWN. All20 complete with exact outputs; median/pair-wins/p95 performance criteria all fail. Independent raw-evidence reviewer agrees. No rerun or live launch.",
+    "source": "Only listener/src/shared/state/state-backend.ts plus new test/state-backend-http-compression.ts; original tracked patch unchanged.",
+    "sourceSha256": "06183228659c7c3863a948c347c5a965879e9177ae2c37fbbdba5961f13d3bfa",
+    "untrackedTestSha256": "e23065d9d3040170712ade1323e41a19d73cfaf207d4e9d25d8e39054e4eab1c",
+    "mechanism": "Negotiate gzip; streamed lossless UTF8 decode; existing JS string-unit max; preserve HTTP/RPC error classification and cancellation; never destroy reused socket after completedHTTP. No Family/Rust/search/default budget changes.",
+    "tests": "Main7/7compression tests + deadline + pinned backend pass; build:live passes. Independent reviewer9/9test entries and additional late-error/socket tests pass; fulltypecheck8same pre-existing errors only.",
+    "capability": "gzip-capability-1.json:8read items,4byte-identical152296-byte bodies; gzip wire15664/15696bytes; canonical pre/post, drained. Independent review and indexed reconciliation complete. Not a Solver claim.",
+    "experiment": "same-input-gzip-1; ABBAx5=20complete-Solver attempts,30s each,rank477,P=.002ETH,12amounts/8GSS/24quotes,batch64/concurrency8/worker16,exact output/call parity; max1492logical reservations (prior slices500;combinedcap1992),650s wrapper. No expected-route natural acceptance claim.",
+    "criterion": "All20complete/parity; Bmedian<=90%A; >=8of10pairwins; nearest-rank Bp95<=110%A. No samples dropped, warmed, retried or deadline widened.",
+    "reviews": [
+      "gzip-transport-review.json",
+      "gzip-solver-review.json"
+    ],
+    "evidence": [
+      "gzip-capability-manual.json",
+      "gzip-capability-reconciliation.json",
+      "gzip-transport-timing.json",
+      "same-input-gzip-1/declaration.json",
+      "same-input-gzip-1/results.json",
+      "gzip-solver-manual.json",
+      "gzip-solver-assessment.json",
+      "gzip-solver-result-review.json",
+      "gzip-solver-reconciliation.json"
+    ],
+    "frozenRuntimeB": "gzip-runtime-complete;sha2566e9daba094d50c1560c725445371b221b7e1d4621cf0a2ecb28a69a4f4e7b2ce",
+    "next": "Closed: state-backend restored to original source; new test preserved as withdrawn-state-backend-http-compression.ts under ignored evidence; original tracked patch071044e25429a6ac9142b6751a068dee08fae15f70f9061456b978436b52b641 restored. Inspect existing repeated-prefix phase evidence before selecting next slice."
+  },
+  "latestBinarySha256": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661",
+  "currentBatchExperiment": {
+    "status": "completed and rejected; launcher11856 exited0, no remaining process; do not duplicate or rerun",
+    "name": "same-input-batch-split-1",
+    "runtime": "prefix-pair-runtime-complete (both arms identical)",
+    "contract": "Selected no-repeat rank477 real Solver; only backend maxBatchSize64vs1; concurrency8, same source/P/grid/8GSS/30s and same immutable code/binary.12invocations ABBAx3, zero reruns/warmups,2000read cap. No live/default or tracked source change.",
+    "review": "batch-split-review.json pass2 approved bounded diagnostic; runner eef6dfb8324769c36216384a80a58d94735fdb405a1554af07021ef45a736260",
+    "spec": "batch-split-timing.json",
+    "launcher": "launch-batch-split.mjs;400s soft abort then physical drain",
+    "result": "same-input-batch-split-1/results.json;12/12 complete with output parity. A64median4.834s, B1median5.922s, B wins2/6pairs: criterion failed. Keep64.",
+    "next": "Reconciled in batch-split-reconciliation.json. Independent Mencius raw-evidence review agrees. New evidence: same152296-byte state response spent up to6.223s receiving body after headers; inspect compression capability without modifying reads/search. No new network run yet."
+  },
+  "currentPairOptimization": {
+    "status": "implemented, tested, frozen and bounded ABBA diagnostic completed; retained for narrow mechanism, NOT complete Solver/systemic win",
+    "contract": "Exactly2 contiguous already-queued same-context/signal/deadline prefix reads. Scalar first, paired next2. Full pre(A), independent executionA, bridge postA+full preB (no check dedup), flushA, independent executionB, postB. No collection delay, retries, journal reuse or deadline change.",
+    "filesAddedToTrackedScope": [
+      "listener/src/searcher/revm-sim-client.ts",
+      "listener/src/searcher/revm-strict-source-owner.ts",
+      "listener/src/searcher/test/revm-sim-client.ts"
+    ],
+    "rustOwner": "Mencius; main independent review and78/78 Rust tests/release pass",
+    "tsOwner": "main; Mencius independent review and308 related tests pass",
+    "additionalIntegrationOwner": "Mencius; main reviewed+ran2 real-client/real-Rust/local-HTTP streaming/parity tests; full related actual-binary suite461/461 pass",
+    "typecheck": "8 identical pre-existing errors in untouched tests, independently compared sealed baseline; no full typecheck pass claim",
+    "frozen": [
+      "prefix-pair-runtime-complete",
+      "prefix-pair-binary",
+      "prefix-pair-timing.json"
+    ],
+    "runner": "same-input-pair-timing.mts (original same-input-timing preserved); includes hash parity of all runtime JSON and tsconfigs",
+    "packagingCorrection": "First offline snapshot omitted listener/searcher assets. Preserved incomplete prefix-pair-runtime, created NEW complete snapshot; offline checks pass. No real RPC before corrected snapshot.",
+    "evidence": [
+      "prefix-pair-main-review.json",
+      "prefix-pair-assessment.json",
+      "prefix-pair-reconciliation.json",
+      "same-input-prefix-pair-1/results.json",
+      "same-input-prefix-pair-1.log"
+    ],
+    "result": {
+      "order": [
+        "A",
+        "B",
+        "B",
+        "A"
+      ],
+      "hop1WallMs": [
+        16415.958417,
+        13107.935833,
+        12868.918792,
+        21835.279709
+      ],
+      "completedHops": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "allStatuses": "cancelled30s",
+      "solverEntered": 0,
+      "fullRouteComplete": 0,
+      "finalSimEV": "not run",
+      "completedHopRustPhysicalAttempts": [
+        24,
+        23,
+        23,
+        24
+      ]
+    },
+    "interpretation": "All common completed quote outputs exact. Same12logical checks/3reads; validation physical6->5. Two B times below both A, so narrow predeclared criterion met, but provider variance prevents attributing all elapsed difference to one saved exchange. Full routes incomplete and production live effect unproven.",
+    "next": "Hydration union rejected: measured A hydration already zero RPC; moving B hydration before A flush relocates latency and compromises partial-result isolation. Actual-Solver ABBA launcher prepared/offline-reviewed but NOT RUN: production requires a full profitable P before coarse/GSS fan-out; identical P diagnostics all timeout before that gate. Inspect source-state quote waits for a new evidence-backed slice. No new experiment or live is running.",
+    "rejectedNextSteps": [
+      "sibling hydration union: no measured saved exchange and B-only delay/fault can delay A",
+      "same-input-pair-solver-timing: offline-only, no network launched; would repeat P timeout without exercising Solver concurrency"
+    ],
+    "scope": "P=.002ETH,3x3,repeatTokenOff/repeatPoolOn,workers16 unchanged. No signing,broadcast,deploy,push,merge. No active real-network process."
+  },
+  "latestUpdate": {
+    "phaseInstrumentation": "Retained opt-in bounded terminal stderr record per strict request, exclusive phases and physical RPC attempts including fresh precheck; source/canonical checks unchanged. Full70/70 and release build pass after cold candidate rollback.",
+    "phaseDiagnostic": "same-input-prefix-phases-1: first prefix5.640s/10RPC; warm siblings0.208/0.334ms/noRPC. No continuation cache justified.",
+    "coldOnlyCandidate": "Frozen at cold-prefix-binary.Q0edHj; source/binary retained.81tests passed before benchmark. Main restored only this delta to prefix-phases-binary.g1YRid sources via apply_patch, hash verified.",
+    "coldOnlyExperiment": "same-input-cold-prefix-1 ABBA four30s invocations. All censored; completed hops2/2/2/1; Solver not entered. First prefix physical RPC10->2, but whole hop A17.378s and censored>26.779s versus B19.711/17.249s: no stable quote-hop latency win. Withdrawn per predeclared criterion.",
+    "evidence": [
+      "cold-prefix-assessment.json",
+      "cold-prefix-reconciliation.json",
+      "same-input-cold-prefix-1/results.json",
+      "same-input-cold-prefix-1.log"
+    ],
+    "next": "Read-only narrow design review with existing Mencius agent: identify generic batching of same-prefix independent reads without removing/reusing canonical checks or sharing mutable execution state. No new patch/network run authorized by an experiment yet; main must issue a reviewed brief under task-level goal.",
+    "scope": "No live/diagnostic processes. No push/merge/deploy/sign/broadcast. User P/search limits unchanged. Never relaunch completed experiments or widen deadlines."
+  },
+  "trackedEdits": [
+    "listener/src/searcher/solver/amount-propagation.ts",
+    "listener/src/searcher/test/solver-sequential-prefix.ts",
+    "listener/src/searcher/test/blockscan-solver-quote-concurrency.ts",
+    "listener/src/searcher/blockscan-runtime-loop.ts",
+    "listener/revm-sim/src/main.rs",
+    "listener/revm-sim/src/diagnostic.rs",
+    "listener/src/searcher/main.ts",
+    "listener/src/searcher/test/blockscan-runtime-loop.ts"
+  ],
+  "firstLive": {
+    "directory": "logs/live-solver-unique-pools-250.YgUfBJ",
+    "status": "completed all250; ended2026-09-30T12:33:49Z; code0; cleanup empty and input hashes verified",
+    "supervisorPid": 23789,
+    "runtimePid": 23807,
+    "window": [
+      26090073,
+      26090322
+    ],
+    "snapshot": "only first three tracked edits; no per-route telemetry or batch precheck",
+    "binarySha256": "461357a18302d74b78a79527ef360c5e3ddfc2d5d58c78981f4f487467f43a36",
+    "lastRead": {
+      "sourceBlock": 26090322,
+      "heights": 250,
+      "solverP50Ms": 5544,
+      "solverCompletedStages": 0,
+      "solverRevmRequests": 0,
+      "finalSims": 38,
+      "finalSimSuccess": 0,
+      "completeReports": [
+        "first250-final.json",
+        "first250-quote-waves.json",
+        "first250-reconciliation.json"
+      ]
+    },
+    "limitation": "many successful amount quotes now reach remote V4 amount Quoters; prior bad-binary live failed early, so elapsed medians are not causal policy effect"
+  },
+  "secondLive": {
+    "directory": "logs/live-solver-batched-prefix-250.I49DJ4",
+    "status": "stopped2026-09-30T12:59:04Z; code0; first=null, last26090448; cleanup empty; input hashes verified. Not a Solver measurement: persistent state cancellation, published source26090328. See second-prewindow-stop-decision.json",
+    "snapshot": "all five tracked edits; same config and Ready",
+    "binarySha256": "5f9c6dba64508decdeff3f5414453f804a9bed48bc947acd2444dd39734e397c",
+    "next": "Do not relaunch this sealed run. Diagnose and review same-budget periodic source-N preparation settlement before third new frozen snapshot. Stale search must remain skipped. Existing P/search/EV settings unchanged.",
+    "window": "250 source heights after catchup, hard2h; no broadcast/signing"
+  },
+  "thirdLive": {
+    "directory": "logs/live-solver-skip-settle-250.7MsLu8",
+    "status": "COMPLETED2026-09-30T14:16:19.515Z; code0; completed250heights; process group empty and Ready/runtime unchanged; do not relaunch",
+    "supervisorPid": 32297,
+    "runtimePid": 32313,
+    "startedLocal": "Wed Sep30 21:22:18 2026",
+    "snapshot": "all seven tracked edits: route prefix policy, mandatory precheck batching, telemetry, same existing cache early-skip, periodic source-N same-budget preparation settlement",
+    "binarySha256": "5f9c6dba64508decdeff3f5414453f804a9bed48bc947acd2444dd39734e397c",
+    "checks": "Ready generation1/26506edges/0stale/0RPC root rehydration; fresh endpoint executor code override probe passed; seal/check/run passed; Ready and executor startup receipts exist",
+    "limits": "250 source heights after first single-transition state-ready pass; hard2h; no signing/broadcast; existing config unchanged",
+    "window": [
+      26090582,
+      26090831
+    ],
+    "lastRead": {
+      "through": 26090755,
+      "heights": 174,
+      "timingRows": 173,
+      "wholeSolverCompleted": 0,
+      "solverNearestRankP50Ms": 4367.054375000007,
+      "stateNearestRankP50Ms": 6587.134000000078,
+      "finalSimAttempts": 147,
+      "finalSimSuccess": 0,
+      "pricingProgress": "source advances; no recurrence of indefinitely unpublished preparation baseline",
+      "routeSnapshot": "Earlier93 actual Solver windows:2746 source-state attempts,1261 completed/1485 aborted, no ordered-prefix. Completed route p50 294ms and p95 5948ms. Actual Solver-window median4644ms, exact RPC union3691ms, remainder969ms;7 batches median. Physical memo/inflight sharing already implemented; do not duplicate it. All partial/censored, not a speedup verdict.",
+      "evidence": "third-progress-01.json; third-progress-01-latency.log/provenance; third-progress-tools.json; third-progress-01-reconciliation.json"
+    },
+    "finalEvidence": "third250-final.json; third250-quote-waves.json; third250-reconciliation.json; third250-latency.log/provenance; third250-tools.json",
+    "finalRead": {
+      "heights": 250,
+      "timingRows": 246,
+      "last": 26090831,
+      "wholeSolverCompleted": 0,
+      "solverEntered": 211,
+      "solverAllRowsP50Ms": 4061.041625000071,
+      "solverEnteredP50Ms": 4472.096833000192,
+      "solverRustRequests": 0,
+      "sourceStateRoutes": 5206,
+      "completedRoutes": 1851,
+      "abortedRoutes": 3355,
+      "orderedPrefixRoutes": 0,
+      "finalSims": 169,
+      "finalSimSuccess": 0,
+      "earlyCacheSkips": 6177
+    },
+    "next": "Complete same-input comparison after review. All live medians censored/nonpaired; no actual whole-stage speedup claim. No more live launched."
+  },
+  "reviews": [
+    "review-1-native.json",
+    "rust-batch-review.json",
+    "telemetry-review.json",
+    "cache-skip-main-review.json",
+    "preparation-settlement-main-review.json"
+  ],
+  "reviewAgents": "Mencius 01a0f250-e06b-7c23-bfec-995ec4aae807 read-only existing successful repeated-workload inventory; no network/code allowed.",
+  "pendingSameInputDiagnostic": {
+    "status": "Completed corrected primary and two separate P-only engine comparisons. Original harness omission fixed only in ignored harness. All artifacts preserved.",
+    "fixtures": "logs/seven-p0002-repeat.6tTOwk/sat1-ready.json plus sat1/prices/{prices,input}.json and sat1/offline-1/enumeration.json",
+    "cases": [
+      {
+        "rank": 477,
+        "kind": "no repeated instance",
+        "shape": "V3 USDC->WETH, V4 WETH->USDC",
+        "Praw": "5195442"
+      },
+      {
+        "rank": 4,
+        "kind": "repeated instance",
+        "shape": "6hops beginning same SAT1 logical instance forward/reverse, then4 V2"
+      }
+    ],
+    "source": {
+      "number": 26029536,
+      "hash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06"
+    },
+    "contract": "Selected historical diagnostic only; not live/natural acceptance. ABBA per case (8 total),30s total each, no retries/budget widening; current64x8 exact batching, fresh same-state sessions, same compatible Rust. Only propagation differs: HEAD always-prefix vs reviewed conditional policy. No finalsim/EV claim. Current live remains isolated from added RPC. Saved fixture used repeated-token admission and512 candidates; rank477 outside current100, and rank4 not original whole transaction. Retained-prefix case may be entirely local and cannot prove Rust prefix speed.",
+    "evidence": [
+      "same-input-primary-1-disposition.json",
+      "same-input-main-review-pass2.json",
+      "same-input-primary-2-assessment.json",
+      "same-input-primary-2-bootstrap-corrected/results.json",
+      "same-input-prefix-engine-1/results.json"
+    ],
+    "next": "Review smallest generic way to avoid same-prefix repeated execution/serial read overhead, with source/cancellation/isolation safeguards. No new implementation or RPC authorized by the current experiment declaration; task-level autonomous goal still active.",
+    "primaryResult": {
+      "noRepeat": {
+        "rank": 477,
+        "A": "both cancelled30s total; Solver27.933/28.416s incomplete4amounts/noGSS",
+        "B": "complete Solver5.829/4.604s;12points/8GSS/24hops; no prefix or Rust",
+        "parity": "6 common completed hop quotes exact each; baseline incomplete so no full output equivalence"
+      },
+      "repeatLocal": {
+        "rank": 4,
+        "A": "2.285/2.035s",
+        "B": "3.220/4.385s",
+        "parity": "all72 hop quotes and3candidate outputs exact in all4runs; full prefixes retained; zero Rust; no speedup claim"
+      }
+    }
+  },
+  "tests": "Main ran full Rust65/65, source batch4/4, release build, Solver/prefix/ordered22/22, runtime-loop40/40; native telemetry reviewer ran build+53 tests+64 in-memory comparisons. Earlier amountsearch22/22 and concurrency passed.",
+  "realRpcMicrobenchmark": {
+    "declaration": "source-check-bench-declaration.json",
+    "result": "source-check-bench-result.json",
+    "source": 26090118,
+    "pairs": 20,
+    "allPassed": true,
+    "A_p50Ms": 2327.674708,
+    "B_p50Ms": 1288.660125,
+    "scope": "fixed WETH.decimals read through production strict client; same gas/output/attestation, precheck3->1 HTTP trips; NOT full Solver or repeated-route latency",
+    "backgroundOverlap": "2026-09-30T11:57:56.712Z..11:59:22.407Z; do not silently drop overlapping live samples",
+    "clients": "both closed and drained"
+  },
+  "analysis": {
+    "observe": "node logs/solver-prefix-policy-20260930.MKk8Vk/observe.mjs <live-dir> [write-once-output.json]",
+    "canonicalManifest": "latency-tools.json",
+    "baselineReconciliation": "baseline-reconciliation.json",
+    "projection": "project-latency.mjs preserves original line positions and actual process/commit anchors; selected timing window only; needed because full1.2GB log exceeds JS joined-string limit",
+    "canonicalRun": "analysis tool-run selected analysis:blockscan-pass-latency, baseline first250, start-line4 actual anchor, successful receipt recorded",
+    "medians": "CORRECTION after reading canonical code: manual uses sorted[ceil(n*p)-1]; canonical uses sorted[floor(n*p)], NOT average. At250 p95 indices coincide; at180 bothp50/p95 differ by one. Same180 records match exactly under canonical convention. See current-progress-reconciliation.json. No canonical tool defect or production edits.",
+    "quoteWaves": "quote-waves.mjs now reads fixed log bytes and reports source/hash-bound exact RPC interval union within Solver, request cohorts, and per-route source-state/ordered-prefix groups when telemetry exists. Interim173 blocks: Solvermedian5980ms, exact-inflightcovered5010ms, residual919ms,7batches/block, summed permitwait0.104ms, batchresponse636ms. Residual is unattributed (not claimed CPU). V4 quotes dominate. Not a formal paired result.",
+    "currentReconciliation": "current-progress-latency.log is a sealed180-record projection through26090252; current-latency-tools.json freshly queried and successful analysis:blockscan-pass-latency run recorded. Manual vs canonical reconciled in current-progress-reconciliation.json. The full250 projection should use a new filename once first ends, not overwrite this partial evidence.",
+    "newMetrics": "second live [searcher/solver-route-timing] reports quoteMode ordered-prefix/source-state, instances, monotonic wallMs, quoteMs, amounts/hops, outcome and aborted flag. quoteMs aggregates overlapping amount work; not stage wall.",
+    "identifiedExample": "source26090075 Solver8.833s/506amounts/2691hops; exact RPC279calls/14batches, total batch service6.75s, peak1 concurrent batch. V4 amount quote requests dominate waits; zero Rust Solver requests in first79. This does not authorize protocol bypass/quote fabrication."
+  },
+  "scopeGuard": "Keep P=.002 ETH,3tokens x3pools,repeat-token off,repeat-pool on; no signing/broadcast,node deployment,Family changes,universe shrink,gas/EV changes. No merge/push of these new changes yet. Main was synced in previous completed Git task only.",
+  "nextPrefixOptimization": {
+    "brief": "prefix-prefetch-brief.json",
+    "state": "FAILED EXPERIMENT WITHDRAWN",
+    "evidence": "prefix-prefetch-assessment.json; same-input-prefix-prefetch-1/results.json",
+    "candidateBinary": "prefix-prefetch-binary.AovEsv/revm-sim",
+    "candidateSource": "prefix-prefetch-binary.AovEsv/main.rs",
+    "candidateSha256": "13ca5325831770bae0ff676ad8999a24a0a09b0da91c1d5455413bb698ca35cb",
+    "restoredPatchSha256": "ec11606164347dc9f01ab334765b102a15758e8f5bab25cdb9147b7dc20a42e5",
+    "restoredBinarySha256": "5f9c6dba64508decdeff3f5414453f804a9bed48bc947acd2444dd39734e397c",
+    "restorationChecks": "Main independently checked exact patch/binary hashes, diffcheck,4 source-batch tests,6 TS prefix/concurrency tests. Agent ran full65/build.",
+    "outcome": "All4 A/B attempts cancelled30s, completed2hops each; same quoted outputs. B hop1 21.107s/16.816s vs A15.133s/15.109s. No win; extra trace overhead not kept."
+  },
+  "lastUserUpdate": "Warm candidate failed (faster prefix failure is not Solver speedup) and was withdrawn. Rebuilt baseline84Rusttests pass. Live250had0ordered-prefix routes; separate current ordinary quote latency from historical repeated-prefix latency.",
+  "nextQuoteCohortReview": {
+    "status": "Two-envelope design rejected; unchanged source-authority timing cannot be preserved",
+    "review": "quote-cohort-design-review.json",
+    "decision": "No cohort implementation; retain pair. The reviewed adjacent chain saves only one exchange and needs disproportionate surface for currently unproven benefit."
+  },
+  "currentProgressDiagnostic": {
+    "status": "COMPLETED and independently reconciled. Diagnostic implementation retained,1 bounded P-only invocation completed with censored route; do not rerun.",
+    "brief": "prefix-progress-brief.json",
+    "spec": "prefix-progress-timing.json",
+    "purpose": "Identify active third-hop phase/remote read on cancellation; no Solver win claim",
+    "agent": "Mencius 01a0f250-e06b-7c23-bfec-995ec4aae807",
+    "basePatchSha256": "071044e25429a6ac9142b6751a068dee08fae15f70f9061456b978436b52b641",
+    "budget": "One30s P-only invocation later; zero reruns/warmups;45s soft55s hard launcher cap",
+    "productionScope": "Only diagnostic.rs/main.rs progress observation; search, source checks, full prefixes and semantic results unchanged",
+    "cuSpentSoFar": "BilledCU unknown; independent reviewer observes85 physical attempts/envelopes across Rust+JS/direct sources, including one unfinished attempt. Not a success/CU count.",
+    "checks": "main Rust84/84, release, actual TS/Rust loopback259/259, held-response1/1, watchdog2/2, offline preflight and diffcheck pass",
+    "frozenBinary": "prefix-progress-binary.onTMkL",
+    "evidence": [
+      "prefix-progress-main-review.json",
+      "prefix-progress-manual-assessment.json",
+      "prefix-progress-result-review.json",
+      "prefix-progress-reconciliation.json"
+    ],
+    "finding": "Request4, full expanded2-leg prefix:56 physical RPC attempt begins/55 ends; ended scopes16.6465s; requests5/6 never dispatched. Source precheck.314s, hydration.641s. No hop2 output, full30s cancelled, no Solver entry.",
+    "next": "Warm candidate experiment completed and withdrawn; progress diagnostic remains retained."
+  },
+  "currentWarmPrefixCandidate": {
+    "status": "COMPLETED, independent review FAIL, reconciled, WITHDRAWN via apply_patch. No rerun/deadline expansion.",
+    "brief": "warm-prefix-brief.json",
+    "designReview": "warm-prefix-design-review.json; W1 ancestor-only misses excluded, W2 logical hint vs physical sends, W3 adjacent-pair no-regression accepted by main",
+    "generator": "Mencius 01a0f250-e06b-7c23-bfec-995ec4aae807",
+    "scope": "Two existing Rust files only; success eligibility after full request+canonicalpost (pairA after bridge+flush), same-source cache-only scout, one logical prefix hint, true hash-pinned hydration and full authoritative execution unchanged",
+    "mainControlsRerun": "No-repeat/repeated-prefixTS5/5; actual1/4/16concurrency sample384quotes passes; owned-process watchdog2/2",
+    "mainGate": "warm-prefix-main-review.json: Rust100/100, actualTS/Rust259/259, held-response1/1, own full source/test diff review, release, preflight/diffcheck pass",
+    "frozen": "warm-prefix-binary.DmlaI6; main5d7cacebfc42bb778db178da3ecd96ea768e85c57562e2f5c7587bbecaa9f868, diagnostic61b7c96dfd433e392910deae77042517477b86bce332adbbc96fb996d37c5f2d, binary1d814015f1fc3677a4435a24da8b5fad93c4915e6f531c46b9a65c5096611a0c",
+    "experiment": "warm-prefix-timing.json SHA63de4637e40ba461763b690beec7cdceec951f1630b3fae2b2ed0f3102611cfe; launch-warm-prefix.mjs SHA9b38152555dba3a31f614127e7ddc715dc724b7ab3e66c7c1099ab7e0c91f22c. Independent warm-prefix-experiment-review.json PASS_BOUNDED_EXPERIMENT_ONLY.4x30s P-only ABBA;140s soft155s hardgroup; no warmups/reruns; stricter adjacent-pair progress/latency rule",
+    "next": "No new experiments. Native reviewer doing bounded offline sample suitability inventory. User asked via asynchronous approval whether to expand next stage to V4 Family local amount quotes (central interfaces/search parameters/final sim unchanged); no reply yet, not authorized or started.",
+    "outcome": "All4 completed2quoted hops; A cancelled30s, B prefix execution failure14-16s; Solver never entered. All shared quotes/plan match; no performance pass.",
+    "evidence": [
+      "warm-prefix-manual-assessment.json",
+      "warm-prefix-result-review.json",
+      "warm-prefix-reconciliation.json"
+    ],
+    "restoration": "Sources and binary restored exactly to frozen progress baseline; patch0621702191948ea1142792abc84f65ab1d864dd6b6cc68cf6dbbeedd540a78b7; main Rust84/84, client and solver265/265, build/diffcheck passed."
+  },
+  "latestStatusArtifact": "solver-latency-current-progress.json",
+  "scopeDecisionPending": {
+    "question": "是否允许下一阶段转向V4 Family本地金额报价优化，中央接口/搜索次数/最终sim/配置不变？",
+    "status": "asked; no answer yet",
+    "firstConsecutiveGoalTurnAwaitingDecision": 1,
+    "reason": "Retained uniqueness split has selected-sample benefit. Recent live has no remote-prefix routes; repeated six-hop benchmark fails before Solver. Further Family semantic work expands frozen diagnostic scope; do not start it without answer."
+  }
+}

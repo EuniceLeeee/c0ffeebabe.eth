@@ -1,0 +1,13 @@
+{
+  "source": "<repo>/logs/live-solver-unique-pools-250.YgUfBJ/live.log",
+  "sourceBytes": 543616381,
+  "sourceSha256": "13d082bc3d007182279f7f5bb4b57bc20a2439e344ce66ede4dfa1d2b95d2225",
+  "projection": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/first250-latency.log",
+  "projectionSha256": "088bb208794ee3d28a145d12c9c8529495c84ee9d63ae1b9a49bc51ad2a457b9",
+  "from": 26090073,
+  "to": 26090322,
+  "lines": 760726,
+  "anchors": 2,
+  "timings": 250,
+  "rule": "original process and commit anchors; all non-startup timing rows in inclusive window; all remaining original line positions blank; no invented anchors or timings"
+}

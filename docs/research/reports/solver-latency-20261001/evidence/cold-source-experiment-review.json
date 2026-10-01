@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "reviewRole": "independent non-author offline experiment reviewer",
+  "reviewPass": 1,
+  "verdict": "spec/runner/input comparison passes offline; hold launch until the declared 160-second wall-cap mismatch is resolved",
+  "externalRpcPerformed": false,
+  "credentialsRead": false,
+  "launcherExecuted": false,
+  "productionEdits": [],
+  "performanceAcceptance": false,
+  "goalComplete": false,
+  "bindings": {
+    "directory": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk",
+    "runner": {
+      "path": "same-input-pair-timing.mts",
+      "sha256": "d3d036dbc10ef7d6151ab04c61a4e75403130ab2dfeee8044e771ac313c7eac9"
+    },
+    "spec": {
+      "path": "cold-source-timing.json",
+      "sha256": "6b5cc4d102178e908a3ee09416ba0a1ba9a46fbca007d543c7bbdfdc315263ad"
+    },
+    "launcherDraft": {
+      "path": "launch-cold-source.mjs",
+      "sha256": "d1af22224c62e966385b3cb15b04e275a8707874926f06c12d893519f5a31cde"
+    },
+    "runtimeBothArms": {
+      "path": "prefix-pair-runtime-complete",
+      "sourceTreeSha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01"
+    },
+    "binaryA": {
+      "path": "prefix-pair-binary/revm-sim",
+      "sha256": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1"
+    },
+    "binaryB": {
+      "path": "cold-source-binary.KD2Xff/revm-sim",
+      "sha256": "8993d08bd501af9c4c7555bb93b76a9286ca8d1f420652f806709f2a305f1e74"
+    },
+    "candidateSource": {
+      "main.rs": "f4d831191a2934ee99b103f04dc3a421470dc74548ce50be42d7c562bbb613f2",
+      "diagnostic.rs": "67a0d33c13ac70368a6061220e541157e2aa85ac135df3aa7e54144e31837482"
+    },
+    "sourceNumber": 26029536,
+    "sourceHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+    "stateRoot": "0xa8c4eb4a5b7d2a90ee1ffa7ca44d1f90394210a46c77e4bf3fb76f68cfb64afe",
+    "rank": 8,
+    "P": "5195442",
+    "order": [
+      "A",
+      "B",
+      "B",
+      "A"
+    ]
+  },
+  "findings": [
+    {
+      "id": "wall-cap-is-only-soft-cancellation",
+      "severity": "launch-blocking declared-resource-contract mismatch",
+      "anchors": [
+        "launch-cold-source.mjs:32",
+        "same-input-pair-timing.mts:484",
+        "same-input-pair-timing.mts:486",
+        "same-input-pair-timing.mts:584"
+      ],
+      "evidence": "The launcher schedules child.kill(SIGTERM) at 160000ms and waits for exit; it has no escalation. The runner installs SIGTERM as an AbortController notification, clears the invocation timer before drain, and awaits closeAndDrain plus every pending promise without a separate hard bound. Therefore 160 seconds is a stop request, not the predeclared launcher wall cap. The launcher also targets the tsx wrapper, so exact child/descendant stop ownership should be explicit.",
+      "minimalResolution": "Keep the runner and work deadlines unchanged. Before launch, provide a narrowly owned launcher watchdog with graceful cancellation before the declared cap and a bounded hard-stop fallback for only that launch's owned process tree. Preserve log/declaration and classify any forced stop or missing results as censored/inconclusive, not success. Alternatively explicitly amend the declaration to a soft-stop contract and obtain acceptance of that changed resource bound; do not silently call it a hard cap.",
+      "reviewerAction": "No process was launched or signaled; no source/launcher edits."
+    }
+  ],
+  "validatedContract": [
+    "Experiment prefix-engine is checked by exact object equality: only rank8, p-only, ABBA, policy B on both arms, old/current binaries. Unused rank477/rank4 fixture declarations do not add runs.",
+    "Both arms load the identical frozen runtime and shared installed dependency root. Source tree, assets, executor artifact, fixtures, binary hashes and route identity are verified before external credential access. The candidate frozen Rust sources match the independently reviewed implementation hashes.",
+    "Offline rehydration fails closed on stale Ready definitions, source/root, canonical edge identity, P, cap or ordered Planner route mismatch. No graph insertion or new enumeration; this remains a post-selection diagnostic.",
+    "All four invocations independently recreate session/backend/daemon state. Each has a fixed 30000ms work deadline covering rehydration, canonical checks, session/Planner preparation and P propagation. Drain is outside measured work and joined before the next invocation.",
+    "Exact transport remains 64x8 with shared 12/4 scheduling; no JS retries/single-call fallback. Existing binary-internal bounded retries remain and must be counted. No warmups, automatic invocation retries, deadline widening or full Solver/final-sim/EV execution.",
+    "Production runtime asserts the full prior-quote length equals the hop index for this repeated route. Hop wall time spans issueExact completion, including its queued/strict sibling reads; it is not merely daemon service time.",
+    "A typed Rust/source-owner fatal or drain rejection aborts the remaining experiment. External interruption marks later items not-run. Ordinary timeout cancels one invocation and retains its record while the fixed order continues. Ordinary JS transport/source failures abort the current invocation but do not necessarily abort the remaining order; they cannot satisfy the predeclared successful screen.",
+    "The launcher draft enables diagnostics and captures runner stdout plus inherited Rust stderr into one exclusive-created log. PID capture calls production spawnDaemon unchanged. Run declaration/results use new-directory and exclusive writes; results flush only after measured work/drains."
+  ],
+  "attributionAndAssessmentRequirements": [
+    "Primary values are hops with hop===1, status===quoted and a fully recorded wallMs, with matching canonical edge, amountIn, amountOut, prefixLength and planSha256. Require both B primary durations to be strictly below both A durations, not just a favorable mean or service median.",
+    "Resolve the spec's completed-hop-count comparison before launch rather than selecting a favorable comparison afterward. A conservative proposed interpretation is that neither B has fewer completed quoted hops than either A; if adjacent pairing is intended instead, predeclare it explicitly. This review does not silently rewrite the frozen criterion.",
+    "Require successful first cold scalar phase attribution and an observed one-attempt reduction for corresponding completed requests. Compare A source-precheck plus hydration with B source-precheck-hydration plus hydration decoding; whole-hop time remains primary and includes overhead outside those labels.",
+    "Join Rust records to invocation by captured daemon PID and to returned requests by numeric requestId; retain TS epoch/requestId and exactCallId for hop association. A strictPair record owns both child IDs and its bridge interval: count that shared physical batch once, never once per child. Do not infer joins from log order or use batch-initiator AsyncLocalStorage as per-item attribution.",
+    "Rust phase records are terminal-only. A killed request, or a killed pair before group timing finishes, has censored attempt/phase totals. Absence is not zero. Whole-invocation physical-attempt totals cannot be claimed exact when such records are missing; report observed completed-record totals and explicitly unknown censored work.",
+    "Missing/censored primary hop, incomplete primary request phase records, retry asymmetry, source/fatal/drain failure, changed hashes or fewer completed candidate hops mean no supported benefit. Retain every timeout/not-run record and withdraw the candidate under the stated no-benefit policy; never rerun to fill a favorable sample.",
+    "Cancellation normally omits the runner's optional final canonicalAfter check because no work budget remains. Completed pinned strict replies still require their fresh authoritative Rust postchecks; never treat a killed/unattested result as completed. Do not equate results.complete=false (expected full-route censoring) with missing evidence for an otherwise fully completed primary hop.",
+    "Exit code 0 is not the benefit criterion. The runner does not execute predeclaredAssessment, and its complete field means whole invocation completion, not the first-hop screen. A separate raw-evidence judgment must enforce the frozen criterion.",
+    "Four historical P-only attempts can at most support a narrow mechanism screen. No independent host/provider-cache reset, numerical CU ceiling, or whole-Solver/live proof is provided. The 120 seconds of aggregate work budgets is a time bound, not an RPC-attempt/CU count bound."
+  ],
+  "offlineChecks": [
+    {
+      "cwd": "listener",
+      "command": "node --import tsx ../logs/solver-prefix-policy-20260930.MKk8Vk/same-input-pair-timing.mts --spec <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-timing.json --candidate-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete --self-test",
+      "exitCode": 0,
+      "result": "Network/process fence, prefix rules, concurrent attribution and real registry/nonempty-prefix compilation pass. One shared runtime intentionally tested once; two synthetic prefix reads compile identical1092-byte prefixes, sha2561de79d731a51d2e247947299debba7c22c6c2bcebe5728b096572dc02d4eb58e. No RPC/EVM execution."
+    },
+    {
+      "cwd": "listener",
+      "command": "node --import tsx ../logs/solver-prefix-policy-20260930.MKk8Vk/same-input-pair-timing.mts --spec <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-timing.json --candidate-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete --experiment prefix-engine --binary-a <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-binary/revm-sim --binary-b <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-binary.KD2Xff/revm-sim",
+      "exitCode": 0,
+      "result": "Offline pairedRuntimeValidated=true; identical runtime tree, exact4 rank8 ABBA entries and bound binary hashes; budgetMsPerInvocation30000; rpcCalls0. No --run or --out."
+    },
+    {
+      "command": "node --check logs/solver-prefix-policy-20260930.MKk8Vk/launch-cold-source.mjs",
+      "exitCode": 0,
+      "result": "Syntax passes only. Launcher not executed and credential file not opened."
+    },
+    {
+      "command": "shasum -a 256 of runner, spec, launcher draft, both frozen binaries and candidate frozen Rust sources",
+      "exitCode": 0,
+      "result": "Matched bindings above and prior implementation review."
+    }
+  ],
+  "reviewerSetupNotes": "Two initial offline commands used repository cwd where bare tsx was not resolvable; both stopped at Node import resolution before runner execution. Corrected to listener cwd (and corrected an unexecuted binary-path typo) and reran successfully. These were reviewer setup failures, not measurements or candidate findings.",
+  "onlyReviewerWrite": "cold-source-experiment-review.json"
+}

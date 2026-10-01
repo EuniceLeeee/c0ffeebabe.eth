@@ -1,0 +1,70 @@
+{
+  "owner": "main independent primary-evidence assessment before indexed reconciliation",
+  "claim": "Selected repeated-route cold-state latency localization, not improvement or complete Solver/live acceptance",
+  "verdict": "Diagnostic answered the censored-hop question; no speedup candidate was tested",
+  "bindings": {
+    "declarationSha256": "33a9597f33d377e33955b4583b49f2af717ba95a8d9c7aceb5e68a2cc3304151",
+    "resultsSha256": "443f46dd85562246ea7d4dce9115608cc4ac217482218a5dfeeefe2d4cf15604",
+    "rawLogSha256": "39bd3ef5805466f5c17eb603785dd2248dbab4cfd532fa40fa2f572d3803e052",
+    "launchReceiptSha256": "3e3dbaa7f0dc6b3530a74c2e9e2e4d2d6a90212526ade0074adee90d9e37f6f5",
+    "rustPid": 64897,
+    "sourceBlock": 26029536,
+    "specSha256": "336c1b78db482d975052b2e7c5789e1d2a62af363beff9cbf3b7595fc44c7f0b"
+  },
+  "outcome": {
+    "attempts": 1,
+    "routeStatus": "cancelled at unchanged30s invocation deadline",
+    "completedHops": 2,
+    "solverEntered": false,
+    "finalSimEv": "not run",
+    "propagationMsCensored": 28254.516709,
+    "hop0Ms": 308.036166,
+    "hop1Ms": 10015.792708,
+    "hop2MsCensored": 17930.053584,
+    "inputRuntimeBinaryChecks": "all unchanged=true",
+    "drainErrors": [],
+    "launcherSoftHardOrResidualStops": false
+  },
+  "causalLocalization": {
+    "request4": "Third hop's first declared read, executing the complete two-leg prefix before reading current reserves; matched by real PID and response/client request identity, not inferred from completion order",
+    "sourcePrecheckMs": 313.732917,
+    "hydrationMs": 640.535333,
+    "prefixPhysicalAttemptsBegun": 56,
+    "prefixPhysicalAttemptsEnded": 55,
+    "endedPrefixRpcMs": 16646.528294,
+    "prefixMethodsBegun": {
+      "eth_getStorageAt": 55,
+      "eth_getBalance": 1,
+      "eth_getCode": 1,
+      "eth_getTransactionCount": 1
+    },
+    "accountReadQualification": "Balance/code/nonce are one physical batch, not three physical trips.54 storage attempts plus that batch ended; the55th storage attempt was outstanding at cancellation.",
+    "lastProgress": {
+      "sequence": 127,
+      "event": "rpc-attempt-begin",
+      "attemptId": 58,
+      "phase": "prefix-execution",
+      "elapsedMs": 17647.952875
+    },
+    "truncationMarker": false,
+    "incomplete": "No request4 RPC-end, interval-end or terminal record after the final begin. Final attempt duration/outcome stays unknown; the128-record cap would prevent assuming further unobserved counts even without a marker.",
+    "queue": "Request4 dispatched immediately. Requests5/6 never dispatched and spent about17.92s queued behind it. This is not ordinary source-check latency or computation in later current-leg reads.",
+    "scope": "Measured dominant cost is serial demand-driven source state reads while executing an expanded prefix. It does not prove every repeated route has this cost or that a particular prefetch policy will improve it."
+  },
+  "correctness": "The two completed hop identities, inputs, outputs and full prefix lengths, plus plan SHA, exactly match both retained baseline A cases from same-input-cold-source-1. Whole route remains incomplete. No new source/fatal/drain fault observed.",
+  "resourceAccounting": {
+    "rustProgressBegins": 81,
+    "rustProgressEnds": 80,
+    "qualification": "23 observed completed requests1/2/3 attempts plus58 observed request4 attempts, one still outstanding. This is an observed Rust transport count, not total JavaScript/network work or provider billed CU. RPC does not return billed CU.",
+    "externalReruns": 0,
+    "taskOwnedExternalWorkNow": "none"
+  },
+  "decision": "Retain bounded diagnostics. No new blind live or deadline expansion. Next behavioral brief must target the newly measured long cold-read chain, preserve full-prefix/source authority and justify itself independently of the failed cold-source/cohort drafts.",
+  "notClaimed": [
+    "complete full-route or Solver",
+    "representative live effect",
+    "speedup from observability",
+    "zero cost for censored work",
+    "profit/simulation success"
+  ]
+}

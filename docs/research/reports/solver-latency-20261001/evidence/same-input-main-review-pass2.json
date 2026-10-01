@@ -1,0 +1,16 @@
+{
+  "role": "non-author evaluator",
+  "author": "Mencius 01a0f250-e06b-7c23-bfec-995ec4aae807",
+  "runnerSha256": "99ef8d736d603c6a462e6a97319c101cdb213c827cc2b7b075343b210a334e06",
+  "ran_gate": [
+    "Read corrected bootstrap, regression and invocation dispatch; real run does not invoke synthetic self-test",
+    "Executed paired offline self-test:54 actions each, isolated registries,1092-byte real prefix compilation",
+    "Executed paired snapshot validation: source trees unchanged and only propagation differs",
+    "Executed6 production prefix/concurrency tests; all passed",
+    "git diff --check passed"
+  ],
+  "finding": "Missing production side-effect registration was a diagnostic bootstrap defect. Corrected by importing each frozen runtime's own production registration, no hand registrations or production edits. Offline regression exercises real nonempty prefix compilation. Failed primary-1 comparison retained and invalidated separately.",
+  "decision": "Approved for a NEW corrected primary experiment under the same predeclared bounds, followed separately by the original optional P-only engine diagnostic. Not approval for live acceptance, merge or a performance claim.",
+  "limits": "8 corrected primary invocations then4 optional prefix invocations,30s work per invocation; no retry of observations or widened deadline; isolated dry-run only; no signing/broadcast/finalsim/EV. All attempted outcomes retained. Existing binary-internal bounded recovery remains disclosed.",
+  "additionalProductionEdits": false
+}

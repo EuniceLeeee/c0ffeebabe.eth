@@ -1,0 +1,24 @@
+{
+  "manualFirst": "prefix-pair-assessment.json written before tool selection/execution",
+  "capabilityQuery": [
+    "latency"
+  ],
+  "catalogCheck": "PASS361 indexed tools",
+  "manifest": "prefix-pair-tools.json",
+  "manifestSha256": "af703b232fcfc9dfcef4bff8ec5a2457ba14258abb3c389ee4725a14faf169b1",
+  "selectedSuccessfulToolIds": [
+    "analysis:blockscan-pass-latency"
+  ],
+  "executedExitCode": 0,
+  "reconciliation": "Canonical tool correctly reports0 production passes and an ineligible live window. The source log is a selected P-only same-input diagnostic, not a live pass. It does not certify Rust phase or overall Solver latency; those are separate local evidence.",
+  "toolDefect": "none; pass-level tool does not claim Rust-phase coverage",
+  "independentRawEvidenceReview": {
+    "reviewer": "Mencius, did not read main assessment before judgment",
+    "result": "Narrow predeclared completed-hop criterion met. Common quote input/output and plan hashes exact; actual pair dispatch verified;24->23 physical attempts per completed first-prefix hop. Full route/Solver incomplete in all4 attempts.",
+    "caveat": "Unchanged request3 hydration varied2.910s(A1) versus0.398/0.414s(B); unchanged first request varied9.798–14.103s. Do not attribute the entire wall difference to the saved exchange.",
+    "suggestedNextCheck": "Check cold account reads before further change",
+    "mainChecked": "load_account already batches balance/nonce/code; daemon HTTP client already pools connections. No missing-account-batching fix is justified."
+  },
+  "processes": "Measured launcher exited0; no revm-sim or same-input child remains",
+  "goal": "active; full Solver/live latency remains unresolved"
+}

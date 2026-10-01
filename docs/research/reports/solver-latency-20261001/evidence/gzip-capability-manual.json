@@ -1,0 +1,31 @@
+{
+  "scope": "Capability and byte parity, not a Solver/live timing win.",
+  "manual": "Read raw gzip-capability-1.json before tooling or reviewer conclusion.",
+  "facts": {
+    "calls": 8,
+    "order": [
+      "A",
+      "B",
+      "B",
+      "A"
+    ],
+    "allBytesEqual": true,
+    "decodedBytes": 152296,
+    "wireBytes": [
+      152296,
+      15696,
+      15664,
+      152296
+    ],
+    "totalMs": [
+      985.432166,
+      324.774834,
+      373.791,
+      471.398542
+    ],
+    "canonicalBeforeAfter": true,
+    "allSocketsClosed": true
+  },
+  "decision": "Provider supports gzip; implement minimal generic TS HTTP compression with output/cancellation/status preservation. Do not infer CPU/CU reduction or full Solver speed.",
+  "cu": "8 read items; provider billing unavailable. Prior batch492 logical issuances plus this8 =500 counted for these two slices."
+}

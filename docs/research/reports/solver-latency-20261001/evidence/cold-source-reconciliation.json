@@ -1,0 +1,30 @@
+{
+  "manualFirst": "cold-source-manual-assessment.json was written before indexed selection/execution and before reading independent result review",
+  "manualAndIndependentReviewAgree": true,
+  "independentRawReview": "cold-source-result-review.json; reviewer did not read main assessment",
+  "verdict": "reject cold-source candidate retention: frozen complete-first-prefix-hop timing screen failed",
+  "indexedReconciliation": {
+    "capabilityQuery": [
+      "latency"
+    ],
+    "catalogCheck": "PASS361tools",
+    "manifest": "cold-source-tools.json",
+    "manifestSha256": "fd5b26c7dfb2bbbf1b5e09640fa3e6b2bfce2a6d581d49dd6972f4040bd97136",
+    "successfulToolIds": [
+      "analysis:blockscan-pass-latency"
+    ],
+    "exitCode": 0,
+    "finding": "Canonical pass-latency tool correctly reports zero production passes/ineligible live window. This selected P-only diagnostic is not a live pass, and the tool does not claim to assess daemon phases. No tool defect or systemic-live verdict."
+  },
+  "resourceQualification": "Independent review additionally counts8 direct JS requests plus8 source backend batches.106 completed observed attempts is a subtotal/lower bound. Four later dispatched Rust requests are censored; total wire attempts and billedCU remain unknown.",
+  "actualRestoration": {
+    "method": "apply_patch of only cold-source delta back to saved prefix-pair Rust sources",
+    "trackedPatchSha256": "071044e25429a6ac9142b6751a068dee08fae15f70f9061456b978436b52b641",
+    "binarySha256": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1",
+    "checks": "main: Rust78/78, release build, diffcheck pass; exact source+binary+whole patch hashes restored",
+    "evidencePreserved": "cold-source-binary.KD2Xff, all tests/reviews and all four result records remain untouched"
+  },
+  "externalProcessState": "launcher exited0 with no soft/hard/residual stop; no task-owned RPC/live process remains",
+  "rerun": false,
+  "goal": "active/incomplete: no-repeat selected-sample benefit proven; entire live cohort and repeated-prefix full Solver timing still not established"
+}

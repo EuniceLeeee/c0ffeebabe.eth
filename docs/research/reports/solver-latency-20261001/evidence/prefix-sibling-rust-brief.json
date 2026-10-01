@@ -1,0 +1,39 @@
+{
+  "status": "approved Rust slice only; TS activation remains separate",
+  "searcherBehaviorChange": true,
+  "baseTrackedDiffSha256": "75d97cb2be70fc49217c64f9ebedb6cb075ede7c4532237fbe45ad049940b5c6",
+  "allowedFiles": [
+    "listener/revm-sim/src/main.rs",
+    "listener/revm-sim/src/diagnostic.rs"
+  ],
+  "author": "Mencius",
+  "evaluator": "main, non-author",
+  "decision": "Reject atomic group settlement because it can lose an already completed scalar outcome at a shared deadline. Use exactly-two contiguous queued prefix siblings and streamed individual identity-bound responses; first response flushes after its postcheck, before second execution. Existing scalar path unchanged.",
+  "wireContract": {
+    "op": "strictPair",
+    "shape": "{op,epoch,requests:[{requestId,...StrictRequest},{requestId,...StrictRequest}]}",
+    "rules": "Exactly two monotonically increasing numeric-string child requestIds, shared epoch, no extra/null fields. Validate both complete bodies and eligibility before RPC. Reserve IDs once. Bounded pair line bytes <=1048576; large requests stay scalar at future client. No implicit fallback/retry of rejected groups.",
+    "eligibility": "Both pinned inner trial-prefix read requests; no preCalls, tokenDeals, native balance override, observations or effects. Equal endpoint/block/pin/root, complete trialPrefix incl code/input, from/origin/caller mode/gas limits. Different main target/data/stateRead allowed. Family names/addresses never drive eligibility.",
+    "response": "Existing scalar response envelopes, each with its original child identity and existing source/strict attestation. Flush A after bridge validation then execute B; never hold A until B finishes. Exact group-invalid validation error reporting must be deterministic and execute nothing. All physical fatal evidence still wins and bars later execution."
+  },
+  "execution": [
+    "Full pre(A): same three calls, fresh verified source.",
+    "Execute A using unchanged strict_simulate_at from fresh local state.",
+    "Bridge: post(A)+all three pre(B) checks in one physical HTTP batch (four logical calls; no dedup). Batch RPC items need not execute in server order, but all lie after execution A and before B.",
+    "Validate canonical post(A) and complete source B with existing header/profile semantics. Emit and flush A's ordinary outcome, preserving validation/execution errors and attestation rules. Source/protocol failures stay fail-closed.",
+    "Execute B from its own fresh local state, using its newly obtained one-use precheck evidence, never A's precheck result. Existing source-value cache remains as before.",
+    "Perform normal fresh canonical post(B) on success/revert/halt/ordinary error before emitting B.",
+    "Factor shared parsing/check/execution helpers where needed; no parallel EVM, journal reuse, trace hints or cached verification. Scalar behavior and existing guards must remain covered unchanged."
+  ],
+  "diagnostics": "Use group-owned timing for bridge and physical attempts once, identify numeric child IDs and logical validation count. Do not nest/reset the scalar accumulator incorrectly or attribute all shared work to A and report B precheck as free. Preserve scalar diagnostics; killed group incomplete remains censored. No credentials/calldata/remote messages.",
+  "testsRequired": [
+    "Two independent request outputs/gas/effects/attestations equal scalar execution including warm/transient isolation and ordinary failures",
+    "Exactly8 logical canonical calls over3 physical batches vs scalar4 physical; no check omitted, post retained on all outcomes",
+    "Bad source/hash/root/profile/chain and bridge/post errors, reordered/missing/duplicate RPC item IDs, physical fatal/throttle",
+    "Malformed group/IDs/bounds/noneligible contexts do no RPC; scalar unchanged",
+    "First response emitted before starting second execution, group partial failure does not fabricate success for second",
+    "Safe diagnostic accounting with no double count and disabled diagnostics no work",
+    "Full Rust tests, release build and diffcheck"
+  ],
+  "authority": "No TS/Family/main edits, no real RPC/live/env/process control, no commit/push/merge/deploy. Tests may use local stub HTTP. Main will review exact Rust diff before authorizing separate TS slice and any real test. If preserving contracts needs a broader change, report instead of weakening them."
+}

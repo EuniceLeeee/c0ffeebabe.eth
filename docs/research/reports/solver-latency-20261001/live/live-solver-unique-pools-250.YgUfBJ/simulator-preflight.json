@@ -1,0 +1,8 @@
+{
+  "at": "2026-09-30T11:27:18.658Z",
+  "prefixParsedAndValidated": true,
+  "noRpc": true,
+  "binarySha256": "461357a18302d74b78a79527ef360c5e3ddfc2d5d58c78981f4f487467f43a36",
+  "test": "wire prefix accepted; mandatory missing source pin rejected before I/O",
+  "broadcast": false
+}

@@ -1,0 +1,807 @@
+{
+  "pass2": {
+    "verdict": "blocked-before-publication",
+    "reviewedExporterSha256": "988071528e547b174d2410e40c7255d8b5e7f19fde6d8f9f2a918400defd80d0",
+    "result": "All22 prior secrecy probes now pass;3 additional quoting probes still leak. Actual log-stream function passes5/8 memory-only controls;2 leak failures overlap the text findings and1 drops non-secret timing metadata.",
+    "syntaxCheck": {
+      "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node --check docs/research/reports/solver-latency-20261001/export-evidence.mjs",
+      "exitCode": 0
+    },
+    "textRegressions": {
+      "sha256": "988071528e547b174d2410e40c7255d8b5e7f19fde6d8f9f2a918400defd80d0",
+      "base22Passed": 22,
+      "results": [
+        {
+          "index": 1,
+          "name": "url userinfo",
+          "pass": true,
+          "output": "<redacted-endpoint>"
+        },
+        {
+          "index": 2,
+          "name": "public url userinfo",
+          "pass": true,
+          "output": "<redacted-endpoint>"
+        },
+        {
+          "index": 3,
+          "name": "fragment access_token",
+          "pass": true,
+          "output": "<redacted-endpoint>"
+        },
+        {
+          "index": 4,
+          "name": "nested bare keys",
+          "pass": true,
+          "output": {
+            "nested": {
+              "private_key": "<redacted-secret>",
+              "authorization": "<redacted-secret>",
+              "password": "<redacted-secret>"
+            }
+          }
+        },
+        {
+          "index": 5,
+          "name": "nested prefixed keys",
+          "pass": true,
+          "output": {
+            "nested": {
+              "SEARCHER_PRIVATE_KEY": "<redacted-secret>",
+              "client_secret": "<redacted-secret>",
+              "rpcPassword": "<redacted-secret>"
+            }
+          }
+        },
+        {
+          "index": 6,
+          "name": "Bearer",
+          "pass": true,
+          "output": "Authorization: \"<redacted-secret>\" <redacted-secret>"
+        },
+        {
+          "index": 7,
+          "name": "Basic",
+          "pass": true,
+          "output": "Authorization: \"<redacted-secret>\" <redacted-secret>"
+        },
+        {
+          "index": 8,
+          "name": "quoted assignments",
+          "pass": true,
+          "output": "{\"private_key\":\"<redacted-secret>\",\"Authorization\":\"<redacted-secret>\"}"
+        },
+        {
+          "index": 9,
+          "name": "nested JSON string",
+          "pass": true,
+          "output": {
+            "message": "{\"private_key\":\"<redacted-secret>\",\"authorization\":\"<redacted-secret>\"}"
+          }
+        },
+        {
+          "index": 10,
+          "name": "env assignment",
+          "pass": true,
+          "output": "SEARCHER_PRIVATE_KEY=\"<redacted-secret>\""
+        },
+        {
+          "index": 11,
+          "name": "escaped url",
+          "pass": true,
+          "output": "<redacted-endpoint>"
+        },
+        {
+          "index": 12,
+          "name": "multiline PEM",
+          "pass": true,
+          "output": "PRIVATE_KEY=\"<redacted-secret>\""
+        },
+        {
+          "index": 13,
+          "name": "opaque fragment",
+          "pass": true,
+          "output": "<redacted-endpoint>"
+        },
+        {
+          "index": 14,
+          "name": "token fragment",
+          "pass": true,
+          "output": "<redacted-endpoint>"
+        },
+        {
+          "index": 15,
+          "name": "nested array",
+          "pass": true,
+          "output": [
+            {
+              "headers": {
+                "Authorization": "<redacted-secret>"
+              },
+              "secrets": "<redacted-secret>"
+            }
+          ]
+        },
+        {
+          "index": 16,
+          "name": "hyphenated header key",
+          "pass": true,
+          "output": {
+            "X-Api-Key": "<redacted-secret>"
+          }
+        },
+        {
+          "index": 17,
+          "name": "camel key",
+          "pass": true,
+          "output": "{\"apiKey\":\"<redacted-secret>\"}"
+        },
+        {
+          "index": 18,
+          "name": "escaped assignment",
+          "pass": true,
+          "output": "message=\"{\"private_key\":\"<redacted-secret>\"}\""
+        },
+        {
+          "index": 19,
+          "name": "private flag space",
+          "pass": true,
+          "output": "--private-key <redacted-secret>"
+        },
+        {
+          "index": 20,
+          "name": "private flag equals",
+          "pass": true,
+          "output": "--private-key=\"<redacted-secret>\""
+        },
+        {
+          "index": 21,
+          "name": "private flag quoted",
+          "pass": true,
+          "output": "--private-key <redacted-secret>"
+        },
+        {
+          "index": 22,
+          "name": "api flag space",
+          "pass": true,
+          "output": "--api-key <redacted-secret>"
+        },
+        {
+          "index": 23,
+          "name": "nested JSON within single quoted message assignment",
+          "pass": false,
+          "output": "message=\"{\\\"private_key\\\":\\\"<redacted-secret>\\\"}\""
+        },
+        {
+          "index": 24,
+          "name": "quoted credential containing escaped quote",
+          "pass": false,
+          "output": "password=\"<redacted-secret>\""
+        },
+        {
+          "index": 25,
+          "name": "quoted flag containing escaped quote",
+          "pass": false,
+          "output": "--password <redacted-secret>"
+        }
+      ],
+      "controls": {
+        "publicLink": true,
+        "timing": true,
+        "urlKeyCount": 2,
+        "multilinePemTextLines": 1
+      }
+    },
+    "streamRegressions": {
+      "sourceSha256": "988071528e547b174d2410e40c7255d8b5e7f19fde6d8f9f2a918400defd80d0",
+      "mechanism": "Exact source exportLog/redactLine functions evaluated with fake fs, real Readable/Writable/gzip/readline; all I/O memory-only; exporter main not invoked.",
+      "results": [
+        {
+          "name": "ordinary timing lines including CRLF and final non-newline",
+          "pass": true,
+          "result": {
+            "output": "source=26029536 durationMs=30.125\nfinishedMs=44\n",
+            "sourceLines": 2,
+            "outputLines": 2,
+            "recordedLines": 2
+          }
+        },
+        {
+          "name": "structured JSON timings and nested secrets",
+          "pass": true,
+          "result": {
+            "output": "event {\"durationMs\":30.125,\"nested\":{\"client_secret\":\"<redacted-secret>\"}}\n",
+            "sourceLines": 1,
+            "outputLines": 1,
+            "recordedLines": 1
+          }
+        },
+        {
+          "name": "standalone multiline PEM",
+          "pass": true,
+          "result": {
+            "output": "beforeMs=10\n<redacted-private-key-line>\n<redacted-private-key-line>\n<redacted-private-key-line>\nafterMs=20\n",
+            "sourceLines": 5,
+            "outputLines": 5,
+            "recordedLines": 5
+          }
+        },
+        {
+          "name": "unterminated PEM rejects without manifest/artifact receipt",
+          "pass": true,
+          "result": {
+            "ok": false,
+            "error": "unterminated private-key block in synthetic.log",
+            "artifacts": []
+          }
+        },
+        {
+          "name": "unclosed sensitive assignment rejects",
+          "pass": true,
+          "result": {
+            "ok": false,
+            "error": "unclosed credential assignment in synthetic.log",
+            "artifacts": []
+          }
+        },
+        {
+          "name": "PEM delimiter lines containing non-secret timing metadata",
+          "pass": false,
+          "result": {
+            "output": "<redacted-private-key-line>\n<redacted-private-key-line>\n<redacted-private-key-line>\n",
+            "sourceLines": 3,
+            "outputLines": 3,
+            "recordedLines": 3
+          }
+        },
+        {
+          "name": "nested serialized quoted log assignment",
+          "pass": false,
+          "result": {
+            "output": "message=\"{\\\"private_key\\\":\\\"<redacted-secret>\\\"}\" durationMs=3\n",
+            "sourceLines": 1,
+            "outputLines": 1,
+            "recordedLines": 1
+          }
+        },
+        {
+          "name": "escaped quote inside password log assignment",
+          "pass": false,
+          "result": {
+            "output": "password=\"<redacted-secret>\" durationMs=3\n",
+            "sourceLines": 1,
+            "outputLines": 1,
+            "recordedLines": 1
+          }
+        }
+      ],
+      "passed": 5,
+      "failed": 3
+    },
+    "remainingFindings": [
+      {
+        "id": "P2-R1",
+        "priority": "P1",
+        "blocking": true,
+        "lines": [
+          40,
+          44,
+          67,
+          73
+        ],
+        "title": "A nonsensitive outer assignment suppresses scanning its nested credential",
+        "input": "message=\"{\\\"private_key\\\":\\\"<redacted-secret>\\\"}\"",
+        "actual": "message=\"{\\\"private_key\\\":\\\"<redacted-secret>\\\"}\"",
+        "mechanism": "The generic assignment regex consumes the complete quoted message value, then returns original for nonsensitive key message; the nested assignment is never visited. A trailing timing field also prevents redactLine JSON parsing, and the same leak was reproduced through actual exportLog.",
+        "minimalCorrection": "Sanitize nested serialized payloads inside nonsensitive quoted values, or fail closed on unresolved credential syntax. Do not rely on only matching top-level assignments."
+      },
+      {
+        "id": "P2-R2",
+        "priority": "P1",
+        "blocking": true,
+        "lines": [
+          23,
+          36,
+          40
+        ],
+        "title": "Global unescaping turns an escaped quote into a premature credential terminator",
+        "inputs": [
+          "password=\"<redacted-secret>\"",
+          "--password <redacted-secret>"
+        ],
+        "actual": [
+          "password=\"<redacted-secret>\"",
+          "--password <redacted-secret>"
+        ],
+        "mechanism": "Removing quote escapes before parsing quoted values makes the original embedded quote look like the end of the secret. Remaining suffix is published; assignment case also reproduced through actual exportLog.",
+        "minimalCorrection": "Recognize quoted values with their escaping intact and consume the complete value; decode only within a parsed context. Keep regressions for quoted CLI flags, assignments and nested JSON."
+      },
+      {
+        "id": "P2-R3",
+        "priority": "P2",
+        "blocking": true,
+        "lines": [
+          110,
+          114
+        ],
+        "title": "PEM line masking also deletes non-secret timing outside the delimiters",
+        "input": "startedMs=10 PRIVATE_KEY=\"<redacted-secret>\" finishedMs=20\n",
+        "actual": "<redacted-private-key-line>\n<redacted-private-key-line>\n<redacted-private-key-line>\n",
+        "mechanism": "All3 lines are retained, but startedMs and finishedMs are removed, violating the requested timing-preservation contract.",
+        "minimalCorrection": "Redact only the delimited secret span while sanitizing/preserving prefix and suffix outside it, or fail export closed on mixed-content PEM lines instead of silently claiming timing preservation."
+      }
+    ],
+    "resolvedFindings": [
+      "Bearer <redacted-secret> Basic <redacted-secret> values removed in tested plain and JSON cases.",
+      "Credential flags removed in all four previously failing forms.",
+      "Normalized structured keys cover tested prefixed, camelCase and header spellings.",
+      "Slash-escaped URLs removed; unsafe public fragments removed; ordinary #L12-L18 source links preserved.",
+      "Redacted URL-keyed object retains two distinct entries.",
+      "Log-stream PEM masking retains one output line per input line for standalone PEM blocks.",
+      "Unterminated PEM and unclosed quoted sensitive assignment reject before an artifact receipt can be added."
+    ],
+    "qualifications": [
+      "Whole-text PRIVATE_KEY=\"<redacted-secret>\" still reduces3 lines to1 because the later assignment replacement collapses the already-masked multiline value. This applies to review harness/patch text, not standalone log PEM blocks; do not claim universal text line-number preservation.",
+      "64MiB remains a rollover threshold, not a hard uncompressed shard cap: the pre-write check does not account for next-line size. Final bundle validation should detect/document or reject oversize without truncation.",
+      "No full export/real filesystem writer was executed. In-memory tests evaluate the exact current exportLog/redactLine source with fake fs and real gzip/streams/readline. They do not certify disk-error recovery or actual multi-gigabyte bundle completeness.",
+      "Planned all-artifact residual-secret scan plus source/transformed hashes, counts and manifest validation are still required before publication. This review does not waive any of them.",
+      "HANDOFF.md remains sha256 e6b9bfddaa24b525f79fe6aa22e01d5cb74adcd84308f63b812398286c454854 at check: line79 still lacks the synthetic parent26029584+N26029585-environment qualifier identified in pass1 follow-up.",
+      "No claim that synthetic canaries occur in real evidence; failures show sanitizer acceptance gaps that must be closed or fail-closed before trusting publication."
+    ],
+    "authority": {
+      "networkCalls": 0,
+      "credentialAccess": false,
+      "productionEdits": false,
+      "mainExporterInvoked": false,
+      "realExportFilesCreated": false,
+      "onlyWrite": "this ignored review receipt"
+    }
+  },
+  "schemaVersion": 1,
+  "reviewPass": 1,
+  "role": "non-author",
+  "verdict": "blocked-before-publication",
+  "scope": "Offline exporter review only; no production acceptance or performance verdict.",
+  "repository": "<repo>",
+  "reviewedSource": {
+    "path": "docs/research/reports/solver-latency-20261001/export-evidence.mjs",
+    "sha256": "fa798f0328fdfa1b0e1935a587e3e708ce2cca5264e83c8f2e3f05d3f0aba305",
+    "lines": 175
+  },
+  "authority": {
+    "sourceEdits": false,
+    "networkCalls": 0,
+    "credentialReads": 0,
+    "exporterMainInvoked": false,
+    "publication": false,
+    "commits": false,
+    "onlyWrite": "logs/solver-prefix-policy-20260930.MKk8Vk/handoff-export-review-pass1.json"
+  },
+  "executedChecks": [
+    {
+      "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node --check docs/research/reports/solver-latency-20261001/export-evidence.mjs",
+      "exitCode": 0,
+      "result": "syntax pass"
+    },
+    {
+      "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node --input-type=module (two inline probe programs importing actual exported redact/redactText)",
+      "exitCode": 0,
+      "result": "18 synthetic secrecy probes executed: 6 pass, 12 fail. Programs report failures as data; exit0 is NOT sanitizer approval. Two preservation controls pass. One JSON key-cardinality control fails."
+    },
+    {
+      "command": "read-only shallow fs directory enumeration, lstat/realpath containment, git diff --name-only and git diff --binary -- listener",
+      "exitCode": 0,
+      "result": "Current allowlist inventory and source containment checked; no exporter output created."
+    }
+  ],
+  "findings": [
+    {
+      "id": "R1",
+      "priority": "P1",
+      "blocking": true,
+      "lines": [
+        29,
+        30
+      ],
+      "title": "Authorization schemes are removed but credentials remain",
+      "evidence": "redactText('Authorization: \"<redacted-secret>\" <redacted-secret>') returns 'Authorization: \"<redacted-secret>\" CANARY_BEARER'; Basic <redacted-secret> the same leak.",
+      "impact": "Non-JSON HTTP/error/log text can publish the actual credential. redactLine's parse-failure branch and all harness/patch text use this function.",
+      "minimumCorrection": "Consume the complete Authorization/Proxy-Authorization credential value, including scheme plus token, before generic assignment redaction. Add positive Bearer/Basic <redacted-secret> quoted header regressions."
+    },
+    {
+      "id": "R2",
+      "priority": "P1",
+      "blocking": true,
+      "lines": [
+        29,
+        46,
+        50,
+        56
+      ],
+      "title": "Quoted assignments, prefixed structured keys and encoded nested secrets survive",
+      "evidence": [
+        "redactText('{\"private_key\":\"<redacted-secret>\",\"Authorization\":\"<redacted-secret>\"}') retains both canaries.",
+        "redact({message:\"{\\\"private_key\\\":\\\"<redacted-secret>\\\",\\\"authorization\\\":\\\"<redacted-secret>\\\"}\"}) retains both embedded canaries.",
+        "redact({nested:{SEARCHER_PRIVATE_KEY:\"<redacted-secret>\",client_secret:\"<redacted-secret>\",rpcPassword:\"<redacted-secret>\"}}) retains all three.",
+        "X-Api-Key field, apiKey quoted assignment and backslash-escaped quoted private_key assignment retain their canaries.",
+        "A multiline quoted PEM PRIVATE_KEY assignment retains CANARY_PEM_BODY."
+      ],
+      "impact": "Structured .json recursion covers only exact bare key names; it does not protect env-prefixed/client/header variants. Pretty-printed, suffix-bearing or escaped JSON logs/harnesses fall through textual handling that does not recognize quoted keys. Multiline log processing cannot safely redact PEM bodies using the current stateless line function.",
+      "minimumCorrection": "Use a shared normalized credential-key predicate that covers these actual forms; robustly redact quoted/escaped assignments and nested serialized JSON; implement safe multiline-secret handling or explicitly refuse export on such unresolved content. Do not blanket-delete all 32-byte chain hashes."
+    },
+    {
+      "id": "R3",
+      "priority": "P1",
+      "blocking": true,
+      "lines": [
+        21,
+        27
+      ],
+      "title": "Escaped URLs bypass endpoint removal; allowlisted URL fragments are unrestricted",
+      "evidence": [
+        "redactText on <redacted-endpoint> leaves both canaries.",
+        "<redacted-endpoint> and an opaque CANARY_OPAQUE_FRAGMENT are preserved."
+      ],
+      "impact": "JSON-/language-escaped endpoint strings in text can expose URL userinfo or provider keys. Public hostname alone is insufficient to establish that a fragment is public source-link metadata.",
+      "minimumCorrection": "Cover escaped URL spellings in text, and remove fragments or restrict them to demonstrably safe public-source anchors; preserve existing ordinary pinned raw-GitHub source links. Add regression probes before export."
+    },
+    {
+      "id": "R4",
+      "priority": "P2",
+      "blocking": false,
+      "lines": [
+        46
+      ],
+      "title": "Redacted object keys can silently discard distinct evidence",
+      "evidence": "Two keys <redacted-endpoint> and <redacted-endpoint> map to the same '<redacted-endpoint>'; Object.fromEntries reduces two entries to one.",
+      "impact": "A source-keyed request/counter table can lose evidence while still producing valid JSON. No claim that an inspected current artifact actually contains this shape.",
+      "minimumCorrection": "Use collision-safe redacted key identifiers or reject collisions; retain field cardinality. This must be checked if publishing URL/path-keyed objects."
+    }
+  ],
+  "probes": [
+    {
+      "name": "URL userinfo and provider key",
+      "pass": true
+    },
+    {
+      "name": "Allowlisted URL with userinfo",
+      "pass": true
+    },
+    {
+      "name": "Allowlisted fragment access_token assignment",
+      "pass": true,
+      "note": "Generic assignment rule catches this specific spelling; it does not protect arbitrary fragments."
+    },
+    {
+      "name": "Nested standard private_key/authorization/password fields",
+      "pass": true
+    },
+    {
+      "name": "Nested prefixed credential fields",
+      "pass": false
+    },
+    {
+      "name": "Plain Authorization Bearer",
+      "pass": false
+    },
+    {
+      "name": "Plain Authorization Basic",
+      "pass": false
+    },
+    {
+      "name": "JSON quoted private_key and Authorization assignments",
+      "pass": false
+    },
+    {
+      "name": "Nested serialized JSON string",
+      "pass": false
+    },
+    {
+      "name": "Plain SEARCHER_PRIVATE_KEY assignment",
+      "pass": true
+    },
+    {
+      "name": "Slash-escaped URL userinfo/provider key",
+      "pass": false
+    },
+    {
+      "name": "Multiline PEM",
+      "pass": false
+    },
+    {
+      "name": "Allowlisted opaque URL fragment",
+      "pass": false
+    },
+    {
+      "name": "Allowlisted fragment token assignment",
+      "pass": false
+    },
+    {
+      "name": "Array containing standard nested Authorization/apiKey",
+      "pass": true
+    },
+    {
+      "name": "Hyphenated X-Api-Key field",
+      "pass": false
+    },
+    {
+      "name": "Quoted camelCase apiKey assignment",
+      "pass": false
+    },
+    {
+      "name": "Backslash-escaped JSON key assignment",
+      "pass": false
+    }
+  ],
+  "preservationControls": {
+    "unchangedPinnedRawGithubLink": "pass",
+    "publicAddressSourceHeightAndNumericTiming": "pass",
+    "urlKeyedObjectCardinality": "fail: 2 -> 1"
+  },
+  "inventory": {
+    "observedBeforeReceiptWrite": {
+      "topLevelDiagnosticJson": 142,
+      "topLevelLog": 48,
+      "topLevelMjsMtsHarness": 28,
+      "experimentResultsDirectories": 14,
+      "selectedSourceFiles": 322,
+      "regularFilesAndRealpathContainment": "pass",
+      "currentSourceSymlinkEscapes": 0
+    },
+    "note": "Writing this permitted review adds one top-level JSON for a future export; re-enumerate at seal time.",
+    "runs": [
+      {
+        "name": "live-raw-ready-250.ajvb1j",
+        "liveLogBytes": 1217494107
+      },
+      {
+        "name": "live-solver-unique-pools-250.YgUfBJ",
+        "liveLogBytes": 543616381
+      },
+      {
+        "name": "live-solver-batched-prefix-250.I49DJ4",
+        "liveLogBytes": 533493705
+      },
+      {
+        "name": "live-solver-skip-settle-250.7MsLu8",
+        "liveLogBytes": 510894204
+      }
+    ],
+    "allFourHaveLiveEventsAndRoutes": true,
+    "experiments": [
+      "same-input-batch-split-1",
+      "same-input-cold-prefix-1",
+      "same-input-cold-source-1",
+      "same-input-gzip-1",
+      "same-input-prefix-engine-1",
+      "same-input-prefix-pair-1",
+      "same-input-prefix-phases-1",
+      "same-input-prefix-prefetch-1",
+      "same-input-prefix-progress-1",
+      "same-input-primary-1",
+      "same-input-primary-2-bootstrap-corrected",
+      "same-input-warm-prefix-1",
+      "source-storage-offline-1",
+      "source-storage-offline-2"
+    ],
+    "allExperimentsHaveDeclarationAndResults": true,
+    "patch": {
+      "fileCount": 13,
+      "bytes": 230385,
+      "sha256": "793568b69413b2778fcdb63b9199c9528abfddda43fb7e5019e58c3ae94d7427",
+      "command": "git diff --binary -- listener",
+      "note": "Current unstaged tracked listener patch only; no staged/untracked inclusion or exact-path-count assertion in exporter. Current count matches requested13."
+    },
+    "incompleteV4": "local-state.ts explicitly exported separately and correctly warned as importing absent local-math; no implementation/test/chain acceptance claimed."
+  },
+  "safetyAndSchemaNotes": [
+    "Importing the module did not run main; no endpoint/credential access. Export code has no chain client or searcher launch; its subprocesses are read-only git commands.",
+    "Source paths are fixed or shallow directory entry names; no caller path argument. Current selected sources are regular in-repository files. Exporter itself has no realpath/lstat containment enforcement for fixed/nested sources or existing destination parents; avoid symlink destinations and recheck before execution.",
+    "Exclusive wx writes and manifest existence guard prevent ordinary overwrites. Manifest is written last; interrupted/failed export can leave partial files without a manifest. Such a directory is not publishable merely because files exist.",
+    "Streaming source stability checks only file size after export; same-size replacement/modification is not detected. Freeze sources or compare source identities/hashes at sealing.",
+    "64MiB shard threshold is checked before a line and can be exceeded by one oversized line; not a hard compressed-file/GitHub limit. Final shard sizes and line counts remain to be verified.",
+    "Manifest binds source bytes/hash and transformed bytes/hash separately, includes log line totals, and clearly labels redaction/review-only limitations. CRLF/final-newline normalization is expected, so transformed hashes do not authenticate original raw content without local originals.",
+    "No automated post-export residual-secret scan or manifest/content verification is currently performed. Secrecy probes plus a final decompressed-content audit are required before publication; synthetic passes alone cannot certify arbitrary original data.",
+    "No full multi-gigabyte export, gzip roundtrip, final manifest audit, HANDOFF review or publication was executed in this pass."
+  ],
+  "nextGate": "Fix R1-R3 in main-owned exporter, address/check R4 if relevant, rerun the exact canaries, then independently audit the sealed exported bundle. This pass grants no publication approval.",
+  "revisionFollowUp": {
+    "label": "pass1_revision_follow_up",
+    "verdict": "still_blocked_before_publication",
+    "exporterSha256": "74e6fbaf2a0c9647d51a408f3647dca9928ae719b418e3fe3097ef01bcd069ff",
+    "handoffSha256": "e6b9bfddaa24b525f79fe6aa22e01d5cb74adcd84308f63b812398286c454854",
+    "executed": {
+      "existingProbeSuite": {
+        "passed": 10,
+        "failed": 8,
+        "results": [
+          {
+            "name": "URL userinfo/provider key",
+            "pass": true,
+            "output": "<redacted-endpoint>"
+          },
+          {
+            "name": "Allowlisted URL userinfo",
+            "pass": true,
+            "output": "<redacted-endpoint>"
+          },
+          {
+            "name": "Fragment access_token",
+            "pass": true,
+            "output": "<redacted-endpoint><redacted-secret>"
+          },
+          {
+            "name": "Nested standard fields",
+            "pass": true,
+            "output": {
+              "nested": {
+                "private_key": "<redacted-secret>",
+                "authorization": "<redacted-secret>",
+                "password": "<redacted-secret>"
+              }
+            }
+          },
+          {
+            "name": "Nested prefixed fields",
+            "pass": false,
+            "output": {
+              "nested": {
+                "SEARCHER_PRIVATE_KEY": "<redacted-secret>",
+                "client_secret": "<redacted-secret>",
+                "rpcPassword": "<redacted-secret>"
+              }
+            }
+          },
+          {
+            "name": "Authorization Bearer",
+            "pass": true,
+            "output": "Authorization: \"<redacted-secret>\" <redacted-secret>"
+          },
+          {
+            "name": "Authorization Basic",
+            "pass": false,
+            "output": "Authorization: \"<redacted-secret>\" CANARY_BASIC"
+          },
+          {
+            "name": "Quoted JSON assignments",
+            "pass": true,
+            "output": "{\"private_key\":\"<redacted-secret>\",\"Authorization\":\"<redacted-secret>\"}"
+          },
+          {
+            "name": "Nested serialized JSON",
+            "pass": true,
+            "output": {
+              "message": "{\"private_key\":\"<redacted-secret>\",\"authorization\":\"<redacted-secret>\"}"
+            }
+          },
+          {
+            "name": "Plain prefixed private key",
+            "pass": true,
+            "output": "SEARCHER_PRIVATE_KEY=\"<redacted-secret>\""
+          },
+          {
+            "name": "Escaped URL",
+            "pass": false,
+            "output": "<redacted-endpoint>"
+          },
+          {
+            "name": "Multiline PEM",
+            "pass": false,
+            "output": "PRIVATE_KEY=\"<redacted-secret>\" PRIVATE KEY-----\nCANARY_PEM\n-----END PRIVATE KEY-----\""
+          },
+          {
+            "name": "Opaque public fragment",
+            "pass": false,
+            "output": "<redacted-endpoint>"
+          },
+          {
+            "name": "Token public fragment",
+            "pass": false,
+            "output": "<redacted-endpoint>"
+          },
+          {
+            "name": "Array standard nested fields",
+            "pass": true,
+            "output": [
+              {
+                "headers": {
+                  "Authorization": "<redacted-secret>"
+                },
+                "secrets": "<redacted-secret>"
+              }
+            ]
+          },
+          {
+            "name": "Hyphenated header key",
+            "pass": false,
+            "output": {
+              "X-Api-Key": "<redacted-secret>"
+            }
+          },
+          {
+            "name": "Quoted camelCase key",
+            "pass": true,
+            "output": "{\"apiKey\":\"<redacted-secret>\"}"
+          },
+          {
+            "name": "Escaped JSON key assignment",
+            "pass": false,
+            "output": "message=\"{\\\"private_key\\\":\\\"<redacted-secret>\\\"}\""
+          }
+        ]
+      },
+      "additionalFlags": [
+        {
+          "input": "--private-key <redacted-secret>",
+          "output": "--private-key <redacted-secret>",
+          "pass": false
+        },
+        {
+          "input": "--private-key=\"<redacted-secret>\"",
+          "output": "--private-key=\"<redacted-secret>\"",
+          "pass": false
+        },
+        {
+          "input": "--private-key <redacted-secret>",
+          "output": "--private-key <redacted-secret>",
+          "pass": false
+        },
+        {
+          "input": "--api-key <redacted-secret>",
+          "output": "--api-key <redacted-secret>",
+          "pass": false
+        },
+        {
+          "input": "Authorization: \"<redacted-secret>\" <redacted-secret>",
+          "output": "Authorization: \"<redacted-secret>\" CANARY_BASIC",
+          "pass": false
+        }
+      ],
+      "negativePreservationControls": 2,
+      "urlObjectKeyCardinality": "still2->1"
+    },
+    "resolved": "Plain Bearer <redacted-secret> ordinary quoted/camelCase assignment and nested serialized JSON probes now pass.",
+    "remainingBlockers": [
+      "Authorization Basic <redacted-secret> the token.",
+      "Structured SEARCHER_PRIVATE_KEY, client_secret, rpcPassword and X-Api-Key values remain.",
+      "Slash-escaped endpoint userinfo/provider-key and backslash-escaped JSON key/value strings remain.",
+      "Multiline PEM body remains.",
+      "Allowlisted URLs preserve opaque and token-bearing fragments.",
+      "All four new CLI probes fail: --private-key <redacted-secret>, --private-key=\"<redacted-secret>\", --private-key <redacted-secret>, --api-key <redacted-secret>"
+    ],
+    "minimalFixConstraints": [
+      "Normalize credential-key/flag spellings consistently for structured fields and text; include prefixes/camelCase/hyphens.",
+      "Consume complete auth/flag values with quoted/escaped forms, not just scheme or first token.",
+      "Handle multiline secrets without removing newline boundaries; fail export closed if a secret shape cannot be sanitized safely.",
+      "Retain all original logical log lines and numerical timings; do not obtain secrecy by filtering failed/slow records.",
+      "Preserve source and transformed hashes separately. Patch/harness redaction is review-only, not executable acceptance.",
+      "A 64MiB uncompressed shard threshold checked only before the next whole line is not a strict cap: one large line can exceed it. Document or enforce the bound without discarding data."
+    ],
+    "boundedHandoffReview": {
+      "status": "paused on user request to prioritize sanitizer; not a full content-audit approval",
+      "finding": {
+        "priority": "P2",
+        "file": "docs/research/reports/solver-latency-20261001/HANDOFF.md",
+        "line": 79,
+        "issue": "'xWin真实历史录下的同源字节' omits the material synthetic-state qualification.",
+        "evidence": "source-storage-offline-result-review.json explicitly binds synthetic parent26029584 state plusN26029585 execution environment, not canonical N end-state; recorded source checks are not fresh canonical authentication. Saved rank1 was selected, not newly natural discovery.",
+        "correction": "Explicitly label historical parent-state + synthetic N-environment recorded-response validation and post-selection workload. Keep the existing no-live-latency/no-final-sim qualifiers."
+      },
+      "checkedWithoutNewRuns": [
+        "Live headline metrics agree with third250-final.json and third250-quote-waves.json, including enteredSolver211 versus246 timing records,0 completedSolver,0 Rust requests, route5206/1851/3355 and request-queue0.069ms.",
+        "Selected primary rank477 completion/censoring claims agree with saved assessment and raw results fields; baseline incomplete parity caveat is appropriate.",
+        "Storage108/9/9/108 and12/8/24, batch-split medians/wins, and gzip medians/p95/wins agree with prior independent reviews/raw result fields inspected. No new full raw equivalence replay performed.",
+        "Current strict-central-adapter-runtime.ts325-333 bypasses source read sharing in exactPrefixContext;571-641 uses combined256 cap plus source/lane/kind/address/slot/signal/deadline.",
+        "amount-propagation.ts89-126 uses route-level repeated logical-instance detection and retains full prefix only when needed; final-sim caveat is present.",
+        "solver/solver.ts420-440 retains positive P gate and bounded8amount fan-out; the outer16candidate setting is not exercised by selected-single-candidate diagnostics.",
+        "univ4-family/exact.ts still uses amount Quoter plus same-source manager-output balance, with no local-math integration.",
+        "exact-trial-state.ts copy-on-write cells and adapter-family-runtime.ts local-vs-EVM prefix handling support the stated semantic ownership split.",
+        "Kyber claims about no-hook delegation,CloneState/UpdateBalance and missing directional-fee/shared-capacity proof agree with v4-kyber-math-review.json. Main-owned tracker latest-fallback claims were not independently re-fetched."
+      ],
+      "notDone": "No whole live-log recount, final source manifest verification, end-to-end export, final decompressed secret scan, or publication review."
+    },
+    "networkCalls": 0,
+    "exporterInvoked": false,
+    "productionEdits": false
+  }
+}

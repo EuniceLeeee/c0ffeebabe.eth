@@ -1,0 +1,439 @@
+{
+  "schemaVersion": 1,
+  "assessment": "FAIL_WITHDRAW_CANDIDATE",
+  "scope": "Selected repeated-instance P-only prefix-engine ABBA; not Solver or live acceptance",
+  "authoredBy": "main evaluator",
+  "assessedAt": "2026-09-30T21:43:20.079Z",
+  "artifacts": {
+    "warm-prefix-timing.json": {
+      "sha256": "63de4637e40ba461763b690beec7cdceec951f1630b3fae2b2ed0f3102611cfe",
+      "bytes": 6730
+    },
+    "same-input-warm-prefix-1/declaration.json": {
+      "sha256": "12fa1023413c00bde4c28d336409fa71d63820286f8260f857d0efd37cfe1e0d",
+      "bytes": 366434
+    },
+    "same-input-warm-prefix-1/results.json": {
+      "sha256": "84e2a3e329a9c0a368c1e05f90e6b16a8795768496c5ab7d92ec89049f2a9bd7",
+      "bytes": 118865
+    },
+    "same-input-warm-prefix-1.log": {
+      "sha256": "d3797ea13fd61bd073209fdfe992f5ba452cfcca1cc014f4f77e8ae6456c6e1e",
+      "bytes": 340328
+    },
+    "warm-prefix-launch-receipt.json": {
+      "sha256": "19de31d2586551b2af3cae0eab44a592f6e8f62afdd022c5b375cd63140d2c16",
+      "bytes": 584
+    }
+  },
+  "unchanged": {
+    "A": true,
+    "B": true,
+    "runtimeAssetsA": true,
+    "runtimeAssetsB": true,
+    "binaryA": true,
+    "binaryB": true,
+    "inputs": true,
+    "runner": true,
+    "spec": true,
+    "executorA": true,
+    "executorB": true
+  },
+  "runs": [
+    {
+      "arm": "A",
+      "pid": 67813,
+      "status": "cancelled",
+      "aborted": true,
+      "solverEntered": false,
+      "measuredMs": 30005.495125,
+      "preparationMs": 1667.526542,
+      "propagationMs": 28337.962333,
+      "completedHops": 2,
+      "hops": [
+        {
+          "hop": 0,
+          "status": "quoted",
+          "prefixLength": 0,
+          "amountIn": "5195442",
+          "amountOut": "1874606836943428",
+          "wallMs": 300.626792
+        },
+        {
+          "hop": 1,
+          "status": "quoted",
+          "prefixLength": 1,
+          "amountIn": "1874606836943428",
+          "amountOut": "378740087141681349621649",
+          "wallMs": 8363.730249999999
+        },
+        {
+          "hop": 2,
+          "status": "failed",
+          "prefixLength": 2,
+          "amountIn": "378740087141681349621649",
+          "amountOut": null,
+          "wallMs": 19672.977458999998
+        }
+      ],
+      "planSha256": "a3552bd126bd6b699ea1b10e9ca1942484b649c5f5e8bc9c6565e9f6c1dc0d6b",
+      "drainErrors": [],
+      "observedRustRpcBegins": 81,
+      "observedRustRpcEnds": 80,
+      "jsRpcEnvelopes": 2,
+      "directRpcEnvelopes": 2,
+      "observedEnvelopeLowerBound": 85,
+      "truncations": [
+        {
+          "recordCap": 128,
+          "event": "truncated",
+          "identity": {
+            "interval": "scalar",
+            "requestId": 4,
+            "childRequestIds": null,
+            "sourceBlock": 26029536
+          },
+          "sequence": 128,
+          "elapsedMs": 15781.376790999999,
+          "phase": "prefix-execution"
+        }
+      ],
+      "terminalRequest4": null,
+      "terminalRpcAttempts": 23,
+      "terminalFatal": false
+    },
+    {
+      "arm": "B",
+      "pid": 67840,
+      "status": "failed",
+      "aborted": false,
+      "solverEntered": false,
+      "measuredMs": 15652.511875,
+      "preparationMs": 993.6044589999983,
+      "propagationMs": 14097.891375,
+      "completedHops": 2,
+      "hops": [
+        {
+          "hop": 0,
+          "status": "quoted",
+          "prefixLength": 0,
+          "amountIn": "5195442",
+          "amountOut": "1874606836943428",
+          "wallMs": 278.4759159999994
+        },
+        {
+          "hop": 1,
+          "status": "quoted",
+          "prefixLength": 1,
+          "amountIn": "1874606836943428",
+          "amountOut": "378740087141681349621649",
+          "wallMs": 9995.124291999997
+        },
+        {
+          "hop": 2,
+          "status": "failed",
+          "prefixLength": 2,
+          "amountIn": "378740087141681349621649",
+          "amountOut": null,
+          "wallMs": 3823.8295
+        }
+      ],
+      "planSha256": "a3552bd126bd6b699ea1b10e9ca1942484b649c5f5e8bc9c6565e9f6c1dc0d6b",
+      "drainErrors": [],
+      "observedRustRpcBegins": 32,
+      "observedRustRpcEnds": 32,
+      "jsRpcEnvelopes": 2,
+      "directRpcEnvelopes": 4,
+      "observedEnvelopeLowerBound": 38,
+      "truncations": [],
+      "terminalRequest4": {
+        "accounting": "exclusive",
+        "wallMs": 2399.9179160000003,
+        "rpcAttempts": 5,
+        "phases": {
+          "other": {
+            "wallMs": 3.466209,
+            "rpcAttempts": 0,
+            "entries": 0
+          },
+          "source-precheck": {
+            "wallMs": 362.127333,
+            "rpcAttempts": 1,
+            "entries": 1
+          },
+          "hydration": {
+            "wallMs": 394.13425,
+            "rpcAttempts": 1,
+            "entries": 1
+          },
+          "token-deal": {
+            "wallMs": 1.189458,
+            "rpcAttempts": 0,
+            "entries": 1
+          },
+          "token-deal-initial-probe": {
+            "wallMs": 0.5195,
+            "rpcAttempts": 0,
+            "entries": 1
+          },
+          "token-deal-trials": {
+            "wallMs": 0.386333,
+            "rpcAttempts": 0,
+            "entries": 1
+          },
+          "token-deal-fallback": {
+            "wallMs": 0,
+            "rpcAttempts": 0,
+            "entries": 0
+          },
+          "trace-hints": {
+            "wallMs": 1355.615958,
+            "rpcAttempts": 2,
+            "entries": 1
+          },
+          "prefix-execution": {
+            "wallMs": 1.2320829999999998,
+            "rpcAttempts": 0,
+            "entries": 1
+          },
+          "main-read-setup": {
+            "wallMs": 0,
+            "rpcAttempts": 0,
+            "entries": 0
+          },
+          "effects-observations": {
+            "wallMs": 0.4545,
+            "rpcAttempts": 0,
+            "entries": 1
+          },
+          "canonical-postcheck": {
+            "wallMs": 280.108375,
+            "rpcAttempts": 1,
+            "entries": 1
+          },
+          "prefix-scout": {
+            "wallMs": 0.683917,
+            "rpcAttempts": 0,
+            "entries": 1
+          }
+        },
+        "identity": {
+          "requestId": 4,
+          "sourceBlock": 26029536,
+          "prefixPresent": true,
+          "prefixCalldataBytes": 1508
+        },
+        "ok": true,
+        "success": false,
+        "fatal": false
+      },
+      "terminalRpcAttempts": 32,
+      "terminalFatal": false
+    },
+    {
+      "arm": "B",
+      "pid": 67846,
+      "status": "failed",
+      "aborted": false,
+      "solverEntered": false,
+      "measuredMs": 14326.393000000004,
+      "preparationMs": 993.2778340000004,
+      "propagationMs": 12770.373125000006,
+      "completedHops": 2,
+      "hops": [
+        {
+          "hop": 0,
+          "status": "quoted",
+          "prefixLength": 0,
+          "amountIn": "5195442",
+          "amountOut": "1874606836943428",
+          "wallMs": 281.2316659999997
+        },
+        {
+          "hop": 1,
+          "status": "quoted",
+          "prefixLength": 1,
+          "amountIn": "1874606836943428",
+          "amountOut": "378740087141681349621649",
+          "wallMs": 8738.027042000002
+        },
+        {
+          "hop": 2,
+          "status": "failed",
+          "prefixLength": 2,
+          "amountIn": "378740087141681349621649",
+          "amountOut": null,
+          "wallMs": 3750.861208000002
+        }
+      ],
+      "planSha256": "a3552bd126bd6b699ea1b10e9ca1942484b649c5f5e8bc9c6565e9f6c1dc0d6b",
+      "drainErrors": [],
+      "observedRustRpcBegins": 32,
+      "observedRustRpcEnds": 32,
+      "jsRpcEnvelopes": 2,
+      "directRpcEnvelopes": 4,
+      "observedEnvelopeLowerBound": 38,
+      "truncations": [],
+      "terminalRequest4": {
+        "accounting": "exclusive",
+        "wallMs": 2394.473042,
+        "rpcAttempts": 5,
+        "phases": {
+          "other": {
+            "wallMs": 4.008083,
+            "rpcAttempts": 0,
+            "entries": 0
+          },
+          "source-precheck": {
+            "wallMs": 315.3495,
+            "rpcAttempts": 1,
+            "entries": 1
+          },
+          "hydration": {
+            "wallMs": 406.687667,
+            "rpcAttempts": 1,
+            "entries": 1
+          },
+          "token-deal": {
+            "wallMs": 1.218416,
+            "rpcAttempts": 0,
+            "entries": 1
+          },
+          "token-deal-initial-probe": {
+            "wallMs": 0.508125,
+            "rpcAttempts": 0,
+            "entries": 1
+          },
+          "token-deal-trials": {
+            "wallMs": 0.374334,
+            "rpcAttempts": 0,
+            "entries": 1
+          },
+          "token-deal-fallback": {
+            "wallMs": 0,
+            "rpcAttempts": 0,
+            "entries": 0
+          },
+          "trace-hints": {
+            "wallMs": 1376.7593339999999,
+            "rpcAttempts": 2,
+            "entries": 1
+          },
+          "prefix-execution": {
+            "wallMs": 1.006875,
+            "rpcAttempts": 0,
+            "entries": 1
+          },
+          "main-read-setup": {
+            "wallMs": 0,
+            "rpcAttempts": 0,
+            "entries": 0
+          },
+          "effects-observations": {
+            "wallMs": 0.436208,
+            "rpcAttempts": 0,
+            "entries": 1
+          },
+          "canonical-postcheck": {
+            "wallMs": 287.474833,
+            "rpcAttempts": 1,
+            "entries": 1
+          },
+          "prefix-scout": {
+            "wallMs": 0.649667,
+            "rpcAttempts": 0,
+            "entries": 1
+          }
+        },
+        "identity": {
+          "requestId": 4,
+          "sourceBlock": 26029536,
+          "prefixPresent": true,
+          "prefixCalldataBytes": 1508
+        },
+        "ok": true,
+        "success": false,
+        "fatal": false
+      },
+      "terminalRpcAttempts": 32,
+      "terminalFatal": false
+    },
+    {
+      "arm": "A",
+      "pid": 67852,
+      "status": "cancelled",
+      "aborted": true,
+      "solverEntered": false,
+      "measuredMs": 30002.437290999995,
+      "preparationMs": 989.8029159999933,
+      "propagationMs": 29012.629958000005,
+      "completedHops": 2,
+      "hops": [
+        {
+          "hop": 0,
+          "status": "quoted",
+          "prefixLength": 0,
+          "amountIn": "5195442",
+          "amountOut": "1874606836943428",
+          "wallMs": 712.661417000003
+        },
+        {
+          "hop": 1,
+          "status": "quoted",
+          "prefixLength": 1,
+          "amountIn": "1874606836943428",
+          "amountOut": "378740087141681349621649",
+          "wallMs": 8909.128541000005
+        },
+        {
+          "hop": 2,
+          "status": "failed",
+          "prefixLength": 2,
+          "amountIn": "378740087141681349621649",
+          "amountOut": null,
+          "wallMs": 19390.51804200001
+        }
+      ],
+      "planSha256": "a3552bd126bd6b699ea1b10e9ca1942484b649c5f5e8bc9c6565e9f6c1dc0d6b",
+      "drainErrors": [],
+      "observedRustRpcBegins": 81,
+      "observedRustRpcEnds": 80,
+      "jsRpcEnvelopes": 2,
+      "directRpcEnvelopes": 2,
+      "observedEnvelopeLowerBound": 85,
+      "truncations": [
+        {
+          "recordCap": 128,
+          "event": "truncated",
+          "identity": {
+            "interval": "scalar",
+            "requestId": 4,
+            "childRequestIds": null,
+            "sourceBlock": 26029536
+          },
+          "sequence": 128,
+          "elapsedMs": 17315.680334,
+          "phase": "prefix-execution"
+        }
+      ],
+      "terminalRequest4": null,
+      "terminalRpcAttempts": 23,
+      "terminalFatal": false
+    }
+  ],
+  "findings": [
+    "Both B attempts completed only2 quoted hops, the same as adjacent A; hop index2 never completed. Predeclared primary criterion failed.",
+    "A1/A2 were cancelled at30s. B1/B2 ended after15.653/14.326s with a prefix execution non-success, not a timeout or proven transport/source failure. Terminal request4 ok=true/success=false/fatal=false, main-read-setup entries0; exact revert/halt cause is not in this harness.",
+    "The outer adapter-work:transport:rpc label must not be treated as proof of a network failure. Baseline eventual failure/semantic equivalence after hop1 remains unknown because A is censored.",
+    "All common completed amounts, edges, prefix lengths and plan SHA match; all11 immutability flags true; no drain error. No whole-route/Solver/EV parity evidence.",
+    "B trace-key hints1.356/1.377s,2 physical attempts, made authoritative prefix execution reach non-success in1.232/1.007ms with0RPC; faster failure and fewer reads are not successful route latency.",
+    "A progress truncates at record128 of request4 before deadline. Observed85/38/38/85 wire envelopes across Rust+JS/direct are lower bounds for A, not provider billed CU. End-of-attempt means scope-ended, not verified remote success."
+  ],
+  "decision": {
+    "action": "Restore only main.rs and diagnostic.rs to prefix-progress-binary.onTMkL via apply_patch, rebuild and hash-check",
+    "keep": "No-repeat prefix policy, batching, pair authority checks, diagnostics and other prior retained changes",
+    "forbid": "No rerun/warmup/deadline expansion to rescue this failed criterion; no Family-specific changes",
+    "goal": "active incomplete",
+    "next": "Check existing successful repeated-instance evidence before another behavior hypothesis; current live had zero ordered-prefix routes"
+  }
+}

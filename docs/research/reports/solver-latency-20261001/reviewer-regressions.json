@@ -1,0 +1,108 @@
+{
+  "sourceReceiptSha256": "f84944b85d446ec991fdb85eed53dcfbd37ff2bcae40626e32178edcf2cc6e51",
+  "review": {
+    "pass": 3,
+    "verdict": "sanitizer-regressions-pass; publication-awaits-generated-artifact-audit",
+    "supersedes": "Pass1/pass2 sanitizer blockers are closed for the exact exporter hash below; their historical failed probes remain retained in this receipt.",
+    "hashes": {
+      "export-evidence.mjs": "61ffc31e24b3b0078233a231da3587b2f79ce4f41304d8cab4fa5ab268e57755",
+      "export-evidence.test.mjs": "907b0681fd06b353a45782eed92d1199867268326d9a12495b301e7778993f82",
+      "verify-evidence.mjs": "0dd225fe36e60a1eb35821ad1113c4b62ab23f85078bde43f95158bc18f140d0",
+      "HANDOFF.md": "af468be8ca4109e1835c78d77076d86f202d67f8116fd4b373a6500f08c84238"
+    },
+    "executedGates": [
+      {
+        "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node --test docs/research/reports/solver-latency-20261001/export-evidence.test.mjs",
+        "exitCode": 0,
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node --check docs/research/reports/solver-latency-20261001/export-evidence.mjs",
+        "exitCode": 0
+      },
+      {
+        "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node --check docs/research/reports/solver-latency-20261001/verify-evidence.mjs",
+        "exitCode": 0
+      },
+      {
+        "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node --input-type=module (inline actual-function, memory-only stream regression)",
+        "exitCode": 0,
+        "passed": 8,
+        "mechanism": "Exact current exportLog/redactLine evaluated with memory fs and real gzip/streams/readline. No exporter main or verifier main invoked.",
+        "results": [
+          {
+            "name": "ordinary timings CRLF/final non-newline",
+            "pass": true,
+            "disposition": "redacted; line count and original/transformed hashes verified"
+          },
+          {
+            "name": "structured JSON timings/nested secret",
+            "pass": true,
+            "disposition": "redacted; line count and original/transformed hashes verified"
+          },
+          {
+            "name": "standalone multiline PEM line preservation",
+            "pass": true,
+            "disposition": "redacted; line count and original/transformed hashes verified"
+          },
+          {
+            "name": "unterminated PEM fail closed",
+            "pass": true,
+            "disposition": "unterminated private-key block in synthetic.log"
+          },
+          {
+            "name": "unclosed assignment fail closed",
+            "pass": true,
+            "disposition": "unclosed credential assignment in synthetic.log"
+          },
+          {
+            "name": "mixed-content PEM fail closed",
+            "pass": true,
+            "disposition": "mixed-content private-key line needs manual redaction in synthetic.log"
+          },
+          {
+            "name": "nested serialized quoted message",
+            "pass": true,
+            "disposition": "redacted; line count and original/transformed hashes verified"
+          },
+          {
+            "name": "escaped quote password assignment",
+            "pass": true,
+            "disposition": "redacted; line count and original/transformed hashes verified"
+          }
+        ]
+      },
+      {
+        "command": "independent redactText assertions for four private/api flag forms plus escaped-quote password flag and trailing timing preservation",
+        "exitCode": 0,
+        "passed": 5
+      }
+    ],
+    "findings": [
+      "No remaining blocking finding in the requested final regression surface.",
+      "Nested nonsensitive quoted message payload is recursively sanitized; escaped quotes no longer terminate credential values early.",
+      "Standalone PEM logs retain line count. Unterminated PEM, unclosed sensitive assignment and mixed-content PEM reject before publishing a completed artifact receipt.",
+      "Source/transformed hashes and line counts verified for each successful in-memory log case; gzip decompression used real stream implementations.",
+      "HANDOFF line79 now explicitly states parent26029584 plus syntheticN26029585 execution environment, not N end-state/fresh canonical authentication; saved rank1 is post-selection, with no new enumeration.",
+      "Redacted patch/harnesses remain review-only, not executable production acceptance. No whole-Solver/live win is implied."
+    ],
+    "publicationBoundary": [
+      "This passes exporter regression review, not publication of an unseen generated bundle.",
+      "Main may proceed to its already-authorized export and separate final audit. Reviewer did not invoke exporter main, verifier main, RPC, credentials, searcher, process control or publication.",
+      "Final audit must inspect actual generated files (including decompressed shards), expected coverage and omissions, source and transformed hashes, JSON validity, line counts, numerical preservation, file-size ceilings, residual sensitive material and unexpected unmanifested files.",
+      "verify-evidence.mjs was read and syntax-checked only; no generated manifest/content was available for executing it here. Its stated source-provenance/numerical-preservation independent audit remains required.",
+      "No additional sanitizer design expansion or new production implementation is proposed. Completed synthetic regressions need not be reopened absent a concrete final-artifact finding."
+    ],
+    "authority": {
+      "networkCalls": 0,
+      "credentialReads": 0,
+      "actualFilesystemExports": 0,
+      "sourceEdits": 0,
+      "commits": 0,
+      "publication": false,
+      "onlyWrite": "logs/solver-prefix-policy-20260930.MKk8Vk/handoff-export-review-pass1.json"
+    }
+  }
+}

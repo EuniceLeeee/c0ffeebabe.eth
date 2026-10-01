@@ -1,0 +1,40 @@
+{
+  "turnClass": "observability-only",
+  "searcherBehaviorChange": false,
+  "purpose": "Attribute repeated-route Solver latency before choosing a behavioral optimization",
+  "author": "Mencius",
+  "reviewer": "main, independent evaluator",
+  "allowedProductionPaths": [
+    "listener/revm-sim/src/main.rs",
+    "listener/revm-sim/src/diagnostic.rs"
+  ],
+  "basePatchSha256": "ec11606164347dc9f01ab334765b102a15758e8f5bab25cdb9147b7dc20a42e5",
+  "baseBinarySha256": "5f9c6dba64508decdeff3f5414453f804a9bed48bc947acd2444dd39734e397c",
+  "constraints": [
+    "Diagnostic gate SEARCHER_STATE_LATENCY_DIAGNOSTICS=1; fixed redacted labels only",
+    "Preserve response semantics, source pre/postchecks, retry policy, full ordered-prefix gas/transient state and fatal latch",
+    "Measure physical RPC attempts with reused versus fresh client identity correct; nested phases labeled as subdivisions",
+    "No killed-request terminal means censored, not zero",
+    "No continuation/prefetch/cache/Family/TS production changes in this patch"
+  ],
+  "testContract": [
+    "Diagnostics on/off preserve semantic outputs and RPC order",
+    "First/reused-session attempt accounting includes canonical pre/postcheck",
+    "Existing full Rust source/prefix/gas/transient/fatal tests pass",
+    "Non-author reviews and independently executes targeted tests before real diagnostic"
+  ],
+  "plannedDiagnostic": {
+    "invocations": 1,
+    "mode": "prefix-phases",
+    "rank": 8,
+    "sourceBlock": 26029536,
+    "phase": "P-only production amount propagation",
+    "budgetMs": 30000,
+    "reruns": 0,
+    "workLimit": "same saved six-hop route and exact unchanged P; no final sim or EV",
+    "cuCap": 10000,
+    "mechanism": "Existing runner abort/drain plus fixed invocation budget; inherited Rust bounded retries disclosed",
+    "claim": "Selected post-enumeration historical diagnostic only; not live, no whole-route timing win"
+  },
+  "next": "Optimize only a measured cause; no automatic additional 250-block live run"
+}

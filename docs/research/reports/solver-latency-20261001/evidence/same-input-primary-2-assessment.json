@@ -1,0 +1,65 @@
+{
+  "scope": "Selected-route same-state Solver diagnostics; not full live acceptance, final simulation or EV",
+  "source": 26029536,
+  "experiment": "same-input-primary-2-bootstrap-corrected",
+  "order": "ABBA per route; all8 attempted invocations retained",
+  "immutableInputs": true,
+  "noRepeatedPool": {
+    "rank": 477,
+    "baseline": {
+      "status": "both cancelled at30s total work limit",
+      "solverMs": [
+        27933.025291,
+        28416.452167
+      ],
+      "amountsStartedEach": 4,
+      "gssCompletedEach": 0
+    },
+    "conditional": {
+      "status": "both complete",
+      "solverMs": [
+        5828.644,
+        4603.942333
+      ],
+      "amountPointsEach": 12,
+      "gssPointsEach": 8,
+      "hopQuotesEach": 24,
+      "prefixCalls": 0
+    },
+    "commonQuoteParity": "Both baseline attempts returned6 hop quotes also present in B; all6 outputs match bit-exactly. Baseline incomplete, so full amount/candidate equivalence cannot be claimed.",
+    "interpretation": "Strong selected-sample work-reduction evidence; no uncensored old/new percentage or whole-live speedup claim. Distinct logical pools may share state elsewhere; final sim remains mandatory."
+  },
+  "repeatedPoolLocalMathControl": {
+    "rank": 4,
+    "baselineSolverMs": [
+      2285.159,
+      2035.16725
+    ],
+    "conditionalSolverMs": [
+      3219.756042,
+      4385.131709
+    ],
+    "amountPointsEach": 12,
+    "gssPointsEach": 8,
+    "hopQuotesEach": 72,
+    "exactQuoteAndCandidateParity": true,
+    "prefixPolicy": "all prior0..5 quotes retained for each amount",
+    "rustRequests": 0,
+    "interpretation": "Behavior unchanged; B was slower in these noisy samples. No repeat-route speedup claim. This local-math control does not measure Rust prefix execution."
+  },
+  "prefixEngineFirstAttempt": {
+    "experiment": "same-input-prefix-engine-1",
+    "rank": 8,
+    "phase": "P-only propagation, not full Solver",
+    "statuses": [
+      "cancelled",
+      "cancelled",
+      "cancelled",
+      "cancelled"
+    ],
+    "workLimitMsEach": 30000,
+    "interpretation": "Both old compatible and batched-precheck engine hit the cap. No completed repeated-route latency improvement established. Retain this failure and optimize the identified cold-state path before another separately declared comparison."
+  },
+  "noBroadcast": true,
+  "goal": "active, not complete"
+}

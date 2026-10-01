@@ -1,0 +1,27 @@
+{
+  "scope": "Previous frozen local blockscan diagnostic, first 250 source heights after catchup",
+  "window": [
+    26089681,
+    26089930
+  ],
+  "manual": "baseline-first250-manual.json",
+  "canonical_manifest": "latency-tools.json",
+  "successful_tool": "analysis:blockscan-pass-latency",
+  "canonical_receipt_stdout_sha256": "a4152e44a0dffddadfd8cd39f54d68dbdfd7b01dcf6b0dfff1c79590bb2ca55b",
+  "projection": "baseline250-latency.log.provenance.json",
+  "reconciliation": "250 timings and p95 agree. Correction after direct percentile implementation inspection: manual uses sorted[ceil(n*p)-1]; canonical uses sorted[floor(n*p)], capped at n-1. Canonical p50 is the upper middle for an even sample, NOT the average previously described. At n=250, p95 indices coincide but p50 indices differ. Solver canonical p50 2852.883209ms vs manual 2837.677584ms is a convention difference, not inconsistent records. First invocation did not anchor the process at window line 1; rerun used actual original process-start line 4, without inventing anchors.",
+  "metrics": {
+    "solverP50Ms": 2852.883209,
+    "solverP95Ms": 6112.622625,
+    "passP50Ms": 11963.742625,
+    "passP95Ms": 13850.848917,
+    "plansP50": 23,
+    "amountPointsP50": 208,
+    "hopExactCallsP50": 980
+  },
+  "limitations": [
+    "Prior binary rejected trialPrefix; not a valid causal speed/profit baseline",
+    "Canonical process anchor is log-only; old process receipt supplies separate identity",
+    "This is not a formal paired Hermes window"
+  ]
+}

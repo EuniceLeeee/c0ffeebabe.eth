@@ -1,0 +1,64 @@
+{
+  "turnClass": "systemic-live implementation; selected-route mechanism test before any further live",
+  "searcher_behavior_change": true,
+  "stage": "MAIN APPROVES GENERATION after accepting W1/W2/W3 in warm-prefix-design-review.json; no external experiment yet",
+  "owner": "main",
+  "generator": "Mencius after approval; existing documented native fallback",
+  "basePatchSha256": "0621702191948ea1142792abc84f65ab1d864dd6b6cc68cf6dbbeedd540a78b7",
+  "baseBinarySha256": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661",
+  "allowedFiles": [
+    "listener/revm-sim/src/main.rs",
+    "listener/revm-sim/src/diagnostic.rs"
+  ],
+  "evidence": [
+    "prefix-progress-manual-assessment.json",
+    "same-input-prefix-progress-1/results.json",
+    "same-input-prefix-progress-1.log",
+    "cold-prefix-assessment.json"
+  ],
+  "hypothesis": "A warm pinned source session can defer optional key-hint prefetch until a later prefix encounters additional source state. The measured expanded two-leg prefix issued at least56 serial physical attempts; batching its fetchable misses may amortize the trace cost that did not improve the first cold one-leg prefix.",
+  "settledHistory": "Read docs/decision-log.md D-007 and X-004. This is remote-RPC demand-read reduction, not multicall/local-reth. Blanket and cold-first prefetch remain rejected; no continuation or sibling mutable-state cache is reopened.",
+  "minimalDesign": [
+    "One source-session-local boolean records whether an authoritative counterfactual trial-prefix request has completed successfully; default false, scoped with the existing endpoint/hash-pinned RemoteRevmDb, discarded on source/session replacement. This is a performance eligibility hint only, never attestation or an execution result cache.",
+    "Only requests with that prior-success hint plus validated source pin, full trial prefix and executor code are eligible. The first cold prefix remains the exact existing lazy path, with zero scout/hint calls.",
+    "For eligible requests, reuse the previously reviewed cache-only scout mechanism from cold-prefix-binary.Q0edHj. It uses existing strict execution in prefix-only scope, peeks immutable remote cache without writes/counters/RPC, and discards all local state, gas, logs and warmth.",
+    "Only an account/storage miss repairable by existing hint hydration permits one logical prefix-only trace-key-hint helper invocation per request. Ancestor-only misses do not authorize hints because this hydration cannot fill headers; preserve authoritative parent-chain reads. Fully warm prefixes, main-only misses, missing code hashes, existing fatal state and scout revert do not authorize hints. No fingerprints, length/Family/address heuristics or per-route allowlists.",
+    "One logical hint consists of trace discovery plus pinned hydration, not one physical RPC attempt. Existing bounded recovery stays unchanged and fully counted; no new candidate retry/scout/hint loop.",
+    "Hints include only the validated request-local executor code override and prepared request-local funding state. Pinned trace values remain untrusted; fetch actual values through existing hash-pinned warm_batch. Ordinary absent/malformed hints fall back; physical source faults stay terminal.",
+    "Always execute the original full prefix and target from the original prepared DB after scout/hints. Preserve all pre/postchecks, pair temporal checkpoints and flush ordering, individual plans/callers/origin, transaction warmth and transient state.",
+    "Record the successful-prefix eligibility hint only after response.ok and success==Some(true), full observations and required canonical postcheck with no fatal latch. Scalar after its postcheck; pair A only after bridge plus successful physical A flush, before B; pair B after postB. No mark in strict_simulate_at. Preserve source checks and response streaming. If this requires broad changes, stop and report rather than infer success from trace/scouting.",
+    "The bit is source-session-local, not per-route: an unrelated cold prefix after earlier session success can qualify. Do not claim all cold routes are excluded or add fingerprints to hide this limitation.",
+    "No TS, Family, search, deadlines, finalsim, EV, dependency, config or public interface changes. Existing bounded diagnostics may add one scout phase label only. Preserve all existing dirty changes."
+  ],
+  "reviewQuestions": [
+    "Is the success hint stored in the correct endpoint/hash lifetime and does it avoid adding any source authority?",
+    "Does the old scout replay exactly the production prefix semantics while excluding observation/main, and can it be ported without disturbing pair/progress code?",
+    "Does this address new measured evidence rather than repeat the withdrawn cold-first hypothesis? What is the smallest safe way to prove cold no-hint and expanded warm one-hint behavior?",
+    "If this surface is disproportionate or a correctness boundary cannot be preserved, report that now; no implementation or RPC."
+  ],
+  "offlineGates": [
+    "Cold initial counterfactual prefix never invokes scout or hint; authoritative source checks/read outcomes unchanged.",
+    "Subsequent same-source fully warm prefixes and differing warm amounts invoke zero remote hints.",
+    "Expanded same-source prefix with newly touched account/storage uses at most one logical hint invocation; account/zero/absent cases tested, ancestor-only miss does not hint.",
+    "New endpoint/block/session resets eligibility; rejected/halted/scout-only execution cannot establish it.",
+    "Exact outcome, stage, output, gas, observations, logs, state and transient-storage parity versus lazy execution, including optional-hint fallback and source-fatal precedence.",
+    "Full Rust tests/release build plus real TS-client-to-Rust loopback integration, held-response cancellation, main independent diff/code review and checks."
+  ],
+  "proposedBoundedExperiment": {
+    "notYetRunAuthorized": true,
+    "shape": "New rank8 P-only ABBA,4 fresh invocations,30s each including preparation; identical frozen TS/runtime/input/search/transport, only Rust warm-session hint behavior differs. Baseline includes the same bounded diagnostics.",
+    "noWarmupsOrReruns": true,
+    "primary": "Both B attempts must complete hop index2 and strictly more hops than their adjacent A (A1/B1 and B2/A2), unless both arms complete full route, where both pairs must have lower B route wall time. No fewer completed hops per adjacent pair is mandatory. Exact shared completed quotes and plan hashes, no safety/drain error.",
+    "mechanism": "Observed first-session cold prefix unchanged; warm sibling hint calls0; expanded-prefix serial demand attempts materially lower after at most1 logical trace-hint helper. If both A/B finish expanded hop2, require B lower hop2 wall time in both adjacent pairs; censored A remains a lower bound, not an invented duration. Every physical trace/hydration/retry attempt remains counted.",
+    "limitations": "Diagnostic route progress only; full-route/whole-Solver/live win still needs complete output and representative evidence. Failure causes exact restoration of this candidate only; no deadline expansion or blind live run.",
+    "resourceBound": "4*30s work,140s graceful and155s hard exact owned group limit; no other task-owned external run, no attempt retries, provider billed CU unknown unless reported. Final sealed declaration/review required."
+  },
+  "notDoing": [
+    "Remote trace outputs as quotes",
+    "Continuation or mutable EVM cache",
+    "More observability-only iterations",
+    "Amount/search pruning",
+    "Production policy changes",
+    "Deploy,sign,broadcast,push,merge"
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "status": "offline draft implemented by main; independent design findings incorporated below; tests and non-author implementation review required before RPC",
+  "searcherBehaviorChange": true,
+  "owner": "main",
+  "hypothesis": "The first cold pinned-prefix request waits for source checks and then a completely determined account/storage hydration batch. Co-send these independent reads in one HTTP envelope, validate ALL three source checks before constructing/publishing any pinned values or executing EVM. No logical reads or checks removed.",
+  "evidence": {
+    "log": "same-input-prefix-pair-1.log",
+    "candidateRequest1": {
+      "sourcePrecheckMs": [
+        2425.762083,
+        3223.072166
+      ],
+      "hydrationMs": [
+        846.151208,
+        897.164292
+      ],
+      "prefixRpcAttempts": [
+        10,
+        10
+      ]
+    },
+    "qualification": "Only one hydration HTTP exchange can be removed per cold source; warm prefix execution is already submillisecond. Not a full Solver latency proof."
+  },
+  "eligible": "Initially only source-pinned trialPrefix scalar request with no existing pinned session. Ordinary strict/final sim, legacy, warm session and paired paths retain existing behavior.",
+  "proposedInternals": [
+    "Factor exact existing hydration address/slot planning and warm-batch request/result decoding into private helpers, used by both old and candidate paths; no protocol addresses/selectors/layout changes.",
+    "Prepare EIP-1898 hash-pinned hydration requests using validated sourcePin and empty cold slot/cache state. Combine with three unchanged source prechecks; use existing batch parsing, fatal and retry machinery.",
+    "Validate complete prechecks, canonical header, root and environment before constructing RemoteRevmDb, applying fetched values, setting slot hints or executing prefix. On mismatch discard every fetched value and preserve fatal precedence.",
+    "Apply pre-fetched responses with same existing hydration decoder exactly once; original strict_simulate_at may visit hydration again but must issue no duplicate RPC because same source values are present. No arbitrary response cache in RpcClient.",
+    "All postchecks remain fresh AFTER execution and every local request has isolated mutable EVM state. No source-attestation reuse, continuation cache, code overrides, amount/candidate/budget/config changes.",
+    "Fast path has a NEW private eligibility bound of 256 outgoing items including3 source checks, not a claimed existing provider limit. Larger requests use original two-batch path before any dispatch, never truncated."
+  ],
+  "resolvedDesignReview": {
+    "review": "next-prefix-slice-review.json",
+    "decision": "Accept bounded transport-grouping differences while preserving every fail-closed authority check; exact serial failure attribution is not an equivalence claim.",
+    "failurePrecedence": "Existing send_json inspects all returned error items. Mixed invalid-source plus hydration-throttle remains fatal and may report throttle instead of the serial baseline's source fault. Never clear/suppress any fatal latch to restore a label.",
+    "readAccounting": "Logical method/parameter multiset must match for successful no-retry requests. Invalid-source calls now co-issue hydration; combined transport retries resend both parts under unchanged retry limit/deadline. Count all physical attempts; no post-send fallback or enlarged deadline.",
+    "size": "At most256items for this optimization only. This does not admit/drop/truncate requests or change the existing fallback's input limit.",
+    "semantics": "All source checks must complete before values enter pinned cache or EVM. Full prefix/main/state source, successful outputs/gas/effects/attestations and fresh postcheck stay unchanged."
+  },
+  "tests": [
+    "cold matching source same output/gas/effects and exact logical call multiset with one fewer HTTP envelope",
+    "wrong chain/hash/root/environment and malformed/incomplete hydration fail closed before state publication/execution",
+    "response-ID reorder/duplicates/missing/fatal throttles preserve classifications",
+    "warm and non-prefix paths unchanged; no duplicate hydration fetch",
+    "fresh canonical postcheck detects source changes even when EVM reverts",
+    "Rust full suite, actual TS-client/Rust/local-HTTP integration and non-author review"
+  ],
+  "allowedImplementationFiles": [
+    "listener/revm-sim/src/main.rs",
+    "listener/revm-sim/src/diagnostic.rs only if accurate exclusive phase accounting needs it"
+  ],
+  "externalRpcBudgetNow": 0,
+  "notDoing": [
+    "data prefetch before authentication enters cache",
+    "reusing source checks",
+    "prefix omission on repeated route",
+    "moving sibling B execution before A publication",
+    "higher deadlines",
+    "search-quality cuts",
+    "live/sign/broadcast/deploy/push/merge"
+  ],
+  "nextExperiment": "Only if judged worthwhile after independent review: freeze source/binary, predeclare bounded new same-input assessment, retain all censored outcomes; never rerun existing experiments."
+}

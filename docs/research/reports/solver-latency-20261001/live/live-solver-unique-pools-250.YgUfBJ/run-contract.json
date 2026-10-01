@@ -1,0 +1,210 @@
+{
+  "createdAt": "2026-09-30T11:38:35.981Z",
+  "head": "baca79b03384a93fb656482c09a5e4de026f5fbc",
+  "snapshotBasis": "Solver repeated-instance quote policy; current compiled Rust source and binary. Same generation-1 Ready and unchanged Graph checked offline. Local bounded diagnostic, not a paired A/B claim.",
+  "defaultPWei": "2000000000000000",
+  "sourceTreeSha256": "7a96969cedcee67cc66f87b800580d0f22ab6b42e994a0c7e775a851c8943dd9",
+  "ready": {
+    "at": "2026-09-30T11:27:27.972Z",
+    "checkpointSha256": "9b7b05d11e23dcc079e36b0dbc8f1363df075bde589fc8717ae5ef160a32ee5b",
+    "sourceManifestSha256": "740ce4f4e3b898f8164c87ac1c470cfaf38e238061598d1e1df2f653d98439fc",
+    "generation": 1,
+    "cutoff": {
+      "number": 26088150,
+      "hash": "0xcd1606be5437c39dae2f04fd1709e6016827cd05323e81674ce8b378f46f86b6",
+      "generation": 26088150
+    },
+    "range": {
+      "fromBlock": 26073751,
+      "toBlock": 26088150
+    },
+    "graphHash": "843c65bd06f425b5ab54d81fea31829e2771c88927aefbc0a732676465367cc3",
+    "instances": 13509,
+    "graphEdges": 26506,
+    "fundingRecords": 44,
+    "rootRehydrated": true,
+    "stale": 0,
+    "networkAttempts": 0,
+    "activations": [
+      {
+        "familyId": "custom-swap:angstrom-v4",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:astra-multitoken",
+        "enabled": true
+      },
+      {
+        "familyId": "flash-loan:balancer-v2",
+        "enabled": true
+      },
+      {
+        "familyId": "balancer-v3",
+        "enabled": false
+      },
+      {
+        "familyId": "curve-plain",
+        "enabled": false
+      },
+      {
+        "familyId": "curve-underlying",
+        "enabled": false
+      },
+      {
+        "familyId": "custom-swap:dodo-v2",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:eigenpie",
+        "enabled": true
+      },
+      {
+        "familyId": "custom-swap:ekubo-router-v1",
+        "enabled": false
+      },
+      {
+        "familyId": "ella-exchange",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:erc4626-silo-redeem",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:erc4626",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:ethertoken-native-redeem",
+        "enabled": true
+      },
+      {
+        "familyId": "credit:fluid",
+        "enabled": false
+      },
+      {
+        "familyId": "fluid-dex",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:goldx",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:metronome-hgusdc",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:metronome-synth",
+        "enabled": true
+      },
+      {
+        "familyId": "mooniswap",
+        "enabled": true
+      },
+      {
+        "familyId": "flash-loan:morpho",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:psm",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:rocksolid",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:self-burn-native",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:token-conversion",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:token-migration",
+        "enabled": true
+      },
+      {
+        "familyId": "custom-swap:uniswap-v1",
+        "enabled": true
+      },
+      {
+        "familyId": "univ2-standard",
+        "enabled": true
+      },
+      {
+        "familyId": "univ3-standard",
+        "enabled": true
+      },
+      {
+        "familyId": "univ4-fee-hook",
+        "enabled": true
+      },
+      {
+        "familyId": "univ4",
+        "enabled": true
+      },
+      {
+        "familyId": "protocol:wsteth",
+        "enabled": true
+      }
+    ]
+  },
+  "config": {
+    "SEARCHER_TEST_DISABLE_DOTENV": "1",
+    "SEARCHER_DRY_RUN": "1",
+    "SEARCHER_DRY_RUN_USE_READY_GENERATION": "1",
+    "SEARCHER_LIVE_BACKEND": "rpc",
+    "SEARCHER_ENABLE_BLOCK_SCAN": "1",
+    "SEARCHER_BLOCKSCAN_SUBMIT": "0",
+    "SEARCHER_EV_GATE": "1",
+    "SEARCHER_ENABLE_BACKRUN": "0",
+    "SEARCHER_ENABLE_MEMPOOL": "0",
+    "SEARCHER_ENABLE_MEV_SHARE": "0",
+    "SEARCHER_ENABLE_HASH_ONLY": "0",
+    "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED": "0",
+    "SEARCHER_FAMILY_EKUBO_ENABLED": "0",
+    "SEARCHER_FAMILY_BALANCER_V3_ENABLED": "0",
+    "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED": "0",
+    "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED": "0",
+    "SEARCHER_FAMILY_UNISWAP_V1_ENABLED": "1",
+    "SEARCHER_FAMILY_MOONISWAP_ENABLED": "1",
+    "SEARCHER_FAMILY_TOKEN_MIGRATION_ENABLED": "1",
+    "SEARCHER_FAMILY_TOKEN_CONVERSION_ENABLED": "1",
+    "SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE": "1",
+    "SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH": "<repo>/logs/live-solver-unique-pools-250.YgUfBJ/checkpoint.json",
+    "SEARCHER_REVM_SIM_BIN": "<repo>/logs/live-solver-unique-pools-250.YgUfBJ/runtime/revm-sim",
+    "SEARCHER_BLOCKSCAN_STARTUP_PREWARM_BUDGET_MS": "2700000",
+    "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED": "0",
+    "SEARCHER_BLOCKSCAN_FINAL_SIM_METHOD": "eth_simulateV1",
+    "SEARCHER_STATE_LATENCY_DIAGNOSTICS": "1",
+    "SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED": "0",
+    "SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED": "1",
+    "SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP": "3",
+    "SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR": "3",
+    "SEARCHER_BLOCKSCAN_MAX_HOPS": "6",
+    "SEARCHER_BLOCKSCAN_ENUMERATION_METHOD": "joint-dfs",
+    "SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND": "typescript",
+    "SEARCHER_BLOCKSCAN_PREFIX_PRUNING_ENABLED": "1",
+    "SEARCHER_BLOCKSCAN_MAX_PREFIX_DRAWDOWN_BPS": "0",
+    "SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS": "0",
+    "SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS": "0",
+    "SEARCHER_EVENTS_PATH": "<repo>/logs/live-solver-unique-pools-250.YgUfBJ/events.jsonl",
+    "SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH": "<repo>/logs/live-solver-unique-pools-250.YgUfBJ/routes.jsonl",
+    "SEARCHER_BLOCKSCAN_MID_HISTORY_PATH": "<repo>/logs/live-solver-unique-pools-250.YgUfBJ/mids.jsonl"
+  },
+  "rpcSha256": "860a9610cd135f044f125b2364ad22718483029de2022075cd8619cbd8ba6b4a",
+  "binarySha256": "461357a18302d74b78a79527ef360c5e3ddfc2d5d58c78981f4f487467f43a36",
+  "artifactSha256": "0fc76fc76afc1838ce7d151078ef5bf40e6f0ba2e14fbaab97e3004b9bf0cc49",
+  "executorCodeOverride": true,
+  "executorCodeKeccak256": "0x75ac3cd7a45da42f6b4611f9203dad2b0df8693ced1a240eacaf8d98b94438ac",
+  "broadcast": false,
+  "signing": false,
+  "blockLimit": 250,
+  "counting": "250 source heights after first state-ready single-transition pass; independent of Solver/sim/EV outcome; startup/catchup excluded, later gaps/failures retained",
+  "wallLimitMs": 7200000,
+  "scope": "one local dry-run observation; no node deployment, discovery rebuild or paired A/B claim",
+  "pricing": "frozen startup raw is P reference only; subsequent current-source effective quote/merge/publication measured separately from startup"
+}

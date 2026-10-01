@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "reviewer": "main-nonauthor",
+  "reviewPass": 1,
+  "harnessSha256": "45e0f55cdee975865a39dd44b1b4004ce6b7d66ca897c63f7c6d7d7dc510e949",
+  "decision": "approved for the declared offline ABBA only",
+  "ran_gate": [
+    "Read entire harness and sealed generator receipt; independently verified sole production delta and input bindings in source-storage-offline-main-check-sealed.log",
+    "Main --check with isolated environment completed exit0 after generator seal"
+  ],
+  "finding": [
+    "Uses production session/Planner/Solver and actual pinned quote backend with fresh controls per attempt; no copied search or amount injection",
+    "Recorded synthetic empty-N source retained exactly; responses cannot authenticate current canonical chain state",
+    "Physical provider observations separate preparation from Solver; all issued hop outputs, prefixes and candidate hashes must match",
+    "Only exact recorded source-pinned request/response pairs are available on the owned loopback listener; external network, missing data and simulation paths fail closed",
+    "Ordinary eth_call recordings intentionally exclude old final-simulation state-override requests",
+    "Full pool-repeat prefix and production per-solve control identity remain asserted; freeze/hash and full drain checks required"
+  ],
+  "limits": {
+    "attempts": 4,
+    "order": [
+      "A",
+      "B",
+      "B",
+      "A"
+    ],
+    "deadlineMsPerAttempt": 30000,
+    "externalCuBudget": 0,
+    "cuSpentBeforeRun": 0,
+    "notAuthorizedByThisReceipt": [
+      "external RPC",
+      "live process",
+      "final sim",
+      "broadcast",
+      "merge",
+      "push"
+    ]
+  },
+  "claimsExcluded": [
+    "new natural enumeration",
+    "freshly authenticated fork",
+    "latency improvement",
+    "live improvement",
+    "final sim or EV"
+  ]
+}

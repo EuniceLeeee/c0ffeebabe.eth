@@ -1,0 +1,91 @@
+// Read-only, post-run diagnostic. This does not control production configuration.
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const sha = (s) => createHash('sha256').update(s).digest('hex');
+const q = (values, p) => {
+  const sorted = [...values].sort((a,b) => a-b);
+  return sorted.length ? sorted[Math.ceil(sorted.length*p)-1] : null;
+};
+function canonicalQuotes(r) {
+  const first = r.hops.filter(h => h.hop === 0);
+  const last = r.hops.filter(h => h.hop === 1);
+  assert.equal(first.length, 12); assert.equal(last.length, 12);
+  assert.equal(new Set(first.map(h => h.amountIn)).size, 12);
+  assert.equal(new Set(first.map(h => h.amountOut)).size, 12);
+  assert.equal(new Set(last.map(h => h.amountIn)).size, 12);
+  assert(r.hops.every(h => h.status === 'quoted' && h.prefixLength === null));
+  // First-hop issuance preserves the production grid/GSS selection order.
+  // Independent second hops can finish in another order; match their input.
+  return first.map(h => {
+    const next = last.find(n => n.amountIn === h.amountOut);
+    assert(next, 'missing second hop for first-hop output');
+    return { edges: [h.canonicalEdgeId,next.canonicalEdgeId],
+      amounts: [h.amountIn,h.amountOut,next.amountOut] };
+  });
+}
+function transport(r) {
+  const dispatch = (r.transportEvents ?? []).filter(e => e.kind === 'dispatch');
+  const settled = (r.transportEvents ?? []).filter(e => e.kind === 'settled');
+  const calls = dispatch.flatMap(e => e.calls.map(c => JSON.stringify({
+    method:e.method,source:e.sourceBlockHash,to:c.target,from:c.from,data:c.calldataSha256,
+  }))).sort();
+  return { calls, batches: dispatch.length, maxItems: Math.max(0,...dispatch.map(e=>e.calls.length)),
+    responses: settled.map(e=>({items:e.items,wallMs:e.wallMs,status:e.status,statusCode:e.statusCode,
+      headerWaitMs:e.http?.responseHeadersAtMs == null ? null : e.http.responseHeadersAtMs-e.startedAtMs})) };
+}
+const dir = path.join(here, 'same-input-batch-split-1');
+const raw = fs.readFileSync(path.join(dir, 'results.json'));
+const dRaw = fs.readFileSync(path.join(dir, 'declaration.json'));
+const result = JSON.parse(raw), declaration = JSON.parse(dRaw);
+assert.equal(result.declarationSha256, sha(dRaw));
+assert.equal(result.experiment, 'batch-split');
+assert.equal(result.results.length, 12);
+assert.deepEqual(result.results.map(r=>r.arm), ['A','B','B','A','A','B','B','A','A','B','B','A']);
+const rows = result.results.map((r,index) => {
+  let paritySurface = null, problem = null;
+  const wire = transport(r);
+  try {
+    assert.equal(r.status, 'returned'); assert(r.canonicalBefore && r.canonicalAfter);
+    assert.equal(r.revmRequests.length,0); assert.equal(r.prefixes.length,0);
+    assert.equal(r.drainErrors.length,0); assert(!r.fatalKind);
+    assert.equal(r.backend.liveItems,0); assert.equal(r.backend.inFlightBatches,0);
+    assert.equal(r.backend.pendingItems,0); assert.equal(r.backend.activeTransports,0);
+    assert.equal(r.backend.throttleRetries,0); assert.equal(r.backend.timeoutRetries,0);
+    assert.equal(r.backend.singleCallFallbacks,0);
+    assert.equal(r.timing.amountPoints,12); assert.equal(r.timing.gssPoints,8);
+    assert.equal(r.timing.hopExactCalls,24);
+    assert.equal(r.backend.batchesSent, wire.batches);
+    assert.equal(r.backend.maxBatchSize, r.arm === 'A' ? 64 : 1);
+    assert.equal(r.backend.maxConcurrentBatches,8);
+    paritySurface = JSON.stringify({plan:r.planSha256,quotes:canonicalQuotes(r),candidates:r.candidates,wire:wire.calls});
+  } catch(error) { problem = error.message; }
+  return {index,arm:r.arm,status:r.status,solverMs:r.solverMs,preparationMs:r.preparationMs,
+    totalMs:r.totalWithDrainMs,drainMs:r.drainMs,parityHash:paritySurface && sha(paritySurface),problem,
+    logicalCalls:wire.calls.length,batches:wire.batches,maxBatchItems:wire.maxItems,
+    peakBatches:r.backend?.peakInFlightBatches,responses:wire.responses};
+});
+const arm = key => {
+  const rr=rows.filter(r=>r.arm===key);
+  return {attempts:rr.length,completed:rr.filter(r=>r.status==='returned').length,
+    // A censored run invalidates the primary criterion, not just the quantile.
+    solverP50:q(rr.map(r=>r.solverMs).filter(v=>typeof v==='number'),.5),
+    solverP95:q(rr.map(r=>r.solverMs).filter(v=>typeof v==='number'),.95),
+    physicalEnvelopes:rr.map(r=>r.batches),logicalCalls:rr.map(r=>r.logicalCalls)};
+};
+const A=arm('A'),B=arm('B'),pairs=[];
+for(let i=0;i<12;i+=2){const p=rows.slice(i,i+2);const a=p.find(r=>r.arm==='A'),b=p.find(r=>r.arm==='B');
+  pairs.push({indices:[i,i+1],aMs:a.solverMs,bMs:b.solverMs,bWins:b.solverMs<a.solverMs});}
+const complete = rows.every(r=>r.status==='returned' && !r.problem);
+const outputParity = complete && new Set(rows.map(r=>r.parityHash)).size===1;
+const integrity = Object.values(result.unchanged).every(Boolean);
+const performance = complete && B.solverP50<=.85*A.solverP50 &&
+  B.solverP95<=1.1*A.solverP95 && pairs.filter(p=>p.bWins).length>=5;
+console.log(JSON.stringify({resultSha256:sha(raw),declarationSha256:sha(dRaw),
+  criterion:declaration.spec.predeclaredAssessment.primary,integrity,complete,outputParity,performance,
+  narrowedCriterionMet:integrity && outputParity && performance,
+  productionDefaultChangeAuthorized:false,scope:result.claim,logicalIssuances:result.logicalIssuances,
+  A,B,pairs,rows,limits:'Selected one-route diagnostic. No final sim/EV or representative live effect. Billed CU unknown.'},null,2));

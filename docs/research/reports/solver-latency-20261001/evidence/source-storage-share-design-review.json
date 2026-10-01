@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "reviewKind": "independent-design-only",
+  "verdict": "Design suitable for a narrow implementation brief, conditional on the contracts and offline gates below. No implementation or performance acceptance.",
+  "blockers": [],
+  "planSha256": "d06c2f318558d39fb575ada86de2930c70c0af1d979bf8b3a94d6081fef881ae",
+  "scope": {
+    "permittedFutureCodeFiles": [
+      "listener/src/searcher/strict-central-adapter-runtime.ts",
+      "listener/src/searcher/test/strict-central-adapter-runtime.ts"
+    ],
+    "nonGoals": [
+      "No Family names, protocol math, ABI/layout knowledge, or new interfaces in central code",
+      "No source checks, search amounts, candidate quality, budgets, deadlines or configuration changes",
+      "No Rust prefix, prefetch, continuation, cohort batching or V4 Family work",
+      "No implementation, runtime tests, network or credential access during this review"
+    ]
+  },
+  "evidence": {
+    "files": [
+      {
+        "path": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-share-plan.json",
+        "sha256": "d06c2f318558d39fb575ada86de2930c70c0af1d979bf8b3a94d6081fef881ae"
+      },
+      {
+        "path": "listener/src/searcher/strict-central-adapter-runtime.ts",
+        "sha256": "5abf08753fc27b0249fbe6db5dff9d56b2cc8efe613e7994d33ff0bc1869ba77"
+      },
+      {
+        "path": "listener/src/searcher/test/strict-central-adapter-runtime.ts",
+        "sha256": "6b57a95a45528f7d015d1a1f88bb28ad6ffc2394c5e2bf4660983fea8a48ce46"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-program.ts",
+        "sha256": "25a7632e2e2c7d4373a7340db39e98307288dfbbfca0b58b455de272aa3c405d"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/token-conversion-family/exact.ts",
+        "sha256": "e6f019551346e7af0e5f51d34a5574373f60f786b40c52bac9bce247f2cb8739"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/token-conversion-family/xwin.ts",
+        "sha256": "c98053bace0736cc4f67c471d06fa1369834aa6c28b7fedb212d07c40ab4a8f1"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/token-conversion-family/xwin-local.ts",
+        "sha256": "ec2a1ef21873e76c0125c8d60c1923cb8f033888455ae2213fac102c077de1ec"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/token-conversion-family/trial-state.ts",
+        "sha256": "b8a8aff90ca4c2c7535ef43f393a79f6ec82c5a74ad80b960a8eec445ef62182"
+      },
+      {
+        "path": "logs/six-family-ev-20260930.Pc1Pv8/xwin/result.json",
+        "sha256": "de05ef8ee5bdab9cdea5250b74d5bb092d5a94cf139e8b3513c7f4934cff3f0f"
+      },
+      {
+        "path": "logs/six-family-ev-20260930.Pc1Pv8/xwin/exact-hop-00001.json",
+        "sha256": "e9d7d687be8f0f914fb849f75c1cf8acf9ace8cc9d7075903ab91595b16ea6a4"
+      }
+    ],
+    "savedPositiveControl": {
+      "source": {
+        "number": 26029585,
+        "hash": "0x9659cc92d3abe53823e71a15e62873850687d5c50b195072bc0940a17ebc706d",
+        "generation": 1
+      },
+      "stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "rank": 1,
+      "solverMs": 17641.05925,
+      "counts": {
+        "hop1:request-exact-derived": 12,
+        "hop2:trial-state-exact-derived": 12
+      },
+      "amountPoints": 12,
+      "prefixReads": 0,
+      "complete": true,
+      "simSuccess": true,
+      "quoteProfit": "1427235",
+      "simGrossProfit": "1427235",
+      "environmentKind": "parent-state-with-N-environment",
+      "limitations": [
+        "Derived local empty N, not canonical N end-state; no full canonical state-root equivalence claimed."
+      ],
+      "rawStorageTimingPresent": false
+    },
+    "currentCodeAnchors": [
+      {
+        "path": "listener/src/searcher/strict-central-adapter-runtime.ts",
+        "lines": "167,210-225,325-334",
+        "finding": "Cache is runtime-local. assertCurrent checks work control, generation and prefix source and retires the relevant lifetime on failure. Prefix-context requests never enter rethBound."
+      },
+      {
+        "path": "listener/src/searcher/strict-central-adapter-runtime.ts",
+        "lines": "350-417",
+        "finding": "Only get-code reserves a raw-byte shared owner/joiner before the direct group queues. Independent storage still issues provider work. Joiners do not hold another group's physical permit; awaitAllDrained retains ownership."
+      },
+      {
+        "path": "listener/src/searcher/strict-central-adapter-runtime.ts",
+        "lines": "562-633",
+        "finding": "Existing cache binds source number/hash/generation, lane, address, original signal identity and exact safe-integer deadline; bounded256-entry LRU with nonretained overflow and rejection eviction."
+      },
+      {
+        "path": "listener/src/searcher/strict-central-adapter-runtime.ts",
+        "lines": "651-666,715-743",
+        "finding": "Prefix simulation takes precedence over raw source transports. Code optionally consumes a shared promise; storage unconditionally calls provider.getStorage through withRpcRetry."
+      },
+      {
+        "path": "listener/src/searcher/strict-central-adapter-runtime.ts",
+        "lines": "309-322,435-445",
+        "finding": "Each logical request has an independent completion fence; final result array preserves request order and has a final fence."
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-program.ts",
+        "lines": "1271-1280",
+        "finding": "Storage requests already require an address and exactly32-byte hex slot."
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/token-conversion-family/exact.ts",
+        "lines": "63-82,87-107",
+        "finding": "Current default xWin exact declares source reads, builds dependent local preparation, then decodes into a local trial quote; explicit simulation mode is not used."
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/token-conversion-family/xwin.ts",
+        "lines": "44-51",
+        "finding": "Initial xWin source wave includes the fund implementation storage slot."
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/token-conversion-family/xwin-local.ts",
+        "lines": "83-158",
+        "finding": "xwinLocalRound takes surface, executor, completedRound and prior results, not amount. Storage appears in completedRound0 (base amount, swap implementation/oracle),1 (token implementation/admin, swap admin, oracle implementations),2 (oracle admins); round3 has no storage. Initial plus these rounds are four successive storage-bearing waves."
+      }
+    ],
+    "interpretation": "Current code exposes repeated amount-independent raw source reads that can be deduplicated generically. The saved successful control establishes12 first-hop request-program executions plus12 local second hops, not storage request counts, physical envelopes or storage-attributed wait. Its17.641s Solver wall time is historical total only and must not be attributed to get-storage.",
+    "unproven": "The saved hop/result artifacts do not bind per-read signal/deadline identity, cache hitability, storage timings or eviction pressure. Actual retained hits across production-shaped amount trials must be demonstrated offline before assuming any latency benefit."
+  },
+  "minimalContract": [
+    "Generalize only the existing private raw-read cache and owner/joiner plumbing to code and storage. Keep one combined256-entry map, not a second256-entry storage cache.",
+    "Key raw storage by source number+lowercase hash+generation, lane, request kind, lowercase address, lowercase canonical32-byte slot, original AbortSignal identity and exact deadlineAtMs. Code must retain its own kind with no slot ambiguity. Provider identity is implicit in the bound runtime; separate runtimes never share.",
+    "Share only with the existing explicit signal plus safe-integer finite deadline eligibility. No signal normalization, implicit controls or lifetime expansion. Aborted/expired/retired requests are fenced before reuse. Missing/partial/nonfinite control retains direct reads.",
+    "Reserve only non-prefix directReth code/storage requests before scheduling. exactPrefixContext must bypass both reservation and source-cache consumption, regardless of available cached source bytes. Do not reuse mutated execution state or simulation results.",
+    "Owner performs the unchanged provider operation and bounded retry with existing controls and before/after source fences. Joiners and completed hits still execute their own runRequest, issueResult, provenance, source snapshots and final fencing. Never share issued result/evidence handles or bypass required/optional result-set validation or Family decode.",
+    "Retain successful storage bytes only when exactly32-byte hexadecimal; all-zero words are valid raw bytes, not proof of Family eligibility. Preserve the original returned bytes and current result/error classification; do not pad, truncate, normalize values, manufacture zeros or turn malformed values into accepted proofs. Malformed bytes may reach their original logical consumers but must not be retained for later reuse.",
+    "Failure, abort, deadline and generation retirement remove reuse without cancelling unrelated work. Pending completions must not repopulate retired/overflow entries. Preserve code's32KiB retention bound, combined cap, LRU and all-pending overflow behavior.",
+    "Preserve one permit for each actual direct physical group, no permit for a pure cache join/hit, no nested acquisition, and release physical group ownership before awaiting other owners. Batch eth_calls remain concurrently queued and independently drained.",
+    "Keep logical request budgets, order and source/result checks intact. Existing rethCalls diagnostic is a logical count, not physical RPCs; do not present a reduced provider count as reduced logical validation."
+  ],
+  "requiredTests": [
+    {
+      "case": "Controlled sharing and independent issuance",
+      "expect": "Canonical storage word, same key/control: concurrent pending joins and sequential completed hits issue one provider read; ordered fresh result objects and independently bound provenance/IDs per request. Different amount/program metadata must not change raw key or reuse logical handles."
+    },
+    {
+      "case": "Negative identity matrix",
+      "expect": "Request kind, address, slot, source number/hash/generation, lane, signal, exact deadline and runtime/provider separately prevent in-flight and completed reuse. Hex case variants of canonical address/slot may share."
+    },
+    {
+      "case": "Legacy test correction",
+      "anchor": "test/strict-central-adapter-runtime.ts:1716-1736",
+      "expect": "Change storage-unshared expectation only for explicit-controlled requests with canonical32-byte response. For two identical controlled mixed groups expect one code and one read per distinct storage slot, one physical owner group; assert logical result order/count unchanged. Retain separate none/signal-only/deadline-only/nonfinite cases with direct storage and original per-group permits. The old0x00 mock is not a valid retained word; do not broaden acceptance merely to make this test pass."
+    },
+    {
+      "case": "Prefix-context exclusion",
+      "expect": "Warm a base-source storage cache, then issue identical slots through withExactPrefix; simulator returns different mutated bytes per prefix. Every prefix read must call simulatePrefix, no source provider/cache reuse, and no pollution of a later base-source hit. Missing simulator/source mismatch stays fail-closed."
+    },
+    {
+      "case": "Failures and malformed bytes",
+      "expect": "Shared physical bounded retry, no rejected promise retained, required failure blocks decode, optional failure remains optional per consumer. Short/odd/invalid/oversized storage never retained; all-zero canonical storage retained but every consumer's semantic guard still executes."
+    },
+    {
+      "case": "Cancellation and drain",
+      "expect": "Pending and completed abort/deadline/generation failures fence every waiter and retire cache. Queued cancellation affects only that control domain. Sync/async permit failure settles every reservation and drains concurrent eth_call work. Mixed owner/joiner cannot deadlock or hold a permit while waiting on another owner."
+    },
+    {
+      "case": "Combined bounds",
+      "expect": "Mixed code+storage entries share one256 cap; LRU eviction, pending overflow and no late repopulation. Existing code shape/retention and producer/discovery bypass cases remain intact."
+    },
+    {
+      "case": "Production-shaped causal gate",
+      "expect": "Under later implementation authority, compare ordinary runtime executions using fixed-source loopback/mock reads through dependent programs and per-amount logical consumers. Require identical outputs/provenance semantics and all source fences with strictly fewer duplicate getStorage calls only when controls match; different controls retain calls. Full existing strictcentral and prefix/client regressions. Not executed in this design review."
+    }
+  ],
+  "benefitAndRisk": {
+    "plausibleBenefit": "After the first source load, repeated amount trials can avoid identical raw slot fetches and corresponding direct-group queue/wait where no other physical reads remain. Dependent round order and all eth_call work remain; not all four round waits necessarily disappear.",
+    "measuredBenefit": "Unknown. No storage-attributed timing or actual physical reduction is established by the old positive result alone.",
+    "tradeoffs": [
+      "Shared256-entry pressure may evict code earlier; do not increase cap to hide this.",
+      "A cached source value must never stand in for post-prefix state.",
+      "Success sharing deliberately reduces repeated transport attempts, not logical checks; failed/malformed outcomes cannot become durable cache entries.",
+      "Same signal/deadline is essential; do not loosen identity to manufacture reuse."
+    ],
+    "futureWorkload": "Saved xWin rank1 is a local-repeat control, not Rust-prefix workload. Its parent-state-with-N-environment source is synthetic and root is zero; any later experiment must preserve that environment rather than remap to canonical external RPC.",
+    "acceptance": "Proceed only to a separately authorized narrow implementation and offline proof. Any later latency claim needs a frozen same-input comparison and physical-call attribution; no live/systemic win follows from this review."
+  },
+  "ranGate": [
+    "Read current plan, central runtime cache/dispatch/fences, existing code-share contract tests, storage request validation and xWin request builders.",
+    "Read-only JSON assertions on saved positive result: complete,12distinctamounts,24exacthops,zeroRustprefixReads,successfulfinalsim,quoteprofit=simprofit.",
+    "SHA256 hashed the listed plan, source/test and evidence files. No production imports, unit tests, runtime execution or network performed."
+  ],
+  "noImplementationApprovalImplied": true
+}

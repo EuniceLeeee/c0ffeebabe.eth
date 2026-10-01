@@ -1,0 +1,64 @@
+// Mechanical snapshot/manifest writer. No RPC, processes or credentials.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repo = path.resolve(here, '../..');
+const sha = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const basis = path.join(repo, 'logs/live-solver-skip-settle-250.7MsLu8/runtime');
+const candidate = path.join(here, 'prefix-pair-runtime');
+const binary = path.join(here, 'prefix-pair-binary');
+const specFile = path.join(here, 'prefix-pair-timing.json');
+for (const [file, expected] of Object.entries({
+  'listener/revm-sim/target/release/revm-sim': '1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1',
+  'listener/revm-sim/src/main.rs': 'dfd2cd47fa3b3b9c851020e1f8d6cf4ad69f1bdf6f428931c23c3e1f6054229b',
+  'listener/revm-sim/src/diagnostic.rs': '5a7c79720d5b0410bf23906860e73082e5979d2b815b08a20470471fd925e286',
+  'listener/src/searcher/revm-sim-client.ts': 'f7c60295c9d0dd3f880811eedf6589e3cc9f3e62744bd35bf2d8eccca8be6cfd',
+  'listener/src/searcher/revm-strict-source-owner.ts': '09a07fe5a9ecb89a25a7d1b80569dc121fe3d9ab45dd61a46ac3f774af427ab1',
+})) assert.equal(sha(path.join(repo, file)), expected, 'reviewed implementation drift: ' + file);
+for (const p of [candidate, binary, specFile]) assert(!fs.existsSync(p), 'do not overwrite a frozen experiment');
+fs.mkdirSync(candidate, { mode: 0o700 });
+fs.mkdirSync(path.join(candidate, 'listener'));
+fs.cpSync(path.join(basis, 'listener/src'), path.join(candidate, 'listener/src'), { recursive: true });
+fs.copyFileSync(path.join(basis, 'listener/package.json'), path.join(candidate, 'listener/package.json'));
+fs.cpSync(path.join(basis, 'listener/searcher'), path.join(candidate, 'listener/searcher'), { recursive: true });
+for (const file of ['tsconfig.json', 'tsconfig.live.json']) fs.copyFileSync(path.join(basis, 'listener', file), path.join(candidate, 'listener', file));
+fs.symlinkSync(fs.realpathSync(path.join(basis, 'listener/node_modules')), path.join(candidate, 'listener/node_modules'));
+fs.mkdirSync(path.join(candidate, 'out/BotVM.sol'), { recursive: true });
+fs.copyFileSync(path.join(basis, 'out/BotVM.sol/BotVM.json'), path.join(candidate, 'out/BotVM.sol/BotVM.json'));
+const deltas = {};
+for (const file of ['searcher/revm-sim-client.ts', 'searcher/revm-strict-source-owner.ts', 'searcher/test/revm-sim-client.ts']) {
+  const source = path.join(repo, 'listener/src', file);
+  const target = path.join(candidate, 'listener/src', file);
+  fs.chmodSync(target, 0o600); fs.copyFileSync(source, target); deltas[file] = sha(target);
+}
+fs.mkdirSync(binary, { mode: 0o700 });
+for (const file of ['main.rs', 'diagnostic.rs']) fs.copyFileSync(path.join(repo, 'listener/revm-sim/src', file), path.join(binary, file));
+fs.copyFileSync(path.join(repo, 'listener/revm-sim/target/release/revm-sim'), path.join(binary, 'revm-sim'));
+fs.chmodSync(path.join(binary, 'revm-sim'), 0o500);
+const spec = JSON.parse(fs.readFileSync(path.join(here, 'cold-prefix-timing.json'), 'utf8'));
+spec.claim = 'Bounded selected repeated-route P-only queued-prefix-pair diagnostic, not complete Solver/live acceptance';
+spec.amountPropagation.A = spec.amountPropagation.B;
+spec.binarySha256.current = sha(path.join(binary, 'revm-sim'));
+spec.runtimeDeltaSha256B = deltas;
+spec.experiments = { 'prefix-pair': { phase: 'p-only', ranks: [8], order: ['A', 'B', 'B', 'A'],
+  runtimePolicies: { A: 'B', B: 'B' }, binaries: { A: 'old', B: 'current' } } };
+spec.limitations = spec.limitations.filter(s => !s.startsWith('Both binaries contain'));
+spec.limitations.push('Both binaries retain phase instrumentation; only B uses exactly-two queued streaming prefix siblings and a combined post(A)/pre(B) HTTP batch. All per-request source checks and independent EVM execution remain.');
+spec.predeclaredAssessment = {
+  attempts: 4, workDeadlineMs: 30000, order: 'ABBA', automaticReruns: 0, warmup: 0,
+  primary: 'Complete first repeated-prefix quote hop (hop index1) wall time, including full sibling queue/service; never compare shifted individual daemon service medians.',
+  correctness: 'Every common completed quote input/output is bit-exact. All requested read validations retained. No new fatal, wrong attestation, stale settlement or physical leak.',
+  benefit: 'Retain only if both B first-prefix-hop durations are below both A durations and B completed-hop counts do not regress; quote-hop missing/censored or no physical pair means inconclusive, not a win.',
+  widerClaim: 'Even a primary win supports this mechanism only. Full Solver/live speed remains unproven without representative same-input and paired live evidence.',
+  cuPolicy: 'Read-only single process.30s per invocation;160s launcher ceiling. No retries beyond unchanged binary-internal bounded transport policy. Provider CU is not returned by RPC; retain actual attempts and never report an invented CU count.',
+  onFailure: 'Preserve every outcome; withdraw pair delta if no supported benefit. Do not widen deadlines or rerun until favorable.'
+};
+fs.writeFileSync(specFile, JSON.stringify(spec, null, 2) + '\n', { flag: 'wx', mode: 0o400 });
+const seal = folder => { for (const e of fs.readdirSync(folder, { withFileTypes: true })) {
+  const p = path.join(folder, e.name); if (e.isDirectory()) seal(p); else if (e.isFile()) fs.chmodSync(p, e.name === 'revm-sim' ? 0o500 : 0o400);
+} fs.chmodSync(folder, 0o500); };
+seal(candidate); seal(binary);
+console.log(JSON.stringify({ candidate, binary, specFile, specSha256: sha(specFile), binarySha256: spec.binarySha256.current, deltas }));

@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "reviewer": "Codex, non-author",
+  "reviewPass": 2,
+  "verdict": "approved_for_declared_bounded_capability_probe_only",
+  "scope": "Offline prerequisite review only. No RPC, --run, credential-file access, production edits or process-control operations. Only this review record was authored.",
+  "reviewedHashes": {
+    "gzip-capability-probe.mts": "038d785927eeb6a1d476fe3489ad0defa8ca3cc200271a132f94e4b0fc48843f",
+    "gzip-capability-brief.json": "d7d161129e64f91d7e2b979fd70a7232425037240a884bb96876609b92cdedd6",
+    "launch-gzip-capability.mjs": "2b36f4cdd498e3c3f0650a8868c2316f0ed2887c3a8a9b88e0b906ae75ebe479"
+  },
+  "pass1ExecutedChecks": [
+    {
+      "command": "env -u MAINNET_RPC_URL TSX_DISABLE_CACHE=1 listener/node_modules/.bin/tsx logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-probe.mts --check",
+      "cwd": "<repo>",
+      "initialResult": "exit 1: ASCII hex-text digest did not match the raw-calldata-byte telemetry digest",
+      "afterAuthorCorrection": "exit 0",
+      "calldataSha256": "a7e62ebee7ebc7db897da50da196f4ffbc05c487c4f403fd2576eda15450a227",
+      "requestBytes": 620,
+      "sourceBlock": 26029536,
+      "order": [
+        "A",
+        "B",
+        "B",
+        "A"
+      ],
+      "callsCap": 8,
+      "rpcCalls": 0
+    },
+    {
+      "check": "Independent local frozen encoder and Ready digest calculation",
+      "result": "passed",
+      "readySha256": "0bcbefca90fa703c30503f5d7f1994ca7a1932604cad124192099fb4ed882089",
+      "calldataBytes": 196,
+      "rawBytesSha256": "a7e62ebee7ebc7db897da50da196f4ffbc05c487c4f403fd2576eda15450a227",
+      "hexTextSha256": "d1aec233f7372544f71b18eb4e79bee6c3adfd820ecb4b5ac66c91efc5d7267c",
+      "rpcCalls": 0
+    },
+    {
+      "check": "Executed the exact measured-loop source in memory with mock rpc/canonical functions and a byte-hash mismatch on the first B response",
+      "result": "Confirmed missing immediate integrity abort: four payload attempts and both canonical checks still ran; capabilityPass=false; no exception",
+      "mockLogicalReads": 8,
+      "actualRpcCalls": 0,
+      "reviewHarnessNote": "Initial isolated test omitted its payload argument and failed with ReferenceError; corrected test passed and demonstrated the reported behavior. This was not a production finding."
+    }
+  ],
+  "resolvedDuringReview": [
+    "Author corrected calldata hashing to sha(Buffer.from(data.slice(2), 'hex')); the corrected --check passed. No reviewer edit to probe or brief.",
+    "Pass2: probe reads only injected MAINNET_RPC_URL in --run. Credential-file extraction is isolated to the explicitly authorized trusted launcher, which was reviewed but never executed by the reviewer.",
+    "Pass2: byte-hash equality is asserted immediately after retaining each completed attempt; a mismatch throws before the next request."
+  ],
+  "findings": [
+    {
+      "id": "gzip-review-endpoint-injection",
+      "priority": "P2",
+      "blocking": false,
+      "status": "resolved_in_pass2",
+      "file": "gzip-capability-probe.mts",
+      "line": 40,
+      "finding": "The run branch reads a hardcoded .env file and ignores an externally injected MAINNET_RPC_URL. This violates the declared endpoint-injection boundary and the carried no-.env scope. Offline --check does not enter this branch, so no credential file was read by the reviewer.",
+      "minimalFix": "Inside --run only, obtain const endpoint = process.env.MAINNET_RPC_URL ?? ''; assert presence with a fixed nonsecret message; retain the pinned endpoint hash and HTTPS assertions. Remove the .env-reading loop."
+    },
+    {
+      "id": "gzip-review-parity-abort",
+      "priority": "P2",
+      "blocking": false,
+      "status": "resolved_in_pass2",
+      "file": "gzip-capability-probe.mts",
+      "line": 132,
+      "finding": "Byte parity is only evaluated after all four payload reads and the postcheck. A mismatching reply is not an integrity exception: further reads proceed and failure stays null. This does not meet the brief's abort-on-integrity-mismatch requirement.",
+      "minimalFix": "After recording each returned row, compare its decoded rawSha256 with the first A row and throw/assert on mismatch before any next request. Preserve the mismatching row and the existing finally destroy/drain/write-once report. Identical decoded JSON already entails parsed result parity. Add an offline check that a first-B mismatch stops subsequent reads."
+    }
+  ],
+  "otherwiseConfirmed": [
+    "Fixed single payload/id and EIP-1898 source hash with requireCanonical=true; A omits Accept-Encoding and B requests gzip; same source and request bytes in all four payload trials.",
+    "Normal successful path issues two precheck methods, four payload methods and two postcheck methods: eight logical reads in six sequential HTTP envelopes. No retry, warmup or fallback loop; Agent maxSockets=1.",
+    "Declaration uses exclusive creation before the first RPC; both declaration and result paths are write-once and prior evidence prevents rerun.",
+    "Canonical checks validate chain 1, historical block hash and state root before/after. Responses require status 200, expected batch cardinality and unique matching IDs with result present and no RPC error.",
+    "Only identity/gzip decoding accepted; compressed and decoded payloads are bounded to 64 MiB. Request timers are 30 seconds, timeout destroys incomplete transport, agent is destroyed on every terminal path, and tracked sockets have a five-second closure check. Incomplete drain sets nonzero exit and allSocketsClosed=false.",
+    "Reported transport errors are generic; endpoint is not included in declared/request/result telemetry. Endpoint hash, payload/runner/brief hashes and response hashes are recorded.",
+    "Provider refusal to gzip is negative capability evidence, not permission to retry or claim a timing result. Final acceptance must require successful canonical checks, byte parity, gzip on both B replies and successful physical drain; capabilityPass alone cannot waive allSocketsClosed=false or nonzero exit."
+  ],
+  "pass2ExecutedChecks": {
+    "probeCheck": {
+      "command": "env -u MAINNET_RPC_URL TSX_DISABLE_CACHE=1 listener/node_modules/.bin/tsx logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-probe.mts --check",
+      "exitCode": 0,
+      "requestBytes": 620,
+      "calldataSha256": "a7e62ebee7ebc7db897da50da196f4ffbc05c487c4f403fd2576eda15450a227",
+      "rpcCalls": 0
+    },
+    "exactLoopMockChecks": {
+      "method": "Transpiled and executed the exact current try/catch/finally block in memory with mock RPC/canonical/agent/file/console/process objects. No real socket, process control, evidence output or credential read.",
+      "firstBMismatch": {
+        "logicalReads": 4,
+        "payloadAttempts": 2,
+        "canonicalChecks": 1,
+        "remainingReadsIssued": false,
+        "mismatchRowRetained": true,
+        "failure": "integrity_assertion",
+        "exitCode": 1,
+        "capabilityPass": false,
+        "agentDestroyed": true,
+        "terminalWriteOnceReports": 1
+      },
+      "equalBytesGzip": {
+        "logicalReads": 8,
+        "payloadAttempts": 4,
+        "canonicalChecks": 2,
+        "exitCode": 0,
+        "capabilityPass": true,
+        "agentDestroyed": true,
+        "terminalWriteOnceReports": 1
+      },
+      "equalBytesNoGzip": {
+        "logicalReads": 8,
+        "payloadAttempts": 4,
+        "canonicalChecks": 2,
+        "exitCode": 0,
+        "capabilityPass": false,
+        "agentDestroyed": true,
+        "terminalWriteOnceReports": 1
+      }
+    },
+    "launcherSyntax": {
+      "command": "node --check logs/solver-prefix-policy-20260930.MKk8Vk/launch-gzip-capability.mjs",
+      "exitCode": 0,
+      "launcherExecuted": false
+    },
+    "launcherReview": "Launcher selects only MAINNET_RPC_URL from the explicitly authorized credential file, does not source its contents or print the endpoint, verifies its hash, passes it via a restricted child environment rather than argv, launches only this probe with --run, and has no retry/relaunch path. Its 200-second outer timeout is a safety ceiling, not additional per-request budget. Missing terminal evidence after interruption cannot pass capability validation or authorize an automatic retry."
+  },
+  "approvalBoundary": "One declared ABBA capability/byte-parity probe only: eight logical reads in at most six normal-path HTTP envelopes, 30-second request timers, no warmup/retry/fallback. Main operates the launcher; reviewer has not run it. Require byte parity, gzip on both B responses, successful canonical pre/post checks, successful drain and no failure. No timing-win, Solver, repeated-prefix, live or production-change acceptance.",
+  "limits": "No real HTTP or socket lifecycle test was executed. The mock verifies entry into cleanup/report handling, not physical socket closure. Provider capability and real drain remain measured-run prerequisites.",
+  "independentEvidenceReview": {
+    "verdict": "capability_and_byte_parity_pass_for_declared_provider_source_payload_only",
+    "evidenceOrder": [
+      "gzip-capability-1-declaration.json",
+      "gzip-capability-1.json",
+      "independent local assertions and calculations",
+      "gzip-transport-brief.json"
+    ],
+    "mainManualVerdictRead": false,
+    "hashes": {
+      "declaration": "6142c81b706997b838de5f62c1dd55436b8bff1301d6652a149aa8d5be4df6d0",
+      "results": "9bb3d1995ded2708ce673a606236f42206bf76004c59b92a96b01e2fb68ed9ef"
+    },
+    "ranGate": "Read-only inline Node assertions: result-to-declaration hash, reviewed runner/brief/calldata identities, fixed source/hash/root, ABBA order, eight calls/no failure, decoded JSON and per-result hash parity, pre/post header-result hash parity and chain-ID-1 digest, gzip on both B replies, request budgets and terminal socket-closure flag.",
+    "calls": 8,
+    "httpEnvelopes": 6,
+    "failure": null,
+    "allSocketsClosed": true,
+    "commonDecodedBytes": 152296,
+    "commonDecodedJsonSha256": "332c0abc0837242690c6ef5fca1c2d09f145bc52018f94c595e10a259ed858d6",
+    "commonResultSha256": "ee594f394a2f6ff2d1add67d119fe8ac86ba575d230ae68fd627f994b99fde53",
+    "responseBodyBytesABBA": [
+      152296,
+      15696,
+      15664,
+      152296
+    ],
+    "contentEncodingABBA": [
+      "identity",
+      "gzip",
+      "gzip",
+      "identity"
+    ],
+    "B_responseBodyReductionPercent": [
+      89.69375426800441,
+      89.71476598203498
+    ],
+    "bodyReceiptMsFromFirstByteABBA": [
+      428.048,
+      8.55704199999991,
+      6.7710000000001855,
+      125.69108399999959
+    ],
+    "allPayloadRequestsReusedSocket": true,
+    "sourceEvidence": "Reviewed producer checked chain 1 and the declared block hash/state root before and after. Pre/post decoded-body and header-result hashes match; the chain-ID result digest independently matches JSON-encoded 0x1. This reviewer did not freshly query canonical state or recover omitted raw header values.",
+    "interpretation": "Provider honored gzip on both B replies and transmitted about 89.7 percent fewer response-body bytes for identical decoded JSON/result. Counters exclude HTTP/TLS framing. The four observations support this transport capability mechanism only: differing header/body times, two observations per arm, and the probe's own synchronous decoder are not production streaming, Solver or live latency validation."
+  },
+  "productionDesignReview": {
+    "brief": "gzip-transport-brief.json",
+    "briefSha256": "44d162a3a1ed924b8ca870b227fc5b40c0b01cfd1b2f7ab55ee54fa8e5e62d62",
+    "designBlockers": [],
+    "implementationApproved": false,
+    "allowedProductionSurface": [
+      "listener/src/shared/state/state-backend.ts",
+      "listener/src/searcher/test/state-backend-http-compression.ts"
+    ],
+    "pendingReviewRequirements": [
+      "Actual streaming decoder and StringDecoder preserve single/batch JSON and fragmented Unicode; decoded-byte telemetry remains distinct from encoded response-body bytes and string-unit limits.",
+      "Signal and failure cleanup cover HTTP and decoder lifetimes, settle/emit timing once, and never destroy a socket already reused after response.complete. The late-abort test must exercise real local socket reuse rather than just a mocked completion flag.",
+      "Valid compressed non-2xx and RPC error bodies retain their original status/error semantics; malformed or unsupported encodings fail without exposing raw body/endpoint or adding retry/fallback behavior.",
+      "Identity response remains valid when gzip negotiation is ignored; malformed/truncated gzip, overflow/decoder failure and abort cannot become successful or partial JSON results.",
+      "Execute new local transport tests plus existing deadline and pinned-backend regressions. Freeze/review the two-file delta before any later bounded performance diagnostic; no Family, Solver, scheduler, Rust, dependency or policy changes."
+    ],
+    "acceptanceBoundary": "Brief is suitable for implementation review, not implementation approval. Capability evidence does not establish production socket safety or a speedup. A later separately predeclared same-input comparison must retain original amounts, outputs, canonical checks, calls, deadlines, cancellations and drains."
+  },
+  "cuSpent": 0
+}

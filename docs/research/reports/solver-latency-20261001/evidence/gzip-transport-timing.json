@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "claim": "Selected no-repeat real production Solver transport gzip comparison; exact quotes/candidates/calls preserved; not a live or final sim/EV acceptance",
+  "source": {
+    "number": 26029536,
+    "hash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+    "generation": 1
+  },
+  "stateRoot": "0xa8c4eb4a5b7d2a90ee1ffa7ca44d1f90394210a46c77e4bf3fb76f68cfb64afe",
+  "executionMode": "source-block",
+  "budgetMs": 30000,
+  "search": {
+    "amountGrid": "multiples",
+    "gridHalfWidth": 2,
+    "gssMaxTries": 8,
+    "quoteConcurrency": 16,
+    "quoteToleranceRawUnits": "0"
+  },
+  "transport": {
+    "maxBatchSize": 64,
+    "maxConcurrentBatches": 8,
+    "capacity": 12,
+    "producerReserved": 4,
+    "transportTimeoutMs": 30000,
+    "jsRetries": 0,
+    "singleCallFallback": false
+  },
+  "inputs": {
+    "ready": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1-ready.json",
+      "sha256": "0bcbefca90fa703c30503f5d7f1994ca7a1932604cad124192099fb4ed882089"
+    },
+    "prices": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1/prices/prices.json",
+      "sha256": "918dbc1484ffec1431c33a663fdd2fea4c1fc109d7e76842bc17d6e1c7e0f031"
+    },
+    "input": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1/prices/input.json",
+      "sha256": "a681976102723801b8e719dc06eb4e5c2e4a7fdb531472d8c1c0d2ca46c7e42a"
+    },
+    "enumeration": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1/offline-1/enumeration.json",
+      "sha256": "712d77701b0046605b3d2dbb91fdf1878db46df8b1111731d9246f39beb7229f"
+    }
+  },
+  "runtimeBasis": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+  "runtimeBasisSourceSha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01",
+  "amountPropagation": {
+    "baselineHead": "baca79b03384a93fb656482c09a5e4de026f5fbc",
+    "A": "bb19c5245f011b09a0695bc4f5dc4695333ed7533436bb2854338e244ccf371a",
+    "B": "bb19c5245f011b09a0695bc4f5dc4695333ed7533436bb2854338e244ccf371a"
+  },
+  "artifactSha256": "0fc76fc76afc1838ce7d151078ef5bf40e6f0ba2e14fbaab97e3004b9bf0cc49",
+  "binarySha256": {
+    "old": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1",
+    "current": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1"
+  },
+  "cases": [
+    {
+      "rank": 477,
+      "P": "5195442",
+      "hops": 2,
+      "repeated": false,
+      "cycleFingerprint": "0x58b576c783fd70d92f287fd17e2c4e47fca7e83d87dab8a842dd301184d31fd7"
+    },
+    {
+      "rank": 4,
+      "P": "2000000000000000",
+      "hops": 6,
+      "repeated": true,
+      "cycleFingerprint": "0x8c6b3d3ad8de8cdbaa04a6eea2b4e7f969b149b461380074365e10c4db7d05ba"
+    },
+    {
+      "rank": 8,
+      "P": "5195442",
+      "hops": 6,
+      "repeated": true,
+      "cycleFingerprint": "0x16a830b1dbe01d8715474fec1a43be64772e28e6805997e203506dc854d1d6c8"
+    }
+  ],
+  "experiments": {
+    "gzip-transport": {
+      "phase": "solver",
+      "ranks": [
+        477
+      ],
+      "order": [
+        "A",
+        "B",
+        "B",
+        "A",
+        "A",
+        "B",
+        "B",
+        "A",
+        "A",
+        "B",
+        "B",
+        "A",
+        "A",
+        "B",
+        "B",
+        "A",
+        "A",
+        "B",
+        "B",
+        "A"
+      ],
+      "runtimePolicies": {
+        "A": "B",
+        "B": "B"
+      },
+      "binaries": {
+        "A": "current",
+        "B": "current"
+      },
+      "maxBatchSize": {
+        "A": 64,
+        "B": 64
+      }
+    }
+  },
+  "limitations": [
+    "The saved512-candidate cohort allowed repeated tokens; rank477 is outside current live100. Postselection diagnostic only.",
+    "Frozen runtime A/B differ only generic HTTP state-backend.ts; new test file tested outside runtime. Separate registries/agent pools; fresh state/memo per invocation. ABBA does not remove provider/OS variability.",
+    "Single route, no outer16-route contention or concurrent producer. This does not measure representative live composition.",
+    "Every completed run must retain12amounts,8GSS,24hopquotes and all exact outputs. No finalsim/EV run.",
+    "Original repeated-prefix full-Solver experiment remains unrun because P times out. This tests a different completed source-state sample, not repeated state.",
+    "Source canonical pre/post checks and physical drains remain. No warmups, retries, forceful sample selection in production or deadline widening."
+  ],
+  "runtimeDeltaSha256B": {
+    "shared/state/state-backend.ts": "06183228659c7c3863a948c347c5a965879e9177ae2c37fbbdba5961f13d3bfa"
+  },
+  "predeclaredAssessment": {
+    "attempts": 20,
+    "workDeadlineMs": 30000,
+    "order": "ABBAx5 fixed before RPC",
+    "warmups": 0,
+    "automaticReruns": 0,
+    "reason": "Provider gzip capability and same152296 decoded byte parity confirmed, wire shrinks~90%. Test actual complete Solver, not only transfer size.",
+    "primary": "All20 complete with exact ordered12 amounts,24 hop results,8GSS,ordered candidates and call multiset. B median <=90% A, B wins>=8/10 adjacent pairs, nearest-rank Bp95<=110% Ap95. Otherwise not proven Solver speedup; no timing claim or blind live launch.",
+    "secondary": "All attempts retained; source canonical pre/post, no prefix/Rust, unchanged deadlines/caps/config, same batch64/concurrency8. Report HTTP encoded/decoded bytes and CPU/decode delay separately.",
+    "scope": "Only generic TS HTTP gzip negotiation/decompression differs. Same frozen baseline plus existing conditional prefix policy and same Rust binary. No finalsim/EV or production strategy changes.",
+    "resources": "One process20 sequential invocations<=600s work,650s wrapper abort+physical drain;1492logical issuance cap, prior500accounted for these slices, combined<=1992. Billed/account-wide CU unavailable.",
+    "decision": "Selected historical route only, outside current live100. Even a pass is not systemic or repeated-prefix win; needs representative bounded live."
+  },
+  "resourceCaps": {
+    "maxLogicalIssuances": 1492,
+    "additionalTaskDailyCalls": 2000,
+    "priorSliceReadReservations": 500,
+    "invocations": 20,
+    "maximumWorkMs": 600000
+  }
+}

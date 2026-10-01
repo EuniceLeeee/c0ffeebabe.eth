@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "searcher_behavior_change": "no; validation of current behavior patch",
+  "kind": "no-external-RPC production-Solver recorded-response contract",
+  "purpose": "Prove actual per-amount storage sharing and full Solver output parity before scheduling any remote experiment. No latency or natural-discovery acceptance claim.",
+  "inputSpec": "../six-family-ev-20260930.Pc1Pv8/xwin-continuation-env.json",
+  "inputSpecSha256": "eb22cee41a8629a92f0bd23eccbd47a1f8533cb7adc9fb2e21320ba7ca20bc0b",
+  "responseFile": "../six-family-ev-20260930.Pc1Pv8/xwin-environment/environment-reads.jsonl",
+  "responseFileSha256": "07a0a3eca1e63e200ce8cc33d11c37943cf29ceb61b1624c04eaca63d3a6e255",
+  "source": {
+    "number": 26029585,
+    "hash": "0x9659cc92d3abe53823e71a15e62873850687d5c50b195072bc0940a17ebc706d",
+    "generation": 1
+  },
+  "environment": "Recorded derived emptyN: parent26029584state plusNenvironment. Preserve recorded source exactly; never remap to canonical external RPC. Replaying bytes is not a newly authenticated fork or final sim.",
+  "runtime": "Freeze two identical production runtime copies differing only in strict-central-adapter-runtime.ts (baseline5abf08753fc27b0249fbe6db5dff9d56b2cc8efe613e7994d33ff0bc1869ba77 versus candidate). Current conditional prefix logic identical. Main verifies tree and input hashes before/after.",
+  "entry": "Rehydrate full immutable Ready with standard wiring; normal strictSession for saved naturally selected rank1; production amount-reference, Planner and AnvilSolver; no copied search logic. This is explicitly post-selection, not new natural enumeration.",
+  "transport": "Read-only loopback endpoint serves only exact recorded requests with matching source pin and unchanged raw outputs. Fail and record any missing/ambiguous request. Canonicalize only JSON object order and hexadecimal case, never amount/address/source semantics. No synthesized output, protocol logic, archive fallback, arbitrary network or credentials. Use actual PinnedRethQuoteBackend64x8 and its existing memoization; fresh backend per invocation; scheduler12total4producer-reserved matching current main. Direct getCode/getStorage use same loopback transport. Simulator entry is poisoned: saved xWin route uses local trial states.",
+  "runs": "ABBA four fresh invocations,30s outer per attempt, no warmups, no latency injection. Same search settings from saved input: P=.002ETH,12amounts including8GSS, worker policy unchanged, max6hops and repeated-pool state retained. No final sim/EV/broadcast.",
+  "assertions": [
+    "all invocations complete; existing production source/generation/deadline checks execute",
+    "same ordered per-hop amounts/outputs/prefix lengths, same selected candidate amounts/profits/resolved-plan hashes",
+    "no shared issued handles; full same-instance prefix still retained",
+    "strictly fewer source getStorage provider calls in B; same distinct storage keys and bytes; count by preparation versus Solver",
+    "actual per-solve control identity not replaced; no widening of lifetime",
+    "no missing recording, simulator/network escape, altered config, source/input drift or pending work after cleanup"
+  ],
+  "status": "PLAN ONLY; generator to implement after two-file patch is returned. Main independently reviews before execution. ExternalCU0."
+}

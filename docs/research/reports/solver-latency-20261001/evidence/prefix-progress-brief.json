@@ -1,0 +1,49 @@
+{
+  "owner": "main",
+  "turnClass": "observability-only; one bounded diagnosis before selecting the next behavior change",
+  "searcherBehaviorChange": false,
+  "decision": "Reject quote-cohort two-envelope draft. Preserve existing per-child temporal source authority. No adjacent-chain framework from that draft.",
+  "why": "All rank8 P-only diagnostics cancel in the third hop; terminal-only phase reports do not identify its active work. Stop optimizing previously completed portions until the censored critical path is measured.",
+  "scope": "Implement opt-in, bounded incremental strict phase/RPC progress, including an attempt end event, so a killed daemon leaves a useful last known phase. No performance claim and no RPC experiment in the generation slice.",
+  "basePatchSha256": "071044e25429a6ac9142b6751a068dee08fae15f70f9061456b978436b52b641",
+  "allowedFiles": [
+    "listener/revm-sim/src/diagnostic.rs",
+    "listener/revm-sim/src/main.rs"
+  ],
+  "mainRsAllowedAnchors": [
+    "existing diagnostic begin/identity call in handle_value_with_diagnostics",
+    "existing RpcClient::send_json diagnostic::rpc_attempt call",
+    "test module for offline instrumentation regression only"
+  ],
+  "implementationContract": [
+    "Reuse SEARCHER_STATE_LATENCY_DIAGNOSTICS. Disabled means no added records and no allocation/work proportional to RPC payload. Do not add another switch or scheduler.",
+    "Keep terminal strict-phase-timing and pair exclusive counters/schema accurate and unchanged. Progress never changes execution, retry, source/canonical validation, batching, cache, controls or fatal behavior.",
+    "Attach numeric request/source identities before I/O; paired first/bridge/second identities must be unambiguous and the bridge counts physical attempts once. Never emit epoch, endpoint, caller data, addresses, calldata, raw responses or errors. RPC method histogram may use only existing allowlisted labels.",
+    "Emit bounded phase transitions and physical RPC attempt begin/end records to stderr. A RAII attempt guard may cover each send_json loop attempt through send/body/decode, with begin after existing delay and end before the next delay. An end event means the attempt scope ended, NOT necessarily a successful response.",
+    "Per scalar request or pair interval use an explicit fixed record cap (e.g.128) and exactly one truncation marker. A truncated stream must never be interpreted as complete; no unbounded payload collections. The complete terminal record remains separate.",
+    "Use monotonic elapsed timings, sequence numbers and independent request identities so incomplete attempts/phase intervals remain unknown/censored instead of recorded as zero. A broken stderr sink must not change results.",
+    "Minimal code only. Keep new observation state in diagnostic.rs. Do not refactor existing simulation logic. If a wider change is needed, stop and explain it."
+  ],
+  "checks": [
+    "disabled/no-op and nested exclusive-counter parity",
+    "scalar and pair identity including bridge",
+    "fixed cap and truncation",
+    "sanitized bounded method metadata",
+    "begin/end semantics on success/error/continue",
+    "all Rust tests, release build and git diff --check"
+  ],
+  "forbidden": [
+    "network except existing local loopback unit fixtures",
+    "credentials",
+    "live",
+    "benchmark rerun",
+    "Family or TS changes",
+    "deadline/search/P/cap/concurrency changes",
+    "source-check weakening",
+    "commits/push/merge",
+    "markdown edits"
+  ],
+  "review": "Generator Mencius; main independently reviews and runs tests before any bounded diagnostic. Maximum three review passes.",
+  "nextExperimentLimit": "After offline review only: one selected rank8 P-only attempt, current30s work deadline, immutable TS and diagnostic Rust, no comparison or retries/warmups, strict owned-process outer cap. Separate predeclaration required.",
+  "cuSpentThisSlice": 0
+}

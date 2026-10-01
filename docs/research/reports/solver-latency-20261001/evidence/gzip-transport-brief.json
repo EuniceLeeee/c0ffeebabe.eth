@@ -1,0 +1,26 @@
+{
+  "searcher_behavior_change": "yes; generic JSON-RPC transport negotiates gzip and decodes losslessly; search results and policy unchanged",
+  "evidence": "gzip-capability-1.json same152296bytes decoded, wire15664-15696bytes;8read cap, source/byte parity.",
+  "allowedFiles": [
+    "listener/src/shared/state/state-backend.ts",
+    "listener/src/searcher/test/state-backend-http-compression.ts"
+  ],
+  "baselineStateBackendSha256": "ab2f48aa410d8a686301d7cf0a754844d28070153b7c2208fd23ffca0b79bcec",
+  "forbidden": "No Family, Solver, scheduler, Rust, package/dependency/config edits; no retries/fallback added; no signing,broadcast,deploy,push/merge.",
+  "design": [
+    "Advertise gzip only; accept identity if provider ignores negotiation; supported response bytes must produce same JSON.",
+    "Stream gzip through Node built-in createGunzip, using StringDecoder for UTF8 chunks. Cap resulting string units at Node MAX_STRING_LENGTH (existing JSON single-string representation), not smaller payload/coverage cap. Cancel decoder too.",
+    "After HTTP end a keep-alive socket may serve another request while decompression remains pending. Abort/failure destroys HTTP request only if response.complete is not true, never unrelated reuse.",
+    "Preserve HTTP status and RPC error body including compressed429/500. Reject malformed gzip/unknown encoding on successful HTTP with sanitized errors; preserve non2xx status without raw body leakage.",
+    "Keep wire responseBytes meaning. Add decodedResponseBytes/contentEncoding telemetry; header/body-end/settled remain distinct and opt-in.",
+    "Unchanged deadlines: signal stays active through decode and JSON parse; no post-abort result, no extra request."
+  ],
+  "tests": [
+    "Plain/gzip single and batch exact JSON incl unicode; fragmented gzip; high compression ratio valid JSON.",
+    "Invalid/truncated gzip and invalid JSON, no raw body or endpoint in parse errors; compressed429/500/RPC errors; unknown encodings.",
+    "Pre-abort sends no request; midstream abort closes only own socket; late abort while decode pending does not kill a reused socket serving another request; exactly-once timing/settlement.",
+    "Existing state-call deadline and pinned quote backend suites remain passing, diffcheck."
+  ],
+  "acceptance": "After tests and non-author review: new fixed-source ABBA Solver20attempt diagnostic with identical P/grid/8GSS/30s, batch64,12amounts24quotes. All outputs exact. Predeclared before RPC: Bmedian<=90%A, >=8/10paired wins, Bp95<=110%A. All20runs complete; failures retained. Failed criterion means no proven speedup or blind live launch. Bounded live only after evidence; no broad latency claim yet.",
+  "owner": "main Codex generator; Mencius non-author evaluator"
+}

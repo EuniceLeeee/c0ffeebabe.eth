@@ -1,0 +1,29 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { runOwned } from './launch-cold-source.mjs';
+
+const heldCode = `
+const { spawn } = require('node:child_process');
+process.on('SIGTERM', () => {});
+spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], {stdio: 'ignore'});
+setInterval(() => {}, 1000);
+`;
+const opts = {stdio: ['ignore', 'ignore', 'inherit'], env: {PATH: process.env.PATH}};
+test('owned watchdog hard-stops held leader and descendant, without external I/O', async () => {
+  const started = performance.now();
+  const result = await runOwned(['-e', heldCode], opts, 200, 500);
+  assert.equal(result.softStop, true);
+  assert.equal(result.forcedStop, true);
+  assert.equal(result.signal, 'SIGKILL');
+  assert(performance.now() - started < 3000);
+  await delay(50);
+  assert.throws(() => process.kill(-result.pid, 0), {code: 'ESRCH'});
+});
+test('normal exit neither signals unrelated processes nor reports a forced stop', async () => {
+  const result = await runOwned(['-e', 'process.exit(0)'], opts, 200, 500);
+  assert.equal(result.code, 0);
+  assert.equal(result.softStop, false);
+  assert.equal(result.forcedStop, false);
+  assert.equal(result.residualGroupStopped, false);
+});

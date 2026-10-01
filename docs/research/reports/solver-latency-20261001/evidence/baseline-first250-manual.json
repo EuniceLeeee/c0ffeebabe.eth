@@ -1,0 +1,257 @@
+{
+  "dir": "<repo>/logs/live-raw-ready-250.ajvb1j",
+  "snapshotBytes": 1217494107,
+  "lines": 1634867,
+  "startup": {
+    "block": 26089662,
+    "ms": 175145.934083
+  },
+  "window": {
+    "from": 26089681,
+    "to": 26089930,
+    "last": 26089930,
+    "heightsSeen": 250
+  },
+  "outcomes": {
+    "stale_state": 225,
+    "degraded": 25
+  },
+  "all": {
+    "n": 250,
+    "total": {
+      "n": 250,
+      "p50": 11945.64137499989,
+      "p95": 13850.848916999996,
+      "max": 18065.588584000245
+    },
+    "state": {
+      "n": 250,
+      "p50": 4873.228374999948,
+      "p95": 10156.791209000046,
+      "max": 18065.58737500012
+    },
+    "enumeration": {
+      "n": 250,
+      "p50": 302.76283399993554,
+      "p95": 387.443458000198,
+      "max": 484.25204199994914
+    },
+    "solver": {
+      "n": 250,
+      "p50": 2837.677583999932,
+      "p95": 6112.6226249998435,
+      "max": 7782.042834000022
+    },
+    "plans": {
+      "n": 250,
+      "p50": 23,
+      "p95": 49,
+      "max": 65
+    },
+    "amounts": {
+      "n": 250,
+      "p50": 208,
+      "p95": 412,
+      "max": 581
+    },
+    "hops": {
+      "n": 250,
+      "p50": 980,
+      "p95": 2024,
+      "max": 2792
+    },
+    "positive": 240,
+    "finalSim": {
+      "n": 250,
+      "p50": 0,
+      "p95": 1942.4395409999997,
+      "max": 4588.075416000094
+    }
+  },
+  "solverCompleted": {
+    "n": 200,
+    "total": {
+      "n": 200,
+      "p50": 11924.906667000148,
+      "p95": 13808.779540999793,
+      "max": 15876.16816700017
+    },
+    "state": {
+      "n": 200,
+      "p50": 4423.746916000266,
+      "p95": 6889.775333000347,
+      "max": 9084.509165999945
+    },
+    "enumeration": {
+      "n": 200,
+      "p50": 305.30333300004713,
+      "p95": 395.017833000049,
+      "max": 484.25204199994914
+    },
+    "solver": {
+      "n": 200,
+      "p50": 2837.677583999932,
+      "p95": 5863.43524999998,
+      "max": 7129.042874999985
+    },
+    "plans": {
+      "n": 200,
+      "p50": 23,
+      "p95": 49,
+      "max": 55
+    },
+    "amounts": {
+      "n": 200,
+      "p50": 210,
+      "p95": 412,
+      "max": 418
+    },
+    "hops": {
+      "n": 200,
+      "p50": 980,
+      "p95": 2024,
+      "max": 2048
+    },
+    "positive": 200,
+    "finalSim": {
+      "n": 200,
+      "p50": 0,
+      "p95": 2186.9154589999816,
+      "max": 4588.075416000094
+    }
+  },
+  "solverIncomplete": 50,
+  "solverRevm": {
+    "requests": 5197,
+    "statuses": {
+      "not-ok": 5155,
+      "rejected": 42
+    },
+    "queueMs": {
+      "n": 5197,
+      "p50": 66,
+      "p95": 504,
+      "max": 869
+    },
+    "serviceMs": {
+      "n": 5162,
+      "p50": 0,
+      "p95": 67,
+      "max": 866
+    }
+  },
+  "allSimulationEvents": 53,
+  "simulationExamples": [
+    {
+      "type": "simulation_result",
+      "opportunity_id": "0xad2800c3d59c15bdc9354c2cb9cea4fe52ccde0269ae12138f698615ce8ed53c",
+      "route_id": "0x532db093a3f8d35fb8dee34e9a1432767124890cc9e98123f29cf719bb9971e8",
+      "target_block": 26089922,
+      "opportunity_kind": "block-scan-arb",
+      "source_block": 26089921,
+      "cycle_id": "0x48d753bfc1874bbc4b45cf8d8704332e2aa2b80e|0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48|0xfd36fa88bb3fea8d1264fc89d70723b6a2b56958|0xdac17f958d2ee523a2206206994597c13d831ec7|0xd46ba6d942050d489dbd938a2c909a5d5039a161|0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "cycle_fingerprint": "0xaf5d42b19fc8ce06714c0ed26d815d44fdcc00b8f2e4b7e03963929eb04a8394",
+      "strategy_view_used": "blockscan",
+      "strategy_view_version": "0x998775d7e088ccf5f82b9652db013fa31cb35dbb6cde3de86ff839aee25156d2",
+      "blockscan_view_hash": "0x969c38a60ba612c7c9557e5c430f42211345d6cf1860029f23e568d5b4e31512",
+      "seed_venues": [
+        "univ3-swap",
+        "univ3-swap",
+        "univ3-swap",
+        "univ2-swap",
+        "univ3-swap",
+        "univ2-swap"
+      ],
+      "path_id": "0xA0b8->0xfD36@univ3-swap>0xfD36->0xdAC1@univ3-swap>0xdAC1->0xD46b@univ3-swap>0xD46b->0xC02a@univ2-swap>0xC02a->0x48D7@univ3-swap>0x48D7->0xA0b8@univ2-swap",
+      "template_id": "flash-swap-repay",
+      "ok": false,
+      "simulated_profit": "0",
+      "profit_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "gas_estimate": "0",
+      "calldata_hash": "0xf36117d79955f5d14f357dd937d049e1fc9ec3d4339c6b75047ec33d4763f888",
+      "flash_amount": "100529156",
+      "failure_reason": "final simulation transaction reverted",
+      "schema_version": 1,
+      "run_id": "b03cce10-5f63-4ccb-987b-83bf3b9d33e4",
+      "chain_id": 1,
+      "emitted_at_ms": 1790766817028
+    },
+    {
+      "type": "simulation_result",
+      "opportunity_id": "0x9e9e7a3015ebbe13037e2d1953f6181c972a4ea7fb7391d105d07c95db8d046d",
+      "route_id": "0xbb90d9451627aa42f93704bfd14d74157ce3cbd6236044e7317e827d442598b1",
+      "target_block": 26089942,
+      "opportunity_kind": "block-scan-arb",
+      "source_block": 26089941,
+      "cycle_id": "0x48d753bfc1874bbc4b45cf8d8704332e2aa2b80e|0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48|0xfd36fa88bb3fea8d1264fc89d70723b6a2b56958|0xdac17f958d2ee523a2206206994597c13d831ec7|0xd46ba6d942050d489dbd938a2c909a5d5039a161|0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "cycle_fingerprint": "0x306fa40cf6be52cef8b474ee62765f54d27ad228d83f0b120590d9c8a8e2955f",
+      "strategy_view_used": "blockscan",
+      "strategy_view_version": "0x998775d7e088ccf5f82b9652db013fa31cb35dbb6cde3de86ff839aee25156d2",
+      "blockscan_view_hash": "0x969c38a60ba612c7c9557e5c430f42211345d6cf1860029f23e568d5b4e31512",
+      "seed_venues": [
+        "univ3-swap",
+        "univ3-swap",
+        "univ3-swap",
+        "univ2-swap",
+        "univ3-swap",
+        "univ2-swap"
+      ],
+      "path_id": "0xA0b8->0xfD36@univ3-swap>0xfD36->0xdAC1@univ3-swap>0xdAC1->0xD46b@univ3-swap>0xD46b->0xC02a@univ2-swap>0xC02a->0x48D7@univ3-swap>0x48D7->0xA0b8@univ2-swap",
+      "template_id": "flash-swap-repay",
+      "ok": false,
+      "simulated_profit": "0",
+      "profit_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "gas_estimate": "0",
+      "calldata_hash": "0xe9c3762c58da26fb0d888c2f56cfb3be7c32e14a7c2a4c8e14bb08810f779ecd",
+      "flash_amount": "100529156",
+      "failure_reason": "final simulation transaction reverted",
+      "schema_version": 1,
+      "run_id": "b03cce10-5f63-4ccb-987b-83bf3b9d33e4",
+      "chain_id": 1,
+      "emitted_at_ms": 1790767057783
+    }
+  ],
+  "failures": [
+    [
+      "strict exact unresolved for univ2-standard\u001f<hex>\u001f<hex>\u001f<hex>><hex>",
+      1016
+    ],
+    [
+      "strict exact unresolved for univ3-standard\u001f<hex>\u001f<hex>\u001f<hex>><hex>",
+      530
+    ],
+    [
+      "solver aborted by caller during amount quote propagation",
+      379
+    ],
+    [
+      "strict exact unresolved for univ4\u001f<hex>\u001f<hex>\u001f<hex>\u001f<hex>",
+      284
+    ],
+    [
+      "strict exact unresolved for mooniswap\u001f<hex>\u001f<hex>\u001f<hex>><hex>",
+      196
+    ],
+    [
+      "strict exact unresolved for custom-swap:dodo-v2\u001f<hex>\u001f<hex>\u001f<hex>><hex>",
+      10
+    ],
+    [
+      "strict exact unresolved for fluid-dex\u001f<hex>\u001f<hex>\u001f<hex>><hex>",
+      4
+    ]
+  ],
+  "ended": {
+    "at": "2026-09-30T11:19:05.186Z",
+    "stopReason": "user_or_task_stop",
+    "first": null,
+    "last": 26089948,
+    "code": 0,
+    "signal": null,
+    "cleanup": {
+      "pgid": 14772,
+      "remaining": [],
+      "terminated": []
+    }
+  }
+}

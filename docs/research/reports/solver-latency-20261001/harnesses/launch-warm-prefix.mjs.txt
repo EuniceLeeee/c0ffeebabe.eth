@@ -1,0 +1,63 @@
+// One sealed, bounded ABBA diagnostic. Never signs or submits transactions.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
+import { runOwned } from './launch-cold-source.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repo = path.resolve(here, '../..');
+const sha = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+
+async function main() {
+  const specPath = path.join(here, 'warm-prefix-timing.json');
+  const spec = JSON.parse(fs.readFileSync(specPath, 'utf8'));
+  assert.equal(spec.runAuthorization, 'APPROVED_BOUNDED_EXPERIMENT');
+  assert.equal(spec.predeclaredAssessment.attempts, 4);
+  assert.equal(spec.budgetMs, 30000);
+  assert.deepEqual(spec.experiments['prefix-engine'].order, ['A', 'B', 'B', 'A']);
+  assert.deepEqual(spec.experiments['prefix-engine'].ranks, [8]);
+  for (const [arm, file] of [['old', spec.baselineBinary], ['current', spec.candidateBinary]]) {
+    assert.equal(path.dirname(path.dirname(file)), here);
+    assert.match(path.basename(path.dirname(file)), arm === 'old'
+      ? /^prefix-progress-binary\.[A-Za-z0-9]+$/ : /^warm-prefix-binary\.[A-Za-z0-9]+$/);
+    assert.equal(path.basename(file), 'revm-sim');
+    assert.equal(fs.realpathSync(file), file);
+    assert.equal(sha(file), spec.binarySha256[arm]);
+  }
+  const out = path.join(here, 'same-input-warm-prefix-1');
+  const logPath = path.join(here, 'same-input-warm-prefix-1.log');
+  const receiptPath = path.join(here, 'warm-prefix-launch-receipt.json');
+  assert(!fs.existsSync(out), 'never overwrite an attempted diagnostic');
+  assert(!fs.existsSync(receiptPath));
+  const fd = fs.openSync(logPath, 'wx', 0o600);
+  let rpc = '';
+  for (const line of fs.readFileSync('<user>/src/MEV/.env', 'utf8').split(/\r?\n/)) {
+    const match = line.trim().match(/^(?:export\s+)?MAINNET_RPC_URL=(.*)$/);
+    if (match) rpc = match[1].trim().replace(/^(['"])(.*)\1$/, '$2');
+  }
+  assert.equal(createHash('sha256').update(rpc).digest('hex'),
+    '860a9610cd135f044f125b2364ad22718483029de2022075cd8619cbd8ba6b4a');
+  const require = createRequire(path.join(repo, 'listener/package.json'));
+  const result = await runOwned(['--import', pathToFileURL(require.resolve('tsx')).href,
+    path.join(here, 'same-input-pair-timing.mts'), '--spec', specPath, '--experiment', 'prefix-engine',
+    '--candidate-runtime', path.join(here, 'prefix-pair-runtime-complete'),
+    '--binary-a', spec.baselineBinary, '--binary-b', spec.candidateBinary, '--run', '--out', out], {
+    cwd: repo, stdio: ['ignore', fd, fd],
+    env: { PATH: process.env.PATH, MAINNET_RPC_URL: rpc,
+      SEARCHER_STATE_LATENCY_DIAGNOSTICS: '1', SEARCHER_DRY_RUN: '1' },
+  }, 140000, 155000);
+  fs.closeSync(fd);
+  const interrupted = result.forcedStop || result.softStop || result.residualGroupStopped;
+  fs.writeFileSync(receiptPath, JSON.stringify({ ...result, out, logPath,
+    resultCompleteForAssessment: !interrupted && result.code === 0,
+    claim: 'Selected P-only ABBA. A normal exit may retain cancelled routes; it never proves full Solver/live improvement.' }, null, 2),
+    { flag: 'wx', mode: 0o600 });
+  console.log(JSON.stringify({ ...result, out, logPath }));
+  process.exitCode = interrupted ? 1 : result.code ?? 1;
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch(() => { console.error('warm prefix diagnostic launcher failed'); process.exitCode = 1; });
+}

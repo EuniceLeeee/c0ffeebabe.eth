@@ -1,0 +1,99 @@
+{
+  "source": {
+    "number": 26090118,
+    "hash": "0x1b82a49f4b235571e9e9aea4b1115aef53724c7d1859565f7c754cc63288d78f"
+  },
+  "scope": "read-only WETH decimals through production strict client; source-check cost only, not full prefix or Solver speed",
+  "pairs": 20,
+  "order": [
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ],
+    [
+      "A",
+      "B"
+    ],
+    [
+      "B",
+      "A"
+    ]
+  ],
+  "warmupsPerLane": 1,
+  "controls": "same full source pin and unchanged request; no deals, overrides, funding, signing or broadcast; return data/gas/attestation must match",
+  "binaries": {
+    "A": "461357a18302d74b78a79527ef360c5e3ddfc2d5d58c78981f4f487467f43a36",
+    "B": "5f9c6dba64508decdeff3f5414453f804a9bed48bc947acd2444dd39734e397c"
+  },
+  "rpcIdentity": "860a9610cd135f044f125b2364ad22718483029de2022075cd8619cbd8ba6b4a",
+  "wallLimitMs": 180000,
+  "at": "2026-09-30T11:57:56.712Z"
+}

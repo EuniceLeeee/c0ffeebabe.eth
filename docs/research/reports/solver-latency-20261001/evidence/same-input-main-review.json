@@ -1,0 +1,24 @@
+{
+  "role": "non-author evaluator",
+  "author": "Mencius 01a0f250-e06b-7c23-bfec-995ec4aae807",
+  "runner": "same-input-timing.mts",
+  "runnerSha256": "06b2567a19d54d640ef96bf3de01a4ec3876c0e375798bdcdf1651d31d06b59e",
+  "ran_gate": [
+    "read all485 runner lines and full spec",
+    "offline self-test: socket/process fence, prefix expectation and AsyncLocalStorage isolation passed",
+    "paired frozen-runtime validation: identical344edges/170instances/2funding; all files except exact HEAD amount-propagation identical; binary/code/inputs hash checked",
+    "original250 live ended code0; process group empty; Ready/runtime unchanged"
+  ],
+  "finding": "Approved for narrow selected-route quote-work diagnostic, not live/replay/EV acceptance. Real production root/session/Planner/Solver/propagation and64x8 pinned batching are used. Complete ordered prefixes are asserted per directed edge; no suppressed provider error becomes profit. Both arms share source/environment/P/search/compatible binary. In-memory metrics avoid synchronous per-hop artifact writes; all attempted outcomes and mandatory drains retained.",
+  "limitations": [
+    "No whole live cohort or finalsim/EV claim",
+    "JS retries/fallback disabled symmetrically for bounded diagnostics, but Rust built-in bounded retries retained and disclosed; no zero-wire-retry claim",
+    "Fresh backend/session/daemon per invocation, but process-local/host/provider caches may persist; ABBA helps only, not proof of elimination",
+    "Rank477 outside current top100; saved repeated-token-enabled cohort differs from current live",
+    "30s total including prep; cancellation and post-anchor failure not completed successes"
+  ],
+  "baselineCopy": "policy-baseline.7QGiBX",
+  "baselineAmountSha256": "7c3fc47690ae747942066155e2b15aded046df392fcdf5615974f678ade0b279",
+  "networkBeforeReview": 0,
+  "decision": "Run primary eight predeclared invocations once, then optional separately declared four P-only prefix-engine invocations once. Do not overlap with live, widen deadlines, or rerun failed observations. No production source edits, signing or broadcast."
+}

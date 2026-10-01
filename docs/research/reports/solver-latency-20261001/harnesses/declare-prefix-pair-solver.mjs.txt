@@ -1,0 +1,21 @@
+// New experiment, same frozen code/input. No network or environment credentials.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const spec = JSON.parse(fs.readFileSync(path.join(here, 'prefix-pair-timing.json'), 'utf8'));
+spec.claim = 'Selected repeated-route actual production Solver concurrency and search diagnostic; not natural live acceptance or final sim/EV';
+spec.experiments = { 'prefix-pair-solver': { phase: 'solver', ranks: [8], order: ['A','B','B','A'],
+  runtimePolicies: { A: 'B', B: 'B' }, binaries: { A: 'old', B: 'current' } } };
+spec.predeclaredAssessment = {
+  attempts: 4, workDeadlineMs: 30000, order: 'ABBA', warmups: 0, automaticReruns: 0,
+  reason: 'Prior P-only diagnostic exercised one amount. Need check actual production concurrent amount grid and adaptive8-point fine search queue before further implementation.',
+  primary: 'Complete Solver result within unchanged30s invocation budget, exact common outputs. A/B both incomplete cannot establish whole Solver speedup.',
+  secondary: 'Actual streaming pair dispatch count, completed quote-hop throughput, coarse/fine amount counters, original full prefixes, no source/fatal/drain regression. Counters do not substitute for complete amount trials.',
+  resources: 'One diagnostic process, sequential ABBA4x30s; no extra warmup, no retry after outcomes.160s launcher soft abort watchdog and physical drain joined. Provider CU not returned, unknown attempts remain unknown.',
+  decision: 'Retain narrow pair result as previously adjudicated. Judge actual Solver evidence independently; if no complete search, record residual and do not claim fix or loosen budget.'
+};
+spec.limitations = spec.limitations.filter(s => !s.startsWith('Rank8 is an optional'));
+spec.limitations.push('Rank8 now exercises unchanged production amount search, not just one P. Single selected route is still post-selection diagnostic, not full live route-worker competition.');
+fs.writeFileSync(path.join(here, 'prefix-pair-solver-timing.json'), JSON.stringify(spec,null,2)+'\n', {flag:'wx',mode:0o400});
+console.log('New actual-Solver declaration saved; no RPC');

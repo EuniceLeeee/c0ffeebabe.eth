@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "reviewerRole": "independent non-author",
+  "reviewPass": 1,
+  "verdict": "offline_implementation_review_pass",
+  "blockingFindings": [],
+  "scope": {
+    "workspace": "<repo>",
+    "productionFile": "listener/src/shared/state/state-backend.ts",
+    "newTestFile": "listener/src/searcher/test/state-backend-http-compression.ts",
+    "reviewerWrites": [
+      "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-transport-review.json"
+    ],
+    "externalRpcCalls": 0,
+    "credentialAccess": false,
+    "productionEditsByReviewer": false,
+    "launchersOrLiveRunsExecuted": false,
+    "newTwentyAttemptExperimentReviewed": false
+  },
+  "bindings": {
+    "initialBriefSha256": "44d162a3a1ed924b8ca870b227fc5b40c0b01cfd1b2f7ab55ee54fa8e5e62d62",
+    "briefSha256": "bc4b8a1c38460ec9e1482a6518bf39e19748af336149f1a8c51a852196949589",
+    "briefBindingNote": "Brief changed during review and was reread at sealing; current source scope, baseline and design remain compatible. Its future twenty-attempt acceptance statement is not an experiment review or run authorization here.",
+    "headStateBackendSha256": "ab2f48aa410d8a686301d7cf0a754844d28070153b7c2208fd23ffca0b79bcec",
+    "reviewedStateBackendSha256": "06183228659c7c3863a948c347c5a965879e9177ae2c37fbbdba5961f13d3bfa",
+    "reviewedNewTestSha256": "e23065d9d3040170712ade1323e41a19d73cfaf207d4e9d25d8e39054e4eab1c",
+    "trackedStateBackendBinaryDiffSha256": "ed3697182d645c293616c627f26da2f989e6b43fd51e52671a890f04d9a1b24a",
+    "unchangedOtherTrackedBinaryDiffSha256": "071044e25429a6ac9142b6751a068dee08fae15f70f9061456b978436b52b641",
+    "untrackedTestBindingNote": "The new test is bound by its file hash, not included in git diff --binary. Tests were rerun after the author narrowed requestBody.jsonrpc with as const."
+  },
+  "reviewFindings": [
+    "Reviewed full scoped source diff, surrounding postJsonRpc implementation, and complete new test. HEAD source hash matches the brief baseline.",
+    "Gzip negotiation and streaming decoding preserve identity fallback, complete JSON settlement, fragmented UTF-8, single/batch results, and RPC error data. No retry, scheduler, source authority, Solver, Family, Rust, budget or config change is introduced by this slice.",
+    "Decoded accumulation uses Node MAX_STRING_LENGTH in JavaScript string units rather than a new smaller response-size or expansion-ratio policy.",
+    "Malformed gzip and unsupported encodings retain non-2xx HTTP status with null body; successful-status malformed bodies reject with sanitized errors.",
+    "Failure settlement precedes transport destruction, preventing synchronous aborted events from replacing the intended error. Cancellation remains attached until final settlement.",
+    "Cleanup always releases its decoder but avoids destroying a completed HTTP response/request, protecting a keep-alive socket already reused by another request.",
+    "Timing remains opt-in. responseBytes retains wire-body meaning; decodedResponseBytes and fixed-label contentEncoding do not expose URLs or payloads."
+  ],
+  "executedChecks": [
+    {
+      "cwd": "listener",
+      "command": "env -u MAINNET_RPC_URL TSX_DISABLE_CACHE=1 node --import tsx --test src/searcher/test/state-backend-http-compression.ts src/searcher/test/state-backend-call-deadline.ts src/searcher/test/pinned-reth-quote-backend.ts",
+      "exitCode": 0,
+      "nodeTestEntries": 9,
+      "passed": 9,
+      "failed": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "durationMs": 23221.13175,
+      "coverage": "Seven new compression tests plus existing deadline and pinned-backend script suites; the latter have internal checks and are not counted as individual node-test entries. All HTTP activity is local fixture traffic."
+    },
+    {
+      "cwd": "listener",
+      "command": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.live.json",
+      "exitCode": 0
+    },
+    {
+      "cwd": "listener",
+      "command": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
+      "exitCode": 2,
+      "diagnosticCount": 8,
+      "scopedFileDiagnostics": 0,
+      "diagnostics": [
+        "src/searcher/test/pinned-reth-quote-backend.ts:1518 TS7022",
+        "src/searcher/test/ready-activity-classification.ts:97 TS7006",
+        "src/searcher/test/ready-activity-classification.ts:122 TS7006 key",
+        "src/searcher/test/ready-activity-classification.ts:122 TS7006 classifier",
+        "src/searcher/test/ready-activity-classification.ts:122 TS7006 data",
+        "src/searcher/test/ready-activity-classification.ts:132 TS7006",
+        "src/searcher/venues/swaps/curve-plain-family/test/cached-refresh-scope.ts:23 TS2345",
+        "src/searcher/venues/swaps/curve-plain-family/test/cached-refresh-scope.ts:93 TS2554"
+      ],
+      "qualification": "These match the eight baseline errors reported by main and are outside this slice. Reviewer did not rebuild a separate pristine baseline during this review. Full-project typechecking is not green."
+    },
+    {
+      "command": "git diff --check -- listener/src/shared/state/state-backend.ts",
+      "exitCode": 0
+    },
+    {
+      "check": "Read-only Node assertions on both scoped files: no trailing whitespace or conflict markers; final source/test SHA-256 binding",
+      "exitCode": 0
+    },
+    {
+      "check": "Independent in-memory Node/tsx local-HTTP controls using actual production postJsonRpc; no test file added",
+      "result": "all passed",
+      "cases": [
+        "HTTP 200 invalid gzip with response deliberately left open rejects invalid gzip, closes its owned socket, and emits exactly one timing settlement.",
+        "HTTP 429 invalid gzip with response deliberately left open preserves status 429/body null, closes its owned socket, and emits exactly one timing settlement.",
+        "Delayed invalid-gzip decoder failure after actual same-socket reuse rejects the old request without destroying the second held request; second request succeeds and old timing settles exactly once."
+      ]
+    }
+  ],
+  "nonblockingCaveats": [
+    "The late-decoder test uses threadpool work and a fixed short wait. It passed independently and explicitly requires both unfinished decode and actual socket identity; arbitrary host scheduling is not proven deterministic.",
+    "No external provider, same-input performance, full-Solver, or live result was produced by these offline implementation gates."
+  ],
+  "separateRawCapabilityReview": {
+    "verdict": "capability_and_byte_parity_pass_only",
+    "existingReview": "gzip-capability-review.json",
+    "rawResult": "gzip-capability-1.json",
+    "rawResultSha256": "9bb3d1995ded2708ce673a606236f42206bf76004c59b92a96b01e2fb68ed9ef",
+    "declaration": "gzip-capability-1-declaration.json",
+    "declarationSha256": "6142c81b706997b838de5f62c1dd55436b8bff1301d6652a149aa8d5be4df6d0",
+    "independentOfMainManualVerdict": true,
+    "sourceHeight": 26029536,
+    "order": "ABBA",
+    "logicalRpcCalls": 8,
+    "httpEnvelopes": 6,
+    "allSocketsClosed": true,
+    "failures": 0,
+    "identityWireBodyBytes": [
+      152296,
+      152296
+    ],
+    "gzipWireBodyBytes": [
+      15696,
+      15664
+    ],
+    "decodedBodyBytesAllFour": 152296,
+    "decodedBodySha256AllFour": "332c0abc0837242690c6ef5fca1c2d09f145bc52018f94c595e10a259ed858d6",
+    "resultSha256AllFour": "ee594f394a2f6ff2d1add67d119fe8ac86ba575d230ae68fd627f994b99fde53",
+    "sourceParity": "Saved pre/post canonical checks and source hash/root match; reviewer did not query fresh chain state.",
+    "interpretation": "Approximately 89.7% smaller response bodies with exact decoded byte/result parity. Body bytes exclude HTTP/TLS framing. The probe used synchronous gunzip and establishes provider capability, not production streaming correctness or Solver/live speed."
+  },
+  "approvalBoundary": "No blocking finding for this hash-bound offline implementation review. Performance acceptance and representative Solver/live validation remain separate and unmet here. This review does not authorize or execute any further RPC experiment or live run."
+}

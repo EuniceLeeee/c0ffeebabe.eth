@@ -1,0 +1,12 @@
+{
+  "code": 0,
+  "signal": null,
+  "pid": 64895,
+  "softStop": false,
+  "forcedStop": false,
+  "residualGroupStopped": false,
+  "out": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-progress-1",
+  "logPath": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-progress-1.log",
+  "diagnosticCompleted": true,
+  "claim": "One selected P-only phase diagnostic. A normal exit can retain a cancelled route and never proves a Solver speedup."
+}

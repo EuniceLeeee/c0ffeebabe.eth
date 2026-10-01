@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "claim": "Selected-route P-only ABBA comparing warm-source-session prefix-key hints; not natural enumeration, whole Solver or live acceptance",
+  "source": {
+    "number": 26029536,
+    "hash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+    "generation": 1
+  },
+  "stateRoot": "0xa8c4eb4a5b7d2a90ee1ffa7ca44d1f90394210a46c77e4bf3fb76f68cfb64afe",
+  "executionMode": "source-block",
+  "budgetMs": 30000,
+  "search": {
+    "amountGrid": "multiples",
+    "gridHalfWidth": 2,
+    "gssMaxTries": 8,
+    "quoteConcurrency": 16,
+    "quoteToleranceRawUnits": "0"
+  },
+  "transport": {
+    "maxBatchSize": 64,
+    "maxConcurrentBatches": 8,
+    "capacity": 12,
+    "producerReserved": 4,
+    "transportTimeoutMs": 30000,
+    "jsRetries": 0,
+    "singleCallFallback": false
+  },
+  "inputs": {
+    "ready": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1-ready.json",
+      "sha256": "0bcbefca90fa703c30503f5d7f1994ca7a1932604cad124192099fb4ed882089"
+    },
+    "prices": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1/prices/prices.json",
+      "sha256": "918dbc1484ffec1431c33a663fdd2fea4c1fc109d7e76842bc17d6e1c7e0f031"
+    },
+    "input": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1/prices/input.json",
+      "sha256": "a681976102723801b8e719dc06eb4e5c2e4a7fdb531472d8c1c0d2ca46c7e42a"
+    },
+    "enumeration": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1/offline-1/enumeration.json",
+      "sha256": "712d77701b0046605b3d2dbb91fdf1878db46df8b1111731d9246f39beb7229f"
+    }
+  },
+  "runtimeBasis": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+  "runtimeBasisSourceSha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01",
+  "amountPropagation": {
+    "baselineHead": "baca79b03384a93fb656482c09a5e4de026f5fbc",
+    "A": "bb19c5245f011b09a0695bc4f5dc4695333ed7533436bb2854338e244ccf371a",
+    "B": "bb19c5245f011b09a0695bc4f5dc4695333ed7533436bb2854338e244ccf371a"
+  },
+  "artifactSha256": "0fc76fc76afc1838ce7d151078ef5bf40e6f0ba2e14fbaab97e3004b9bf0cc49",
+  "binarySha256": {
+    "old": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661",
+    "current": "1d814015f1fc3677a4435a24da8b5fad93c4915e6f531c46b9a65c5096611a0c"
+  },
+  "cases": [
+    {
+      "rank": 477,
+      "P": "5195442",
+      "hops": 2,
+      "repeated": false,
+      "cycleFingerprint": "0x58b576c783fd70d92f287fd17e2c4e47fca7e83d87dab8a842dd301184d31fd7"
+    },
+    {
+      "rank": 4,
+      "P": "2000000000000000",
+      "hops": 6,
+      "repeated": true,
+      "cycleFingerprint": "0x8c6b3d3ad8de8cdbaa04a6eea2b4e7f969b149b461380074365e10c4db7d05ba"
+    },
+    {
+      "rank": 8,
+      "P": "5195442",
+      "hops": 6,
+      "repeated": true,
+      "cycleFingerprint": "0x16a830b1dbe01d8715474fec1a43be64772e28e6805997e203506dc854d1d6c8"
+    }
+  ],
+  "experiments": {
+    "prefix-engine": {
+      "phase": "p-only",
+      "ranks": [
+        8
+      ],
+      "order": [
+        "A",
+        "B",
+        "B",
+        "A"
+      ],
+      "runtimePolicies": {
+        "A": "B",
+        "B": "B"
+      },
+      "binaries": {
+        "A": "old",
+        "B": "current"
+      }
+    }
+  },
+  "limitations": [
+    "The saved 512-candidate cohort allowed repeated tokens; rank477 is outside the present live100. No new enumeration or forced graph edges.",
+    "Rank4 retains ordered prefixes but its repeated core is local SAT1 math and may issue zero Rust prefix requests.",
+    "Rank8 is an optional separate P-only binary diagnostic, never appended automatically to primary.",
+    "One selected route at a time; outer16-route competition and concurrent producer traffic are not exercised.",
+    "No warmups or invocation reruns. Shared production permits and64x8 batching retained; JS transport recovery/fallback is disabled. Pinned Rust binaries retain their built-in bounded transport recovery; zero wire retries is NOT guaranteed and cannot be configured here.",
+    "30s includes root rehydration, canonical reads, strict session, Planner preparation and selected P propagation. This experiment does not enter Solver. Mandatory physical drain is joined and reported separately, not a raised work deadline.",
+    "1424 previous late reject-cache drops were mostly local V2/V3; this does not establish a dominant V4 RPC fix or live speedup.",
+    "Each invocation starts with a fresh source session and daemon, with no target prewarming; B alone permits hints after an earlier authoritative prefix completes. This tests cold-first versus later expanded-prefix behavior.",
+    "Identical frozen TS and diagnostic baseline. B changes only opt-in eligibility for one key-hint attempt; complete authoritative prefix/source checks remain. Timeout results remain lower bounds, never full Solver timings."
+  ],
+  "predeclaredAssessment": {
+    "attempts": 4,
+    "workDeadlineMs": 30000,
+    "order": "ABBA",
+    "automaticReruns": 0,
+    "warmup": 0,
+    "primary": "Both B attempts must complete hop index2 and complete strictly more hops than their adjacent paired A (A1/B1 and B2/A2), unless both arms complete the full route; in that case both pairs must have lower B route wall time.",
+    "mechanism": "First cold prefix no scout/hint; warm fully cached siblings no hint; later fetchable prefix miss at most1 hint/request. Fewer serial source reads for the expanded prefix. If A and B both complete hop index2, B must have lower hop2 wall time in both pairs.",
+    "correctness": "All shared completed hop identities/amounts/full-prefix lengths and plan hashes match; no new fatal/drain failures. Both arms preserve complete prefixes, EVM isolation and every canonical checkpoint.",
+    "qualification": "Progress past a censored baseline is selected-route evidence only. No amount-Solver, profitability or systemic-live verdict from this P-only test. Keep every invocation, including timeouts/reverts.",
+    "resourceBound": "4 invocations*30s work including preparation;140s graceful launcher cancellation and155s hard exact owned group cap. No background task-owned RPC/live, no warmup/rerun, existing bounded internal wire recovery retained. Provider billedCU unknown.",
+    "onFailure": "Withdraw only new warm-session prefetch candidate to frozen progress baseline; preserve all evidence; no extra repeats/deadline expansion."
+  },
+  "baselineBinary": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-binary.onTMkL/revm-sim",
+  "candidateBinary": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-binary.DmlaI6/revm-sim",
+  "runAuthorization": "<redacted-secret>"
+}

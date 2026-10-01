@@ -1,0 +1,41 @@
+{
+  "purpose": "Resume bounded multi-block Solver latency observation after diagnosed preparation starvation, retaining previous failed run",
+  "scope": "one local blockscan-only dry-run; no mainnet submission, node deployment or rebuild",
+  "baseline": "live-solver-unique-pools-250.YgUfBJ full250; different blocks, not paired causal comparison",
+  "failedPreparationRun": "live-solver-batched-prefix-250.I49DJ4;103 nonstartup state-only attempts retained",
+  "policy": {
+    "pWei": "2000000000000000",
+    "hopTokensPerStep": 3,
+    "hopPoolsPerPair": 3,
+    "maxHops": 6,
+    "repeatTokens": false,
+    "repeatPools": true,
+    "quoteWorkers": 16
+  },
+  "changes": [
+    "source-state quotes only on no-repeat-instance routes",
+    "same Rust mandatory prechecks batched",
+    "existing typed-revert cache checked before Solver",
+    "nonstartup periodic source-N preparation may finish within unchanged deadline, then stale search skipped"
+  ],
+  "window": {
+    "heights": 250,
+    "start": "first state-ready single-transition pass independent of outcome",
+    "hardWallMs": 7200000,
+    "keepLaterCancelledAndMissingHeights": true
+  },
+  "measure": [
+    "route source-state vs ordered-prefix cohorts",
+    "whole Solver completed/incomplete denominators",
+    "quote waves and exact-RPC interval union",
+    "early cache skips and actual solver plans/points",
+    "state publication progress",
+    "final sim outcomes and positive EV"
+  ],
+  "limitations": [
+    "Changes are combined for this diagnostic; cannot attribute a whole-run difference to one patch",
+    "If no natural repeated-instance route occurs, report missing live evidence instead of claiming repeated-pool speedup",
+    "Old incompatible simulator live is not a causal latency baseline",
+    "Same safety/source/final-sim/EV guards and Ready remain mandatory"
+  ]
+}

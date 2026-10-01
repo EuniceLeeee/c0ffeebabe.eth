@@ -1,0 +1,100 @@
+{
+  "schema_version": 2,
+  "repo_root": "<repo>",
+  "pending_nonce": "0e994e85-1edc-40d9-8811-4b92dcc48361",
+  "requested_capabilities": [
+    "latency"
+  ],
+  "recommended_tools": [
+    {
+      "id": "analysis:blockscan-pass-latency",
+      "package": "analysis",
+      "script": "blockscan-pass-latency",
+      "command": "cd analysis && npm run blockscan-pass-latency --",
+      "implementation": "src/cli/blockscan-pass-latency.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "analysis",
+        "block-scan",
+        "blockscan",
+        "latency",
+        "pass"
+      ],
+      "cost": "zero-cu",
+      "summary": "analysis package script: blockscan-pass-latency",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    }
+  ],
+  "related_tools": [
+    {
+      "id": "analysis:blockscan-pass-latency",
+      "package": "analysis",
+      "script": "blockscan-pass-latency",
+      "command": "cd analysis && npm run blockscan-pass-latency --",
+      "implementation": "src/cli/blockscan-pass-latency.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "analysis",
+        "block-scan",
+        "blockscan",
+        "latency",
+        "pass"
+      ],
+      "cost": "zero-cu",
+      "summary": "analysis package script: blockscan-pass-latency",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "analysis:test:blockscan-pass-latency",
+      "package": "analysis",
+      "script": "test:blockscan-pass-latency",
+      "command": "cd analysis && npm run test:blockscan-pass-latency --",
+      "implementation": "src/test/blockscan-pass-latency.ts",
+      "kind": "test",
+      "capabilities": [
+        "analysis",
+        "block-scan",
+        "blockscan",
+        "latency",
+        "pass",
+        "test",
+        "verification"
+      ],
+      "cost": "zero-cu",
+      "summary": "analysis package script: test:blockscan-pass-latency",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    }
+  ],
+  "executions": [
+    {
+      "schema_version": 1,
+      "tool_id": "analysis:blockscan-pass-latency",
+      "descriptor_sha256": "1793207c4144c543feb3da93cb60b74431ce3f51f14416bcbab2d717ed01dded",
+      "started_at": "2026-09-30T18:55:02.269Z",
+      "finished_at": "2026-09-30T18:55:02.471Z",
+      "exit_code": 0,
+      "cwd": "analysis",
+      "argv_sha256": "25df131de519e4d38825a7e9d0bce1a75f2a4ca2915ed001e684eecfd4399e49",
+      "argv_redacted": [
+        "npm",
+        "run",
+        "blockscan-pass-latency",
+        "--",
+        "--log",
+        "../logs/solver-prefix-policy-20260930.MKk8Vk/same-input-batch-split-1.log"
+      ],
+      "stdout_sha256": "f8d63eb85a9589d8ccbca3d2571fb0d4450d2946526365adec2c3ce143f97b76",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 2509,
+      "stderr_bytes": 0
+    }
+  ],
+  "generated_at": "2026-09-30T18:47:37.261Z",
+  "updated_at": "2026-09-30T18:55:02.471Z"
+}

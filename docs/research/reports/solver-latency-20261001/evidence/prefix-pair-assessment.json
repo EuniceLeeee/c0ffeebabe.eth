@@ -1,0 +1,60 @@
+{
+  "role": "manual evaluator before indexed analysis",
+  "experiment": "same-input-prefix-pair-1",
+  "resultsSha256": "52963bffa950d596ed94027675291e83d5cc526c734047fc6ead23170a12c859",
+  "logSha256": "023f5972dd7a119bb3f4bd58b570f1643c4c42116134de2a6b1bb82822165233",
+  "order": [
+    "A",
+    "B",
+    "B",
+    "A"
+  ],
+  "allInputsAndFrozenArtifactsUnchanged": true,
+  "outcomes": [
+    "cancelled30s",
+    "cancelled30s",
+    "cancelled30s",
+    "cancelled30s"
+  ],
+  "completedQuoteHops": [
+    2,
+    2,
+    2,
+    2
+  ],
+  "wholeFirstPrefixHopWallMs": [
+    16415.958417,
+    13107.935833,
+    12868.918792,
+    21835.279709
+  ],
+  "quoteOutputParity": "Both completed hops have identical per-hop input/output in all4 attempts. No full-route output/parity claim.",
+  "actualPairing": "Both B invocations physically emitted strictPair for child IDs2/3; numeric process IDs recorded by actual client. Both A invocations stayed scalar.",
+  "completedHopPhysicalAttempts": [
+    24,
+    23,
+    23,
+    24
+  ],
+  "validationMechanism": "For3 sibling reads:12 logical canonical checks remain, physical validation exchanges6->5. Other state-read attempts unchanged. Whole completed-hop physical attempts24->23, not a reduction in validation coverage.",
+  "predeclaredCriterion": "Met narrowly: both B hop1 durations below both A durations, same number completed hops, identical completed quotes, no fatal or drain errors. Individual request service medians were not used.",
+  "decision": "Retain implementation as an experimentally supported local transport improvement. NOT whole Solver completion, systemic_live win, merge approval or final sim/EV evidence.",
+  "remaining": "All4 six-hop P-only paths still exceed30s; none entered a full Solver search. The next quote hop is censored. Full-prefix cold state access remains expensive.",
+  "causalLimit": "Only two observations per arm. Provider response and cold-source latency vary substantially; do not attribute the entire3-9second observed difference to one saved physical exchange or claim a population percentage speedup.",
+  "finalSimulation": "not run",
+  "EV": "not run",
+  "resourceAccounting": {
+    "completedHopRustPhysicalAttempts": 94,
+    "incompleteHopAttempts": "terminal phase record absent;unknown,not zero",
+    "providerBilledCU": "not exposed by provider",
+    "extraTrials": 0
+  },
+  "drainMs": [
+    1.1755,
+    1.173959,
+    1.408125,
+    1.775625
+  ],
+  "drainErrors": [],
+  "goal": "active; not complete; do not launch another blind live250 run without a new relevant metric/sample contract"
+}

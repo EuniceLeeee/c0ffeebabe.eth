@@ -1,0 +1,7 @@
+{
+  "original": "<repo>/logs/ready-raw-baseline-20260930.3nsqtq/checkpoint.json",
+  "originalSha256": "9b7b05d11e23dcc079e36b0dbc8f1363df075bde589fc8717ae5ef160a32ee5b",
+  "checkpointSha256": "9b7b05d11e23dcc079e36b0dbc8f1363df075bde589fc8717ae5ef160a32ee5b",
+  "generation": 1,
+  "copyOnly": true
+}

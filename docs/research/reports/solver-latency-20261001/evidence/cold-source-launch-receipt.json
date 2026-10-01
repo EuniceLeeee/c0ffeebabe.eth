@@ -1,0 +1,12 @@
+{
+  "code": 0,
+  "signal": null,
+  "pid": 61898,
+  "softStop": false,
+  "forcedStop": false,
+  "residualGroupStopped": false,
+  "out": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-cold-source-1",
+  "logPath": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-cold-source-1.log",
+  "resultCompleteForAssessment": true,
+  "qualification": "A forced/soft stop or residual group is censored/inconclusive; zero exit alone is not a timing win."
+}

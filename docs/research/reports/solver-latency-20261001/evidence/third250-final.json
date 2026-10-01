@@ -1,0 +1,206 @@
+{
+  "dir": "<repo>/logs/live-solver-skip-settle-250.7MsLu8",
+  "snapshotBytes": 510894204,
+  "lines": 715859,
+  "startup": {
+    "block": 26090567,
+    "ms": 154307.63958299998
+  },
+  "window": {
+    "from": 26090582,
+    "to": 26090831,
+    "last": 26090831,
+    "heightsSeen": 250
+  },
+  "outcomes": {
+    "stale_state": 246
+  },
+  "all": {
+    "n": 246,
+    "total": {
+      "n": 246,
+      "p50": 12111.993458000012,
+      "p95": 18475.170708000194,
+      "max": 28571.601832999964
+    },
+    "state": {
+      "n": 246,
+      "p50": 7089.44299999997,
+      "p95": 17828.150458000135,
+      "max": 28571.59908299998
+    },
+    "enumeration": {
+      "n": 246,
+      "p50": 536.8577920000535,
+      "p95": 740.4706249999581,
+      "max": 846.0403749999823
+    },
+    "solver": {
+      "n": 246,
+      "p50": 4061.041625000071,
+      "p95": 8189.761832999997,
+      "max": 14264.328583000228
+    },
+    "plans": {
+      "n": 246,
+      "p50": 20,
+      "p95": 43,
+      "max": 57
+    },
+    "amounts": {
+      "n": 246,
+      "p50": 168,
+      "p95": 405,
+      "max": 574
+    },
+    "hops": {
+      "n": 246,
+      "p50": 833,
+      "p95": 2212,
+      "max": 3093
+    },
+    "positive": 148,
+    "finalSim": {
+      "n": 246,
+      "p50": 0,
+      "p95": 4899.440416000085,
+      "max": 7286.021457999945
+    }
+  },
+  "solverCompleted": {
+    "n": 0,
+    "total": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "state": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "enumeration": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "solver": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "plans": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "amounts": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "hops": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "positive": 0,
+    "finalSim": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "solverIncomplete": 246,
+  "solverRevm": {
+    "requests": 0,
+    "statuses": {},
+    "queueMs": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "serviceMs": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "simulationWindow": {
+    "attempts": 169,
+    "successful": 0,
+    "positive": 0
+  },
+  "allSimulationEvents": 169,
+  "simulationExamples": [
+    {
+      "sourceBlock": 26090826,
+      "ok": false,
+      "profit": "0",
+      "reason": "final simulation transaction reverted"
+    },
+    {
+      "sourceBlock": 26090826,
+      "ok": false,
+      "profit": "0",
+      "reason": "final simulation transaction reverted"
+    }
+  ],
+  "failuresAllLog": [
+    [
+      "solver aborted by caller during amount quote propagation",
+      629
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 25072ms reached before sim",
+      16
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 21750ms reached before sim",
+      16
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 22967ms reached before sim",
+      16
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 22833ms reached before sim",
+      16
+    ],
+    [
+      "no profitable plan (sim'd top-1 strict-funded amounts): deadline 21839ms reached before sim",
+      16
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 25656ms reached before sim",
+      16
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 21700ms reached before sim",
+      14
+    ]
+  ],
+  "ended": {
+    "at": "2026-09-30T14:16:19.515Z",
+    "stopReason": "completed_250_source_heights",
+    "first": 26090582,
+    "last": 26090831,
+    "code": 0,
+    "signal": null,
+    "cleanup": {
+      "pgid": 32313,
+      "remaining": [],
+      "terminated": []
+    }
+  }
+}

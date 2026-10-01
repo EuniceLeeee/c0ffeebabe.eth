@@ -1,0 +1,194 @@
+{
+  "dir": "<repo>/logs/live-solver-skip-settle-250.7MsLu8",
+  "snapshotBytes": 416952469,
+  "lines": 585093,
+  "startup": {
+    "block": 26090567,
+    "ms": 154307.63958299998
+  },
+  "window": {
+    "from": 26090582,
+    "to": 26090831,
+    "last": 26090755,
+    "heightsSeen": 174
+  },
+  "outcomes": {
+    "stale_state": 173
+  },
+  "all": {
+    "n": 173,
+    "total": {
+      "n": 173,
+      "p50": 12105.034458000213,
+      "p95": 16157.754292000085,
+      "max": 28571.601832999964
+    },
+    "state": {
+      "n": 173,
+      "p50": 6587.134000000078,
+      "p95": 16157.531000000075,
+      "max": 28571.59908299998
+    },
+    "enumeration": {
+      "n": 173,
+      "p50": 602.5564999999478,
+      "p95": 754.5362500000047,
+      "max": 846.0403749999823
+    },
+    "solver": {
+      "n": 173,
+      "p50": 4367.054375000007,
+      "p95": 7901.82195799984,
+      "max": 9591.10129199992
+    },
+    "plans": {
+      "n": 173,
+      "p50": 23,
+      "p95": 43,
+      "max": 57
+    },
+    "amounts": {
+      "n": 173,
+      "p50": 200,
+      "p95": 408,
+      "max": 574
+    },
+    "hops": {
+      "n": 173,
+      "p50": 980,
+      "p95": 2212,
+      "max": 3093
+    },
+    "positive": 121,
+    "finalSim": {
+      "n": 173,
+      "p50": 1495.3737919999985,
+      "p95": 4921.103791000205,
+      "max": 7286.021457999945
+    }
+  },
+  "solverCompleted": {
+    "n": 0,
+    "total": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "state": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "enumeration": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "solver": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "plans": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "amounts": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "hops": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "positive": 0,
+    "finalSim": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "solverIncomplete": 173,
+  "solverRevm": {
+    "requests": 0,
+    "statuses": {},
+    "queueMs": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "serviceMs": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "simulationWindow": {
+    "attempts": 147,
+    "successful": 0,
+    "positive": 0
+  },
+  "allSimulationEvents": 147,
+  "simulationExamples": [
+    {
+      "sourceBlock": 26090750,
+      "ok": false,
+      "profit": "0",
+      "reason": "final simulation transaction reverted"
+    },
+    {
+      "sourceBlock": 26090751,
+      "ok": false,
+      "profit": "0",
+      "reason": "final simulation transaction reverted"
+    }
+  ],
+  "failuresAllLog": [
+    [
+      "solver aborted by caller during amount quote propagation",
+      418
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 25072ms reached before sim",
+      16
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 21750ms reached before sim",
+      16
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 21700ms reached before sim",
+      14
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 23621ms reached before sim",
+      14
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 22636ms reached before sim",
+      12
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 23816ms reached before sim",
+      10
+    ],
+    [
+      "no profitable plan (sim'd top-3 strict-funded amounts): deadline 23777ms reached before sim",
+      10
+    ]
+  ],
+  "ended": null
+}

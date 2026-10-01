@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "verdict": "promising_narrow_mechanism_but_plan_requires_contract_clarification_before_generation",
+  "scope": "Independent read-only design review; no implementation, local servers, RPC, credentials, process control or experiments.",
+  "reviewerWrites": [
+    "next-prefix-slice-review.json"
+  ],
+  "bindings": {
+    "restoredTrackedDiffSha256": "071044e25429a6ac9142b6751a068dee08fae15f70f9061456b978436b52b641",
+    "mainRsSha256": "dfd2cd47fa3b3b9c851020e1f8d6cf4ad69f1bdf6f428931c23c3e1f6054229b",
+    "diagnosticRsSha256": "5a7c79720d5b0410bf23906860e73082e5979d2b815b08a20470471fd925e286",
+    "planSha256": "3f9542bf359101091b162474325863d6e2d500d46ab13a34790fc4b80f2621b9",
+    "phaseLogSha256": "dac273918cdfba760de88ca044738a304fa98441b6e6ae26853c2daea3ba0936",
+    "pairLogSha256": "023f5972dd7a119bb3f4bd58b570f1643c4c42116134de2a6b1bb82822165233"
+  },
+  "priorIndependentFinding": {
+    "mappingSlots": "Current main.rs:3900-3915 uses ten indices [0,1,2,3,4,5,9,10,11,51], plus deduplicated explicit/cached hints, not 0..32.",
+    "evidence": "Five completed cold requests: hydration one physical attempt/699-1279ms; initial untouched balance probe three attempts/1401-1958ms; seven funding trials zero attempts/0.077-0.214ms; prefix ten attempts/3830-6066ms. Ten warm requests have zero prefix attempts and 0.179-0.463ms prefix execution.",
+    "conclusion": "No measured material slot-pruning optimization. Slots share one required-account hydration envelope and are cached thereafter. Removing speculative hydration may introduce a new serial read in the initial probe.",
+    "limitation": "Existing phase records contain wall time, physical attempts and entries, not phase bytes, logical item counts or read keys. No specific batching remedy for the initial probe's three reads was established."
+  },
+  "planAssessment": {
+    "mechanism": "Co-send the existing three source-precheck reads and exactly the already-determined cold hydration reads. This removes a real dispatch dependency rather than reducing candidate coverage.",
+    "eligibility": "Locally validated scalar source-pinned trialPrefix request and self.pinned.is_none(). Existing pinned sessions, including a different source, use the original path. No paired, ordinary strict/final-sim or legacy change.",
+    "whyFeasible": "StrictPlan validation supplies addresses/calls; the request pin supplies the hash; cold balance/allowance/code caches are empty. None of the existing hydration keys requires the returned block environment. VerifiedSource remains mandatory before constructing or seeding pinned execution state.",
+    "benefitBound": "Successful cold requests can lose one HTTP envelope: the observed 17 attempts could become 16 absent retries. In the two candidate cold records, hydration took 846.151 and 897.164ms after prechecks of 2425.762 and 3223.072ms. These durations are an opportunity scale, not a promised saving: the provider may serialize the larger batch. No warm-request, ten-read prefix or whole-Solver gain is established.",
+    "scopeProportionality": "Potentially proportionate in main.rs with private hydration-planning/decoding helpers, colocated tests and small diagnostic accounting if necessary. Not proportionate if preserving advertised equivalence requires a new general response parser, scheduler or retry framework."
+  },
+  "requiredPlanClarifications": [
+    {
+      "issue": "Exact old failure precedence does not follow from deferred cache seeding.",
+      "anchors": [
+        "listener/revm-sim/src/main.rs:257",
+        "listener/revm-sim/src/main.rs:397",
+        "listener/revm-sim/src/main.rs:485",
+        "listener/revm-sim/src/main.rs:591",
+        "listener/revm-sim/src/main.rs:812"
+      ],
+      "counterexample": "The three source replies contain a wrong chain/header while a co-issued hydration item returns a throttle. Originally source verification rejects before hydration is issued. Existing send_json scans every physical response and latches the hydration throttle before verified_header runs; delaying hydration decoding alone cannot recover original precedence.",
+      "requirement": "Keep every observed fatal fatal; never suppress a hydration throttle or clear the shared latch. Explicitly distinguish unchanged fail-closed authority from exact serial-path classification. If exact old classification is mandatory for simultaneous cross-phase faults, reject this minimal batching plan rather than silently widening the RPC machinery."
+    },
+    {
+      "issue": "Logical-read equality only holds on the successful no-retry path.",
+      "anchors": [
+        "listener/revm-sim/src/main.rs:397",
+        "listener/revm-sim/src/main.rs:2698"
+      ],
+      "consequence": "Co-sending performs hydration reads even when source validation later fails. Retrying a combined transport envelope repeats checks plus hydration, whereas the original path might retry only one phase. A stalled hydration reply also delays reporting a bad source.",
+      "requirement": "Predeclare and test these bounded transport differences. Keep existing retry limits, operation deadline, fatal handling and cancellation. No retry through a separate fallback after any combined request has been sent."
+    },
+    {
+      "issue": "The referenced existing RPC envelope-size bound is not identified.",
+      "anchors": [
+        "listener/revm-sim/src/main.rs:591",
+        "listener/revm-sim/src/main.rs:1644"
+      ],
+      "requirement": "The visible 1MiB constant limits strictPair stdin, not outgoing provider batches. Name a real applicable bound or explicitly review a small fast-path eligibility bound with pre-send fallback. Do not claim an existing provider limit or truncate reads."
+    }
+  ],
+  "safetyContract": [
+    "Preserve all local StrictPlan/source-pin validation before network dispatch. Hydration uses exactly the caller hash with requireCanonical:true.",
+    "Validate chain, both full headers, root/environment/profile and complete response identities before accepting any fetched value. Do not publish self.pinned, source attestation, slot hints or persistent code on failed validation.",
+    "Retain exact account/storage key selection and decoder semantics. Verify the second hydration visit performs zero duplicate fetches.",
+    "Fresh independent CacheDB, unchanged funding trials and complete prefix/main execution remain mandatory. No shared mutable EVM state.",
+    "Keep the fresh postcheck after every previously covered nonfatal outcome. Fatal latches still prevent subsequent work immediately."
+  ],
+  "requiredOfflineTests": [
+    "Matching cold request: identical output, revert/halt classification, gas, effects, logs and source attestation; identical logical method/parameter multiset and one fewer HTTP envelope; no duplicate hydration.",
+    "Mixed invalid-source plus hydration-throttle/source-fault cases, response reordering/duplicate/missing IDs and malformed state: zero execution/cache publication and explicitly agreed fatal classification.",
+    "Bounded transport retry and held-response cancellation/deadline: no extra fallback, no raised timeout, no use of partial state.",
+    "Warm, preexisting different-source, non-prefix, legacy and pair paths unchanged; canonical changes after success/revert/nonfatal probe failure still reject.",
+    "Diagnostics on/off semantic parity, exclusive physical-attempt totals, followed by full Rust and existing local TS/Rust integration gates."
+  ],
+  "diagnostics": {
+    "recommendation": "Charge the combined HTTP attempt once. Use an explicitly identified combined interval, or label the existing source-precheck interval as including cold hydration; hydration then records only local decode/application. Compare candidate combined duration with baseline precheck+hydration, not hydration alone.",
+    "prohibition": "Do not double-count the envelope, imply hydration vanished, or infer per-phase bytes absent telemetry."
+  },
+  "recommendation": "Revise the narrow brief to resolve the failure/resource contract, then this is the strongest available candidate for an offline implementation proof. No production generation or RPC experiment approval is issued here. If literal serial-path failure equivalence is non-negotiable, the small design should be rejected.",
+  "executedChecks": "Read current code/plan and both raw logs; independently validated phase sums and restored diff hash. No builds/tests or external calls executed in this design pass."
+}

@@ -1,0 +1,663 @@
+{
+  "schemaVersion": 1,
+  "status": "PASS: recorded-response Solver semantic parity and source-storage provider-call reduction; no live latency verdict",
+  "reviewScope": "Independent primary declaration/results inspection plus read-only existing historical transport source. No main assessment used. No replay, network, credential access or source edits.",
+  "artifacts": [
+    {
+      "path": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-2/declaration.json",
+      "sha256": "06610ef279356674626248ce88fe58fed8fbd8107856846774edb5838f7fcfa6"
+    },
+    {
+      "path": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-2/results.json",
+      "sha256": "5571bf7021ac803ad5c0411418a1beb2934eae97cc8a073d4605a53c4348d341"
+    },
+    {
+      "path": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline.mts",
+      "sha256": "013318f162ef7a6771df269d0ddb16f5bbfc71fdd28ab2fc73dfa0228cbfa9ff"
+    }
+  ],
+  "binding": {
+    "source": {
+      "number": 26029585,
+      "hash": "0x9659cc92d3abe53823e71a15e62873850687d5c50b195072bc0940a17ebc706d",
+      "generation": 1
+    },
+    "search": {
+      "amountGrid": "multiples",
+      "gridHalfWidth": 2,
+      "gssMaxTries": 8,
+      "quoteConcurrency": 16,
+      "quoteToleranceRawUnits": "0"
+    },
+    "order": [
+      "A",
+      "B",
+      "B",
+      "A"
+    ],
+    "operationBudgetMs": 30000,
+    "socketCleanupBudgetMs": 1000,
+    "maxWireItemsPerInvocation": 4096,
+    "exactTransport": {
+      "maxBatchSize": 64,
+      "maxConcurrentBatches": 8,
+      "schedulerCapacity": 12,
+      "producerReserved": 4
+    },
+    "recordings": {
+      "acceptedKeys": 221,
+      "readRows": 1417,
+      "diagnosticRows": 84,
+      "ignoredRows": 64,
+      "conflicts": 0
+    },
+    "runtimes": {
+      "A": {
+        "root": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+        "sha256": "6290a7a46fa2e4789fe4ad53c9b0ad0c5223e7a3ad8fecdd51260a4774bf4158",
+        "fileCount": 1343
+      },
+      "B": {
+        "root": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/storage-share-runtime.8WzAK5",
+        "sha256": "eee9822835abf1276e045eedaf4e54c7745f2ed444d2755721accae60277b811",
+        "fileCount": 1343
+      }
+    }
+  },
+  "independentChecks": {
+    "rawAssertions": {
+      "passed": 54,
+      "failed": 0,
+      "categories": [
+        "ABBA completeness and bounds",
+        "full immutable artifact and both1343-file runtime manifest hashes",
+        "only central runtime and unimported test snapshot differences",
+        "full amount/hop/candidate/plan/result parity",
+        "all trial output chaining and candidate quote-profit arithmetic",
+        "distinct storage bytes and non-storage phase/request/result multisets",
+        "zero errors/retries/fallbacks/cancellations/escape and complete drain"
+      ]
+    },
+    "physicalItemsMatchedToExactOriginalRequestAndResultHashes": 638,
+    "rawHopIssuanceArrayEquality": [
+      true,
+      true,
+      true,
+      true
+    ],
+    "failedOffline1DeclarationAndResultsPreserved": true
+  },
+  "physicalCountsPerInvocation": [
+    {
+      "attempt": 1,
+      "arm": "A",
+      "status": "complete",
+      "physicalRpcItems": 209,
+      "phase": {
+        "preparation": {
+          "eth_chainId": 1,
+          "eth_getBlockByNumber": 1,
+          "eth_call": 1
+        },
+        "solver": {
+          "eth_getCode": 18,
+          "eth_getStorageAt": 108,
+          "eth_call": 78
+        },
+        "postcheck": {
+          "eth_chainId": 1,
+          "eth_getBlockByNumber": 1
+        }
+      },
+      "directProviderReads": {
+        "solver:get-code": 18,
+        "solver:get-storage": 108
+      },
+      "distinctStorageKeys": 9,
+      "sourceFenceCalls": 3676
+    },
+    {
+      "attempt": 2,
+      "arm": "B",
+      "status": "complete",
+      "physicalRpcItems": 110,
+      "phase": {
+        "preparation": {
+          "eth_chainId": 1,
+          "eth_getBlockByNumber": 1,
+          "eth_call": 1
+        },
+        "solver": {
+          "eth_getCode": 18,
+          "eth_getStorageAt": 9,
+          "eth_call": 78
+        },
+        "postcheck": {
+          "eth_chainId": 1,
+          "eth_getBlockByNumber": 1
+        }
+      },
+      "directProviderReads": {
+        "solver:get-code": 18,
+        "solver:get-storage": 9
+      },
+      "distinctStorageKeys": 9,
+      "sourceFenceCalls": 3694
+    },
+    {
+      "attempt": 3,
+      "arm": "B",
+      "status": "complete",
+      "physicalRpcItems": 110,
+      "phase": {
+        "preparation": {
+          "eth_chainId": 1,
+          "eth_getBlockByNumber": 1,
+          "eth_call": 1
+        },
+        "solver": {
+          "eth_getCode": 18,
+          "eth_getStorageAt": 9,
+          "eth_call": 78
+        },
+        "postcheck": {
+          "eth_chainId": 1,
+          "eth_getBlockByNumber": 1
+        }
+      },
+      "directProviderReads": {
+        "solver:get-code": 18,
+        "solver:get-storage": 9
+      },
+      "distinctStorageKeys": 9,
+      "sourceFenceCalls": 3694
+    },
+    {
+      "attempt": 4,
+      "arm": "A",
+      "status": "complete",
+      "physicalRpcItems": 209,
+      "phase": {
+        "preparation": {
+          "eth_chainId": 1,
+          "eth_getBlockByNumber": 1,
+          "eth_call": 1
+        },
+        "solver": {
+          "eth_getCode": 18,
+          "eth_getStorageAt": 108,
+          "eth_call": 78
+        },
+        "postcheck": {
+          "eth_chainId": 1,
+          "eth_getBlockByNumber": 1
+        }
+      },
+      "directProviderReads": {
+        "solver:get-code": 18,
+        "solver:get-storage": 108
+      },
+      "distinctStorageKeys": 9,
+      "sourceFenceCalls": 3676
+    }
+  ],
+  "mechanism": {
+    "same9StorageKeyResultPairs": true,
+    "perKeyMultiplicity": {
+      "A": 12,
+      "B": 1
+    },
+    "solverStorageCalls": {
+      "A": [
+        108,
+        108
+      ],
+      "B": [
+        9,
+        9
+      ]
+    },
+    "removedPerSolve": 99,
+    "storageReductionPercent": 91.66666666666666,
+    "totalRpcItems": {
+      "A": [
+        209,
+        209
+      ],
+      "B": [
+        110,
+        110
+      ]
+    },
+    "unchanged": "Each invocation: preparation chainId1/header1/eth_call1; Solver code18/eth_call78; postcheck chainId1/header1. All non-storage phase/key/result multisets identical.",
+    "backend": "Each invocation79 physical eth_call items in6 backend HTTP batches,1074 memo hits. This batching was already present and unchanged; physicalRpcItems is an item count, not an envelope count.",
+    "inference": "The real frozen runtime/session/Solver uses the same9 recorded storage words across12 amount trials. B removes repeated provider dispatches rather than pruning amounts, hops or distinct state reads."
+  },
+  "semanticParity": {
+    "allFour": {
+      "amountPoints": 12,
+      "gssPoints": 8,
+      "hopExactCalls": 24,
+      "successfulHopOutputs": 24,
+      "simMs": 0
+    },
+    "prefix": "Every trial first hop prefixLength0, repeated-instance second hop prefixLength1. All raw hop arrays and ordered logical trial/hop arrays match exactly.",
+    "completeTrials": [
+      {
+        "trial": 1,
+        "hops": [
+          {
+            "trial": 1,
+            "hop": 0,
+            "amountIn": "5538803",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "6618975557313964400"
+          },
+          {
+            "trial": 1,
+            "hop": 1,
+            "amountIn": "6618975557313964400",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "6966038"
+          }
+        ],
+        "quoteProfitRaw": "1427235"
+      },
+      {
+        "trial": 2,
+        "hops": [
+          {
+            "trial": 2,
+            "hop": 0,
+            "amountIn": "55388030",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "53674219859453115645"
+          },
+          {
+            "trial": 2,
+            "hop": 1,
+            "amountIn": "53674219859453115645",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "56487244"
+          }
+        ],
+        "quoteProfitRaw": "1099214"
+      },
+      {
+        "trial": 3,
+        "hops": [
+          {
+            "trial": 3,
+            "hop": 0,
+            "amountIn": "553880300",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "524231570206361680290"
+          },
+          {
+            "trial": 3,
+            "hop": 1,
+            "amountIn": "524231570206361680290",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "551708234"
+          }
+        ],
+        "quoteProfitRaw": "-2172066"
+      },
+      {
+        "trial": 4,
+        "hops": [
+          {
+            "trial": 4,
+            "hop": 0,
+            "amountIn": "5538803000",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "5229653285216364565283"
+          },
+          {
+            "trial": 4,
+            "hop": 1,
+            "amountIn": "5229653285216364565283",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "5503931079"
+          }
+        ],
+        "quoteProfitRaw": "-34871921"
+      },
+      {
+        "trial": 5,
+        "hops": [
+          {
+            "trial": 5,
+            "hop": 0,
+            "amountIn": "24581208",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "24593945170299269855"
+          },
+          {
+            "trial": 5,
+            "hop": 1,
+            "amountIn": "24593945170299269855",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "25882032"
+          }
+        ],
+        "quoteProfitRaw": "1300824"
+      },
+      {
+        "trial": 6,
+        "hops": [
+          {
+            "trial": 6,
+            "hop": 0,
+            "amountIn": "36345625",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "35699251192367100293"
+          },
+          {
+            "trial": 6,
+            "hop": 1,
+            "amountIn": "35699251192367100293",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "37570358"
+          }
+        ],
+        "quoteProfitRaw": "1224733"
+      },
+      {
+        "trial": 7,
+        "hops": [
+          {
+            "trial": 7,
+            "hop": 0,
+            "amountIn": "17307010",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "17727710464308416701"
+          },
+          {
+            "trial": 7,
+            "hop": 1,
+            "amountIn": "17727710464308416701",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "18656066"
+          }
+        ],
+        "quoteProfitRaw": "1349056"
+      },
+      {
+        "trial": 8,
+        "hops": [
+          {
+            "trial": 8,
+            "hop": 0,
+            "amountIn": "12813002",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "13485212155103397759"
+          },
+          {
+            "trial": 8,
+            "hop": 1,
+            "amountIn": "13485212155103397759",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "14192000"
+          }
+        ],
+        "quoteProfitRaw": "1378998"
+      },
+      {
+        "trial": 9,
+        "hops": [
+          {
+            "trial": 9,
+            "hop": 0,
+            "amountIn": "10034259",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "10862158697605017612"
+          },
+          {
+            "trial": 9,
+            "hop": 1,
+            "amountIn": "10862158697605017612",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "11432172"
+          }
+        ],
+        "quoteProfitRaw": "1397913"
+      },
+      {
+        "trial": 10,
+        "hops": [
+          {
+            "trial": 10,
+            "hop": 0,
+            "amountIn": "8317548",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "9242029014812344548"
+          },
+          {
+            "trial": 10,
+            "hop": 1,
+            "amountIn": "9242029014812344548",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "9726729"
+          }
+        ],
+        "quoteProfitRaw": "1409181"
+      },
+      {
+        "trial": 11,
+        "hops": [
+          {
+            "trial": 11,
+            "hop": 0,
+            "amountIn": "7256068",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "8239369146008576085"
+          },
+          {
+            "trial": 11,
+            "hop": 1,
+            "amountIn": "8239369146008576085",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "8671612"
+          }
+        ],
+        "quoteProfitRaw": "1415544"
+      },
+      {
+        "trial": 12,
+        "hops": [
+          {
+            "trial": 12,
+            "hop": 0,
+            "amountIn": "6600284",
+            "prefixLength": 0,
+            "status": "quoted",
+            "amountOut": "7620819115030374334"
+          },
+          {
+            "trial": 12,
+            "hop": 1,
+            "amountIn": "7620819115030374334",
+            "prefixLength": 1,
+            "status": "quoted",
+            "amountOut": "8019885"
+          }
+        ],
+        "quoteProfitRaw": "1419601"
+      }
+    ],
+    "initialPlanSha256": "e98ac610c03870c25a2ffdb7e102bc35034acd0cd6f79598f4fc698f81bbee26",
+    "resolvedPlanSha256": "c4437bab0511e9bb3b7c7fcb6b9523774cfde53d8ca22bf761814c35f1143aae",
+    "candidates": [
+      {
+        "amount": "5538803",
+        "profit": "1427235",
+        "profitToken": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "planSha256": "c4437bab0511e9bb3b7c7fcb6b9523774cfde53d8ca22bf761814c35f1143aae"
+      },
+      {
+        "amount": "6600284",
+        "profit": "1419601",
+        "profitToken": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "planSha256": "8e8a7089d76ee4253357911d7712840f8d7237dd27c5e40864f817441ce9cd4c"
+      },
+      {
+        "amount": "7256068",
+        "profit": "1415544",
+        "profitToken": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "planSha256": "8f03d82f314d3cc211397de2ad185c6676f6f1bf764a8dc5759c979bc50a8e34"
+      }
+    ],
+    "selected": {
+      "inputRaw": "5538803",
+      "outputRaw": "6966038",
+      "quoteProfitRaw": "1427235",
+      "token": "USDC",
+      "qualification": "quote-only arithmetic, not final-sim realized profit or production EV"
+    },
+    "handlesAndControls": "Sealed harness independently rejects reused issued handles, changed per-solve control identity/deadline, missing prefixes and generation/source mismatch; successful completion traversed these assertions.",
+    "sourceFences": {
+      "A": 3676,
+      "B": 3694,
+      "note": "Counts are not identical; B has18 additional runtime fence invocations. No omitted recorded pre/post source check."
+    }
+  },
+  "resources": {
+    "allComplete": true,
+    "allWorkUnder30000ms": true,
+    "allSocketCleanupUnder1000ms": true,
+    "socketsRemaining": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "pendingPromises": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "activeHttp": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "backendAndSchedulerPendingOrActive": 0,
+    "retryFallbackFailureAbortCounts": 0,
+    "networkProcessEscapeAttempts": 0,
+    "timingOnlyForBounds": [
+      {
+        "arm": "A",
+        "workMs": 620.0799999999999,
+        "drainMs": 0.6749170000000504
+      },
+      {
+        "arm": "B",
+        "workMs": 573.042917,
+        "drainMs": 0.33579200000008314
+      },
+      {
+        "arm": "B",
+        "workMs": 571.7522919999999,
+        "drainMs": 0.18695800000023155
+      },
+      {
+        "arm": "A",
+        "workMs": 585.0298339999999,
+        "drainMs": 0.21216599999979735
+      }
+    ],
+    "interpretation": "No timing criterion was declared. Local recorded-response durations and overlapping quoteMs sums are not evidence of live remote latency improvement."
+  },
+  "quoteWorkerPolicy": {
+    "anchor": "Both frozen listener/src/searcher/solver/solver.ts:424-440",
+    "productionSolverSha256": "e9e069bfcea006cd7116633782f56f301b321ab0ea1e0a4ff984ec6c08a92ae4",
+    "finding": "Unchanged production Solver uses coarse fan-out8, with P first and3 remaining coarse amounts in this fixture. search.quoteConcurrency16 is saved metadata, not a solve option; this selected single-candidate harness does not exercise the outer16-candidate worker policy. Exact backend64x8 and shared scheduler12/4 are explicit and unchanged."
+  },
+  "remoteForkTimingAssessment": {
+    "verdict": "REJECT proposed fresh-fork xWin ABBA as next causal live-storage-latency experiment",
+    "sources": [
+      {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/environment-rpc.mjs",
+        "sha256": "b7c73b0ea92bd9700fabb24134abd374c4a4244aefc199e529516ad4c39b25f9",
+        "anchors": [
+          5,
+          24,
+          25,
+          31,
+          38,
+          39
+        ],
+        "finding": "Only eligible eth_call uses archive debug_traceCall; getStorage takes unconditional local RPC branch at38. Log mode remains local-fork."
+      },
+      {
+        "path": "<repo>/logs/six-family-ev-20260930.Pc1Pv8/environment.mjs",
+        "sha256": "b19ed7b6d54e5b809e119aa1a36c2f9e913ff21a6e9acaaf763c48c64c7a3960",
+        "anchors": [
+          134,
+          135,
+          136,
+          149,
+          154,
+          155,
+          168
+        ],
+        "finding": "local is127.0.0.1 Anvil fork; prepares derived emptyN and supplies that local endpoint to environmentRpc. State is explicitly not canonical N end-state."
+      },
+      {
+        "path": "<repo>/logs/six-family-ev-20260930.Pc1Pv8/continue.mts",
+        "sha256": "b2388fcd2577e15f3d7ed2c57a18986fbd04dc16d780990092bd610c2763e63b",
+        "anchors": [
+          144,
+          147,
+          151
+        ],
+        "finding": "Pinned getStorage is sent through the configured environment endpoint."
+      }
+    ],
+    "recordingConfirmation": {
+      "allRecordedStorageRows": 222,
+      "mode": "local-fork",
+      "otherStorageModes": 0
+    },
+    "rationale": "The eliminated99 calls are duplicates of the same9 keys and would reach Anvil, not99 independent direct archive reads. A fresh fork changes cold hydration/setup but does not make its repeated reads direct live-provider reads; both arms still need the same9 distinct words. Whole-fork timing additionally includes remote eth_call traces, local cache behavior and preparation. No upstream-miss trace was collected here, so the exact fraction of time or upstream reads attributable to Anvil caching is not established.",
+    "narrowUseIfSeparatelyNeeded": "A fork could support clearly labeled historical-environment correctness/work evidence, not the proposed causal live-storage latency claim. SAT1 remains only a zero-storage negative control."
+  },
+  "nextScope": {
+    "recommendation": "Retain this as production-runtime recorded-response parity plus real provider-dispatch reduction. Do not launch a remote fork timing exercise to promote it to a live latency claim.",
+    "essentialUnmetValidation": "A representative workload traversing the ordinary direct source-pinned production storage provider, with matching solve control lifetime and source semantics, has not been measured here. Current synthetic emptyN fixture cannot be remapped to canonical N merely to obtain remote timings.",
+    "blocker": "No justified next live-latency experiment from these inspected artifacts alone. Need appropriate direct-provider evidence before declaring one; no new pipeline, Family change, cache/budget change or experiment is proposed/authorized."
+  },
+  "caveats": [
+    "Post-selection saved rank1 local repeated-instance route, not newly demonstrated natural discovery.",
+    "Synthetic parent26029584 state plusN26029585 environment; recorded source checks are not fresh external canonical authentication.",
+    "No Rust ordered-prefix performance coverage: this route's repeated leg is local and simulator entry is poisoned.",
+    "No final simulation, realized profit/EV, broadcast, live distribution or whole-system speed claim.",
+    "All failed offline-1 evidence remains failed and preserved; offline-2 is a separately declared cleanup repair validation.",
+    "This result review does not replace main's non-author production implementation review or authorize subsequent runs."
+  ]
+}

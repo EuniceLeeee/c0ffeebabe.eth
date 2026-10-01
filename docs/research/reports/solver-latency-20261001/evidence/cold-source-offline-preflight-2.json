@@ -1,0 +1,58 @@
+{
+  "offline": true,
+  "pairedRuntimeValidated": true,
+  "experiment": "prefix-engine",
+  "snapshots": {
+    "A": {
+      "root": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+      "sha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01"
+    },
+    "B": {
+      "root": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+      "sha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01"
+    }
+  },
+  "executor": {
+    "keccak256": "0x75ac3cd7a45da42f6b4611f9203dad2b0df8693ced1a240eacaf8d98b94438ac",
+    "counterfactual": true,
+    "address": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+    "owner": "0xb8578b6de173c8554ff0390db5a7effa567dda3c",
+    "note": "same owner-bound frozen BotVM code-only override for prefix quotation; not deployed-code or final-simulation proof"
+  },
+  "order": [
+    {
+      "rank": 8,
+      "arm": "A",
+      "policy": "B",
+      "runtime": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+      "binary": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-binary/revm-sim",
+      "binarySha256": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1"
+    },
+    {
+      "rank": 8,
+      "arm": "B",
+      "policy": "B",
+      "runtime": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+      "binary": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-binary.KD2Xff/revm-sim",
+      "binarySha256": "8993d08bd501af9c4c7555bb93b76a9286ca8d1f420652f806709f2a305f1e74"
+    },
+    {
+      "rank": 8,
+      "arm": "B",
+      "policy": "B",
+      "runtime": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+      "binary": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-binary.KD2Xff/revm-sim",
+      "binarySha256": "8993d08bd501af9c4c7555bb93b76a9286ca8d1f420652f806709f2a305f1e74"
+    },
+    {
+      "rank": 8,
+      "arm": "A",
+      "policy": "B",
+      "runtime": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+      "binary": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-binary/revm-sim",
+      "binarySha256": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1"
+    }
+  ],
+  "budgetMsPerInvocation": 30000,
+  "rpcCalls": 0
+}

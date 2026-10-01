@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "status": "generation-sealed; offline static/preflight checks passed; replay not executed",
+  "searcher_behavior_change": "no additional production change; ignored validation harness only",
+  "harness": {
+    "path": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline.mts",
+    "sha256": "45e0f55cdee975865a39dd44b1b4004ce6b7d66ca897c63f7c6d7d7dc510e949"
+  },
+  "productionEditsFrozen": true,
+  "productionReceipt": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-share-generator-result.json",
+  "binding": {
+    "artifacts": [
+      {
+        "path": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-plan.json",
+        "sha256": "3bcc2d4c5a2ff24761c6bd0315aa68936dfd74020d58889585067df5d5f18382"
+      },
+      {
+        "path": "<repo>/logs/six-family-ev-20260930.Pc1Pv8/xwin-continuation-env.json",
+        "sha256": "eb22cee41a8629a92f0bd23eccbd47a1f8533cb7adc9fb2e21320ba7ca20bc0b"
+      },
+      {
+        "path": "<repo>/logs/six-family-ev-20260930.Pc1Pv8/xwin-environment/environment-reads.jsonl",
+        "sha256": "07a0a3eca1e63e200ce8cc33d11c37943cf29ceb61b1624c04eaca63d3a6e255"
+      },
+      {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/xwin-ready.json",
+        "sha256": "383815646af341a6ba955b3d9d20d3249dbe2fa46b587d7a1546d53f8066f461"
+      },
+      {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/xwin/environment/production/input.json",
+        "sha256": "5028c5fea5ae4ccb4d4e24bafebc6df37f905fd0feda2d3cf39a448eeaead0de"
+      },
+      {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/xwin/environment/production/prices.json",
+        "sha256": "168837c98d39c319ce55d084941e9f019de010d03237fc218885d6744ae19024"
+      },
+      {
+        "path": "<repo>/logs/repeat-policy-three-final.POePpH/xwin-token-off/offline-1/enumeration.json",
+        "sha256": "29e794a520628cda6e4080344577fe314a998f32bc5445bc9da0deacd1be626c"
+      }
+    ],
+    "source": {
+      "number": 26029585,
+      "hash": "0x9659cc92d3abe53823e71a15e62873850687d5c50b195072bc0940a17ebc706d",
+      "generation": 1
+    },
+    "runtimes": {
+      "A": {
+        "root": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+        "sha256": "6290a7a46fa2e4789fe4ad53c9b0ad0c5223e7a3ad8fecdd51260a4774bf4158",
+        "centralSha256": "5abf08753fc27b0249fbe6db5dff9d56b2cc8efe613e7994d33ff0bc1869ba77",
+        "unimportedTestSha256": "6b57a95a45528f7d015d1a1f88bb28ad6ffc2394c5e2bf4660983fea8a48ce46"
+      },
+      "B": {
+        "root": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/storage-share-runtime.8WzAK5",
+        "sha256": "eee9822835abf1276e045eedaf4e54c7745f2ed444d2755721accae60277b811",
+        "centralSha256": "cd5ad6ed30b147903d5c18f99110afc09c7f4a93ac58f72dbcb72da22f2baeba",
+        "unimportedTestSha256": "b73cfa9848e5981c33df3413a4ee008b14e5d86cf834cef9faf96baebbb8a2ff"
+      }
+    },
+    "ready": {
+      "A": {
+        "graphHash": "e00ac41f1d87c8342510cbe797b30ea5bb6d9354d0aeb379a7343443a848e94e",
+        "publicationSetHash": "cd7247138dadacb0c1ec410bbec4f254c8951322cba53cdf53ba03244d371580",
+        "instances": 18,
+        "funding": 2,
+        "edges": [
+          "protocol:token-conversion\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f8a86483017790ad14a7245dfc4fcc2642bf539fbc4d4f81c7a2049b9d178b417",
+          "protocol:token-conversion\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f265182316c1e8df53493ff74fa7c9c6980f827eac1b85ecba278131a9dbca17d"
+        ]
+      },
+      "B": {
+        "graphHash": "e00ac41f1d87c8342510cbe797b30ea5bb6d9354d0aeb379a7343443a848e94e",
+        "publicationSetHash": "cd7247138dadacb0c1ec410bbec4f254c8951322cba53cdf53ba03244d371580",
+        "instances": 18,
+        "funding": 2,
+        "edges": [
+          "protocol:token-conversion\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f8a86483017790ad14a7245dfc4fcc2642bf539fbc4d4f81c7a2049b9d178b417",
+          "protocol:token-conversion\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f265182316c1e8df53493ff74fa7c9c6980f827eac1b85ecba278131a9dbca17d"
+        ]
+      }
+    },
+    "recordings": {
+      "acceptedKeys": 221,
+      "readRows": 1417,
+      "diagnosticRows": 84,
+      "ignoredRows": 64,
+      "conflicts": 0
+    }
+  },
+  "snapshotException": "The two frozen trees differ only in central runtime production code and the explicitly hash-bound corresponding test file. The test file is not imported by the harness. No snapshot was modified.",
+  "finalStaticFixes": [
+    "Changed .map(JSON.parse) to .map(line => JSON.parse(line)) for the correct callback signature.",
+    "Changed generic arrow <T> to <T,> for .mts syntax.",
+    "No further harness or production edits pending."
+  ],
+  "preparationClarifications": [
+    "Only ordinary two-parameter eth_call recordings are accepted. 1417 ordinary source-read rows versus broader manual1427 excludes10 final-simulation override calls intentionally.",
+    "Recorded fixture really contains zero-address getCode; deny-on-missing self-check instead uses zero-address/all-ff storage slot.",
+    "Explicitly bound the existing unimported test-file snapshot difference; did not rewrite snapshots."
+  ],
+  "checks": [
+    {
+      "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node --import tsx ../logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline.mts --check",
+      "cwd": "<repo>/listener",
+      "exit": 0,
+      "result": "Both frozen registries imported and complete Ready snapshots rehydrated; bindings, deny-on-missing and recording schema checks passed. No listener, quote, Solver, RPC or replay execution."
+    },
+    {
+      "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin node node_modules/typescript/bin/tsc --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --types node --typeRoots ./node_modules/@types --esModuleInterop ../logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline.mts",
+      "cwd": "<repo>/listener",
+      "exit": 0
+    },
+    {
+      "command": "git diff --check",
+      "cwd": "<repo>",
+      "exit": 0
+    },
+    {
+      "check": "Production source/test SHA256 still match frozen main-provided values",
+      "exit": 0
+    }
+  ],
+  "futureRunContract": {
+    "authority": "Main review and explicit execution authorization still required; --run was not executed.",
+    "order": [
+      "A",
+      "B",
+      "B",
+      "A"
+    ],
+    "workDeadlineMs": 30000,
+    "backend": {
+      "maxBatchSize": 64,
+      "maxConcurrentBatches": 8,
+      "sharedCapacity": 12,
+      "producerReserved": 4,
+      "memoization": "unchanged"
+    },
+    "scope": "Saved rank1 two-hop USDC/xWin local-repeat route, normal production session/Planner/AnvilSolver, saved .002ETH P and search configuration. No new enumeration, forced graph additions, final simulation or EV.",
+    "transport": "Exact recorded source-pinned responses through owned loopback only. Deny missing/ambiguous requests, any other network endpoint, fetch/child-process escape and simulator entry. Before/after immutable input/runtime checks.",
+    "bounds": "No warmups/retries, 4096 wire-item guard, 1MiB request-body guard, max64 batch. Failures retained; remaining attempts not-run. Write-once declaration/results.",
+    "expectedAssertions": "Ordered trials/hops/outputs/prefixes, candidate/plan parity, independently issued handles, same distinct storage bytes with fewer B storage provider calls, actual solve controls retained and complete drain."
+  },
+  "limitations": [
+    "Actual recorded xWin Solver parity and provider-call reduction remain unexecuted.",
+    "Preflight validates saved synthetic empty-N bytes, not newly authenticated canonical chain state; source must never be remapped.",
+    "No latency-win, live, natural-discovery, final-simulation or profitability claim.",
+    "No external network/RPC, credentials, .env, config, dependency, Family, Rust, frozen-snapshot, documentation, commit or push operations.",
+    "Generator receipt is not independent approval or experiment authority."
+  ]
+}

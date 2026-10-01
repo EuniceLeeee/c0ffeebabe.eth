@@ -1,0 +1,15 @@
+{
+  "experiment": "same-input-primary-1",
+  "comparisonStatus": "invalid_harness_bootstrap",
+  "cause": "The thin diagnostic imported production session/solver modules but omitted main.ts's shared/adapters/index registration bootstrap. Both A rank477 invocations stopped before compiling an actual-amount-flow prefix.",
+  "notProductionFinding": true,
+  "retained": [
+    "same-input-primary-1/declaration.json",
+    "same-input-primary-1/results.json",
+    "same-input-main-review.json"
+  ],
+  "restriction": "Do not compare A's early failures to B's completed 12-point searches as latency evidence. Do not infer a production adapter regression.",
+  "correction": "Load the same production registration separately from each isolated runtime. Require offline nonempty-prefix compilation and registry isolation regression before declaring a new corrected experiment.",
+  "newExperiment": "same-input-primary-2-bootstrap-corrected",
+  "unchangedContract": "Same fixtures, A/B snapshots, ABBA order, search policy, 30s total invocation budget and physical drain; no production edits, signing, broadcast, final-sim or EV claim. Preserve every observation."
+}

@@ -1,0 +1,68 @@
+{
+  "role": "main non-author evaluator of Mencius implementation",
+  "verdict": "PASS offline correctness/implementation gate; performance and live effect remain unproven",
+  "reviewPass": 1,
+  "code": {
+    "mainRsSha256": "5d7cacebfc42bb778db178da3ecd96ea768e85c57562e2f5c7587bbecaa9f868",
+    "diagnosticRsSha256": "61b7c96dfd433e392910deae77042517477b86bce332adbbc96fb996d37c5f2d",
+    "binarySha256": "1d814015f1fc3677a4435a24da8b5fad93c4915e6f531c46b9a65c5096611a0c",
+    "entireTrackedPatchSha256": "a810a89adb6f15d2e1448fb89abd06375fd714a3ca44f588486385c0c8f3ed1b",
+    "frozenDirectory": "warm-prefix-binary.DmlaI6"
+  },
+  "findings": [
+    "Read full incremental production and test diff against frozen prefix-progress sources.128 production added lines plus16 inline regressions; no central protocol semantics or TS/search/default changes.",
+    "The private eligibility bit shares the actual endpoint/VerifiedSource cache lifetime. It is established only after full success and source postcheck; pair A additionally waits for physical flush. Ordinary Revert/Halt, observation failure or canonical fault cannot establish first eligibility.",
+    "CacheOnlySource has no source getter fallthrough, I/O, shared-cache/counter writes or latch mutation. Account/storage misses may authorize hints; cached zero/absent values remain hits, missing code/ancestor-only/fatal do not authorize speculative repair.",
+    "The PrefixOnly scope uses the existing complete plan/engine/context, returns before observations/main/finalization/commit, and discards scout state. Full execution still starts from the original prepared DB; exact gas, temporary/persistent state, logs and output parity tested.",
+    "Hints use only validated executor code and prepared root funding. Remote trace values remain untrusted and ignored; existing source-hash-pinned hydration supplies real values. Full pre/post checkpoints, pair bridge and flushing are unchanged.",
+    "One logical hint is trace discovery plus hydration, potentially including pre-existing bounded wire recovery. No retry loop, deduped source authority or mutable continuation was added. Warmness is session-local, not route-local; benefit is an unproven performance hypothesis.",
+    "Only one fixed scout phase was added to diagnostics. Existing progress caps, exclusive counters, per-child identity and attempt-end censoring semantics are retained."
+  ],
+  "ranGate": [
+    {
+      "check": "main full offline Rust suite",
+      "result": "100/100 pass",
+      "log": "warm-prefix-main-tests.log"
+    },
+    {
+      "check": "main offline release build",
+      "result": "pass; only existing dead-code warning",
+      "log": "warm-prefix-main-build.log"
+    },
+    {
+      "check": "actual TS client to rebuilt Rust via loopback, diagnostics enabled",
+      "result": "259/259 pass",
+      "log": "warm-prefix-main-integration.log"
+    },
+    {
+      "check": "main-authored held-response cancellation against new binary",
+      "result": "1/1 pass; no false end/result",
+      "file": "prefix-progress-held-test.mjs"
+    },
+    {
+      "check": "retained no-repeat/full-prefix semantics",
+      "result": "5/5 TS tests;1/4/16concurrency parity on384quotes passes"
+    },
+    {
+      "check": "owned-group watchdog regression",
+      "result": "2/2 pass",
+      "file": "cold-source-launcher-test.mjs"
+    },
+    {
+      "check": "unchanged production diagnostic harness offline preflight",
+      "result": "ABBA rank8 only,30s each,zeroRPC",
+      "log": "warm-prefix-main-preflight.log"
+    },
+    {
+      "check": "git diffcheck and frozen/current SHA equality",
+      "result": "pass"
+    }
+  ],
+  "notClaimed": [
+    "full TypeScript typecheck passes",
+    "complete Solver/live speedup",
+    "positive sim/EV",
+    "production merge or deployment readiness"
+  ],
+  "next": "Independent review of main-authored final timing spec/launcher before bounded external diagnostic. No live, signing, broadcast, commit/push/merge."
+}

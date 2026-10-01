@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "reviewer": "main nonauthor evaluator",
+  "reviewPass": 1,
+  "verdict": "implementation offline contracts pass; historical production-Solver recorded-response gate next; no latency or live win yet",
+  "scope": "Only strict-central-adapter-runtime.ts and its corresponding test. Other11dirty-file patch unchanged:0621702191948ea1142792abc84f65ab1d864dd6b6cc68cf6dbbeedd540a78b7. No protocol semantics/API/config/search/deadline changes.",
+  "patchSha256": "8fadffc4cbd65bf1c8f8f48fd38d6316ef1070ad6f54391c8f84fa88084f84ad",
+  "runtimeSha256": "cd5ad6ed30b147903d5c18f99110afc09c7f4a93ac58f72dbcb72da22f2baeba",
+  "testSha256": "b73cfa9848e5981c33df3413a4ee008b14e5d86cf834cef9faf96baebbb8a2ff",
+  "ranGate": [
+    {
+      "check": "relevant central, request-program, prefix, quote-concurrency, scheduler and client tests",
+      "result": "287/287 pass;0skip/0cancel",
+      "log": "source-storage-main-tests.log",
+      "sha256": "d2913f91c5fb3e2d7809155981b108fc65dd1b22aa3cf214356ebf5fbe0a2578"
+    },
+    {
+      "check": "build:live",
+      "result": "exit0",
+      "log": "source-storage-main-build-pass1.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "check": "actual rebuilt Rust client loopback with REVM_SIM_TEST_BINARY",
+      "result": "259/259 pass;0skip/0cancel",
+      "log": "source-storage-main-rust-client.log",
+      "sha256": "8d9f2cb39631688967746d8b58eb0af2d4fcbeb1145cf9ee44c0fc5ba15ac1e3"
+    },
+    {
+      "check": "git diff --check and full independent source/test diff review",
+      "result": "pass"
+    },
+    {
+      "check": "frozen runtime tree comparison",
+      "result": "only declared2files differ A/B;B equals working src;shared dependencies unchanged",
+      "baseline": "prefix-pair-runtime-complete",
+      "candidate": "storage-share-runtime.8WzAK5",
+      "baselineTreeHash": "5a476058936ee10a475f303f7449eb475ca91609b96d22c1cd1c0c638a98d134",
+      "candidateTreeHash": "cb76c4f0ccfc3d0d2f97c3f41c6fed61b16ba2ea182f98f154ad25848258b832"
+    }
+  ],
+  "findings": [
+    "Source number/hash/generation, kind/address/slot, lane and exact original control bind sharing. No finite deadline or explicit signal retains old direct path. No amount semantics introduced.",
+    "Cache retains only raw canonical32byte storage;256combined bound and existing code size bound preserved. Logical results and provenance issued independently. Prefix-context branch bypasses reservation and cache consumption.",
+    "All original source/control fences preserved. Shared owner/joiner permit lifetime and awaitAllDrained still prevent releasing work early; failure/retirement and pending overflow covered.",
+    "Review caught request descriptor capture regression for direct mutable executor input. Generator added frozen read descriptor and queued-mutation regression; both main test runs pass it.",
+    "Real Solver control fixture has12points/8GSS/24hopquotes; source reads72to6 across2fresh solves, each retains3dependent rounds and full repeated prefix. This is a controlled fixture, not real-chain or latency evidence."
+  ],
+  "invocationCorrection": "Initial pass1 list included standalone solver-grid-quote-concurrency CLI without required --baseline-solver. It failed usage,181other entries passed. Preserved source-storage-main-tests-pass1.log SHA d584e46d5f0b68e91d0107ebbbb3d299524a17a6c245e05d93aacaa54269f88f. Corrected suite excludes that non-unit CLI; no source changes to hide failure.",
+  "next": "Review ignored source-storage-offline.mts once generated; execute ABBA recorded-response comparison only after harness review. No remote experiment or live deployment yet.",
+  "externalCuSpent": 0
+}

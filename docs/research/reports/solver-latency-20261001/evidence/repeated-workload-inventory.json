@@ -1,0 +1,348 @@
+{
+  "schemaVersion": 1,
+  "reviewKind": "offline-existing-evidence-sample-suitability",
+  "workspace": "<repo>",
+  "scope": "Bounded current SAT1/xWin exact-path and saved-success audit. Not historical acceptance, new sample discovery, live proof, or a performance experiment.",
+  "conclusion": {
+    "positive": "Saved SAT1 rank68 and xWin rank1 are successful repeated-logical-instance local-TS amount-propagation controls. Both saved results contain 24/24 successful quote hops and zero Rust prefix reads.",
+    "negative": "Neither core route exercises the current remote ordered-prefix Rust quote path. Old xWin-directory successes and historical receipt-mode acceptance do not establish a representative current remote-prefix cohort under repeatTokenOff/repeatPoolOn. Six-hop rank8 is not selected.",
+    "unknown": "No successful current-default same-state remote ordered-prefix repeated-pool cohort is established in the inspected evidence. This is not a claim of global absence.",
+    "recommendation": "Use SAT1 rank68 only as a local-repeat control if a separate bounded diagnostic is authorized. xWin rank1 is a secondary local control conditional on preserving its exact saved synthetic source environment. There is no established remote-prefix timing cohort to recommend from this audit.",
+    "remainingPrerequisite": "A remote-prefix optimization needs an independently successful, source-bound, policy-eligible complete quote workload using current default semantics. Enumeration or partial/censored prefixes alone do not supply that evidence.",
+    "separateFamilyDirection": "Standard no-hook V4 currently has a remote amountQuoter path. Adding or optimizing its local math is a separate Family direction, not proposed or implemented here."
+  },
+  "terminology": {
+    "local": "All route amount math and same-trial transitions are TS-local for these two core routes; initial pinned source reads may still use RPC. Zero Rust prefix reads does not mean zero source reads or zero final simulation.",
+    "repeatedInstance": "Identity is the saved logical instanceKey; for V4 it includes PoolId, not PoolManager address alone.",
+    "natural": "Saved enumeration selected the candidate without forced additions. The subsequent single-route timing/simulation is post-selection diagnostic, not historical natural-discovery or live acceptance."
+  },
+  "currentSources": [
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/exact.ts",
+      "sha256": "e6f019551346e7af0e5f51d34a5574373f60f786b40c52bac9bce247f2cb8739",
+      "lines": "63-107",
+      "finding": "Default local state-read/decode path with trialState.quote; simulation is explicit, not fallback."
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/trial-state.ts",
+      "sha256": "b8a8aff90ca4c2c7535ef43f393a79f6ec82c5a74ad80b960a8eec445ef62182",
+      "lines": "51-75",
+      "finding": "quoteXwinTrial applies local fund/V3 transition state."
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/exact.ts",
+      "sha256": "3845aa23ef1de4edfdca227a4d67f5945416a528f371f299f413d627817f11e3",
+      "lines": "138-175",
+      "finding": "Default SAT1 local exact method; explicit quoter is a different mode."
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/sat1-local.ts",
+      "sha256": "be2f63e51e81fec410eceea7f7e6efdf6f829be04c4a3dc0f221e80e3807d57a",
+      "lines": "104-133",
+      "finding": "Source state loads once for a trial; later same-PoolId leg quotes current trial state."
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/univ4-family/exact.ts",
+      "sha256": "965c75cd171e9b8b70ebb13844f65ace417be2dd8348d832709e54226c8300f3",
+      "lines": "101-115",
+      "finding": "Standard no-hook V4 uses remote amount quoter with output balance, no local trialState implementation."
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "b39c665b75d817f4525e7e5e0547251848e7129f6c4502c69d63505439ca0e1a",
+      "lines": "1468-1478,1508-1535",
+      "finding": "Generic runtime chooses full EVM prefix when local trial-state continuation is unavailable; loaded trial state returns trial-state-exact-derived."
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-propagation.ts",
+      "sha256": "bb19c5245f011b09a0695bc4f5dc4695333ed7533436bb2854338e244ccf371a",
+      "lines": "89-99,124",
+      "finding": "Repeated logical-instance route preserves priorQuotes; it does not itself imply Rust work."
+    },
+    {
+      "path": "listener/src/searcher/blockscan-enumeration-config.ts",
+      "sha256": "e9023b69d0f938fef128215da1afb1883a29e0258d7a3cf7c64c38c7d4a03f9d",
+      "lines": "10-20",
+      "finding": "Current maxCandidates100, repeated pools on, repeated tokens off (closing return allowed), 3x3."
+    }
+  ],
+  "successfulLocalControls": [
+    {
+      "family": "sat1",
+      "result": {
+        "path": "logs/six-family-ev-20260930.Pc1Pv8/sat1/result.json",
+        "sha256": "d194da945efa7776585bd4e71bc8fa52c8648daa5cc020aba467c078717de12e"
+      },
+      "rank": 68,
+      "route": "WETH -> SAT1 -> WETH",
+      "cycleFingerprint": "0x237df0915aa2b47bd1a6489506542a59e02ea3812602da67b94a90ab5439df4a",
+      "edges": [
+        {
+          "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f",
+          "adapterId": "univ4-fee-hook-unlock",
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0x8f66337a0c2A02202fd91Dd596c411CF977c6060"
+        },
+        {
+          "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f",
+          "adapterId": "univ4-fee-hook-unlock",
+          "tokenIn": "0x8f66337a0c2A02202fd91Dd596c411CF977c6060",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        }
+      ],
+      "source": {
+        "number": 26029536,
+        "hash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+        "generation": 1
+      },
+      "stateRoot": "0xa8c4eb4a5b7d2a90ee1ffa7ca44d1f90394210a46c77e4bf3fb76f68cfb64afe",
+      "pRaw": "2000000000000000",
+      "naturalCandidateCount": 70,
+      "policyEvidence": {
+        "summary": {
+          "path": "<repo>/logs/repeat-policy-three-final.POePpH/sat1-token-off/offline-1/summary.json",
+          "sha256": "7d293a08a7ce58b9321b543d841d78496e99a6a84cf1bda5b6e8cea1040235bf"
+        },
+        "allowRepeatedTokens": false,
+        "allowRepeatedPools": true,
+        "selectionMode": "production",
+        "forcedSelectionCount": 0,
+        "tokenInUniqueAndTerminalReturnAllowed": true,
+        "sameInstanceRepeated": true,
+        "enumerationMethod": "joint-dfs",
+        "hopTokensPerStep": 3,
+        "hopPoolsPerPair": 3,
+        "savedMaxCandidates": 512,
+        "liveDefaultMaxCandidates": 100,
+        "caveat": "Saved enumeration was configured for 512 candidates, not the live 100 cap; both saved cohort counts and these ranks are below 100. No new live-equivalence rerun was performed."
+      },
+      "completedEvidence": {
+        "complete": true,
+        "exactHops": {
+          "attempted": 24,
+          "quoted": 24,
+          "failed": 0
+        },
+        "quoteReasonCounts": {
+          "request-exact-derived": 12,
+          "trial-state-exact-derived": 12
+        },
+        "rustPrefixReads": 0,
+        "amountPoints": 12,
+        "gssPoints": 8,
+        "finalSimulation": {
+          "success": true,
+          "amount": "461423614538167628",
+          "quoteProfit": "25093325849927",
+          "simGrossProfit": "25093325849927",
+          "gasUsed": "320170",
+          "positiveEv": true
+        },
+        "recordedEngineSha256": "24839c489f33ffd735a6061f49245b19e48db7b2de1b9133334b0ee78da4e3a1"
+      },
+      "inputArtifacts": [
+        {
+          "path": "<repo>/logs/six-family-ev-20260930.Pc1Pv8/sat1-continuation.json",
+          "sha256": "e414ceca53aace216a65b5e5c5dfdb1df209aa52edaa3d9cbacfa1902c1228c3"
+        },
+        {
+          "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/sat1-ready.json",
+          "sha256": "0bcbefca90fa703c30503f5d7f1994ca7a1932604cad124192099fb4ed882089"
+        },
+        {
+          "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/sat1/prices/prices.json",
+          "sha256": "918dbc1484ffec1431c33a663fdd2fea4c1fc109d7e76842bc17d6e1c7e0f031"
+        },
+        {
+          "path": "<repo>/logs/repeat-policy-three-final.POePpH/sat1-token-off/offline-1/enumeration.json",
+          "sha256": "54743dfbd2da1a89f77e8cded86999edb831f0a954dbdfa9dec4576d7cd67db7"
+        },
+        {
+          "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/sat1/prices/input.json",
+          "sha256": "a681976102723801b8e719dc06eb4e5c2e4a7fdb531472d8c1c0d2ca46c7e42a"
+        },
+        {
+          "path": "<repo>/logs/six-family-ev-20260930.Pc1Pv8/executor-runtime-code.json",
+          "sha256": "cccd8570832ede1e9aa3f1d12380a37a58493ab732740ce593cae6b03a299376"
+        }
+      ],
+      "suitability": {
+        "classification": "positive-local-repeat-control; negative-remote-prefix-target",
+        "preferred": true,
+        "caveats": [
+          "Pinned state is source26029536, but saved topology is26029537; topologyContainsFutureDiscovery=true and historicalNaturalDiscoveryProven=false.",
+          "Suitable only as declared post-selection local-repeat diagnostic; not historical acceptance or natural/live discovery proof.",
+          "No new timing, budget-completion, or production-throughput claim is made."
+        ]
+      }
+    },
+    {
+      "family": "xwin",
+      "result": {
+        "path": "logs/six-family-ev-20260930.Pc1Pv8/xwin/result.json",
+        "sha256": "de05ef8ee5bdab9cdea5250b74d5bb092d5a94cf139e8b3513c7f4934cff3f0f"
+      },
+      "rank": 1,
+      "route": "USDC -> xWin shares -> USDC",
+      "cycleFingerprint": "0xd98184a812306f6b4cbb082aa54c08f16609ba544f4c85b606e49896d02c5216",
+      "edges": [
+        {
+          "instanceKey": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "adapterId": "token-conversion-mint",
+          "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "tokenOut": "0x49eDcC5aAb2e349C1f71c27C98Fe9C65B01745b1"
+        },
+        {
+          "instanceKey": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "adapterId": "token-conversion-redeem",
+          "tokenIn": "0x49eDcC5aAb2e349C1f71c27C98Fe9C65B01745b1",
+          "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+        }
+      ],
+      "source": {
+        "number": 26029585,
+        "hash": "0x9659cc92d3abe53823e71a15e62873850687d5c50b195072bc0940a17ebc706d",
+        "generation": 1
+      },
+      "stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "pRaw": "5538803",
+      "naturalCandidateCount": 4,
+      "policyEvidence": {
+        "summary": {
+          "path": "<repo>/logs/repeat-policy-three-final.POePpH/xwin-token-off/offline-1/summary.json",
+          "sha256": "54bd4f42a88f8a8dc64890bab411509c7196d5bf92fb3021a238f3a0af81e36a"
+        },
+        "allowRepeatedTokens": false,
+        "allowRepeatedPools": true,
+        "selectionMode": "production",
+        "forcedSelectionCount": 0,
+        "tokenInUniqueAndTerminalReturnAllowed": true,
+        "sameInstanceRepeated": true,
+        "enumerationMethod": "joint-dfs",
+        "hopTokensPerStep": 3,
+        "hopPoolsPerPair": 3,
+        "savedMaxCandidates": 512,
+        "liveDefaultMaxCandidates": 100,
+        "caveat": "Saved enumeration was configured for 512 candidates, not the live 100 cap; both saved cohort counts and these ranks are below 100. No new live-equivalence rerun was performed."
+      },
+      "completedEvidence": {
+        "complete": true,
+        "exactHops": {
+          "attempted": 24,
+          "quoted": 24,
+          "failed": 0
+        },
+        "quoteReasonCounts": {
+          "request-exact-derived": 12,
+          "trial-state-exact-derived": 12
+        },
+        "rustPrefixReads": 0,
+        "amountPoints": 12,
+        "gssPoints": 8,
+        "finalSimulation": {
+          "success": true,
+          "amount": "5538803",
+          "quoteProfit": "1427235",
+          "simGrossProfit": "1427235",
+          "gasUsed": "1145009",
+          "positiveEv": true
+        },
+        "recordedEngineSha256": "24839c489f33ffd735a6061f49245b19e48db7b2de1b9133334b0ee78da4e3a1"
+      },
+      "inputArtifacts": [
+        {
+          "path": "<repo>/logs/six-family-ev-20260930.Pc1Pv8/xwin-continuation-env.json",
+          "sha256": "eb22cee41a8629a92f0bd23eccbd47a1f8533cb7adc9fb2e21320ba7ca20bc0b"
+        },
+        {
+          "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/xwin-ready.json",
+          "sha256": "383815646af341a6ba955b3d9d20d3249dbe2fa46b587d7a1546d53f8066f461"
+        },
+        {
+          "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/xwin/environment/production/prices.json",
+          "sha256": "168837c98d39c319ce55d084941e9f019de010d03237fc218885d6744ae19024"
+        },
+        {
+          "path": "<repo>/logs/repeat-policy-three-final.POePpH/xwin-token-off/offline-1/enumeration.json",
+          "sha256": "29e794a520628cda6e4080344577fe314a998f32bc5445bc9da0deacd1be626c"
+        },
+        {
+          "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/xwin/environment/production/input.json",
+          "sha256": "5028c5fea5ae4ccb4d4e24bafebc6df37f905fd0feda2d3cf39a448eeaead0de"
+        },
+        {
+          "path": "<repo>/logs/six-family-ev-20260930.Pc1Pv8/executor-runtime-code.json",
+          "sha256": "cccd8570832ede1e9aa3f1d12380a37a58493ab732740ce593cae6b03a299376"
+        }
+      ],
+      "suitability": {
+        "classification": "conditional-local-repeat-control; negative-remote-prefix-target",
+        "preferred": false,
+        "environment": {
+          "kind": "parent-state-with-N-environment",
+          "baseNumber": "0x18d2e10",
+          "actualNumber": "0x18d2e11",
+          "limitations": [
+            "Derived local empty N, not canonical N end-state; no full canonical state-root equivalence claimed."
+          ]
+        },
+        "caveats": [
+          "Derived empty-N environment at26029585 backed by parent26029584, with synthetic source hash and zero stateRoot; not canonical N end-state.",
+          "Do not remap this saved source hash/root to canonical external RPC. Exact environment rehydration would be a prerequisite under separate authorization.",
+          "Historical source-read latency does not establish a Rust-prefix bottleneck."
+        ]
+      }
+    }
+  ],
+  "archivedContext": {
+    "artifacts": [
+      {
+        "path": "logs/xwin-sequential-acceptance.XH3E7d/acceptance-summary.json",
+        "sha256": "b56cfc1d7c3660c8d415d34c31e82065455f69626c0799aac01aa04efce4d4cd"
+      },
+      {
+        "path": "logs/xwin-local-production-20260926/environment/production/summary.json",
+        "sha256": "ebe0cad9fcb1b6ab40691a85d01c519a8a279030f97fdcd051d616f39c790529"
+      },
+      {
+        "path": "logs/xwin-local-production-20260926/environment/production/solver-4.json",
+        "sha256": "7991577e88587da4c5433d99acbb70bb4329e510d0b97cf14338738b95cd8310"
+      },
+      {
+        "path": "logs/xwin-local-production-20260926/environment/production/solver-7.json",
+        "sha256": "03483467632201518557d472eb64683fd20637c6a48fd6af5c88c26f6ccf9bb4"
+      },
+      {
+        "path": "logs/xwin-local-production-20260926/environment/production/simulation-2.json",
+        "sha256": "e85f586134596fb8f89842c7a9ac5836262222e4dca15c55dff222a8b08303d5"
+      },
+      {
+        "path": "logs/xwin-local-production-20260926/environment/production/simulation-5.json",
+        "sha256": "5b6895ff10dabd682deefa829b99eb84e112b3e9fb02192ada28aeeb9de089e3"
+      }
+    ],
+    "findings": [
+      "In the previously inspected xwin-local-production-20260926/environment/production set, the15 Solver artifacts and5 successful simulations do not contain an xWin mint/redeem route despite the directory name.",
+      "The successful repeated-instance routes represented by solver-4/simulation-2 and solver-7/simulation-5 are V2/V3 routes with an internal repeated WETH token, so are excluded by current repeatTokenOff. Their current quote paths are local-model paths; those old artifacts do not themselves record a measured Rust-prefix count.",
+      "V4-containing successes in that inspected set do not repeat a logical instance, so are not repeated-prefix evidence.",
+      "xwin-sequential-acceptance.XH3E7d records an older successful two-hop receipt/simulation-mode route in a derived environment. Current xWin defaults to local trial-state math; enabling the old diagnostic mode would change the workload, not demonstrate representative current production behavior."
+    ]
+  },
+  "executedReadOnlyChecks": [
+    "Read sampled current exact/trial-state/default-policy and generic prefix dispatch code; SHA256 hashed the listed source files.",
+    "Parsed the two saved result files: complete=true, prefixReads.length=0,24 successful exact hops, zero failed exact hops, first final simulation success, quote profit equals simulated gross profit.",
+    "Rehashed all12 result input references across the two samples; each matched its recorded SHA256.",
+    "Matched each saved rank to its enumeration cycleFingerprint; verified repeated logical instance, unique tokenIn sequence, allowRepeatedTokens=false, allowRepeatedPools=true and forcedSelectionCount=0.",
+    "Hashed the listed saved results, policy summaries and previously inspected archived context files."
+  ],
+  "boundaries": {
+    "newNetworkOrRpc": false,
+    "productionImportsOrRuntimeRuns": false,
+    "replayOrTests": false,
+    "credentialAccess": false,
+    "productionOrConfigOrMarkdownEdits": false,
+    "newChainSamplesDiscovered": false,
+    "soleOutput": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/repeated-workload-inventory.json",
+    "taskGoalComplete": false
+  }
+}

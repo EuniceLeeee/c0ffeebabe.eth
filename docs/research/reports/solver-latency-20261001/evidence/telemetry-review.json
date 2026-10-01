@@ -1,0 +1,20 @@
+{
+  "reviewer": "01a0f21d-6bde-7e10-9003-c2e6a9f9ed04 (non-author of TS telemetry)",
+  "scope": "listener/src/searcher/blockscan-runtime-loop.ts diagnostic-only additions",
+  "verdict": "no blocking findings for bounded diagnostic",
+  "reviewed_file_sha256_prefix": "d18d12e3ebfd",
+  "reported_checks": {
+    "build_live": "pass",
+    "runtime_ordered_deadline_tests_diagnostics_enabled": "53 pass",
+    "in_memory_before_after_comparisons": "64 identical",
+    "diff_check": "pass"
+  },
+  "findings": [
+    "No await, cancellation or result mutation added",
+    "quoteMode agrees with propagation instance identity rule",
+    "Synchronous identity/logging exceptions contained",
+    "completed means solve returned; positiveCandidates separate",
+    "wallMs excludes logging cost; actual logging overhead not benchmarked"
+  ],
+  "frozen_first_window_unchanged": true
+}

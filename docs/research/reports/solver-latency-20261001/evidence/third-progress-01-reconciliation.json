@@ -1,0 +1,33 @@
+{
+  "scope": "Partial local Solver latency diagnostic, not paired Hermes acceptance",
+  "window": [
+    26090582,
+    26090755
+  ],
+  "heights": 174,
+  "timingRows": 173,
+  "manual": "third-progress-01.json",
+  "projection": "third-progress-01-latency.log.provenance.json",
+  "executionManifest": "third-progress-tools.json",
+  "executedTool": "analysis:blockscan-pass-latency",
+  "result": "Both analyses have identical173 rows and p50/p95 for total/state/enumeration/Solver. Projection input read later bytes but fixed same completed window. All173 cohorts incomplete;5 sub10s durations do not mean completed Solver or valid opportunities. No whole-stage speedup conclusion.",
+  "solverWallMs": {
+    "p50": 4367.054375000007,
+    "p95": 7901.82195799984
+  },
+  "totalMs": {
+    "p50": 12105.034458000213,
+    "p95": 16157.754292000085
+  },
+  "stateMs": {
+    "p50": 6587.134000000078,
+    "p95": 16157.531000000075
+  },
+  "simulation": {
+    "attempts": 147,
+    "successful": 0,
+    "positive": 0
+  },
+  "toolInvocationNote": "First invocation with --window was rejected because selected descriptor has null window_binding. Successful rerun uses hash-bound window projection plus real process anchors. This is a caller-argument correction, not a tool defect. Both invocations preserved in session output.",
+  "resource": "Read-only local file analysis; no added RPC/CU during this continuation. Existing frozen bounded live continues under original limits."
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "manualFirst": "source-storage-offline-main-assessment.json (raw results inspected and compared before tool-run)",
+  "capabilityQuery": [
+    "latency"
+  ],
+  "manifest": "source-storage-tools.json",
+  "manifestSha256": "2b06c1c51678c219e2525995193f4cabc95b895013c1acd38059aa8f677133ba",
+  "executedTool": "analysis:blockscan-pass-latency",
+  "exitCode": 0,
+  "output": "source-storage-offline-indexed-latency.log",
+  "canonicalFinding": "0live passes; no process-start anchor; eligibleForQualification=false",
+  "reconciliation": "Agrees with manual scope: selected Solver recorded-response contract is not a blockscan live pass. Request and semantic parity are separately checked in raw results; canonical latency metrics are inapplicable, not zero-latency.",
+  "independentRawReview": "source-storage-offline-result-review.json;54checks pass,638physicalitems match original recordings; agrees with main resource/parity verdict and rejects live latency extrapolation",
+  "toolingDefect": false,
+  "externalCuSpent": 0,
+  "goalComplete": false
+}

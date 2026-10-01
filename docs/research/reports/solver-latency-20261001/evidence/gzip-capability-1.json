@@ -1,0 +1,124 @@
+{
+  "declarationSha256": "6142c81b706997b838de5f62c1dd55436b8bff1301d6652a149aa8d5be4df6d0",
+  "attempts": [
+    {
+      "arm": "A",
+      "rawSha256": "332c0abc0837242690c6ef5fca1c2d09f145bc52018f94c595e10a259ed858d6",
+      "decodedBytes": 152296,
+      "resultHashes": [
+        {
+          "id": 1,
+          "sha256": "ee594f394a2f6ff2d1add67d119fe8ac86ba575d230ae68fd627f994b99fde53"
+        }
+      ],
+      "responseBytes": 152296,
+      "contentEncoding": "identity",
+      "headersMs": 556.486625,
+      "firstByteMs": 556.7207500000002,
+      "bodyEndMs": 984.7687500000002,
+      "totalMs": 985.432166,
+      "reusedSocket": true
+    },
+    {
+      "arm": "B",
+      "rawSha256": "332c0abc0837242690c6ef5fca1c2d09f145bc52018f94c595e10a259ed858d6",
+      "decodedBytes": 152296,
+      "resultHashes": [
+        {
+          "id": 1,
+          "sha256": "ee594f394a2f6ff2d1add67d119fe8ac86ba575d230ae68fd627f994b99fde53"
+        }
+      ],
+      "responseBytes": 15696,
+      "contentEncoding": "gzip",
+      "headersMs": 314.6007499999996,
+      "firstByteMs": 314.71254199999976,
+      "bodyEndMs": 323.26958399999967,
+      "totalMs": 324.7748339999998,
+      "reusedSocket": true
+    },
+    {
+      "arm": "B",
+      "rawSha256": "332c0abc0837242690c6ef5fca1c2d09f145bc52018f94c595e10a259ed858d6",
+      "decodedBytes": 152296,
+      "resultHashes": [
+        {
+          "id": 1,
+          "sha256": "ee594f394a2f6ff2d1add67d119fe8ac86ba575d230ae68fd627f994b99fde53"
+        }
+      ],
+      "responseBytes": 15664,
+      "contentEncoding": "gzip",
+      "headersMs": 366.0485840000001,
+      "firstByteMs": 366.1217919999999,
+      "bodyEndMs": 372.8927920000001,
+      "totalMs": 373.79100000000017,
+      "reusedSocket": true
+    },
+    {
+      "arm": "A",
+      "rawSha256": "332c0abc0837242690c6ef5fca1c2d09f145bc52018f94c595e10a259ed858d6",
+      "decodedBytes": 152296,
+      "resultHashes": [
+        {
+          "id": 1,
+          "sha256": "ee594f394a2f6ff2d1add67d119fe8ac86ba575d230ae68fd627f994b99fde53"
+        }
+      ],
+      "responseBytes": 152296,
+      "contentEncoding": "identity",
+      "headersMs": 344.57212500000014,
+      "firstByteMs": 344.7258330000004,
+      "bodyEndMs": 470.416917,
+      "totalMs": 471.39854200000036,
+      "reusedSocket": true
+    }
+  ],
+  "pre": {
+    "rawSha256": "c5df08b7bd9368e6a7d60b5a9eaf87498a5af4becaa9a25352087e9cc8968983",
+    "decodedBytes": 9418,
+    "resultHashes": [
+      {
+        "id": 101,
+        "sha256": "32d74fe09a60fb247229b49f6dfc2a06ba10e72cb813e62e8852415654381784"
+      },
+      {
+        "id": 102,
+        "sha256": "00638eb74f60a6957960ab69f4a5f17336f7a6658469523d4ac463eed3fca56c"
+      }
+    ],
+    "responseBytes": 9418,
+    "contentEncoding": "identity",
+    "headersMs": 969.295791,
+    "firstByteMs": 969.7451249999999,
+    "bodyEndMs": 970.0341249999999,
+    "totalMs": 970.431458,
+    "reusedSocket": false
+  },
+  "post": {
+    "rawSha256": "c5df08b7bd9368e6a7d60b5a9eaf87498a5af4becaa9a25352087e9cc8968983",
+    "decodedBytes": 9418,
+    "resultHashes": [
+      {
+        "id": 101,
+        "sha256": "32d74fe09a60fb247229b49f6dfc2a06ba10e72cb813e62e8852415654381784"
+      },
+      {
+        "id": 102,
+        "sha256": "00638eb74f60a6957960ab69f4a5f17336f7a6658469523d4ac463eed3fca56c"
+      }
+    ],
+    "responseBytes": 9418,
+    "contentEncoding": "identity",
+    "headersMs": 291.71570900000006,
+    "firstByteMs": 291.8368340000002,
+    "bodyEndMs": 299.8860420000001,
+    "totalMs": 300.174,
+    "reusedSocket": true
+  },
+  "failure": null,
+  "calls": 8,
+  "capabilityPass": true,
+  "allSocketsClosed": true,
+  "completedAt": "2026-09-30T19:06:35.249Z"
+}

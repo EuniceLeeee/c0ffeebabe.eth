@@ -1,0 +1,4046 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-01T03:04:44.610Z",
+  "purpose": "User-requested independent Solver latency handoff; not acceptance, deployment, or performance approval",
+  "baseCommit": "baca79b03384a93fb656482c09a5e4de026f5fbc",
+  "sourceBranch": "codex/s1-unified-adapter-architecture-impl",
+  "scope": "2026-09-30 Asia/Shanghai live diagnostics plus continuation experiments through 2026-10-01; no new chain access",
+  "chainRpcCalls": 0,
+  "externalCuSpent": 0,
+  "redaction": {
+    "policy": "Endpoints except allowlisted public source links, credential fields/assignments, user paths, large raw hex. Public chain addresses/hash IDs and numeric timing/results retained.",
+    "counts": {
+      "url": 19,
+      "credentialField": 30,
+      "credentialAssignment": 81,
+      "localPath": 67,
+      "largeHex": 0
+    },
+    "notRawLogs": true,
+    "originalFilesRemainLocal": true
+  },
+  "artifacts": [
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/assess-batch-split.mjs",
+      "sourceBytes": 5615,
+      "sourceSha256": "b878e7435fda477f949f3449bc22df696f3a28d51aa2055762434a788c7a6840",
+      "type": "redacted-text",
+      "file": "harnesses/assess-batch-split.mjs.txt",
+      "bytes": 5615,
+      "sha256": "b878e7435fda477f949f3449bc22df696f3a28d51aa2055762434a788c7a6840"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/assess-gzip-solver.mjs",
+      "sourceBytes": 5593,
+      "sourceSha256": "7813b70fcc6a6d5d7280001d4d3352a7abc667a2b7dc0c655eeda2f4afb42469",
+      "type": "redacted-text",
+      "file": "harnesses/assess-gzip-solver.mjs.txt",
+      "bytes": 5593,
+      "sha256": "7813b70fcc6a6d5d7280001d4d3352a7abc667a2b7dc0c655eeda2f4afb42469"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/baseline-first250-manual.json",
+      "sourceBytes": 7437,
+      "sourceSha256": "b5695de039a2ab8995a60e35a82e6eb3d7fff80a943c25e45addbe8d2288d8d4",
+      "type": "redacted-json",
+      "file": "evidence/baseline-first250-manual.json",
+      "bytes": 7380,
+      "sha256": "0fd4cd6b17a9964dab4ab4ecdc7f47efc75b9bca810916d18db8b39e8e77f311"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/baseline-reconciliation.json",
+      "sourceBytes": 1445,
+      "sourceSha256": "4fbcc2a9aa93e15087091320d9c957ae817d34b77240cdca5c45d93d16ed1f47",
+      "type": "redacted-json",
+      "file": "evidence/baseline-reconciliation.json",
+      "bytes": 1519,
+      "sha256": "2bc99ac3cc7fbe76c8b8e5f7faa078e31ccb187ae9ec038341045f643ff6b7da"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/baseline250-latency.log",
+      "sourceBytes": 2362014,
+      "sourceSha256": "7bd63c58d88640164b9d2931977541d72fbe17a913158715c62338877e5d37c2",
+      "type": "redacted-line-preserving-log",
+      "lines": 1634867,
+      "redactedSha256": "7bd63c58d88640164b9d2931977541d72fbe17a913158715c62338877e5d37c2",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/baseline250-latency.log.part-001.redacted.log.gz",
+          "lines": 1634867,
+          "uncompressedBytes": 2362014,
+          "bytes": 72563,
+          "sha256": "8604d204d0cdaec641d73f3254aee9635a2668255f9b482a4b05a763df19e470"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/baseline250-latency.log.provenance.json",
+      "sourceBytes": 743,
+      "sourceSha256": "5eaca0315c82c1c1df074329c7c9197eb67ffda01a9ffb42c76bcde0f86c196d",
+      "type": "redacted-json",
+      "file": "evidence/baseline250-latency.log.provenance.json",
+      "bytes": 629,
+      "sha256": "2769828eb843b7024edbb5af24183e54ad221847b14e596a6ab9a333a6167573"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/batch-split-manual.json",
+      "sourceBytes": 2175,
+      "sourceSha256": "e378a0e37e7e4a72c4e9865bfc7d91908027a3bcdf859d2f2210c66750419be9",
+      "type": "redacted-json",
+      "file": "evidence/batch-split-manual.json",
+      "bytes": 2271,
+      "sha256": "c7f6eaf4186d646416206b4b466924cdaca1ad2216e6a94d17c7e8df36a47212"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/batch-split-reconciliation.json",
+      "sourceBytes": 1561,
+      "sourceSha256": "02328609c6d60744100be8a8a624b26342bca75baf358d7f74b2156d91f08bab",
+      "type": "redacted-json",
+      "file": "evidence/batch-split-reconciliation.json",
+      "bytes": 1561,
+      "sha256": "02328609c6d60744100be8a8a624b26342bca75baf358d7f74b2156d91f08bab"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/batch-split-review.json",
+      "sourceBytes": 12655,
+      "sourceSha256": "1a4704f5549c2f8df0fd92afa4b8edc10566f43044d044b35d36bfac0d005649",
+      "type": "redacted-json",
+      "file": "evidence/batch-split-review.json",
+      "bytes": 13288,
+      "sha256": "cfc41429e0019b37cd0a9da400b3a981b2f01bb235aad619fb9d81753c94c33e"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/batch-split-timing.json",
+      "sourceBytes": 5984,
+      "sourceSha256": "d620cbdc231f9d14e2ac3102627325c9d1c3c2a78c4bb46fad2fa2cf7c9be232",
+      "type": "redacted-json",
+      "file": "evidence/batch-split-timing.json",
+      "bytes": 5984,
+      "sha256": "d620cbdc231f9d14e2ac3102627325c9d1c3c2a78c4bb46fad2fa2cf7c9be232"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/batch-split-tools.json",
+      "sourceBytes": 3061,
+      "sourceSha256": "e73bb1de141b334992910863798b1f915a0d9385640bf117fe1dcc1f0c9727f3",
+      "type": "redacted-json",
+      "file": "evidence/batch-split-tools.json",
+      "bytes": 3004,
+      "sha256": "85f6f1ed9f0b5b4016131bfb5fe6bae2f9a732aa3d2f98c043f6efd5036edb8c"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cache-skip-main-review.json",
+      "sourceBytes": 1930,
+      "sourceSha256": "cb9123bc2907745b07ec9d5bd493e097659dcc4d64b930077b34097b0294af0d",
+      "type": "redacted-json",
+      "file": "evidence/cache-skip-main-review.json",
+      "bytes": 2040,
+      "sha256": "c263d561054b7e23d8ada1c7773537c5988e2ca175eab7fa77e68fd018f1ffd1"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-prefix-assessment.json",
+      "sourceBytes": 2174,
+      "sourceSha256": "b1827c91151fcb6beaa17b0372f872a106b4a44a8611854528ee3211397977bc",
+      "type": "redacted-json",
+      "file": "evidence/cold-prefix-assessment.json",
+      "bytes": 2426,
+      "sha256": "aa164ae63bdefddb84b7529b62214a2cdf6accd9fe2692f316e5d149f58244c3"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-prefix-brief.json",
+      "sourceBytes": 3479,
+      "sourceSha256": "7c5ddb7a0451f1a8474223232de5f8b578a2a88a8bd5396988752defd8c4ed0a",
+      "type": "redacted-json",
+      "file": "evidence/cold-prefix-brief.json",
+      "bytes": 3515,
+      "sha256": "b9bf1dca8edf09e1355dcaebb854ca94ef93935f5fe374c1a69ded35f7d86221"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-prefix-main-review.json",
+      "sourceBytes": 1658,
+      "sourceSha256": "6299077f9ab45c76ac436c9c5e093bfd3bf1b54fd366c1b71de446a8a61f6b01",
+      "type": "redacted-json",
+      "file": "evidence/cold-prefix-main-review.json",
+      "bytes": 1682,
+      "sha256": "aa647bb28216c2452c385475dafe62da62b5d6fcd8e80cf31c21fa5a97fc9cd1"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-prefix-main-tests.log",
+      "sourceBytes": 236663,
+      "sourceSha256": "e03c23e72a4e1ea6f2d6f5728d7a0bc6de2cf745a1647e6acaf81ed93294597c",
+      "type": "redacted-line-preserving-log",
+      "lines": 1129,
+      "redactedSha256": "6c8eb76ed8d370733dbdc9499e21de0b929c9f61e5adff937b879cdb4d88d5d7",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/cold-prefix-main-tests.log.part-001.redacted.log.gz",
+          "lines": 1129,
+          "uncompressedBytes": 236447,
+          "bytes": 14461,
+          "sha256": "5c7ea07cefd67dbe858633e05d96eecbbdc1d8e7b2fb2fe231b923b9c122ea54"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-prefix-reconciliation.json",
+      "sourceBytes": 1049,
+      "sourceSha256": "6169f7392799f83f814644fcae33cd5e14629da7b4478df3504787fdf3734bee",
+      "type": "redacted-json",
+      "file": "evidence/cold-prefix-reconciliation.json",
+      "bytes": 1089,
+      "sha256": "b83fa6e360ac2e8f0ccb560756c4df94123093c360376dc4aa2b8a5583c2dd41"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-prefix-timing.json",
+      "sourceBytes": 4923,
+      "sourceSha256": "4cca4a2b6937be4d45c18abd11173fe73de38f3254fe44d537a30b0ec08350f7",
+      "type": "redacted-json",
+      "file": "evidence/cold-prefix-timing.json",
+      "bytes": 4923,
+      "sha256": "4cca4a2b6937be4d45c18abd11173fe73de38f3254fe44d537a30b0ec08350f7"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-prefix-tools.json",
+      "sourceBytes": 3095,
+      "sourceSha256": "a715f403698046ca68e34e4c1416fbc3a69fcd79372cd3f13ffbd12344b0466f",
+      "type": "redacted-json",
+      "file": "evidence/cold-prefix-tools.json",
+      "bytes": 3038,
+      "sha256": "271845daf5da769479ab5dbe4bb47101c1f90c7db7924a6910635dfbd77adaea"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-build.log",
+      "sourceBytes": 513,
+      "sourceSha256": "3cc83ac0849508c36377e1a9f077a2e599b534af5ff3471769488673e2d7f374",
+      "type": "redacted-line-preserving-log",
+      "lines": 11,
+      "redactedSha256": "1519bc8dbf7dec261cf942a923df05c141d496a041403883dcc78c801071e98e",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/cold-source-build.log.part-001.redacted.log.gz",
+          "lines": 11,
+          "uncompressedBytes": 456,
+          "bytes": 284,
+          "sha256": "1a5bbe869a5292965de7a044f647699b44c83c722c11f28284af024a14c6879e"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-canonical-latency.log",
+      "sourceBytes": 2930,
+      "sourceSha256": "965510c72120b6ee8a481169fd61bd62aef82abd04d9326b1ca4dba5f90b72a6",
+      "type": "redacted-line-preserving-log",
+      "lines": 131,
+      "redactedSha256": "965510c72120b6ee8a481169fd61bd62aef82abd04d9326b1ca4dba5f90b72a6",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/cold-source-canonical-latency.log.part-001.redacted.log.gz",
+          "lines": 131,
+          "uncompressedBytes": 2930,
+          "bytes": 720,
+          "sha256": "022d1972f27a09a25a8ecdb626b16e2e9880c077160004e22d92533b52e306de"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-experiment-review-2.json",
+      "sourceBytes": 10497,
+      "sourceSha256": "02349e0d426fe7822f0b0d3fd4d74fd7965ddfa40c70726363f2d9c421e98de6",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-experiment-review-2.json",
+      "bytes": 10440,
+      "sha256": "d7a1b337763ae951ab0c599cc16a8a2920c24ccf423625b5ef056bd1609d4f30"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-experiment-review.json",
+      "sourceBytes": 11220,
+      "sourceSha256": "4cee042dba4e51f3249a375552e659af1b19b7c39cb49559cd8adaebbe2879cf",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-experiment-review.json",
+      "bytes": 10999,
+      "sha256": "dfc26ee637735275636dcb29dad6a2b0e7ddd27def918e7aaedd6533810d37a1"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-full-tests.log",
+      "sourceBytes": 315504,
+      "sourceSha256": "5766fc97913e8d2550630c3e16aa1155c5ea98b8888e4a7bb3e1c76ee6b804a9",
+      "type": "redacted-line-preserving-log",
+      "lines": 1292,
+      "redactedSha256": "a93db94c9c040b2a093fbaf83b0844bc0ee4a7e0afdf2b499b58555dbc8aa1e3",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/cold-source-full-tests.log.part-001.redacted.log.gz",
+          "lines": 1292,
+          "uncompressedBytes": 314340,
+          "bytes": 15186,
+          "sha256": "45bdbca4c5a9683cd035c523b589ebf0871bfa3cce31d3aa1f9f91676087d5fe"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-hydration-plan.json",
+      "sourceBytes": 4897,
+      "sourceSha256": "bc6def0480c24b2e7cb73fe7487cbfc52fb45a172ab20c6cebbd846d3ad31320",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-hydration-plan.json",
+      "bytes": 5084,
+      "sha256": "2b8e920210cdb406635193afc59964ebe1a56339e27b9d2362ea8990d94af83b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-implementation-review.json",
+      "sourceBytes": 10034,
+      "sourceSha256": "eb670a2eb01b49aa3112405b7e530b871599c8c0bf51f678dd1d8c5fcf639d89",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-implementation-review.json",
+      "bytes": 10270,
+      "sha256": "35082cb375c42f6f29f2456cda4f296395cd71fad2e0fe45eb66e9944cdb4c95"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-launch-receipt.json",
+      "sourceBytes": 581,
+      "sourceSha256": "95972280df341ba02bb18e673b2aac5ae0ac8e2a8f9ca42e0edb608695ae460c",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-launch-receipt.json",
+      "bytes": 468,
+      "sha256": "ac1cdaa6ca7c5a8b3d099d51a2fcf9d35ca69287148657deacb7840e2df95405"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-launcher-test.mjs",
+      "sourceBytes": 1324,
+      "sourceSha256": "44cd4999114fd5b509a4663784de557aca96f9407a86ab0666fc7daaf76050ff",
+      "type": "redacted-text",
+      "file": "harnesses/cold-source-launcher-test.mjs.txt",
+      "bytes": 1324,
+      "sha256": "44cd4999114fd5b509a4663784de557aca96f9407a86ab0666fc7daaf76050ff"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-manual-assessment.json",
+      "sourceBytes": 2815,
+      "sourceSha256": "c4030ef5f32ba9b6c7a231c7cf5573cedbc7faa7b7a01fb9c9ceb02e77373180",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-manual-assessment.json",
+      "bytes": 2955,
+      "sha256": "e81f3386f773377da69fc207f3900716fdb6cc993ba01e442f4e6ce2f4095533"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-offline-preflight-2.json",
+      "sourceBytes": 2947,
+      "sourceSha256": "00003cc9d916eb17bf8678a26290c8e30fce2a6741cc7f31fcc66cdfcf88c8dc",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-offline-preflight-2.json",
+      "bytes": 2377,
+      "sha256": "3ea56d39accb4800743487c8b60c516662848cbda5b67479c4e3cf714290189b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-offline-preflight.json",
+      "sourceBytes": 2947,
+      "sourceSha256": "00003cc9d916eb17bf8678a26290c8e30fce2a6741cc7f31fcc66cdfcf88c8dc",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-offline-preflight.json",
+      "bytes": 2377,
+      "sha256": "3ea56d39accb4800743487c8b60c516662848cbda5b67479c4e3cf714290189b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-reconciliation.json",
+      "sourceBytes": 2079,
+      "sourceSha256": "5d3b33e808695c6be0607a7d68ad04aec6b8295597143df4c6d87ba842de30c9",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-reconciliation.json",
+      "bytes": 2103,
+      "sha256": "99b297a7699f27033fa7a8d0e8a47375e3a03f7674f8697f370df7cb809c5704"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-restored-build.log",
+      "sourceBytes": 513,
+      "sourceSha256": "ade567194232705dcddb7aaf2ff54e4a4bc9aa78bb94b8d5d54fc45dc9516528",
+      "type": "redacted-line-preserving-log",
+      "lines": 11,
+      "redactedSha256": "3f106e6a424a39078c37a9d67b8de19d586cb0fc10954e42e903a5b4b483dae1",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/cold-source-restored-build.log.part-001.redacted.log.gz",
+          "lines": 11,
+          "uncompressedBytes": 456,
+          "bytes": 283,
+          "sha256": "8f7511dd48b71e32372c9da52c71e9c0b5fa7825d31f4237869ff13cd9ee0af6"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-restored-tests.log",
+      "sourceBytes": 283760,
+      "sourceSha256": "061b9af6b847bf4ef8d08dd7f0f55f5ac352c79508a7a9b1768a8f3323330e20",
+      "type": "redacted-line-preserving-log",
+      "lines": 1298,
+      "redactedSha256": "c989639719b923cbd96adc905b18daf53779bc7d604bf24a3e94590125b740f2",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/cold-source-restored-tests.log.part-001.redacted.log.gz",
+          "lines": 1298,
+          "uncompressedBytes": 282949,
+          "bytes": 15658,
+          "sha256": "87ad8fc2d4d0b1b5ca0a2473d10a890e024f7d90aba355aac1411b75e502511d"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-result-review.json",
+      "sourceBytes": 18581,
+      "sourceSha256": "94ae7761c630810eb397c1fb66d00c3e7980d9547e9adfeb0f83b8d6c4069d2a",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-result-review.json",
+      "bytes": 18410,
+      "sha256": "28cc5f9bcbb746c331a456b2e5f494d8f2895c15557757eafcc420f5f69c96df"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-tests-2.log",
+      "sourceBytes": 32115,
+      "sourceSha256": "9ceed015930eee8513ab2f6b28048a548fdea90c1b10b5f927abed60ef9fb4f8",
+      "type": "redacted-line-preserving-log",
+      "lines": 78,
+      "redactedSha256": "d89d3ac81d650569b6102032f26bbe0916d7853d11451de8452b4aaaa67b9a1c",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/cold-source-tests-2.log.part-001.redacted.log.gz",
+          "lines": 78,
+          "uncompressedBytes": 31833,
+          "bytes": 2490,
+          "sha256": "30a9e61329c76affb37720655b9d371ff6adcdf8c996693eb15288fdb9a5ce13"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-tests-3.log",
+      "sourceBytes": 34453,
+      "sourceSha256": "6977ad794ff24142cfd43ec34e2bde7021c6c21c3c2fd74a9e83e7ba59830759",
+      "type": "redacted-line-preserving-log",
+      "lines": 80,
+      "redactedSha256": "9a9b2c604fe2548da662169f61f6929f98e6b74d0101593d20cf1fb9d32940ad",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/cold-source-tests-3.log.part-001.redacted.log.gz",
+          "lines": 80,
+          "uncompressedBytes": 34155,
+          "bytes": 2641,
+          "sha256": "4028ec4b4c8a7b7c9c3bd5aa38a024bb1999f57f972a64c0d1750d5aeb3a87a1"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-tests.log",
+      "sourceBytes": 2845,
+      "sourceSha256": "aa3f64f8d93d0d60546d7be580cfdc04a4128fbaf2ce3c37da4a19bfc83b9658",
+      "type": "redacted-line-preserving-log",
+      "lines": 33,
+      "redactedSha256": "aa3f64f8d93d0d60546d7be580cfdc04a4128fbaf2ce3c37da4a19bfc83b9658",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/cold-source-tests.log.part-001.redacted.log.gz",
+          "lines": 33,
+          "uncompressedBytes": 2845,
+          "bytes": 690,
+          "sha256": "596240f12ddeaea0e1003b4511ec169ed6555029776ba8443cc1432d8a5d7abc"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-timing.json",
+      "sourceBytes": 6535,
+      "sourceSha256": "4a5842e407c74b70c341f57efe2e109accc18269ec0ffee9c2fdac94ca817a65",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-timing.json",
+      "bytes": 6535,
+      "sha256": "4a5842e407c74b70c341f57efe2e109accc18269ec0ffee9c2fdac94ca817a65"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-tools.json",
+      "sourceBytes": 3098,
+      "sourceSha256": "fd5b26c7dfb2bbbf1b5e09640fa3e6b2bfce2a6d581d49dd6972f4040bd97136",
+      "type": "redacted-json",
+      "file": "evidence/cold-source-tools.json",
+      "bytes": 3041,
+      "sha256": "7919db2a6020104c0b0fa70d686c5810ccd697b6874cc40cd234466f998ff9f4"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-ts-rust-integration.log",
+      "sourceBytes": 49558,
+      "sourceSha256": "ab8fc446182eab678ab88089450f0cf075478e65c1d43b9cf3d9498df4786f90",
+      "type": "redacted-line-preserving-log",
+      "lines": 423,
+      "redactedSha256": "ab8fc446182eab678ab88089450f0cf075478e65c1d43b9cf3d9498df4786f90",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/cold-source-ts-rust-integration.log.part-001.redacted.log.gz",
+          "lines": 423,
+          "uncompressedBytes": 49558,
+          "bytes": 7309,
+          "sha256": "c3edb245451b8d085c2545c5af124de0f83f969440b9cf66cc2134a72b34a160"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/complete-prefix-pair-snapshot.mjs",
+      "sourceBytes": 1271,
+      "sourceSha256": "199da51cdfef6c2a62d35d786b339ccb66ba71cdd4fa29f8aa6a30626087a3c2",
+      "type": "redacted-text",
+      "file": "harnesses/complete-prefix-pair-snapshot.mjs.txt",
+      "bytes": 1271,
+      "sha256": "199da51cdfef6c2a62d35d786b339ccb66ba71cdd4fa29f8aa6a30626087a3c2"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/continuation-state.json",
+      "sourceBytes": 35456,
+      "sourceSha256": "eb18733287699871e08b137a2af5d409d81a1857634729402ef73e873b1c22f0",
+      "type": "redacted-json",
+      "file": "evidence/continuation-state.json",
+      "bytes": 35301,
+      "sha256": "2664c78b8dab5e1c5186578ce3cec80f1f68c82c5a0c8015194ea64b0103b20d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/current-latency-tools.json",
+      "sourceBytes": 4062,
+      "sourceSha256": "d4f6ab8d6a3d76803118021797ccff27d0fd9f0ef1855e45ca0599dc0e99e600",
+      "type": "redacted-json",
+      "file": "evidence/current-latency-tools.json",
+      "bytes": 4005,
+      "sha256": "a6776cd01a3e623904d7deaf3bb49ba3e348debb84882f7b3be1d978fec80120"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/current-progress-latency.log",
+      "sourceBytes": 1108461,
+      "sourceSha256": "97365cef1047b939a126891b0f01939481f21029252b2d7060905b8be5fa0308",
+      "type": "redacted-line-preserving-log",
+      "lines": 608470,
+      "redactedSha256": "97365cef1047b939a126891b0f01939481f21029252b2d7060905b8be5fa0308",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/current-progress-latency.log.part-001.redacted.log.gz",
+          "lines": 608470,
+          "uncompressedBytes": 1108461,
+          "bytes": 50116,
+          "sha256": "7c1a443a61b6d248f7672b0765fe9253459006ab06ecd213c2b5b80e3ebea9ed"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/current-progress-latency.log.provenance.json",
+      "sourceBytes": 756,
+      "sourceSha256": "e0f7fd20ccf9e378ebd24b0bf58e6321bf13bc0e25608d8134228d68d12ca628",
+      "type": "redacted-json",
+      "file": "evidence/current-progress-latency.log.provenance.json",
+      "bytes": 642,
+      "sha256": "a15e0cf3517861a591b4605f841a0e6f163ed00d04f1093869b8659156715dd0"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/current-progress-reconciliation.json",
+      "sourceBytes": 1530,
+      "sourceSha256": "2a9f77be6122bc90dad3f33628e7a434c0d0b3c1dad36d6189dea57d610b0686",
+      "type": "redacted-json",
+      "file": "evidence/current-progress-reconciliation.json",
+      "bytes": 1543,
+      "sha256": "77f101a2b16711c7a9f5a815dacadedfeb37678dd86f415fb2e69f0123c9243b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/declare-prefix-pair-solver.mjs",
+      "sourceBytes": 2225,
+      "sourceSha256": "108faaa0cb30532bef60b1c3afbaaf2e88e66c0e7b974266339adbccf47bd3e7",
+      "type": "redacted-text",
+      "file": "harnesses/declare-prefix-pair-solver.mjs.txt",
+      "bytes": 2225,
+      "sha256": "108faaa0cb30532bef60b1c3afbaaf2e88e66c0e7b974266339adbccf47bd3e7"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/experiment.json",
+      "sourceBytes": 1695,
+      "sourceSha256": "c3224e17200d60003444d7742c96b9997c52bc65af75f27eb3b0271ce3d2b591",
+      "type": "redacted-json",
+      "file": "evidence/experiment.json",
+      "bytes": 1857,
+      "sha256": "fe3a03640c358115d73378291acc740c96286c809ff666d12f4c665c1926eb61"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/first250-final.json",
+      "sourceBytes": 4128,
+      "sourceSha256": "457746f62a13165f27da1cd7fb936a4ebc451e1a37d04fd635f2bd9679f76dcd",
+      "type": "redacted-json",
+      "file": "evidence/first250-final.json",
+      "bytes": 4071,
+      "sha256": "7094794197e2c79b409e8ccfd525711ae1b25e4ac97de0735fd3fa1dc5048e77"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/first250-latency.log",
+      "sourceBytes": 1445425,
+      "sourceSha256": "088bb208794ee3d28a145d12c9c8529495c84ee9d63ae1b9a49bc51ad2a457b9",
+      "type": "redacted-line-preserving-log",
+      "lines": 760726,
+      "redactedSha256": "088bb208794ee3d28a145d12c9c8529495c84ee9d63ae1b9a49bc51ad2a457b9",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/first250-latency.log.part-001.redacted.log.gz",
+          "lines": 760726,
+          "uncompressedBytes": 1445425,
+          "bytes": 69079,
+          "sha256": "cde35ebe57ff11c97f78279d2e0056a41e4522a2c219dfbc4c8be07f935be4e9"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/first250-latency.log.provenance.json",
+      "sourceBytes": 748,
+      "sourceSha256": "780ab5626c45740327a0110fc4e83af00dff527da38fa33c54e408078f64aa0c",
+      "type": "redacted-json",
+      "file": "evidence/first250-latency.log.provenance.json",
+      "bytes": 634,
+      "sha256": "6f53a1a1fdcc0c032a47b3500fa8b88d9609f0a882d1e0b2aefba8a3a37b2e63"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/first250-quote-waves.json",
+      "sourceBytes": 123863,
+      "sourceSha256": "0605c747a9f051bc62783c4fc16f0268e63774b62469f5c7eac9101ac6c725a9",
+      "type": "redacted-json",
+      "file": "evidence/first250-quote-waves.json",
+      "bytes": 123806,
+      "sha256": "ec6c790e6ce4dd56e447d71b1b0211f5b5ff9ed510b9aa9cec8d040867add541"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/first250-reconciliation.json",
+      "sourceBytes": 2289,
+      "sourceSha256": "50206adcb0b12f022e67108b1068d3710ea1b0d959d3f88674cbee1b214ade02",
+      "type": "redacted-json",
+      "file": "evidence/first250-reconciliation.json",
+      "bytes": 2344,
+      "sha256": "a7ab7c07d7c9655d69b2c6b4361eada97611faa362faa7c405f4a4416625ffec"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/freeze-prefix-pair.mjs",
+      "sourceBytes": 5741,
+      "sourceSha256": "6cc5fe213b24b6bced918226804369abb911dbf645c48f1bbb615bc04077bf5a",
+      "type": "redacted-text",
+      "file": "harnesses/freeze-prefix-pair.mjs.txt",
+      "bytes": 5741,
+      "sha256": "6cc5fe213b24b6bced918226804369abb911dbf645c48f1bbb615bc04077bf5a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-1-declaration.json",
+      "sourceBytes": 883,
+      "sourceSha256": "6142c81b706997b838de5f62c1dd55436b8bff1301d6652a149aa8d5be4df6d0",
+      "type": "redacted-json",
+      "file": "evidence/gzip-capability-1-declaration.json",
+      "bytes": 883,
+      "sha256": "6142c81b706997b838de5f62c1dd55436b8bff1301d6652a149aa8d5be4df6d0"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-1.json",
+      "sourceBytes": 3671,
+      "sourceSha256": "9bb3d1995ded2708ce673a606236f42206bf76004c59b92a96b01e2fb68ed9ef",
+      "type": "redacted-json",
+      "file": "evidence/gzip-capability-1.json",
+      "bytes": 3671,
+      "sha256": "9bb3d1995ded2708ce673a606236f42206bf76004c59b92a96b01e2fb68ed9ef"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-brief.json",
+      "sourceBytes": 1781,
+      "sourceSha256": "d7d161129e64f91d7e2b979fd70a7232425037240a884bb96876609b92cdedd6",
+      "type": "redacted-json",
+      "file": "evidence/gzip-capability-brief.json",
+      "bytes": 1781,
+      "sha256": "d7d161129e64f91d7e2b979fd70a7232425037240a884bb96876609b92cdedd6"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-manual.json",
+      "sourceBytes": 868,
+      "sourceSha256": "431cc4f075c47a0f904120f4484145e5d5c9aa9c46e862739ca58e2893a64589",
+      "type": "redacted-json",
+      "file": "evidence/gzip-capability-manual.json",
+      "bytes": 868,
+      "sha256": "431cc4f075c47a0f904120f4484145e5d5c9aa9c46e862739ca58e2893a64589"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-probe.mts",
+      "sourceBytes": 8421,
+      "sourceSha256": "038d785927eeb6a1d476fe3489ad0defa8ca3cc200271a132f94e4b0fc48843f",
+      "type": "redacted-text",
+      "file": "harnesses/gzip-capability-probe.mts.txt",
+      "bytes": 8421,
+      "sha256": "038d785927eeb6a1d476fe3489ad0defa8ca3cc200271a132f94e4b0fc48843f"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-reconciliation.json",
+      "sourceBytes": 1092,
+      "sourceSha256": "95745bd039cc8773b3b4a9c4b186a0eb06d5f9df5f66ca828beb5303aecce519",
+      "type": "redacted-json",
+      "file": "evidence/gzip-capability-reconciliation.json",
+      "bytes": 1092,
+      "sha256": "95745bd039cc8773b3b4a9c4b186a0eb06d5f9df5f66ca828beb5303aecce519"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-review.json",
+      "sourceBytes": 12912,
+      "sourceSha256": "c4271353b728d0ffb530047df7f121be44c9634a5fb640553a88c3f5910bf859",
+      "type": "redacted-json",
+      "file": "evidence/gzip-capability-review.json",
+      "bytes": 13291,
+      "sha256": "457fe84bc13ac5022a3188f8b9eedbd8cdab67f6a122331be50e36787cd48506"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-tools.json",
+      "sourceBytes": 3055,
+      "sourceSha256": "0dc537b2b429b50b417b163b9c91ad7837fb4a802c23ecd5102407e7214207ac",
+      "type": "redacted-json",
+      "file": "evidence/gzip-capability-tools.json",
+      "bytes": 2998,
+      "sha256": "a1c02b109935f7c79247ab623bd41b8a51ed835afd52c41e79f9532cb966e102"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-solver-assessment.json",
+      "sourceBytes": 47506,
+      "sourceSha256": "a20868b629629329b15b66f32459c151a599150e8f97268fbe4893827372775f",
+      "type": "redacted-json",
+      "file": "evidence/gzip-solver-assessment.json",
+      "bytes": 47506,
+      "sha256": "a20868b629629329b15b66f32459c151a599150e8f97268fbe4893827372775f"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-solver-manual.json",
+      "sourceBytes": 1851,
+      "sourceSha256": "310de85c6d23d02706b6e5dc237176b5789871ecbc69b3d90e489928425fe443",
+      "type": "redacted-json",
+      "file": "evidence/gzip-solver-manual.json",
+      "bytes": 1851,
+      "sha256": "310de85c6d23d02706b6e5dc237176b5789871ecbc69b3d90e489928425fe443"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-solver-reconciliation.json",
+      "sourceBytes": 1650,
+      "sourceSha256": "77137600c99f33868f090356f310ed7f24ac96615a4b23e1a84e7d329b3b5944",
+      "type": "redacted-json",
+      "file": "evidence/gzip-solver-reconciliation.json",
+      "bytes": 1770,
+      "sha256": "eb1743ff7cf42432b68eea2b27294e161ad0a6361e60383e427de71c9586d0b2"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-solver-result-review.json",
+      "sourceBytes": 47624,
+      "sourceSha256": "f59f796326fbe9c9e063f59bdba2d273691688a6c3ac16015eb846d370ea9601",
+      "type": "redacted-json",
+      "file": "evidence/gzip-solver-result-review.json",
+      "bytes": 47624,
+      "sha256": "f59f796326fbe9c9e063f59bdba2d273691688a6c3ac16015eb846d370ea9601"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-solver-review.json",
+      "sourceBytes": 15580,
+      "sourceSha256": "053aeb7fcffbbbf7e484ea0d7c899abbd0e2bc576c19bea7c4ecdcb590920274",
+      "type": "redacted-json",
+      "file": "evidence/gzip-solver-review.json",
+      "bytes": 14155,
+      "sha256": "62884613917b0d89216d7c7b7ab0ac2298f5114efaa7f5df8d1d30494c71994c"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-solver-tools.json",
+      "sourceBytes": 3054,
+      "sourceSha256": "61cbaf5626d9403a752f4006219706c771459daaf13d18cee5c3def2cf041a3b",
+      "type": "redacted-json",
+      "file": "evidence/gzip-solver-tools.json",
+      "bytes": 2997,
+      "sha256": "4681def2687ffda6816a595f65f948d234a2758b868b6dc1b31beccb2bd498c1"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-transport-brief.json",
+      "sourceBytes": 2755,
+      "sourceSha256": "bc4b8a1c38460ec9e1482a6518bf39e19748af336149f1a8c51a852196949589",
+      "type": "redacted-json",
+      "file": "evidence/gzip-transport-brief.json",
+      "bytes": 2755,
+      "sha256": "bc4b8a1c38460ec9e1482a6518bf39e19748af336149f1a8c51a852196949589"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-transport-review.json",
+      "sourceBytes": 8095,
+      "sourceSha256": "6de36e73f91f89b48ee5d05a752f0558034318cf368cb5ac382012214700aea6",
+      "type": "redacted-json",
+      "file": "evidence/gzip-transport-review.json",
+      "bytes": 8086,
+      "sha256": "d521e4825e77ac70a2862409b2ec2d76630965cb6af9a2ff629b5f3e6ac0e907"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-transport-timing.json",
+      "sourceBytes": 6130,
+      "sourceSha256": "8af732f48eae4b2698b5a881f6f11c728e2844abede1a3d5d604aa9e22770142",
+      "type": "redacted-json",
+      "file": "evidence/gzip-transport-timing.json",
+      "bytes": 6130,
+      "sha256": "8af732f48eae4b2698b5a881f6f11c728e2844abede1a3d5d604aa9e22770142"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/handoff-export-review-pass1.json",
+      "sourceBytes": 34708,
+      "sourceSha256": "4dcaf674c92cf692feba1ce044eb06836f38fe73f01cb0cc068c2de2ab697204",
+      "type": "redacted-json",
+      "file": "evidence/handoff-export-review-pass1.json",
+      "bytes": 34525,
+      "sha256": "79aeb34f541be4bc9abbb95e1b6d3a58e9da25fbc0fa86f2d338871bac8e536d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/handoff-latency-reconciliation.json",
+      "sourceBytes": 1616,
+      "sourceSha256": "1e588d08da37455f9d03d95212d42d390175cbcb1f33fa7473e5f6523fe1fd4f",
+      "type": "redacted-json",
+      "file": "evidence/handoff-latency-reconciliation.json",
+      "bytes": 1637,
+      "sha256": "74c4948eead5c4954aeca1b2d7a109b020a536cbcad88dcf57e1389091c93fa2"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/handoff-latency-tools.json",
+      "sourceBytes": 3124,
+      "sourceSha256": "c638d5bba68d2acfe0dbc9d18e485863261d545e76c8aa2b6fa91e15947da96f",
+      "type": "redacted-json",
+      "file": "evidence/handoff-latency-tools.json",
+      "bytes": 3067,
+      "sha256": "463befcc923606859ab6ca3fcb33c0cb42ad22fbc54c28cc4daf6fffa4b8a740"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/latency-tools.json",
+      "sourceBytes": 4023,
+      "sourceSha256": "9701431f1c60466903c08d99403b5b105d0ae7d0ca4e07ef77d0be6313dfcd34",
+      "type": "redacted-json",
+      "file": "evidence/latency-tools.json",
+      "bytes": 3966,
+      "sha256": "b3eee5190c3799c3a530188b8e120f47d039e51ca7162dddedfdc3e514775079"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/launch-batch-split.mjs",
+      "sourceBytes": 1941,
+      "sourceSha256": "82ebc61a18e2c86ecee1faad6451dfdfb5d02f4b687b51a337386448b6bd41f5",
+      "type": "redacted-text",
+      "file": "harnesses/launch-batch-split.mjs.txt",
+      "bytes": 1934,
+      "sha256": "ff0c773e8b78424d2ffbdb9d86be571cbb6042db5a67bff77d1e4a0cc888fa9b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/launch-cold-prefix.mjs",
+      "sourceBytes": 1940,
+      "sourceSha256": "50ed78189ca34c83421efb40b91358fdb1b63ecea8f9daf2f44a711106efff15",
+      "type": "redacted-text",
+      "file": "harnesses/launch-cold-prefix.mjs.txt",
+      "bytes": 1933,
+      "sha256": "413b630b05b3a13d555445ee0c472c7e217adc665d10e35e895cf157615b8fb0"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/launch-cold-source.mjs",
+      "sourceBytes": 4147,
+      "sourceSha256": "c87366110867826658f15066993dbb8ab25fd47037955a222c3a7d541ffc44d7",
+      "type": "redacted-text",
+      "file": "harnesses/launch-cold-source.mjs.txt",
+      "bytes": 4140,
+      "sha256": "565e4db5fc5099447b9be4089207b395999f319e27bcc80ef308ff1f6427780a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/launch-gzip-capability.mjs",
+      "sourceBytes": 1257,
+      "sourceSha256": "2b36f4cdd498e3c3f0650a8868c2316f0ed2887c3a8a9b88e0b906ae75ebe479",
+      "type": "redacted-text",
+      "file": "harnesses/launch-gzip-capability.mjs.txt",
+      "bytes": 1250,
+      "sha256": "c0054713283d3deb64f3321f17a09775dc65bac38dd0121481dcbe3f4f522531"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/launch-gzip-solver.mjs",
+      "sourceBytes": 1924,
+      "sourceSha256": "bc3a9fa85b73fa25ff4563634db663b55b8c5047f9acf020faf3ce61faaefc06",
+      "type": "redacted-text",
+      "file": "harnesses/launch-gzip-solver.mjs.txt",
+      "bytes": 1917,
+      "sha256": "f785aa5a0d5e894433f03c46663b0df71dbca3fd5c088082bba95716589df198"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/launch-prefix-pair-solver.mjs",
+      "sourceBytes": 2081,
+      "sourceSha256": "574a495d09d701d111c046448a434b40403a42ea58c8cbab9f33df9956b1cba0",
+      "type": "redacted-text",
+      "file": "harnesses/launch-prefix-pair-solver.mjs.txt",
+      "bytes": 2074,
+      "sha256": "42f454dca44cb122ca4e261f2cb6e383462caf128140d234f2def9a93a2018d1"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/launch-prefix-pair.mjs",
+      "sourceBytes": 2102,
+      "sourceSha256": "37d1c77673b56e63a7d8040441fefdbafbe58a94cd58b5cec25338c7a4503b7b",
+      "type": "redacted-text",
+      "file": "harnesses/launch-prefix-pair.mjs.txt",
+      "bytes": 2095,
+      "sha256": "5b28d7b7ae7361b72b00f9ca1b1f4a3a504055ed5871def79a768e9c376a4079"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/launch-prefix-phases.mjs",
+      "sourceBytes": 2097,
+      "sourceSha256": "2d378891f86dde1f8adb59699a64023f85e99ef968c8d2a7c61b3b6034cac385",
+      "type": "redacted-text",
+      "file": "harnesses/launch-prefix-phases.mjs.txt",
+      "bytes": 2090,
+      "sha256": "d00a398172361b70ac2888db546ef7d294ccdb7dbdc1da6b412e6ddae039678e"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/launch-prefix-progress.mjs",
+      "sourceBytes": 3299,
+      "sourceSha256": "06a2e3cfcd3a5dc93e26f275371c02e61370169a3f809d94ce13e7cc992730d1",
+      "type": "redacted-text",
+      "file": "harnesses/launch-prefix-progress.mjs.txt",
+      "bytes": 3292,
+      "sha256": "b57b38644a27cc1ce888bd90c8e71747c53f3f7f01535240b685425339b2795b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/launch-warm-prefix.mjs",
+      "sourceBytes": 3625,
+      "sourceSha256": "9b38152555dba3a31f614127e7ddc715dc724b7ab3e66c7c1099ab7e0c91f22c",
+      "type": "redacted-text",
+      "file": "harnesses/launch-warm-prefix.mjs.txt",
+      "bytes": 3618,
+      "sha256": "e03cd2a078b0fe1759ad1c34d86aa3c5a107783bef385273ba6edbccfe6e50ce"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/next-prefix-investigation.json",
+      "sourceBytes": 2046,
+      "sourceSha256": "bb085baf58e56445320d8317d4c718fc664acb9dc5e5f644484bd02c6581a5ff",
+      "type": "redacted-json",
+      "file": "evidence/next-prefix-investigation.json",
+      "bytes": 2100,
+      "sha256": "6d48c802c75ef3bcb4f1a8a6d60aaf31a322a812a825bef9f839fc5f970ed8b1"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/next-prefix-slice-review.json",
+      "sourceBytes": 8502,
+      "sourceSha256": "a0c92b5a10a5f2f646c4aec5bf2d0f7b4fb3d837d9291320d6c59b9c452ebc8d",
+      "type": "redacted-json",
+      "file": "evidence/next-prefix-slice-review.json",
+      "bytes": 8502,
+      "sha256": "a0c92b5a10a5f2f646c4aec5bf2d0f7b4fb3d837d9291320d6c59b9c452ebc8d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/observe.mjs",
+      "sourceBytes": 3995,
+      "sourceSha256": "2d9fd80fbd063f18ee3667783903f5c15ed9bc7390ed5553a2e63373fd0a4517",
+      "type": "redacted-text",
+      "file": "harnesses/observe.mjs.txt",
+      "bytes": 3995,
+      "sha256": "2d9fd80fbd063f18ee3667783903f5c15ed9bc7390ed5553a2e63373fd0a4517"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-assessment.json",
+      "sourceBytes": 2417,
+      "sourceSha256": "2e72e3176039b277c03af085de1dead1966f7698eb0800c2f594e6a9e91f4bc7",
+      "type": "redacted-json",
+      "file": "evidence/prefix-pair-assessment.json",
+      "bytes": 2576,
+      "sha256": "db5b44125a2da798d8d44528a55a9c2f1bd81d4ffe9cda08e9d89adf9828ab59"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-main-review.json",
+      "sourceBytes": 3838,
+      "sourceSha256": "75c044cf374151372aa9b15642110bff52897f39671466c1ef064f5e45278c88",
+      "type": "redacted-json",
+      "file": "evidence/prefix-pair-main-review.json",
+      "bytes": 3859,
+      "sha256": "940b447d101d9ea5a06133da8a76d88c37f181da12749222ce73bda1c63e0d38"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-main-ts-tests.log",
+      "sourceBytes": 70077,
+      "sourceSha256": "6cfcc914c2cae67dfd90744ac091e57ac6cb9f2f92d9246a3fe8972e99da1d2f",
+      "type": "redacted-line-preserving-log",
+      "lines": 675,
+      "redactedSha256": "6cfcc914c2cae67dfd90744ac091e57ac6cb9f2f92d9246a3fe8972e99da1d2f",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/prefix-pair-main-ts-tests.log.part-001.redacted.log.gz",
+          "lines": 675,
+          "uncompressedBytes": 70077,
+          "bytes": 11396,
+          "sha256": "c11960ed02bfd09070642d7935521d9b815a57062970802a820f703e3e97098c"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-reconciliation.json",
+      "sourceBytes": 1690,
+      "sourceSha256": "e5b54a62005ac2aadc5ac764757e3f42a3807beee56dc8d542ee51e611b17543",
+      "type": "redacted-json",
+      "file": "evidence/prefix-pair-reconciliation.json",
+      "bytes": 1706,
+      "sha256": "1713978c3b9e295327379c9343abd78ce46345b59fba06f056f4450f98f57493"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-solver-offline-check.log",
+      "sourceBytes": 2887,
+      "sourceSha256": "eb5b94a4c3ab9b39801238a9b90506ca489d124eb277e567b892c3747a6aec06",
+      "type": "redacted-line-preserving-log",
+      "lines": 58,
+      "redactedSha256": "de639588e1edd7aa0dca7d26cce513736e93eb995dae41bdf8bf9a3ba6cf3fdd",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/prefix-pair-solver-offline-check.log.part-001.redacted.log.gz",
+          "lines": 58,
+          "uncompressedBytes": 2317,
+          "bytes": 765,
+          "sha256": "a868ec66749b191e26f6fc866ef11f663fb96cd8dd525b5cf564baea6093965b"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-solver-timing.json",
+      "sourceBytes": 6192,
+      "sourceSha256": "cfd2eab47b9639946ce5fdb36fc4c3644411fad556a97ed47c1debb355ee49e4",
+      "type": "redacted-json",
+      "file": "evidence/prefix-pair-solver-timing.json",
+      "bytes": 6192,
+      "sha256": "cfd2eab47b9639946ce5fdb36fc4c3644411fad556a97ed47c1debb355ee49e4"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-timing.json",
+      "sourceBytes": 6233,
+      "sourceSha256": "6b97709be66cd12c83a99f1e20f51a97103e72f769b1d0593dd9e980f5ff2ce5",
+      "type": "redacted-json",
+      "file": "evidence/prefix-pair-timing.json",
+      "bytes": 6233,
+      "sha256": "6b97709be66cd12c83a99f1e20f51a97103e72f769b1d0593dd9e980f5ff2ce5"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-tools.json",
+      "sourceBytes": 3061,
+      "sourceSha256": "af703b232fcfc9dfcef4bff8ec5a2457ba14258abb3c389ee4725a14faf169b1",
+      "type": "redacted-json",
+      "file": "evidence/prefix-pair-tools.json",
+      "bytes": 3004,
+      "sha256": "81a6c4cbd6ec9ab072b72c836e293c2f370b69f8caccb038cf7f957c7098740a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-phase-assessment.json",
+      "sourceBytes": 2333,
+      "sourceSha256": "761e2e3b312f579617532b221c8c51ca643fe8b903394f1e206ab5b730c86b6c",
+      "type": "redacted-json",
+      "file": "evidence/prefix-phase-assessment.json",
+      "bytes": 2544,
+      "sha256": "e492409ca871fe92214f1c2ee946d53b5383f01e65a8b14bf41338695738182b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-phase-brief.json",
+      "sourceBytes": 1996,
+      "sourceSha256": "36e7c4dbceb73829373fc8bfe80e62b9f96dd1b04d9e6433ad800e0254293046",
+      "type": "redacted-json",
+      "file": "evidence/prefix-phase-brief.json",
+      "bytes": 2008,
+      "sha256": "60b0c783adb9b0b8764d2ca33d3079588315e66f8e393160780f36419f56fe9d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-phase-main-review.json",
+      "sourceBytes": 1246,
+      "sourceSha256": "083ae9b927532752c6b4822832af848752605a55056cd531d2e4dbd3746bdc89",
+      "type": "redacted-json",
+      "file": "evidence/prefix-phase-main-review.json",
+      "bytes": 1278,
+      "sha256": "ac06cbcf76a25e011c03bd9c2b400191baaa7f51a560a8a9674acea7a59c3cc4"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-phase-timing.json",
+      "sourceBytes": 4997,
+      "sourceSha256": "1496c0fff86b2e4e7e42b7c3123a03503e4f5b81a0911fb5978267ecc9bcdb79",
+      "type": "redacted-json",
+      "file": "evidence/prefix-phase-timing.json",
+      "bytes": 4997,
+      "sha256": "1496c0fff86b2e4e7e42b7c3123a03503e4f5b81a0911fb5978267ecc9bcdb79"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-phase-tools.json",
+      "sourceBytes": 3097,
+      "sourceSha256": "abf16418e38bef80dd1c4c11cfe2e858b836f4b99a08b4982fd9d75aecb1fc9d",
+      "type": "redacted-json",
+      "file": "evidence/prefix-phase-tools.json",
+      "bytes": 3040,
+      "sha256": "e83bbff35778491b1618897646137debf3c61fe14e4d97583ddc4c73baeb726d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-prefetch-assessment.json",
+      "sourceBytes": 1494,
+      "sourceSha256": "33e58a1d6db5d820b2d56d062b84991edb754d890a275b796589f5670dbc7d9f",
+      "type": "redacted-json",
+      "file": "evidence/prefix-prefetch-assessment.json",
+      "bytes": 1536,
+      "sha256": "826e571dda40875d48acb6d2e90e495105edf98b6301cca711c8a06a6417390d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-prefetch-brief.json",
+      "sourceBytes": 2136,
+      "sourceSha256": "8b6f0b48e8cf44cac0b8a66f3896d4cd9ab4837062b9a85005c15a0b35e97f94",
+      "type": "redacted-json",
+      "file": "evidence/prefix-prefetch-brief.json",
+      "bytes": 2192,
+      "sha256": "6e1b02d1e9ec89faeea570c09d0966d5d0c723323414a43dd3a3addbed545c88"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-prefetch-main-review.json",
+      "sourceBytes": 1779,
+      "sourceSha256": "a212bc0dcfc03f2d156bf3130ed296f96253062b627198b5b6acf384cd66bbb9",
+      "type": "redacted-json",
+      "file": "evidence/prefix-prefetch-main-review.json",
+      "bytes": 1838,
+      "sha256": "98274b7746e746718767381f43a5b5bacf9b45a3fffa8f43311e30bcbdf3deec"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-prefetch-timing.json",
+      "sourceBytes": 5198,
+      "sourceSha256": "6acb454f8559fef4641fcb61290695aa8aed4fd1d93f14463284c38263dd58a7",
+      "type": "redacted-json",
+      "file": "evidence/prefix-prefetch-timing.json",
+      "bytes": 5198,
+      "sha256": "6acb454f8559fef4641fcb61290695aa8aed4fd1d93f14463284c38263dd58a7"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-brief.json",
+      "sourceBytes": 3826,
+      "sourceSha256": "39bf8b18ee7684d8980f48c6473178d3239f8e7992c479711d428b94157773da",
+      "type": "redacted-json",
+      "file": "evidence/prefix-progress-brief.json",
+      "bytes": 3922,
+      "sha256": "0bd41c89ba07d215f6277cb5588f11fee80317a7bdbde73142d261edfd3d14bd"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-experiment-review-final.json",
+      "sourceBytes": 4720,
+      "sourceSha256": "79d3c47e63d99c5937c870a0ae0df7e6e13e55cdf226d7fc334a2c1ce3e317da",
+      "type": "redacted-json",
+      "file": "evidence/prefix-progress-experiment-review-final.json",
+      "bytes": 4905,
+      "sha256": "345e6b0060a3fd925438bce72060533c00106e9c348b7355110d31e1a28f39d8"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-experiment-review.json",
+      "sourceBytes": 7410,
+      "sourceSha256": "661fead58e8edf52892766bc298af5a1683e41abfd4ead1391d523bb499ccc2e",
+      "type": "redacted-json",
+      "file": "evidence/prefix-progress-experiment-review.json",
+      "bytes": 7442,
+      "sha256": "45a93868e7b0759b69fcb875908bb64cefa085e439725957c9e7168912714e39"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-held-test.mjs",
+      "sourceBytes": 3684,
+      "sourceSha256": "3e03bd1e9795a44ae30f4b2bd6bd7e4ffa1ea70fb151ebaaed7b56c46c5a8207",
+      "type": "redacted-text",
+      "file": "harnesses/prefix-progress-held-test.mjs.txt",
+      "bytes": 3686,
+      "sha256": "3ffe22f1c979b09dfa00ecb9381b2212318e7ec529129c34a4785d05e2920e61"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-implementation.json",
+      "sourceBytes": 4085,
+      "sourceSha256": "b1cbbc2305262ff6aadaf5b2979cf5a3e2844774ba1af6cb52dcdf6ac985836e",
+      "type": "redacted-json",
+      "file": "evidence/prefix-progress-implementation.json",
+      "bytes": 4253,
+      "sha256": "78e9f0969767418ce5a9cd7135013beb2a1ca2c288fa07fc1293ec6922918eaa"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-launch-receipt.json",
+      "sourceBytes": 589,
+      "sourceSha256": "3e3dbaa7f0dc6b3530a74c2e9e2e4d2d6a90212526ade0074adee90d9e37f6f5",
+      "type": "redacted-json",
+      "file": "evidence/prefix-progress-launch-receipt.json",
+      "bytes": 476,
+      "sha256": "ed87b2c3b5d9d2138b8066e4a900a218781cb8ae0797212690b7a173e3b74ef4"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-main-build.log",
+      "sourceBytes": 400,
+      "sourceSha256": "a0c0121ff7fdd452cdc0c32cd5b9d6a806a7bad67164757bbbf4b52831d672bf",
+      "type": "redacted-line-preserving-log",
+      "lines": 10,
+      "redactedSha256": "a0c0121ff7fdd452cdc0c32cd5b9d6a806a7bad67164757bbbf4b52831d672bf",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/prefix-progress-main-build.log.part-001.redacted.log.gz",
+          "lines": 10,
+          "uncompressedBytes": 400,
+          "bytes": 253,
+          "sha256": "c63e9d521b671309dbbaa67718a539b32314a883f25371d16b188b5fddf8b2c1"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-main-integration.log",
+      "sourceBytes": 174392,
+      "sourceSha256": "b57bffed0c0cbb6dc4689117b62b80fe5537296a671417ea10426ca7e9d1f3eb",
+      "type": "redacted-line-preserving-log",
+      "lines": 753,
+      "redactedSha256": "b57bffed0c0cbb6dc4689117b62b80fe5537296a671417ea10426ca7e9d1f3eb",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/prefix-progress-main-integration.log.part-001.redacted.log.gz",
+          "lines": 753,
+          "uncompressedBytes": 174392,
+          "bytes": 17136,
+          "sha256": "1b0705c8476bf2bcd1326940db480e9b42be1217cb93f29e1f0fb494946068f6"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-main-review.json",
+      "sourceBytes": 3109,
+      "sourceSha256": "ef01d657f82e87431573db090cbad4d2b06cd047d26101460bef901aa1152953",
+      "type": "redacted-json",
+      "file": "evidence/prefix-progress-main-review.json",
+      "bytes": 3291,
+      "sha256": "8838275191e72402008292f07b436df7f92bf490d1205634065352eba1c8229a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-main-tests.log",
+      "sourceBytes": 598796,
+      "sourceSha256": "aa78df774f3d82908b531c888a3af9c1a8f2f2120858a1119c0ddb997c3f14fb",
+      "type": "redacted-line-preserving-log",
+      "lines": 2252,
+      "redactedSha256": "b2cecf49d39454100012262b81d78eb73d1793ff2f2f7f4781d473d91e412a58",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/prefix-progress-main-tests.log.part-001.redacted.log.gz",
+          "lines": 2252,
+          "uncompressedBytes": 597872,
+          "bytes": 33183,
+          "sha256": "3982a1c2ada0abd6ece36cf94cd1fc75fc966f1bb24568e6a4be7868d63e90a0"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-manual-assessment.json",
+      "sourceBytes": 3959,
+      "sourceSha256": "f3fc15f8a766be4747a9a4ab5663d2290ea2252981975b528bbd58b59fa86f08",
+      "type": "redacted-json",
+      "file": "evidence/prefix-progress-manual-assessment.json",
+      "bytes": 4065,
+      "sha256": "ac7fd2eba8fa1cf8c9175f2dae7934843a8ae48e8e91b88efda523abd56038af"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-offline-preflight.log",
+      "sourceBytes": 1546,
+      "sourceSha256": "2cef8800760907d9e550f0c1a9b83c2ae5f2fe2f33961ee0e54c47044d6dc02d",
+      "type": "redacted-line-preserving-log",
+      "lines": 34,
+      "redactedSha256": "9b824793ff87acb65bfc69ce29af13cbd76158f6b06fb6e95c16533c6f9f4f37",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/prefix-progress-offline-preflight.log.part-001.redacted.log.gz",
+          "lines": 34,
+          "uncompressedBytes": 1318,
+          "bytes": 612,
+          "sha256": "7074b79af85e2870fce4540d4dce608ec0938dccda3180e5692d03e1d59c078a"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-reconciliation.json",
+      "sourceBytes": 2396,
+      "sourceSha256": "802c514160ce88f1408c7e53bd70ac42c0dbcdab86d9184d0012fb7eb62346d9",
+      "type": "redacted-json",
+      "file": "evidence/prefix-progress-reconciliation.json",
+      "bytes": 2477,
+      "sha256": "5f83f5829e10923cb93e87102a195545709028927fae428dc87f8e7c7e7b09c2"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-result-review.json",
+      "sourceBytes": 13676,
+      "sourceSha256": "85e1f8e82c6098cbb34cbaf09b93c3a7821ccf0141b0cdd1a5cda8cd870d3b2d",
+      "type": "redacted-json",
+      "file": "evidence/prefix-progress-result-review.json",
+      "bytes": 14750,
+      "sha256": "8e36a0164176f3eaaf4b000cd65421d6f654fdcde8c4c41b60a8c6087e8d9799"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-timing.json",
+      "sourceBytes": 5999,
+      "sourceSha256": "336c1b78db482d975052b2e7c5789e1d2a62af363beff9cbf3b7595fc44c7f0b",
+      "type": "redacted-json",
+      "file": "evidence/prefix-progress-timing.json",
+      "bytes": 5942,
+      "sha256": "4a31422049d6458ebec5ee6e0507acda55a7fbb8cccbfdcf33931cff37b66d7d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-tools.json",
+      "sourceBytes": 3065,
+      "sourceSha256": "02c1a40ba08d27990811b2544eef255704a3d046342e04c8a051b4a6c581e9f7",
+      "type": "redacted-json",
+      "file": "evidence/prefix-progress-tools.json",
+      "bytes": 3008,
+      "sha256": "ad49aaf97ef690ed41301cc167ce1b8b783ff92a7fb153291a4478600e76edce"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-sibling-batch-design.json",
+      "sourceBytes": 3469,
+      "sourceSha256": "274e9578aa74989da474c0042b169c4826125e19e0060538cd679bb5672b6f6c",
+      "type": "redacted-json",
+      "file": "evidence/prefix-sibling-batch-design.json",
+      "bytes": 3557,
+      "sha256": "6fa11060d4baac44d4f4a74946dd0d1100e7f84d077f770461f146f879084073"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-sibling-rust-brief.json",
+      "sourceBytes": 4396,
+      "sourceSha256": "3c061d1015a0285083596e61d4a62c729a00805c5343138878b74cf04119d1e7",
+      "type": "redacted-json",
+      "file": "evidence/prefix-sibling-rust-brief.json",
+      "bytes": 4408,
+      "sha256": "5b63363ec0bef1f9ca8ade2e86da296661258098a18ec20b495f0bbb9aafc21d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-sibling-ts-brief.json",
+      "sourceBytes": 2219,
+      "sourceSha256": "9021b168aece867d2a74f247f4960db74076dbc09527ddae5e7d6933bc6327ce",
+      "type": "redacted-json",
+      "file": "evidence/prefix-sibling-ts-brief.json",
+      "bytes": 2235,
+      "sha256": "428dc6e021105ef404674140686f23256d0a91da349783eceee688c35da8c627"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/preparation-settlement-main-review.json",
+      "sourceBytes": 2165,
+      "sourceSha256": "a6e3ff504d8d1f71f4a14bf4ff96c4de4493f4e205426b4af7588d1bceee67ef",
+      "type": "redacted-json",
+      "file": "evidence/preparation-settlement-main-review.json",
+      "bytes": 2261,
+      "sha256": "a362855f9ddce3a3c0e3b6e7820e32516671f9009f36a4bd252821b4f98c52ce"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/project-latency.mjs",
+      "sourceBytes": 1991,
+      "sourceSha256": "41ad97f2c6af6e38d10bd7e8f5a8e42453170c0b7b40ef9e1fadad0eed4dfe7a",
+      "type": "redacted-text",
+      "file": "harnesses/project-latency.mjs.txt",
+      "bytes": 1991,
+      "sha256": "41ad97f2c6af6e38d10bd7e8f5a8e42453170c0b7b40ef9e1fadad0eed4dfe7a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/quote-cohort-batching-investigation.json",
+      "sourceBytes": 5076,
+      "sourceSha256": "276349ff1b89b2bf8ee35526fb06d1f6c55700f034ccf7a2460c0e09fc15037d",
+      "type": "redacted-json",
+      "file": "evidence/quote-cohort-batching-investigation.json",
+      "bytes": 5112,
+      "sha256": "da2cbc8485a67c883221bf79ab0306d97e75dda86ef1d256eaba97f0251fb5d9"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/quote-cohort-design-review.json",
+      "sourceBytes": 12139,
+      "sourceSha256": "909d47418541d9b35fa349fcb5d910129dbba95c7f7ff143bf5ae48db53e4ce3",
+      "type": "redacted-json",
+      "file": "evidence/quote-cohort-design-review.json",
+      "bytes": 12782,
+      "sha256": "1afd83b7945c0273ca66186fc684b10b50d4a4f4f22755205602466fd6322762"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/quote-waves.mjs",
+      "sourceBytes": 5765,
+      "sourceSha256": "f466455800439845d30a32824a3788b584b3dec4d07c8024cd9b97128073893c",
+      "type": "redacted-text",
+      "file": "harnesses/quote-waves.mjs.txt",
+      "bytes": 5765,
+      "sha256": "f466455800439845d30a32824a3788b584b3dec4d07c8024cd9b97128073893c"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/repeated-workload-inventory.json",
+      "sourceBytes": 19037,
+      "sourceSha256": "84bef27a91ef4d9d9b7410df9cdbdb3b1b2ea75293595b2b4caded50bf4e0659",
+      "type": "redacted-json",
+      "file": "evidence/repeated-workload-inventory.json",
+      "bytes": 18125,
+      "sha256": "319e96ec95064ee1aa41ecd7d0c592dd42c6b826587706f64049816e384e5ab4"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/review-1-native.json",
+      "sourceBytes": 1182,
+      "sourceSha256": "13306ae0b465036c2d415224679465bad40d52ae49c25febc92c5861381c5a8f",
+      "type": "redacted-json",
+      "file": "evidence/review-1-native.json",
+      "bytes": 1262,
+      "sha256": "d57798dd54068a267c64099920c119204901ebb8e090f2f3776352746830790f"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/rust-batch-review.json",
+      "sourceBytes": 1270,
+      "sourceSha256": "fdd26e3cbb54862e2e95c2ed4767d2af767bb3d1dc020b4dce8c3fef505f8471",
+      "type": "redacted-json",
+      "file": "evidence/rust-batch-review.json",
+      "bytes": 1326,
+      "sha256": "30404828b8fb2d3a827ef1903432f06b265ab31546b9bd487aec9ffc372660ad"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-batch-split-1/declaration.json",
+      "sourceBytes": 369745,
+      "sourceSha256": "e605175246e0603b324aa07ab60a1e2758a6c6b28b416a235dd25097acf2925f",
+      "type": "redacted-json",
+      "file": "experiments/same-input-batch-split-1/declaration.json",
+      "bytes": 368008,
+      "sha256": "f930d1bbf572bfe8663a1bfadebfa5f3302dbb0f08cdf1634c923b21c916b94a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-batch-split-1/results.json",
+      "sourceBytes": 763555,
+      "sourceSha256": "58b4ae90f08f9e6fb3b320b05d6cb9494e4e4c457570f3204dfa90941f2d3cf2",
+      "type": "redacted-json",
+      "file": "experiments/same-input-batch-split-1/results.json",
+      "bytes": 762188,
+      "sha256": "97b6fae45a18facb06ebee65d9145a30cab579a48dc68db0c4c24840423ffa5e"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-batch-split-1.log",
+      "sourceBytes": 3201,
+      "sourceSha256": "ca7ad34f5fcd6168327428661de74766363475a44c55b1dcda2de4b1fbda74ef",
+      "type": "redacted-line-preserving-log",
+      "lines": 126,
+      "redactedSha256": "8f7db139f29e37c94ab06454c5b5f1bcfa61dddbd4af1d9ef598651c9044f831",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/same-input-batch-split-1.log.part-001.redacted.log.gz",
+          "lines": 126,
+          "uncompressedBytes": 3144,
+          "bytes": 639,
+          "sha256": "6359351dd45859d61f76cf24882de07d4259c2ddb4ec22e76217d219e3c5a2f6"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-batch-timing.mts",
+      "sourceBytes": 44447,
+      "sourceSha256": "eef6dfb8324769c36216384a80a58d94735fdb405a1554af07021ef45a736260",
+      "type": "redacted-text",
+      "file": "harnesses/same-input-batch-timing.mts.txt",
+      "bytes": 44455,
+      "sha256": "08705128ab7df51aa5613a1eb5d83e8fd0602b83dc1cb70d29556eff318f9041"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-bootstrap-correction-pass2.json",
+      "sourceBytes": 7904,
+      "sourceSha256": "3c77bf3c601850dd5ec81203709077ba2bd1387ce2bdcf6e047c141fbbf7c9ac",
+      "type": "redacted-json",
+      "file": "evidence/same-input-bootstrap-correction-pass2.json",
+      "bytes": 7676,
+      "sha256": "66c00ed6a49b25f43d8a73ba1a0d07b6c0937d9b95797afacba973864ef88d5b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-cold-prefix-1/declaration.json",
+      "sourceBytes": 362496,
+      "sourceSha256": "13ed4709a8ab780a16a3c2f79cc5ca46adf5fb0eb2f87ccc11ace9b1a3113769",
+      "type": "redacted-json",
+      "file": "experiments/same-input-cold-prefix-1/declaration.json",
+      "bytes": 361671,
+      "sha256": "0bb84abc0a6c1563455dba4634bc339fe4976b697a177990526711325862ee12"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-cold-prefix-1/results.json",
+      "sourceBytes": 113109,
+      "sourceSha256": "3a9f7164fe8c38d486bda16da8d1b21e68aeee316588709a26a70ad7660893e4",
+      "type": "redacted-json",
+      "file": "experiments/same-input-cold-prefix-1/results.json",
+      "bytes": 112654,
+      "sha256": "f2199096f90fca0e8a831b77b45bc28f25039a812c5e2fc4cd2800ea597b2b8d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-cold-prefix-1.log",
+      "sourceBytes": 15518,
+      "sourceSha256": "32131d726eeb3cbec40208039ae7dcc510d9c64ffb70bc2565d9162e814395f2",
+      "type": "redacted-line-preserving-log",
+      "lines": 58,
+      "redactedSha256": "c56fe8bfc0b879ebdb07bc2af725dea7d27971be34581b3e1b671e1a726f51b5",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/same-input-cold-prefix-1.log.part-001.redacted.log.gz",
+          "lines": 58,
+          "uncompressedBytes": 15415,
+          "bytes": 2088,
+          "sha256": "8cae77a2fbb271a78b33a227d5dc2154ea99fdf657ab82e87d860472b28f8b51"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-cold-source-1/declaration.json",
+      "sourceBytes": 366192,
+      "sourceSha256": "f152d1ff98ff79715df3f35a731dfe7ada34c0325d837b9df26a8b29cfac7f0e",
+      "type": "redacted-json",
+      "file": "experiments/same-input-cold-source-1/declaration.json",
+      "bytes": 365367,
+      "sha256": "ab44b13f211fa47f5898d2264808b1f8d4d418d7b6fee02cb096738222054b6a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-cold-source-1/results.json",
+      "sourceBytes": 116805,
+      "sourceSha256": "5fd407eff9eb99ec141c74ae1ebaac6ef81a91dc8ea5a716f9ffff32217e02af",
+      "type": "redacted-json",
+      "file": "experiments/same-input-cold-source-1/results.json",
+      "bytes": 116350,
+      "sha256": "a66f2b40be2f97d5680001bc50843e69b7ea1bb7833c9b4528e67b92f36436ce"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-cold-source-1.log",
+      "sourceBytes": 18176,
+      "sourceSha256": "6836269a94d6dba1b57b10a64f76c8e13eac9120ab289ec623ae71e2629b19bd",
+      "type": "redacted-line-preserving-log",
+      "lines": 54,
+      "redactedSha256": "f845e2b532554fbf4b9ad6364f9066eed765468f3641fee3d214987338549c46",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/same-input-cold-source-1.log.part-001.redacted.log.gz",
+          "lines": 54,
+          "uncompressedBytes": 17951,
+          "bytes": 2233,
+          "sha256": "cc386289a7065f38ee14df88af61c1d358de2a486b4cc03ca39ab49b7f8b8057"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-gzip-1/declaration.json",
+      "sourceBytes": 373802,
+      "sourceSha256": "e54be5eefc07f0eff6ebb9a6c4fe4cc07d0edfa82e8eb6b0196bf5cbf1aaa566",
+      "type": "redacted-json",
+      "file": "experiments/same-input-gzip-1/declaration.json",
+      "bytes": 371153,
+      "sha256": "c4ea61ead14d398a24e149a3e9bd2ee98829d1d0e00434b8dbf1e73fe666e3f4"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-gzip-1/results.json",
+      "sourceBytes": 1208360,
+      "sourceSha256": "2d5dc8cf43bdefb8239dd1d209a8c2b5212d54e2ade5a04fa6f98921cd1ed386",
+      "type": "redacted-json",
+      "file": "experiments/same-input-gzip-1/results.json",
+      "bytes": 1206081,
+      "sha256": "adc2320e0a6d26554a36bf756011511ec718ff69de639bbf36e8a3e77ef4b75d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-gzip-1.log",
+      "sourceBytes": 5214,
+      "sourceSha256": "336d3f09c362bc41471adb1c0c6a496ec40646842a380b9955cd1553352e0586",
+      "type": "redacted-line-preserving-log",
+      "lines": 206,
+      "redactedSha256": "fc9690d1d12b9bf63bbb39796fb694c1ff5fc87ea84c8beae3a07cc9c57c9055",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/same-input-gzip-1.log.part-001.redacted.log.gz",
+          "lines": 206,
+          "uncompressedBytes": 5157,
+          "bytes": 858,
+          "sha256": "58661d4496883b69eda436ef05b16205badf82a4a3805cb4a1e75689c616513d"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-gzip-timing.mts",
+      "sourceBytes": 44789,
+      "sourceSha256": "2be619af4ec2c0ea9f48976c2f8d265f1dea5d684d4472e419e5d5f2cbc78b37",
+      "type": "redacted-text",
+      "file": "harnesses/same-input-gzip-timing.mts.txt",
+      "bytes": 44797,
+      "sha256": "a8b0c8f33eb00a0c3bfa8ab993812f7e00b344cba14fc1b2604d982b65dacf5f"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-main-review-pass2.json",
+      "sourceBytes": 1513,
+      "sourceSha256": "49eee58f601c52ef764cbb10cb075c45eed0b0d6356994150bb81bc6626e2ed4",
+      "type": "redacted-json",
+      "file": "evidence/same-input-main-review-pass2.json",
+      "bytes": 1537,
+      "sha256": "5dfa2a57cfb87143a670cdaf377e4fdda21b77f55604218b7b40ad57534ea3b5"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-main-review.json",
+      "sourceBytes": 2063,
+      "sourceSha256": "782b7866b53f9925471421033f70a2646bbc9236c23291fda7b7ac4775267e45",
+      "type": "redacted-json",
+      "file": "evidence/same-input-main-review.json",
+      "bytes": 2125,
+      "sha256": "da879fe7eb03f511f6d275295d0f572719c1e1c120ba5ab64725a2ed9e152df1"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-pair-solver-timing.mts",
+      "sourceBytes": 44098,
+      "sourceSha256": "4e98f0528ec5e9333c5b61576cd6961499c19a8a813e07eb5ee390aabd8b4ceb",
+      "type": "redacted-text",
+      "file": "harnesses/same-input-pair-solver-timing.mts.txt",
+      "bytes": 44106,
+      "sha256": "facc069ad76b782541b95620ce91051ba6b070189a95b6bc22bcc38d27a67a0b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-pair-timing.mts",
+      "sourceBytes": 43819,
+      "sourceSha256": "d3d036dbc10ef7d6151ab04c61a4e75403130ab2dfeee8044e771ac313c7eac9",
+      "type": "redacted-text",
+      "file": "harnesses/same-input-pair-timing.mts.txt",
+      "bytes": 43827,
+      "sha256": "ea1454e81fb34f9eb6af2b8d6e4c598c2cc4416001ff59df37025c25d5f2ecd1"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-engine-1/declaration.json",
+      "sourceBytes": 362193,
+      "sourceSha256": "db70ada0e9ead5884ecc25187fb6cc02f5c8c7528eacc8c254cac442daf08dd7",
+      "type": "redacted-json",
+      "file": "experiments/same-input-prefix-engine-1/declaration.json",
+      "bytes": 361368,
+      "sha256": "2ef7c3561a25bd6263b92c279e5353bd683b66c14dcf43536918bd2eccde33e5"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-engine-1/results.json",
+      "sourceBytes": 112153,
+      "sourceSha256": "313057faadbc4e0be9b56dd9b69fdc96c66c47813cdc9b1bd2e103379e8da34f",
+      "type": "redacted-json",
+      "file": "experiments/same-input-prefix-engine-1/results.json",
+      "bytes": 111698,
+      "sha256": "afea988ffd17c2570c140cd4e4379a6a9b1b1f0dc6294fb7b76832daf5ea404b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-pair-1/declaration.json",
+      "sourceBytes": 365826,
+      "sourceSha256": "7b7c4d429c9e93eb74b03cbcbc8d8064ea975bb8018966c6361513cb470b8210",
+      "type": "redacted-json",
+      "file": "experiments/same-input-prefix-pair-1/declaration.json",
+      "bytes": 365001,
+      "sha256": "4a1a6db6d69154d2d2f43b8a55089c1cfb0904c5c5b90cf8794f0c4cb74d89e5"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-pair-1/results.json",
+      "sourceBytes": 116871,
+      "sourceSha256": "52963bffa950d596ed94027675291e83d5cc526c734047fc6ead23170a12c859",
+      "type": "redacted-json",
+      "file": "experiments/same-input-prefix-pair-1/results.json",
+      "bytes": 116416,
+      "sha256": "47162816cb0ece4766fd704f724f38f2f8900e4192ad7cf1b1a16cc9b4fc680c"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-pair-1.log",
+      "sourceBytes": 16188,
+      "sourceSha256": "023f5972dd7a119bb3f4bd58b570f1643c4c42116134de2a6b1bb82822165233",
+      "type": "redacted-line-preserving-log",
+      "lines": 56,
+      "redactedSha256": "92342f9d36b1f45da4e1266fbcbb5313f17e6932134552e9c589cc2253eb50ec",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/same-input-prefix-pair-1.log.part-001.redacted.log.gz",
+          "lines": 56,
+          "uncompressedBytes": 16031,
+          "bytes": 2104,
+          "sha256": "f62639d88c06d0126b9b59811392532dfff6609fa7c737457a41a58abee8111b"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-phases-1/declaration.json",
+      "sourceBytes": 361237,
+      "sourceSha256": "686a5aa0a357a9a47f84fc21bcf0390cef09ba9b39c09e93b1be7b915bdc183a",
+      "type": "redacted-json",
+      "file": "experiments/same-input-prefix-phases-1/declaration.json",
+      "bytes": 360754,
+      "sha256": "f60fd6749f1ad845d84b057357341ad9088080351189503ab0763b296b4903bb"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-phases-1/results.json",
+      "sourceBytes": 29306,
+      "sourceSha256": "694350daa4ef1ce4a719472af50bff94e253a2538d401c76ef1c82a40ef85c60",
+      "type": "redacted-json",
+      "file": "experiments/same-input-prefix-phases-1/results.json",
+      "bytes": 29193,
+      "sha256": "67a4f51ae41ba30de64d952e83427215a091f8f59ebbf7f8db166cba60445c6a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-phases-1.log",
+      "sourceBytes": 3938,
+      "sourceSha256": "dac273918cdfba760de88ca044738a304fa98441b6e6ae26853c2daea3ba0936",
+      "type": "redacted-line-preserving-log",
+      "lines": 19,
+      "redactedSha256": "75c095348645b2f759e303d276311af8ef117ac9b4994411bc4099b1a3b63bd1",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/same-input-prefix-phases-1.log.part-001.redacted.log.gz",
+          "lines": 19,
+          "uncompressedBytes": 3869,
+          "bytes": 977,
+          "sha256": "62c9edd693ddf83717b9fb299bfe0c9f8fee2bf80a5033b356e43169e3760b5b"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-prefetch-1/declaration.json",
+      "sourceBytes": 362722,
+      "sourceSha256": "9c0472a12727a9431d11f061e501f30c2908b04b0ff2a7d6bbccaab27414a1fb",
+      "type": "redacted-json",
+      "file": "experiments/same-input-prefix-prefetch-1/declaration.json",
+      "bytes": 361897,
+      "sha256": "d6a793298c2af078d91a3a041c1635332f70a9c1c4dee74cd3ada4de79a7770a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-prefetch-1/results.json",
+      "sourceBytes": 116550,
+      "sourceSha256": "3177563b5e3c4cccb9a5a0292231d8b3592766ad70a9949cb70fb4d937e7f087",
+      "type": "redacted-json",
+      "file": "experiments/same-input-prefix-prefetch-1/results.json",
+      "bytes": 116095,
+      "sha256": "3484b495b49708aa509a32b249ce4250aef7ef7d1c7d93749d34d00fe8dd462c"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-progress-1/declaration.json",
+      "sourceBytes": 364257,
+      "sourceSha256": "33a9597f33d377e33955b4583b49f2af717ba95a8d9c7aceb5e68a2cc3304151",
+      "type": "redacted-json",
+      "file": "experiments/same-input-prefix-progress-1/declaration.json",
+      "bytes": 363717,
+      "sha256": "1af2f133cec7f93efaf29b9704efd7888a1526b521a95ed314feddd0afd4e405"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-progress-1/results.json",
+      "sourceBytes": 29489,
+      "sourceSha256": "443f46dd85562246ea7d4dce9115608cc4ac217482218a5dfeeefe2d4cf15604",
+      "type": "redacted-json",
+      "file": "experiments/same-input-prefix-progress-1/results.json",
+      "bytes": 29376,
+      "sha256": "1acc8e3746f5fe53e84d616b4fa6749362ff962d5b818b55335b1e8083243585"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-prefix-progress-1.log",
+      "sourceBytes": 93342,
+      "sourceSha256": "39bd3ef5805466f5c17eb603785dd2248dbab4cfd532fa40fa2f572d3803e052",
+      "type": "redacted-line-preserving-log",
+      "lines": 267,
+      "redactedSha256": "cc2feb0c4b6f7d64e75d3f8535cbb6e430a25648c1993a9c8bdb00744b98c602",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/same-input-prefix-progress-1.log.part-001.redacted.log.gz",
+          "lines": 267,
+          "uncompressedBytes": 93247,
+          "bytes": 6736,
+          "sha256": "1c21366fe1acf94e55e7fee5aa44e46e19531bdb1d515b0222aefe71200ed27a"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-primary-1/declaration.json",
+      "sourceBytes": 363998,
+      "sourceSha256": "e6103043a4ce3e811d965c09ec6d0838be8480ec07f41619c7de46ccbb10be40",
+      "type": "redacted-json",
+      "file": "experiments/same-input-primary-1/declaration.json",
+      "bytes": 362717,
+      "sha256": "1c1f6c23fb0bef25b87c1b657fa94fa5ac18aaf985fccc98fc224b2167a33ab8"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-primary-1/results.json",
+      "sourceBytes": 388332,
+      "sourceSha256": "796befa96b2a146e5508759bd194e1a3740207809182a6ec3d93b5f1504d7980",
+      "type": "redacted-json",
+      "file": "experiments/same-input-primary-1/results.json",
+      "bytes": 387421,
+      "sha256": "fce82f7ef896b2ecc023932bbefe410de8c7f1f0af7327a413f692838df60216"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-primary-1-disposition.json",
+      "sourceBytes": 1139,
+      "sourceSha256": "6c2c6fd0bfc6fec3b8d7e2d7442c553ccdfe1c49c7d9334bcb020a42a86f3bbe",
+      "type": "redacted-json",
+      "file": "evidence/same-input-primary-1-disposition.json",
+      "bytes": 1155,
+      "sha256": "a941345e0e829e03766042530a0487b789021af8ea545a97a2c072be90d8e0e1"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-primary-2-assessment.json",
+      "sourceBytes": 2152,
+      "sourceSha256": "cb52c9f6f9258f1dcd803b7f0345d292b5ad5d01e5a14314eccf9c7937bf449f",
+      "type": "redacted-json",
+      "file": "evidence/same-input-primary-2-assessment.json",
+      "bytes": 2369,
+      "sha256": "0ded01dc15ae94f075270aa4a9d1325290a615d71bd87d638cbdc3c0af1884f8"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-primary-2-bootstrap-corrected/declaration.json",
+      "sourceBytes": 363998,
+      "sourceSha256": "d556f95272a9af9e8151031b2df143a4182191f0ad5a6066c5d98846dab1504e",
+      "type": "redacted-json",
+      "file": "experiments/same-input-primary-2-bootstrap-corrected/declaration.json",
+      "bytes": 362717,
+      "sha256": "fd9ec698e6c04b07edbe2561b251b2383917afb588a37db356e8b8d2819eb7e5"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-primary-2-bootstrap-corrected/results.json",
+      "sourceBytes": 412507,
+      "sourceSha256": "e81ae46b36db554fe8f2bcb5ee5df039f2a709782d0562b7172e9893a29d51eb",
+      "type": "redacted-json",
+      "file": "experiments/same-input-primary-2-bootstrap-corrected/results.json",
+      "bytes": 411596,
+      "sha256": "93f8654621814c6dc1c944f2279776e638f0de5fbae82d60d70984134f326208"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-timing.json",
+      "sourceBytes": 4070,
+      "sourceSha256": "d85ba640e539427590adef1817c85e2e5b1754222cd19e8b747a071a9afc495f",
+      "type": "redacted-json",
+      "file": "evidence/same-input-timing.json",
+      "bytes": 4719,
+      "sha256": "0a1c9aed8432722581a4777e0f2edf755c2b3c0a35ace954aa050713f438cda8"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-timing.mts",
+      "sourceBytes": 42569,
+      "sourceSha256": "0919962b2df460429229e54405ca21f86acd8dfdf778b4ad1def97a8cc54f1e3",
+      "type": "redacted-text",
+      "file": "harnesses/same-input-timing.mts.txt",
+      "bytes": 42577,
+      "sha256": "d48402d6c2e0209bd94d8ea2b68e68544a03ed995de1056974883645a275b6c2"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-warm-prefix-1/declaration.json",
+      "sourceBytes": 366434,
+      "sourceSha256": "12fa1023413c00bde4c28d336409fa71d63820286f8260f857d0efd37cfe1e0d",
+      "type": "redacted-json",
+      "file": "experiments/same-input-warm-prefix-1/declaration.json",
+      "bytes": 365485,
+      "sha256": "a92ac366a45d2b6d52cf3de27b05ff363faf9e75ba2bf208fdb7cc18550e2c9b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-warm-prefix-1/results.json",
+      "sourceBytes": 118865,
+      "sourceSha256": "84e2a3e329a9c0a368c1e05f90e6b16a8795768496c5ab7d92ec89049f2a9bd7",
+      "type": "redacted-json",
+      "file": "experiments/same-input-warm-prefix-1/results.json",
+      "bytes": 118410,
+      "sha256": "d4e3862eadbc5e2545e54344da698dd609d44b460bb54f4e446f719a86749ab9"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-warm-prefix-1.log",
+      "sourceBytes": 340328,
+      "sourceSha256": "d3797ea13fd61bd073209fdfe992f5ba452cfcca1cc014f4f77e8ae6456c6e1e",
+      "type": "redacted-line-preserving-log",
+      "lines": 966,
+      "redactedSha256": "3ce6c3142c21bd66c0d25a2f72ec8f950d937d28ac59c69dacdd5c5cefe87e68",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/same-input-warm-prefix-1.log.part-001.redacted.log.gz",
+          "lines": 966,
+          "uncompressedBytes": 340023,
+          "bytes": 22987,
+          "sha256": "a863fd18dd6154d2a65c66433283831bad1c072e40f68a01110352bb01ad8de3"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/second-prewindow-latency.log",
+      "sourceBytes": 938908,
+      "sourceSha256": "07a96c9ac9d223e339230b100cd064e3e5925a476e184cee358f59c2c97b4191",
+      "type": "redacted-line-preserving-log",
+      "lines": 716245,
+      "redactedSha256": "07a96c9ac9d223e339230b100cd064e3e5925a476e184cee358f59c2c97b4191",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/second-prewindow-latency.log.part-001.redacted.log.gz",
+          "lines": 716245,
+          "uncompressedBytes": 938908,
+          "bytes": 12113,
+          "sha256": "cc75435e86cf41528c4406e77f6835a0461390ec1ed683084f3e618f7869e1ec"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/second-prewindow-latency.log.provenance.json",
+      "sourceBytes": 758,
+      "sourceSha256": "55b4ffeb96f2b9c859dc0f7a28df4244b5f1fd9b63568782a3c40c4e3ae0c738",
+      "type": "redacted-json",
+      "file": "evidence/second-prewindow-latency.log.provenance.json",
+      "bytes": 644,
+      "sha256": "580499a30c7df4d2ba45809206eb5073099618f85c6fc33c40bfe153f476260e"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/second-prewindow-reconciliation.json",
+      "sourceBytes": 1144,
+      "sourceSha256": "c84942d492eeaced27ad96df2257e9abcfdd83b05184e7042fd09e3a955711a8",
+      "type": "redacted-json",
+      "file": "evidence/second-prewindow-reconciliation.json",
+      "bytes": 1156,
+      "sha256": "e11c5c52cc0a0a281a36d55c8f312f8408b08f77f54889686d3a31330e736a9c"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/second-prewindow-stop-decision.json",
+      "sourceBytes": 1046,
+      "sourceSha256": "22692e950458736e4ea0db2e23f50055d241db3f1f1a7fd4cfc93db8f5a88d59",
+      "type": "redacted-json",
+      "file": "evidence/second-prewindow-stop-decision.json",
+      "bytes": 1046,
+      "sha256": "22692e950458736e4ea0db2e23f50055d241db3f1f1a7fd4cfc93db8f5a88d59"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/second-prewindow-tools.json",
+      "sourceBytes": 3132,
+      "sourceSha256": "61aa137afcef0bd2f215852ee64b40356f2752e82c32472e38ced8f93007a96b",
+      "type": "redacted-json",
+      "file": "evidence/second-prewindow-tools.json",
+      "bytes": 3075,
+      "sha256": "28361ef9af74e96ceded42b886ffe2cecf97ffb9fde78f617c707295f142f5ef"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/second-stopped-final.json",
+      "sourceBytes": 2576,
+      "sourceSha256": "bf4892582a1d693f1d19e7c6317d32e5606449c964525b8d6ac7f0c0333fc6a3",
+      "type": "redacted-json",
+      "file": "evidence/second-stopped-final.json",
+      "bytes": 2519,
+      "sha256": "47f636eb25a22cc55ec7cb20bc7b937ae8623f0911683158d8284b05567a999c"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/solver-latency-current-progress.json",
+      "sourceBytes": 5519,
+      "sourceSha256": "dda0f63383a473287e70258261ee02a276b29e263b927ce9b097e5c77245c744",
+      "type": "redacted-json",
+      "file": "evidence/solver-latency-current-progress.json",
+      "bytes": 5315,
+      "sha256": "3a843776beb6e14e6a8584bc1582565bec44da2c5cefce64cbf52bdfdea24559"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-check-bench-declaration.json",
+      "sourceBytes": 1462,
+      "sourceSha256": "3d06a32396a772ae26cec9718677b5d17e863126328bc903cca0dec393695ab6",
+      "type": "redacted-json",
+      "file": "evidence/source-check-bench-declaration.json",
+      "bytes": 1462,
+      "sha256": "3d06a32396a772ae26cec9718677b5d17e863126328bc903cca0dec393695ab6"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-check-bench-result.json",
+      "sourceBytes": 5592,
+      "sourceSha256": "0127b75c8abda784afb9ba3afdaca4e9cc1e7ad42b44bfcae034b140ec81325a",
+      "type": "redacted-json",
+      "file": "evidence/source-check-bench-result.json",
+      "bytes": 5592,
+      "sha256": "0127b75c8abda784afb9ba3afdaca4e9cc1e7ad42b44bfcae034b140ec81325a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-check-bench.mts",
+      "sourceBytes": 4302,
+      "sourceSha256": "cfaab362806779c2d6a019daad2df8f1c9454cd8c53085ff4e29c5491eb80407",
+      "type": "redacted-text",
+      "file": "harnesses/source-check-bench.mts.txt",
+      "bytes": 4295,
+      "sha256": "6379b031211ae96aa6ca3d997b1051ebc8963c38214de64e072910dfc4d66591"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-main-build-pass1.log",
+      "sourceBytes": 71,
+      "sourceSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "type": "redacted-line-preserving-log",
+      "lines": 4,
+      "redactedSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/source-storage-main-build-pass1.log.part-001.redacted.log.gz",
+          "lines": 4,
+          "uncompressedBytes": 71,
+          "bytes": 86,
+          "sha256": "b9776f24ce0acf406785a561e31fc2522eb3aeaa1baeb2a5ca76c55d7344cb09"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-main-review.json",
+      "sourceBytes": 3575,
+      "sourceSha256": "7a55bdf5ad78d06fcab6ae80fc40c3034fe8d61acc49a7cddc1329aa439eb74b",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-main-review.json",
+      "bytes": 3725,
+      "sha256": "8b3e97780ba31d328a1b097007a9e142e06a9add10ccd58b97c330c7ca4b1c8c"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-main-rust-client.log",
+      "sourceBytes": 49547,
+      "sourceSha256": "8d9f2cb39631688967746d8b58eb0af2d4fcbeb1145cf9ee44c0fc5ba15ac1e3",
+      "type": "redacted-line-preserving-log",
+      "lines": 423,
+      "redactedSha256": "8d9f2cb39631688967746d8b58eb0af2d4fcbeb1145cf9ee44c0fc5ba15ac1e3",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/source-storage-main-rust-client.log.part-001.redacted.log.gz",
+          "lines": 423,
+          "uncompressedBytes": 49547,
+          "bytes": 7249,
+          "sha256": "b861ed72006246a4de61e5d66507ca7bdf0ca8c86e14501d5722b065af9f963b"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-main-tests-pass1.log",
+      "sourceBytes": 19147,
+      "sourceSha256": "d584e46d5f0b68e91d0107ebbbb3d299524a17a6c245e05d93aacaa54269f88f",
+      "type": "redacted-line-preserving-log",
+      "lines": 242,
+      "redactedSha256": "fe5764bd28d8ac472b22b057ab301041f788ec221911b8f26d722817289d1a96",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/source-storage-main-tests-pass1.log.part-001.redacted.log.gz",
+          "lines": 242,
+          "uncompressedBytes": 19090,
+          "bytes": 4239,
+          "sha256": "2d84fd5100a70082e27591f47449cd53893fce7c45ad7465c777917596c751bc"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-main-tests.log",
+      "sourceBytes": 37396,
+      "sourceSha256": "d2913f91c5fb3e2d7809155981b108fc65dd1b22aa3cf214356ebf5fbe0a2578",
+      "type": "redacted-line-preserving-log",
+      "lines": 382,
+      "redactedSha256": "d2913f91c5fb3e2d7809155981b108fc65dd1b22aa3cf214356ebf5fbe0a2578",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/source-storage-main-tests.log.part-001.redacted.log.gz",
+          "lines": 382,
+          "uncompressedBytes": 37396,
+          "bytes": 6786,
+          "sha256": "fbe92f1f7cce11bc529c53131e70b26aca4561623400508499ba99636b79661d"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-1/declaration.json",
+      "sourceBytes": 379441,
+      "sourceSha256": "0f8d81be8b841f131d6de52f993174cb205cc42420b69677572ebf6300e9060c",
+      "type": "redacted-json",
+      "file": "experiments/source-storage-offline-1/declaration.json",
+      "bytes": 378915,
+      "sha256": "95e747cd1521c36c1985a2b398efff134e8307fdfbc103ed9d328180b867adf7"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-1/results.json",
+      "sourceBytes": 76299,
+      "sourceSha256": "5c6139f1be8d91a6d7a6473031149fc4902b599ed96ba62391cc75637b082f23",
+      "type": "redacted-json",
+      "file": "experiments/source-storage-offline-1/results.json",
+      "bytes": 76300,
+      "sha256": "f2f30c6cea94523f86d5906a1ca3097bd67c561a7fe862dc6889aeb7e9f91e0a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-2/declaration.json",
+      "sourceBytes": 379474,
+      "sourceSha256": "06610ef279356674626248ce88fe58fed8fbd8107856846774edb5838f7fcfa6",
+      "type": "redacted-json",
+      "file": "experiments/source-storage-offline-2/declaration.json",
+      "bytes": 378948,
+      "sha256": "5b481824a919a564f74e308c8b1b3eb5b649d7679483504cfa68ebf2994c4a4b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-2/results.json",
+      "sourceBytes": 233473,
+      "sourceSha256": "5571bf7021ac803ad5c0411418a1beb2934eae97cc8a073d4605a53c4348d341",
+      "type": "redacted-json",
+      "file": "experiments/source-storage-offline-2/results.json",
+      "bytes": 233474,
+      "sha256": "e0f3b94f80510bf676fc8228ba4d7cd1b5d0b1de0c8ac5958caad1798536293a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-generator-result-2.json",
+      "sourceBytes": 6360,
+      "sourceSha256": "633db70dc0b2dff0ee70168cb7626a97b72b3f893f7297581556b97fe8434748",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-offline-generator-result-2.json",
+      "bytes": 6075,
+      "sha256": "c9e6699df8aeb62d73fe99bfca8e404f7cf5ec843d22223aa83224f228ffa025"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-generator-result.json",
+      "sourceBytes": 9484,
+      "sourceSha256": "7b21164e03b94c448fd47febd8b661f657cf780a2c0273b988dc9f41c1d38331",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-offline-generator-result.json",
+      "bytes": 8686,
+      "sha256": "ffdd241ea45fd3d89241ef65a187a32805cb4c27442a12681318d25c2010c7c4"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-indexed-latency.log",
+      "sourceBytes": 2932,
+      "sourceSha256": "809b04b45394704a9e0673b39589d563ad8a6071df7f9b5f8c503820c26700aa",
+      "type": "redacted-line-preserving-log",
+      "lines": 131,
+      "redactedSha256": "809b04b45394704a9e0673b39589d563ad8a6071df7f9b5f8c503820c26700aa",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/source-storage-offline-indexed-latency.log.part-001.redacted.log.gz",
+          "lines": 131,
+          "uncompressedBytes": 2932,
+          "bytes": 713,
+          "sha256": "2af30c80c2dd44ce20d837189aade4bddd208e892d8b45c161c0a4264100f917"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-main-assessment.json",
+      "sourceBytes": 2844,
+      "sourceSha256": "79442e99d3dfd5ce535aca746a07953b1d043a3a977545cb87c403273e27e0b0",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-offline-main-assessment.json",
+      "bytes": 3092,
+      "sha256": "6a49e3ee1cb9b125533c0908b408a28fb99edce6650adb1759654e75f83da225"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-main-check-pass2.log",
+      "sourceBytes": 4774,
+      "sourceSha256": "bd725ba9bbcda47696d656d46ca19dd589d570408f35d908f5ace52d2905a29b",
+      "type": "redacted-line-preserving-log",
+      "lines": 82,
+      "redactedSha256": "56b521d6e2805b9708bd283b7500fbe3ce98fd0f17c657d9c9eaa0c94c0544f9",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/source-storage-offline-main-check-pass2.log.part-001.redacted.log.gz",
+          "lines": 82,
+          "uncompressedBytes": 4261,
+          "bytes": 1490,
+          "sha256": "9d8cf9f18ed7727421f743e5213cafa6bebe74ed4f4d52c32c8b3baecb83cdcd"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-main-check-sealed.log",
+      "sourceBytes": 4774,
+      "sourceSha256": "a4d445b1a300f274704cbae7f87c745946810d5ce4b3a3e132ada819817d4507",
+      "type": "redacted-line-preserving-log",
+      "lines": 82,
+      "redactedSha256": "d41f6eea8a22a940ff43772c843a53c79a87b8124c235a0c903abf2965acd847",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/source-storage-offline-main-check-sealed.log.part-001.redacted.log.gz",
+          "lines": 82,
+          "uncompressedBytes": 4261,
+          "bytes": 1491,
+          "sha256": "33d7850614627ce6f32c5e2f5dc7c3c49cff2e79119fa08fea386235f8264ba7"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-main-check.log",
+      "sourceBytes": 4774,
+      "sourceSha256": "e0ee69ba41d22fceea119bfa9a34993ee2b3a0a4e7048c149496a485f4ead2b7",
+      "type": "redacted-line-preserving-log",
+      "lines": 82,
+      "redactedSha256": "b0a94516a5102763627c75404bd7aa755d5139500ca9d22f965382f7ccd05dab",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/source-storage-offline-main-check.log.part-001.redacted.log.gz",
+          "lines": 82,
+          "uncompressedBytes": 4261,
+          "bytes": 1490,
+          "sha256": "91afa892429b1c80bc1c4302e5f5662638b9af4251b307d5c6fca6d00c07cca6"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-main-review-pass2.json",
+      "sourceBytes": 1403,
+      "sourceSha256": "1b2929ee88b38cdcdb05b0f1b715393f43b61426200fa39d01c3386f7164c4b6",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-offline-main-review-pass2.json",
+      "bytes": 1528,
+      "sha256": "8e3ec86ba496ec2eecd9c6900c0d2864985d2e5870a3ec5aa59b7777d97c0d06"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-main-review.json",
+      "sourceBytes": 1742,
+      "sourceSha256": "3ff0ae63a9820bd06e530fde9e378e6e45fc92a92f519b1d8be5fbf47dd75552",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-offline-main-review.json",
+      "bytes": 1838,
+      "sha256": "540b0a6fff4406cfd52987cf3db3910b677fc6b620179c6243dc8d1cd941d0fd"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-main-run-pass2.log",
+      "sourceBytes": 3016,
+      "sourceSha256": "c6342c48099c81f26ed3408062ca70c7365d338a67fcbd3daaf5a3c3806c8deb",
+      "type": "redacted-line-preserving-log",
+      "lines": 28,
+      "redactedSha256": "c6342c48099c81f26ed3408062ca70c7365d338a67fcbd3daaf5a3c3806c8deb",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/source-storage-offline-main-run-pass2.log.part-001.redacted.log.gz",
+          "lines": 28,
+          "uncompressedBytes": 3016,
+          "bytes": 334,
+          "sha256": "3104ba03451d67c4f2544d8dff1c8743458cdd5457c1ec9e6497ea2f14cf4f4e"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-main-run.log",
+      "sourceBytes": 754,
+      "sourceSha256": "b1bb1f24a8bd31a280b6958088ec23d0ffa555158ce2d3477a1d8b63cec83d63",
+      "type": "redacted-line-preserving-log",
+      "lines": 7,
+      "redactedSha256": "b1bb1f24a8bd31a280b6958088ec23d0ffa555158ce2d3477a1d8b63cec83d63",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/source-storage-offline-main-run.log.part-001.redacted.log.gz",
+          "lines": 7,
+          "uncompressedBytes": 754,
+          "bytes": 309,
+          "sha256": "7c75dd627693b765d01ae6429c6518403475328898637fd5087c285ac6f9745b"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-plan.json",
+      "sourceBytes": 3325,
+      "sourceSha256": "3bcc2d4c5a2ff24761c6bd0315aa68936dfd74020d58889585067df5d5f18382",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-offline-plan.json",
+      "bytes": 3341,
+      "sha256": "8fed6b3ff4c050798846be0f11c469b125dccfc443895b88a635f9d82e144d1f"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-reconciliation.json",
+      "sourceBytes": 1065,
+      "sourceSha256": "910983956533d20f8c87be728cfaa830b294530e0466506482503f449f040ec1",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-offline-reconciliation.json",
+      "bytes": 1073,
+      "sha256": "6b776ebcf0e3043de0242db8e5a12e9ec8638bf701b5d682a72c1a00d173ccb6"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-repair-declaration.json",
+      "sourceBytes": 5951,
+      "sourceSha256": "0d5569c58cb96db5f5305b6aa749cb03205fa06e5530345c01b1b1b2b8b93f12",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-offline-repair-declaration.json",
+      "bytes": 5210,
+      "sha256": "375580f70e775aa6324bc218520c24412d130fb372dcaaaa8c9675bcae1ba11a"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-result-review.json",
+      "sourceBytes": 21186,
+      "sourceSha256": "d27dc10e27cd16a7b0bd2a13bd8d62c2816f78ae3d536c0bce73a90da54b4948",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-offline-result-review.json",
+      "bytes": 20730,
+      "sha256": "7bf6e086969a7c7d075168d02de94ebb06d945a54103d1492101df87e3dab9c7"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline.mts",
+      "sourceBytes": 28094,
+      "sourceSha256": "013318f162ef7a6771df269d0ddb16f5bbfc71fdd28ab2fc73dfa0228cbfa9ff",
+      "type": "redacted-text",
+      "file": "harnesses/source-storage-offline.mts.txt",
+      "bytes": 28082,
+      "sha256": "03510160d55f97efd22bec09cb3a8ec86b275db4367c0938479663e1ad5273a4"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-share-brief.json",
+      "sourceBytes": 1860,
+      "sourceSha256": "1c4d2a4bbf605e019d90c6eda457aa83b53148ce276da8eb428c18524cd82c03",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-share-brief.json",
+      "bytes": 1872,
+      "sha256": "df34cbefa7b4d168f2accd0031f982f0c37112d8abb95ca878cf96cb7cc16245"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-share-design-review.json",
+      "sourceBytes": 15094,
+      "sourceSha256": "0c62aeae15a8cf20728fa4f37629533262f52eb6a5188b43ede5aed10c3a5043",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-share-design-review.json",
+      "bytes": 15094,
+      "sha256": "0c62aeae15a8cf20728fa4f37629533262f52eb6a5188b43ede5aed10c3a5043"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-share-generator-result.json",
+      "sourceBytes": 7926,
+      "sourceSha256": "85b9d79c13545dbc228724ba25de17648b0f9461d65a616b307dee2b7bdd951c",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-share-generator-result.json",
+      "bytes": 7584,
+      "sha256": "647e0aa8355cd01c80e0bb5d385766beeb8857c7f1b18ce4437c204cb5ba0b59"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-share-plan.json",
+      "sourceBytes": 3326,
+      "sourceSha256": "d06c2f318558d39fb575ada86de2930c70c0af1d979bf8b3a94d6081fef881ae",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-share-plan.json",
+      "bytes": 3326,
+      "sha256": "d06c2f318558d39fb575ada86de2930c70c0af1d979bf8b3a94d6081fef881ae"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-tools.json",
+      "sourceBytes": 3074,
+      "sourceSha256": "2b06c1c51678c219e2525995193f4cabc95b895013c1acd38059aa8f677133ba",
+      "type": "redacted-json",
+      "file": "evidence/source-storage-tools.json",
+      "bytes": 3017,
+      "sha256": "83725a06d7e4479304282707ec85c79b91ed558f88b866afae692475eed04d09"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/telemetry-review.json",
+      "sourceBytes": 819,
+      "sourceSha256": "f53486f46c43ab8ab62ee681224424a9080fe3d224de3b4babdae7b435a3ac2b",
+      "type": "redacted-json",
+      "file": "evidence/telemetry-review.json",
+      "bytes": 870,
+      "sha256": "6cd2db936f955dcfb7056bf148bac01691f04a48c03df040b22df1f27feac233"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/third-progress-01-latency.log",
+      "sourceBytes": 1009541,
+      "sourceSha256": "c8f825b60e9e4d495c5f1b2dc4a15d6d63fd61cbe3be8d9362b05878b9a42bb9",
+      "type": "redacted-line-preserving-log",
+      "lines": 589989,
+      "redactedSha256": "c8f825b60e9e4d495c5f1b2dc4a15d6d63fd61cbe3be8d9362b05878b9a42bb9",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/third-progress-01-latency.log.part-001.redacted.log.gz",
+          "lines": 589989,
+          "uncompressedBytes": 1009541,
+          "bytes": 49681,
+          "sha256": "ed47c68e822ed6b8e3dc61203ce4fe8c7053f78d55c87da71e59ed8516507855"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/third-progress-01-latency.log.provenance.json",
+      "sourceBytes": 756,
+      "sourceSha256": "ebe65756c733cb35050b53a33e0c45737a655cae9efb9cf6f957e828593ff58a",
+      "type": "redacted-json",
+      "file": "evidence/third-progress-01-latency.log.provenance.json",
+      "bytes": 642,
+      "sha256": "0190e48c46f9956f71c8075bb1017c21c72ed5ef579f00bdc00af59e323ea57d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/third-progress-01-reconciliation.json",
+      "sourceBytes": 1386,
+      "sourceSha256": "33f19d9d5728ef022da458ce999b18848ca55fca862851470c637efc2ed1f18a",
+      "type": "redacted-json",
+      "file": "evidence/third-progress-01-reconciliation.json",
+      "bytes": 1464,
+      "sha256": "b4691865048cc90b2fcb29076f67860acaa17f587421da13c5819c87d8cd3b25"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/third-progress-01.json",
+      "sourceBytes": 3896,
+      "sourceSha256": "e822a69a46812536a3e31168478e526041faa4ec0b262d22c500f745ac9b623b",
+      "type": "redacted-json",
+      "file": "evidence/third-progress-01.json",
+      "bytes": 3839,
+      "sha256": "9acaddee9965d122d7d1ea69f55ecf4a51932c72c23948696935997c2f221f2b"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/third-progress-tools.json",
+      "sourceBytes": 3133,
+      "sourceSha256": "5334865873437768de64569422b4909892bdc1697f4a722b8852472bd45f0d96",
+      "type": "redacted-json",
+      "file": "evidence/third-progress-tools.json",
+      "bytes": 3076,
+      "sha256": "c5a579e95e181fc516e3481123696ffac24eff8908900b154b06873b195fa1f8"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/third250-final.json",
+      "sourceBytes": 4140,
+      "sourceSha256": "74e9a0691b2c266202eb5dc8369bf41c52f81b419bac9f21d040077081ea05d9",
+      "type": "redacted-json",
+      "file": "evidence/third250-final.json",
+      "bytes": 4083,
+      "sha256": "9ae2844710e62f29a9cb98a43e6f5b4c9bdbeb1022434b0f84d5db14d23c1769"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/third250-latency.log",
+      "sourceBytes": 1307540,
+      "sourceSha256": "0be86d4f64fe52c0bd3dac9849db74ec88e8403349bfe2aece720d3a7cf10315",
+      "type": "redacted-line-preserving-log",
+      "lines": 715859,
+      "redactedSha256": "0be86d4f64fe52c0bd3dac9849db74ec88e8403349bfe2aece720d3a7cf10315",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/third250-latency.log.part-001.redacted.log.gz",
+          "lines": 715859,
+          "uncompressedBytes": 1307540,
+          "bytes": 67622,
+          "sha256": "037e073e41e4994a3b2c351bb5322c4af4ab04538555933dbf4fdc34493cd8dd"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/third250-latency.log.provenance.json",
+      "sourceBytes": 747,
+      "sourceSha256": "d35e3fd2689cc5b2f0ab7cfc35d982b3514dda3ec3f44ccb8d6c442973c0142f",
+      "type": "redacted-json",
+      "file": "evidence/third250-latency.log.provenance.json",
+      "bytes": 633,
+      "sha256": "178a79aad6e2e86912b9b6bc64499f1768209914522d39b79a38763b42078335"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/third250-quote-waves.json",
+      "sourceBytes": 120206,
+      "sourceSha256": "a1ac5f64cfd7f7f51719c4f82f27c76ca4bf2c49ba382d044a34b96488bc1754",
+      "type": "redacted-json",
+      "file": "evidence/third250-quote-waves.json",
+      "bytes": 120149,
+      "sha256": "e8d7c1caf20680d6fe170f2df79323bd22b56d6005924e5003c95a1c86ba6b2d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/third250-reconciliation.json",
+      "sourceBytes": 2825,
+      "sourceSha256": "0f2223b3bb11e829767e179d48b3bc61b2e7d7026f70c110b5304a1f3bd03a99",
+      "type": "redacted-json",
+      "file": "evidence/third250-reconciliation.json",
+      "bytes": 3031,
+      "sha256": "c208c541f1901a3ebf71adc2fffa474a0c281cff820d6fa89b4313326f6b4cac"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/third250-tools.json",
+      "sourceBytes": 3124,
+      "sourceSha256": "095eab390f090d1dbba7a45ae9fbec8787fa59b170857c96e71b45aacbb84d79",
+      "type": "redacted-json",
+      "file": "evidence/third250-tools.json",
+      "bytes": 3067,
+      "sha256": "fe89398531e335a4b33bcd0926dd4f4deae3885beb84931af32f230e4810645d"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/v4-kyber-math-review.json",
+      "sourceBytes": 17089,
+      "sourceSha256": "089affba410937fd135a2d359ba61e6d84adb3b2789ec5f5ff0edcf8e853eea8",
+      "type": "redacted-json",
+      "file": "evidence/v4-kyber-math-review.json",
+      "bytes": 17089,
+      "sha256": "089affba410937fd135a2d359ba61e6d84adb3b2789ec5f5ff0edcf8e853eea8"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/v4-local-plan.json",
+      "sourceBytes": 2774,
+      "sourceSha256": "fb54314ef9279d531fd0f6aac8afb2f0db9c52b0fab2541e8c777cde474e4383",
+      "type": "redacted-json",
+      "file": "evidence/v4-local-plan.json",
+      "bytes": 2878,
+      "sha256": "12b668733cfe1992819bb9d4f64bb70a2112591d63624d7d73f61c4b08dc34ed"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-brief.json",
+      "sourceBytes": 7655,
+      "sourceSha256": "f8406eeb4224dd685442d077fbcf763cde5bb4f11b2d4848d064282108956bf2",
+      "type": "redacted-json",
+      "file": "evidence/warm-prefix-brief.json",
+      "bytes": 7715,
+      "sha256": "abd437a2292bd9dc4d6010fc2a477f650287c3bc9a0c913f512ca8ac37834a81"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-design-review.json",
+      "sourceBytes": 12937,
+      "sourceSha256": "94fcf90adc15523ab0a621e4ca7d82584b9216e93fe78bdc7098ec3781b7df2a",
+      "type": "redacted-json",
+      "file": "evidence/warm-prefix-design-review.json",
+      "bytes": 13057,
+      "sha256": "45951491df47c4108780d4d60f182d98654d2c7f5070c46682d0ad67fc6b34b8"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-experiment-review.json",
+      "sourceBytes": 11486,
+      "sourceSha256": "e28235ccd2b9bf6e802c95514dd935c7fe639b53eacd1d4073441dc3eff161f1",
+      "type": "redacted-json",
+      "file": "evidence/warm-prefix-experiment-review.json",
+      "bytes": 10745,
+      "sha256": "d181d63792faba2e8a1da033f48d4d0c7a48355c601cfee91bfb633dc3d73f15"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-full-tests-1.log",
+      "sourceBytes": 1018444,
+      "sourceSha256": "9261f2ba36f930d5796b5f4879cd96a87f920b125d19bd3265217983aa769b81",
+      "type": "redacted-line-preserving-log",
+      "lines": 3475,
+      "redactedSha256": "4f0e72bb22c46eeb2ab2e11758e5ffc58a1fd9f9e2dd00ddc961e476839eace6",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/warm-prefix-full-tests-1.log.part-001.redacted.log.gz",
+          "lines": 3475,
+          "uncompressedBytes": 1016996,
+          "bytes": 55412,
+          "sha256": "7491e99396470d76cbcce5d111d69a3d1d2579802af98218ba2baf664effc2cd"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-implementation.json",
+      "sourceBytes": 7929,
+      "sourceSha256": "facb0dc5573c762fa28258ff96d72975f1e39a29e2568653e63c95a398ec907f",
+      "type": "redacted-json",
+      "file": "evidence/warm-prefix-implementation.json",
+      "bytes": 8013,
+      "sha256": "d309618ca38fe0ced01bfb72c48e23b3a90a3f026d6a0c34ab1265464a808714"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-launch-receipt.json",
+      "sourceBytes": 584,
+      "sourceSha256": "19de31d2586551b2af3cae0eab44a592f6e8f62afdd022c5b375cd63140d2c16",
+      "type": "redacted-json",
+      "file": "evidence/warm-prefix-launch-receipt.json",
+      "bytes": 471,
+      "sha256": "73c6efc32db487df1badfa2fb7c27e0aa52f30dd4b97138f8c44148a7db0aaa1"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-main-build.log",
+      "sourceBytes": 400,
+      "sourceSha256": "e784f5d712d1ec29c94f185792ac5be6609a8ba7a6c2eaac3371ac181b2e67c9",
+      "type": "redacted-line-preserving-log",
+      "lines": 10,
+      "redactedSha256": "e784f5d712d1ec29c94f185792ac5be6609a8ba7a6c2eaac3371ac181b2e67c9",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/warm-prefix-main-build.log.part-001.redacted.log.gz",
+          "lines": 10,
+          "uncompressedBytes": 400,
+          "bytes": 253,
+          "sha256": "fc236fd3677c7cc6824f2a9626d8d3c1009c2addd44b427f4f94e9916eb765d8"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-main-integration.log",
+      "sourceBytes": 174379,
+      "sourceSha256": "e107fcc37e28571a8633a1d002eabc68a20d6fd578569931c58840beb2fa3893",
+      "type": "redacted-line-preserving-log",
+      "lines": 753,
+      "redactedSha256": "e107fcc37e28571a8633a1d002eabc68a20d6fd578569931c58840beb2fa3893",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/warm-prefix-main-integration.log.part-001.redacted.log.gz",
+          "lines": 753,
+          "uncompressedBytes": 174379,
+          "bytes": 17081,
+          "sha256": "5b9dd03b622ce0fd30c30ac9f028df125fabe4d2a2b9c70bb2cec2f1a6ad0fd4"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-main-preflight.log",
+      "sourceBytes": 2969,
+      "sourceSha256": "639371053bab5145e2ae9de9aa0cd5e1d5fe609d44baeb64cf9814103a365674",
+      "type": "redacted-line-preserving-log",
+      "lines": 58,
+      "redactedSha256": "cfe148e0863db8f4f9992b2c814dccdf1e8aa45c9d0899448e7e3fe966c3a941",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/warm-prefix-main-preflight.log.part-001.redacted.log.gz",
+          "lines": 58,
+          "uncompressedBytes": 2399,
+          "bytes": 702,
+          "sha256": "2bc8adad6574e78621e51df26bd178008c91b78c65af7e4e8c95c6912550f99d"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-main-review.json",
+      "sourceBytes": 3763,
+      "sourceSha256": "500d706e4490bdfb08ce1d758f012e55cb5352a779b4d83cdf8f99580aa01342",
+      "type": "redacted-json",
+      "file": "evidence/warm-prefix-main-review.json",
+      "bytes": 3985,
+      "sha256": "02152e577e046e6156245d3ffab5519afb6ce4424299f5d5bd10229b82229967"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-main-tests.log",
+      "sourceBytes": 1018298,
+      "sourceSha256": "5608a4e0447ef1f31671b5b23554ad841b836b21da2064c040801f456b17be75",
+      "type": "redacted-line-preserving-log",
+      "lines": 3475,
+      "redactedSha256": "ab59d5008640902cc173ef826c0d51ca0f4553c40e765c9027e08410afa139e5",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/warm-prefix-main-tests.log.part-001.redacted.log.gz",
+          "lines": 3475,
+          "uncompressedBytes": 1016900,
+          "bytes": 55446,
+          "sha256": "9c08d1ebc90152c02d2aa8f06b8b09cc4ce5daaa6e67b4e82f61f21706a224d6"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-manual-assessment.json",
+      "sourceBytes": 13394,
+      "sourceSha256": "2fc7ff199c7cdd82cb569abe75410c131a6ac1b2243b69a5f027b5c674b739ee",
+      "type": "redacted-json",
+      "file": "evidence/warm-prefix-manual-assessment.json",
+      "bytes": 13394,
+      "sha256": "2fc7ff199c7cdd82cb569abe75410c131a6ac1b2243b69a5f027b5c674b739ee"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-reconciliation.json",
+      "sourceBytes": 3510,
+      "sourceSha256": "37648a8d3c37eda5c7e9fb7fa3f9f33515d37fcf2890ce3182b21f227cac87d5",
+      "type": "redacted-json",
+      "file": "evidence/warm-prefix-reconciliation.json",
+      "bytes": 3510,
+      "sha256": "37648a8d3c37eda5c7e9fb7fa3f9f33515d37fcf2890ce3182b21f227cac87d5"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-release-build.log",
+      "sourceBytes": 513,
+      "sourceSha256": "a059f92c279a703a38859573479262d5772eac6ad75b488b6e755b87be4ccfb0",
+      "type": "redacted-line-preserving-log",
+      "lines": 11,
+      "redactedSha256": "ef4bd7f6dc5eef7c6bd5ce96bfd9a7f42d73e5ad08da993d5928ecbcadaca709",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/warm-prefix-release-build.log.part-001.redacted.log.gz",
+          "lines": 11,
+          "uncompressedBytes": 456,
+          "bytes": 284,
+          "sha256": "29518ed414b6429a1aac833a47dab94e1f358db9c85a6e36a95e33445db6d201"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-restoration-tests.log",
+      "sourceBytes": 50183,
+      "sourceSha256": "c4cd7b7ee134e2e2e1a4fbad0d7e906d28d3ad0cbe53b50ceaddf3809ddee867",
+      "type": "redacted-line-preserving-log",
+      "lines": 430,
+      "redactedSha256": "c4cd7b7ee134e2e2e1a4fbad0d7e906d28d3ad0cbe53b50ceaddf3809ddee867",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/warm-prefix-restoration-tests.log.part-001.redacted.log.gz",
+          "lines": 430,
+          "uncompressedBytes": 50183,
+          "bytes": 7631,
+          "sha256": "33a24ef1c70fbc4222b8af04ac8195eaf7d4b75830699ae347b16e68e0291618"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-result-review.json",
+      "sourceBytes": 21968,
+      "sourceSha256": "63d262017e4ad8dbcae7de325ff0e75fa844959c19dabe5ae8b804c4c61471f8",
+      "type": "redacted-json",
+      "file": "evidence/warm-prefix-result-review.json",
+      "bytes": 21626,
+      "sha256": "fd52942c38296f0087064a6ca799840473addc61c706c91b41575b94f6205daa"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-tests-1.log",
+      "sourceBytes": 412531,
+      "sourceSha256": "16431f10e9f2a86a29c90b9e9f6307e2c058ac094326fbe2a00d04ab8b8c3e12",
+      "type": "redacted-line-preserving-log",
+      "lines": 1217,
+      "redactedSha256": "84dce9dbe268a95f58400e5d729fd03f1ff25cd47c70723834f4056c84933947",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "evidence/warm-prefix-tests-1.log.part-001.redacted.log.gz",
+          "lines": 1217,
+          "uncompressedBytes": 412084,
+          "bytes": 24933,
+          "sha256": "c9023ce015297fdddb34249de13a016b96379709321b7e0ade59776d1b41626d"
+        }
+      ]
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-timing.json",
+      "sourceBytes": 6730,
+      "sourceSha256": "63de4637e40ba461763b690beec7cdceec951f1630b3fae2b2ed0f3102611cfe",
+      "type": "redacted-json",
+      "file": "evidence/warm-prefix-timing.json",
+      "bytes": 6606,
+      "sha256": "35ab0e13521f2608c0c4ac62f5cf3883eab868d0a26ab52c34d8300ff355a874"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-tools.json",
+      "sourceBytes": 3061,
+      "sourceSha256": "55ddef090dc4744bbc44630c818146e8d301e2d7a4e7997dea68df979ac635b4",
+      "type": "redacted-json",
+      "file": "evidence/warm-prefix-tools.json",
+      "bytes": 3004,
+      "sha256": "74627ad291a1621d178ec6ea4bb6ac43b90591dbf3aafc08303b70068ca71e1a"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/live.log",
+      "sourceBytes": 1217494107,
+      "sourceSha256": "a7fde1af6bfa8edeffb5dc5e2e01e52518144e6455127694d3991e82cd9617e6",
+      "type": "redacted-line-preserving-log",
+      "lines": 1634867,
+      "redactedSha256": "3c8a6116a7b034916452d0dbea3efe23fc72acb186406803ac10e63581d04a0b",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-001.redacted.log.gz",
+          "lines": 101137,
+          "uncompressedBytes": 67109577,
+          "bytes": 6548832,
+          "sha256": "9082885deaf3ae3bd3cb6c35f597532f1c68f99d71ca5bc76abc58357a3ecba3"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-002.redacted.log.gz",
+          "lines": 85077,
+          "uncompressedBytes": 67109402,
+          "bytes": 4857486,
+          "sha256": "1589901880ef47862a8713096de9286d44f4d9a2e54644ed20828b54a1e31964"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-003.redacted.log.gz",
+          "lines": 88846,
+          "uncompressedBytes": 67109558,
+          "bytes": 3488400,
+          "sha256": "2abf1f6c504a5ce5b3d3aee8d7e6717e4c9af5e3198986af93a015fdecdaac85"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-004.redacted.log.gz",
+          "lines": 88169,
+          "uncompressedBytes": 67109605,
+          "bytes": 2527722,
+          "sha256": "9acae628dadf6e338759ef41e6a9310faa6bd7b419120a170312b0dcafabfeba"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-005.redacted.log.gz",
+          "lines": 88354,
+          "uncompressedBytes": 67109633,
+          "bytes": 2548605,
+          "sha256": "7dd26f5d04356be9eeb600b4b480a09f39a0760ae7e690f5821314bca2d651b6"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-006.redacted.log.gz",
+          "lines": 88846,
+          "uncompressedBytes": 67109084,
+          "bytes": 2554492,
+          "sha256": "13ef1bff42519728550d67da213c24048b5e18a018a282e6700a268c93c466f4"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-007.redacted.log.gz",
+          "lines": 89609,
+          "uncompressedBytes": 67109619,
+          "bytes": 2492737,
+          "sha256": "053394480b00a69aafc7d9954574a456b9e6ecfcc4308e6d540f7acd2d578795"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-008.redacted.log.gz",
+          "lines": 89301,
+          "uncompressedBytes": 67109177,
+          "bytes": 2510780,
+          "sha256": "68e9f311b0ceadafe98399340c5733233d8733c02eca56921b10e91aece8399c"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-009.redacted.log.gz",
+          "lines": 88376,
+          "uncompressedBytes": 67109288,
+          "bytes": 2644725,
+          "sha256": "e0543b5fc5298fc73b834de8bba845f57154dc1980fd6e5d2ac0c9de6e15da5f"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-010.redacted.log.gz",
+          "lines": 90739,
+          "uncompressedBytes": 67109124,
+          "bytes": 2713437,
+          "sha256": "7abb5aa79c950e2fb8ce524d5278a105f383e6557abc986a493dbed0c0383b5d"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-011.redacted.log.gz",
+          "lines": 91037,
+          "uncompressedBytes": 67109143,
+          "bytes": 2755919,
+          "sha256": "43483db2cb7aab3f89adbfb6d8ef61705577fa6f6a1f3a9f6b0e6bc7e7be8190"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-012.redacted.log.gz",
+          "lines": 90767,
+          "uncompressedBytes": 67109353,
+          "bytes": 2759144,
+          "sha256": "51363ad3d6f64429459a723d7ed1c1c03956d5332fa31b558e0164331fcb7de8"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-013.redacted.log.gz",
+          "lines": 90078,
+          "uncompressedBytes": 67109118,
+          "bytes": 2585090,
+          "sha256": "083329627ed13319b255ae9790dce314949996eb9ceaab74b1b193524bb6b6de"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-014.redacted.log.gz",
+          "lines": 89966,
+          "uncompressedBytes": 67109348,
+          "bytes": 2708197,
+          "sha256": "8c8e32ce4635d507997225ffba51bef91674f4dbfee37e7667eb81e8bcac55a2"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-015.redacted.log.gz",
+          "lines": 90668,
+          "uncompressedBytes": 67109327,
+          "bytes": 2925714,
+          "sha256": "dcdda9a7f429aca009c00e2de617a97df132967bc7edd793a14617dedf3a560c"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-016.redacted.log.gz",
+          "lines": 90511,
+          "uncompressedBytes": 67109345,
+          "bytes": 2701508,
+          "sha256": "58fd31b94609371bfe785ce57c997e24bdad2e77680f7ac6d65d0ca4f9eaa95b"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-017.redacted.log.gz",
+          "lines": 90246,
+          "uncompressedBytes": 67109107,
+          "bytes": 2522630,
+          "sha256": "3bb141a01fb3672de4c919ada4961b53a3203b722c52b021cf2c1546858ab120"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-018.redacted.log.gz",
+          "lines": 90306,
+          "uncompressedBytes": 67109353,
+          "bytes": 2556796,
+          "sha256": "7a32bc4d559e9bc4bc3e6ca3dc55688feae031ccf0ba5f3f796111b8064671e5"
+        },
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/live.log.part-019.redacted.log.gz",
+          "lines": 12834,
+          "uncompressedBytes": 9525490,
+          "bytes": 394057,
+          "sha256": "37b33078b82038aa29581ca1b4364a236084ad754fdd8d63b57cf3900c8a544c"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/events.jsonl",
+      "sourceBytes": 3796335,
+      "sourceSha256": "8076a4c90c427c1a36130fe9424a23a9def8b26e8ec5b1767e5dae00ce10955c",
+      "type": "redacted-line-preserving-log",
+      "lines": 2730,
+      "redactedSha256": "8076a4c90c427c1a36130fe9424a23a9def8b26e8ec5b1767e5dae00ce10955c",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/events.jsonl.part-001.redacted.log.gz",
+          "lines": 2730,
+          "uncompressedBytes": 3796335,
+          "bytes": 312068,
+          "sha256": "7e14912b0b6131ff433fc7668f20942d11fc1dd585c4f35f6634bf9a9f33d81d"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/routes.jsonl",
+      "sourceBytes": 7381,
+      "sourceSha256": "fb304b3f90a273241816c0389d2c6502f46ee93b6f10e5c266f7ef0e74a0c6eb",
+      "type": "redacted-line-preserving-log",
+      "lines": 18,
+      "redactedSha256": "fb304b3f90a273241816c0389d2c6502f46ee93b6f10e5c266f7ef0e74a0c6eb",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-raw-ready-250.ajvb1j/routes.jsonl.part-001.redacted.log.gz",
+          "lines": 18,
+          "uncompressedBytes": 7381,
+          "bytes": 645,
+          "sha256": "5425db376ebed7f96e0b78c59979f019ef03c188a0a9b27379175e25c00b03d0"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/binding.json",
+      "sourceBytes": 204974,
+      "sourceSha256": "23231f4b28bef3ed0bea185a05605c73e0627048049d051024c70278edafd9e0",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/binding.json",
+      "bytes": 203948,
+      "sha256": "21c44342ba93b03a811045ca33b3912ff8e6103635deafbdb07a436694efead5"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/ended.json",
+      "sourceBytes": 225,
+      "sourceSha256": "1a080e8d066bd387e9e660026e19a18a1f968b687c80edb02450b432ecaa7c9d",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/ended.json",
+      "bytes": 225,
+      "sha256": "1a080e8d066bd387e9e660026e19a18a1f968b687c80edb02450b432ecaa7c9d"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/executor-code-override-preflight.json",
+      "sourceBytes": 777,
+      "sourceSha256": "0d53f94728eeab745bedef08e08423b22e780c879a216a3655965a0121ef945b",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/executor-code-override-preflight.json",
+      "bytes": 777,
+      "sha256": "0d53f94728eeab745bedef08e08423b22e780c879a216a3655965a0121ef945b"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/executor-code-started.json",
+      "sourceBytes": 162,
+      "sourceSha256": "7e57d12eff0415c1f9488eb514915fc0c8cda80776dfde02ec5ab9ba291a4bfb",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/executor-code-started.json",
+      "bytes": 162,
+      "sha256": "7e57d12eff0415c1f9488eb514915fc0c8cda80776dfde02ec5ab9ba291a4bfb"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/input-ended-verified.json",
+      "sourceBytes": 92,
+      "sourceSha256": "80ecf934981742b76125430d37b47db10041be39f912aee1f3244dcb27d74c1b",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/input-ended-verified.json",
+      "bytes": 92,
+      "sha256": "80ecf934981742b76125430d37b47db10041be39f912aee1f3244dcb27d74c1b"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/process.json",
+      "sourceBytes": 199,
+      "sourceSha256": "22670321ad05891485fd183e0095a21ff5ef4ca2c18b1ed52ef45a10dae8f29f",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/process.json",
+      "bytes": 142,
+      "sha256": "5add850571ff2cb4073a1eb5b16c755a58be27981429fbce6a91ce3d9c69436a"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/progress-tool-selection.json",
+      "sourceBytes": 3989,
+      "sourceSha256": "199bd045eb2dd3cad2f89ba48ba1305667c8fd83338853b4199e7fc4498a4d06",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/progress-tool-selection.json",
+      "bytes": 3932,
+      "sha256": "2ba43c894f9afd8b58abb57f24eaec54d407cb43de15df7774e72e1136364103"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/ready-refresh.json",
+      "sourceBytes": 357,
+      "sourceSha256": "a0a0d15fc1d1253bfad00533e45e9ea137f6362d936944cc149e54d8569de84f",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/ready-refresh.json",
+      "bytes": 300,
+      "sha256": "5d992b98feb03fffdb35bf53cd2b3ad8e51a7d5481446bc7152996895f2a6566"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/ready-started.json",
+      "sourceBytes": 232,
+      "sourceSha256": "3569f1f971897f586c63a3dbd2c2f6fe76c93a74d55a39d2419f068712f3794b",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/ready-started.json",
+      "bytes": 232,
+      "sha256": "3569f1f971897f586c63a3dbd2c2f6fe76c93a74d55a39d2419f068712f3794b"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/ready-verified.json",
+      "sourceBytes": 3033,
+      "sourceSha256": "b4c5955ec21c755aa8406c666bff65345509b4d76a7817df40b9f6f9158033cd",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/ready-verified.json",
+      "bytes": 3033,
+      "sha256": "b4c5955ec21c755aa8406c666bff65345509b4d76a7817df40b9f6f9158033cd"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/run-contract.json",
+      "sourceBytes": 7146,
+      "sourceSha256": "3050d805951468d68b55028cefc15363b94e134da2f4885596103472c26de691",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/run-contract.json",
+      "bytes": 6861,
+      "sha256": "d3840ebde1df7a86688ff0ea9292f45fcabfd2f2b9a7baa89274c00f4fb09cc6"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/runtime-data.json",
+      "sourceBytes": 861,
+      "sourceSha256": "330f567a6f27a2c76d7dcc6d9efd0f434829686a74ab54ad7b3f9b98d990c042",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/runtime-data.json",
+      "bytes": 861,
+      "sha256": "330f567a6f27a2c76d7dcc6d9efd0f434829686a74ab54ad7b3f9b98d990c042"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/source-frozen.json",
+      "sourceBytes": 196598,
+      "sourceSha256": "dbb5bbf1ef329b2bf49d829d6dcd55ede92c8409ba2ab79e09424788ea982c6b",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/source-frozen.json",
+      "bytes": 196477,
+      "sha256": "2600030f35f5a7892b857ca395bec8d14e0275d41848b0d1d627f38b670d067e"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/stop-request.json",
+      "sourceBytes": 122,
+      "sourceSha256": "c610fb3bf0f8ba73954e4146b5063504935308e4a34fba0261685b12a28a6e00",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/stop-request.json",
+      "bytes": 122,
+      "sha256": "c610fb3bf0f8ba73954e4146b5063504935308e4a34fba0261685b12a28a6e00"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/supervisor.json",
+      "sourceBytes": 58,
+      "sourceSha256": "fccf447f916bf2f5dfc2878ce6ba884c549d5a6761d5abc02024a5f4e89c4d9a",
+      "type": "redacted-json",
+      "file": "live/live-raw-ready-250.ajvb1j/supervisor.json",
+      "bytes": 58,
+      "sha256": "fccf447f916bf2f5dfc2878ce6ba884c549d5a6761d5abc02024a5f4e89c4d9a"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/live.log",
+      "sourceBytes": 543616381,
+      "sourceSha256": "13d082bc3d007182279f7f5bb4b57bc20a2439e344ce66ede4dfa1d2b95d2225",
+      "type": "redacted-line-preserving-log",
+      "lines": 760726,
+      "redactedSha256": "66a32041086dfd39d00a905039455fab446a4afcae2d9ddec7ee1bc0419a0131",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-solver-unique-pools-250.YgUfBJ/live.log.part-001.redacted.log.gz",
+          "lines": 101169,
+          "uncompressedBytes": 67109434,
+          "bytes": 6548782,
+          "sha256": "e25b41d673bac9adcf679f3f7a45f414042e293349d2c2759381db40fef6c7b2"
+        },
+        {
+          "file": "live/live-solver-unique-pools-250.YgUfBJ/live.log.part-002.redacted.log.gz",
+          "lines": 85050,
+          "uncompressedBytes": 67109758,
+          "bytes": 4856293,
+          "sha256": "d290fcff2bb020c8c8101edf4d4de0479890abba4a53d22771dcbfcf9263037f"
+        },
+        {
+          "file": "live/live-solver-unique-pools-250.YgUfBJ/live.log.part-003.redacted.log.gz",
+          "lines": 94756,
+          "uncompressedBytes": 67109672,
+          "bytes": 5160484,
+          "sha256": "2c4b2bcd7decb25e151461f2a4daef75056df0534f8106b26215b8b7f54fdb6b"
+        },
+        {
+          "file": "live/live-solver-unique-pools-250.YgUfBJ/live.log.part-004.redacted.log.gz",
+          "lines": 96399,
+          "uncompressedBytes": 67109423,
+          "bytes": 4694399,
+          "sha256": "5562f00fbafe72541d4e4b703a7b3ec1860c3430e72726d3fe00623c6eb7486a"
+        },
+        {
+          "file": "live/live-solver-unique-pools-250.YgUfBJ/live.log.part-005.redacted.log.gz",
+          "lines": 94239,
+          "uncompressedBytes": 67109431,
+          "bytes": 4747294,
+          "sha256": "b7176b6fe1812ea2362eeb069e1505908ca996a160372d8cca038c2891a6c2ec"
+        },
+        {
+          "file": "live/live-solver-unique-pools-250.YgUfBJ/live.log.part-006.redacted.log.gz",
+          "lines": 93134,
+          "uncompressedBytes": 67109112,
+          "bytes": 4686282,
+          "sha256": "9bd661a94ac6befdbf42259efd5f2b99f29227fd931fc7f5843f9eec779d52bf"
+        },
+        {
+          "file": "live/live-solver-unique-pools-250.YgUfBJ/live.log.part-007.redacted.log.gz",
+          "lines": 91465,
+          "uncompressedBytes": 67109379,
+          "bytes": 4863277,
+          "sha256": "3df0beb489c4e361281bfef0c9089d62ce588c616ecc131dd4d6a5ebc6a34ea3"
+        },
+        {
+          "file": "live/live-solver-unique-pools-250.YgUfBJ/live.log.part-008.redacted.log.gz",
+          "lines": 94142,
+          "uncompressedBytes": 67109072,
+          "bytes": 5002723,
+          "sha256": "ff2d86c9a4191caf48eea84b64621c162ccb5d08047bbebc5374f6fc95fed46a"
+        },
+        {
+          "file": "live/live-solver-unique-pools-250.YgUfBJ/live.log.part-009.redacted.log.gz",
+          "lines": 10372,
+          "uncompressedBytes": 6740644,
+          "bytes": 489926,
+          "sha256": "c0363230dfc0d0d622dfaa309786f82ad6628563c5301d37aadd57209522e217"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/events.jsonl",
+      "sourceBytes": 2530432,
+      "sourceSha256": "d0d0405a25a8a4b8762318951e89f3607dea85d7351e1e4b0cdaa1f45f9ce15a",
+      "type": "redacted-line-preserving-log",
+      "lines": 1765,
+      "redactedSha256": "d0d0405a25a8a4b8762318951e89f3607dea85d7351e1e4b0cdaa1f45f9ce15a",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-solver-unique-pools-250.YgUfBJ/events.jsonl.part-001.redacted.log.gz",
+          "lines": 1765,
+          "uncompressedBytes": 2530432,
+          "bytes": 218006,
+          "sha256": "9ebadbfde78ebd412ad62cc606d55357588ed7a58acbd7d608829162a1ba3087"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/routes.jsonl",
+      "sourceBytes": 11080,
+      "sourceSha256": "dc56911bf349880d7174f39d155d95b1a26a5599b90999ba4eeed5fc1814d86e",
+      "type": "redacted-line-preserving-log",
+      "lines": 26,
+      "redactedSha256": "dc56911bf349880d7174f39d155d95b1a26a5599b90999ba4eeed5fc1814d86e",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-solver-unique-pools-250.YgUfBJ/routes.jsonl.part-001.redacted.log.gz",
+          "lines": 26,
+          "uncompressedBytes": 11080,
+          "bytes": 1010,
+          "sha256": "60cf58e964bdf707eff8ad33a978cfdc3e1a93274d958da4bb9000abda9f6ede"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/binding.json",
+      "sourceBytes": 205574,
+      "sourceSha256": "d1a8139f22d83a87edefc5c5b375e4c4677e4a41ccadb21d5b960d9d97408aa4",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/binding.json",
+      "bytes": 204434,
+      "sha256": "3120098e831750efdd445898179a3f0e15ca8fe0ecd35a2521a7fea2ae1c2c6b"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/ended.json",
+      "sourceBytes": 240,
+      "sourceSha256": "af650bda79f166efffc267597836ee86dba8936256f70a65272432a07fcda058",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/ended.json",
+      "bytes": 240,
+      "sha256": "af650bda79f166efffc267597836ee86dba8936256f70a65272432a07fcda058"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/executor-code-override-preflight.json",
+      "sourceBytes": 777,
+      "sourceSha256": "f51959dfefb42321ed3d587a8e5ebf760048e2fdf28aad42ca157fe7dfbbf029",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/executor-code-override-preflight.json",
+      "bytes": 777,
+      "sha256": "f51959dfefb42321ed3d587a8e5ebf760048e2fdf28aad42ca157fe7dfbbf029"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/executor-code-started.json",
+      "sourceBytes": 162,
+      "sourceSha256": "60ad2c78f1132478dcfd0de42fe43415cb272fb7a4c62aa580a30352947bef15",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/executor-code-started.json",
+      "bytes": 162,
+      "sha256": "60ad2c78f1132478dcfd0de42fe43415cb272fb7a4c62aa580a30352947bef15"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/input-ended-verified.json",
+      "sourceBytes": 92,
+      "sourceSha256": "6847cdf0666e4b399c4ef63a6955b9bb87bc46947a4c7acca70459d356ba8fc4",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/input-ended-verified.json",
+      "bytes": 92,
+      "sha256": "6847cdf0666e4b399c4ef63a6955b9bb87bc46947a4c7acca70459d356ba8fc4"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/process.json",
+      "sourceBytes": 209,
+      "sourceSha256": "2e88b00fcb72c150d747ca8ce6e1cf4ad923989e9c5cf796297cc87a12f21ace",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/process.json",
+      "bytes": 152,
+      "sha256": "ac180381bdf8efa357f6d62d1cc943f1ef019b2859ac3bb854beb6f619984cb8"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/ready-refresh.json",
+      "sourceBytes": 357,
+      "sourceSha256": "a0a0d15fc1d1253bfad00533e45e9ea137f6362d936944cc149e54d8569de84f",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/ready-refresh.json",
+      "bytes": 300,
+      "sha256": "5d992b98feb03fffdb35bf53cd2b3ad8e51a7d5481446bc7152996895f2a6566"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/ready-started.json",
+      "sourceBytes": 232,
+      "sourceSha256": "091e99e5cc99d46181de29b13cf1be1d660481cab46074c488e6b3aadf7d176a",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/ready-started.json",
+      "bytes": 232,
+      "sha256": "091e99e5cc99d46181de29b13cf1be1d660481cab46074c488e6b3aadf7d176a"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/ready-verified.json",
+      "sourceBytes": 3033,
+      "sourceSha256": "17674f991d3b6f318f4c12fa4051a7331d98d3218898c19ef0bb560d3a09a483",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/ready-verified.json",
+      "bytes": 3033,
+      "sha256": "17674f991d3b6f318f4c12fa4051a7331d98d3218898c19ef0bb560d3a09a483"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/run-contract.json",
+      "sourceBytes": 7217,
+      "sourceSha256": "09acdf7995228d7d4ac727d21ca6c1c988710fe6ee9aa5b60d6593be500fddf2",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/run-contract.json",
+      "bytes": 6932,
+      "sha256": "3129bac6bddd68895eb5a7785aefd2f955e267e78bd2885e25d2182e2db9317c"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/runtime-data.json",
+      "sourceBytes": 861,
+      "sourceSha256": "c863010c02af2cfbd5cb68398cf8eacb6320888d466fde6dc909bd5f0a0ca410",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/runtime-data.json",
+      "bytes": 861,
+      "sha256": "c863010c02af2cfbd5cb68398cf8eacb6320888d466fde6dc909bd5f0a0ca410"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/simulator-preflight.json",
+      "sourceBytes": 284,
+      "sourceSha256": "4e6cb940d681df877ee8130d73573e19af593d9b5f5d2800dfafc6791a11432e",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/simulator-preflight.json",
+      "bytes": 284,
+      "sha256": "4e6cb940d681df877ee8130d73573e19af593d9b5f5d2800dfafc6791a11432e"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/source-frozen.json",
+      "sourceBytes": 196676,
+      "sourceSha256": "740ce4f4e3b898f8164c87ac1c470cfaf38e238061598d1e1df2f653d98439fc",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/source-frozen.json",
+      "bytes": 196555,
+      "sha256": "ec603a8b87110aa7ebf4b012c82712f91b96f46135ebc8cbf39f905bfdf6538b"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/stop-request.json",
+      "sourceBytes": 141,
+      "sourceSha256": "d1f75fd80196af6e4c790d7ccf5eb437db9d6b7ac961b5f5f558d9ba1776656f",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/stop-request.json",
+      "bytes": 141,
+      "sha256": "d1f75fd80196af6e4c790d7ccf5eb437db9d6b7ac961b5f5f558d9ba1776656f"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/supervisor.json",
+      "sourceBytes": 58,
+      "sourceSha256": "ab9e3750b339778ef176be93ef691eb0265c30b16f96e5a19721263f43ac3440",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/supervisor.json",
+      "bytes": 58,
+      "sha256": "ab9e3750b339778ef176be93ef691eb0265c30b16f96e5a19721263f43ac3440"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/window.json",
+      "sourceBytes": 193,
+      "sourceSha256": "836d154d6a47081c144ab3a89de94fbbb7d8caccbd2e7b0917f9299001888012",
+      "type": "redacted-json",
+      "file": "live/live-solver-unique-pools-250.YgUfBJ/window.json",
+      "bytes": 193,
+      "sha256": "836d154d6a47081c144ab3a89de94fbbb7d8caccbd2e7b0917f9299001888012"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/live.log",
+      "sourceBytes": 533493705,
+      "sourceSha256": "1ab62daed68a27285a5a024542657a054f75bfc66ce11a0f560da7d67fd5dc9f",
+      "type": "redacted-line-preserving-log",
+      "lines": 716245,
+      "redactedSha256": "ab5b86782559391abb44f000ed2c127742ac421d625383704676a7ad415e719e",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-solver-batched-prefix-250.I49DJ4/live.log.part-001.redacted.log.gz",
+          "lines": 101103,
+          "uncompressedBytes": 67109435,
+          "bytes": 6533245,
+          "sha256": "2912076c1cafbeefb9500bf005243fa121cb3d7abf95ccfce0b6026a9a2b5701"
+        },
+        {
+          "file": "live/live-solver-batched-prefix-250.I49DJ4/live.log.part-002.redacted.log.gz",
+          "lines": 85080,
+          "uncompressedBytes": 67109281,
+          "bytes": 5839263,
+          "sha256": "ae85f13521f809e0b7ee86bc3a8821d0b43b3b86da904e9e64e929250eb862df"
+        },
+        {
+          "file": "live/live-solver-batched-prefix-250.I49DJ4/live.log.part-003.redacted.log.gz",
+          "lines": 88856,
+          "uncompressedBytes": 67109347,
+          "bytes": 7070171,
+          "sha256": "e34d460e1b67924b7513e416076712bb936acc32f13fea88868024a112f68902"
+        },
+        {
+          "file": "live/live-solver-batched-prefix-250.I49DJ4/live.log.part-004.redacted.log.gz",
+          "lines": 88458,
+          "uncompressedBytes": 67109606,
+          "bytes": 7769422,
+          "sha256": "a9c1dafc1d0d2192277c8971cbacd9b3c5c14f0ff680a2ac384afafcbb72f9ec"
+        },
+        {
+          "file": "live/live-solver-batched-prefix-250.I49DJ4/live.log.part-005.redacted.log.gz",
+          "lines": 88989,
+          "uncompressedBytes": 67109416,
+          "bytes": 8092944,
+          "sha256": "c7cafeb43318e5c8e8a27e02e5f10bf99af7b4f919c6251ad3e72a54ed06b243"
+        },
+        {
+          "file": "live/live-solver-batched-prefix-250.I49DJ4/live.log.part-006.redacted.log.gz",
+          "lines": 89410,
+          "uncompressedBytes": 67109022,
+          "bytes": 7209579,
+          "sha256": "c9251734ea7cc7ea61133ab5252dffa8d008a8951088fe6fd6e67302e498270c"
+        },
+        {
+          "file": "live/live-solver-batched-prefix-250.I49DJ4/live.log.part-007.redacted.log.gz",
+          "lines": 89406,
+          "uncompressedBytes": 67108917,
+          "bytes": 7496873,
+          "sha256": "c60e386e7e14bb7d2a1e11efc4694ee9344108fe2c1f1bc2a0e93795088269b0"
+        },
+        {
+          "file": "live/live-solver-batched-prefix-250.I49DJ4/live.log.part-008.redacted.log.gz",
+          "lines": 84943,
+          "uncompressedBytes": 63728225,
+          "bytes": 7313964,
+          "sha256": "8486244ac026ad6c2112fd6c2b95e7a4dad0951faffdfa752a1c07af06ed9651"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/events.jsonl",
+      "sourceBytes": 242668,
+      "sourceSha256": "b7385158e2f09c1be98ce70295e59cd42660f81d316135c810503acb239203de",
+      "type": "redacted-line-preserving-log",
+      "lines": 105,
+      "redactedSha256": "b7385158e2f09c1be98ce70295e59cd42660f81d316135c810503acb239203de",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-solver-batched-prefix-250.I49DJ4/events.jsonl.part-001.redacted.log.gz",
+          "lines": 105,
+          "uncompressedBytes": 242668,
+          "bytes": 10583,
+          "sha256": "14c2f585ffde17646047700b3b0c0195c2bd837e7eb01ef8d6726845cd0c7507"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/routes.jsonl",
+      "sourceBytes": 54834,
+      "sourceSha256": "07a2cf7537a17776622d97fa2b45eebcca8fae1b567eeb2cf765b286d68c9c84",
+      "type": "redacted-line-preserving-log",
+      "lines": 122,
+      "redactedSha256": "07a2cf7537a17776622d97fa2b45eebcca8fae1b567eeb2cf765b286d68c9c84",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-solver-batched-prefix-250.I49DJ4/routes.jsonl.part-001.redacted.log.gz",
+          "lines": 122,
+          "uncompressedBytes": 54834,
+          "bytes": 5286,
+          "sha256": "713cabaf47f3202326fa88b86f081a3da58c0a3d4554b958302661852c9aae2a"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/binding.json",
+      "sourceBytes": 205662,
+      "sourceSha256": "13137983abcd09bfbcea665c2aae32dced187bcbfacdb3eb2347ed33cb76b0ba",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/binding.json",
+      "bytes": 204522,
+      "sha256": "2c42a35ea7a0769292f5482899c040a1c04bdeab9388893deb693274bdb5f497"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/ended.json",
+      "sourceBytes": 225,
+      "sourceSha256": "575f206b13878b7322698b4d4a0b56c1f61b645a4e1646e709152848ffd3c593",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/ended.json",
+      "bytes": 225,
+      "sha256": "575f206b13878b7322698b4d4a0b56c1f61b645a4e1646e709152848ffd3c593"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/executor-code-override-preflight.json",
+      "sourceBytes": 777,
+      "sourceSha256": "8f29b218914cb6a9cafbdedf9de279c2e7646256b3d59cb8a69e14d2cdb4c577",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/executor-code-override-preflight.json",
+      "bytes": 777,
+      "sha256": "8f29b218914cb6a9cafbdedf9de279c2e7646256b3d59cb8a69e14d2cdb4c577"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/executor-code-started.json",
+      "sourceBytes": 162,
+      "sourceSha256": "472ab5c67986e05ee5f74442b5a6be697e673607b5089a11330ab436adf9074c",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/executor-code-started.json",
+      "bytes": 162,
+      "sha256": "472ab5c67986e05ee5f74442b5a6be697e673607b5089a11330ab436adf9074c"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/input-ended-verified.json",
+      "sourceBytes": 92,
+      "sourceSha256": "90f2ecfe5cda52dff6d6980ceca974e33ef546749129a7c219b46996d01a4590",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/input-ended-verified.json",
+      "bytes": 92,
+      "sha256": "90f2ecfe5cda52dff6d6980ceca974e33ef546749129a7c219b46996d01a4590"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/process.json",
+      "sourceBytes": 211,
+      "sourceSha256": "08fe4263e6427540fa8825916c984733bb08a72591ca0e1d6de2cb2d64a37314",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/process.json",
+      "bytes": 154,
+      "sha256": "c9f3d7562a7de27e7f93c9c7fb20f10ebea1ab47aac701e39358c1952ac1fd39"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/ready-refresh.json",
+      "sourceBytes": 357,
+      "sourceSha256": "a0a0d15fc1d1253bfad00533e45e9ea137f6362d936944cc149e54d8569de84f",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/ready-refresh.json",
+      "bytes": 300,
+      "sha256": "5d992b98feb03fffdb35bf53cd2b3ad8e51a7d5481446bc7152996895f2a6566"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/ready-started.json",
+      "sourceBytes": 232,
+      "sourceSha256": "bb8440f5b6d02b58d39ae469aa13d4be2f6f9fb99a7f34d9d154545194a9899a",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/ready-started.json",
+      "bytes": 232,
+      "sha256": "bb8440f5b6d02b58d39ae469aa13d4be2f6f9fb99a7f34d9d154545194a9899a"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/ready-verified.json",
+      "sourceBytes": 3033,
+      "sourceSha256": "a749a58ee63f91552aa327f45a211e1cac157e0a1e5d204519b0f44bc6d55d2b",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/ready-verified.json",
+      "bytes": 3033,
+      "sha256": "a749a58ee63f91552aa327f45a211e1cac157e0a1e5d204519b0f44bc6d55d2b"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/run-contract.json",
+      "sourceBytes": 7281,
+      "sourceSha256": "5381526970ccb46b565c234743bb2e6fae592e196bd9da6641c10a8cf0e9f6b3",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/run-contract.json",
+      "bytes": 6996,
+      "sha256": "5664199a9fd43fb04d3c2c519928bc74c033d0414fd4456a8a42b7affae38664"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/runtime-data.json",
+      "sourceBytes": 861,
+      "sourceSha256": "26edbcb71476795501fe55df8932d97e196a9be51a2597e4cefa6d580afa6f4a",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/runtime-data.json",
+      "bytes": 861,
+      "sha256": "26edbcb71476795501fe55df8932d97e196a9be51a2597e4cefa6d580afa6f4a"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/simulator-preflight.json",
+      "sourceBytes": 284,
+      "sourceSha256": "d8e7a5db22152734e30d81c3a1e9f369832f6535b4f931273371e802d5d2349d",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/simulator-preflight.json",
+      "bytes": 284,
+      "sha256": "d8e7a5db22152734e30d81c3a1e9f369832f6535b4f931273371e802d5d2349d"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/source-frozen.json",
+      "sourceBytes": 196676,
+      "sourceSha256": "5bd961d30510d2ed6840b9f1d6bc7c7038ca7fa5b8638cfa39c0dc37bda3460f",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/source-frozen.json",
+      "bytes": 196555,
+      "sha256": "b318970e41e6ea3edae125edf104e8343312d1e90e234407132dca053de52608"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/stop-request.json",
+      "sourceBytes": 122,
+      "sourceSha256": "9acbae9053b50a1380e7ffa6f414eb30fcabd7400a4d443638c1ea16644ec2e7",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/stop-request.json",
+      "bytes": 122,
+      "sha256": "9acbae9053b50a1380e7ffa6f414eb30fcabd7400a4d443638c1ea16644ec2e7"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/supervisor.json",
+      "sourceBytes": 58,
+      "sourceSha256": "cfc793e9dbb925e14a2f1382395b55725a0f5cc4dcf359144e93105c7eb38498",
+      "type": "redacted-json",
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/supervisor.json",
+      "bytes": 58,
+      "sha256": "cfc793e9dbb925e14a2f1382395b55725a0f5cc4dcf359144e93105c7eb38498"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/live.log",
+      "sourceBytes": 510894204,
+      "sourceSha256": "f2853a757e01049cd663bc96e27e2d29a7a0b2a73c67c8193316f74deb77a543",
+      "type": "redacted-line-preserving-log",
+      "lines": 715859,
+      "redactedSha256": "f58b88ea4b6b773fe0af9e21ea7cde57ce58d1789c48f4af0e0669e9b16d0e45",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-solver-skip-settle-250.7MsLu8/live.log.part-001.redacted.log.gz",
+          "lines": 100974,
+          "uncompressedBytes": 67109568,
+          "bytes": 6517610,
+          "sha256": "170eb482a4931f50c4d195326a7574e9174c70998146bf9419936b5f04792e89"
+        },
+        {
+          "file": "live/live-solver-skip-settle-250.7MsLu8/live.log.part-002.redacted.log.gz",
+          "lines": 85227,
+          "uncompressedBytes": 67109459,
+          "bytes": 5852759,
+          "sha256": "3971684aaacf9e5b4f221d0d174bf77a7c66c4b22da4909a0c8e98f7bb153af3"
+        },
+        {
+          "file": "live/live-solver-skip-settle-250.7MsLu8/live.log.part-003.redacted.log.gz",
+          "lines": 93350,
+          "uncompressedBytes": 67109236,
+          "bytes": 5210165,
+          "sha256": "932ab2a5813d30e94e5d61ce27ab83a0fb93ec0a7331babb2595e3284ccb2cc3"
+        },
+        {
+          "file": "live/live-solver-skip-settle-250.7MsLu8/live.log.part-004.redacted.log.gz",
+          "lines": 96519,
+          "uncompressedBytes": 67109123,
+          "bytes": 4780954,
+          "sha256": "64be7408be9591c1acb1b76168537d60d1a328f1d461b4d8247d70808cef88dd"
+        },
+        {
+          "file": "live/live-solver-skip-settle-250.7MsLu8/live.log.part-005.redacted.log.gz",
+          "lines": 95834,
+          "uncompressedBytes": 67109007,
+          "bytes": 4461518,
+          "sha256": "07f388e4a06f78030cf93a0f996245690bf52bd041bba8b6e65532904a78f296"
+        },
+        {
+          "file": "live/live-solver-skip-settle-250.7MsLu8/live.log.part-006.redacted.log.gz",
+          "lines": 93398,
+          "uncompressedBytes": 67109400,
+          "bytes": 4535468,
+          "sha256": "4f7384ecd2873209b94a304d6908206238b2ead4d221a826ab7749070122d9b6"
+        },
+        {
+          "file": "live/live-solver-skip-settle-250.7MsLu8/live.log.part-007.redacted.log.gz",
+          "lines": 93123,
+          "uncompressedBytes": 67109498,
+          "bytes": 4388710,
+          "sha256": "fba54f51cea09c6d9be39628517b9f509ff6deab3b284bef34561435081fb8c3"
+        },
+        {
+          "file": "live/live-solver-skip-settle-250.7MsLu8/live.log.part-008.redacted.log.gz",
+          "lines": 57434,
+          "uncompressedBytes": 41127602,
+          "bytes": 2949295,
+          "sha256": "8b7f3fcef0d902e4b95e04dab3e433ff0f99706cc9d34b6f3c537f2267574331"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/events.jsonl",
+      "sourceBytes": 6286178,
+      "sourceSha256": "3936f269495d4353094a64e891255244519095d234d367c365309ab42e550946",
+      "type": "redacted-line-preserving-log",
+      "lines": 6766,
+      "redactedSha256": "3936f269495d4353094a64e891255244519095d234d367c365309ab42e550946",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-solver-skip-settle-250.7MsLu8/events.jsonl.part-001.redacted.log.gz",
+          "lines": 6766,
+          "uncompressedBytes": 6286178,
+          "bytes": 799618,
+          "sha256": "be73b43243105f8b717422abd76a7b132188ea0a32aa6f36a8a08235e8200318"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/routes.jsonl",
+      "sourceBytes": 12358,
+      "sourceSha256": "b47a27131b0ecbe6f1e0aa90c2a361464f410f5a3a49d9bc03f511cdc86fa31a",
+      "type": "redacted-line-preserving-log",
+      "lines": 28,
+      "redactedSha256": "b47a27131b0ecbe6f1e0aa90c2a361464f410f5a3a49d9bc03f511cdc86fa31a",
+      "note": "Concatenate decompressed shards in filename order. All original lines retained; sensitive values rewritten.",
+      "shards": [
+        {
+          "file": "live/live-solver-skip-settle-250.7MsLu8/routes.jsonl.part-001.redacted.log.gz",
+          "lines": 28,
+          "uncompressedBytes": 12358,
+          "bytes": 1255,
+          "sha256": "983fb0223842184a84d51ff835cf9254a4695f17de7d9d927e726823bcfebce5"
+        }
+      ]
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/binding.json",
+      "sourceBytes": 205667,
+      "sourceSha256": "f076ab12e67f18186f0de97df9e208dd29a649d59d4a4e5a121dfe074f370082",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/binding.json",
+      "bytes": 204527,
+      "sha256": "9e6e39cd0f9fcd5dc3fab5afaa24391025b1dc35e902711dc7c2f5a5093bae15"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/ended.json",
+      "sourceBytes": 240,
+      "sourceSha256": "6f6eb8cd2aabc1bbd5bbd9cb2024e5c761ca2529aa09964dbf84bd4c4c3ba818",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/ended.json",
+      "bytes": 240,
+      "sha256": "6f6eb8cd2aabc1bbd5bbd9cb2024e5c761ca2529aa09964dbf84bd4c4c3ba818"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/executor-code-override-preflight.json",
+      "sourceBytes": 777,
+      "sourceSha256": "c4475ee7be5e3cab80cd2dc12a8787288bc59e481414041a9116f81e5ded8c43",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/executor-code-override-preflight.json",
+      "bytes": 777,
+      "sha256": "c4475ee7be5e3cab80cd2dc12a8787288bc59e481414041a9116f81e5ded8c43"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/executor-code-started.json",
+      "sourceBytes": 162,
+      "sourceSha256": "6b4e131d4dbb86c6be38f77711c36ecc2d62868dda928dc1e5cd49049eb2063b",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/executor-code-started.json",
+      "bytes": 162,
+      "sha256": "6b4e131d4dbb86c6be38f77711c36ecc2d62868dda928dc1e5cd49049eb2063b"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/experiment-declaration.json",
+      "sourceBytes": 1705,
+      "sourceSha256": "7134f547c0f75708b6c5d98ce384faca5d20b6c48bce5d7c1b39fe541c612981",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/experiment-declaration.json",
+      "bytes": 1845,
+      "sha256": "0f09989b191969edd0166155c3692815f8f7a9b106b40bb2ef15fc40c37ceae4"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/input-ended-verified.json",
+      "sourceBytes": 92,
+      "sourceSha256": "c35cb6499fb8ba7116a4354551e1f52b288437f384338c031bc0dc6fc3b5d7b4",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/input-ended-verified.json",
+      "bytes": 92,
+      "sha256": "c35cb6499fb8ba7116a4354551e1f52b288437f384338c031bc0dc6fc3b5d7b4"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/process.json",
+      "sourceBytes": 208,
+      "sourceSha256": "c92475a0d52e9a832311a09903c32bb018e9499693fbe8d4afd4adde1dacce35",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/process.json",
+      "bytes": 151,
+      "sha256": "a06c0a7209bb7efd99a706705d006546114ddf5cbb567ca3e6aaf0775671988c"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/ready-refresh.json",
+      "sourceBytes": 357,
+      "sourceSha256": "a0a0d15fc1d1253bfad00533e45e9ea137f6362d936944cc149e54d8569de84f",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/ready-refresh.json",
+      "bytes": 300,
+      "sha256": "5d992b98feb03fffdb35bf53cd2b3ad8e51a7d5481446bc7152996895f2a6566"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/ready-started.json",
+      "sourceBytes": 232,
+      "sourceSha256": "705379a59965e097113c37a53413f95a65c404671d83f04b7085ed3067def287",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/ready-started.json",
+      "bytes": 232,
+      "sha256": "705379a59965e097113c37a53413f95a65c404671d83f04b7085ed3067def287"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/ready-verified.json",
+      "sourceBytes": 3033,
+      "sourceSha256": "288f3f9afd2b23ed3935905a2dbc50ea3ce70f864b0d0026236995508d2ddad3",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/ready-verified.json",
+      "bytes": 3033,
+      "sha256": "288f3f9afd2b23ed3935905a2dbc50ea3ce70f864b0d0026236995508d2ddad3"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/run-contract.json",
+      "sourceBytes": 7322,
+      "sourceSha256": "413ed08d8ebf1f1239afefe3c5a0fd4d4237a15d9c2d375859ec041e1d7a3ad5",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/run-contract.json",
+      "bytes": 7037,
+      "sha256": "8fdaf1003e765c94b2b6bf990f82cd33316faf0d90636964453d4616efd55d13"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/runtime-data.json",
+      "sourceBytes": 861,
+      "sourceSha256": "d0972a755ac83bb81057428fbb5e5168c799c2886acdc930153744c0e56451e3",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/runtime-data.json",
+      "bytes": 861,
+      "sha256": "d0972a755ac83bb81057428fbb5e5168c799c2886acdc930153744c0e56451e3"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/simulator-preflight.json",
+      "sourceBytes": 284,
+      "sourceSha256": "cf5bea4d904e833c5a15f5025a4eed1c5a8f4cd5d32df9312441a3eaa068b9cc",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/simulator-preflight.json",
+      "bytes": 284,
+      "sha256": "cf5bea4d904e833c5a15f5025a4eed1c5a8f4cd5d32df9312441a3eaa068b9cc"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/source-frozen.json",
+      "sourceBytes": 196676,
+      "sourceSha256": "218a6461f58693966207e240d666e370b566ac5a637ddc05cb1a7d7e80243b8e",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/source-frozen.json",
+      "bytes": 196555,
+      "sha256": "eb5de7f0cae0b7906b8e514c5705cfd673f8df8f4c92220c6d59bcb981dbe668"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/stop-request.json",
+      "sourceBytes": 141,
+      "sourceSha256": "3bcb125245e201310a605ea5e834f471f3a1d6188132dd31af2779067d2d0906",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/stop-request.json",
+      "bytes": 141,
+      "sha256": "3bcb125245e201310a605ea5e834f471f3a1d6188132dd31af2779067d2d0906"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/supervisor.json",
+      "sourceBytes": 58,
+      "sourceSha256": "7eca2af9f1fe0182dc767c51e1b26edb4836f526c7e8a6b45462f78814c376c6",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/supervisor.json",
+      "bytes": 58,
+      "sha256": "7eca2af9f1fe0182dc767c51e1b26edb4836f526c7e8a6b45462f78814c376c6"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/window.json",
+      "sourceBytes": 193,
+      "sourceSha256": "36504b6d922e09f3ed764b749455217bf81dc15ee97cc5b4b97d41be0f977d49",
+      "type": "redacted-json",
+      "file": "live/live-solver-skip-settle-250.7MsLu8/window.json",
+      "bytes": 193,
+      "sha256": "36504b6d922e09f3ed764b749455217bf81dc15ee97cc5b4b97d41be0f977d49"
+    },
+    {
+      "source": "git diff --binary -- listener",
+      "sourceBytes": 230385,
+      "sourceSha256": "793568b69413b2778fcdb63b9199c9528abfddda43fb7e5019e58c3ae94d7427",
+      "type": "redacted-review-patch",
+      "file": "code-review/current-uncommitted.review.patch",
+      "bytes": 230321,
+      "sha256": "596859e506117f295901e0ca4b9a98cc418d9171ed19712e9ed2d958c648bf9a"
+    },
+    {
+      "source": "listener/src/searcher/venues/swaps/univ4-family/local-state.ts",
+      "sourceBytes": 8909,
+      "sourceSha256": "06b478975f0830918f07105249b98f40194770cda5c4837f89199d7b5e35b58d",
+      "type": "redacted-text",
+      "file": "code-review/unintegrated-v4-local-state.ts.txt",
+      "bytes": 8909,
+      "sha256": "06b478975f0830918f07105249b98f40194770cda5c4837f89199d7b5e35b58d"
+    }
+  ],
+  "omitted": [
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-prefix-binary.Q0edHj",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-binary.KD2Xff",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-independent-test.rs",
+      "reason": "not in diagnostic JSON/log/harness allowlist"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-runtime-complete",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/policy-baseline.7QGiBX",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-binary",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-phases-binary.g1YRid",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-prefetch-binary.AovEsv",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-binary.onTMkL",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/review-1.events.jsonl",
+      "reason": "not in diagnostic JSON/log/harness allowlist"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/review-1.out",
+      "reason": "not in diagnostic JSON/log/harness allowlist"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/review-brief.txt",
+      "reason": "not in diagnostic JSON/log/harness allowlist"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/storage-share-runtime.8WzAK5",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-binary.DmlaI6",
+      "reason": "runtime/source/binary copy, not a diagnostic result directory"
+    },
+    {
+      "source": "logs/solver-prefix-policy-20260930.MKk8Vk/withdrawn-state-backend-http-compression.ts",
+      "reason": "not in diagnostic JSON/log/harness allowlist"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/checkpoint.json",
+      "bytes": 362214765,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/freeze-data.mjs",
+      "bytes": 1129,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/launch.mjs",
+      "bytes": 17344,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/mids.jsonl",
+      "bytes": 2143806733,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/prepare.mjs",
+      "bytes": 3480,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/ready-check.mts",
+      "bytes": 4188,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/runtime",
+      "reason": "runtime copy"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/simulation-preflight.mts",
+      "bytes": 4374,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-raw-ready-250.ajvb1j/supervisor.log",
+      "bytes": 0,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/checkpoint.json",
+      "bytes": 362214765,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/freeze-data.mjs",
+      "bytes": 1130,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/launch.mjs",
+      "bytes": 17576,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/mids.jsonl",
+      "bytes": 2142814021,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/prepare.mjs",
+      "bytes": 3545,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/ready-check.mts",
+      "bytes": 4189,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/runtime",
+      "reason": "runtime copy"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/simulation-preflight.mts",
+      "bytes": 4375,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/simulator-check.mjs",
+      "bytes": 1774,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-unique-pools-250.YgUfBJ/supervisor.log",
+      "bytes": 0,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/checkpoint.json",
+      "bytes": 362214765,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/freeze-data.mjs",
+      "bytes": 1131,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/launch.mjs",
+      "bytes": 17631,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/mids.jsonl",
+      "bytes": 36390359,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/prepare.mjs",
+      "bytes": 3546,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/ready-check.mts",
+      "bytes": 4190,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/runtime",
+      "reason": "runtime copy"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/simulation-preflight.mts",
+      "bytes": 4376,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/simulator-check.mjs",
+      "bytes": 1775,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-batched-prefix-250.I49DJ4/supervisor.log",
+      "bytes": 0,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/checkpoint.json",
+      "bytes": 362214765,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/freeze-data.mjs",
+      "bytes": 1131,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/launch.mjs",
+      "bytes": 17686,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/mids.jsonl",
+      "bytes": 2141517132,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/prepare.mjs",
+      "bytes": 3546,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/ready-check.mts",
+      "bytes": 4190,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/runtime",
+      "reason": "runtime copy"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/simulation-preflight.mts",
+      "bytes": 4376,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/simulator-check.mjs",
+      "bytes": 1775,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    },
+    {
+      "source": "logs/live-solver-skip-settle-250.7MsLu8/supervisor.log",
+      "bytes": 0,
+      "reason": "Ready/full price-table/runtime artifact; excluded from latency review bundle"
+    }
+  ],
+  "warnings": [
+    "Archived plans/status JSON reflect the moment written; HANDOFF.md owns the current status. Some older records say V4 permission pending; user subsequently approved investigation/implementation.",
+    "Current 13-file patch is not all deployed in any one measured live window. Use each run-contract and frozen source manifest, not current working files, to attribute behavior.",
+    "Unintegrated V4 state-reader draft imports an absent local-math module; it is not functional production code and has no tests or quote parity evidence.",
+    "Cancelled/missing/failed trials are retained. Offline recorded-response request reduction is not proof of live latency improvement.",
+    "Code/harness text is a redacted review snapshot, not a standalone execution package; historical runtime, Ready, binaries and price tables are not uploaded."
+  ]
+}

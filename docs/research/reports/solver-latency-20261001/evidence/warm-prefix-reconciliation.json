@@ -1,0 +1,61 @@
+{
+  "claim": "Warm-session prefix prefetch P-only diagnostic, not Solver/live acceptance",
+  "manualFirst": "warm-prefix-manual-assessment.json",
+  "manualSha256": "2fc7ff199c7cdd82cb569abe75410c131a6ac1b2243b69a5f027b5c674b739ee",
+  "independentReview": "warm-prefix-result-review.json",
+  "independentReviewSha256": "63d262017e4ad8dbcae7de325ff0e75fa844959c19dabe5ae8b804c4c61471f8",
+  "canonical": {
+    "query": [
+      "latency"
+    ],
+    "catalogCheck": "361 tools pass",
+    "manifest": "warm-prefix-tools.json",
+    "manifestSha256": "55ddef090dc4744bbc44630c818146e8d301e2d7a4e7997dea68df979ac635b4",
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "analysis:blockscan-pass-latency",
+        "descriptor_sha256": "1793207c4144c543feb3da93cb60b74431ce3f51f14416bcbab2d717ed01dded",
+        "started_at": "2026-09-30T21:43:43.324Z",
+        "finished_at": "2026-09-30T21:43:43.522Z",
+        "exit_code": 0,
+        "cwd": "analysis",
+        "argv_sha256": "6f28b0bc2a936f8467c07c4935c03ac09e41e5665deff0766ad8ee81544d4dac",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "blockscan-pass-latency",
+          "--",
+          "--log",
+          "../logs/solver-prefix-policy-20260930.MKk8Vk/same-input-warm-prefix-1.log"
+        ],
+        "stdout_sha256": "10a6f200f7663e219ffb0416a4a3d11647280abf73063e3a5b8adac399b66922",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 2509,
+        "stderr_bytes": 0
+      }
+    ],
+    "successfulIds": [
+      "analysis:blockscan-pass-latency"
+    ],
+    "alternativesInspected": [
+      "analysis:test:blockscan-pass-latency"
+    ],
+    "sameInput": "same-input-warm-prefix-1.log",
+    "result": "0 production passes; expected_one_process_start:0; all whole-live metrics null",
+    "coverage": "Correct rejection of live qualification; Rust phase details remain a separate independently checked diagnostic, not a defect in the pass-level tool"
+  },
+  "agreement": "Manual and independent reviewers reproduce2/2/2/2 completed hops,0 Solver entries, shared quote and plan equality, all immutability flags, baseline truncation and candidate ordinary prefix non-success. Both adjacent pairs fail the sealed criterion. No tool conflict.",
+  "qualification": "B14-16s is time to prefix failure, never time to completed Solver. Unknown baseline eventual failure; no equivalence claim after hop1. Physical attempts do not equal billed CU.",
+  "disposition": "WITHDRAWN_CANDIDATE_ONLY; preserved frozen candidate and all four attempted runs",
+  "restoration": {
+    "method": "apply_patch from frozen prefix-progress sources",
+    "mainRsSha256": "c0c05e20bc4c2b571794bd37a592232c6f15dd1e2f445d6f68f0de16f9a29ba6",
+    "diagnosticRsSha256": "8aaef92ce3ebbebfc8588c255d34ec528b63f25affc5d3a8c2c05ec5721d9e1e",
+    "binarySha256": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661",
+    "wholeTrackedPatchSha256": "0621702191948ea1142792abc84f65ab1d864dd6b6cc68cf6dbbeedd540a78b7",
+    "checks": "Full Rust84/84, release build and exact baseline hashes pass; actual client/rebuilt daemon loopback plus TS prefix/concurrency265/265 pass (warm-prefix-restoration-tests.log). No skipped/cancelled tests."
+  },
+  "goal": "active incomplete",
+  "next": "Read existing positive repeated-instance artifacts and current quote code to decide if any successful remote-prefix workload is representative; no new external diagnostic/live launched"
+}

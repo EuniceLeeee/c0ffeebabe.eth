@@ -1,0 +1,23 @@
+{
+  "status": "Continuation cache deferred pending phase measurement; instrumentation patch in progress",
+  "scope": "One observability-only patch and one separately declared30s P-only diagnostic after review; no blind repeated250-block live",
+  "hypothesis": "A single-entry, size-bounded prefix continuation within the existing pinned daemon may avoid replaying the same authenticated prefix for sibling reads.",
+  "constraints": [
+    "No daemon pool or cross-amount/source reuse",
+    "Every request retains validation and canonical pre/postchecks",
+    "Checkpoint publish only after successful prefix and originating canonical postcheck",
+    "Independent clone per sibling read; reset/cancel/fatal invalidates",
+    "Unsupported or oversized continuation falls back to existing full replay"
+  ],
+  "unresolved": [
+    "revm complete continuation must retain original journal values, transient state, warmed accounts/slots, gas and transaction context",
+    "Prove prefix independent of current read target/calldata and account preload before omitting them from cache identity",
+    "Sibling writes/logs/refunds/reverts must not contaminate others",
+    "Bound memory and drain lifetime"
+  ],
+  "firstGate": "Instrument and measure first: existing RemoteRevmDb already shares same-source read cache, so continuation may save only tiny local execution. No continuation implementation until justified. If later pursued, offline differential output/gas/revert/transient/warm-state/isolation tests are mandatory; a committed-storage-only snapshot is invalid.",
+  "delegationNote": "Main issued prefix-phase-brief.json to the same subagent. Only generic Rust phase diagnostics and offline tests authorized in that subtask; no independent RPC/process actions. Main reviews/tests and executes the bounded diagnostic.",
+  "liveStatus": "All bounded live runs and network diagnostics stopped cleanly; no signing or broadcast",
+  "restoredPatch": "ec11606164347dc9f01ab334765b102a15758e8f5bab25cdb9147b7dc20a42e5",
+  "restoredBinary": "5f9c6dba64508decdeff3f5414453f804a9bed48bc947acd2444dd39734e397c"
+}

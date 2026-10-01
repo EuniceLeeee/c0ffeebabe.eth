@@ -1,0 +1,12 @@
+{
+  "code": 0,
+  "signal": null,
+  "pid": 67811,
+  "softStop": false,
+  "forcedStop": false,
+  "residualGroupStopped": false,
+  "out": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-warm-prefix-1",
+  "logPath": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-warm-prefix-1.log",
+  "resultCompleteForAssessment": true,
+  "claim": "Selected P-only ABBA. A normal exit may retain cancelled routes; it never proves full Solver/live improvement."
+}

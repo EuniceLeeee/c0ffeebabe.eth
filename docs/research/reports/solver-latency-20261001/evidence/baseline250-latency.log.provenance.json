@@ -1,0 +1,13 @@
+{
+  "source": "<repo>/logs/live-raw-ready-250.ajvb1j/live.log",
+  "sourceBytes": 1217494107,
+  "sourceSha256": "a7fde1af6bfa8edeffb5dc5e2e01e52518144e6455127694d3991e82cd9617e6",
+  "projection": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/baseline250-latency.log",
+  "projectionSha256": "7bd63c58d88640164b9d2931977541d72fbe17a913158715c62338877e5d37c2",
+  "from": 26089681,
+  "to": 26089930,
+  "lines": 1634867,
+  "anchors": 2,
+  "timings": 250,
+  "rule": "original process and commit anchors; all non-startup timing rows in inclusive window; all remaining original line positions blank; no invented anchors or timings"
+}

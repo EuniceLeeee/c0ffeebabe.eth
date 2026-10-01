@@ -1,0 +1,269 @@
+{
+  "schemaVersion": 1,
+  "reviewer": "Codex, non-author",
+  "reviewPass": 2,
+  "verdict": "approved_for_declared_bounded_diagnostic_only",
+  "scope": "Offline review only; no --run, launcher execution, RPC, credential-file access, production edits or commits.",
+  "hashes": {
+    "same-input-batch-timing.mts": "eef6dfb8324769c36216384a80a58d94735fdb405a1554af07021ef45a736260",
+    "batch-split-timing.json": "d620cbdc231f9d14e2ac3102627325c9d1c3c2a78c4bb46fad2fa2cf7c9be232",
+    "launch-batch-split.mjs": "82ebc61a18e2c86ecee1faad6451dfdfb5d02f4b687b51a337386448b6bd41f5",
+    "runtimeSourceBothArms": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01",
+    "binaryBothArms": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1",
+    "trackedGitDiffBinaryBeforeAndAfter": "071044e25429a6ac9142b6751a068dee08fae15f70f9061456b978436b52b641",
+    "unchangedUnrunRank8Runner": "4e98f0528ec5e9333c5b61576cd6961499c19a8a813e07eb5ee390aabd8b4ceb",
+    "unchangedUnrunRank8Spec": "cfd2eab47b9639946ce5fdb36fc4c3644411fad556a97ed47c1debb355ee49e4",
+    "unchangedUnrunRank8Launcher": "574a495d09d701d111c046448a434b40403a42ea58c8cbab9f33df9956b1cba0"
+  },
+  "commands": {
+    "cwd": "<repo>",
+    "base": "env -u MAINNET_RPC_URL TSX_DISABLE_CACHE=1 listener/node_modules/.bin/tsx logs/solver-prefix-policy-20260930.MKk8Vk/same-input-batch-timing.mts --spec logs/solver-prefix-policy-20260930.MKk8Vk/batch-split-timing.json --experiment batch-split --candidate-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete --binary-b <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-binary/revm-sim",
+    "selfTest": "base command plus --self-test",
+    "declaration": "base command without additional flags; prints offline declaration, writes no experiment artifacts",
+    "launcherSyntax": "node --check logs/solver-prefix-policy-20260930.MKk8Vk/launch-batch-split.mjs",
+    "diffWhitespace": "git diff --check"
+  },
+  "pass1ExecutedGates": {
+    "selfTest": {
+      "exitCode": 0,
+      "result": "passed",
+      "coverage": [
+        "network/process fence",
+        "prefix policy",
+        "concurrent attribution",
+        "real strict-session nonempty prefix compilation",
+        "production registry identity and descriptor coverage"
+      ],
+      "runtimeRegistriesTested": 1,
+      "compiledPrefixBytes": 1092,
+      "compiledPrefixSha256": "1de79d731a51d2e247947299debba7c22c6c2bcebe5728b096572dc02d4eb58e",
+      "syntheticSourceReads": 2,
+      "syntheticPrefixReads": 2,
+      "rpcCalls": 0
+    },
+    "declaration": {
+      "exitCode": 0,
+      "pairedRuntimeValidated": true,
+      "order": "ABBAABBAABBA",
+      "rank": 477,
+      "invocations": 12,
+      "budgetMsEach": 30000,
+      "rpcCalls": 0
+    },
+    "launcherSyntax": {
+      "exitCode": 0,
+      "launcherExecuted": false
+    },
+    "diffWhitespace": "passed",
+    "extractedGuardBodies": {
+      "method": "Executed exact guard bodies extracted from reviewed runner in an in-memory Node check; no runtime/network/process execution.",
+      "resourceCap": {
+        "admitted": 2000,
+        "attempt2001Throws": true,
+        "experimentAborted": true
+      },
+      "unexpectedPrefix": {
+        "throws": true,
+        "experimentAborted": true
+      },
+      "unexpectedRust": {
+        "throws": true,
+        "experimentAborted": false
+      }
+    }
+  },
+  "findings": [
+    {
+      "id": "batch-split-review-1-rust-fatal-guard",
+      "priority": "P2",
+      "blocking": false,
+      "status": "resolved_in_pass2",
+      "file": "same-input-batch-timing.mts",
+      "line": 404,
+      "finding": "Unexpected strictSimulate throws an ordinary Error without latching globalAbort. The request counter append is unreachable. Unlike the prefix guard, this does not ensure experiment-wide fatal termination; invocation catches ordinary failures and the outer loop continues when globalAbort is unset. Actual Rust dispatch is prevented, but the specified fatal guard contract is not met.",
+      "requestedCorrection": "Latch globalAbort before throwing its reason, as the prefix guard does, and exercise both forbidden paths in an offline regression. Do not change production code or the experiment search/budget."
+    }
+  ],
+  "confirmed": [
+    "Identical frozen runtime path, conditional amount policy and binary in both arms; runtimeDeltaSha256B is empty. Only maxBatchSize 64 versus 1 varies.",
+    "Physical concurrency 8, shared scheduler capacity 12/reserved 4, no JS retries/single-call fallback, original P/grid/GSS/cap and 30-second work deadline retained.",
+    "Real Planner/AnvilSolver with deferred final simulation; 12 amount/8 GSS/24 quoted-hop assertions. Prefix path aborts before dispatch.",
+    "Input hashes, Ready/source identity, candidate selection, runtime assets/source and executor/binary are bound before any run; existing after-work integrity checks remain.",
+    "Logical issuance cap is experiment-wide and conservative: backend.call includes memo hits; the rejected 2001st reservation increments the counter but dispatches no read.",
+    "Launcher points only at the new batch runner/spec/output and same frozen runtime/binary. Its 400-second termination requests runner cancellation/drain; launcher was syntax-checked, never executed.",
+    "Transport events are retained in memory. All invocation outcomes, cancellations and drain failures remain in terminal results; no warmup or automatic rerun added.",
+    "Original unrun rank8 runner/spec/launcher and tracked diff hashes remained unchanged during this review."
+  ],
+  "pass2ExecutedGates": {
+    "isolatedFatalGuards": "passed: exact Rust and prefix guard bodies both abort the experiment and linked invocation, and throw the identical abort reason",
+    "deltaVerification": "Reversing the exact guard replacement in memory and restoring one trailing blank line reproduces prior runner SHA 2b2182fdfc3d1b9cf0d25c4dbcb77e123945c3ed24b8bc1ec981bd89c17e002c. No other byte changes. The first guard-only hash assertion failed because of this harmless trailing blank-line removal; the precise two-change assertion passed.",
+    "specLauncherTrackedDiff": "unchanged from pass1",
+    "assessorSyntax": "node --check logs/solver-prefix-policy-20260930.MKk8Vk/assess-batch-split.mjs passed",
+    "assessorSha256": "b878e7435fda477f949f3449bc22df696f3a28d51aa2055762434a788c7a6840",
+    "assessorSurfaceReview": "No blocking issue found in bounded static review: ordered first-hop amounts, unique two-hop reconstruction, ordered candidates, plan hash and sorted physical-call multiset are compared; canonical success, drain, retry and batch configuration checks gate complete parity. Fixed nearest-rank quantiles and six non-overlapping adjacent pairs match the stated contract. Main still owns raw-evidence judgment; no post-run assessor or benchmark was executed."
+  },
+  "remainingAssessmentBoundary": "Approval is limited to the declared 12-invocation rank477 ABBAx3 diagnostic, batch64 versus1, unchanged 30-second work deadline and 2000-read cap. Main's raw-evidence review and separate assessor remain required; no live default change or systemic performance claim is authorized by these offline gates.",
+  "independentEvidenceReview": {
+    "verdict": "reject_batch_size_1_default_change_keep_current_batch_size_64",
+    "evidenceRead": [
+      "same-input-batch-split-1/results.json",
+      "same-input-batch-split-1/declaration.json",
+      "batch-split-timing.json"
+    ],
+    "mainManualOrAssessorReportRead": false,
+    "networkCallsByReviewer": 0,
+    "hashes": {
+      "results": "58b4ae90f08f9e6fb3b320b05d6cb9494e4e4c457570f3204dfa90941f2d3cf2",
+      "declaration": "e605175246e0603b324aa07ab60a1e2758a6c6b28b416a235dd25097acf2925f",
+      "spec": "d620cbdc231f9d14e2ac3102627325c9d1c3c2a78c4bb46fad2fa2cf7c9be232"
+    },
+    "ranGate": "Independent inline Node read-only assertions over the three named JSON files; no assessor execution. Verified declaration/spec hash binding, reviewed runner identity, identical declared snapshots, fixed order, all 12 terminals, exact ordered two-hop output reconstruction/candidates/plan, physical dispatch-response joins and call multiset, source receipts, drain/retry/resource counters, and calculated fixed nearest-rank quantiles plus adjacent pairs.",
+    "completionAndParity": {
+      "completed": 12,
+      "cancelled": 0,
+      "failed": 0,
+      "amountTrialsPerRun": 12,
+      "gssEvaluationsPerRun": 8,
+      "quotedHopsPerRun": 24,
+      "orderedAmountsOutputsCandidatesAndPlanEqual": true,
+      "planSha256": "e82b72ea693706138b4f987182f10261d62618121f6922c3e09aef67ab333eec",
+      "selectedAmountOrder": [
+        "5195442",
+        "51954420",
+        "519544200",
+        "5195442000",
+        "23057372",
+        "34092490",
+        "16234115",
+        "27270590",
+        "20450049",
+        "24665143",
+        "22060215",
+        "21446047"
+      ],
+      "orderedCandidateAmountProfit": [
+        [
+          "22060215",
+          "7987"
+        ],
+        [
+          "23057372",
+          "7982"
+        ],
+        [
+          "21446047",
+          "7975"
+        ]
+      ],
+      "sourceBeforeAndAfterReceiptsSucceeded": 12,
+      "allElevenRecordedUnchangedFlagsTrue": true,
+      "integrityScope": "Checked recorded hashes/receipts within the permitted artifacts; did not reread production, runtime assets or fixture files in this evidence-only pass."
+    },
+    "predeclaredCriterion": {
+      "quantile": "nearest rank, sorted[ceil(p*n)-1], n=6 per arm",
+      "A_solverMs": [
+        4834.431042,
+        4425.8089169999985,
+        4764.183541999999,
+        5038.416583999999,
+        12841.602625,
+        10970.391042000003
+      ],
+      "B_solverMs": [
+        5323.891291999998,
+        5922.451333000001,
+        5865.548667000003,
+        6795.517458000002,
+        6870.525167,
+        8192.370332999999
+      ],
+      "A_medianMs": 4834.431042,
+      "B_medianMs": 5922.451333000001,
+      "medianRatioBOverA": 1.2250565333433503,
+      "medianRequirementBOverA": 0.85,
+      "medianPass": false,
+      "A_p95Ms": 12841.602625,
+      "B_p95Ms": 8192.370332999999,
+      "p95RatioBOverA": 0.6379554462346556,
+      "p95RequirementBOverA": 1.1,
+      "p95Pass": true,
+      "adjacentPairBWins": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "B_pairWins": 2,
+      "requiredPairWins": 5,
+      "pairPass": false,
+      "overallPass": false
+    },
+    "transportAndResources": {
+      "samePhysicalCallMultisetEveryRun": true,
+      "exactRpcItemsPerRunBothArms": 15,
+      "memoHitsPerRunBothArms": 22,
+      "canonicalRpcItemsPerRunBothArms": 4,
+      "A_exactEnvelopesPerRun": 11,
+      "B_exactEnvelopesPerRun": 15,
+      "A_exactBatchSizeHistogramPerRun": {
+        "1": 8,
+        "2": 2,
+        "3": 1
+      },
+      "B_exactBatchSizeHistogramPerRun": {
+        "1": 15
+      },
+      "A_exactEnvelopesTotal": 66,
+      "B_exactEnvelopesTotal": 90,
+      "A_allHttpEnvelopesTotal": 90,
+      "B_allHttpEnvelopesTotal": 114,
+      "A_peakConcurrentExactBatchesEveryRun": 1,
+      "B_peakConcurrentExactBatchesEveryRun": 3,
+      "physicalRpcItemsTotal": 228,
+      "httpEnvelopesTotal": 204,
+      "canonicalRpcItemsTotal": 48,
+      "logicalIssuancesIncludingMemoHits": 492,
+      "logicalIssuanceCap": 2000,
+      "measuredWorkTotalMs": 114984.86204099997,
+      "totalWithDrainMs": 114990.506751,
+      "maxInvocationTotalMs": 15210.855292000007,
+      "maxDrainMs": 1.5455410000004122,
+      "retriesFallbacksFailuresAbortedBatchesDrainErrorsRemainingItems": 0,
+      "prefixRequestsRustRequestsRustProcesses": 0
+    },
+    "varianceFinding": {
+      "sameSingletonCalldataSha256": "a7e62ebee7ebc7db897da50da196f4ffbc05c487c4f403fd2576eda15450a227",
+      "responseBytesEveryRun": 152296,
+      "singletonEnvelopeAndReusedSocketEveryRun": true,
+      "wallMsInDeclaredOrder": [
+        1169,
+        887,
+        1931,
+        812,
+        748,
+        625,
+        2995,
+        568,
+        9534,
+        3538,
+        3877,
+        7977
+      ],
+      "lateA_run9": {
+        "wallMs": 9534,
+        "headerWaitMs": 3310,
+        "bodyMs": 6223
+      },
+      "lateA_run12": {
+        "wallMs": 7977,
+        "headerWaitMs": 1950,
+        "bodyMs": 6025
+      },
+      "interpretation": "B's only pair wins and favorable p95 coincide with late A stalls in an identical already-singleton read, not a multi-item response barrier. With six samples p95 is the maximum. Source/backend caches are fresh per invocation but provider/connection conditions are not reset; the first B opened two additional sockets and later runs reused sockets. Do not discard cold or slow samples, infer a stable tail win, or attribute all timing differences to batch size. The observed header/body waits do not isolate provider execution from network or client scheduling."
+    },
+    "scopeLimit": "This failed selected-source-state diagnostic supports retaining the existing default, not proving it globally optimal. No live/default change, repeated-prefix validation, final-sim/EV finding, or whole-live Solver claim. Goal remains active; no follow-up run authorized or requested by this review."
+  },
+  "cuSpent": 0
+}

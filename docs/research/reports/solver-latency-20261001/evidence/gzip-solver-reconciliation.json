@@ -1,0 +1,45 @@
+{
+  "scope": "Selected one-route complete Solver diagnostic, not representative live or final sim/EV acceptance",
+  "manual": {
+    "file": "gzip-solver-manual.json",
+    "sha256": "310de85c6d23d02706b6e5dc237176b5789871ecbc69b3d90e489928425fe443",
+    "first": true,
+    "performance": false
+  },
+  "assessor": {
+    "file": "gzip-solver-assessment.json",
+    "sha256": "a20868b629629329b15b66f32459c151a599150e8f97268fbe4893827372775f",
+    "integrity": true,
+    "complete": true,
+    "outputParity": true,
+    "performance": false
+  },
+  "independentReview": {
+    "file": "gzip-solver-result-review.json",
+    "sha256": "f59f796326fbe9c9e063f59bdba2d273691688a6c3ac16015eb846d370ea9601",
+    "verdict": "reject_predeclared_solver_latency_acceptance",
+    "readMainOrAssessor": false,
+    "rpcCalls": 0
+  },
+  "indexedReconciliation": {
+    "query": [
+      "latency"
+    ],
+    "manifest": "gzip-solver-tools.json",
+    "sha256": "61cbaf5626d9403a752f4006219706c771459daaf13d18cee5c3def2cf041a3b",
+    "successfulIds": [
+      "analysis:blockscan-pass-latency"
+    ],
+    "finding": "Correctly reports zero live passes: selected Solver harness is ineligible for live-window latency inference; no tool defect"
+  },
+  "decision": "withdraw_gzip_draft_keep_prior_patch",
+  "retainedData": "Frozen gzip-runtime-complete and all20 attempt evidence preserved; new test moved to ignored withdrawn-state-backend-http-compression.ts",
+  "restoredSourceSha256": "ab2f48aa410d8a686301d7cf0a754844d28070153b7c2208fd23ffca0b79bcec",
+  "restoredPatchSha256": "071044e25429a6ac9142b6751a068dee08fae15f70f9061456b978436b52b641",
+  "readReservations": 820,
+  "previousSlices": 500,
+  "combinedCounted": 1320,
+  "billedCu": "unknown",
+  "noRpcRerun": true,
+  "goalComplete": false
+}

@@ -1,0 +1,128 @@
+{
+  "schema_version": 2,
+  "repo_root": "<repo>",
+  "pending_nonce": "a98ae44e-41f5-4fb2-b4c5-161fdb2c2cbb",
+  "requested_capabilities": [
+    "latency"
+  ],
+  "recommended_tools": [
+    {
+      "id": "analysis:blockscan-pass-latency",
+      "package": "analysis",
+      "script": "blockscan-pass-latency",
+      "command": "cd analysis && npm run blockscan-pass-latency --",
+      "implementation": "src/cli/blockscan-pass-latency.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "analysis",
+        "block-scan",
+        "blockscan",
+        "latency",
+        "pass"
+      ],
+      "cost": "zero-cu",
+      "summary": "analysis package script: blockscan-pass-latency",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    }
+  ],
+  "related_tools": [
+    {
+      "id": "analysis:blockscan-pass-latency",
+      "package": "analysis",
+      "script": "blockscan-pass-latency",
+      "command": "cd analysis && npm run blockscan-pass-latency --",
+      "implementation": "src/cli/blockscan-pass-latency.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "analysis",
+        "block-scan",
+        "blockscan",
+        "latency",
+        "pass"
+      ],
+      "cost": "zero-cu",
+      "summary": "analysis package script: blockscan-pass-latency",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "analysis:test:blockscan-pass-latency",
+      "package": "analysis",
+      "script": "test:blockscan-pass-latency",
+      "command": "cd analysis && npm run test:blockscan-pass-latency --",
+      "implementation": "src/test/blockscan-pass-latency.ts",
+      "kind": "test",
+      "capabilities": [
+        "analysis",
+        "block-scan",
+        "blockscan",
+        "latency",
+        "pass",
+        "test",
+        "verification"
+      ],
+      "cost": "zero-cu",
+      "summary": "analysis package script: test:blockscan-pass-latency",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    }
+  ],
+  "executions": [
+    {
+      "schema_version": 1,
+      "tool_id": "analysis:blockscan-pass-latency",
+      "descriptor_sha256": "1793207c4144c543feb3da93cb60b74431ce3f51f14416bcbab2d717ed01dded",
+      "started_at": "2026-09-30T11:45:09.258Z",
+      "finished_at": "2026-09-30T11:45:09.630Z",
+      "exit_code": 0,
+      "cwd": "analysis",
+      "argv_sha256": "a5070462f2f52735b8658c47960224a8bc21127e231d6855615dc02b561fef2e",
+      "argv_redacted": [
+        "npm",
+        "run",
+        "blockscan-pass-latency",
+        "--",
+        "--log",
+        "../logs/solver-prefix-policy-20260930.MKk8Vk/baseline250-latency.log",
+        "--min-run",
+        "1"
+      ],
+      "stdout_sha256": "68291f836f86fe7617c8278b901fe2d6552665062adbb471cd93a2e2b484f832",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 2867,
+      "stderr_bytes": 0
+    },
+    {
+      "schema_version": 1,
+      "tool_id": "analysis:blockscan-pass-latency",
+      "descriptor_sha256": "1793207c4144c543feb3da93cb60b74431ce3f51f14416bcbab2d717ed01dded",
+      "started_at": "2026-09-30T11:48:23.887Z",
+      "finished_at": "2026-09-30T11:48:24.260Z",
+      "exit_code": 0,
+      "cwd": "analysis",
+      "argv_sha256": "f6758f31dae98a9350673f932fe7fdf29b2bbe44854d61179b3c9c04ac7e2d4b",
+      "argv_redacted": [
+        "npm",
+        "run",
+        "blockscan-pass-latency",
+        "--",
+        "--log",
+        "../logs/solver-prefix-policy-20260930.MKk8Vk/baseline250-latency.log",
+        "--start-line",
+        "4",
+        "--min-run",
+        "1"
+      ],
+      "stdout_sha256": "a4152e44a0dffddadfd8cd39f54d68dbdfd7b01dcf6b0dfff1c79590bb2ca55b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 3742,
+      "stderr_bytes": 0
+    }
+  ],
+  "generated_at": "2026-09-30T11:42:32.101Z",
+  "updated_at": "2026-09-30T11:48:24.260Z"
+}

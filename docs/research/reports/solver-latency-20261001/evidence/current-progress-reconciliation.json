@@ -1,0 +1,21 @@
+{
+  "scope": "Partial first live observation only; not a completed 250-height result or a causal speedup claim",
+  "window": [
+    26090073,
+    26090252
+  ],
+  "rows": 180,
+  "projection": "current-progress-latency.log.provenance.json",
+  "canonicalManifest": "current-latency-tools.json",
+  "executedTool": "analysis:blockscan-pass-latency",
+  "solver": {
+    "nearestRankP50Ms": 5915.4966249999125,
+    "nearestRankP95Ms": 8833.46862499998,
+    "canonicalFloorP50Ms": 5937.959334000014,
+    "canonicalFloorP95Ms": 8884.283166999929,
+    "completedStages": 0
+  },
+  "reconciliation": "Same immutable projected timing records; direct manual recomputation using canonical sorted[floor(n*p)] exactly agrees. Canonical percentile is upper-index, not midpoint average. Keep the predeclared nearest-rank convention for manual experiment reports; do not change records or exclude cancelled stages.",
+  "additionalDiagnosis": "quote-waves.mjs measures union, not sum, of exact-lane transport intervals intersecting each Solver window. Interim173 rows: median Solver5980ms, exact transport covered5010ms, unattributed remainder919ms, 7batches/block, summed permit queue wait0.104ms, batch response636ms. The residual is NOT asserted to be CPU-only. V4 amount calls dominate; no per-route mode telemetry in this first snapshot.",
+  "approval": "No formal Hermes or performance acceptance implied by canonical eligibleForQualification; cancellation and final-sim outcomes are checked independently. No changed production files in this continuation."
+}

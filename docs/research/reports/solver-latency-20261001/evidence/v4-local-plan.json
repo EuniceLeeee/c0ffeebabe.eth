@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "searcher_behavior_change": "yes",
+  "scope": "Existing no-hook V4 Family only; explicit user approval received. Preserve original13dirtyfiles and all search/transport/safety settings.",
+  "design": "First slice: exact-input local single-step quote inside one known liquidity segment, including directional protocol plus LP fee. Source-pinned slot0/liquidity/output balance and required bitmap word use existing request programs/backend cache. If the full input is not consumed in that segment, retain the original full chain Quoter and capacity check. No missing bitmap as zero, clipping, linear point-price scaling or input/output haircut.",
+  "trialState": "No unsupported local prefix projection. Explicit unsupportedReason retains common EVM full-prefix routing. Default ordinary reads may reuse only existing source-hash-pinned backend bytes. Do not declare stateOnlyReads: shared manager output balance can change when another pool is touched. No Family-private cache or new central interface.",
+  "localWhitelist": [
+    "venues/swaps/univ4-family/local-single-step.ts",
+    "venues/swaps/univ4-family/test/local-single-step.ts",
+    "venues/swaps/univ4-family/exact.ts",
+    "venues/swaps/univ4-family/types.ts",
+    "venues/swaps/univ4-family/execution.ts",
+    "test/univ4-family-plugin.ts",
+    "generated catalog only if required"
+  ],
+  "notDoing": [
+    "hook Families",
+    "global v3 math edits",
+    "central branches",
+    "new scheduler/cache",
+    "reduce amount or candidate search",
+    "deploy/sign/broadcast/push/merge"
+  ],
+  "delegation": "Reuse previously documented native Codex fallback (wrapper unsupported model). Agent owns math module and its tests (2files); main owns exact/evidence integration. Non-author executes each other's checks; maximum3review passes.",
+  "acceptance": [
+    "offline canonical parsing/direction/protocol fee/rounding/limits/zero liquidity/negative tick and fallback tests",
+    "same-source real Quoter raw-amount parity over pinned prior live source and production P/multiples",
+    "source/output capacity checks retained for native/ERC20",
+    "compatible Ready receipt reuse or selective revalidation; no authority bypass",
+    "same-input whole-Solver timing then bounded live; cancellation retained separately"
+  ],
+  "resources": {
+    "currentSliceMainnetCU": 0,
+    "implementationNetworkRPC": 0,
+    "sourceReferenceFetchesMax": 6,
+    "nextRemoteExperiment": "declare immutable cohort, request/CU budgets and wall watchdog before launching; no blind250 repeat"
+  },
+  "limitations": "This slice does not yet optimize arbitrary repeated-pool state and does not claim all V4 swaps are locally quoted. Cold extra state rounds and fallback overhead must be measured, not hidden. Earlier no-repeat selected sample rank477 is not current liveTop100 or new natural enumeration proof."
+}

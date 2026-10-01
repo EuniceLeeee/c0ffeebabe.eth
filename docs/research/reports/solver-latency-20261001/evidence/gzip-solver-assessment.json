@@ -1,0 +1,2048 @@
+{
+  "resultSha256": "2d5dc8cf43bdefb8239dd1d209a8c2b5212d54e2ade5a04fa6f98921cd1ed386",
+  "declarationSha256": "e54be5eefc07f0eff6ebb9a6c4fe4cc07d0edfa82e8eb6b0196bf5cbf1aaa566",
+  "criterion": "All20 complete with exact ordered12 amounts,24 hop results,8GSS,ordered candidates and call multiset. B median <=90% A, B wins>=8/10 adjacent pairs, nearest-rank Bp95<=110% Ap95. Otherwise not proven Solver speedup; no timing claim or blind live launch.",
+  "integrity": true,
+  "complete": true,
+  "outputParity": true,
+  "performance": false,
+  "narrowedCriterionMet": false,
+  "productionDefaultChangeAuthorized": false,
+  "scope": "Selected no-repeat real production Solver transport gzip comparison; exact quotes/candidates/calls preserved; not a live or final sim/EV acceptance",
+  "logicalIssuances": 820,
+  "A": {
+    "attempts": 10,
+    "completed": 10,
+    "solverP50": 4553.884040999983,
+    "solverP95": 5751.443125000005,
+    "physicalEnvelopes": [
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11
+    ],
+    "logicalCalls": [
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15
+    ]
+  },
+  "B": {
+    "attempts": 10,
+    "completed": 10,
+    "solverP50": 4322.1654160000035,
+    "solverP95": 7432.210250000004,
+    "physicalEnvelopes": [
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11
+    ],
+    "logicalCalls": [
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15
+    ]
+  },
+  "pairs": [
+    {
+      "indices": [
+        0,
+        1
+      ],
+      "aMs": 5721.719417,
+      "bMs": 4073.3507499999996,
+      "bWins": true
+    },
+    {
+      "indices": [
+        2,
+        3
+      ],
+      "aMs": 5391.0065410000025,
+      "bMs": 3689.3975830000018,
+      "bWins": true
+    },
+    {
+      "indices": [
+        4,
+        5
+      ],
+      "aMs": 3674.7109999999993,
+      "bMs": 4322.1654160000035,
+      "bWins": false
+    },
+    {
+      "indices": [
+        6,
+        7
+      ],
+      "aMs": 3656.0648749999964,
+      "bMs": 5210.1855,
+      "bWins": false
+    },
+    {
+      "indices": [
+        8,
+        9
+      ],
+      "aMs": 3654.058250000002,
+      "bMs": 5536.379167000006,
+      "bWins": false
+    },
+    {
+      "indices": [
+        10,
+        11
+      ],
+      "aMs": 5751.443125000005,
+      "bMs": 3963.0758750000095,
+      "bWins": true
+    },
+    {
+      "indices": [
+        12,
+        13
+      ],
+      "aMs": 4908.720209000006,
+      "bMs": 4918.550374999992,
+      "bWins": false
+    },
+    {
+      "indices": [
+        14,
+        15
+      ],
+      "aMs": 4217.9253330000065,
+      "bMs": 5444.609540999998,
+      "bWins": false
+    },
+    {
+      "indices": [
+        16,
+        17
+      ],
+      "aMs": 4888.431125000003,
+      "bMs": 7432.210250000004,
+      "bWins": false
+    },
+    {
+      "indices": [
+        18,
+        19
+      ],
+      "aMs": 4553.884040999983,
+      "bMs": 4299.21699999999,
+      "bWins": true
+    }
+  ],
+  "rows": [
+    {
+      "index": 0,
+      "arm": "A",
+      "status": "returned",
+      "solverMs": 5721.719417,
+      "preparationMs": 1767.107958,
+      "totalMs": 8356.753332999999,
+      "drainMs": 1.314542000000074,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 300,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 299
+        },
+        {
+          "items": 1,
+          "wallMs": 1234,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 678
+        },
+        {
+          "items": 2,
+          "wallMs": 297,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 295
+        },
+        {
+          "items": 3,
+          "wallMs": 1469,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 1468
+        },
+        {
+          "items": 2,
+          "wallMs": 295,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 294
+        },
+        {
+          "items": 1,
+          "wallMs": 294,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 294
+        },
+        {
+          "items": 1,
+          "wallMs": 294,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 293
+        },
+        {
+          "items": 1,
+          "wallMs": 681,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 681
+        },
+        {
+          "items": 1,
+          "wallMs": 294,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 294
+        },
+        {
+          "items": 1,
+          "wallMs": 338,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 338
+        },
+        {
+          "items": 1,
+          "wallMs": 398,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 398
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "arm": "B",
+      "status": "returned",
+      "solverMs": 4073.3507499999996,
+      "preparationMs": 1902.7548749999987,
+      "totalMs": 6602.871291999998,
+      "drainMs": 1.5603330000012647,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 298,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 297
+        },
+        {
+          "items": 1,
+          "wallMs": 475,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 315
+        },
+        {
+          "items": 2,
+          "wallMs": 291,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 290
+        },
+        {
+          "items": 3,
+          "wallMs": 287,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 286
+        },
+        {
+          "items": 2,
+          "wallMs": 320,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 320
+        },
+        {
+          "items": 1,
+          "wallMs": 287,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 285
+        },
+        {
+          "items": 1,
+          "wallMs": 289,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 288
+        },
+        {
+          "items": 1,
+          "wallMs": 728,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 726
+        },
+        {
+          "items": 1,
+          "wallMs": 317,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 315
+        },
+        {
+          "items": 1,
+          "wallMs": 681,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 680
+        },
+        {
+          "items": 1,
+          "wallMs": 285,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 284
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "arm": "B",
+      "status": "returned",
+      "solverMs": 3689.3975830000018,
+      "preparationMs": 2150.097916999999,
+      "totalMs": 6629.145,
+      "drainMs": 0.3637910000034026,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 400,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 398
+        },
+        {
+          "items": 1,
+          "wallMs": 582,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 358
+        },
+        {
+          "items": 2,
+          "wallMs": 328,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 327
+        },
+        {
+          "items": 3,
+          "wallMs": 592,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 591
+        },
+        {
+          "items": 2,
+          "wallMs": 284,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 284
+        },
+        {
+          "items": 1,
+          "wallMs": 285,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 284
+        },
+        {
+          "items": 1,
+          "wallMs": 284,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 283
+        },
+        {
+          "items": 1,
+          "wallMs": 282,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 281
+        },
+        {
+          "items": 1,
+          "wallMs": 290,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 289
+        },
+        {
+          "items": 1,
+          "wallMs": 286,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 286
+        },
+        {
+          "items": 1,
+          "wallMs": 367,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 366
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "arm": "A",
+      "status": "returned",
+      "solverMs": 5391.0065410000025,
+      "preparationMs": 1153.5375830000012,
+      "totalMs": 7302.8838749999995,
+      "drainMs": 0.7443329999987327,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 316,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 315
+        },
+        {
+          "items": 1,
+          "wallMs": 1009,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 712
+        },
+        {
+          "items": 2,
+          "wallMs": 285,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 284
+        },
+        {
+          "items": 3,
+          "wallMs": 721,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 720
+        },
+        {
+          "items": 2,
+          "wallMs": 594,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 594
+        },
+        {
+          "items": 1,
+          "wallMs": 606,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 605
+        },
+        {
+          "items": 1,
+          "wallMs": 402,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 401
+        },
+        {
+          "items": 1,
+          "wallMs": 302,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 302
+        },
+        {
+          "items": 1,
+          "wallMs": 391,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 390
+        },
+        {
+          "items": 1,
+          "wallMs": 306,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 305
+        },
+        {
+          "items": 1,
+          "wallMs": 674,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 674
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "arm": "A",
+      "status": "returned",
+      "solverMs": 3674.7109999999993,
+      "preparationMs": 1253.674833000001,
+      "totalMs": 5522.002750000003,
+      "drainMs": 0.261000000005879,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 526,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 525
+        },
+        {
+          "items": 1,
+          "wallMs": 822,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 543
+        },
+        {
+          "items": 2,
+          "wallMs": 290,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 290
+        },
+        {
+          "items": 3,
+          "wallMs": 429,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 428
+        },
+        {
+          "items": 2,
+          "wallMs": 288,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 287
+        },
+        {
+          "items": 1,
+          "wallMs": 284,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 284
+        },
+        {
+          "items": 1,
+          "wallMs": 288,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 288
+        },
+        {
+          "items": 1,
+          "wallMs": 291,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 291
+        },
+        {
+          "items": 1,
+          "wallMs": 290,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 290
+        },
+        {
+          "items": 1,
+          "wallMs": 288,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 287
+        },
+        {
+          "items": 1,
+          "wallMs": 296,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 294
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "arm": "B",
+      "status": "returned",
+      "solverMs": 4322.1654160000035,
+      "preparationMs": 1107.5410830000037,
+      "totalMs": 6559.856417000003,
+      "drainMs": 0.36933399999543326,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 281,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 280
+        },
+        {
+          "items": 1,
+          "wallMs": 537,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 535
+        },
+        {
+          "items": 2,
+          "wallMs": 595,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 594
+        },
+        {
+          "items": 3,
+          "wallMs": 390,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 389
+        },
+        {
+          "items": 2,
+          "wallMs": 394,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 393
+        },
+        {
+          "items": 1,
+          "wallMs": 298,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 297
+        },
+        {
+          "items": 1,
+          "wallMs": 298,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 297
+        },
+        {
+          "items": 1,
+          "wallMs": 398,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 397
+        },
+        {
+          "items": 1,
+          "wallMs": 707,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 707
+        },
+        {
+          "items": 1,
+          "wallMs": 282,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 282
+        },
+        {
+          "items": 1,
+          "wallMs": 317,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 316
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "arm": "B",
+      "status": "returned",
+      "solverMs": 5210.1855,
+      "preparationMs": 1442.5142080000005,
+      "totalMs": 7466.980625000004,
+      "drainMs": 0.2086249999993015,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 284,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 284
+        },
+        {
+          "items": 1,
+          "wallMs": 1866,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 1311
+        },
+        {
+          "items": 2,
+          "wallMs": 287,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 286
+        },
+        {
+          "items": 3,
+          "wallMs": 287,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 286
+        },
+        {
+          "items": 2,
+          "wallMs": 370,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 368
+        },
+        {
+          "items": 1,
+          "wallMs": 702,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 701
+        },
+        {
+          "items": 1,
+          "wallMs": 300,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 298
+        },
+        {
+          "items": 1,
+          "wallMs": 401,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 399
+        },
+        {
+          "items": 1,
+          "wallMs": 295,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 294
+        },
+        {
+          "items": 1,
+          "wallMs": 278,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 277
+        },
+        {
+          "items": 1,
+          "wallMs": 320,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 317
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "arm": "A",
+      "status": "returned",
+      "solverMs": 3656.0648749999964,
+      "preparationMs": 1112.8822500000024,
+      "totalMs": 5578.604500000001,
+      "drainMs": 0.5373340000005555,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 286,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 286
+        },
+        {
+          "items": 1,
+          "wallMs": 617,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 520
+        },
+        {
+          "items": 2,
+          "wallMs": 283,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 283
+        },
+        {
+          "items": 3,
+          "wallMs": 296,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 295
+        },
+        {
+          "items": 2,
+          "wallMs": 305,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 305
+        },
+        {
+          "items": 1,
+          "wallMs": 286,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 285
+        },
+        {
+          "items": 1,
+          "wallMs": 292,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 292
+        },
+        {
+          "items": 1,
+          "wallMs": 577,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 577
+        },
+        {
+          "items": 1,
+          "wallMs": 288,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 287
+        },
+        {
+          "items": 1,
+          "wallMs": 307,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 306
+        },
+        {
+          "items": 1,
+          "wallMs": 291,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 291
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "arm": "A",
+      "status": "returned",
+      "solverMs": 3654.058250000002,
+      "preparationMs": 1010.7963329999984,
+      "totalMs": 5278.011082999998,
+      "drainMs": 0.3688750000001164,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 290,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 290
+        },
+        {
+          "items": 1,
+          "wallMs": 425,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 362
+        },
+        {
+          "items": 2,
+          "wallMs": 293,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 293
+        },
+        {
+          "items": 3,
+          "wallMs": 699,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 699
+        },
+        {
+          "items": 2,
+          "wallMs": 293,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 293
+        },
+        {
+          "items": 1,
+          "wallMs": 283,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 282
+        },
+        {
+          "items": 1,
+          "wallMs": 285,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 284
+        },
+        {
+          "items": 1,
+          "wallMs": 296,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 296
+        },
+        {
+          "items": 1,
+          "wallMs": 292,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 292
+        },
+        {
+          "items": 1,
+          "wallMs": 293,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 292
+        },
+        {
+          "items": 1,
+          "wallMs": 392,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 391
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "arm": "B",
+      "status": "returned",
+      "solverMs": 5536.379167000006,
+      "preparationMs": 1784.6394169999985,
+      "totalMs": 8122.754584000002,
+      "drainMs": 0.4631660000013653,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 290,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 289
+        },
+        {
+          "items": 1,
+          "wallMs": 1768,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 1651
+        },
+        {
+          "items": 2,
+          "wallMs": 327,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 326
+        },
+        {
+          "items": 3,
+          "wallMs": 392,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 391
+        },
+        {
+          "items": 2,
+          "wallMs": 907,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 289
+        },
+        {
+          "items": 1,
+          "wallMs": 297,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 283
+        },
+        {
+          "items": 1,
+          "wallMs": 606,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 605
+        },
+        {
+          "items": 1,
+          "wallMs": 287,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 287
+        },
+        {
+          "items": 1,
+          "wallMs": 283,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 282
+        },
+        {
+          "items": 1,
+          "wallMs": 281,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 280
+        },
+        {
+          "items": 1,
+          "wallMs": 292,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 291
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "arm": "B",
+      "status": "returned",
+      "solverMs": 3963.0758750000095,
+      "preparationMs": 1316.4560420000053,
+      "totalMs": 6060.28850000001,
+      "drainMs": 0.48408300000301097,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 287,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 286
+        },
+        {
+          "items": 1,
+          "wallMs": 1243,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 551
+        },
+        {
+          "items": 2,
+          "wallMs": 283,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 282
+        },
+        {
+          "items": 3,
+          "wallMs": 288,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 287
+        },
+        {
+          "items": 2,
+          "wallMs": 288,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 288
+        },
+        {
+          "items": 1,
+          "wallMs": 283,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 283
+        },
+        {
+          "items": 1,
+          "wallMs": 286,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 285
+        },
+        {
+          "items": 1,
+          "wallMs": 280,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 280
+        },
+        {
+          "items": 1,
+          "wallMs": 280,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 279
+        },
+        {
+          "items": 1,
+          "wallMs": 346,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 345
+        },
+        {
+          "items": 1,
+          "wallMs": 283,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 283
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "arm": "A",
+      "status": "returned",
+      "solverMs": 5751.443125000005,
+      "preparationMs": 1688.5189590000082,
+      "totalMs": 8057.3556249999965,
+      "drainMs": 0.5855830000073183,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 750,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 750
+        },
+        {
+          "items": 1,
+          "wallMs": 1102,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 407
+        },
+        {
+          "items": 2,
+          "wallMs": 847,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 846
+        },
+        {
+          "items": 3,
+          "wallMs": 887,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 886
+        },
+        {
+          "items": 2,
+          "wallMs": 394,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 393
+        },
+        {
+          "items": 1,
+          "wallMs": 399,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 399
+        },
+        {
+          "items": 1,
+          "wallMs": 401,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 400
+        },
+        {
+          "items": 1,
+          "wallMs": 709,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 709
+        },
+        {
+          "items": 1,
+          "wallMs": 299,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 298
+        },
+        {
+          "items": 1,
+          "wallMs": 301,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 300
+        },
+        {
+          "items": 1,
+          "wallMs": 308,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 308
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "arm": "A",
+      "status": "returned",
+      "solverMs": 4908.720209000006,
+      "preparationMs": 1412.8691249999974,
+      "totalMs": 6943.531040999995,
+      "drainMs": 0.366334000005736,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 604,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 604
+        },
+        {
+          "items": 1,
+          "wallMs": 1111,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 714
+        },
+        {
+          "items": 2,
+          "wallMs": 297,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 297
+        },
+        {
+          "items": 3,
+          "wallMs": 404,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 404
+        },
+        {
+          "items": 2,
+          "wallMs": 1009,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 1008
+        },
+        {
+          "items": 1,
+          "wallMs": 399,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 399
+        },
+        {
+          "items": 1,
+          "wallMs": 284,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 284
+        },
+        {
+          "items": 1,
+          "wallMs": 315,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 314
+        },
+        {
+          "items": 1,
+          "wallMs": 356,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 355
+        },
+        {
+          "items": 1,
+          "wallMs": 342,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 342
+        },
+        {
+          "items": 1,
+          "wallMs": 290,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 289
+        }
+      ]
+    },
+    {
+      "index": 13,
+      "arm": "B",
+      "status": "returned",
+      "solverMs": 4918.550374999992,
+      "preparationMs": 1332.8946670000005,
+      "totalMs": 7036.757291999995,
+      "drainMs": 0.3098749999917345,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 300,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 299
+        },
+        {
+          "items": 1,
+          "wallMs": 1530,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 1106
+        },
+        {
+          "items": 2,
+          "wallMs": 302,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 301
+        },
+        {
+          "items": 3,
+          "wallMs": 792,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 791
+        },
+        {
+          "items": 2,
+          "wallMs": 300,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 299
+        },
+        {
+          "items": 1,
+          "wallMs": 298,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 298
+        },
+        {
+          "items": 1,
+          "wallMs": 296,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 294
+        },
+        {
+          "items": 1,
+          "wallMs": 299,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 298
+        },
+        {
+          "items": 1,
+          "wallMs": 284,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 284
+        },
+        {
+          "items": 1,
+          "wallMs": 317,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 316
+        },
+        {
+          "items": 1,
+          "wallMs": 402,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 400
+        }
+      ]
+    },
+    {
+      "index": 14,
+      "arm": "B",
+      "status": "returned",
+      "solverMs": 5444.609540999998,
+      "preparationMs": 1244.208375000002,
+      "totalMs": 7481.8320410000015,
+      "drainMs": 0.6233340000035241,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 295,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 295
+        },
+        {
+          "items": 1,
+          "wallMs": 1340,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 466
+        },
+        {
+          "items": 2,
+          "wallMs": 300,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 287
+        },
+        {
+          "items": 3,
+          "wallMs": 1415,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 1414
+        },
+        {
+          "items": 2,
+          "wallMs": 396,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 395
+        },
+        {
+          "items": 1,
+          "wallMs": 296,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 295
+        },
+        {
+          "items": 1,
+          "wallMs": 347,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 346
+        },
+        {
+          "items": 1,
+          "wallMs": 353,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 352
+        },
+        {
+          "items": 1,
+          "wallMs": 299,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 298
+        },
+        {
+          "items": 1,
+          "wallMs": 280,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 279
+        },
+        {
+          "items": 1,
+          "wallMs": 313,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 311
+        }
+      ]
+    },
+    {
+      "index": 15,
+      "arm": "A",
+      "status": "returned",
+      "solverMs": 4217.9253330000065,
+      "preparationMs": 1541.3808750000026,
+      "totalMs": 6482.603709000003,
+      "drainMs": 0.48408300000301097,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 283,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 282
+        },
+        {
+          "items": 1,
+          "wallMs": 959,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 590
+        },
+        {
+          "items": 2,
+          "wallMs": 286,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 286
+        },
+        {
+          "items": 3,
+          "wallMs": 382,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 381
+        },
+        {
+          "items": 2,
+          "wallMs": 394,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 394
+        },
+        {
+          "items": 1,
+          "wallMs": 399,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 398
+        },
+        {
+          "items": 1,
+          "wallMs": 300,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 299
+        },
+        {
+          "items": 1,
+          "wallMs": 297,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 296
+        },
+        {
+          "items": 1,
+          "wallMs": 300,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 300
+        },
+        {
+          "items": 1,
+          "wallMs": 401,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 401
+        },
+        {
+          "items": 1,
+          "wallMs": 401,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 401
+        }
+      ]
+    },
+    {
+      "index": 16,
+      "arm": "A",
+      "status": "returned",
+      "solverMs": 4888.431125000003,
+      "preparationMs": 1044.445584000001,
+      "totalMs": 6533.583583999993,
+      "drainMs": 0.6731250000011642,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 286,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 286
+        },
+        {
+          "items": 1,
+          "wallMs": 1123,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 638
+        },
+        {
+          "items": 2,
+          "wallMs": 289,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 289
+        },
+        {
+          "items": 3,
+          "wallMs": 371,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 371
+        },
+        {
+          "items": 2,
+          "wallMs": 394,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 394
+        },
+        {
+          "items": 1,
+          "wallMs": 403,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 403
+        },
+        {
+          "items": 1,
+          "wallMs": 279,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 279
+        },
+        {
+          "items": 1,
+          "wallMs": 674,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 674
+        },
+        {
+          "items": 1,
+          "wallMs": 284,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 283
+        },
+        {
+          "items": 1,
+          "wallMs": 659,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 659
+        },
+        {
+          "items": 1,
+          "wallMs": 310,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 310
+        }
+      ]
+    },
+    {
+      "index": 17,
+      "arm": "B",
+      "status": "returned",
+      "solverMs": 7432.210250000004,
+      "preparationMs": 1359.1402080000116,
+      "totalMs": 9617.63562500001,
+      "drainMs": 0.5381670000060694,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 284,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 283
+        },
+        {
+          "items": 1,
+          "wallMs": 2679,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 1159
+        },
+        {
+          "items": 2,
+          "wallMs": 279,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 278
+        },
+        {
+          "items": 3,
+          "wallMs": 964,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 963
+        },
+        {
+          "items": 2,
+          "wallMs": 728,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 727
+        },
+        {
+          "items": 1,
+          "wallMs": 296,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 295
+        },
+        {
+          "items": 1,
+          "wallMs": 398,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 397
+        },
+        {
+          "items": 1,
+          "wallMs": 1114,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 1113
+        },
+        {
+          "items": 1,
+          "wallMs": 295,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 294
+        },
+        {
+          "items": 1,
+          "wallMs": 292,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 291
+        },
+        {
+          "items": 1,
+          "wallMs": 281,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 280
+        }
+      ]
+    },
+    {
+      "index": 18,
+      "arm": "B",
+      "status": "returned",
+      "solverMs": 4299.21699999999,
+      "preparationMs": 1352.7981250000012,
+      "totalMs": 6673.464166000005,
+      "drainMs": 0.4250000000174623,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 361,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 360
+        },
+        {
+          "items": 1,
+          "wallMs": 1380,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 913
+        },
+        {
+          "items": 2,
+          "wallMs": 344,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 343
+        },
+        {
+          "items": 3,
+          "wallMs": 391,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 391
+        },
+        {
+          "items": 2,
+          "wallMs": 286,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 285
+        },
+        {
+          "items": 1,
+          "wallMs": 305,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 304
+        },
+        {
+          "items": 1,
+          "wallMs": 283,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 282
+        },
+        {
+          "items": 1,
+          "wallMs": 284,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 283
+        },
+        {
+          "items": 1,
+          "wallMs": 325,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 324
+        },
+        {
+          "items": 1,
+          "wallMs": 281,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 280
+        },
+        {
+          "items": 1,
+          "wallMs": 315,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 314
+        }
+      ]
+    },
+    {
+      "index": 19,
+      "arm": "A",
+      "status": "returned",
+      "solverMs": 4553.884040999983,
+      "preparationMs": 1082.336249999993,
+      "totalMs": 6250.343292000005,
+      "drainMs": 0.6834579999849666,
+      "parityHash": "e56c49489baa52ddea425ecb73444beccb6e218265839351f81a2d4a875189b1",
+      "problem": null,
+      "logicalCalls": 15,
+      "batches": 11,
+      "maxBatchItems": 3,
+      "peakBatches": 1,
+      "responses": [
+        {
+          "items": 1,
+          "wallMs": 285,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 285
+        },
+        {
+          "items": 1,
+          "wallMs": 1011,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 579
+        },
+        {
+          "items": 2,
+          "wallMs": 453,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 452
+        },
+        {
+          "items": 3,
+          "wallMs": 390,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 390
+        },
+        {
+          "items": 2,
+          "wallMs": 395,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 394
+        },
+        {
+          "items": 1,
+          "wallMs": 300,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 300
+        },
+        {
+          "items": 1,
+          "wallMs": 604,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 604
+        },
+        {
+          "items": 1,
+          "wallMs": 290,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 289
+        },
+        {
+          "items": 1,
+          "wallMs": 283,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 283
+        },
+        {
+          "items": 1,
+          "wallMs": 321,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 321
+        },
+        {
+          "items": 1,
+          "wallMs": 401,
+          "status": "returned",
+          "statusCode": 200,
+          "headerWaitMs": 401
+        }
+      ]
+    }
+  ],
+  "limits": "Selected one-route diagnostic. No final sim/EV or representative live effect. Billed CU unknown."
+}

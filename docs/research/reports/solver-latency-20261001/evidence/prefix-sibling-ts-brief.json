@@ -1,0 +1,16 @@
+{
+  "author": "main",
+  "reviewer": "Mencius, non-author for TS",
+  "status": "implemented; independent review pending Rust slice completion",
+  "files": [
+    "listener/src/searcher/revm-sim-client.ts",
+    "listener/src/searcher/revm-strict-source-owner.ts",
+    "listener/src/searcher/test/revm-sim-client.ts"
+  ],
+  "contract": "Same public scalar APIs. Normalize identical original quote abort domains within existing slot via WeakMap, release on retirement. Existing client queue may pair exactly2 contiguous already-queued prefix reads at pump with same immutable source/prefix/caller/gas, same signal identity and same original effective deadline. No collection delay, reordering, retries or timer renewal.1MiB serialized pair bound. First result streams and settles before second; no group completion barrier.",
+  "ownership": "Both paired IDs physically dispatched and marked with same dispatch time. Cancellation of either same-domain active member terminates physical daemon and settles both; unrelated queued cancellations remain isolated. New work waits for last pair response. All scalar response/attestation validation unchanged.",
+  "lateResponses": "Live response identities remain strictly ordered. Retired mode retains original policy: late successes for actually-issued IDs ignored; any matched fatal delivered, unknown IDs fail protocol. Pair IDs never assigned to a different request. This preserves existing buffered-expiry duplicate-success regression.",
+  "testsSoFar": "307/307 across client, source-owner, source-simulation, transport and Solver prefix tests; an additional paired deadline settlement test added subsequently. First regression run caught overstrict retired duplicate handling; implementation corrected, original test unchanged.",
+  "typecheck": "Current tsc reports8 errors in untouched test files. Re-ran tsc against sealed third-live baseline runtime: identical8 errors, no new error in modified code. Do not fix unrelated tests in this task.",
+  "reviewRequired": "Execute tests and examine cancellation/duplicate/framing/fatal/source/data ownership, not only file scope. Main will independently review and run Rust checks. No real RPC until both slices pass and frozen TS/Rust match."
+}

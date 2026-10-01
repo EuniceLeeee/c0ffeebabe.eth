@@ -1,0 +1,65 @@
+{
+  "scope": "Complete local bounded diagnostic; not paired Hermes acceptance or systemic speedup verdict",
+  "window": [
+    26090582,
+    26090831
+  ],
+  "heights": 250,
+  "timingRows": 246,
+  "missingPerHeightTiming": [
+    26090614,
+    26090790,
+    26090819,
+    26090830
+  ],
+  "solverEnteredRows": 211,
+  "wholeSolverCompleted": 0,
+  "exit": "completed_250_source_heights; code0; supervisor/runtime exited; owned group empty; Ready and runtime snapshot unchanged verified",
+  "sourceSha256": "f2853a757e01049cd663bc96e27e2d29a7a0b2a73c67c8193316f74deb77a543",
+  "sourceBytes": 510894204,
+  "manual": "third250-final.json",
+  "rpcDecomposition": "third250-quote-waves.json",
+  "canonicalProjection": "third250-latency.log.provenance.json",
+  "canonicalExecutionManifest": "third250-tools.json",
+  "executedTool": "analysis:blockscan-pass-latency",
+  "solverAllRowsMs": {
+    "nearestRankP50": 4061.041625000071,
+    "canonicalFloorP50": 4064.3752089999616,
+    "p95": 8189.761832999997
+  },
+  "solverEnteredMs": {
+    "nearestRankP50": 4472.096833000192,
+    "p95": 8312.105083000031,
+    "rpcUnionP50": 3679,
+    "unattributedRemainderP50": 791
+  },
+  "allRowsTotalMs": {
+    "nearestRankP50": 12111.993458000012,
+    "canonicalFloorP50": 12143.909541999921,
+    "p95": 18475.170708000194
+  },
+  "sourceStateRoutes": {
+    "attempted": 5206,
+    "completed": 1851,
+    "aborted": 3355,
+    "completedP50Ms": 300.5989169999957,
+    "completedP95Ms": 6711.716416999698
+  },
+  "orderedPrefixRoutes": 0,
+  "solverRustRequests": 0,
+  "quotePositiveBlocks": 148,
+  "finalSim": {
+    "attempts": 169,
+    "successful": 0,
+    "positive": 0
+  },
+  "drops": {
+    "sim_revert": 169,
+    "sim_revert_seen_this_live": 6177,
+    "blockscan_stale_state": 1
+  },
+  "earlySolverCacheSkips": 6177,
+  "reconciliation": "Same246 timed rows; p50 difference is nearest-rank ceil(n*p)-1 versus canonical floor(n*p); p95 agrees. Seven sub10s durations are cancelled/not-run work, never completed-stage successes.211 actual Solver windows exclude35 not-entered rows only for conditional decomposition, never from the250-height denominator. Four missing individual heights remain failures/missing observations. No safe claim that4.06s versus first-run5.54s is a speedup.",
+  "finding": "Conditional policy omits unnecessary prefix in actual live. Same-budget preparation now publishes/advances, but complete Solver cohorts still miss new heads. Completed individual routes coexist with stage interruption;169 final simulations all reverted. Remaining active Solver wait is predominantly6 dependent exact-RPC batch waves (median517ms response), not Rust prefix work or permit queues. Existing in-flight RPC memo already coalesces identical requests.",
+  "next": "After reviewing the ignored same-input harness, run predeclared bounded isolated baseline/candidate diagnostic; do not relaunch live or claim success from censored medians. A repeated-pool P-only engine benchmark is separately predeclared, not mixed into full Solver/live evidence."
+}

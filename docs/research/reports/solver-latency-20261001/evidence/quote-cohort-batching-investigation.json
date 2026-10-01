@@ -1,0 +1,40 @@
+{
+  "status": "DESIGN INVESTIGATION ONLY; no implementation or external experiment authorized by this brief yet",
+  "searcherBehaviorChangeIfAccepted": true,
+  "owner": "main",
+  "restoredBasePatchSha256": "071044e25429a6ac9142b6751a068dee08fae15f70f9061456b978436b52b641",
+  "evidence": {
+    "rawLog": "same-input-cold-source-1.log",
+    "rawResults": "same-input-cold-source-1/results.json",
+    "observed": "Each completed first-prefix quote issues three strict reads with exactCallId=2 and the same compiled prefix, returned request IDs1,2,3. Current implementation dispatches scalar1 then streamed pair2/3. Same quote parent waits for every result; next hop never receives partial results.",
+    "existingChecks": "Three separate logical prechecks and one fresh canonical postcheck per child; twelve logical checks across three children. Current transport uses five validation HTTP exchanges across scalar plus pair.",
+    "warmExecution": "Full prefix execution in later children is already submillisecond/zeroRPC; further continuation caching is not justified. The failed cold-source candidate removed one exchange only once and failed its whole-hop screen; do not resurrect it.",
+    "unresolved": "Third route hop still censored in all four attempts. Phase records are terminal-only; its missing timings cannot be attributed to a specific phase. No claim that this proposed grouping solves full-route latency."
+  },
+  "question": "Can explicit already-known request cohorts inside one central AdapterRequestProgram batch safely share physical source-validation envelopes, without grouping independent amounts/routes or changing Family interfaces?",
+  "proposedMechanismToReview": [
+    "Use only an explicit central execution.requests cohort under nonempty exactPrefixContext. This existing parent already awaits all results via awaitAllDrained before decoding. Never infer cohort identity solely from equal prefix bytes or a collection timer.",
+    "A private optional transport batch operation could snapshot/materialize all eligible requests and keep same source/generation, exact prefix, executor code, origin and cancellation/deadline domain. Validate each request with existing authority code. Ordinary/non-prefix/final-sim paths remain scalar, and unsupported/oversized batches fall back before dispatch only.",
+    "One grouped Rust request would issue every child's full three source checks (no logical dedup or source-attestation reuse), verify all, execute each unchanged full prefix/current read in a separate CacheDB, then issue every child's fresh postcheck after its execution (potentially one post-envelope after all children). All successful output/gas/effects/attestations remain per child. Mutable EVM state is never shared.",
+    "Only this already-atomic parent receives a grouped result. Existing independent scalar/pair streaming behavior remains unchanged. Review whether optional child failures, early fatal attribution, queue fairness, differing request.from and postcheck timing invalidate the parent-atomic premise; do not assume that shared source implies interchangeable actors.",
+    "Expected narrow mechanism, if valid: same twelve logical source checks, five physical validation exchanges potentially reduced to two for a three-read cohort. No guarantee of proportional wall-time savings; larger provider batches may serialize or cost more bandwidth."
+  ],
+  "implementationBoundaryIfReviewed": "Generic central transport/cohort wiring, source owner/client, Rust daemon and tests only; no Family names/addresses/math branches, no planner/search/ranking/P/caps/deadlines/EV changes. Split into bounded reviewed slices before generation; do not opportunistically add a general scheduler.",
+  "requiredAdversarialDesignChecks": [
+    "Prove this is genuinely one parent work batch, not independent consumers whose early publication is required. If the contract needs a new broad orchestration framework, reject the slice.",
+    "Confirm actual same-quote reads differ in caller/to/kind and identify which must remain isolated. Existing strictPair matching is not automatically sufficient or appropriate.",
+    "All failure/cancel/fatal semantics remain fail-closed; fresh prechecks before each relevant execution and postchecks after execution must remain authoritative. Do not silently redefine source safety to reduce calls.",
+    "Preserve complete per-child effects/gas/return identity, deadlines, queue ownership/drain and bounded pre-send fallback; no late post-send fallback or cancellation resurrection.",
+    "Estimate whether the saved serial exchanges are material relative to measured cold-prefix/whole-hop costs; no new network run until a frozen experiment and independent offline checks exist."
+  ],
+  "notDoing": [
+    "cold-source precheck/hydration co-batch",
+    "sibling hydration union before independent A publication",
+    "continuation-state cache",
+    "omitting priorQuotes on repeated routes",
+    "removing or caching source checks",
+    "raising timeouts or cutting search",
+    "changing Family code",
+    "starting live or deploying"
+  ]
+}

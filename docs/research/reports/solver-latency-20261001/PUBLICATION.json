@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "kind": "redacted-evidence-handoff",
+  "userRequest": "Publish yesterday's Solver logs and relevant background to GitHub for an independent optimization assessment",
+  "dateAsiaShanghai": "2026-10-01",
+  "productionChangesInThisCommit": false,
+  "deploymentOrBroadcast": false,
+  "newChainRpcCalls": 0,
+  "externalCuSpent": 0,
+  "manifestSha256": "1d414c2a71185feefc48d307b65bc9a9c13fe93e0bbac3b234ffc8538a493224",
+  "coverage": {
+    "artifactEntries": 326,
+    "payloadFiles": 366,
+    "payloadBytes": 206111966,
+    "largestPayloadFileBytes": 8092944,
+    "completeLiveLogs": 4,
+    "originalLiveLogLines": 3827697,
+    "allRedactedLogLinesIncludingDiagnosticProjectionsAndTests": 8886325,
+    "experimentResultDirectories": 14,
+    "omittedEntries": 56
+  },
+  "completedChecks": [
+    "Main:23/23 persisted exporter regressions",
+    "Nonauthor pass3:23/23 persisted tests,8/8 actual-function memory stream cases,5/5 credential-flag probes and syntax checks",
+    "Main:all366 payload files and decompressed log hashes,sizes,line counts;JSON parse;endpoint/token/personal-path/raw-hex scan;50MiB per-file ceiling",
+    "Main:144 archived JSON files,12301 numeric fields compared with local originals;no differences",
+    "Current generated tool-index361 entries checked;latency tool selected and executed through tool-run on the latest250-height window;results reconciled",
+    "Staged report-only scope checked;zero listener production files staged;git diff checks pass with narrowly declared artifact-whitespace attributes"
+  ],
+  "independentGeneratedArtifactAudit": "PASS:publication-review.json; original audit receipt SHA256 ffb081b2152da50c37673d6ef1273b8d457c35cda84252dd46d74a42d0669af3.326sourceartifacts/366payloads/60loglinecounts verified;235JSONcompared;lastlive3323249 numeric leaves and1182492 source identity leaves unchanged. No unexplained differences or unexpected unmanifested files.",
+  "archivedReviewChronology": "evidence/handoff-export-review-pass1.json is an earlier snapshot including rejected sanitizer probes. reviewer-regressions.json holds the final pass3 result with source receipt hash. Neither is a Solver performance approval.",
+  "formatNotes": [
+    "Logs retain every original logical line;shards roll over at64MiB before the next complete line,not a strict uncompressed64MiB cap;all produced compressed files are below50MiB",
+    "Redacted patch and harness copies are review artifacts,not directly runnable/applicable code snapshots",
+    "Report-local attributes preserve literal diff context blanks and one archived harness EOF without modifying their sealed bytes",
+    "Earlier partial export was moved intact to ignored local scratch storage after sanitizer fixes;it is not staged or published",
+    "Ready checkpoints,full price tables,compiled binaries and repeated runtime checkouts remain local and are explicitly listed as omitted"
+  ],
+  "productionCodeState": {
+    "baseCommit": "baca79b03384a93fb656482c09a5e4de026f5fbc",
+    "trackedDirtyFiles": 13,
+    "originalTrackedPatchSha256": "793568b69413b2778fcdb63b9199c9528abfddda43fb7e5019e58c3ae94d7427",
+    "v4Draft": "Unintegrated local-state.ts;missing local-math.ts;no tests or source-bound quote parity performed for this draft"
+  },
+  "verdict": "Evidence sharing only;whole-Solver/live latency improvement remains unproved"
+}

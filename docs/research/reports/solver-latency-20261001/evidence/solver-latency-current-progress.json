@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "status": "partially validated; resumed V4 Family implementation after explicit user approval; source-storage slice remains closed; no new live latency proof",
+  "latestAuthorization": "<redacted-secret>",
+  "inProgress": {
+    "slice": "Generic source-storage raw-read sharing completed implementation, independent code review, regression/build and recorded real-route validation",
+    "authority": "Within original Solver optimization; independent of pending V4 Family scope question",
+    "externalCuThisSlice": 0,
+    "newEvidence": "source-storage-offline-2: all4ABBA complete; storage108/9/9/108,9unique words;12amounts/8GSS/24hops and all per-hop outputs/selected candidates/resolved plans exact; full ordered prefix and zero residual work. ExternalCU0. Not a live timing result.",
+    "patchNote": "currentImplementation.trackedPatchSha256 now binds all13currentdirtyfiles; retained11-file pre-slice patch remains0621702191948ea1142792abc84f65ab1d864dd6b6cc68cf6dbbeedd540a78b7",
+    "evidence": [
+      "source-storage-main-review.json",
+      "source-storage-offline-main-assessment.json",
+      "source-storage-offline-reconciliation.json"
+    ],
+    "independentResultReview": "source-storage-offline-result-review.json:54independent assertions pass;638physical items mapped to exact original recorded request/result hashes; all input/runtime files unchanged",
+    "nextScope": "Generic storage slice is closed at resource/parity level. Existing user question about V4 Family local amount quotation remains unanswered. That is the next measured dominant-bottleneck direction; do not implement without scope confirmation. No further appropriate direct-provider repeated-state timing workload established. Do not launch another blind250-block run or label fork-local storage cache timing as live RPC speedup."
+  },
+  "currentImplementation": {
+    "root": "<repo>",
+    "branch": "codex/s1-unified-adapter-architecture-impl",
+    "baseCommit": "baca79b03384a93fb656482c09a5e4de026f5fbc",
+    "trackedPatchSha256": "793568b69413b2778fcdb63b9199c9528abfddda43fb7e5019e58c3ae94d7427",
+    "binarySha256": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661",
+    "uncommitted": true,
+    "externalProcessesRunning": false
+  },
+  "completed": {
+    "policy": "Verified logical-instance uniqueness omits route-prefix state; any repeated instance retains all ordered prior handles from hop0. Different pools behind one manager are not repetitions.",
+    "controls": "P=.002 ETH,3x3,max6hops,repeatTokenOff,repeatPoolOn,workers16 and search quality/deadlines unchanged; mandatory final sim/repayment/EV unchanged.",
+    "controlledNoRepeat": {
+      "baseline": "Both30s attempts cancelled before completing Solver",
+      "candidateSolverMs": [
+        5828.644,
+        4603.942333
+      ],
+      "candidateWork": "12 amount points/8GSS/24hopquotes, both complete",
+      "parity": "6 common completed hopquote outputs exact; baseline incomplete, no full-output equivalence",
+      "evidence": "same-input-primary-2-assessment.json"
+    },
+    "restorationChecks": {
+      "rust": "84/84",
+      "clientAndSolver": "265/265, no skips or cancellations",
+      "releaseBuild": "pass, exact frozen baseline binary",
+      "diffCheck": "pass"
+    }
+  },
+  "live": {
+    "window": "26090582..26090831 (250heights)",
+    "solverEnteredWindows": 211,
+    "wholeSolverCohortsCompleted": 0,
+    "solverWindowP50Ms": 4472.096833000192,
+    "exactRpcUnionP50Ms": 3679,
+    "unattributedRemainderP50Ms": 791,
+    "orderedPrefixRoutes": 0,
+    "solverRustRequests": 0,
+    "routeAttempts": 5206,
+    "completedRouteAttempts": 1851,
+    "abortedRouteAttempts": 3355,
+    "finalSimAttempts": 169,
+    "finalSimSucceeded": 0,
+    "qualification": "All interrupted/censored outcomes retained; this is not an uncensored causal same-block live speedup comparison.",
+    "evidence": [
+      "third250-final.json",
+      "third250-quote-waves.json",
+      "third250-reconciliation.json"
+    ]
+  },
+  "latestRejected": {
+    "name": "warm-session prefix-key prefetch",
+    "status": "ABBA failed and candidate withdrawn",
+    "outcomes": [
+      "A30s cancelled",
+      "B15.653s prefix non-success",
+      "B14.326s prefix non-success",
+      "A30s cancelled"
+    ],
+    "completedHops": [
+      2,
+      2,
+      2,
+      2
+    ],
+    "solverEntries": 0,
+    "evidence": [
+      "warm-prefix-manual-assessment.json",
+      "warm-prefix-result-review.json",
+      "warm-prefix-reconciliation.json"
+    ],
+    "noRerun": true
+  },
+  "open": {
+    "repeatedPrefix": "No successful complete repeated remote-prefix Solver speedup established; chosen six-hop diagnostic is now unsuitable for unqualified performance claims.",
+    "wholeLive": "No whole-Solver live completion improvement established; ordinary amount quote RPC dominates measured windows.",
+    "scopeDecision": "Requested user approval before moving into V4 Family local amount quotation. Not authorized by diagnostic artifacts and not started.",
+    "sampleInventory": "SAT1/xWin complete positive local-trial-state controls, neither exercises Rust prefix. xWin current production Solver recorded-response test passed with99fewer storage reads and exact outputs. Real remote-prefix whole-Solver speedup remains unproved."
+  }
+}

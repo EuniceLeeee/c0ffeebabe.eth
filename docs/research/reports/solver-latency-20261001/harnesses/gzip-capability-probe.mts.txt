@@ -1,0 +1,148 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
+import { Agent, request } from 'node:https';
+import { gunzipSync } from 'node:zlib';
+import { performance } from 'node:perf_hooks';
+import { uniV3StateRequestData, resolveUniV3StateReader } from './prefix-pair-runtime-complete/listener/src/searcher/venues/swaps/univ3-family/state-reader.ts';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repo = path.resolve(here, '../..');
+const sha = (x: string | Buffer) => createHash('sha256').update(x).digest('hex');
+const source = { number: 26029536,
+  hash: '0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06',
+  stateRoot: '0xa8c4eb4a5b7d2a90ee1ffa7ca44d1f90394210a46c77e4bf3fb76f68cfb64afe' };
+const bytes = fs.readFileSync(path.join(repo, 'logs/seven-p0002-repeat.6tTOwk/sat1-ready.json'));
+assert.equal(sha(bytes), '0bcbefca90fa703c30503f5d7f1994ca7a1932604cad124192099fb4ed882089');
+const ready = JSON.parse(bytes.toString('utf8'), (_, v) =>
+  v?.$durableType === 'bigint' ? BigInt(v.value) : v);
+const memo = Object.values(ready.verifiedMemos).find((v: any) =>
+  v.instanceKey === '0x1ac1a8feaaea1900c4166deeed0c11cc10669d36') as any;
+assert(memo);
+const to = resolveUniV3StateReader(memo.compiledDescriptor)!.address;
+const data = uniV3StateRequestData(memo.compiledDescriptor);
+const calldataSha256 = sha(Buffer.from(data.slice(2), 'hex'));
+assert.equal(calldataSha256, 'a7e62ebee7ebc7db897da50da196f4ffbc05c487c4f403fd2576eda15450a227');
+const payload = [{ jsonrpc: '2.0', id: 1, method: 'eth_call',
+  params: [{ to, data }, { blockHash: source.hash, requireCanonical: true }] }];
+const order = ['A', 'B', 'B', 'A'];
+const argv = process.argv.slice(2);
+assert(argv.length === 1 && ['--check', '--run'].includes(argv[0]));
+if (argv[0] === '--check') {
+  console.log(JSON.stringify({ offline: true, source, to, calldataSha256,
+    requestBytes: Buffer.byteLength(JSON.stringify(payload)), callsCap: 8, order }));
+} else {
+  const declarationPath = path.join(here, 'gzip-capability-1-declaration.json');
+  const resultPath = path.join(here, 'gzip-capability-1.json');
+  assert(!fs.existsSync(declarationPath) && !fs.existsSync(resultPath), 'never rerun/overwrite');
+  const endpoint = process.env.MAINNET_RPC_URL ?? '';
+  assert.equal(sha(endpoint), '860a9610cd135f044f125b2364ad22718483029de2022075cd8619cbd8ba6b4a');
+  assert.equal(new URL(endpoint).protocol, 'https:');
+  const declaration = { startedAt: new Date().toISOString(), source, order, callsCap: 8,
+    runnerSha256: sha(fs.readFileSync(fileURLToPath(import.meta.url))),
+    briefSha256: sha(fs.readFileSync(path.join(here, 'gzip-capability-brief.json'))),
+    payloadSha256: sha(JSON.stringify(payload)), calldataSha256,
+    endpointSha256: sha(endpoint), perRequestMs: 30000, retries: 0,
+    scope: 'Transport capability/byte parity only; no Solver/live speed claim.' };
+  fs.writeFileSync(declarationPath, JSON.stringify(declaration, null, 2)+'\n', { flag: 'wx', mode: 0o600 });
+  const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+  const sockets = new Set<any>();
+  let calls = 0;
+  async function rpc(body: any[], encoding: string | null) {
+    calls += body.length; assert(calls <= 8, 'read cap');
+    const rawRequest = Buffer.from(JSON.stringify(body));
+    const start = performance.now();
+    return new Promise<any>((resolve, reject) => {
+      let incoming: any, done = false, headersMs: number | null = null, firstByteMs: number | null = null;
+      let responseBytes = 0;
+      const finish = (err?: Error, value?: any) => {
+        if (done) return; done = true; clearTimeout(timer);
+        if (err) reject(err); else resolve(value);
+      };
+      const req = request(endpoint, { method: 'POST', agent, headers: {
+        'content-type': 'application/json', 'content-length': String(rawRequest.length),
+        connection: 'keep-alive', ...(encoding === null ? {} : { 'accept-encoding': encoding }),
+      } }, (res) => {
+        incoming = res; headersMs = performance.now()-start;
+        const chunks: Buffer[] = [];
+        res.on('data', (part: Buffer) => {
+          firstByteMs ??= performance.now()-start; responseBytes += part.length;
+          if (responseBytes > 64*1024*1024) {
+            req.destroy(); res.destroy(); finish(new Error('probe_response_cap')); return;
+          }
+          chunks.push(part);
+        });
+        res.once('aborted', () => finish(new Error('response_aborted')));
+        res.once('error', () => finish(new Error('response_error')));
+        res.once('end', () => {
+          if (done) return;
+          const bodyEndMs = performance.now()-start;
+          try {
+            assert.equal(res.statusCode, 200, 'http status');
+            const contentEncoding = String(res.headers['content-encoding'] ?? 'identity').toLowerCase();
+            assert(['identity','gzip'].includes(contentEncoding));
+            const wire = Buffer.concat(chunks);
+            const decoded = contentEncoding === 'gzip'
+              ? gunzipSync(wire, { maxOutputLength: 64*1024*1024 }) : wire;
+            const parsed = JSON.parse(decoded.toString('utf8'));
+            assert(Array.isArray(parsed) && parsed.length === body.length);
+            for (const item of body) {
+              const matches = parsed.filter((v: any) => v.id === item.id);
+              assert.equal(matches.length,1); assert(!matches[0].error); assert('result' in matches[0]);
+            }
+            finish(undefined, { parsed, rawSha256: sha(decoded), decodedBytes: decoded.length,
+              resultHashes: parsed.map((v: any) => ({ id:v.id,sha256:sha(JSON.stringify(v.result)) })),
+              responseBytes, contentEncoding, headersMs, firstByteMs, bodyEndMs,
+              totalMs:performance.now()-start,reusedSocket:req.reusedSocket });
+          } catch { finish(new Error('response_validation')); }
+        });
+      });
+      const timer = setTimeout(() => {
+        if (!incoming?.complete) { incoming?.destroy(); req.destroy(); }
+        finish(new Error('request_deadline'));
+      },30000);
+      req.on('socket',(s) => { sockets.add(s); s.once('close',()=>sockets.delete(s)); });
+      req.once('error', () => finish(new Error('request_error')));
+      req.end(rawRequest);
+    });
+  }
+  async function canonical() {
+    const read = await rpc([
+      { jsonrpc:'2.0',id:101,method:'eth_chainId',params:[] },
+      { jsonrpc:'2.0',id:102,method:'eth_getBlockByNumber',params:['0x'+source.number.toString(16),false] },
+    ], null);
+    assert.equal(read.parsed.find((r:any)=>r.id===101).result, '0x1');
+    const header = read.parsed.find((r:any)=>r.id===102).result;
+    assert.equal(header.hash,source.hash); assert.equal(header.stateRoot,source.stateRoot);
+    delete read.parsed; return read;
+  }
+  const report:any = { declarationSha256:sha(fs.readFileSync(declarationPath)), attempts:[],pre:null,post:null,
+    failure:null,calls:0,capabilityPass:false,allSocketsClosed:false };
+  try {
+    report.pre = await canonical();
+    for (const arm of order) {
+      const row:any = { arm };
+      report.attempts.push(row);
+      const value = await rpc(payload,arm==='B'?'gzip':null); delete value.parsed;
+      Object.assign(row,value);
+      assert.equal(row.rawSha256,report.attempts[0].rawSha256,'immediate response byte parity');
+    }
+    report.post = await canonical();
+    report.capabilityPass = new Set(report.attempts.map((r:any)=>r.rawSha256)).size===1 &&
+      report.attempts.filter((r:any)=>r.arm==='B').every((r:any)=>r.contentEncoding==='gzip');
+  } catch (e) {
+    report.failure = e instanceof assert.AssertionError ? 'integrity_assertion' : String((e as any)?.message ?? 'probe_error');
+    process.exitCode = 1;
+  } finally {
+    agent.destroy();
+    const drainStart = performance.now();
+    while (sockets.size && performance.now()-drainStart<5000) await new Promise(r=>setTimeout(r,10));
+    report.allSocketsClosed = sockets.size===0; report.calls=calls;
+    report.completedAt=new Date().toISOString();
+    if (!report.allSocketsClosed) process.exitCode=1;
+    fs.writeFileSync(resultPath,JSON.stringify(report,null,2)+'\n',{flag:'wx',mode:0o600});
+    console.log(JSON.stringify({ resultPath,capabilityPass:report.capabilityPass,calls,allSocketsClosed:report.allSocketsClosed,failure:report.failure }));
+  }
+}

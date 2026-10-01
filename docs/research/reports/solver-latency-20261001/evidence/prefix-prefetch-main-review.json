@@ -1,0 +1,25 @@
+{
+  "role": "non-author evaluator",
+  "author": "Mencius 01a0f250-e06b-7c23-bfec-995ec4aae807",
+  "sourceSha256": "d9236f900ecafa9f674d00f3cfcc49ccbaa4780b8977941859898a775a4589a6",
+  "binarySha256": "13ca5325831770bae0ff676ad8999a24a0a09b0da91c1d5455413bb698ca35cb",
+  "wholePatchSha256": "5b275d71c2b432e39d1386ce3ae9f866201a4481cd54d42402f51155d1e958c2",
+  "harnessSha256": "6f573dc0db97bef65bd823cf056f6bc58be7dfe46e4b1c5e4bb9e6c2513225b1",
+  "ran_gate": [
+    "Read complete production delta and4 added regression tests",
+    "Independently executed cargo test --offline --locked:69/69",
+    "Independently executed cargo build --release --offline --locked:pass; existing unused-function warning",
+    "git diff --check:pass",
+    "Paired harness offline self-test after adding task-local --spec option:pass"
+  ],
+  "findings": [
+    "Only already validated request-local executor target/code enters trace override; arbitrary cached code does not",
+    "Pinned seed_from_prestate still reads only keys; source account/code/storage values fetched with hash pin and source checks",
+    "Actual prefix execution, request overlay isolation, fatal latch and canonical postcheck retained",
+    "Legacy unpinned callers receive None; existing precheck-batch patch preserved",
+    "Separate --spec is restricted to this experiment directory; fixed shape/30s/order still asserted"
+  ],
+  "verdict": "implemented; safe for bounded paired diagnostic, latency not yet validated",
+  "decision": "Run4 P-only ABBA invocations once with unchanged30s limits; current batched binary A vs frozen new binary B. No live restart, finalsim, EV, signing, broadcast, commit or push.",
+  "risk": "Trace is optional and not a correctness oracle. Extra trace work can regress warm-path latency; retain every failure and measure before claiming improvement."
+}

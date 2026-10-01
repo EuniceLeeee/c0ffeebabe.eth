@@ -1,0 +1,19 @@
+{
+  "manualFirst": "gzip-capability-manual.json written after inspecting raw results and before index selection/execution.",
+  "capabilityQuery": [
+    "latency"
+  ],
+  "catalogCheck": "PASS361",
+  "manifest": "gzip-capability-tools.json",
+  "manifestSha256": "0dc537b2b429b50b417b163b9c91ad7837fb4a802c23ecd5102407e7214207ac",
+  "selectedSuccessfulToolIds": [
+    "analysis:blockscan-pass-latency"
+  ],
+  "executedExitCode": 0,
+  "reconciliation": "Canonical tool reports0live passes/ineligible because this is transport capability evidence, not a production pass. It does not claim gzip-phase coverage. Independent reviewer independently confirms identical152296 decoded bytes and~89.7% body reduction. No tool defect and no Solver/live performance acceptance.",
+  "review": "gzip-transport-review.json separateRawCapabilityReview",
+  "source": "26029536 pinned canonical pre/post",
+  "resultSha256": "9bb3d1995ded2708ce673a606236f42206bf76004c59b92a96b01e2fb68ed9ef",
+  "cu": "8read items,0 broadcast,provider billedCU unavailable",
+  "processes": "probe exited0 and all sockets closed"
+}

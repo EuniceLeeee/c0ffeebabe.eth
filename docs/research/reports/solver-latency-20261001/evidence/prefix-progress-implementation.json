@@ -1,0 +1,64 @@
+{
+  "status": "implemented; author edits frozen; independent main review pending",
+  "turnClass": "observability-only",
+  "searcherBehaviorChange": false,
+  "externalRpcCalls": 0,
+  "experimentRun": false,
+  "basePatchSha256": "071044e25429a6ac9142b6751a068dee08fae15f70f9061456b978436b52b641",
+  "briefSha256": "39bf8b18ee7684d8980f48c6473178d3239f8e7992c479711d428b94157773da",
+  "trackedDiffSha256": "0621702191948ea1142792abc84f65ab1d864dd6b6cc68cf6dbbeedd540a78b7",
+  "sourceSha256": {
+    "listener/revm-sim/src/main.rs": "c0c05e20bc4c2b571794bd37a592232c6f15dd1e2f445d6f68f0de16f9a29ba6",
+    "listener/revm-sim/src/diagnostic.rs": "8aaef92ce3ebbebfc8588c255d34ec528b63f25affc5d3a8c2c05ec5721d9e1e"
+  },
+  "release": {
+    "path": "listener/revm-sim/target/release/revm-sim",
+    "sha256": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661"
+  },
+  "delta": {
+    "mainProduction": "Exactly two permitted hooks: numeric identity binding before dispatch and RAII scope at the existing physical-attempt counter location. Verified all other pre-test-module main.rs bytes against retained prefix-pair-binary/main.rs after reversing those two hooks in memory.",
+    "diagnostics": "Existing SEARCHER_STATE_LATENCY_DIAGNOSTICS gate. New strict-progress interval/phase/attempt begin/end records; numeric source/request IDs and explicit pair-first/bridge/second ownership. No endpoint, epoch, addresses, calldata, responses or error strings.",
+    "bounds": "At most 127 ordinary records plus exactly one truncation marker per scalar or pair interval; maximum 384 per pair. Histogram inspects at most 128 logical items using existing allowlisted method labels, with sample count/completeness. Disabled and exhausted streams do not scan the RPC body. Terminal records/counters remain separate and untruncated.",
+    "semantics": "RPC scope begins after existing delay and ends on success, error or continue before the next delay. End means scope ended, never success. Sequence and attempt IDs are interval-local; correlate with PID and the full numeric identity. Missing ends/terminal records or truncation remain censored/unknown.",
+    "preserved": "Source pre/post checks, retries, scalar/pair authority, execution/funding/cache isolation, fatal policy, TypeScript and existing uncommitted changes. No new configuration or scheduling."
+  },
+  "checks": [
+    {
+      "command": "cargo test --offline --locked strict_progress -- --nocapture",
+      "result": "5/5 passed before held-response test addition"
+    },
+    {
+      "command": "cargo test --offline --locked",
+      "result": "final settled revision: 84/84 passed, zero failed/ignored, 16.18s"
+    },
+    {
+      "command": "cargo build --release --offline --locked",
+      "result": "passed; existing account_specific_storage_candidates dead-code warning only"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "check": "new regression coverage",
+      "result": "disabled/no-scan; nested exclusive counters; scalar/pair/bridge identity; cap/truncation; bounded sanitized methods; old guard cannot end in a new request; broken sink error ignored; real send_json success/decode error/disconnect retry/fatal with on/off output+RPC-order parity; attempt-begin available during held loopback response"
+    },
+    {
+      "check": "existing strict scalar fixtures strengthened",
+      "result": "first/reused sessions also assert progress identity, physical counts and disabled silence; ordinary/fatal outcomes remain equal"
+    }
+  ],
+  "caveats": [
+    "Opt-in stderr observation adds overhead; this is not a latency improvement or acceptance claim.",
+    "A blocked stderr sink can delay observation/execution; returned write errors are ignored, with no added asynchronous logger.",
+    "Main owns independent full Rust and real TS-to-Rust loopback gates, binary freeze and any separately authorized diagnostic."
+  ],
+  "generation": "Native generator continuation; previously recorded unsupported-model CLI failure/fallback preserved. No CLI retry or global configuration edit.",
+  "notDone": [
+    "external RPC or credentials",
+    "live or experiment",
+    "TypeScript/snapshot changes",
+    "commits/push",
+    "scheduling"
+  ]
+}

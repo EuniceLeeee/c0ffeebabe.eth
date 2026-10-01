@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "reviewPass": 2,
+  "classification": "tooling_defect",
+  "status": "implemented; offline regression failure-to-pass observed; independent main review pending",
+  "modifiedHarness": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-timing.mts",
+  "harnessBeforeSha256": "06b2567a19d54d640ef96bf3de01a4ec3876c0e375798bdcdf1651d31d06b59e",
+  "harnessAfterSha256": "99ef8d736d603c6a462e6a97319c101cdb213c827cc2b7b075343b210a334e06",
+  "cause": "The harness imported the production catalog but omitted main.ts's side-effect shared/adapters/index bootstrap. Each isolated runtime owns its own compiler registry; both require the same production registration entrypoint.",
+  "correction": "loadRuntime(root) first imports root/listener/src/shared/adapters/index.ts. No manual registration, substitute adapters, production changes, snapshot changes, policy changes, budget changes, or spec changes.",
+  "evidenceDisposition": {
+    "originalRun": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-primary-1",
+    "observed": "Both A rank477 invocations failed at hop1 with prefixLength1 and exact-declaration:unknown adapter: actual-amount-flow.",
+    "interpretation": "Harness bootstrap failure, not a production finding. Primary-1 is not a valid causal prefix-policy latency comparison. Original evidence remains unchanged.",
+    "correctedTimingRun": "not-run"
+  },
+  "regression": {
+    "command": "TSX_DISABLE_CACHE=1 node --import ./listener/node_modules/tsx/dist/loader.mjs logs/solver-prefix-policy-20260930.MKk8Vk/same-input-timing.mts --self-test --baseline-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/policy-baseline.7QGiBX",
+    "cwd": "<repo>",
+    "preCorrection": {
+      "exitCode": 1,
+      "observedReason": "exact-declaration:unknown adapter: actual-amount-flow",
+      "phase": "second exact issuance with one sealed prior quote",
+      "note": "Executed the completed regression before adding the bootstrap import."
+    },
+    "postCorrection": {
+      "exitCode": 0,
+      "checks": [
+        "network/process fence",
+        "prefix rules",
+        "concurrent attribution",
+        "real strict-session nonempty prefix compilation",
+        "full production registry identity/descriptor coverage",
+        "isolated registries"
+      ]
+    },
+    "construction": "Rehydrate the unchanged saved Sat1 Ready; use its rank8 first/last V4 directions only as an explicitly synthetic compiler regression. Real StrictProductionRuntimeRoot/session, central runtime, quote issuers, Family execution fragments and prefix compiler are unchanged. In-memory ABI responses are supplied only at provider/simulatePrefix boundaries. No graph addition, custom action adapter, RPC, EVM execution, Solver search or historical quote claim.",
+    "assertions": [
+      "Exactly two initial source-provider fixture reads and two subsequent prefix fixture reads; no source-read fallback after prefix binding.",
+      "Prefix has nonempty executable bytes, actual-amount-flow opcode0x09, zero tolerance and one authenticated prior step.",
+      "Both prefix reads receive identical calldata; each isolated runtime compiles identical1092-byte calldata.",
+      "Registry membership exactly equals that runtime's PRODUCTION_STRICT_SHADOW_ACTION_ADAPTERS; each registered object has same-runtime identity and descriptor coverage.",
+      "actual-amount-flow, actual-amount-step and actual-amount-case are registered wrappers; runtime registries are distinct."
+    ],
+    "registeredActionIds": [
+      "actual-amount-case",
+      "actual-amount-flow",
+      "actual-amount-step",
+      "angstrom-v4-swap",
+      "assert-balance",
+      "astra-multitoken-change",
+      "balancer-flash",
+      "curve-exchange",
+      "curve-exchange-nr",
+      "curve-exchange-plain",
+      "curve-exchange-received-uint",
+      "curve-exchange-uint",
+      "curve-exchange-underlying",
+      "dodo-v2-swap",
+      "eigenpie-deposit-asset",
+      "ella-buy-token",
+      "ella-sell-token",
+      "erc20-approve",
+      "erc20-transfer",
+      "erc4626-deposit",
+      "erc4626-redeem",
+      "erc4626-redeem-silo",
+      "ethertoken-native-redeem",
+      "fluid-dex-swap",
+      "goldx-mint",
+      "metronome-hgusdc-exit",
+      "metronome-synth-swap",
+      "mooniswap-swap-for",
+      "morpho-flash",
+      "psm",
+      "rocksolid-sync-deposit",
+      "self-burn-native-redeem",
+      "token-conversion-mint",
+      "token-conversion-redeem",
+      "token-migration",
+      "univ1-exact-input",
+      "univ2-swap",
+      "univ3-swap",
+      "univ4-fee-hook-settle",
+      "univ4-fee-hook-settle-value",
+      "univ4-fee-hook-swap",
+      "univ4-fee-hook-sync",
+      "univ4-fee-hook-take",
+      "univ4-fee-hook-unlock",
+      "univ4-settle",
+      "univ4-settle-value",
+      "univ4-swap",
+      "univ4-sync",
+      "univ4-take",
+      "univ4-unlock",
+      "weth-deposit-value",
+      "weth-withdraw-amount",
+      "wsteth-unwrap",
+      "wsteth-wrap"
+    ],
+    "runtimes": [
+      {
+        "runtime": "<repo>/logs/live-solver-skip-settle-250.7MsLu8/runtime",
+        "wrappers": [
+          "actual-amount-flow",
+          "actual-amount-step",
+          "actual-amount-case"
+        ],
+        "sourceReads": 2,
+        "prefixReads": 2,
+        "compiledPrefixSha256": "1de79d731a51d2e247947299debba7c22c6c2bcebe5728b096572dc02d4eb58e",
+        "compiledPrefixBytes": 1092,
+        "scope": "offline registration/compilation only; synthetic transport responses; no RPC or EVM execution",
+        "registeredActionCount": 54
+      },
+      {
+        "runtime": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/policy-baseline.7QGiBX",
+        "wrappers": [
+          "actual-amount-flow",
+          "actual-amount-step",
+          "actual-amount-case"
+        ],
+        "sourceReads": 2,
+        "prefixReads": 2,
+        "compiledPrefixSha256": "1de79d731a51d2e247947299debba7c22c6c2bcebe5728b096572dc02d4eb58e",
+        "compiledPrefixBytes": 1092,
+        "scope": "offline registration/compilation only; synthetic transport responses; no RPC or EVM execution",
+        "registeredActionCount": 54
+      }
+    ]
+  },
+  "additionalChecks": {
+    "strictTypeScriptNoEmitDiagnostics": 0,
+    "gitDiffCheck": "passed",
+    "trackedPatchSha256Unchanged": "ec11606164347dc9f01ab334765b102a15758e8f5bab25cdb9147b7dc20a42e5"
+  },
+  "preserved": [
+    {
+      "path": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-timing.json",
+      "sha256": "d85ba640e539427590adef1817c85e2e5b1754222cd19e8b747a071a9afc495f"
+    },
+    {
+      "path": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-primary-1/declaration.json",
+      "sha256": "e6103043a4ce3e811d965c09ec6d0838be8480ec07f41619c7de46ccbb10be40"
+    },
+    {
+      "path": "logs/solver-prefix-policy-20260930.MKk8Vk/same-input-primary-1/results.json",
+      "sha256": "796befa96b2a146e5508759bd194e1a3740207809182a6ec3d93b5f1504d7980"
+    }
+  ],
+  "safety": {
+    "rpcCalls": 0,
+    "simulatorLaunches": 0,
+    "credentialOrEnvironmentFileAccess": false,
+    "liveProcessOperations": false,
+    "productionOrSnapshotWrites": false,
+    "commits": false
+  },
+  "limitations": [
+    "This is a bootstrap/registration compilation regression only, not on-chain quote, EVM execution, profitability or latency evidence.",
+    "The synthetic two-direction test is not represented as natural discovery or as execution of the full saved rank8 route.",
+    "No primary or optional timing rerun was performed. Main independent review remains required.",
+    "Existing transport-retry caveat and all experiment bounds remain unchanged; no codify commit under current no-commit authorization."
+  ]
+}

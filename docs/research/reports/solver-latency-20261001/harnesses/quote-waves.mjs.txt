@@ -1,0 +1,92 @@
+// Read-only timing decomposition. No inferred completion for cancelled work.
+import {createReadStream, statSync, writeFileSync} from 'node:fs';
+import {createInterface} from 'node:readline';
+import {createHash} from 'node:crypto';
+import {resolve} from 'node:path';
+const [dirArg, fromArg, toArg, outArg] = process.argv.slice(2);
+const dir = resolve(dirArg), from = Number(fromArg), to = Number(toArg);
+if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || to < from) throw Error('invalid window');
+const source = resolve(dir, 'live.log'), bytes = statSync(source).size;
+const input = createReadStream(source, {end: bytes - 1}), digest = createHash('sha256');
+input.on('data', chunk => digest.update(chunk));
+const timings = [], batches = [], calls = [], routes = [], stats = new Map();
+const wanted = b => b >= from && b <= to;
+for await (const line of createInterface({input, crlfDelay: Infinity})) {
+  let kind;
+  if (line.startsWith('[searcher/quote-batch-timing] ')) kind = 'batch';
+  else if (line.startsWith('[strict-eth-call-timing] ')) kind = 'call';
+  else if (line.startsWith('[searcher/solver-route-timing] ')) kind = 'route';
+  else if (line.startsWith('[searcher/blockscan-exact-quote-stats-final] ')) kind = 'stats';
+  else if (line.includes('"type":"block_scan_timing"')) kind = 'timing';
+  else continue;
+  let row;
+  try { row = JSON.parse(line.slice(line.indexOf('{'))); } catch { continue; }
+  if (kind === 'batch' && row.lane === 'exact') batches.push(row);
+  if (kind === 'call' && row.phase === 'completed' && wanted(row.sourceBlock)) calls.push(row);
+  if (kind === 'route' && wanted(row.sourceBlock)) routes.push(row);
+  if (kind === 'stats' && wanted(row.block)) stats.set(row.block, row);
+  if (kind === 'timing' && wanted(row.source_block) && !row.startup_warm) timings.push(row);
+}
+const quantiles = values => {
+  const a = values.filter(Number.isFinite).sort((a, b) => a - b);
+  return {n: a.length, p50: a[Math.ceil(a.length * .5) - 1] ?? null,
+    p95: a[Math.ceil(a.length * .95) - 1] ?? null, max: a.at(-1) ?? null};
+};
+function union(intervals) {
+  let total = 0, end = -Infinity;
+  for (const [a, b] of intervals.sort((a, b) => a[0] - b[0])) {
+    total += Math.max(0, b - Math.max(end, a)); end = Math.max(end, b);
+  }
+  return total;
+}
+const rows = [], selectedBatches = [], byFamily = new Map();
+for (const t of timings) {
+  const start = t.first_solver_started_at_ms, end = t.stages?.planner_solver?.finished_at_ms;
+  if (start == null || end == null || end < start) continue;
+  const bs = batches.filter(b => b.sourceBlockHash === t.exact_source_block_hash &&
+    b.startedAtMs < end && b.startedAtMs + b.wallMs > start);
+  selectedBatches.push(...bs);
+  const overlap = union(bs.map(b => [Math.max(start, b.startedAtMs), Math.min(end, b.startedAtMs + b.wallMs)]));
+  const s = stats.get(t.source_block);
+  rows.push({block: t.source_block, stageStatus: t.stages.planner_solver.status,
+    solverWallMs: t.planner_solver_detail?.solverWallMs,
+    observedWindowMs: end - start, exactTransportCoveredMs: overlap,
+    notCoveredByExactTransportMs: end - start - overlap,
+    batches: bs.length, calls: s?.totalCalls, memoHits: s?.memoHits,
+    peakInFlightBatches: s?.peakInFlightBatches,
+    permitQueueWaitMs: s?.transportQueueWaitMs,
+    plans: t.planner_solver_detail?.solverPlans,
+    amountPoints: t.planner_solver_detail?.solverAmountPoints,
+    hopExactCalls: t.planner_solver_detail?.solverHopExactCalls});
+  for (const c of calls.filter(c => c.sourceBlock === t.source_block && c.startedAtMs >= start && c.startedAtMs < end)) {
+    const key = `${c.familyId}|${c.requestId}`;
+    if (!byFamily.has(key)) byFamily.set(key, []);
+    byFamily.get(key).push(c);
+  }
+}
+const fields = ['solverWallMs', 'observedWindowMs', 'exactTransportCoveredMs',
+  'notCoveredByExactTransportMs', 'batches', 'calls', 'memoHits', 'peakInFlightBatches',
+  'permitQueueWaitMs', 'plans', 'amountPoints', 'hopExactCalls'];
+const cohorts = [...new Set(routes.map(r => r.quoteMode))].map(mode => {
+  const rs = routes.filter(r => r.quoteMode === mode), outcomes = {};
+  for (const r of rs) outcomes[r.outcome] = (outcomes[r.outcome] ?? 0) + 1;
+  return {mode, n: rs.length, outcomes, aborted: rs.filter(r => r.aborted).length,
+    allWallMs: quantiles(rs.map(r => r.wallMs)),
+    nonAbortedWallMs: quantiles(rs.filter(r => !r.aborted).map(r => r.wallMs)),
+    amounts: quantiles(rs.map(r => r.amountPoints)), hops: quantiles(rs.map(r => r.hopExactCalls))};
+});
+const result = {dir, sourceBytes: bytes, sourceSha256: digest.digest('hex'),
+  declaredWindow: {from, to}, observedBlocks: rows.length,
+  definitions: {quantile: 'nearest rank',
+    exactTransportCoveredMs: 'union of exact-lane physical RPC intervals clipped to each Solver wall window; not a sum across overlapping requests',
+    notCoveredByExactTransportMs: 'unattributed remainder; includes local work, scheduling, other I/O and cancellation/drain; NOT asserted to be CPU time',
+    limitations: 'unpaired live diagnostic; cancelled/failed blocks retained; route wall timing exists only in second snapshot'},
+  summary: Object.fromEntries(fields.map(k => [k, quantiles(rows.map(r => r[k]))])),
+  batchResponseMs: quantiles(selectedBatches.map(b => b.wallMs)),
+  requestToHeadersMs: quantiles(selectedBatches.map(b => b.http?.responseHeadersAtMs - b.startedAtMs)),
+  familyCalls: [...byFamily].map(([key, cs]) => ({key, n: cs.length,
+    aborted: cs.filter(c => c.aborted).length, wallMs: quantiles(cs.map(c => c.wallMs))})).sort((a,b) => b.n - a.n),
+  cohorts, rows};
+if (outArg) writeFileSync(resolve(outArg), JSON.stringify(result, null, 2) + '\n', {flag:'wx',mode:0o600});
+const {rows: ignored, ...summary} = result;
+console.log(JSON.stringify(summary, null, 2));

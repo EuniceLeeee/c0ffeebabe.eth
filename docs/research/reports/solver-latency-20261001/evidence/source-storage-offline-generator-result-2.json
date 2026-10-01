@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "reviewPass": 2,
+  "status": "harness repair implemented and sealed; awaiting main review; offline-2 not run",
+  "searcher_behavior_change": "no; ignored harness socket cleanup only",
+  "harness": {
+    "path": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline.mts",
+    "sha256": "013318f162ef7a6771df269d0ddb16f5bbfc71fdd28ab2fc73dfa0228cbfa9ff",
+    "previousSha256": "45e0f55cdee975865a39dd44b1b4004ce6b7d66ca897c63f7c6d7d7dc510e949"
+  },
+  "previousEvidence": {
+    "declaration": {
+      "path": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-1/declaration.json",
+      "sha256": "0f8d81be8b841f131d6de52f993174cb205cc42420b69677572ebf6300e9060c"
+    },
+    "results": {
+      "path": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-1/results.json",
+      "sha256": "5c6139f1be8d91a6d7a6473031149fc4902b599ed96ba62391cc75637b082f23"
+    },
+    "preserved": true
+  },
+  "finding": {
+    "originalStatus": "failed after first A; remaining B/B/A not-run-after-failure",
+    "cause": "server.close callback can resolve before owned socket close events remove sockets from the Set; the original assertion ran during that gap",
+    "reproduction": {
+      "node": "v26.0.0",
+      "transport": "owned ephemeral 127.0.0.1 HTTP listener and keep-alive client only",
+      "socketsBefore": 1,
+      "socketsAtServerCloseCallback": 1,
+      "socketsAfterCloseEvents": 0,
+      "eventOrder": [
+        "server-close",
+        "socket-close"
+      ]
+    },
+    "originalA": {
+      "amountPoints": 12,
+      "gssPoints": 8,
+      "hopExactCalls": 24,
+      "allHopsQuoted": true,
+      "prefixes": "12 first hops length0; 12 second hops length1",
+      "canonicalBefore": true,
+      "canonicalAfter": true,
+      "sourceFences": 3676,
+      "physicalRpcItems": 209,
+      "physicalByPhase": {
+        "preparation": {
+          "eth_chainId": 1,
+          "eth_getBlockByNumber": 1,
+          "eth_call": 1
+        },
+        "solver": {
+          "eth_getCode": 18,
+          "eth_getStorageAt": 108,
+          "eth_call": 78
+        },
+        "postcheck": {
+          "eth_chainId": 1,
+          "eth_getBlockByNumber": 1
+        }
+      },
+      "best": {
+        "inputRaw": "5538803",
+        "outputRaw": "6966038",
+        "quoteProfitRaw": "1427235",
+        "profitToken": "USDC",
+        "resolvedPlanSha256": "c4437bab0511e9bb3b7c7fcb6b9523774cfde53d8ca22bf761814c35f1143aae"
+      },
+      "drain": "pending0, activeHttp0, backend pending/live/transports/batches0 and scheduler active/queued0; sockets were not recorded in old results, but the only remaining truthy drain condition is sockets.size"
+    },
+    "interpretation": "No cross-arm parity or storage-reduction verdict is possible from offline-1; failed cleanup evidence retained, not reclassified as a pass."
+  },
+  "delta": [
+    "Subscribe to each owned socket close event before closeIdleConnections/server.close/destroy.",
+    "Wait for both server-close callback and all owned socket close events, with fixed1000ms socket-cleanup cap.",
+    "Timeout marks attempt failed; retain all existing zero-work assertions including sockets.size.",
+    "Record socketsRemaining and declare socketCleanupBudgetMs; deny additional connections at cleanup entry.",
+    "Default new write-once output is source-storage-offline-2. No replay/measurement was executed."
+  ],
+  "scopeProof": "Reversing only the listed harness edits in memory reproduces exact old runner SHA45e0f55c; source/search/runtime/recording semantics unchanged.",
+  "checks": [
+    {
+      "name": "independent original close-event race reproduction",
+      "result": "reproduced"
+    },
+    {
+      "name": "regressions against helper extracted from exact current harness and TypeScript-transpiled in memory",
+      "passed": 6,
+      "failed": 0,
+      "cases": [
+        "zero owned sockets",
+        "one real loopback socket",
+        "three real loopback sockets",
+        "destroy already requested but close event pending",
+        "server callback before delayed socket close does not settle helper",
+        "missing close event rejects after fixed1000ms without clearing tracked socket"
+      ]
+    },
+    {
+      "name": "standalone NodeNext harness typecheck",
+      "exit": 0
+    },
+    {
+      "name": "--check against both frozen runtimes",
+      "exit": 0,
+      "recordings": {
+        "acceptedKeys": 221,
+        "readRows": 1417,
+        "diagnosticRows": 84,
+        "ignoredRows": 64,
+        "conflicts": 0
+      }
+    },
+    {
+      "name": "all original declaration input and runtime file hashes rechecked",
+      "result": "unchanged"
+    },
+    {
+      "name": "git diff --check",
+      "exit": 0
+    },
+    {
+      "name": "tracked diff hash",
+      "sha256": "793568b69413b2778fcdb63b9199c9528abfddda43fb7e5019e58c3ae94d7427",
+      "result": "unchanged"
+    },
+    {
+      "name": "new output existence",
+      "path": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-2",
+      "exists": false
+    }
+  ],
+  "workerPolicy": {
+    "frozenSolverSha256BothArms": "e9e069bfcea006cd7116633782f56f301b321ab0ea1e0a4ff984ec6c08a92ae4",
+    "anchor": "listener/src/searcher/solver/solver.ts:433-440",
+    "finding": "Both arms use unchanged production coarse-grid fan-out constant8. P is evaluated first; this fixture then has3 coarse points. Harness search.quoteConcurrency16 is checked saved metadata, not a SolveOptions setting and not evidence of16 Solver workers. Backend64x8 and shared scheduler12/4 remain explicitly configured."
+  },
+  "limitations": [
+    "No --run or external network/RPC/credential access; only local socket regressions and offline preflight.",
+    "No production, frozen snapshot, search/source/budget/config or existing evidence edits.",
+    "Not live latency, new natural discovery, final simulation, profitability or historical acceptance."
+  ],
+  "repairDeclaration": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/source-storage-offline-repair-declaration.json"
+}

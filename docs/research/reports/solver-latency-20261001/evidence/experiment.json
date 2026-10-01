@@ -1,0 +1,46 @@
+{
+  "scope": "local blockscan-only dry-run Solver latency diagnostic; not production deployment or formal paired Hermes acceptance",
+  "baselineCommit": "baca79b03384a93fb656482c09a5e4de026f5fbc",
+  "hypothesis": "Source-state quotes for routes without repeated verified instances avoid unnecessary route-prefix execution. Repeated instances retain the complete per-amount prefix.",
+  "quotePolicyLimitation": "Distinct pools can share state; independent final simulation remains authoritative. No claim of exact output equivalence for such dependent routes.",
+  "fixedConfig": {
+    "pWei": "2000000000000000",
+    "hopTokensPerStep": 3,
+    "hopPoolsPerPair": 3,
+    "maxHops": 6,
+    "allowRepeatedTokens": false,
+    "allowRepeatedPools": true,
+    "quoteWorkers": 16,
+    "broadcast": false,
+    "signing": false
+  },
+  "window": {
+    "sourceHeightsAfterCatchup": 250,
+    "wallLimitMs": 7200000,
+    "retainInterruptions": true
+  },
+  "metrics": [
+    "solverWallMs p50/p95 with all and completed-stage denominators",
+    "amountPoints",
+    "hopExactCalls",
+    "prefix vs source-state quote work",
+    "cancelled Solver blocks",
+    "RPC calls/memo hits",
+    "final sim success/revert",
+    "positive EV",
+    "whole-pass p50/p95"
+  ],
+  "controls": [
+    "same verified Graph and active Families",
+    "repeated logical instance preserves full prefix from hop zero",
+    "distinct manager pools stay distinct",
+    "no mixing across amount trials",
+    "final sim/repayment/EV unmodified",
+    "compiled simulator matches source and supports trialPrefix"
+  ],
+  "comparisonLimitations": [
+    "previous bad-binary live is not a valid profitability or causal speed baseline",
+    "non-overlapping historical live windows have different candidate composition",
+    "warmup/catchup excluded but cancellations retained and separately reported"
+  ]
+}

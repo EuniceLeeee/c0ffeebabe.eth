@@ -1,0 +1,26 @@
+{
+  "scope": "Second bounded Solver-prefix optimization after completed policy and first engine diagnostics",
+  "searcher_behavior_change": true,
+  "evidence": [
+    "same-input-primary-2-bootstrap-corrected/results.json",
+    "same-input-prefix-engine-1/results.json"
+  ],
+  "observed": "No-repeat old full-prefix first daemon service20.699s/22.869s, later warm services about1s; repeated rank8 P-only all4 attempts exceeded30s. strict_simulate_at explicitly skips trace prefetch whenever counterfactual executor code exists. Thus lazy source RPC reads are a concrete candidate cold-path cost, not yet quantified causal improvement.",
+  "hypothesis": "Allow source-pinned trace-key hints for counterfactual executor code to replace many lazy storage reads with bounded batch hydration. Preserve real execution and every source check.",
+  "allowed": [
+    "listener/revm-sim/src/main.rs implementation and colocated regressions",
+    "ignored experiment harness/evidence"
+  ],
+  "forbidden": [
+    "Family semantics",
+    "search count/range",
+    "live policy/deadlines",
+    "source validation removal",
+    "trace-returned values as pinned state",
+    "snapshot mutation",
+    "deploy/sign/broadcast/push/merge"
+  ],
+  "implementation": "Pass the already validated request-local executor bytecode as an explicit optional trace override; do not infer altered code from arbitrary cache entries. Existing unpinned callers pass None. Source-pinned prestate only identifies keys, warm_batch fetches source values. Treat hints as optional, retain fatal latch and postcheck. Keep full per-amount prefixes.",
+  "validation": "Full Rust tests/build plus non-author review; then new separately declared same-input rank8 P-only ABBA with unchanged30s budget, both arms conditional prefix policy and identical TS snapshots; old batched binary versus new prefetch binary. Retain cancellations and compare completed outputs before any timing claim. No extra250-block run unless a useful prefix result exists.",
+  "networkBudget": "No new network until reviewed. Four30s diagnostic invocations only; no retry of observations or budget widening. Existing bounded internal RPC retries remain disclosed."
+}

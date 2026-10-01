@@ -1,0 +1,17 @@
+{
+  "decision": "stop_owned_diagnostic_gracefully_for_confirmed_no_progress_mechanism",
+  "run": "logs/live-solver-batched-prefix-250.I49DJ4",
+  "scope": "local dry-run only; no deployment, broadcast, Ready rebuild or restart by elapsed-time guess",
+  "evidence": {
+    "lastObservedSource": 26090437,
+    "publishedSource": 26090328,
+    "unpublishedTransitions": 109,
+    "observedNonStartupPasses": 92,
+    "measuredWindowStarted": false,
+    "solverEntered": false,
+    "observedFailure": "source_head_superseded during state preparation",
+    "code": "advanceLatestHead cancels every non-startup periodic pass, including state preparation; unpublished catchup range therefore grows"
+  },
+  "interpretation": "A failed preparation run, not Solver batching performance evidence. Preserve all records. No source/RPC/EV guard is waived.",
+  "next": "Review minimal same-budget periodic preparation settlement separately from Solver changes before another frozen run. Stale search must still be skipped and new search must use current source."
+}

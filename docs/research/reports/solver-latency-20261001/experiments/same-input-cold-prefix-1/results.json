@@ -1,0 +1,2664 @@
+{
+  "declarationSha256": "13ed4709a8ab780a16a3c2f79cc5ca46adf5fb0eb2f87ccc11ace9b1a3113769",
+  "experiment": "prefix-engine",
+  "phase": "p-only",
+  "unchanged": {
+    "A": true,
+    "B": true,
+    "binaryA": true,
+    "binaryB": true,
+    "inputs": true,
+    "runner": true,
+    "spec": true,
+    "executorA": true,
+    "executorB": true
+  },
+  "results": [
+    {
+      "rank": 8,
+      "arm": "A",
+      "policy": "B",
+      "runtime": "<repo>/logs/live-solver-skip-settle-250.7MsLu8/runtime",
+      "binary": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-phases-binary.g1YRid/revm-sim",
+      "binarySha256": "e278d6530f806787588984cfe445dc2395cc0dec334a264441aa73fc4c5b0d5b",
+      "status": "cancelled",
+      "stage": "p-only",
+      "solverEntered": false,
+      "preparationMs": 2115.936333,
+      "solverMs": null,
+      "propagationMs": 27890.892625,
+      "drainMs": 1.716667000000598,
+      "hops": [
+        {
+          "id": 1,
+          "hop": 0,
+          "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f67da6fc5994c96d758f7f7bfee5562ed43b6d511a2959c17c751cd1e0e8d9903",
+          "amountIn": "5195442",
+          "prefixLength": 0,
+          "atMs": 2116.2987080000003,
+          "status": "quoted",
+          "amountOut": "1874606836943428",
+          "wallMs": 302.86033399999997
+        },
+        {
+          "id": 2,
+          "hop": 1,
+          "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+          "amountIn": "1874606836943428",
+          "prefixLength": 1,
+          "atMs": 2419.240666,
+          "status": "quoted",
+          "amountOut": "378740087141681349621649",
+          "wallMs": 17378.449417
+        },
+        {
+          "id": 3,
+          "hop": 2,
+          "canonicalEdgeId": "univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524",
+          "amountIn": "378740087141681349621649",
+          "prefixLength": 2,
+          "atMs": 19797.731333,
+          "status": "failed",
+          "error": "Error: strict exact unresolved for univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524: adapter-work:transport:scheduler-failure",
+          "wallMs": 10208.814125
+        }
+      ],
+      "prefixes": [
+        {
+          "exactCallId": 2,
+          "requestId": "exact-reserves",
+          "kind": "eth-call",
+          "atMs": 2427.29925,
+          "status": "returned",
+          "completion": "returned",
+          "wallMs": 13586.840499999998
+        },
+        {
+          "exactCallId": 2,
+          "requestId": "exact-input-balance",
+          "kind": "eth-call",
+          "atMs": 2428.237333,
+          "status": "returned",
+          "completion": "returned",
+          "wallMs": 15248.810708
+        },
+        {
+          "exactCallId": 2,
+          "requestId": "exact-output-balance",
+          "kind": "eth-call",
+          "atMs": 2428.315375,
+          "status": "returned",
+          "completion": "returned",
+          "wallMs": 17367.354625
+        },
+        {
+          "exactCallId": 3,
+          "requestId": "exact-reserves",
+          "kind": "eth-call",
+          "atMs": 19803.695041,
+          "status": "failed",
+          "error": "RevmStrictError: strict simulation cancelled",
+          "wallMs": 10202.021917000002
+        },
+        {
+          "exactCallId": 3,
+          "requestId": "exact-input-balance",
+          "kind": "eth-call",
+          "atMs": 19803.798416,
+          "status": "failed",
+          "error": "RevmStrictError: strict simulation cancelled",
+          "wallMs": 10201.922584
+        },
+        {
+          "exactCallId": 3,
+          "requestId": "exact-output-balance",
+          "kind": "eth-call",
+          "atMs": 19803.8525,
+          "status": "failed",
+          "error": "RevmStrictError: strict simulation cancelled",
+          "wallMs": 10201.869416999998
+        }
+      ],
+      "scheduler": [
+        {
+          "lane": "exact",
+          "exactCallId": null,
+          "atMs": 1714.5174580000003,
+          "queueMs": 0.22937499999989086,
+          "activeTotal": 1,
+          "activeByLane": {
+            "producer-critical": 0,
+            "producer-bulk": 0,
+            "exact": 1,
+            "discovery": 0
+          },
+          "serviceMs": 394.094333
+        },
+        {
+          "lane": "exact",
+          "exactCallId": null,
+          "atMs": 2122.27775,
+          "queueMs": 0.05870900000036272,
+          "activeTotal": 1,
+          "activeByLane": {
+            "producer-critical": 0,
+            "producer-bulk": 0,
+            "exact": 1,
+            "discovery": 0
+          },
+          "serviceMs": 293.20737499999996
+        }
+      ],
+      "directRpc": [
+        {
+          "id": 1,
+          "method": "eth_chainId",
+          "exactCallId": null,
+          "status": "returned",
+          "wallMs": 1064.5444590000002
+        },
+        {
+          "id": 2,
+          "method": "eth_getBlockByNumber",
+          "exactCallId": null,
+          "status": "returned",
+          "wallMs": 508.8267499999997
+        }
+      ],
+      "revmRequests": [
+        {
+          "exactCallId": 2,
+          "atMs": 2429.248541,
+          "requestKind": null,
+          "target": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6",
+          "ok": true,
+          "epoch": "3e19e5f6-65b4-462d-baf3-d027f295a3b0",
+          "requestId": "1",
+          "daemonLatencyMs": 12759,
+          "wallMs": 13584.315875000002
+        },
+        {
+          "exactCallId": 2,
+          "atMs": 2433.26775,
+          "requestKind": null,
+          "target": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "ok": true,
+          "epoch": "3e19e5f6-65b4-462d-baf3-d027f295a3b0",
+          "requestId": "2",
+          "daemonLatencyMs": 1044,
+          "wallMs": 15243.630040999999
+        },
+        {
+          "exactCallId": 2,
+          "atMs": 2434.663125,
+          "requestKind": null,
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "ok": true,
+          "epoch": "3e19e5f6-65b4-462d-baf3-d027f295a3b0",
+          "requestId": "3",
+          "daemonLatencyMs": 1690,
+          "wallMs": 17360.868417
+        },
+        {
+          "exactCallId": 3,
+          "atMs": 19803.959083,
+          "requestKind": null,
+          "target": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60",
+          "wallMs": 10201.234042
+        },
+        {
+          "exactCallId": 3,
+          "atMs": 19805.305916,
+          "requestKind": null,
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "wallMs": 10199.894832999998
+        },
+        {
+          "exactCallId": 3,
+          "atMs": 19806.690083,
+          "requestKind": null,
+          "target": "0xd9e795dfbc7d1dca53d181d613681f5c1effab65",
+          "wallMs": 10198.511917
+        }
+      ],
+      "revmTiming": [
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "3e19e5f6-65b4-462d-baf3-d027f295a3b0",
+          "requestId": "1",
+          "target": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6",
+          "enqueuedAtMs": 1790786166826,
+          "dispatchedAtMs": 1790786166826,
+          "queueMs": 0,
+          "serviceMs": 13582,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 12759
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "3e19e5f6-65b4-462d-baf3-d027f295a3b0",
+          "requestId": "2",
+          "target": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "enqueuedAtMs": 1790786166829,
+          "dispatchedAtMs": 1790786180408,
+          "queueMs": 13579,
+          "serviceMs": 1664,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 1044
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "3e19e5f6-65b4-462d-baf3-d027f295a3b0",
+          "requestId": "3",
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "enqueuedAtMs": 1790786166831,
+          "dispatchedAtMs": 1790786182072,
+          "queueMs": 15241,
+          "serviceMs": 2119,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 1690
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "3e19e5f6-65b4-462d-baf3-d027f295a3b0",
+          "requestId": "4",
+          "target": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60",
+          "enqueuedAtMs": 1790786184200,
+          "dispatchedAtMs": 1790786184200,
+          "queueMs": 0,
+          "serviceMs": 10199,
+          "status": "rejected",
+          "aborted": true
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "3e19e5f6-65b4-462d-baf3-d027f295a3b0",
+          "requestId": "5",
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "enqueuedAtMs": 1790786184202,
+          "dispatchedAtMs": null,
+          "queueMs": 10197,
+          "serviceMs": null,
+          "status": "rejected",
+          "aborted": true
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "3e19e5f6-65b4-462d-baf3-d027f295a3b0",
+          "requestId": "6",
+          "target": "0xd9e795dfbc7d1dca53d181d613681f5c1effab65",
+          "enqueuedAtMs": 1790786184203,
+          "dispatchedAtMs": null,
+          "queueMs": 10196,
+          "serviceMs": null,
+          "status": "rejected",
+          "aborted": true
+        }
+      ],
+      "revmProcesses": [
+        {
+          "pid": 45919,
+          "atMs": 2432.818166
+        }
+      ],
+      "suppressedLogLines": 24,
+      "timing": {
+        "quoteMs": 0,
+        "planBuildMs": 0,
+        "simMs": 0,
+        "amountPoints": 0,
+        "gssPoints": 0,
+        "hopExactCalls": 0
+      },
+      "ready": {
+        "instances": 170,
+        "funding": 2,
+        "graphEdges": 344,
+        "cutoff": {
+          "number": 26029537,
+          "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+          "generation": 26029537
+        },
+        "publicationSetHash": "a343dcb72689d751355dd59a5e44915da8dce6330363a371c294ff5ffaebddea",
+        "graphHash": "5ca7b6393686818a1c0a03e0797d78d915c5f291d5bab2fa68d8b97b8a9b525c",
+        "activations": [
+          {
+            "familyId": "custom-swap:angstrom-v4",
+            "sourceFile": "angstrom-v4.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ANGSTROM_V4_ENABLED"
+          },
+          {
+            "familyId": "protocol:astra-multitoken",
+            "sourceFile": "astra-multitoken.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ASTRA_MULTITOKEN_ENABLED"
+          },
+          {
+            "familyId": "flash-loan:balancer-v2",
+            "sourceFile": "balancer-flash.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_BALANCER_FLASH_ENABLED"
+          },
+          {
+            "familyId": "balancer-v3",
+            "sourceFile": "balancer-v3.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_BALANCER_V3_ENABLED"
+          },
+          {
+            "familyId": "curve-plain",
+            "sourceFile": "curve-plain.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED"
+          },
+          {
+            "familyId": "curve-underlying",
+            "sourceFile": "curve-underlying.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:dodo-v2",
+            "sourceFile": "dodo-v2.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_DODO_V2_ENABLED"
+          },
+          {
+            "familyId": "protocol:eigenpie",
+            "sourceFile": "eigenpie.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_EIGENPIE_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:ekubo-router-v1",
+            "sourceFile": "ekubo.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_EKUBO_ENABLED"
+          },
+          {
+            "familyId": "ella-exchange",
+            "sourceFile": "ella-exchange.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ELLA_EXCHANGE_ENABLED"
+          },
+          {
+            "familyId": "protocol:erc4626-silo-redeem",
+            "sourceFile": "erc4626-silo-redeem.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ERC4626_SILO_REDEEM_ENABLED"
+          },
+          {
+            "familyId": "protocol:erc4626",
+            "sourceFile": "erc4626.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ERC4626_ENABLED"
+          },
+          {
+            "familyId": "protocol:ethertoken-native-redeem",
+            "sourceFile": "ethertoken-native-redeem.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ETHERTOKEN_NATIVE_REDEEM_ENABLED"
+          },
+          {
+            "familyId": "credit:fluid",
+            "sourceFile": "fluid-credit.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED"
+          },
+          {
+            "familyId": "fluid-dex",
+            "sourceFile": "fluid-dex.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_FLUID_DEX_ENABLED"
+          },
+          {
+            "familyId": "protocol:goldx",
+            "sourceFile": "goldx.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_GOLDX_ENABLED"
+          },
+          {
+            "familyId": "protocol:metronome-hgusdc",
+            "sourceFile": "metronome-hgusdc.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_METRONOME_HGUSDC_ENABLED"
+          },
+          {
+            "familyId": "protocol:metronome-synth",
+            "sourceFile": "metronome-synth.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_METRONOME_SYNTH_ENABLED"
+          },
+          {
+            "familyId": "mooniswap",
+            "sourceFile": "mooniswap.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_MOONISWAP_ENABLED"
+          },
+          {
+            "familyId": "flash-loan:morpho",
+            "sourceFile": "morpho-flash.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED"
+          },
+          {
+            "familyId": "protocol:psm",
+            "sourceFile": "psm.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_PSM_ENABLED"
+          },
+          {
+            "familyId": "protocol:rocksolid",
+            "sourceFile": "rocksolid.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ROCKSOLID_ENABLED"
+          },
+          {
+            "familyId": "protocol:self-burn-native",
+            "sourceFile": "self-burn-native.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_SELF_BURN_NATIVE_ENABLED"
+          },
+          {
+            "familyId": "protocol:token-conversion",
+            "sourceFile": "token-conversion.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_TOKEN_CONVERSION_ENABLED"
+          },
+          {
+            "familyId": "protocol:token-migration",
+            "sourceFile": "token-migration.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_TOKEN_MIGRATION_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:uniswap-v1",
+            "sourceFile": "uniswap-v1.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNISWAP_V1_ENABLED"
+          },
+          {
+            "familyId": "univ2-standard",
+            "sourceFile": "univ2-standard.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV2_STANDARD_ENABLED"
+          },
+          {
+            "familyId": "univ3-standard",
+            "sourceFile": "univ3-standard.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV3_STANDARD_ENABLED"
+          },
+          {
+            "familyId": "univ4-fee-hook",
+            "sourceFile": "univ4-fee-hook.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED"
+          },
+          {
+            "familyId": "univ4",
+            "sourceFile": "univ4.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV4_ENABLED"
+          },
+          {
+            "familyId": "protocol:wsteth",
+            "sourceFile": "wsteth.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_WSTETH_ENABLED"
+          }
+        ],
+        "cases": [
+          {
+            "rank": 477,
+            "P": "5195442",
+            "cap": "5000000000000",
+            "repeated": false,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ3-standard\u001f0x1ac1a8feaaea1900c4166deeed0c11cc10669d36\u001f0x1ac1a8feaaea1900c4166deeed0c11cc10669d36\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001ffc1a55cc59bce4baa79572a9b32adfd9df71c9174faea417dccb33e77dbc6d71",
+                "instance": "0x1ac1a8feaaea1900c4166deeed0c11cc10669d36"
+              },
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc166577917ebda5da12c2549434ec31c0ffe5c418f3152f17d291971fce14505",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              }
+            ]
+          },
+          {
+            "rank": 4,
+            "P": "2000000000000000",
+            "cap": "2000000000000000000000",
+            "repeated": true,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ4-fee-hook\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x8f66337a0c2a02202fd91dd596c411cf977c6060\u001fcfba6e7c0977fc138e4b317ea0b2260aa76fa130637441297c4f2faa80a967ae",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f"
+              },
+              {
+                "canonicalEdgeId": "univ4-fee-hook\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x8f66337a0c2a02202fd91dd596c411cf977c6060>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fdf89659ac18a113d91d1baa10a5df3b82551228959e3e453f48a33a33f1ffc19",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+                "instance": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524",
+                "instance": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0xd9e795dfbc7d1dca53d181d613681f5c1effab65>0x4507cef57c46789ef8d1a19ea45f4216bae2b528\u001f5ff3e327ba900871c8616b10441859ded7adddc099f4dbbc0a18cfc7461833eb",
+                "instance": "0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0x4507cef57c46789ef8d1a19ea45f4216bae2b528>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f5ea47e24ecf23cbf5341c4b062023d3590fcd3be1d7b646a6389ce9907739094",
+                "instance": "0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6"
+              }
+            ]
+          },
+          {
+            "rank": 8,
+            "P": "5195442",
+            "cap": "5000000000000",
+            "repeated": true,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f67da6fc5994c96d758f7f7bfee5562ed43b6d511a2959c17c751cd1e0e8d9903",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+                "instance": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524",
+                "instance": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0xd9e795dfbc7d1dca53d181d613681f5c1effab65>0x4507cef57c46789ef8d1a19ea45f4216bae2b528\u001f5ff3e327ba900871c8616b10441859ded7adddc099f4dbbc0a18cfc7461833eb",
+                "instance": "0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0x4507cef57c46789ef8d1a19ea45f4216bae2b528>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f5ea47e24ecf23cbf5341c4b062023d3590fcd3be1d7b646a6389ce9907739094",
+                "instance": "0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6"
+              },
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc166577917ebda5da12c2549434ec31c0ffe5c418f3152f17d291971fce14505",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              }
+            ]
+          }
+        ]
+      },
+      "canonicalBefore": true,
+      "planCount": 1,
+      "planIndex": 0,
+      "sessionCreationTiming": {
+        "readyInstanceCount": 170,
+        "selectedInstanceCount": 5,
+        "refreshedInstanceCount": 0,
+        "skippedCleanInstanceCount": 0,
+        "failedInstanceCount": 0,
+        "requestedFundingAssetCount": 1,
+        "fundingOfferCount": 1,
+        "projectedRouteCount": 10,
+        "cleanAuthorityReissueCount": 0,
+        "pricingMs": 0,
+        "fundingMs": 405,
+        "routeProjectionMs": 1,
+        "totalMs": 409,
+        "heapUsedBytes": 72867080
+      },
+      "planSha256": "a3552bd126bd6b699ea1b10e9ca1942484b649c5f5e8bc9c6565e9f6c1dc0d6b",
+      "cancelCause": "deadline",
+      "error": "BlockScanFamilyAttributedError: strict exact unresolved for univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524: adapter-work:transport:scheduler-failure",
+      "measuredMs": 30006.838,
+      "aborted": true,
+      "totalWithDrainMs": 30008.577125,
+      "backend": {
+        "lane": "exact",
+        "scopeLabel": "exact quote",
+        "allowSingleCallFallback": false,
+        "maxBatchSize": 64,
+        "maxConcurrentBatches": 8,
+        "currentConcurrentBatchLimit": 8,
+        "currentBatchSizeLimit": 64,
+        "throttleRetries": 0,
+        "timeoutRetries": 0,
+        "totalCalls": 3,
+        "memoHits": 0,
+        "batchesSent": 2,
+        "batchedItems": 3,
+        "batchLatencyMs": 689,
+        "maxBatchItemsSent": 2,
+        "pendingItems": 0,
+        "liveItems": 0,
+        "inFlightBatches": 0,
+        "peakInFlightBatches": 1,
+        "activeTransports": 0,
+        "abortedBatches": 0,
+        "completedAfterScopeAbort": 0,
+        "transportQueueWaitMs": 0.2880840000002536,
+        "maxTransportQueueWaitMs": 0.22937499999989086,
+        "peakSchedulerActiveTotal": 1,
+        "peakSchedulerLaneActive": 1,
+        "batchFailures": 0,
+        "singleCallFallbacks": 0,
+        "batchesOnNewSocket": 0,
+        "batchesOnReusedSocket": 2,
+        "drainMs": 1,
+        "persistentCacheContentSha256": null,
+        "persistentCacheConfigured": false,
+        "persistentCacheEntries": 0,
+        "persistentCacheHits": 0,
+        "persistentCacheSourceBlockHash": null,
+        "persistentCacheWrites": 0
+      },
+      "drainErrors": []
+    },
+    {
+      "rank": 8,
+      "arm": "B",
+      "policy": "B",
+      "runtime": "<repo>/logs/live-solver-skip-settle-250.7MsLu8/runtime",
+      "binary": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/cold-prefix-binary.Q0edHj/revm-sim",
+      "binarySha256": "71ebae8b45a5b406b7b5e90ebf2005449a2f6c14af20c33ac3f7866727e01462",
+      "status": "cancelled",
+      "stage": "p-only",
+      "solverEntered": false,
+      "preparationMs": 2156.9187090000014,
+      "solverMs": null,
+      "propagationMs": 27846.654708000002,
+      "drainMs": 1.06104200000118,
+      "hops": [
+        {
+          "id": 1,
+          "hop": 0,
+          "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f67da6fc5994c96d758f7f7bfee5562ed43b6d511a2959c17c751cd1e0e8d9903",
+          "amountIn": "5195442",
+          "prefixLength": 0,
+          "atMs": 2156.9994170000027,
+          "status": "quoted",
+          "amountOut": "1874606836943428",
+          "wallMs": 351.36970799999835
+        },
+        {
+          "id": 2,
+          "hop": 1,
+          "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+          "amountIn": "1874606836943428",
+          "prefixLength": 1,
+          "atMs": 2508.397208999999,
+          "status": "quoted",
+          "amountOut": "378740087141681349621649",
+          "wallMs": 19711.254875
+        },
+        {
+          "id": 3,
+          "hop": 2,
+          "canonicalEdgeId": "univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524",
+          "amountIn": "378740087141681349621649",
+          "prefixLength": 2,
+          "atMs": 22219.708458999998,
+          "status": "failed",
+          "error": "Error: strict exact unresolved for univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524: adapter-work:transport:scheduler-failure",
+          "wallMs": 7783.591124999999
+        }
+      ],
+      "prefixes": [
+        {
+          "exactCallId": 2,
+          "requestId": "exact-reserves",
+          "kind": "eth-call",
+          "atMs": 2511.092124999999,
+          "status": "returned",
+          "completion": "returned",
+          "wallMs": 14541.991000000002
+        },
+        {
+          "exactCallId": 2,
+          "requestId": "exact-input-balance",
+          "kind": "eth-call",
+          "atMs": 2511.2324590000026,
+          "status": "returned",
+          "completion": "returned",
+          "wallMs": 16669.571083000003
+        },
+        {
+          "exactCallId": 2,
+          "requestId": "exact-output-balance",
+          "kind": "eth-call",
+          "atMs": 2511.272667000001,
+          "status": "returned",
+          "completion": "returned",
+          "wallMs": 19707.073958
+        },
+        {
+          "exactCallId": 3,
+          "requestId": "exact-reserves",
+          "kind": "eth-call",
+          "atMs": 22225.279249999996,
+          "status": "failed",
+          "error": "RevmStrictError: strict simulation deadline reached",
+          "wallMs": 7777.172416000001
+        },
+        {
+          "exactCallId": 3,
+          "requestId": "exact-input-balance",
+          "kind": "eth-call",
+          "atMs": 22225.389,
+          "status": "failed",
+          "error": "RevmStrictError: strict simulation deadline reached",
+          "wallMs": 7777.0689580000035
+        },
+        {
+          "exactCallId": 3,
+          "requestId": "exact-output-balance",
+          "kind": "eth-call",
+          "atMs": 22225.433500000003,
+          "status": "failed",
+          "error": "RevmStrictError: strict simulation deadline reached",
+          "wallMs": 7777.025457999996
+        }
+      ],
+      "scheduler": [
+        {
+          "lane": "exact",
+          "exactCallId": null,
+          "atMs": 984.7167090000003,
+          "queueMs": 0.06641699999818229,
+          "activeTotal": 1,
+          "activeByLane": {
+            "producer-critical": 0,
+            "producer-bulk": 0,
+            "exact": 1,
+            "discovery": 0
+          },
+          "serviceMs": 1168.2802080000001
+        },
+        {
+          "lane": "exact",
+          "exactCallId": null,
+          "atMs": 2160.6191670000007,
+          "queueMs": 0.0476249999992433,
+          "activeTotal": 1,
+          "activeByLane": {
+            "producer-critical": 0,
+            "producer-bulk": 0,
+            "exact": 1,
+            "discovery": 0
+          },
+          "serviceMs": 346.8442920000016
+        }
+      ],
+      "directRpc": [
+        {
+          "id": 1,
+          "method": "eth_chainId",
+          "exactCallId": null,
+          "status": "returned",
+          "wallMs": 324.4177500000005
+        },
+        {
+          "id": 2,
+          "method": "eth_getBlockByNumber",
+          "exactCallId": null,
+          "status": "returned",
+          "wallMs": 495.66712499999994
+        }
+      ],
+      "revmRequests": [
+        {
+          "exactCallId": 2,
+          "atMs": 2511.4069169999966,
+          "requestKind": null,
+          "target": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6",
+          "ok": true,
+          "epoch": "6848df88-320b-4834-87b7-24e70ba6489b",
+          "requestId": "1",
+          "daemonLatencyMs": 12930,
+          "wallMs": 14541.560124999996
+        },
+        {
+          "exactCallId": 2,
+          "atMs": 2512.859916999998,
+          "requestKind": null,
+          "target": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "ok": true,
+          "epoch": "6848df88-320b-4834-87b7-24e70ba6489b",
+          "requestId": "2",
+          "daemonLatencyMs": 1573,
+          "wallMs": 16667.751500000006
+        },
+        {
+          "exactCallId": 2,
+          "atMs": 2513.528583999996,
+          "requestKind": null,
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "ok": true,
+          "epoch": "6848df88-320b-4834-87b7-24e70ba6489b",
+          "requestId": "3",
+          "daemonLatencyMs": 1989,
+          "wallMs": 19704.681624999997
+        },
+        {
+          "exactCallId": 3,
+          "atMs": 22225.535208999998,
+          "requestKind": null,
+          "target": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60",
+          "wallMs": 7776.241999999998
+        },
+        {
+          "exactCallId": 3,
+          "atMs": 22226.738709,
+          "requestKind": null,
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "wallMs": 7775.051708999999
+        },
+        {
+          "exactCallId": 3,
+          "atMs": 22227.781667,
+          "requestKind": null,
+          "target": "0xd9e795dfbc7d1dca53d181d613681f5c1effab65",
+          "wallMs": 7774.010291000006
+        }
+      ],
+      "revmTiming": [
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "6848df88-320b-4834-87b7-24e70ba6489b",
+          "requestId": "1",
+          "target": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6",
+          "enqueuedAtMs": 1790786196916,
+          "dispatchedAtMs": 1790786196916,
+          "queueMs": 0,
+          "serviceMs": 14541,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 12930
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "6848df88-320b-4834-87b7-24e70ba6489b",
+          "requestId": "2",
+          "target": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "enqueuedAtMs": 1790786196918,
+          "dispatchedAtMs": 1790786211457,
+          "queueMs": 14539,
+          "serviceMs": 2127,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 1573
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "6848df88-320b-4834-87b7-24e70ba6489b",
+          "requestId": "3",
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "enqueuedAtMs": 1790786196918,
+          "dispatchedAtMs": 1790786213585,
+          "queueMs": 16667,
+          "serviceMs": 3037,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 1989
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "6848df88-320b-4834-87b7-24e70ba6489b",
+          "requestId": "4",
+          "target": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60",
+          "enqueuedAtMs": 1790786216631,
+          "dispatchedAtMs": 1790786216631,
+          "queueMs": 0,
+          "serviceMs": 7774,
+          "status": "rejected",
+          "aborted": false
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "6848df88-320b-4834-87b7-24e70ba6489b",
+          "requestId": "5",
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "enqueuedAtMs": 1790786216632,
+          "dispatchedAtMs": null,
+          "queueMs": 7774,
+          "serviceMs": null,
+          "status": "rejected",
+          "aborted": false
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "6848df88-320b-4834-87b7-24e70ba6489b",
+          "requestId": "6",
+          "target": "0xd9e795dfbc7d1dca53d181d613681f5c1effab65",
+          "enqueuedAtMs": 1790786216633,
+          "dispatchedAtMs": null,
+          "queueMs": 7773,
+          "serviceMs": null,
+          "status": "rejected",
+          "aborted": false
+        }
+      ],
+      "revmProcesses": [
+        {
+          "pid": 45989,
+          "atMs": 2512.758874999996
+        }
+      ],
+      "suppressedLogLines": 24,
+      "timing": {
+        "quoteMs": 0,
+        "planBuildMs": 0,
+        "simMs": 0,
+        "amountPoints": 0,
+        "gssPoints": 0,
+        "hopExactCalls": 0
+      },
+      "ready": {
+        "instances": 170,
+        "funding": 2,
+        "graphEdges": 344,
+        "cutoff": {
+          "number": 26029537,
+          "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+          "generation": 26029537
+        },
+        "publicationSetHash": "a343dcb72689d751355dd59a5e44915da8dce6330363a371c294ff5ffaebddea",
+        "graphHash": "5ca7b6393686818a1c0a03e0797d78d915c5f291d5bab2fa68d8b97b8a9b525c",
+        "activations": [
+          {
+            "familyId": "custom-swap:angstrom-v4",
+            "sourceFile": "angstrom-v4.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ANGSTROM_V4_ENABLED"
+          },
+          {
+            "familyId": "protocol:astra-multitoken",
+            "sourceFile": "astra-multitoken.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ASTRA_MULTITOKEN_ENABLED"
+          },
+          {
+            "familyId": "flash-loan:balancer-v2",
+            "sourceFile": "balancer-flash.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_BALANCER_FLASH_ENABLED"
+          },
+          {
+            "familyId": "balancer-v3",
+            "sourceFile": "balancer-v3.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_BALANCER_V3_ENABLED"
+          },
+          {
+            "familyId": "curve-plain",
+            "sourceFile": "curve-plain.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED"
+          },
+          {
+            "familyId": "curve-underlying",
+            "sourceFile": "curve-underlying.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:dodo-v2",
+            "sourceFile": "dodo-v2.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_DODO_V2_ENABLED"
+          },
+          {
+            "familyId": "protocol:eigenpie",
+            "sourceFile": "eigenpie.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_EIGENPIE_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:ekubo-router-v1",
+            "sourceFile": "ekubo.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_EKUBO_ENABLED"
+          },
+          {
+            "familyId": "ella-exchange",
+            "sourceFile": "ella-exchange.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ELLA_EXCHANGE_ENABLED"
+          },
+          {
+            "familyId": "protocol:erc4626-silo-redeem",
+            "sourceFile": "erc4626-silo-redeem.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ERC4626_SILO_REDEEM_ENABLED"
+          },
+          {
+            "familyId": "protocol:erc4626",
+            "sourceFile": "erc4626.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ERC4626_ENABLED"
+          },
+          {
+            "familyId": "protocol:ethertoken-native-redeem",
+            "sourceFile": "ethertoken-native-redeem.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ETHERTOKEN_NATIVE_REDEEM_ENABLED"
+          },
+          {
+            "familyId": "credit:fluid",
+            "sourceFile": "fluid-credit.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED"
+          },
+          {
+            "familyId": "fluid-dex",
+            "sourceFile": "fluid-dex.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_FLUID_DEX_ENABLED"
+          },
+          {
+            "familyId": "protocol:goldx",
+            "sourceFile": "goldx.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_GOLDX_ENABLED"
+          },
+          {
+            "familyId": "protocol:metronome-hgusdc",
+            "sourceFile": "metronome-hgusdc.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_METRONOME_HGUSDC_ENABLED"
+          },
+          {
+            "familyId": "protocol:metronome-synth",
+            "sourceFile": "metronome-synth.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_METRONOME_SYNTH_ENABLED"
+          },
+          {
+            "familyId": "mooniswap",
+            "sourceFile": "mooniswap.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_MOONISWAP_ENABLED"
+          },
+          {
+            "familyId": "flash-loan:morpho",
+            "sourceFile": "morpho-flash.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED"
+          },
+          {
+            "familyId": "protocol:psm",
+            "sourceFile": "psm.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_PSM_ENABLED"
+          },
+          {
+            "familyId": "protocol:rocksolid",
+            "sourceFile": "rocksolid.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ROCKSOLID_ENABLED"
+          },
+          {
+            "familyId": "protocol:self-burn-native",
+            "sourceFile": "self-burn-native.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_SELF_BURN_NATIVE_ENABLED"
+          },
+          {
+            "familyId": "protocol:token-conversion",
+            "sourceFile": "token-conversion.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_TOKEN_CONVERSION_ENABLED"
+          },
+          {
+            "familyId": "protocol:token-migration",
+            "sourceFile": "token-migration.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_TOKEN_MIGRATION_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:uniswap-v1",
+            "sourceFile": "uniswap-v1.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNISWAP_V1_ENABLED"
+          },
+          {
+            "familyId": "univ2-standard",
+            "sourceFile": "univ2-standard.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV2_STANDARD_ENABLED"
+          },
+          {
+            "familyId": "univ3-standard",
+            "sourceFile": "univ3-standard.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV3_STANDARD_ENABLED"
+          },
+          {
+            "familyId": "univ4-fee-hook",
+            "sourceFile": "univ4-fee-hook.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED"
+          },
+          {
+            "familyId": "univ4",
+            "sourceFile": "univ4.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV4_ENABLED"
+          },
+          {
+            "familyId": "protocol:wsteth",
+            "sourceFile": "wsteth.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_WSTETH_ENABLED"
+          }
+        ],
+        "cases": [
+          {
+            "rank": 477,
+            "P": "5195442",
+            "cap": "5000000000000",
+            "repeated": false,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ3-standard\u001f0x1ac1a8feaaea1900c4166deeed0c11cc10669d36\u001f0x1ac1a8feaaea1900c4166deeed0c11cc10669d36\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001ffc1a55cc59bce4baa79572a9b32adfd9df71c9174faea417dccb33e77dbc6d71",
+                "instance": "0x1ac1a8feaaea1900c4166deeed0c11cc10669d36"
+              },
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc166577917ebda5da12c2549434ec31c0ffe5c418f3152f17d291971fce14505",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              }
+            ]
+          },
+          {
+            "rank": 4,
+            "P": "2000000000000000",
+            "cap": "2000000000000000000000",
+            "repeated": true,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ4-fee-hook\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x8f66337a0c2a02202fd91dd596c411cf977c6060\u001fcfba6e7c0977fc138e4b317ea0b2260aa76fa130637441297c4f2faa80a967ae",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f"
+              },
+              {
+                "canonicalEdgeId": "univ4-fee-hook\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x8f66337a0c2a02202fd91dd596c411cf977c6060>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fdf89659ac18a113d91d1baa10a5df3b82551228959e3e453f48a33a33f1ffc19",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+                "instance": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524",
+                "instance": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0xd9e795dfbc7d1dca53d181d613681f5c1effab65>0x4507cef57c46789ef8d1a19ea45f4216bae2b528\u001f5ff3e327ba900871c8616b10441859ded7adddc099f4dbbc0a18cfc7461833eb",
+                "instance": "0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0x4507cef57c46789ef8d1a19ea45f4216bae2b528>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f5ea47e24ecf23cbf5341c4b062023d3590fcd3be1d7b646a6389ce9907739094",
+                "instance": "0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6"
+              }
+            ]
+          },
+          {
+            "rank": 8,
+            "P": "5195442",
+            "cap": "5000000000000",
+            "repeated": true,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f67da6fc5994c96d758f7f7bfee5562ed43b6d511a2959c17c751cd1e0e8d9903",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+                "instance": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524",
+                "instance": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0xd9e795dfbc7d1dca53d181d613681f5c1effab65>0x4507cef57c46789ef8d1a19ea45f4216bae2b528\u001f5ff3e327ba900871c8616b10441859ded7adddc099f4dbbc0a18cfc7461833eb",
+                "instance": "0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0x4507cef57c46789ef8d1a19ea45f4216bae2b528>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f5ea47e24ecf23cbf5341c4b062023d3590fcd3be1d7b646a6389ce9907739094",
+                "instance": "0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6"
+              },
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc166577917ebda5da12c2549434ec31c0ffe5c418f3152f17d291971fce14505",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              }
+            ]
+          }
+        ]
+      },
+      "canonicalBefore": true,
+      "planCount": 1,
+      "planIndex": 0,
+      "sessionCreationTiming": {
+        "readyInstanceCount": 170,
+        "selectedInstanceCount": 5,
+        "refreshedInstanceCount": 0,
+        "skippedCleanInstanceCount": 0,
+        "failedInstanceCount": 0,
+        "requestedFundingAssetCount": 1,
+        "fundingOfferCount": 1,
+        "projectedRouteCount": 10,
+        "cleanAuthorityReissueCount": 0,
+        "pricingMs": 0,
+        "fundingMs": 1171,
+        "routeProjectionMs": 1,
+        "totalMs": 1175,
+        "heapUsedBytes": 69846928
+      },
+      "planSha256": "a3552bd126bd6b699ea1b10e9ca1942484b649c5f5e8bc9c6565e9f6c1dc0d6b",
+      "error": "BlockScanFamilyAttributedError: strict exact unresolved for univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524: adapter-work:transport:scheduler-failure",
+      "cancelCause": "deadline",
+      "canonicalAfter": false,
+      "canonicalError": "Error: 30s invocation deadline",
+      "canonicalAfterMs": 0.16341699999611592,
+      "measuredMs": 30003.750624999997,
+      "aborted": true,
+      "totalWithDrainMs": 30004.835709000003,
+      "backend": {
+        "lane": "exact",
+        "scopeLabel": "exact quote",
+        "allowSingleCallFallback": false,
+        "maxBatchSize": 64,
+        "maxConcurrentBatches": 8,
+        "currentConcurrentBatchLimit": 8,
+        "currentBatchSizeLimit": 64,
+        "throttleRetries": 0,
+        "timeoutRetries": 0,
+        "totalCalls": 3,
+        "memoHits": 0,
+        "batchesSent": 2,
+        "batchedItems": 3,
+        "batchLatencyMs": 1515,
+        "maxBatchItemsSent": 2,
+        "pendingItems": 0,
+        "liveItems": 0,
+        "inFlightBatches": 0,
+        "peakInFlightBatches": 1,
+        "activeTransports": 0,
+        "abortedBatches": 0,
+        "completedAfterScopeAbort": 0,
+        "transportQueueWaitMs": 0.11404199999742559,
+        "maxTransportQueueWaitMs": 0.06641699999818229,
+        "peakSchedulerActiveTotal": 1,
+        "peakSchedulerLaneActive": 1,
+        "batchFailures": 0,
+        "singleCallFallbacks": 0,
+        "batchesOnNewSocket": 0,
+        "batchesOnReusedSocket": 2,
+        "drainMs": 0,
+        "persistentCacheContentSha256": null,
+        "persistentCacheConfigured": false,
+        "persistentCacheEntries": 0,
+        "persistentCacheHits": 0,
+        "persistentCacheSourceBlockHash": null,
+        "persistentCacheWrites": 0
+      },
+      "drainErrors": []
+    },
+    {
+      "rank": 8,
+      "arm": "B",
+      "policy": "B",
+      "runtime": "<repo>/logs/live-solver-skip-settle-250.7MsLu8/runtime",
+      "binary": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/cold-prefix-binary.Q0edHj/revm-sim",
+      "binarySha256": "71ebae8b45a5b406b7b5e90ebf2005449a2f6c14af20c33ac3f7866727e01462",
+      "status": "cancelled",
+      "stage": "p-only",
+      "solverEntered": false,
+      "preparationMs": 1331.44225,
+      "solverMs": null,
+      "propagationMs": 28671.939916000003,
+      "drainMs": 2.364417000004323,
+      "hops": [
+        {
+          "id": 1,
+          "hop": 0,
+          "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f67da6fc5994c96d758f7f7bfee5562ed43b6d511a2959c17c751cd1e0e8d9903",
+          "amountIn": "5195442",
+          "prefixLength": 0,
+          "atMs": 1331.4959579999995,
+          "status": "quoted",
+          "amountOut": "1874606836943428",
+          "wallMs": 316.9740410000013
+        },
+        {
+          "id": 2,
+          "hop": 1,
+          "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+          "amountIn": "1874606836943428",
+          "prefixLength": 1,
+          "atMs": 1648.5065829999949,
+          "status": "quoted",
+          "amountOut": "378740087141681349621649",
+          "wallMs": 17248.573208
+        },
+        {
+          "id": 3,
+          "hop": 2,
+          "canonicalEdgeId": "univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524",
+          "amountIn": "378740087141681349621649",
+          "prefixLength": 2,
+          "atMs": 18897.127624999994,
+          "status": "failed",
+          "error": "Error: strict exact unresolved for univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524: adapter-work:transport:scheduler-failure",
+          "wallMs": 11106.171750000009
+        }
+      ],
+      "prefixes": [
+        {
+          "exactCallId": 2,
+          "requestId": "exact-reserves",
+          "kind": "eth-call",
+          "atMs": 1651.695332999996,
+          "status": "returned",
+          "completion": "returned",
+          "wallMs": 12878.241582999995
+        },
+        {
+          "exactCallId": 2,
+          "requestId": "exact-input-balance",
+          "kind": "eth-call",
+          "atMs": 1651.8290419999976,
+          "status": "returned",
+          "completion": "returned",
+          "wallMs": 14220.539958000001
+        },
+        {
+          "exactCallId": 2,
+          "requestId": "exact-output-balance",
+          "kind": "eth-call",
+          "atMs": 1651.8761249999952,
+          "status": "returned",
+          "completion": "returned",
+          "wallMs": 17244.055625
+        },
+        {
+          "exactCallId": 3,
+          "requestId": "exact-reserves",
+          "kind": "eth-call",
+          "atMs": 18902.354374999995,
+          "status": "failed",
+          "error": "RevmStrictError: strict prefix simulation did not complete current request",
+          "wallMs": 8935.199584000002
+        },
+        {
+          "exactCallId": 3,
+          "requestId": "exact-input-balance",
+          "kind": "eth-call",
+          "atMs": 18902.418332999994,
+          "status": "failed",
+          "error": "RevmStrictError: strict prefix simulation did not complete current request",
+          "wallMs": 9839.64304200001
+        },
+        {
+          "exactCallId": 3,
+          "requestId": "exact-output-balance",
+          "kind": "eth-call",
+          "atMs": 18902.453666999994,
+          "status": "failed",
+          "error": "RevmStrictError: strict simulation cancelled",
+          "wallMs": 11100.299875000012
+        }
+      ],
+      "scheduler": [
+        {
+          "lane": "exact",
+          "exactCallId": null,
+          "atMs": 799.849749999994,
+          "queueMs": 0.04408300000068266,
+          "activeTotal": 1,
+          "activeByLane": {
+            "producer-critical": 0,
+            "producer-bulk": 0,
+            "exact": 1,
+            "discovery": 0
+          },
+          "serviceMs": 528.9665000000023
+        },
+        {
+          "lane": "exact",
+          "exactCallId": null,
+          "atMs": 1334.4615829999966,
+          "queueMs": 0.036041999999724794,
+          "activeTotal": 1,
+          "activeByLane": {
+            "producer-critical": 0,
+            "producer-bulk": 0,
+            "exact": 1,
+            "discovery": 0
+          },
+          "serviceMs": 312.7862909999967
+        }
+      ],
+      "directRpc": [
+        {
+          "id": 1,
+          "method": "eth_chainId",
+          "exactCallId": null,
+          "status": "returned",
+          "wallMs": 304.89091700000426
+        },
+        {
+          "id": 2,
+          "method": "eth_getBlockByNumber",
+          "exactCallId": null,
+          "status": "returned",
+          "wallMs": 340.4180420000048
+        }
+      ],
+      "revmRequests": [
+        {
+          "exactCallId": 2,
+          "atMs": 1652.0089999999982,
+          "requestKind": null,
+          "target": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6",
+          "ok": true,
+          "epoch": "854ed8f7-f126-49f9-b5d1-3f7b759175a3",
+          "requestId": "1",
+          "daemonLatencyMs": 12318,
+          "wallMs": 12877.778917000003
+        },
+        {
+          "exactCallId": 2,
+          "atMs": 1653.7006669999973,
+          "requestKind": null,
+          "target": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "ok": true,
+          "epoch": "854ed8f7-f126-49f9-b5d1-3f7b759175a3",
+          "requestId": "2",
+          "daemonLatencyMs": 941,
+          "wallMs": 14218.537959000001
+        },
+        {
+          "exactCallId": 2,
+          "atMs": 1654.5147919999945,
+          "requestKind": null,
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "ok": true,
+          "epoch": "854ed8f7-f126-49f9-b5d1-3f7b759175a3",
+          "requestId": "3",
+          "daemonLatencyMs": 1996,
+          "wallMs": 17241.275875
+        },
+        {
+          "exactCallId": 3,
+          "atMs": 18902.518291999993,
+          "requestKind": null,
+          "target": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60",
+          "ok": true,
+          "epoch": "854ed8f7-f126-49f9-b5d1-3f7b759175a3",
+          "requestId": "4",
+          "daemonLatencyMs": 8547,
+          "wallMs": 8934.694082999995
+        },
+        {
+          "exactCallId": 3,
+          "atMs": 18903.781208,
+          "requestKind": null,
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "ok": true,
+          "epoch": "854ed8f7-f126-49f9-b5d1-3f7b759175a3",
+          "requestId": "5",
+          "daemonLatencyMs": 514,
+          "wallMs": 9838.118957999992
+        },
+        {
+          "exactCallId": 3,
+          "atMs": 18904.868875,
+          "requestKind": null,
+          "target": "0xd9e795dfbc7d1dca53d181d613681f5c1effab65",
+          "wallMs": 11097.804541999998
+        }
+      ],
+      "revmTiming": [
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "854ed8f7-f126-49f9-b5d1-3f7b759175a3",
+          "requestId": "1",
+          "target": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6",
+          "enqueuedAtMs": 1790786226062,
+          "dispatchedAtMs": 1790786226062,
+          "queueMs": 0,
+          "serviceMs": 12877,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 12318
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "854ed8f7-f126-49f9-b5d1-3f7b759175a3",
+          "requestId": "2",
+          "target": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "enqueuedAtMs": 1790786226064,
+          "dispatchedAtMs": 1790786238939,
+          "queueMs": 12875,
+          "serviceMs": 1342,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 941
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "854ed8f7-f126-49f9-b5d1-3f7b759175a3",
+          "requestId": "3",
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "enqueuedAtMs": 1790786226064,
+          "dispatchedAtMs": 1790786240281,
+          "queueMs": 14217,
+          "serviceMs": 3024,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 1996
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "854ed8f7-f126-49f9-b5d1-3f7b759175a3",
+          "requestId": "4",
+          "target": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60",
+          "enqueuedAtMs": 1790786243313,
+          "dispatchedAtMs": 1790786243313,
+          "queueMs": 0,
+          "serviceMs": 8933,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 8547
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "854ed8f7-f126-49f9-b5d1-3f7b759175a3",
+          "requestId": "5",
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "enqueuedAtMs": 1790786243314,
+          "dispatchedAtMs": 1790786252246,
+          "queueMs": 8932,
+          "serviceMs": 905,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 514
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "854ed8f7-f126-49f9-b5d1-3f7b759175a3",
+          "requestId": "6",
+          "target": "0xd9e795dfbc7d1dca53d181d613681f5c1effab65",
+          "enqueuedAtMs": 1790786243315,
+          "dispatchedAtMs": 1790786253151,
+          "queueMs": 9836,
+          "serviceMs": 1261,
+          "status": "rejected",
+          "aborted": true
+        }
+      ],
+      "revmProcesses": [
+        {
+          "pid": 46074,
+          "atMs": 1653.6154169999936
+        }
+      ],
+      "suppressedLogLines": 24,
+      "timing": {
+        "quoteMs": 0,
+        "planBuildMs": 0,
+        "simMs": 0,
+        "amountPoints": 0,
+        "gssPoints": 0,
+        "hopExactCalls": 0
+      },
+      "ready": {
+        "instances": 170,
+        "funding": 2,
+        "graphEdges": 344,
+        "cutoff": {
+          "number": 26029537,
+          "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+          "generation": 26029537
+        },
+        "publicationSetHash": "a343dcb72689d751355dd59a5e44915da8dce6330363a371c294ff5ffaebddea",
+        "graphHash": "5ca7b6393686818a1c0a03e0797d78d915c5f291d5bab2fa68d8b97b8a9b525c",
+        "activations": [
+          {
+            "familyId": "custom-swap:angstrom-v4",
+            "sourceFile": "angstrom-v4.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ANGSTROM_V4_ENABLED"
+          },
+          {
+            "familyId": "protocol:astra-multitoken",
+            "sourceFile": "astra-multitoken.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ASTRA_MULTITOKEN_ENABLED"
+          },
+          {
+            "familyId": "flash-loan:balancer-v2",
+            "sourceFile": "balancer-flash.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_BALANCER_FLASH_ENABLED"
+          },
+          {
+            "familyId": "balancer-v3",
+            "sourceFile": "balancer-v3.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_BALANCER_V3_ENABLED"
+          },
+          {
+            "familyId": "curve-plain",
+            "sourceFile": "curve-plain.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED"
+          },
+          {
+            "familyId": "curve-underlying",
+            "sourceFile": "curve-underlying.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:dodo-v2",
+            "sourceFile": "dodo-v2.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_DODO_V2_ENABLED"
+          },
+          {
+            "familyId": "protocol:eigenpie",
+            "sourceFile": "eigenpie.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_EIGENPIE_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:ekubo-router-v1",
+            "sourceFile": "ekubo.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_EKUBO_ENABLED"
+          },
+          {
+            "familyId": "ella-exchange",
+            "sourceFile": "ella-exchange.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ELLA_EXCHANGE_ENABLED"
+          },
+          {
+            "familyId": "protocol:erc4626-silo-redeem",
+            "sourceFile": "erc4626-silo-redeem.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ERC4626_SILO_REDEEM_ENABLED"
+          },
+          {
+            "familyId": "protocol:erc4626",
+            "sourceFile": "erc4626.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ERC4626_ENABLED"
+          },
+          {
+            "familyId": "protocol:ethertoken-native-redeem",
+            "sourceFile": "ethertoken-native-redeem.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ETHERTOKEN_NATIVE_REDEEM_ENABLED"
+          },
+          {
+            "familyId": "credit:fluid",
+            "sourceFile": "fluid-credit.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED"
+          },
+          {
+            "familyId": "fluid-dex",
+            "sourceFile": "fluid-dex.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_FLUID_DEX_ENABLED"
+          },
+          {
+            "familyId": "protocol:goldx",
+            "sourceFile": "goldx.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_GOLDX_ENABLED"
+          },
+          {
+            "familyId": "protocol:metronome-hgusdc",
+            "sourceFile": "metronome-hgusdc.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_METRONOME_HGUSDC_ENABLED"
+          },
+          {
+            "familyId": "protocol:metronome-synth",
+            "sourceFile": "metronome-synth.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_METRONOME_SYNTH_ENABLED"
+          },
+          {
+            "familyId": "mooniswap",
+            "sourceFile": "mooniswap.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_MOONISWAP_ENABLED"
+          },
+          {
+            "familyId": "flash-loan:morpho",
+            "sourceFile": "morpho-flash.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED"
+          },
+          {
+            "familyId": "protocol:psm",
+            "sourceFile": "psm.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_PSM_ENABLED"
+          },
+          {
+            "familyId": "protocol:rocksolid",
+            "sourceFile": "rocksolid.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ROCKSOLID_ENABLED"
+          },
+          {
+            "familyId": "protocol:self-burn-native",
+            "sourceFile": "self-burn-native.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_SELF_BURN_NATIVE_ENABLED"
+          },
+          {
+            "familyId": "protocol:token-conversion",
+            "sourceFile": "token-conversion.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_TOKEN_CONVERSION_ENABLED"
+          },
+          {
+            "familyId": "protocol:token-migration",
+            "sourceFile": "token-migration.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_TOKEN_MIGRATION_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:uniswap-v1",
+            "sourceFile": "uniswap-v1.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNISWAP_V1_ENABLED"
+          },
+          {
+            "familyId": "univ2-standard",
+            "sourceFile": "univ2-standard.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV2_STANDARD_ENABLED"
+          },
+          {
+            "familyId": "univ3-standard",
+            "sourceFile": "univ3-standard.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV3_STANDARD_ENABLED"
+          },
+          {
+            "familyId": "univ4-fee-hook",
+            "sourceFile": "univ4-fee-hook.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED"
+          },
+          {
+            "familyId": "univ4",
+            "sourceFile": "univ4.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV4_ENABLED"
+          },
+          {
+            "familyId": "protocol:wsteth",
+            "sourceFile": "wsteth.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_WSTETH_ENABLED"
+          }
+        ],
+        "cases": [
+          {
+            "rank": 477,
+            "P": "5195442",
+            "cap": "5000000000000",
+            "repeated": false,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ3-standard\u001f0x1ac1a8feaaea1900c4166deeed0c11cc10669d36\u001f0x1ac1a8feaaea1900c4166deeed0c11cc10669d36\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001ffc1a55cc59bce4baa79572a9b32adfd9df71c9174faea417dccb33e77dbc6d71",
+                "instance": "0x1ac1a8feaaea1900c4166deeed0c11cc10669d36"
+              },
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc166577917ebda5da12c2549434ec31c0ffe5c418f3152f17d291971fce14505",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              }
+            ]
+          },
+          {
+            "rank": 4,
+            "P": "2000000000000000",
+            "cap": "2000000000000000000000",
+            "repeated": true,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ4-fee-hook\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x8f66337a0c2a02202fd91dd596c411cf977c6060\u001fcfba6e7c0977fc138e4b317ea0b2260aa76fa130637441297c4f2faa80a967ae",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f"
+              },
+              {
+                "canonicalEdgeId": "univ4-fee-hook\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x8f66337a0c2a02202fd91dd596c411cf977c6060>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fdf89659ac18a113d91d1baa10a5df3b82551228959e3e453f48a33a33f1ffc19",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+                "instance": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524",
+                "instance": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0xd9e795dfbc7d1dca53d181d613681f5c1effab65>0x4507cef57c46789ef8d1a19ea45f4216bae2b528\u001f5ff3e327ba900871c8616b10441859ded7adddc099f4dbbc0a18cfc7461833eb",
+                "instance": "0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0x4507cef57c46789ef8d1a19ea45f4216bae2b528>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f5ea47e24ecf23cbf5341c4b062023d3590fcd3be1d7b646a6389ce9907739094",
+                "instance": "0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6"
+              }
+            ]
+          },
+          {
+            "rank": 8,
+            "P": "5195442",
+            "cap": "5000000000000",
+            "repeated": true,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f67da6fc5994c96d758f7f7bfee5562ed43b6d511a2959c17c751cd1e0e8d9903",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+                "instance": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524",
+                "instance": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0xd9e795dfbc7d1dca53d181d613681f5c1effab65>0x4507cef57c46789ef8d1a19ea45f4216bae2b528\u001f5ff3e327ba900871c8616b10441859ded7adddc099f4dbbc0a18cfc7461833eb",
+                "instance": "0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0x4507cef57c46789ef8d1a19ea45f4216bae2b528>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f5ea47e24ecf23cbf5341c4b062023d3590fcd3be1d7b646a6389ce9907739094",
+                "instance": "0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6"
+              },
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc166577917ebda5da12c2549434ec31c0ffe5c418f3152f17d291971fce14505",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              }
+            ]
+          }
+        ]
+      },
+      "canonicalBefore": true,
+      "planCount": 1,
+      "planIndex": 0,
+      "sessionCreationTiming": {
+        "readyInstanceCount": 170,
+        "selectedInstanceCount": 5,
+        "refreshedInstanceCount": 0,
+        "skippedCleanInstanceCount": 0,
+        "failedInstanceCount": 0,
+        "requestedFundingAssetCount": 1,
+        "fundingOfferCount": 1,
+        "projectedRouteCount": 10,
+        "cleanAuthorityReissueCount": 0,
+        "pricingMs": 0,
+        "fundingMs": 532,
+        "routeProjectionMs": 1,
+        "totalMs": 535,
+        "heapUsedBytes": 83248312
+      },
+      "planSha256": "a3552bd126bd6b699ea1b10e9ca1942484b649c5f5e8bc9c6565e9f6c1dc0d6b",
+      "cancelCause": "deadline",
+      "error": "BlockScanFamilyAttributedError: strict exact unresolved for univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524: adapter-work:transport:scheduler-failure",
+      "measuredMs": 30003.386874999997,
+      "aborted": true,
+      "totalWithDrainMs": 30005.766999999993,
+      "backend": {
+        "lane": "exact",
+        "scopeLabel": "exact quote",
+        "allowSingleCallFallback": false,
+        "maxBatchSize": 64,
+        "maxConcurrentBatches": 8,
+        "currentConcurrentBatchLimit": 8,
+        "currentBatchSizeLimit": 64,
+        "throttleRetries": 0,
+        "timeoutRetries": 0,
+        "totalCalls": 3,
+        "memoHits": 0,
+        "batchesSent": 2,
+        "batchedItems": 3,
+        "batchLatencyMs": 841,
+        "maxBatchItemsSent": 2,
+        "pendingItems": 0,
+        "liveItems": 0,
+        "inFlightBatches": 0,
+        "peakInFlightBatches": 1,
+        "activeTransports": 0,
+        "abortedBatches": 0,
+        "completedAfterScopeAbort": 0,
+        "transportQueueWaitMs": 0.08012500000040745,
+        "maxTransportQueueWaitMs": 0.04408300000068266,
+        "peakSchedulerActiveTotal": 1,
+        "peakSchedulerLaneActive": 1,
+        "batchFailures": 0,
+        "singleCallFallbacks": 0,
+        "batchesOnNewSocket": 0,
+        "batchesOnReusedSocket": 2,
+        "drainMs": 0,
+        "persistentCacheContentSha256": null,
+        "persistentCacheConfigured": false,
+        "persistentCacheEntries": 0,
+        "persistentCacheHits": 0,
+        "persistentCacheSourceBlockHash": null,
+        "persistentCacheWrites": 0
+      },
+      "drainErrors": []
+    },
+    {
+      "rank": 8,
+      "arm": "A",
+      "policy": "B",
+      "runtime": "<repo>/logs/live-solver-skip-settle-250.7MsLu8/runtime",
+      "binary": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-phases-binary.g1YRid/revm-sim",
+      "binarySha256": "e278d6530f806787588984cfe445dc2395cc0dec334a264441aa73fc4c5b0d5b",
+      "status": "cancelled",
+      "stage": "p-only",
+      "solverEntered": false,
+      "preparationMs": 2615.0488329999935,
+      "solverMs": null,
+      "propagationMs": 27388.942708000002,
+      "drainMs": 1.4031250000116415,
+      "hops": [
+        {
+          "id": 1,
+          "hop": 0,
+          "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f67da6fc5994c96d758f7f7bfee5562ed43b6d511a2959c17c751cd1e0e8d9903",
+          "amountIn": "5195442",
+          "prefixLength": 0,
+          "atMs": 2615.1392919999926,
+          "status": "quoted",
+          "amountOut": "1874606836943428",
+          "wallMs": 609.3857080000016
+        },
+        {
+          "id": 2,
+          "hop": 1,
+          "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+          "amountIn": "1874606836943428",
+          "prefixLength": 1,
+          "atMs": 3224.5892500000045,
+          "status": "failed",
+          "error": "Error: strict exact unresolved for univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2: adapter-work:transport:scheduler-failure",
+          "wallMs": 26779.239375000005
+        }
+      ],
+      "prefixes": [
+        {
+          "exactCallId": 2,
+          "requestId": "exact-reserves",
+          "kind": "eth-call",
+          "atMs": 3229.699999999997,
+          "status": "returned",
+          "completion": "returned",
+          "wallMs": 23972.67308400001
+        },
+        {
+          "exactCallId": 2,
+          "requestId": "exact-input-balance",
+          "kind": "eth-call",
+          "atMs": 3229.896708,
+          "status": "failed",
+          "error": "RevmStrictError: strict simulation deadline reached",
+          "wallMs": 26773.103040999995
+        },
+        {
+          "exactCallId": 2,
+          "requestId": "exact-output-balance",
+          "kind": "eth-call",
+          "atMs": 3229.9351670000033,
+          "status": "failed",
+          "error": "RevmStrictError: strict simulation deadline reached",
+          "wallMs": 26773.06579200001
+        }
+      ],
+      "scheduler": [
+        {
+          "lane": "exact",
+          "exactCallId": null,
+          "atMs": 2204.435083000004,
+          "queueMs": 0.06229200000234414,
+          "activeTotal": 1,
+          "activeByLane": {
+            "producer-critical": 0,
+            "producer-bulk": 0,
+            "exact": 1,
+            "discovery": 0
+          },
+          "serviceMs": 406.6425420000014
+        },
+        {
+          "lane": "exact",
+          "exactCallId": null,
+          "atMs": 2618.5918329999986,
+          "queueMs": 0.04112499998882413,
+          "activeTotal": 1,
+          "activeByLane": {
+            "producer-critical": 0,
+            "producer-bulk": 0,
+            "exact": 1,
+            "discovery": 0
+          },
+          "serviceMs": 603.9489999999932
+        }
+      ],
+      "directRpc": [
+        {
+          "id": 1,
+          "method": "eth_chainId",
+          "exactCallId": null,
+          "status": "returned",
+          "wallMs": 1645.9169590000092
+        },
+        {
+          "id": 2,
+          "method": "eth_getBlockByNumber",
+          "exactCallId": null,
+          "status": "returned",
+          "wallMs": 405.4972909999924
+        }
+      ],
+      "revmRequests": [
+        {
+          "exactCallId": 2,
+          "atMs": 3230.1196669999918,
+          "requestKind": null,
+          "target": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6",
+          "ok": true,
+          "epoch": "b6955fe0-87da-4246-91b8-2e11cf52877d",
+          "requestId": "1",
+          "daemonLatencyMs": 22600,
+          "wallMs": 23972.177958999993
+        },
+        {
+          "exactCallId": 2,
+          "atMs": 3232.4938330000004,
+          "requestKind": null,
+          "target": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "wallMs": 26770.406583000004
+        },
+        {
+          "exactCallId": 2,
+          "atMs": 3233.5929999999935,
+          "requestKind": null,
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "wallMs": 26769.310333999994
+        }
+      ],
+      "revmTiming": [
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "b6955fe0-87da-4246-91b8-2e11cf52877d",
+          "requestId": "1",
+          "target": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6",
+          "enqueuedAtMs": 1790786257647,
+          "dispatchedAtMs": 1790786257647,
+          "queueMs": 0,
+          "serviceMs": 23971,
+          "status": "returned",
+          "aborted": false,
+          "daemonLatencyMs": 22600
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "b6955fe0-87da-4246-91b8-2e11cf52877d",
+          "requestId": "2",
+          "target": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "enqueuedAtMs": 1790786257649,
+          "dispatchedAtMs": 1790786281618,
+          "queueMs": 23969,
+          "serviceMs": 2800,
+          "status": "rejected",
+          "aborted": true
+        },
+        {
+          "sourceBlock": 26029536,
+          "sourceBlockHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+          "epoch": "b6955fe0-87da-4246-91b8-2e11cf52877d",
+          "requestId": "3",
+          "target": "0xd5d19691d2f745bc6749f47cd8a3e61efde26423",
+          "enqueuedAtMs": 1790786257650,
+          "dispatchedAtMs": null,
+          "queueMs": 26768,
+          "serviceMs": null,
+          "status": "rejected",
+          "aborted": true
+        }
+      ],
+      "revmProcesses": [
+        {
+          "pid": 46121,
+          "atMs": 3232.3152919999993
+        }
+      ],
+      "suppressedLogLines": 18,
+      "timing": {
+        "quoteMs": 0,
+        "planBuildMs": 0,
+        "simMs": 0,
+        "amountPoints": 0,
+        "gssPoints": 0,
+        "hopExactCalls": 0
+      },
+      "ready": {
+        "instances": 170,
+        "funding": 2,
+        "graphEdges": 344,
+        "cutoff": {
+          "number": 26029537,
+          "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+          "generation": 26029537
+        },
+        "publicationSetHash": "a343dcb72689d751355dd59a5e44915da8dce6330363a371c294ff5ffaebddea",
+        "graphHash": "5ca7b6393686818a1c0a03e0797d78d915c5f291d5bab2fa68d8b97b8a9b525c",
+        "activations": [
+          {
+            "familyId": "custom-swap:angstrom-v4",
+            "sourceFile": "angstrom-v4.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ANGSTROM_V4_ENABLED"
+          },
+          {
+            "familyId": "protocol:astra-multitoken",
+            "sourceFile": "astra-multitoken.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ASTRA_MULTITOKEN_ENABLED"
+          },
+          {
+            "familyId": "flash-loan:balancer-v2",
+            "sourceFile": "balancer-flash.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_BALANCER_FLASH_ENABLED"
+          },
+          {
+            "familyId": "balancer-v3",
+            "sourceFile": "balancer-v3.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_BALANCER_V3_ENABLED"
+          },
+          {
+            "familyId": "curve-plain",
+            "sourceFile": "curve-plain.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED"
+          },
+          {
+            "familyId": "curve-underlying",
+            "sourceFile": "curve-underlying.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:dodo-v2",
+            "sourceFile": "dodo-v2.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_DODO_V2_ENABLED"
+          },
+          {
+            "familyId": "protocol:eigenpie",
+            "sourceFile": "eigenpie.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_EIGENPIE_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:ekubo-router-v1",
+            "sourceFile": "ekubo.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_EKUBO_ENABLED"
+          },
+          {
+            "familyId": "ella-exchange",
+            "sourceFile": "ella-exchange.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ELLA_EXCHANGE_ENABLED"
+          },
+          {
+            "familyId": "protocol:erc4626-silo-redeem",
+            "sourceFile": "erc4626-silo-redeem.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ERC4626_SILO_REDEEM_ENABLED"
+          },
+          {
+            "familyId": "protocol:erc4626",
+            "sourceFile": "erc4626.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ERC4626_ENABLED"
+          },
+          {
+            "familyId": "protocol:ethertoken-native-redeem",
+            "sourceFile": "ethertoken-native-redeem.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ETHERTOKEN_NATIVE_REDEEM_ENABLED"
+          },
+          {
+            "familyId": "credit:fluid",
+            "sourceFile": "fluid-credit.production.ts",
+            "enabled": false,
+            "defaultEnabled": false,
+            "envKey": "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED"
+          },
+          {
+            "familyId": "fluid-dex",
+            "sourceFile": "fluid-dex.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_FLUID_DEX_ENABLED"
+          },
+          {
+            "familyId": "protocol:goldx",
+            "sourceFile": "goldx.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_GOLDX_ENABLED"
+          },
+          {
+            "familyId": "protocol:metronome-hgusdc",
+            "sourceFile": "metronome-hgusdc.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_METRONOME_HGUSDC_ENABLED"
+          },
+          {
+            "familyId": "protocol:metronome-synth",
+            "sourceFile": "metronome-synth.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_METRONOME_SYNTH_ENABLED"
+          },
+          {
+            "familyId": "mooniswap",
+            "sourceFile": "mooniswap.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_MOONISWAP_ENABLED"
+          },
+          {
+            "familyId": "flash-loan:morpho",
+            "sourceFile": "morpho-flash.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED"
+          },
+          {
+            "familyId": "protocol:psm",
+            "sourceFile": "psm.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_PSM_ENABLED"
+          },
+          {
+            "familyId": "protocol:rocksolid",
+            "sourceFile": "rocksolid.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_ROCKSOLID_ENABLED"
+          },
+          {
+            "familyId": "protocol:self-burn-native",
+            "sourceFile": "self-burn-native.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_SELF_BURN_NATIVE_ENABLED"
+          },
+          {
+            "familyId": "protocol:token-conversion",
+            "sourceFile": "token-conversion.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_TOKEN_CONVERSION_ENABLED"
+          },
+          {
+            "familyId": "protocol:token-migration",
+            "sourceFile": "token-migration.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_TOKEN_MIGRATION_ENABLED"
+          },
+          {
+            "familyId": "custom-swap:uniswap-v1",
+            "sourceFile": "uniswap-v1.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNISWAP_V1_ENABLED"
+          },
+          {
+            "familyId": "univ2-standard",
+            "sourceFile": "univ2-standard.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV2_STANDARD_ENABLED"
+          },
+          {
+            "familyId": "univ3-standard",
+            "sourceFile": "univ3-standard.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV3_STANDARD_ENABLED"
+          },
+          {
+            "familyId": "univ4-fee-hook",
+            "sourceFile": "univ4-fee-hook.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED"
+          },
+          {
+            "familyId": "univ4",
+            "sourceFile": "univ4.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_UNIV4_ENABLED"
+          },
+          {
+            "familyId": "protocol:wsteth",
+            "sourceFile": "wsteth.production.ts",
+            "enabled": true,
+            "defaultEnabled": true,
+            "envKey": "SEARCHER_FAMILY_WSTETH_ENABLED"
+          }
+        ],
+        "cases": [
+          {
+            "rank": 477,
+            "P": "5195442",
+            "cap": "5000000000000",
+            "repeated": false,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ3-standard\u001f0x1ac1a8feaaea1900c4166deeed0c11cc10669d36\u001f0x1ac1a8feaaea1900c4166deeed0c11cc10669d36\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001ffc1a55cc59bce4baa79572a9b32adfd9df71c9174faea417dccb33e77dbc6d71",
+                "instance": "0x1ac1a8feaaea1900c4166deeed0c11cc10669d36"
+              },
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc166577917ebda5da12c2549434ec31c0ffe5c418f3152f17d291971fce14505",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              }
+            ]
+          },
+          {
+            "rank": 4,
+            "P": "2000000000000000",
+            "cap": "2000000000000000000000",
+            "repeated": true,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ4-fee-hook\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x8f66337a0c2a02202fd91dd596c411cf977c6060\u001fcfba6e7c0977fc138e4b317ea0b2260aa76fa130637441297c4f2faa80a967ae",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f"
+              },
+              {
+                "canonicalEdgeId": "univ4-fee-hook\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x8f66337a0c2a02202fd91dd596c411cf977c6060>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fdf89659ac18a113d91d1baa10a5df3b82551228959e3e453f48a33a33f1ffc19",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+                "instance": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524",
+                "instance": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0xd9e795dfbc7d1dca53d181d613681f5c1effab65>0x4507cef57c46789ef8d1a19ea45f4216bae2b528\u001f5ff3e327ba900871c8616b10441859ded7adddc099f4dbbc0a18cfc7461833eb",
+                "instance": "0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0x4507cef57c46789ef8d1a19ea45f4216bae2b528>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f5ea47e24ecf23cbf5341c4b062023d3590fcd3be1d7b646a6389ce9907739094",
+                "instance": "0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6"
+              }
+            ]
+          },
+          {
+            "rank": 8,
+            "P": "5195442",
+            "cap": "5000000000000",
+            "repeated": true,
+            "edges": [
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f67da6fc5994c96d758f7f7bfee5562ed43b6d511a2959c17c751cd1e0e8d9903",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2",
+                "instance": "0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0x6aa99959cc4722c3284f7fd8f2247222e6784a60\u001f0xd5d19691d2f745bc6749f47cd8a3e61efde26423>0xd9e795dfbc7d1dca53d181d613681f5c1effab65\u001f97baf10d86ae34b2ca7c27603a3d0085cd709a0a14d6186d06f638c70b75e524",
+                "instance": "0x6aa99959cc4722c3284f7fd8f2247222e6784a60"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f\u001f0xd9e795dfbc7d1dca53d181d613681f5c1effab65>0x4507cef57c46789ef8d1a19ea45f4216bae2b528\u001f5ff3e327ba900871c8616b10441859ded7adddc099f4dbbc0a18cfc7461833eb",
+                "instance": "0x9a8e07e47cbfafb5e142315794b2ebbe5aee011f"
+              },
+              {
+                "canonicalEdgeId": "univ2-standard\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6\u001f0x4507cef57c46789ef8d1a19ea45f4216bae2b528>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f5ea47e24ecf23cbf5341c4b062023d3590fcd3be1d7b646a6389ce9907739094",
+                "instance": "0xc7e6b676bfc73ae40bcc4577f22aab1682c691c6"
+              },
+              {
+                "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc166577917ebda5da12c2549434ec31c0ffe5c418f3152f17d291971fce14505",
+                "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+              }
+            ]
+          }
+        ]
+      },
+      "canonicalBefore": true,
+      "planCount": 1,
+      "planIndex": 0,
+      "sessionCreationTiming": {
+        "readyInstanceCount": 170,
+        "selectedInstanceCount": 5,
+        "refreshedInstanceCount": 0,
+        "skippedCleanInstanceCount": 0,
+        "failedInstanceCount": 0,
+        "requestedFundingAssetCount": 1,
+        "fundingOfferCount": 1,
+        "projectedRouteCount": 10,
+        "cleanAuthorityReissueCount": 0,
+        "pricingMs": 0,
+        "fundingMs": 410,
+        "routeProjectionMs": 1,
+        "totalMs": 415,
+        "heapUsedBytes": 70878464
+      },
+      "planSha256": "a3552bd126bd6b699ea1b10e9ca1942484b649c5f5e8bc9c6565e9f6c1dc0d6b",
+      "error": "BlockScanFamilyAttributedError: strict exact unresolved for univ2-standard\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xffee4a8c8fa89ae6bb19dfbd52f433c79b6501c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd5d19691d2f745bc6749f47cd8a3e61efde26423\u001f399019961d09062ee405f3d2cc5a6c35eed4a26f7ee16eaa71bb6eafa2de21f2: adapter-work:transport:scheduler-failure",
+      "cancelCause": "deadline",
+      "canonicalAfter": false,
+      "canonicalError": "Error: 30s invocation deadline",
+      "canonicalAfterMs": 0.1870000000053551,
+      "measuredMs": 30004.18908299999,
+      "aborted": true,
+      "totalWithDrainMs": 30005.616458000004,
+      "backend": {
+        "lane": "exact",
+        "scopeLabel": "exact quote",
+        "allowSingleCallFallback": false,
+        "maxBatchSize": 64,
+        "maxConcurrentBatches": 8,
+        "currentConcurrentBatchLimit": 8,
+        "currentBatchSizeLimit": 64,
+        "throttleRetries": 0,
+        "timeoutRetries": 0,
+        "totalCalls": 3,
+        "memoHits": 0,
+        "batchesSent": 2,
+        "batchedItems": 3,
+        "batchLatencyMs": 1010,
+        "maxBatchItemsSent": 2,
+        "pendingItems": 0,
+        "liveItems": 0,
+        "inFlightBatches": 0,
+        "peakInFlightBatches": 1,
+        "activeTransports": 0,
+        "abortedBatches": 0,
+        "completedAfterScopeAbort": 0,
+        "transportQueueWaitMs": 0.10341699999116827,
+        "maxTransportQueueWaitMs": 0.06229200000234414,
+        "peakSchedulerActiveTotal": 1,
+        "peakSchedulerLaneActive": 1,
+        "batchFailures": 0,
+        "singleCallFallbacks": 0,
+        "batchesOnNewSocket": 0,
+        "batchesOnReusedSocket": 2,
+        "drainMs": 0,
+        "persistentCacheContentSha256": null,
+        "persistentCacheConfigured": false,
+        "persistentCacheEntries": 0,
+        "persistentCacheHits": 0,
+        "persistentCacheSourceBlockHash": null,
+        "persistentCacheWrites": 0
+      },
+      "drainErrors": []
+    }
+  ],
+  "claim": "Selected repeated-route P-only cold-prefix hint ABBA diagnostic; full route and Solver/live completion reported separately; no final sim or EV",
+  "complete": false
+}

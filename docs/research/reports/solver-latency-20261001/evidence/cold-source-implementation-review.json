@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "reviewRole": "independent non-author implementation reviewer",
+  "reviewPass": 1,
+  "verdict": "offline implementation review passes for the exact bound sources; no blocking correctness findings",
+  "scope": "Cold-source hydration candidate versus prefix-pair-binary saved Rust sources. No external RPC, credentials, live operations, source edits, snapshot edits, commits or pushes by reviewer.",
+  "performanceAcceptance": false,
+  "externalRunAuthorization": "<redacted-secret>",
+  "goalComplete": false,
+  "bindings": {
+    "workspace": "<repo>",
+    "evidenceDirectory": "logs/solver-prefix-policy-20260930.MKk8Vk",
+    "plan": {
+      "path": "cold-source-hydration-plan.json",
+      "sha256": "bc6def0480c24b2e7cb73fe7487cbfc52fb45a172ab20c6cebbd846d3ad31320"
+    },
+    "priorDesignReview": {
+      "path": "next-prefix-slice-review.json",
+      "sha256": "a0c92b5a10a5f2f646c4aec5bf2d0f7b4fb3d837d9291320d6c59b9c452ebc8d"
+    },
+    "baseline": {
+      "main.rs": "dfd2cd47fa3b3b9c851020e1f8d6cf4ad69f1bdf6f428931c23c3e1f6054229b",
+      "diagnostic.rs": "5a7c79720d5b0410bf23906860e73082e5979d2b815b08a20470471fd925e286"
+    },
+    "candidate": {
+      "listener/revm-sim/src/main.rs": "f4d831191a2934ee99b103f04dc3a421470dc74548ce50be42d7c562bbb613f2",
+      "listener/revm-sim/src/diagnostic.rs": "67a0d33c13ac70368a6061220e541157e2aa85ac135df3aa7e54144e31837482",
+      "listener/revm-sim/target/release/revm-sim": "8993d08bd501af9c4c7555bb93b76a9286ca8d1f420652f806709f2a305f1e74"
+    },
+    "wholeTrackedDiffCommand": "git diff --binary | shasum -a 256",
+    "wholeTrackedDiffSha256AtReview": "252c371a5ee3074f6cac94c8fffcf6def3b01536f6fa52cd1b01c38226838f61",
+    "independentTest": {
+      "path": "cold-source-independent-test.rs",
+      "sha256": "283177962b75868c0e57b8442f081ab3227615bd839b7ba94e0b22c1d05f55e9"
+    }
+  },
+  "findings": [],
+  "contractReview": [
+    {
+      "property": "Eligibility and pre-send bound",
+      "anchors": [
+        "main.rs:2730",
+        "main.rs:2742",
+        "main.rs:2750"
+      ],
+      "finding": "The branch is inside source-pinned scalar strict_simulate, requires trial_prefix and self.pinned.is_none(), and accepts at most 253 hydration items plus exactly three source checks. Over-bound work selects the existing path before dispatch; no truncation or post-send fallback. Even a different-source existing session remains on the original path."
+    },
+    {
+      "property": "Authenticate before cache publication",
+      "anchors": [
+        "main.rs:832",
+        "main.rs:840",
+        "main.rs:2760",
+        "main.rs:2786"
+      ],
+      "finding": "Combined replies pass unchanged pinned batch identity/type/completeness checks, then all three source checks and complete header/environment/root comparison. Only then is a new session constructed and hydration applied. Invalid-source or malformed/missing hydration cannot publish self.pinned, source attestation, deal hints or EVM effects."
+    },
+    {
+      "property": "Mixed fatal outcomes and retries",
+      "anchors": [
+        "main.rs:265",
+        "main.rs:398",
+        "main.rs:591",
+        "main.rs:840"
+      ],
+      "finding": "RpcClient implementation is byte-identical to baseline. All response errors still pass through the fatal latch; an invalid source plus hydration quota error stays fatal and can report rpc-throttle, as accepted by the plan. Combined retry reissues the same whole body with existing limits. No fallback follows a dispatched failure. Success/no-retry logical-call equality does not imply equality on invalid prechecks or retries."
+    },
+    {
+      "property": "Hydration identity and zero duplicate reads",
+      "anchors": [
+        "main.rs:943",
+        "main.rs:1198",
+        "main.rs:1207",
+        "main.rs:2893",
+        "main.rs:2991"
+      ],
+      "finding": "Both paths use the same sorted/deduplicated account/storage planner and decoder. Candidate reads use the same EIP-1898 block hash and requireCanonical flag. Empty accounts are cached as known absence. The ordinary hydration revisit has zero RPC after successful combined hydration; no local code/storage mutation is put in the source cache."
+    },
+    {
+      "property": "Execution, warm, paired, final-sim and authority isolation",
+      "anchors": [
+        "main.rs:2774",
+        "main.rs:2823",
+        "main.rs:2891",
+        "main.rs:3232"
+      ],
+      "finding": "Fresh CacheDB and full authoritative prefix/main execution remain. The strict_pair, strict_execute_observed, RpcClient and apply_token_deals-to-mapping_slot_candidates source sections are independently byte-identical to frozen baseline. Fresh scalar postcheck remains after success, ordinary error, Revert and Halt; fatal latch still prevents further I/O. Existing non-prefix and warm request paths do not enter the optimization."
+    },
+    {
+      "property": "Exclusive diagnostic accounting",
+      "anchors": [
+        "diagnostic.rs:13",
+        "diagnostic.rs:23",
+        "main.rs:2753",
+        "main.rs:2764"
+      ],
+      "finding": "One new fixed phase charges the combined physical attempt once. Hydration decoding/revisit have separate exclusive wall intervals and zero attempts after successful combined fetch. Retry attempts remain counted in the combined phase; canonical-postcheck remains separately counted. No response/error text or new configurable behavior is introduced."
+    }
+  ],
+  "executedChecks": [
+    {
+      "cwd": "listener/revm-sim",
+      "command": "cargo test --offline --locked",
+      "exitCode": 0,
+      "result": "82 passed, 0 failed, 0 ignored; independently rerun at the final stable source hashes, 16.20s",
+      "coverage": "Includes the four new cold-source tests plus existing pinned/fatal/retry/strict execution/phase/pair regressions."
+    },
+    {
+      "cwd": "listener/revm-sim",
+      "command": "cargo test --offline --locked cold_source_hydration",
+      "exitCode": 0,
+      "result": "4 passed, 0 failed, 78 filtered out",
+      "coverage": "Complete response/gas/stage/attestation equality; exact logical order and 3-to-2 envelope reduction; bad source/hydration, duplicate/missing IDs and mixed throttle before publication; shuffled response IDs and identical whole-envelope retry; different-source and oversized fallback."
+    },
+    {
+      "cwd": "listener/revm-sim",
+      "command": "rustc --edition=2024 --test --crate-name cold_source_independent ../../logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-independent-test.rs -L dependency=target/debug/deps --extern anyhow=target/debug/deps/libanyhow-aad1a319eea0f22f.rlib --extern clap=target/debug/deps/libclap-ccc193fa5f46c878.rlib --extern hex=target/debug/deps/libhex-ce021e0d3a439a1a.rlib --extern reqwest=target/debug/deps/libreqwest-36f56ca27e5be9f7.rlib --extern revm=target/debug/deps/librevm-e27bf1a5ac0124f8.rlib --extern serde=target/debug/deps/libserde-8ad45854b1d4e28a.rlib --extern serde_json=target/debug/deps/libserde_json-389257afa0c1b8b2.rlib -o target/debug/cold-source-independent-test",
+      "exitCode": 0,
+      "result": "Independent ignored tests compiled against the production source directly, using already installed offline dependencies."
+    },
+    {
+      "cwd": "listener/revm-sim",
+      "command": "target/debug/cold-source-independent-test independent_cold_source",
+      "exitCode": 0,
+      "result": "3 passed, 0 failed, 82 existing tests filtered out; 0.08s",
+      "coverage": [
+        "Exactly 256 combined outgoing items succeeds; a request needing 259 combined items instead sends original precheck(3), hydration(256), postcheck(1). All state reads unique and correctly hash-pinned; no lost reads.",
+        "One cold and two same-source warm requests with input amounts 100, 1, 99 have envelope item counts [28,1,3,1,3,1], zero repeated hydration, equal output/gas/effects, known-empty source executor and no source-storage mutation.",
+        "Cold non-prefix strict execution remains [3,12,1] separate precheck/hydration/postcheck; it never enters the combined phase.",
+        "The independent loopback server reverses batch reply order. All addresses/endpoints are fixture-only; no credentials or environment endpoint lookup."
+      ]
+    },
+    {
+      "cwd": "listener/revm-sim",
+      "command": "cargo build --release --offline --locked",
+      "exitCode": 0,
+      "result": "Release succeeds. Existing account_specific_storage_candidates dead_code warning remains. Binary hash bound above."
+    },
+    {
+      "cwd": "listener",
+      "command": "REVM_SIM_TEST_BINARY=<repo>/listener/revm-sim/target/release/revm-sim node --import tsx --test --test-name-pattern '^pinned direct pair:' src/searcher/test/revm-sim-client.ts",
+      "exitCode": 0,
+      "result": "2 passed, 0 failed, 0 skipped. Actual TS client/current Rust/local HTTP; A streams before held B main-read and postcheck; scalar equality and all eight logical validations retained. Existing tests passed unchanged, with no fixture alignment by reviewer."
+    },
+    {
+      "cwd": "workspace",
+      "command": "git diff --check",
+      "exitCode": 0,
+      "result": "pass"
+    }
+  ],
+  "limitations": [
+    "This is an offline correctness/mechanism verdict only, not a latency win, deployment approval or full-Solver/live acceptance.",
+    "The mechanism removes one cold hydration exchange, not logical source/state work. Larger combined bodies may cost more provider time, and invalid-source/retry cases may issue extra hydration. Those costs remain part of a separately predeclared measurement.",
+    "Independent boundary fixtures intentionally use already sufficient token balance; existing full-suite funding and storage/transient/log/gas tests cover the unchanged execution machinery. No real historical route was replayed.",
+    "The new 256-item number is only an optimization eligibility bound, not an established provider limit or a bound on pre-existing request parsing/allocation.",
+    "This review does not cover any later source, binary, TS, runner or experiment-spec change. Rebind and review relevant deltas before use."
+  ],
+  "reviewerWrites": [
+    "cold-source-independent-test.rs",
+    "cold-source-implementation-review.json"
+  ],
+  "productionEditsByReviewer": []
+}

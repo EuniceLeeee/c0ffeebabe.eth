@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "reviewRole": "independent non-author design review",
+  "verdict": "REJECT proposed two-envelope execution under the unchanged per-child authority contract; explicit cohort ownership is feasible but does not resolve this blocker",
+  "implementationAuthorized": false,
+  "summary": "One central program batch really is a full-result publication boundary. However, collecting all prechecks before A and all postchecks after C removes the currently authoritative checkpoints between executions. Retaining twelve logical calls is not equivalent to retaining their temporal authority. Do not implement the proposed five-to-two exchange reduction as transport-only. An adjacent-bridge chain could retain the checkpoints, but saves only one exchange for the observed scalar-plus-pair triple and has not demonstrated a material benefit sufficient to justify the additional interfaces.",
+  "bindings": {
+    "root": "<repo>",
+    "briefSha256": "276349ff1b89b2bf8ee35526fb06d1f6c55700f034ccf7a2460c0e09fc15037d",
+    "sourceSha256": {
+      "listener/src/searcher/strict-central-adapter-runtime.ts": "5abf08753fc27b0249fbe6db5dff9d56b2cc8efe613e7994d33ff0bc1869ba77",
+      "listener/src/searcher/revm-strict-simulation-transport.ts": "2db8237af2fa97e8056cbe6764e190975ecc265e22442726180afbcff51012fb",
+      "listener/src/searcher/revm-strict-source-owner.ts": "09a07fe5a9ecb89a25a7d1b80569dc121fe3d9ab45dd61a46ac3f774af427ab1",
+      "listener/src/searcher/revm-sim-client.ts": "f7c60295c9d0dd3f880811eedf6589e3cc9f3e62744bd35bf2d8eccca8be6cfd",
+      "listener/revm-sim/src/main.rs": "dfd2cd47fa3b3b9c851020e1f8d6cf4ad69f1bdf6f428931c23c3e1f6054229b",
+      "listener/revm-sim/src/diagnostic.rs": "5a7c79720d5b0410bf23906860e73082e5979d2b815b08a20470471fd925e286",
+      "listener/src/searcher/venues/adapter-request-program.ts": "25a7632e2e2c7d4373a7340db39e98307288dfbbfca0b58b455de272aa3c405d"
+    }
+  },
+  "findings": [
+    {
+      "id": "publication-boundary",
+      "classification": "supported with limits",
+      "anchors": [
+        "strict-central-adapter-runtime.ts:330",
+        "strict-central-adapter-runtime.ts:431",
+        "strict-central-adapter-runtime.ts:552",
+        "venues/adapter-request-program.ts:460",
+        "venues/adapter-request-program.ts:477"
+      ],
+      "finding": "With exactPrefixContext, every execution.requests child enters simulated; awaitAllDrained waits for all and drains even after a rejection. Results are restored to declaration order, fenced, then returned. runRequestProgram checks the complete result set and required failures before synchronous decode; static reuse proof is issued only afterward and only when all results are ok. This supports atomic publication for this explicit execution, not for an entire quote, equal-prefix strangers, or all work sharing a signal. It is not an atomic source transaction."
+    },
+    {
+      "id": "authority-timing",
+      "classification": "blocking",
+      "anchors": [
+        "revm-sim/src/main.rs:812",
+        "revm-sim/src/main.rs:830",
+        "revm-sim/src/main.rs:854",
+        "revm-sim/src/main.rs:2698",
+        "revm-sim/src/main.rs:2787",
+        "revm-sim/src/main.rs:2817"
+      ],
+      "finding": "Scalar execution is pre(A), execute(A), post(A). Pair execution validates post(A)+pre(B) after A and before B, using four separate logical calls; B receives its own fresh VerifiedSource. Upfront pre(B/C) is older evidence across preceding executions, and deferred post(A/B) no longer gates the next child. Equal call counts cannot prove equivalence.",
+      "counterexample": "Let all upfront checks succeed, let the canonical header disagree during the A/B boundary, then restore it before the final checks. Warm B/C can execute from cached source values without a remote lookup. The current bridge can latch source-fault and prevent B; the proposed two-envelope schedule can miss that observation and accept all children. Also a persistent post-A failure would be discovered only after otherwise avoidable B/C work. Neither parent atomicity nor requireCanonical on cold reads repairs cached-read coverage.",
+      "resolution": "Preserve an actual validation boundary between executions, or explicitly obtain review of a changed source-authority contract. The latter is outside this transport-only request. Parallel independent executions would not recreate the current boundaries and is not a narrow substitute."
+    },
+    {
+      "id": "caller-and-state-isolation",
+      "classification": "feasible, not identity deduplication",
+      "anchors": [
+        "revm-strict-simulation-transport.ts:139",
+        "revm-strict-simulation-transport.ts:164",
+        "revm-sim-client.ts:435",
+        "revm-sim/src/main.rs:1676",
+        "revm-sim/src/main.rs:2873",
+        "revm-sim/src/main.rs:2987",
+        "revm-sim/src/main.rs:3017",
+        "revm-sim/src/main.rs:3206"
+      ],
+      "finding": "Main callers may differ: code/storage reads use zero, eth-call resolves its declared caller, and simulation uses its sealed actor. Current pair matching rejects differing from. A separate explicit-cohort contract could allow them only by retaining independently validated complete requests/plans. Prefix entry remains executor->executor; each main retains its own actor and the separately bound origin. Never copy A.from or A's plan to siblings. Every child must call unchanged strict_simulate_at with a fresh CacheDB and fresh execution journal; only the existing pinned remote values/slot hints are reusable. Gas, warmth, transient state, local code/funding/storage, observations and logs stay child-local."
+    },
+    {
+      "id": "ordinary-versus-fatal-outcomes",
+      "classification": "required design obligation",
+      "anchors": [
+        "venues/adapter-request-program.ts:477",
+        "strict-central-adapter-runtime.ts:887",
+        "revm-strict-simulation-transport.ts:60",
+        "revm-strict-simulation-transport.ts:125",
+        "revm-sim/src/main.rs:265",
+        "revm-sim/src/main.rs:2715",
+        "revm-sim/src/main.rs:2747"
+      ],
+      "finding": "required:false deliberately permits decode to consume a failed child beside successful ones. A batch-level throw for one ordinary validation, observation, prefix failure or main Halt would lose that behavior. Preserve each child's current result/error conversion, main Revert versus prefix failure, gas/effects/attestation validation and all-outcome postcheck. Unsupported or locally ineligible cohorts must fall back before any group dispatch; never replay after partial dispatch. Source/throttle/protocol fatal remains owner-terminal and outranks ordinary results/cancellation; it must never become merely an optional child failure. Prevalidating all children must not silently replace existing optional-error semantics."
+    },
+    {
+      "id": "ownership-fairness-drain",
+      "classification": "required design obligation",
+      "anchors": [
+        "revm-strict-simulation-transport.ts:85",
+        "revm-strict-source-owner.ts:147",
+        "revm-strict-source-owner.ts:163",
+        "revm-strict-source-owner.ts:189",
+        "revm-strict-source-owner.ts:223",
+        "revm-sim-client.ts:621",
+        "revm-sim-client.ts:670",
+        "revm-sim-client.ts:701"
+      ],
+      "finding": "Materialize/detach the whole explicit cohort before yielding, retain one exact source lease/generation and original cancellation domain, and compare actual effective deadlines including client timeout and source-slot deadline. Equal original deadlines/signals alone are insufficient. Insert bounded work through the existing FIFO without timers, queue scans, priority jumps or a second scheduler; never pull a later sibling ahead of older unrelated work. Parent identity must be explicit because the owner's normalized signal can cover multiple programs. Track every physically issued child through cancellation, matched late fatal, framing validation and real drain. A queued cancellation must not retire unrelated active work. No extension of any deadline. Arbitrary batches up to the central 512 limit would be disproportionate; any separately approved narrow version needs a small fixed child and encoded-byte bound with pre-send fallback."
+    }
+  ],
+  "authorityPreservingAlternativeNotApproved": {
+    "sequence": [
+      "pre(A):3",
+      "execute A",
+      "post(A)+pre(B):4",
+      "execute B",
+      "post(B)+pre(C):4",
+      "execute C",
+      "post(C):1"
+    ],
+    "logicalChecks": 12,
+    "physicalValidationEnvelopesOnSuccessWithoutRetry": 4,
+    "currentObservedEnvelopes": 5,
+    "limits": "This is an adjacent-bridge extension, not the proposed two-envelope optimization. Child execution stays serial and independent. Streaming checked child frames remains possible even if this parent publishes only the final array. Existing scalar/pair behavior must remain unchanged. No implementation or experiment is recommended solely from this review."
+  },
+  "measuredScale": {
+    "evidence": "same-input-cold-source-1.log, baseline A PIDs 61900 and 61948 only",
+    "baselineRows": [
+      {
+        "pid": 61900,
+        "scalarPostMs": 305.408542,
+        "pairFirstPreMs": 299.504125,
+        "existingPairBridgeMs": 329.406459,
+        "coldPrefixMs": 3712.148458,
+        "coldPrefixAttempts": 10,
+        "warmPrefixAttempts": [
+          0,
+          0
+        ]
+      },
+      {
+        "pid": 61948,
+        "scalarPostMs": 278.516792,
+        "pairFirstPreMs": 296.10475,
+        "existingPairBridgeMs": 318.186167,
+        "coldPrefixMs": 3072.662833,
+        "coldPrefixAttempts": 10,
+        "warmPrefixAttempts": [
+          0,
+          0
+        ]
+      }
+    ],
+    "interpretation": "These show a serial exchange opportunity at the scalar/pair boundary, not its counterfactual latency. The existing bridge is roughly 0.32s; replacing roughly 0.58-0.60s of separate checks with a similar bridge might save a few tenths, but provider/batch variability prevents a prediction. Cold prefix work still costs 3.07-3.71s here. The withdrawn one-exchange cold-source experiment did not establish a stable whole-hop win. Missing terminal third-hop timings remain censored, not evidence of a validation bottleneck. No complete-route, Solver or live win is supported."
+  },
+  "minimumRealScopeIfRebriefed": {
+    "productionFiles": [
+      "listener/src/searcher/strict-central-adapter-runtime.ts",
+      "listener/src/searcher/revm-strict-simulation-transport.ts",
+      "listener/src/searcher/revm-strict-source-owner.ts",
+      "listener/src/searcher/revm-sim-client.ts",
+      "listener/revm-sim/src/main.rs",
+      "listener/revm-sim/src/diagnostic.rs"
+    ],
+    "why": "Explicit central ownership, per-child materialization/result conversion, lease binding/drain, bounded wire/framing/FIFO admission, authority execution and accurate group accounting each require a real integration point. Existing input/result types could be reused without changing Family or search interfaces. This is not a two-file transport tweak.",
+    "diagnostics": "Count physical attempts once in exclusive group-owned validation intervals, retaining per-child IDs, execution intervals and logical-check attribution. Do not multiply one batch attempt by child count or treat absent terminal records as zero. Keep source height/PID linkage, diagnostic gating and secrecy.",
+    "necessaryOfflineProofsNotRun": [
+      "Mixed callers/targets/state reads exactly match scalar output, gas, effects and attestation with fresh journals",
+      "Optional ordinary error plus successful required peers retains decoder input; fatal never becomes optional",
+      "Canonical change between A/B stops B even if source later recovers; malformed/reordered/mixed-fatal batches fail closed",
+      "Pre/post checks remain on Revert, Halt and observation failure; no execution after fatal",
+      "Older unrelated FIFO work, unequal effective deadlines/signals, queued cancellation, late fatal and drain",
+      "Fixed child/byte overflow falls back before dispatch; no replay after dispatch; diagnostics conserve physical totals"
+    ]
+  },
+  "recommendation": "Keep the retained pair. Reject the two-envelope draft under current authority. If main chooses to investigate further, first rebrief the smaller adjacent-bridge contract and its modest measured opportunity; do not auto-generate a general cohort framework.",
+  "executedChecks": [
+    "Read-only source and existing test-body inspection",
+    "Read-only SHA-256 bindings",
+    "Read-only extraction of already-recorded baseline phase metrics"
+  ],
+  "notPerformed": [
+    "Tests or daemon launch",
+    "RPC/network/credential access",
+    "Production or snapshot edits",
+    "Process control",
+    "Benchmark rerun"
+  ]
+}

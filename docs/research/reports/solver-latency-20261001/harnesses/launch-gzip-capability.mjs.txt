@@ -1,0 +1,23 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import assert from 'node:assert/strict';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repo = path.resolve(here,'../..');
+let rpc = '';
+for (const line of fs.readFileSync('<user>/src/MEV/.env','utf8').split(/\r?\n/)) {
+  const match = line.trim().match(/^(?:export\s+)?MAINNET_RPC_URL=(.*)$/);
+  if (match) rpc = match[1].trim().replace(/^(['"])(.*)\1$/,'$2');
+}
+assert.equal(createHash('sha256').update(rpc).digest('hex'),
+  '860a9610cd135f044f125b2364ad22718483029de2022075cd8619cbd8ba6b4a');
+const child = spawn(path.join(repo,'listener/node_modules/.bin/tsx'),
+  [path.join(here,'gzip-capability-probe.mts'),'--run'], {
+    cwd:repo,stdio:['ignore','inherit','inherit'],
+    env:{PATH:process.env.PATH,MAINNET_RPC_URL:rpc,SEARCHER_DRY_RUN:'1'},
+  });
+const timer = setTimeout(()=>child.kill('SIGTERM'),200000);
+child.once('error',()=>{clearTimeout(timer);console.error('probe launcher failed');process.exitCode=1;});
+child.once('exit',(code,signal)=>{clearTimeout(timer);console.log(JSON.stringify({code,signal}));process.exitCode=code??1;});

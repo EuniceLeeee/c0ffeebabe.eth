@@ -1,0 +1,23 @@
+// Faithful line-preserving projection for the canonical latency analyzer.
+// Non-latency lines become blank; process/commit anchors remain byte-identical.
+import {createReadStream,createWriteStream,writeFileSync,statSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {createInterface} from 'node:readline';
+import {once} from 'node:events';
+import {resolve} from 'node:path';
+const [sourceArg,outArg,fromArg,toArg]=process.argv.slice(2);
+const source=resolve(sourceArg),out=resolve(outArg),from=Number(fromArg),to=Number(toArg);
+if(!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||to<from)throw Error('invalid window');
+const size=statSync(source).size,inputHash=createHash('sha256'),outputHash=createHash('sha256');
+const stream=createReadStream(source,{end:size-1});stream.on('data',chunk=>inputHash.update(chunk));
+const output=createWriteStream(out,{flags:'wx',mode:0o600});
+let lines=0,anchors=0,timings=0;
+for await(const line of createInterface({input:stream,crlfDelay:Infinity})){
+  lines++;let keep=false;
+  if(line.includes('[searcher/live] starting V5 searcher')||line.includes('[searcher/live] runtime_commit=')){keep=true;anchors++;}
+  if(line.includes('"type":"block_scan_timing"')){try{const v=JSON.parse(line.slice(line.indexOf('{')));if(v.source_block>=from&&v.source_block<=to&&!v.startup_warm){keep=true;timings++;}}catch{}}
+  const text=(keep?line:'')+'\n';outputHash.update(text);if(!output.write(text))await once(output,'drain');
+}
+output.end();await once(output,'finish');
+const receipt={source,sourceBytes:size,sourceSha256:inputHash.digest('hex'),projection:out,projectionSha256:outputHash.digest('hex'),from,to,lines,anchors,timings,rule:'original process and commit anchors; all non-startup timing rows in inclusive window; all remaining original line positions blank; no invented anchors or timings'};
+writeFileSync(out+'.provenance.json',JSON.stringify(receipt,null,2)+'\n',{flag:'wx',mode:0o600});console.log(JSON.stringify(receipt));

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "kind": "implementation-plan-for-review-not-yet-approved",
+  "searcher_behavior_change": "yes",
+  "scope": "Generic source-state read reuse inside existing strict runtime; no Family semantics or interfaces, source checks, pricing/search changes.",
+  "causalEvidence": {
+    "currentCode": "createSharedCodeReadCache retains successful code bytes by same runtime/source/lane/signal/deadline; get-storage remains direct on every exact request.",
+    "savedControl": "six-family-ev-20260930.Pc1Pv8/xwin/result.json has12amounts/8GSS/24completedhops/0Rustprefixreads; default xWin local exact program issues amount-independent storage reads in several dependent preparation rounds.",
+    "claimBoundary": "This is repeated-route quote preparation, not Rust prefix execution. Existing evidence cannot quantify storage-attributed savings; validate before any latency win claim."
+  },
+  "candidate": {
+    "allowedFiles": [
+      "listener/src/searcher/strict-central-adapter-runtime.ts",
+      "listener/src/searcher/test/strict-central-adapter-runtime.ts"
+    ],
+    "forbidden": "Family/math/ABI/protocol branches, other existing11dirty files, source/fence/canonical checks, config/search/deadlines, simulator implementation, exact result/handle reuse, unsafe number-only cross-source cache",
+    "strategy": "Extend existing bounded raw-byte source cache and owner/joiner handling to get-storage; key includes kind,address,slot plus current source/lane/signal/deadline; no new scheduler/API/knob. Prefix-context requests remain simulator-bound and completely bypass source cache.",
+    "lifetime": "Same explicit signal and finite deadline only; source hash+number+generation; provider is fixed by runtime object. Retire on abort/deadline/generation failure exactly as current code cache. No cross-trial mutable state cached.",
+    "bounds": "Keep256total entries; retain existing code<=32KiB bound and storage only canonical32byte hex strings; no failure cached, overflow existing non-cached path; preserve work drain."
+  },
+  "requiredTests": [
+    "existing code-sharing/parallelism/fencing tests still pass",
+    "storage repeated same slot sequential and concurrent joins onephysicalread, fresh per-request result/provenance",
+    "kind,address,slot,source,hash,generation,lane,signal,deadline isolate",
+    "failed/malformed/oversized storage not retained",
+    "all-pending overflow/eviction no repopulation or cancellation leaks",
+    "cancel/deadline/generation and permit failure drains owners/joiners without acceptingstale",
+    "exactPrefixContext mutated reads never reuse raw storage cache",
+    "no amountquote or search quality changes"
+  ],
+  "evaluation": {
+    "offline": "Main nonauthor review, full strictcentral and client/prefix suites; baseline/current actual production request path with loopback reads and parity/counters before external calls.",
+    "performance": "Only after approved frozen same-input experiment; original xWin derived environment must remain exact. No relabeling of canned replay time as live. Prior failed rank8 experiments remain closed.",
+    "next": "Independent narrow design review pending. No new code or RPC started."
+  },
+  "authority": "Original autonomous Solver latency scope only; pending V4 Family permission is separate and not assumed."
+}

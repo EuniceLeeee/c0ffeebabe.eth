@@ -1,0 +1,75 @@
+{
+  "role": "manual non-author evaluator",
+  "experiment": "same-input-cold-prefix-1",
+  "inputsUnchanged": true,
+  "allFourAttemptsRetained": true,
+  "order": [
+    "A",
+    "B",
+    "B",
+    "A"
+  ],
+  "outcomes": [
+    "cancelled30s",
+    "cancelled30s",
+    "cancelled30s",
+    "cancelled30s"
+  ],
+  "solverEntered": 0,
+  "finalSimOrEV": "not run by declared P-only diagnostic",
+  "completedQuoteHops": [
+    2,
+    2,
+    2,
+    1
+  ],
+  "sharedCompletedQuoteOutputs": "hop0 all4 exact; hop1 A1/B1/B2 exact; no full-route parity claim",
+  "hop1WallMs": [
+    17378.449417,
+    19711.254875,
+    17248.573208,
+    null
+  ],
+  "hop1CensoredElapsedA2Ms": 26779.239375,
+  "firstRequestColdPrefix": {
+    "A": [
+      {
+        "wallMs": 5339.769126,
+        "rpcAttempts": 10
+      },
+      {
+        "wallMs": 12315.744625,
+        "rpcAttempts": 10
+      }
+    ],
+    "B": [
+      {
+        "scoutHintExecutionWallMs": 5275.280875,
+        "rpcAttempts": 2
+      },
+      {
+        "scoutHintExecutionWallMs": 4304.633083,
+        "rpcAttempts": 2
+      }
+    ],
+    "warmSiblingHintAttempts": 0
+  },
+  "finding": "Physical cold-prefix requests reduced but declared quote-hop latency win not demonstrated consistently; first B slower than complete A and second B nearly equal. All routes censored. Source pre/postchecks and other cold hydration remain dominant; warm prefix execution itself submillisecond.",
+  "phaseAssociation": "Actual production daemon PID captured by runner plus numeric requestId; no join by ordering",
+  "censoring": "No terminal phase record means unfinished/unknown, never zero. Later rejected prefix requests in B2 do not prove full-route equivalence or success.",
+  "decision": "WITHDRAW latest cold-prefix candidate, preserve its frozen source/binary and all evidence. Retain earlier conditional-prefix policy, batched mandatory source checks, preparation settlement and phase diagnostics.",
+  "restoredTrackedDiffSha256": "75d97cb2be70fc49217c64f9ebedb6cb075ede7c4532237fbe45ad049940b5c6",
+  "drainMs": [
+    1.716667,
+    1.061042,
+    2.364417,
+    1.403125
+  ],
+  "drainErrors": [],
+  "limitations": [
+    "Selected post-enumeration route, not natural live acceptance",
+    "No stable full-route or whole-Solver speed claim",
+    "No new live or extra real-RPC trials after seeing these outcomes",
+    "CU not known from provider billing; physical attempts are the diagnostic metric"
+  ]
+}

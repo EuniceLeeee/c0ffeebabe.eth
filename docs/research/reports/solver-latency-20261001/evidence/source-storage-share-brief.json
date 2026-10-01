@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "searcher_behavior_change": "yes",
+  "decision": "Implement the reviewed narrow generic source-storage sharing slice under the original autonomous Solver latency goal.",
+  "plan": "source-storage-share-plan.json",
+  "review": "source-storage-share-design-review.json",
+  "allowedFiles": [
+    "listener/src/searcher/strict-central-adapter-runtime.ts",
+    "listener/src/searcher/test/strict-central-adapter-runtime.ts"
+  ],
+  "implementation": "Extend the existing private raw-byte code-read cache and owner/joiner dispatch to get-storage. Keep the combined256-entry cap and existing explicit-control lifetime. Include request kind and canonical slot in the key. Retain storage only if exactly32byte hex; preserve original result/error semantics. Prefix-context work completely bypasses source reuse. Each consumer has fresh result/provenance and all original fences. No new public API/config/scheduler, Family semantics, source-authority changes, search or timeout changes.",
+  "regressions": "Execute all reviewed positive/negative isolation, lifetime/fence, malformed/error, overflow/drain, prefix exclusion and existing code-sharing tests. Production-shaped dependent programs must prove actual duplicate read reduction, not just cache-unit hits. No external network, credentials or RPC.",
+  "reviewPassLimit": 3,
+  "evaluation": "Main independently reviews full two-file diff and reruns gates. A passed offline test means implementation correctness only, not live Solver speedup. Later external performance experiment requires its own frozen declaration.",
+  "cuSpentThisSlice": 0,
+  "scope": "Do not edit other11dirty tracked files, docs, global config, Family files, source checks, simulator or search limits. No push/merge/deployment/sign/broadcast. CLI model incompatibility already established; reuse existing native Codex fallback."
+}

@@ -1,0 +1,1678 @@
+{
+  "schemaVersion": 1,
+  "reviewerRole": "independent non-author raw-evidence evaluator",
+  "verdict": "reject_predeclared_solver_latency_acceptance",
+  "implementationCorrectnessFinding": "No observed output, call, source-guard or drain regression in these twenty saved attempts.",
+  "performanceFinding": "All three predeclared latency criteria fail. Do not promote this change as a demonstrated Solver speedup on the basis of this experiment.",
+  "scope": {
+    "allowedEvidenceRead": [
+      "same-input-gzip-1/results.json",
+      "same-input-gzip-1/declaration.json",
+      "gzip-transport-timing.json"
+    ],
+    "mainManualJudgmentRead": false,
+    "assessorOutputRead": false,
+    "implementationReviewRepeated": false,
+    "reviewerWrites": [
+      "gzip-solver-result-review.json"
+    ],
+    "externalRpcCalls": 0,
+    "reruns": 0,
+    "productionOrSnapshotEdits": false,
+    "credentialAccess": false
+  },
+  "evidenceBindings": {
+    "same-input-gzip-1/results.json": "2d5dc8cf43bdefb8239dd1d209a8c2b5212d54e2ade5a04fa6f98921cd1ed386",
+    "same-input-gzip-1/declaration.json": "e54be5eefc07f0eff6ebb9a6c4fe4cc07d0edfa82e8eb6b0196bf5cbf1aaa566",
+    "gzip-transport-timing.json": "8af732f48eae4b2698b5a881f6f11c728e2844abede1a3d5d604aa9e22770142",
+    "declaredRunnerSha256": "2be619af4ec2c0ea9f48976c2f8d265f1dea5d684d4472e419e5d5f2cbc78b37"
+  },
+  "gates": {
+    "allTwentyComplete": true,
+    "cancelled": 0,
+    "failed": 0,
+    "notRun": 0,
+    "identicalOrderedAmountsAndHopOutputs": true,
+    "identicalOrderedCandidates": true,
+    "identicalPlanHash": true,
+    "identicalPhysicalCallMultiset": true,
+    "identicalOrderedEnvelopeCallGroups": true,
+    "sourceGuardsAndDrainsPass": true,
+    "solverMedian": {
+      "metric": "solverMs; nearest-rank empirical median, fifth order statistic per ten observations",
+      "baselineMs": 4553.884040999983,
+      "candidateMs": 4322.1654160000035,
+      "candidateOverBaseline": 0.949116265826326,
+      "requiredMaximumRatio": 0.9,
+      "reductionPct": 5.088373417367398,
+      "pass": false,
+      "sensitivity": {
+        "note": "Using the conventional even-sample midpoint median also fails; verdict does not depend on this convention.",
+        "baselineMs": 4721.157582999993,
+        "candidateMs": 4620.3578954999975,
+        "reductionPct": 2.1350629740247595
+      }
+    },
+    "adjacentPairWins": {
+      "candidateWins": 4,
+      "totalPairs": 10,
+      "requiredWins": 8,
+      "pass": false,
+      "pairing": "Consecutive non-overlapping declaration slots: (1,2), (3,4), ..., (19,20); identify A/B within each pair."
+    },
+    "solverP95": {
+      "method": "nearest-rank ceil(0.95*n); maximum with n=10 per arm",
+      "baselineMs": 5751.443125000005,
+      "candidateMs": 7432.210250000004,
+      "candidateOverBaseline": 1.2922339817104593,
+      "requiredMaximumRatio": 1.1,
+      "pass": false
+    }
+  },
+  "integrityAndResource": {
+    "assertionsPassed": true,
+    "order": "ABBAx5",
+    "rank": 477,
+    "P": "5195442",
+    "source": {
+      "number": 26029536,
+      "hash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+      "generation": 1
+    },
+    "stateRoot": "0xa8c4eb4a5b7d2a90ee1ffa7ca44d1f90394210a46c77e4bf3fb76f68cfb64afe",
+    "snapshotManifestOnlyDelta": [
+      "shared/state/state-backend.ts"
+    ],
+    "postRunUnchangedAttestations": {
+      "A": true,
+      "B": true,
+      "runtimeAssetsA": true,
+      "runtimeAssetsB": true,
+      "binaryA": true,
+      "binaryB": true,
+      "inputs": true,
+      "runner": true,
+      "spec": true,
+      "executorA": true,
+      "executorB": true
+    },
+    "declarationBeforeFirstRecordedBackendDispatch": true,
+    "orderedNonOverlappingBackendWindows": true,
+    "createdAt": "2026-09-30T19:22:09.839Z",
+    "firstBackendDispatch": "2026-09-30T19:22:11.301Z",
+    "lastBackendSettled": "2026-09-30T19:24:27.781Z",
+    "perInvocation": {
+      "amountPoints": 12,
+      "gssPoints": 8,
+      "hopQuotes": 24,
+      "backendPhysicalCalls": 15,
+      "backendHttpEnvelopes": 11,
+      "directCanonicalLogicalCalls": 4,
+      "directCanonicalHttpEnvelopes": 4,
+      "backendMemoHits": 22,
+      "logicalIssuancesIncludingMemo": 41,
+      "maxBatchSize": 64,
+      "maxConcurrentBatches": 8,
+      "observedPeakInFlightBatches": 1,
+      "observedPeakSchedulerActiveTotal": 1,
+      "batchSizes": [
+        1,
+        1,
+        2,
+        3,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "throttleRetries": 0,
+      "timeoutRetries": 0,
+      "singleCallFallbacks": 0
+    },
+    "total": {
+      "amountPoints": 240,
+      "gssPoints": 160,
+      "hopQuotes": 480,
+      "backendPhysicalCalls": 300,
+      "canonicalLogicalCalls": 80,
+      "wireLogicalCalls": 380,
+      "backendHttpEnvelopes": 220,
+      "canonicalHttpEnvelopes": 80,
+      "httpEnvelopes": 300,
+      "memoHits": 440,
+      "logicalIssuances": 820
+    },
+    "resources": {
+      "logicalIssuances": 820,
+      "cap": 1492,
+      "priorReservation": 500,
+      "combined": 1320,
+      "totalWorkMs": 138545.01071,
+      "totalWithDrainMs": 138557.258334,
+      "maxWorkMs": 9617.068250000011,
+      "maxDrainMs": 1.5603330000012647
+    },
+    "canonicalPreChecks": 20,
+    "canonicalPostChecks": 20,
+    "unexpectedPrefixRequests": 0,
+    "rustRequests": 0,
+    "rustProcesses": 0,
+    "finalSimulations": 0,
+    "allBackendEndCountersZero": [
+      "pendingItems",
+      "liveItems",
+      "inFlightBatches",
+      "activeTransports",
+      "abortedBatches",
+      "completedAfterScopeAbort",
+      "batchFailures",
+      "singleCallFallbacks",
+      "throttleRetries",
+      "timeoutRetries"
+    ],
+    "drainErrors": 0,
+    "sourceQualification": "Each run records successful canonical pre/post checks, four returned canonical RPCs and the declared source hash on every backend envelope. Saved evidence does not include raw chainId/header return bodies, so these are reviewed-runner attestations, not a fresh independent chain verification.",
+    "unchangedQualification": "Only the three allowed evidence files were read for this outcome review. Snapshot manifests were compared and their declaration hashes recomputed; post-run unchanged flags were checked. No live files or frozen snapshots were reopened."
+  },
+  "equality": {
+    "planSha256": "e82b72ea693706138b4f987182f10261d62618121f6922c3e09aef67ab333eec",
+    "orderedHopProjectionSha256": "74f6c1b1e6729520c11ee4e545b6e9f6d38ed98b7ab904b613533f5ad374d98b",
+    "physicalCallMultisetSha256": "cf057131085053abb26f8e838e4cf90cff9f4aa704cc10529b00a23553c9e531",
+    "comparisonMethod": "Deep equality across all twenty runs, not hash-only acceptance. First-hop amount order and reconstructed two-hop input/intermediate/output triples match exactly. The full issued hop sequence, ordered candidates and plan hash match. Physical requests compare method/source/target/from/selector/calldata SHA; envelope call grouping and order also match.",
+    "orderedTwoHopOutputs": [
+      {
+        "input": "5195442",
+        "intermediate": "1876284098039338",
+        "output": "5198721"
+      },
+      {
+        "input": "51954420",
+        "intermediate": "18749955020633093",
+        "output": "51948454"
+      },
+      {
+        "input": "519544200",
+        "intermediate": "186213492213330237",
+        "output": "515619969"
+      },
+      {
+        "input": "5195442000",
+        "intermediate": "1803071204876023504",
+        "output": "4964647540"
+      },
+      {
+        "input": "23057372",
+        "intermediate": "8324763679236690",
+        "output": "23065354"
+      },
+      {
+        "input": "34092490",
+        "intermediate": "12306949165940879",
+        "output": "34098288"
+      },
+      {
+        "input": "16234115",
+        "intermediate": "5861843957351583",
+        "output": "16241502"
+      },
+      {
+        "input": "27270590",
+        "intermediate": "9845318012258538",
+        "output": "27278196"
+      },
+      {
+        "input": "20450049",
+        "intermediate": "7383683718745691",
+        "output": "20457978"
+      },
+      {
+        "input": "24665143",
+        "intermediate": "8905031970583646",
+        "output": "24673048"
+      },
+      {
+        "input": "22060215",
+        "intermediate": "7964860984880513",
+        "output": "22068202"
+      },
+      {
+        "input": "21446047",
+        "intermediate": "7743184905928464",
+        "output": "21454022"
+      }
+    ],
+    "orderedDeferredCandidates": [
+      {
+        "amount": "22060215",
+        "profit": "7987",
+        "profitToken": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      },
+      {
+        "amount": "23057372",
+        "profit": "7982",
+        "profitToken": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      },
+      {
+        "amount": "21446047",
+        "profit": "7975",
+        "profitToken": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      }
+    ],
+    "finalSimulationAndProfitabilityNotTested": true
+  },
+  "performance": {
+    "solver": {
+      "A": {
+        "n": 10,
+        "min": 3654.058250000002,
+        "medianNearestRank": 4553.884040999983,
+        "medianMidpoint": 4721.157582999993,
+        "p95": 5751.443125000005,
+        "max": 5751.443125000005,
+        "sum": 46417.96391600001
+      },
+      "B": {
+        "n": 10,
+        "min": 3689.3975830000018,
+        "medianNearestRank": 4322.1654160000035,
+        "medianMidpoint": 4620.3578954999975,
+        "p95": 7432.210250000004,
+        "max": 7432.210250000004,
+        "sum": 48889.141457000005
+      },
+      "medianRatio": 0.949116265826326,
+      "p95Ratio": 1.2922339817104593
+    },
+    "measuredIncludingPreparationAndCanonicalPostcheck": {
+      "A": {
+        "n": 10,
+        "min": 5277.608915999997,
+        "medianNearestRank": 6482.085959000004,
+        "medianMidpoint": 6507.481833999998,
+        "p95": 8355.374792,
+        "max": 8355.374792,
+        "sum": 66299.103918
+      },
+      "B": {
+        "n": 10,
+        "min": 6059.767959000004,
+        "medianNearestRank": 6673.016125000009,
+        "medianMidpoint": 6854.721624999998,
+        "p95": 9617.068250000011,
+        "max": 9617.068250000011,
+        "sum": 72245.90679200001
+      },
+      "medianRatio": 1.0294550499958905,
+      "p95Ratio": 1.1510038136419734
+    },
+    "totalIncludingDrain": {
+      "A": {
+        "n": 10,
+        "min": 5278.011082999998,
+        "medianNearestRank": 6482.603709000003,
+        "medianMidpoint": 6508.093646499998,
+        "p95": 8356.753332999999,
+        "max": 8356.753332999999,
+        "sum": 66305.672792
+      },
+      "B": {
+        "n": 10,
+        "min": 6060.28850000001,
+        "medianNearestRank": 6673.464166000005,
+        "medianMidpoint": 6855.110729,
+        "p95": 9617.63562500001,
+        "max": 9617.63562500001,
+        "sum": 72251.58554200003
+      },
+      "medianRatio": 1.0294419442507377,
+      "p95Ratio": 1.1508818367320848
+    },
+    "preparation": {
+      "A": {
+        "n": 10,
+        "min": 1010.7963329999984,
+        "medianNearestRank": 1153.5375830000012,
+        "medianMidpoint": 1203.606208000001,
+        "p95": 1767.107958,
+        "max": 1767.107958,
+        "sum": 13067.549750000006
+      },
+      "B": {
+        "n": 10,
+        "min": 1107.5410830000037,
+        "medianNearestRank": 1352.7981250000012,
+        "medianMidpoint": 1355.9691665000064,
+        "p95": 2150.097916999999,
+        "max": 2150.097916999999,
+        "sum": 14993.044917000021
+      },
+      "medianRatio": 1.172738664900526,
+      "p95Ratio": 1.2167326321327103
+    },
+    "canonicalPostcheck": {
+      "A": {
+        "n": 10,
+        "min": 593.3132499999992,
+        "medianNearestRank": 616.7574170000007,
+        "medianMidpoint": 619.1484584999998,
+        "p95": 866.4855419999985,
+        "max": 866.4855419999985,
+        "sum": 6813.372250999997
+      },
+      "B": {
+        "n": 10,
+        "min": 625.1385000000009,
+        "medianNearestRank": 792.3371670000051,
+        "medianMidpoint": 796.7736460000015,
+        "p95": 1129.7282500000001,
+        "max": 1129.7282500000001,
+        "sum": 8363.54200099999
+      },
+      "medianRatio": 1.2846820243428125,
+      "p95Ratio": 1.3038050783771786
+    },
+    "invocations": [
+      {
+        "n": 1,
+        "arm": "A",
+        "solverMs": 5721.719417,
+        "preparationMs": 1767.107958,
+        "postMs": 866.4855419999985,
+        "measuredMs": 8355.374792,
+        "drainMs": 1.314542000000074,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 2,
+        "arm": "B",
+        "solverMs": 4073.3507499999996,
+        "preparationMs": 1902.7548749999987,
+        "postMs": 625.1385000000009,
+        "measuredMs": 6601.264874999999,
+        "drainMs": 1.5603330000012647,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 3,
+        "arm": "B",
+        "solverMs": 3689.3975830000018,
+        "preparationMs": 2150.097916999999,
+        "postMs": 789.2196250000015,
+        "measuredMs": 6628.739582999999,
+        "drainMs": 0.3637910000034026,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 4,
+        "arm": "A",
+        "solverMs": 5391.0065410000025,
+        "preparationMs": 1153.5375830000012,
+        "postMs": 757.4070839999986,
+        "measuredMs": 7301.962958,
+        "drainMs": 0.7443329999987327,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 5,
+        "arm": "A",
+        "solverMs": 3674.7109999999993,
+        "preparationMs": 1253.674833000001,
+        "postMs": 593.3132499999992,
+        "measuredMs": 5521.719000000001,
+        "drainMs": 0.261000000005879,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 6,
+        "arm": "B",
+        "solverMs": 4322.1654160000035,
+        "preparationMs": 1107.5410830000037,
+        "postMs": 1129.7282500000001,
+        "measuredMs": 6559.451125,
+        "drainMs": 0.36933399999543326,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 7,
+        "arm": "B",
+        "solverMs": 5210.1855,
+        "preparationMs": 1442.5142080000005,
+        "postMs": 814.0249580000018,
+        "measuredMs": 7466.744875000004,
+        "drainMs": 0.2086249999993015,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 8,
+        "arm": "A",
+        "solverMs": 3656.0648749999964,
+        "preparationMs": 1112.8822500000024,
+        "postMs": 809.0502080000006,
+        "measuredMs": 5578.019125000006,
+        "drainMs": 0.5373340000005555,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 9,
+        "arm": "A",
+        "solverMs": 3654.058250000002,
+        "preparationMs": 1010.7963329999984,
+        "postMs": 612.7291669999977,
+        "measuredMs": 5277.608915999997,
+        "drainMs": 0.3688750000001164,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 10,
+        "arm": "B",
+        "solverMs": 5536.379167000006,
+        "preparationMs": 1784.6394169999985,
+        "postMs": 801.2101249999978,
+        "measuredMs": 8122.257917000003,
+        "drainMs": 0.4631660000013653,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 11,
+        "arm": "B",
+        "solverMs": 3963.0758750000095,
+        "preparationMs": 1316.4560420000053,
+        "postMs": 780.2210419999901,
+        "measuredMs": 6059.767959000004,
+        "drainMs": 0.48408300000301097,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 12,
+        "arm": "A",
+        "solverMs": 5751.443125000005,
+        "preparationMs": 1688.5189590000082,
+        "postMs": 616.7574170000007,
+        "measuredMs": 8056.7402090000105,
+        "drainMs": 0.5855830000073183,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 13,
+        "arm": "A",
+        "solverMs": 4908.720209000006,
+        "preparationMs": 1412.8691249999974,
+        "postMs": 621.539499999999,
+        "measuredMs": 6943.1368749999965,
+        "drainMs": 0.366334000005736,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 14,
+        "arm": "B",
+        "solverMs": 4918.550374999992,
+        "preparationMs": 1332.8946670000005,
+        "postMs": 784.9685000000027,
+        "measuredMs": 7036.427124999987,
+        "drainMs": 0.3098749999917345,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 15,
+        "arm": "B",
+        "solverMs": 5444.609540999998,
+        "preparationMs": 1244.208375000002,
+        "postMs": 792.3371670000051,
+        "measuredMs": 7481.168957999995,
+        "drainMs": 0.6233340000035241,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 16,
+        "arm": "A",
+        "solverMs": 4217.9253330000065,
+        "preparationMs": 1541.3808750000026,
+        "postMs": 722.7630840000056,
+        "measuredMs": 6482.085959000004,
+        "drainMs": 0.48408300000301097,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 17,
+        "arm": "A",
+        "solverMs": 4888.431125000003,
+        "preparationMs": 1044.445584000001,
+        "postMs": 599.9861660000024,
+        "measuredMs": 6532.877708999993,
+        "drainMs": 0.6731250000011642,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 18,
+        "arm": "B",
+        "solverMs": 7432.210250000004,
+        "preparationMs": 1359.1402080000116,
+        "postMs": 825.7051249999931,
+        "measuredMs": 9617.068250000011,
+        "drainMs": 0.5381670000060694,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 19,
+        "arm": "B",
+        "solverMs": 4299.21699999999,
+        "preparationMs": 1352.7981250000012,
+        "postMs": 1020.9887089999975,
+        "measuredMs": 6673.016125000009,
+        "drainMs": 0.4250000000174623,
+        "physicalCalls": 19,
+        "envelopes": 15
+      },
+      {
+        "n": 20,
+        "arm": "A",
+        "solverMs": 4553.884040999983,
+        "preparationMs": 1082.336249999993,
+        "postMs": 613.3408329999947,
+        "measuredMs": 6249.578374999983,
+        "drainMs": 0.6834579999849666,
+        "physicalCalls": 19,
+        "envelopes": 15
+      }
+    ],
+    "adjacentPairs": [
+      {
+        "pair": 1,
+        "A": 1,
+        "B": 2,
+        "aSolverMs": 5721.719417,
+        "bSolverMs": 4073.3507499999996,
+        "deltaBMinusAMs": -1648.3686670000006,
+        "Bwins": true
+      },
+      {
+        "pair": 2,
+        "A": 4,
+        "B": 3,
+        "aSolverMs": 5391.0065410000025,
+        "bSolverMs": 3689.3975830000018,
+        "deltaBMinusAMs": -1701.6089580000007,
+        "Bwins": true
+      },
+      {
+        "pair": 3,
+        "A": 5,
+        "B": 6,
+        "aSolverMs": 3674.7109999999993,
+        "bSolverMs": 4322.1654160000035,
+        "deltaBMinusAMs": 647.4544160000041,
+        "Bwins": false
+      },
+      {
+        "pair": 4,
+        "A": 8,
+        "B": 7,
+        "aSolverMs": 3656.0648749999964,
+        "bSolverMs": 5210.1855,
+        "deltaBMinusAMs": 1554.1206250000032,
+        "Bwins": false
+      },
+      {
+        "pair": 5,
+        "A": 9,
+        "B": 10,
+        "aSolverMs": 3654.058250000002,
+        "bSolverMs": 5536.379167000006,
+        "deltaBMinusAMs": 1882.3209170000046,
+        "Bwins": false
+      },
+      {
+        "pair": 6,
+        "A": 12,
+        "B": 11,
+        "aSolverMs": 5751.443125000005,
+        "bSolverMs": 3963.0758750000095,
+        "deltaBMinusAMs": -1788.3672499999957,
+        "Bwins": true
+      },
+      {
+        "pair": 7,
+        "A": 13,
+        "B": 14,
+        "aSolverMs": 4908.720209000006,
+        "bSolverMs": 4918.550374999992,
+        "deltaBMinusAMs": 9.830165999985184,
+        "Bwins": false
+      },
+      {
+        "pair": 8,
+        "A": 16,
+        "B": 15,
+        "aSolverMs": 4217.9253330000065,
+        "bSolverMs": 5444.609540999998,
+        "deltaBMinusAMs": 1226.6842079999915,
+        "Bwins": false
+      },
+      {
+        "pair": 9,
+        "A": 17,
+        "B": 18,
+        "aSolverMs": 4888.431125000003,
+        "bSolverMs": 7432.210250000004,
+        "deltaBMinusAMs": 2543.779125000001,
+        "Bwins": false
+      },
+      {
+        "pair": 10,
+        "A": 20,
+        "B": 19,
+        "aSolverMs": 4553.884040999983,
+        "bSolverMs": 4299.21699999999,
+        "deltaBMinusAMs": -254.66704099999333,
+        "Bwins": true
+      }
+    ]
+  },
+  "transportEvidence": {
+    "definitions": {
+      "headerWaitMs": "responseHeadersAtMs-requestFlushedAtMs",
+      "bodyMs": "responseEndedAtMs-firstBodyByteAtMs",
+      "postBodyMs": "settledAtMs-responseEndedAtMs; residual wall delay, not isolated CPU/decode cost",
+      "solverBackend": "ten quote envelopes after first funding balance envelope; no direct canonical request detailed HTTP timeline"
+    },
+    "units": "milliseconds and response-body bytes; excludes HTTP/TLS framing",
+    "all220BackendResponsesUsedRecordedReusedSocket": true,
+    "all110CandidateBackendResponsesEncodedGzip": true,
+    "decodedLengthMatchesBaselineForEveryCorrespondingEnvelope": true,
+    "baselineWireBodyBytes": 1545220,
+    "candidateWireBodyBytes": 167780,
+    "candidateDecodedBodyBytes": 1545220,
+    "responseBodyWireReductionPct": 89.14199919752527,
+    "largeRead": {
+      "decodedBytesPerResponse": 152296,
+      "baselineWireBytesPerResponse": 152296,
+      "candidateWireBytesMin": 15626,
+      "candidateWireBytesMax": 15986,
+      "reductionPctAcrossTen": 89.61791511267532,
+      "baseline": {
+        "headerWaitMs": {
+          "count": 10,
+          "sum": 5737,
+          "min": 361,
+          "median": 579,
+          "p95": 714,
+          "max": 714
+        },
+        "bodyMs": {
+          "count": 10,
+          "sum": 3662,
+          "min": 62,
+          "median": 368,
+          "p95": 694,
+          "max": 694
+        },
+        "postBodyMs": {
+          "count": 10,
+          "sum": 4,
+          "min": 0,
+          "median": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "httpWallMs": {
+          "count": 10,
+          "sum": 9409,
+          "min": 423,
+          "median": 1009,
+          "p95": 1234,
+          "max": 1234
+        },
+        "wireBytes": {
+          "count": 10,
+          "sum": 1522960,
+          "min": 152296,
+          "median": 152296,
+          "p95": 152296,
+          "max": 152296
+        }
+      },
+      "candidate": {
+        "headerWaitMs": {
+          "count": 10,
+          "sum": 8361,
+          "min": 314,
+          "median": 551,
+          "p95": 1651,
+          "max": 1651
+        },
+        "bodyMs": {
+          "count": 10,
+          "sum": 5021,
+          "min": 0,
+          "median": 423,
+          "p95": 1518,
+          "max": 1518
+        },
+        "postBodyMs": {
+          "count": 10,
+          "sum": 9,
+          "min": 0,
+          "median": 1,
+          "p95": 1,
+          "max": 1
+        },
+        "httpWallMs": {
+          "count": 10,
+          "sum": 13399,
+          "min": 474,
+          "median": 1340,
+          "p95": 2679,
+          "max": 2679
+        },
+        "wireBytes": {
+          "count": 10,
+          "sum": 158115,
+          "min": 15626,
+          "median": 15762,
+          "p95": 15986,
+          "max": 15986
+        }
+      }
+    },
+    "allBackendByArm": {
+      "A": {
+        "preFlushMs": {
+          "count": 110,
+          "sum": 82,
+          "min": 0,
+          "median": 1,
+          "p95": 2,
+          "max": 15
+        },
+        "headerWaitMs": {
+          "count": 110,
+          "sum": 45472,
+          "min": 279,
+          "median": 313,
+          "p95": 720,
+          "max": 1468
+        },
+        "headersToFirstByteMs": {
+          "count": 110,
+          "sum": 17,
+          "min": 0,
+          "median": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "bodyMs": {
+          "count": 110,
+          "sum": 3671,
+          "min": 0,
+          "median": 0,
+          "p95": 368,
+          "max": 694
+        },
+        "postBodyMs": {
+          "count": 110,
+          "sum": 9,
+          "min": 0,
+          "median": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "httpWallMs": {
+          "count": 110,
+          "sum": 49251,
+          "min": 279,
+          "median": 315,
+          "p95": 1011,
+          "max": 1468
+        },
+        "wireBytes": {
+          "count": 110,
+          "sum": 1545220,
+          "min": 104,
+          "median": 169,
+          "p95": 152296,
+          "max": 152296
+        },
+        "decodedBytes": {
+          "count": 110,
+          "sum": 1545220,
+          "min": 104,
+          "median": 169,
+          "p95": 152296,
+          "max": 152296
+        },
+        "permitQueueMs": {
+          "count": 110,
+          "sum": 3.163753999936489,
+          "min": 0.013167000004614238,
+          "median": 0.0247500000114087,
+          "p95": 0.043708000000151515,
+          "max": 0.2364159999997355
+        }
+      },
+      "B": {
+        "preFlushMs": {
+          "count": 110,
+          "sum": 42,
+          "min": 0,
+          "median": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "headerWaitMs": {
+          "count": 110,
+          "sum": 45102,
+          "min": 277,
+          "median": 298,
+          "p95": 1105,
+          "max": 1651
+        },
+        "headersToFirstByteMs": {
+          "count": 110,
+          "sum": 44,
+          "min": 0,
+          "median": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "bodyMs": {
+          "count": 110,
+          "sum": 5679,
+          "min": 0,
+          "median": 0,
+          "p95": 465,
+          "max": 1518
+        },
+        "postBodyMs": {
+          "count": 110,
+          "sum": 48,
+          "min": 0,
+          "median": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "httpWallMs": {
+          "count": 110,
+          "sum": 50915,
+          "min": 278,
+          "median": 300,
+          "p95": 1380,
+          "max": 2679
+        },
+        "wireBytes": {
+          "count": 110,
+          "sum": 167780,
+          "min": 79,
+          "median": 92,
+          "p95": 15762,
+          "max": 15986
+        },
+        "decodedBytes": {
+          "count": 110,
+          "sum": 1545220,
+          "min": 104,
+          "median": 169,
+          "p95": 152296,
+          "max": 152296
+        },
+        "permitQueueMs": {
+          "count": 110,
+          "sum": 3.4572850000404287,
+          "min": 0.008957999991253018,
+          "median": 0.02679099999659229,
+          "p95": 0.0585410000057891,
+          "max": 0.22320800000125018
+        }
+      }
+    },
+    "solverBackendByArm": {
+      "A": {
+        "headerWaitMs": {
+          "count": 100,
+          "sum": 41559,
+          "min": 279,
+          "median": 320,
+          "p95": 714,
+          "max": 1468
+        },
+        "bodyMs": {
+          "count": 100,
+          "sum": 3670,
+          "min": 0,
+          "median": 0,
+          "p95": 368,
+          "max": 694
+        },
+        "postBodyMs": {
+          "count": 100,
+          "sum": 9,
+          "min": 0,
+          "median": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "httpWallMs": {
+          "count": 100,
+          "sum": 45328,
+          "min": 279,
+          "median": 321,
+          "p95": 1011,
+          "max": 1468
+        }
+      },
+      "B": {
+        "headerWaitMs": {
+          "count": 100,
+          "sum": 42038,
+          "min": 277,
+          "median": 298,
+          "p95": 1105,
+          "max": 1651
+        },
+        "bodyMs": {
+          "count": 100,
+          "sum": 5679,
+          "min": 0,
+          "median": 0,
+          "p95": 465,
+          "max": 1518
+        },
+        "postBodyMs": {
+          "count": 100,
+          "sum": 46,
+          "min": 0,
+          "median": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "httpWallMs": {
+          "count": 100,
+          "sum": 47837,
+          "min": 278,
+          "median": 300,
+          "p95": 1380,
+          "max": 2679
+        }
+      }
+    },
+    "solverBackendSumsCandidateMinusBaseline": {
+      "solverWallMs": 2471.1775409999973,
+      "recordedHttpWallMs": 2509,
+      "headerWaitMs": 479,
+      "bodyReceiptMs": 2009,
+      "postBodyResidualMs": 37
+    },
+    "pairDelayDecomposition": [
+      {
+        "pair": 1,
+        "A": 1,
+        "B": 2,
+        "solverDeltaMs": -1648.3686670000006,
+        "solverBackendDelta": {
+          "preFlushMs": -6,
+          "headerWaitMs": -1239,
+          "headersToFirstByteMs": 2,
+          "bodyMs": -396,
+          "postBodyMs": 5,
+          "httpWallMs": -1634,
+          "wireBytes": -137655,
+          "decodedBytes": 0,
+          "permitQueueMs": 0.0267920000014783
+        }
+      },
+      {
+        "pair": 2,
+        "A": 4,
+        "B": 3,
+        "solverDeltaMs": -1701.6089580000007,
+        "solverBackendDelta": {
+          "preFlushMs": -4,
+          "headerWaitMs": -1634,
+          "headersToFirstByteMs": -1,
+          "bodyMs": -73,
+          "postBodyMs": 3,
+          "httpWallMs": -1709,
+          "wireBytes": -137538,
+          "decodedBytes": 0,
+          "permitQueueMs": 0.057413999991695164
+        }
+      },
+      {
+        "pair": 3,
+        "A": 5,
+        "B": 6,
+        "solverDeltaMs": 647.4544160000041,
+        "solverBackendDelta": {
+          "preFlushMs": -17,
+          "headerWaitMs": 943,
+          "headersToFirstByteMs": 1,
+          "bodyMs": -278,
+          "postBodyMs": 3,
+          "httpWallMs": 652,
+          "wireBytes": -137914,
+          "decodedBytes": 0,
+          "permitQueueMs": 0.015000000021245796
+        }
+      },
+      {
+        "pair": 4,
+        "A": 8,
+        "B": 7,
+        "solverDeltaMs": 1554.1206250000032,
+        "solverBackendDelta": {
+          "preFlushMs": 1,
+          "headerWaitMs": 1095,
+          "headersToFirstByteMs": 3,
+          "bodyMs": 463,
+          "postBodyMs": 2,
+          "httpWallMs": 1564,
+          "wireBytes": -137824,
+          "decodedBytes": 0,
+          "permitQueueMs": 0.0015429999912157655
+        }
+      },
+      {
+        "pair": 5,
+        "A": 9,
+        "B": 10,
+        "solverDeltaMs": 1882.3209170000046,
+        "solverBackendDelta": {
+          "preFlushMs": -3,
+          "headerWaitMs": 1205,
+          "headersToFirstByteMs": 3,
+          "bodyMs": 684,
+          "postBodyMs": 4,
+          "httpWallMs": 1893,
+          "wireBytes": -137797,
+          "decodedBytes": 0,
+          "permitQueueMs": -0.03212599999824306
+        }
+      },
+      {
+        "pair": 6,
+        "A": 12,
+        "B": 11,
+        "solverDeltaMs": -1788.3672499999957,
+        "solverBackendDelta": {
+          "preFlushMs": -3,
+          "headerWaitMs": -1780,
+          "headersToFirstByteMs": 3,
+          "bodyMs": -5,
+          "postBodyMs": 2,
+          "httpWallMs": -1783,
+          "wireBytes": -137560,
+          "decodedBytes": 0,
+          "permitQueueMs": 0.037457999991602264
+        }
+      },
+      {
+        "pair": 7,
+        "A": 13,
+        "B": 14,
+        "solverDeltaMs": 9.830165999985184,
+        "solverBackendDelta": {
+          "preFlushMs": -1,
+          "headerWaitMs": -18,
+          "headersToFirstByteMs": 2,
+          "bodyMs": 28,
+          "postBodyMs": 4,
+          "httpWallMs": 15,
+          "wireBytes": -137776,
+          "decodedBytes": 0,
+          "permitQueueMs": 0.010374000019510277
+        }
+      },
+      {
+        "pair": 8,
+        "A": 16,
+        "B": 15,
+        "solverDeltaMs": 1226.6842079999915,
+        "solverBackendDelta": {
+          "preFlushMs": -3,
+          "headerWaitMs": 700,
+          "headersToFirstByteMs": 3,
+          "bodyMs": 518,
+          "postBodyMs": 6,
+          "httpWallMs": 1224,
+          "wireBytes": -137757,
+          "decodedBytes": 0,
+          "permitQueueMs": -0.020667999997385778
+        }
+      },
+      {
+        "pair": 9,
+        "A": 17,
+        "B": 18,
+        "solverDeltaMs": 2543.779125000001,
+        "solverBackendDelta": {
+          "preFlushMs": -2,
+          "headerWaitMs": 1500,
+          "headersToFirstByteMs": 3,
+          "bodyMs": 1035,
+          "postBodyMs": 6,
+          "httpWallMs": 2542,
+          "wireBytes": -137764,
+          "decodedBytes": 0,
+          "permitQueueMs": 0.05295600002864376
+        }
+      },
+      {
+        "pair": 10,
+        "A": 20,
+        "B": 19,
+        "solverDeltaMs": -254.66704099999333,
+        "solverBackendDelta": {
+          "preFlushMs": -1,
+          "headerWaitMs": -293,
+          "headersToFirstByteMs": 4,
+          "bodyMs": 33,
+          "postBodyMs": 2,
+          "httpWallMs": -255,
+          "wireBytes": -137623,
+          "decodedBytes": 0,
+          "permitQueueMs": 0.009539000049699098
+        }
+      }
+    ],
+    "perInvocation": [
+      {
+        "n": 1,
+        "arm": "A",
+        "solverMs": 5721.719417,
+        "solverBackend": {
+          "preFlushMs": 8,
+          "headerWaitMs": 5025,
+          "headersToFirstByteMs": 2,
+          "bodyMs": 557,
+          "postBodyMs": 1,
+          "httpWallMs": 5593,
+          "wireBytes": 154418,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.4510810000001584
+        },
+        "large": {
+          "headerMs": 677,
+          "bodyMs": 555,
+          "postBodyMs": 1,
+          "wireBytes": 152296
+        }
+      },
+      {
+        "n": 2,
+        "arm": "B",
+        "solverMs": 4073.3507499999996,
+        "solverBackend": {
+          "preFlushMs": 2,
+          "headerWaitMs": 3786,
+          "headersToFirstByteMs": 4,
+          "bodyMs": 161,
+          "postBodyMs": 6,
+          "httpWallMs": 3959,
+          "wireBytes": 16763,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.4778730000016367
+        },
+        "large": {
+          "headerMs": 314,
+          "bodyMs": 159,
+          "postBodyMs": 1,
+          "wireBytes": 15897
+        }
+      },
+      {
+        "n": 3,
+        "arm": "B",
+        "solverMs": 3689.3975830000018,
+        "solverBackend": {
+          "preFlushMs": 4,
+          "headerWaitMs": 3345,
+          "headersToFirstByteMs": 2,
+          "bodyMs": 224,
+          "postBodyMs": 5,
+          "httpWallMs": 3580,
+          "wireBytes": 16880,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.3040419999997539
+        },
+        "large": {
+          "headerMs": 357,
+          "bodyMs": 223,
+          "postBodyMs": 1,
+          "wireBytes": 15986
+        }
+      },
+      {
+        "n": 4,
+        "arm": "A",
+        "solverMs": 5391.0065410000025,
+        "solverBackend": {
+          "preFlushMs": 8,
+          "headerWaitMs": 4979,
+          "headersToFirstByteMs": 3,
+          "bodyMs": 297,
+          "postBodyMs": 2,
+          "httpWallMs": 5289,
+          "wireBytes": 154418,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.24662800000805873
+        },
+        "large": {
+          "headerMs": 711,
+          "bodyMs": 296,
+          "postBodyMs": 1,
+          "wireBytes": 152296
+        }
+      },
+      {
+        "n": 5,
+        "arm": "A",
+        "solverMs": 3674.7109999999993,
+        "solverBackend": {
+          "preFlushMs": 21,
+          "headerWaitMs": 3260,
+          "headersToFirstByteMs": 2,
+          "bodyMs": 280,
+          "postBodyMs": 1,
+          "httpWallMs": 3564,
+          "wireBytes": 154418,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.24791699999332195
+        },
+        "large": {
+          "headerMs": 542,
+          "bodyMs": 278,
+          "postBodyMs": 1,
+          "wireBytes": 152296
+        }
+      },
+      {
+        "n": 6,
+        "arm": "B",
+        "solverMs": 4322.1654160000035,
+        "solverBackend": {
+          "preFlushMs": 4,
+          "headerWaitMs": 4203,
+          "headersToFirstByteMs": 3,
+          "bodyMs": 2,
+          "postBodyMs": 4,
+          "httpWallMs": 4216,
+          "wireBytes": 16504,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.26291700001456775
+        },
+        "large": {
+          "headerMs": 535,
+          "bodyMs": 0,
+          "postBodyMs": 1,
+          "wireBytes": 15626
+        }
+      },
+      {
+        "n": 7,
+        "arm": "B",
+        "solverMs": 5210.1855,
+        "solverBackend": {
+          "preFlushMs": 5,
+          "headerWaitMs": 4532,
+          "headersToFirstByteMs": 5,
+          "bodyMs": 560,
+          "postBodyMs": 3,
+          "httpWallMs": 5105,
+          "wireBytes": 16594,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.24300099999527447
+        },
+        "large": {
+          "headerMs": 1311,
+          "bodyMs": 555,
+          "postBodyMs": 0,
+          "wireBytes": 15700
+        }
+      },
+      {
+        "n": 8,
+        "arm": "A",
+        "solverMs": 3656.0648749999964,
+        "solverBackend": {
+          "preFlushMs": 4,
+          "headerWaitMs": 3437,
+          "headersToFirstByteMs": 2,
+          "bodyMs": 97,
+          "postBodyMs": 1,
+          "httpWallMs": 3541,
+          "wireBytes": 154418,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.2414580000040587
+        },
+        "large": {
+          "headerMs": 519,
+          "bodyMs": 96,
+          "postBodyMs": 0,
+          "wireBytes": 152296
+        }
+      },
+      {
+        "n": 9,
+        "arm": "A",
+        "solverMs": 3654.058250000002,
+        "solverBackend": {
+          "preFlushMs": 7,
+          "headerWaitMs": 3475,
+          "headersToFirstByteMs": 2,
+          "bodyMs": 62,
+          "postBodyMs": 0,
+          "httpWallMs": 3546,
+          "wireBytes": 154418,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.2559999999939464
+        },
+        "large": {
+          "headerMs": 361,
+          "bodyMs": 62,
+          "postBodyMs": 0,
+          "wireBytes": 152296
+        }
+      },
+      {
+        "n": 10,
+        "arm": "B",
+        "solverMs": 5536.379167000006,
+        "solverBackend": {
+          "preFlushMs": 4,
+          "headerWaitMs": 4680,
+          "headersToFirstByteMs": 5,
+          "bodyMs": 746,
+          "postBodyMs": 4,
+          "httpWallMs": 5439,
+          "wireBytes": 16621,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.22387399999570334
+        },
+        "large": {
+          "headerMs": 1651,
+          "bodyMs": 115,
+          "postBodyMs": 1,
+          "wireBytes": 15736
+        }
+      },
+      {
+        "n": 11,
+        "arm": "B",
+        "solverMs": 3963.0758750000095,
+        "solverBackend": {
+          "preFlushMs": 3,
+          "headerWaitMs": 3160,
+          "headersToFirstByteMs": 3,
+          "bodyMs": 690,
+          "postBodyMs": 4,
+          "httpWallMs": 3860,
+          "wireBytes": 16858,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.25720799998089205
+        },
+        "large": {
+          "headerMs": 551,
+          "bodyMs": 690,
+          "postBodyMs": 1,
+          "wireBytes": 15964
+        }
+      },
+      {
+        "n": 12,
+        "arm": "A",
+        "solverMs": 5751.443125000005,
+        "solverBackend": {
+          "preFlushMs": 6,
+          "headerWaitMs": 4940,
+          "headersToFirstByteMs": 0,
+          "bodyMs": 695,
+          "postBodyMs": 2,
+          "httpWallMs": 5643,
+          "wireBytes": 154418,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.2197499999892898
+        },
+        "large": {
+          "headerMs": 406,
+          "bodyMs": 694,
+          "postBodyMs": 1,
+          "wireBytes": 152296
+        }
+      },
+      {
+        "n": 13,
+        "arm": "A",
+        "solverMs": 4908.720209000006,
+        "solverBackend": {
+          "preFlushMs": 5,
+          "headerWaitMs": 4401,
+          "headersToFirstByteMs": 2,
+          "bodyMs": 396,
+          "postBodyMs": 1,
+          "httpWallMs": 4805,
+          "wireBytes": 154418,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.23645899999246467
+        },
+        "large": {
+          "headerMs": 714,
+          "bodyMs": 396,
+          "postBodyMs": 0,
+          "wireBytes": 152296
+        }
+      },
+      {
+        "n": 14,
+        "arm": "B",
+        "solverMs": 4918.550374999992,
+        "solverBackend": {
+          "preFlushMs": 4,
+          "headerWaitMs": 4383,
+          "headersToFirstByteMs": 4,
+          "bodyMs": 424,
+          "postBodyMs": 5,
+          "httpWallMs": 4820,
+          "wireBytes": 16642,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.24683300001197495
+        },
+        "large": {
+          "headerMs": 1105,
+          "bodyMs": 423,
+          "postBodyMs": 1,
+          "wireBytes": 15743
+        }
+      },
+      {
+        "n": 15,
+        "arm": "B",
+        "solverMs": 5444.609540999998,
+        "solverBackend": {
+          "preFlushMs": 3,
+          "headerWaitMs": 4440,
+          "headersToFirstByteMs": 3,
+          "bodyMs": 887,
+          "postBodyMs": 6,
+          "httpWallMs": 5339,
+          "wireBytes": 16661,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.2549569999828236
+        },
+        "large": {
+          "headerMs": 466,
+          "bodyMs": 873,
+          "postBodyMs": 1,
+          "wireBytes": 15762
+        }
+      },
+      {
+        "n": 16,
+        "arm": "A",
+        "solverMs": 4217.9253330000065,
+        "solverBackend": {
+          "preFlushMs": 6,
+          "headerWaitMs": 3740,
+          "headersToFirstByteMs": 0,
+          "bodyMs": 369,
+          "postBodyMs": 0,
+          "httpWallMs": 4115,
+          "wireBytes": 154418,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.2756249999802094
+        },
+        "large": {
+          "headerMs": 590,
+          "bodyMs": 368,
+          "postBodyMs": 0,
+          "wireBytes": 152296
+        }
+      },
+      {
+        "n": 17,
+        "arm": "A",
+        "solverMs": 4888.431125000003,
+        "solverBackend": {
+          "preFlushMs": 5,
+          "headerWaitMs": 4294,
+          "headersToFirstByteMs": 0,
+          "bodyMs": 485,
+          "postBodyMs": 0,
+          "httpWallMs": 4784,
+          "wireBytes": 154418,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.23087699997995514
+        },
+        "large": {
+          "headerMs": 638,
+          "bodyMs": 485,
+          "postBodyMs": 0,
+          "wireBytes": 152296
+        }
+      },
+      {
+        "n": 18,
+        "arm": "B",
+        "solverMs": 7432.210250000004,
+        "solverBackend": {
+          "preFlushMs": 3,
+          "headerWaitMs": 5794,
+          "headersToFirstByteMs": 3,
+          "bodyMs": 1520,
+          "postBodyMs": 6,
+          "httpWallMs": 7326,
+          "wireBytes": 16654,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.2838330000085989
+        },
+        "large": {
+          "headerMs": 1158,
+          "bodyMs": 1518,
+          "postBodyMs": 1,
+          "wireBytes": 15766
+        }
+      },
+      {
+        "n": 19,
+        "arm": "B",
+        "solverMs": 4299.21699999999,
+        "solverBackend": {
+          "preFlushMs": 4,
+          "headerWaitMs": 3715,
+          "headersToFirstByteMs": 6,
+          "bodyMs": 465,
+          "postBodyMs": 3,
+          "httpWallMs": 4193,
+          "wireBytes": 16795,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.27716500003589317
+        },
+        "large": {
+          "headerMs": 913,
+          "bodyMs": 465,
+          "postBodyMs": 1,
+          "wireBytes": 15935
+        }
+      },
+      {
+        "n": 20,
+        "arm": "A",
+        "solverMs": 4553.884040999983,
+        "solverBackend": {
+          "preFlushMs": 5,
+          "headerWaitMs": 4008,
+          "headersToFirstByteMs": 2,
+          "bodyMs": 432,
+          "postBodyMs": 1,
+          "httpWallMs": 4448,
+          "wireBytes": 154418,
+          "decodedBytes": 154418,
+          "permitQueueMs": 0.2676259999861941
+        },
+        "large": {
+          "headerMs": 579,
+          "bodyMs": 432,
+          "postBodyMs": 0,
+          "wireBytes": 152296
+        }
+      }
+    ],
+    "maxRecordedPostBodyResidualMs": 1,
+    "interpretation": [
+      "Payload compression is effective: 1,545,220 identity body bytes versus 167,780 gzip body bytes for equal decoded lengths and matching observed Solver outputs. This is a byte-volume finding, not a transfer-speed finding.",
+      "The five B losses greater than 100ms have excess summed Solver-backend header wait of 943, 1095, 1205, 700 and 1500ms respectively. Their body-receipt deltas are -278, 463, 684, 518 and 1035ms. Post-body residual deltas are only 2-6ms per invocation.",
+      "Worst pair is A slot17 versus B slot18: Solver loss 2543.779ms; quote-HTTP header wait +1500ms, body receipt +1035ms, post-body residual +6ms. B slot18 large response alone has 1158ms header wait, 1518ms body receipt and 1ms post-body residual.",
+      "Across all ten invocations per arm, summed Solver time is 2471.178ms higher for B. Recorded quote-HTTP summed time is 2509ms higher: +479ms header wait, +2009ms body receipt, +37ms post-body residual, with small offsetting pre-flush/first-byte differences.",
+      "Both wins and losses contain substantial variable pre-header delays. ABBA and reused sockets do not distinguish provider queue/execution/compression, network delivery, or host scheduling causes.",
+      "Observed post-body residual is at most 1ms per response in both arms. It does not explain the second-scale losses as a delayed post-body decoder tail. Streaming decode may overlap receipt; no CPU or zlib-worker duration is measured, so this does not prove total decoder cost is zero or exonerate it causally."
+    ],
+    "limitations": [
+      "Header wait means local request flush to observed headers; it is not a pure provider-execution measurement.",
+      "Body interval spans observed first byte to response end and can include network/server/consumer scheduling or backpressure; no packet/chunk timeline is retained.",
+      "Full raw RPC response bytes are not retained in these results. Exact observed hop outputs and candidate equality plus decoded-length equality do not substitute for a whole-response byte hash.",
+      "Detailed HTTP milestones cover the eleven backend envelopes, not the four direct canonical RPCs. Direct canonical timing is only aggregate wall time."
+    ]
+  },
+  "executedReadOnlyChecks": [
+    {
+      "name": "binding, source manifest, order, every result/output/call, drains, resource totals and performance criteria",
+      "tool": "inline Node assertions",
+      "exitCode": 0
+    },
+    {
+      "name": "ordered envelope identity, decoded lengths, all HTTP timestamps and delay decomposition",
+      "tool": "inline Node assertions",
+      "exitCode": 0
+    },
+    {
+      "name": "declaration-before-observed-dispatch, canonical call coverage, nonoverlapping windows and fixed resource bounds",
+      "tool": "inline Node assertions",
+      "exitCode": 0
+    }
+  ],
+  "conclusion": {
+    "keepOrReject": "Reject as an accepted Solver-latency optimization under the frozen criterion; no evidence-based speed promotion or blind live launch from this result.",
+    "notSupported": "No systemic, whole-live, repeated-prefix, execution/EV or profitability claim. This selected historical rank477 remains outside the current live100.",
+    "causality": "Do not label this a proven intrinsic gzip slowdown, and do not dismiss failures as provider noise to reverse the predeclared rejection.",
+    "nextAction": "Preserve raw evidence. No implementation change, rerun, additional benchmark or RPC was performed or proposed by this outcome review."
+  }
+}

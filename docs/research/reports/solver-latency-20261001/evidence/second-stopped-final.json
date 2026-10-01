@@ -1,0 +1,153 @@
+{
+  "dir": "<repo>/logs/live-solver-batched-prefix-250.I49DJ4",
+  "snapshotBytes": 533493705,
+  "lines": 716245,
+  "startup": {
+    "block": 26090328,
+    "ms": 216432.234542
+  },
+  "window": null,
+  "outcomes": {},
+  "all": {
+    "n": 0,
+    "total": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "state": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "enumeration": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "solver": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "plans": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "amounts": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "hops": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "positive": 0,
+    "finalSim": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "solverCompleted": {
+    "n": 0,
+    "total": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "state": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "enumeration": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "solver": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "plans": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "amounts": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "hops": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "positive": 0,
+    "finalSim": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "solverIncomplete": 0,
+  "solverRevm": {
+    "requests": 0,
+    "statuses": {},
+    "queueMs": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    },
+    "serviceMs": {
+      "n": 0,
+      "p50": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "simulationWindow": {
+    "attempts": 0,
+    "successful": 0,
+    "positive": 0
+  },
+  "allSimulationEvents": 0,
+  "simulationExamples": [],
+  "failuresAllLog": [],
+  "ended": {
+    "at": "2026-09-30T12:59:04.710Z",
+    "stopReason": "user_or_task_stop",
+    "first": null,
+    "last": 26090448,
+    "code": 0,
+    "signal": null,
+    "cleanup": {
+      "pgid": 27643,
+      "remaining": [],
+      "terminated": []
+    }
+  }
+}

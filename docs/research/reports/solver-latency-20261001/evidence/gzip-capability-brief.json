@@ -1,0 +1,23 @@
+{
+  "searcher_behavior_change": "no; one capability prerequisite before deciding a minimal transport change",
+  "hypothesis": "An observed152296-byte fixed historical state response is compressible; negotiating gzip may reduce body download time without changing calls or results.",
+  "allowedFiles": [
+    "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-probe.mts",
+    "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-brief.json",
+    "logs/solver-prefix-policy-20260930.MKk8Vk/gzip-capability-review.json"
+  ],
+  "forbidden": "No tracked production edits, Family edits, search/config changes, signer, broadcast, push or merge.",
+  "contract": "Import existing frozen Family encoder only to reproduce same already-observed payload. Ready hash and calldata hash asserted offline. Single run4 sequential ABBA requests, A no Accept-Encoding, B gzip. Same EIP1898 source/hash requireCanonical and JSON body/id. Canonical chain/header checks before and after. All attempts retained. Result and JSON byte parity mandatory; wire bytes, headers/body/end timing only diagnostic.",
+  "budget": {
+    "calls": 8,
+    "httpEnvelopes": 6,
+    "perRequestMs": 30000,
+    "retries": 0,
+    "warmups": 0,
+    "additionalTaskReadCap": 8,
+    "previousBatchLogicalCalls": 492,
+    "billedCU": "unavailable; no assertion of account-wide daily usage"
+  },
+  "success": "Provider sends gzip in both B replies; four uncompressed JSON bodies byte-identical and canonical source pre/post matches. Only capability/bytes, no Solver or live latency acceptance.",
+  "guard": "Write-once declaration before RPC. Abort if integrity mismatch, no forced fallbacks. Endpoint from MAINNET_RPC_URL only, hashed; never stdout. Agent destroyed and tracked sockets physically close after run."
+}

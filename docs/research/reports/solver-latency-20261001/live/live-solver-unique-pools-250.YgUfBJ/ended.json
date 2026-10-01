@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-30T12:33:49.393Z",
+  "stopReason": "completed_250_source_heights",
+  "first": 26090073,
+  "last": 26090322,
+  "code": 0,
+  "signal": null,
+  "cleanup": {
+    "pgid": 23807,
+    "remaining": [],
+    "terminated": []
+  }
+}

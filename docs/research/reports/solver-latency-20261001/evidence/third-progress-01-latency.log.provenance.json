@@ -1,0 +1,13 @@
+{
+  "source": "<repo>/logs/live-solver-skip-settle-250.7MsLu8/live.log",
+  "sourceBytes": 420632960,
+  "sourceSha256": "a7f2ddc440326ce1ef94a472b971058d349d4b75d748fee62ba20d51330358c7",
+  "projection": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/third-progress-01-latency.log",
+  "projectionSha256": "c8f825b60e9e4d495c5f1b2dc4a15d6d63fd61cbe3be8d9362b05878b9a42bb9",
+  "from": 26090582,
+  "to": 26090755,
+  "lines": 589989,
+  "anchors": 2,
+  "timings": 173,
+  "rule": "original process and commit anchors; all non-startup timing rows in inclusive window; all remaining original line positions blank; no invented anchors or timings"
+}

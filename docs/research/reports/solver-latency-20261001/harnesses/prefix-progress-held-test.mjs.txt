@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
+import { setTimeout as delay } from 'node:timers/promises';
+
+test('real daemon emits an outstanding attempt before a held loopback response, without a false completion',
+  { timeout: 8000 }, async () => {
+    assert(process.env.REVM_SIM_TEST_BINARY);
+    const sockets = new Set();
+    let accepted;
+    const requestSeen = new Promise(resolve => { accepted = resolve; });
+    const server = createServer((req, _res) => {
+      req.resume();
+      req.once('end', accepted); // Deliberately do not send a response.
+    });
+    server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
+    server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    const child = spawn(process.env.REVM_SIM_TEST_BINARY, ['serve'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { PATH: process.env.PATH, SEARCHER_STATE_LATENCY_DIAGNOSTICS: '1' },
+    });
+    const closed = once(child, 'close');
+    let stderr = '', stdout = '';
+    child.stderr.setEncoding('utf8'); child.stderr.on('data', value => { stderr += value; });
+    child.stdout.setEncoding('utf8'); child.stdout.on('data', value => { stdout += value; });
+    const kill = setTimeout(() => child.kill('SIGKILL'), 5000);
+    try {
+      const addr = byte => '0x' + byte.repeat(40);
+      child.stdin.end(JSON.stringify({ op: 'strictSimulate', epoch: 'held-progress', requestId: '1',
+        blockNumber: 300, rpcUrl: '<redacted-endpoint>' + server.address().port,
+        sourcePin: { chainId: 1, blockHash: '0x' + '1'.repeat(64) },
+        from: addr('a'), to: addr('b'), data: '0x', gasLimit: 100000, executionGasLimit: 100000,
+        transactionOrigin: addr('e'), callerMode: 'impersonated-call-frame',
+        trialPrefix: { executor: addr('c'), inputToken: addr('d'), inputAmount: '1', calldata: '0x01' },
+      }) + '\n');
+      await new Promise((resolve, reject) => {
+        const wait = setTimeout(() => reject(new Error('loopback request did not arrive')), 3500);
+        requestSeen.then(() => { clearTimeout(wait); resolve(); });
+        closed.then(() => { clearTimeout(wait); reject(new Error('daemon exited before request')); }, reject);
+      });
+      await delay(30); // Let already-written stderr reach the parent, not a network wait.
+      child.kill('SIGTERM');
+      await closed;
+      const rows = stderr.split('\n').filter(line => line.startsWith('[revm-diagnostic] '))
+        .map(line => JSON.parse(line.slice('[revm-diagnostic] '.length)));
+      const progress = rows.filter(row => row.stage === 'strict-progress').map(row => row.details);
+      const begins = progress.filter(row => row.event === 'rpc-attempt-begin');
+      assert.equal(begins.length, 1);
+      assert.equal(begins[0].phase, 'source-precheck');
+      assert.equal(begins[0].identity.requestId, 1);
+      assert.equal(begins[0].identity.sourceBlock, 300);
+      assert.equal(begins[0].logicalItems, 3);
+      assert.equal(progress.some(row => row.event === 'rpc-attempt-end'), false);
+      assert.equal(rows.some(row => row.stage === 'strict-phase-timing'), false);
+      assert.equal(stdout, '', 'no simulated result accepted before a source response');
+      assert.equal(stderr.includes('http://'), false);
+    } finally {
+      clearTimeout(kill);
+      if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await closed; }
+      for (const socket of sockets) socket.destroy();
+      await new Promise(resolve => server.close(resolve));
+    }
+  });

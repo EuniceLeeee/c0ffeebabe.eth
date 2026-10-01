@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "reviewRole": "independent non-author offline reviewer",
+  "reviewPass": 2,
+  "scope": "Only the launcher/spec corrections to pass1, plus the local watchdog test. No production, runtime, runner or benchmark changes.",
+  "verdict": "pass: prior launch-blocking wall-cap mismatch resolved; the exact declared bounded diagnostic is ready for main's launch decision",
+  "blockingFindings": [],
+  "externalRpcPerformed": false,
+  "credentialsRead": false,
+  "benchmarkLaunched": false,
+  "credentialEntrypointInvoked": false,
+  "productionAcceptance": false,
+  "performanceAcceptance": false,
+  "goalComplete": false,
+  "bindings": {
+    "directory": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk",
+    "previousReview": {
+      "path": "cold-source-experiment-review.json",
+      "sha256": "4cee042dba4e51f3249a375552e659af1b19b7c39cb49559cd8adaebbe2879cf"
+    },
+    "launcher": {
+      "path": "launch-cold-source.mjs",
+      "sha256": "c87366110867826658f15066993dbb8ab25fd47037955a222c3a7d541ffc44d7"
+    },
+    "spec": {
+      "path": "cold-source-timing.json",
+      "sha256": "4a5842e407c74b70c341f57efe2e109accc18269ec0ffee9c2fdac94ca817a65"
+    },
+    "runner": {
+      "path": "same-input-pair-timing.mts",
+      "sha256": "d3d036dbc10ef7d6151ab04c61a4e75403130ab2dfeee8044e771ac313c7eac9"
+    },
+    "mainAuthoredLocalTest": {
+      "path": "cold-source-launcher-test.mjs",
+      "sha256": "44cd4999114fd5b509a4663784de557aca96f9407a86ab0666fc7daaf76050ff"
+    },
+    "binaryA": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1",
+    "binaryB": "8993d08bd501af9c4c7555bb93b76a9286ca8d1f420652f806709f2a305f1e74",
+    "runtimeBothArms": "prefix-pair-runtime-complete",
+    "runtimeSourceTreeSha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01"
+  },
+  "exactDeltaChecks": [
+    "Independently replaced only predeclaredAssessment.benefit and predeclaredAssessment.cuPolicy in memory with their pass1 values; serialized bytes reproduced the exact old spec SHA6b5cc4d102178e908a3ee09416ba0a1ba9a46fbca007d543c7bbdfdc315263ad. Thus no other spec/input/order/budget/binary fields changed.",
+    "Timing runner SHA remains exactly d3d036dbc10ef7d6151ab04c61a4e75403130ab2dfeee8044e771ac313c7eac9. No rerun of the already-passed full runner/production review.",
+    "Launcher now uses process.execPath with the resolved tsx loader via --import rather than a wrapper leader; detached:true establishes its own process group. Only child.pid or -child.pid is signaled.",
+    "Soft cancellation targets the owned leader at150000ms. At160000ms an independent hard timer targets only the same launch's process group. Leader exit checks/kills residual descendants. Timers/listeners are removed on settlement.",
+    "Main-module guard prevents import from invoking main(), credential lookup, log creation or benchmark dispatch. runOwned can be exercised independently with explicit local child code and no endpoint environment.",
+    "Launch receipt is exclusive-created and qualifies any softStop, forcedStop or residualGroupStopped as inconclusive; those outcomes set nonzero launcher exit status. A clean zero exit merely allows assessment, never declares a timing win.",
+    "Spec now requires neither B to complete fewer quoted hops than either A, and explicitly marks terminal physical-attempt totals censored/unknown for missing killed-request records."
+  ],
+  "executedChecks": [
+    {
+      "command": "node --check logs/solver-prefix-policy-20260930.MKk8Vk/launch-cold-source.mjs",
+      "exitCode": 0,
+      "result": "Syntax passes without executing module main()."
+    },
+    {
+      "command": "node --test logs/solver-prefix-policy-20260930.MKk8Vk/cold-source-launcher-test.mjs",
+      "exitCode": 0,
+      "result": "2/2 passed independently. Held leader+descendant ignore SIGTERM and are killed by the hard group watchdog; exact group is gone. Normal exit reports no soft/hard/residual stop.",
+      "timingsMs": {
+        "heldLeaderAndDescendant": 566.83375,
+        "normalExit": 65.896583
+      },
+      "reducedFixtureTimersMs": {
+        "soft": 200,
+        "hard": 500
+      }
+    },
+    {
+      "command": "node --input-type=module (stdin harness below)",
+      "exitCode": 0,
+      "result": "2/2 additional independent local cases passed: graceful soft-stop before hard timer, and leader exit with a live descendant requiring residual-group cleanup. Both exact groups confirmed absent.",
+      "receipt": {
+        "passed": 2,
+        "failed": 0,
+        "credentialAccess": false,
+        "network": false,
+        "mainInvoked": false,
+        "receipts": [
+          {
+            "name": "graceful-soft-stop",
+            "result": {
+              "code": 0,
+              "signal": null,
+              "pid": 61775,
+              "softStop": true,
+              "forcedStop": false,
+              "residualGroupStopped": false
+            },
+            "groupAbsent": true,
+            "teardownObservations": [
+              "ESRCH"
+            ],
+            "elapsedMs": 208.696625
+          },
+          {
+            "name": "residual-descendant-cleanup",
+            "result": {
+              "code": 0,
+              "signal": null,
+              "pid": 61776,
+              "softStop": false,
+              "forcedStop": false,
+              "residualGroupStopped": true
+            },
+            "groupAbsent": true,
+            "teardownObservations": [
+              "EPERM",
+              "ESRCH"
+            ],
+            "elapsedMs": 122.917958
+          }
+        ]
+      },
+      "reproductionCommand": "node --input-type=module <<'NODE'\nimport assert from 'node:assert/strict';\nimport fs from 'node:fs';\nimport cp from 'node:child_process';\nimport {syncBuiltinESMExports} from 'node:module';\nimport {setTimeout as delay} from 'node:timers/promises';\nconst originalRead=fs.readFileSync, originalSpawn=cp.spawn, children=[];\nfs.readFileSync=function(file,...args){assert(!String(file).includes('.env'),'credential access forbidden');return Reflect.apply(originalRead,this,[file,...args]);};\ncp.spawn=function(...args){const child=Reflect.apply(originalSpawn,this,args);children.push(child);return child;};syncBuiltinESMExports();\nconst {runOwned}=await import('./logs/solver-prefix-policy-20260930.MKk8Vk/launch-cold-source.mjs');\nconst childCode='process.on(\"SIGTERM\",()=>{});console.log(\"descendant-ready\");setInterval(()=>{},1000);';\nconst residualCode=\"const {spawn}=require('node:child_process');const d=spawn(process.execPath,['-e',\"+JSON.stringify(childCode)+\"],{stdio:['ignore','pipe','pipe'],env:{}});d.stderr.pipe(process.stderr);d.stdout.once('data',b=>process.stdout.write(b,()=>process.exit(0)));setInterval(()=>{},1000);\";\nconst fixtures=[\n {name:'graceful-soft-stop',code:'process.on(\"SIGTERM\",()=>process.exit(0));console.log(\"ready\");setInterval(()=>{},1000);',soft:200,hard:600,softStop:true,residual:false,ready:'ready'},\n {name:'residual-descendant-cleanup',code:residualCode,soft:1000,hard:2000,softStop:false,residual:true,ready:'descendant-ready'}\n];\nconst receipts=[];\nfor(const f of fixtures){\n const started=performance.now(),task=runOwned(['-e',f.code],{stdio:['ignore','pipe','pipe'],env:{}},f.soft,f.hard);\n const child=children.at(-1);let stdout='',stderr='';child.stdout.on('data',x=>stdout+=x);child.stderr.on('data',x=>stderr+=x);\n const result=await task;assert.equal(stderr,'');assert(stdout.includes(f.ready));assert.equal(result.pid,child.pid);\n assert.equal(result.code,0);assert.equal(result.softStop,f.softStop);assert.equal(result.forcedStop,false);assert.equal(result.residualGroupStopped,f.residual);\n const observations=[];let absent=false;\n for(let i=0;i<100;i++){try{process.kill(-result.pid,0);observations.push('exists');}catch(e){observations.push(e.code);if(e.code==='ESRCH'){absent=true;break;}if(e.code!=='EPERM')throw e;}await delay(20);}\n assert(absent,'exact owned test group must disappear');\n receipts.push({name:f.name,result,groupAbsent:absent,teardownObservations:observations,elapsedMs:performance.now()-started});\n}\nfs.readFileSync=originalRead;cp.spawn=originalSpawn;syncBuiltinESMExports();\nconsole.log(JSON.stringify({passed:2,failed:0,credentialAccess:false,network:false,mainInvoked:false,receipts},null,2));\nNODE"
+    },
+    {
+      "command": "Read-only SHA checks and in-memory old-spec reconstruction",
+      "exitCode": 0,
+      "result": "Two-field-only spec change and unchanged runner verified. Launcher/spec/test hashes bound above."
+    }
+  ],
+  "testHistory": [
+    "Did not rely on main's withdrawn premature inline pass claim. Independently ran the replacement readable test.",
+    "Reviewer initial extra inline harness passed its soft-stop subcase but had an invalid quoted descendant fixture. Corrected fixture construction using JSON.stringify; no candidate or production change.",
+    "Reviewer next immediate group-absence assertion saw transient EPERM during killed-descendant teardown. A bounded read-only signal0 poll observed EPERM then ESRCH within one20ms interval. The final settled two-case harness above passes and confirms disappearance rather than accepting EPERM as proof.",
+    "All setup failures were local watchdog-fixture checks, not benchmark attempts. They did not access credentials or network, and no ambient process was signaled."
+  ],
+  "remainingQualifications": [
+    "Approval is for this four-attempt ABBA30s P-only rank8 screen only. No expanded runs, warmups, reruns or widened work deadlines.",
+    "Any watchdog stop, residual group, missing receipt/result, fatal, drain failure, censored primary hop, retry asymmetry or failure of the frozen benefit/correctness criteria means no supported benefit. Preserve evidence and withdraw the candidate as declared.",
+    "Hard-stop dispatch follows normal host/OS scheduling, not a real-time guarantee. The launcher does not wait for a complete daemon phase record after forced termination; such evidence remains censored.",
+    "Keep PID/requestId and pair-owned bridge attribution from pass1. Missing terminal attempts remain unknown, not zero. Four selected historical attempts cannot establish full-Solver/live improvement.",
+    "No benchmark, production source, frozen snapshot, runner or credential artifact was changed or executed by this reviewer."
+  ],
+  "onlyReviewerWrite": "cold-source-experiment-review-2.json"
+}

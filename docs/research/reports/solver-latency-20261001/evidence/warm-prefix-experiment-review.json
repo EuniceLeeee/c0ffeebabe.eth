@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-09-30T21:33:10.484Z",
+  "verdict": "PASS_BOUNDED_EXPERIMENT_ONLY",
+  "blockingFindings": [],
+  "scope": "Final warm-prefix spec/launcher, unchanged runner/helper bindings and offline preflight only. Main owns Rust implementation review; no second Rust implementation review performed.",
+  "repository": "<repo>",
+  "hashes": {
+    "warm-prefix-timing.json": "63de4637e40ba461763b690beec7cdceec951f1630b3fae2b2ed0f3102611cfe",
+    "launch-warm-prefix.mjs": "9b38152555dba3a31f614127e7ddc715dc724b7ab3e66c7c1099ab7e0c91f22c",
+    "launch-cold-source.mjs": "c87366110867826658f15066993dbb8ab25fd47037955a222c3a7d541ffc44d7",
+    "same-input-pair-timing.mts": "d3d036dbc10ef7d6151ab04c61a4e75403130ab2dfeee8044e771ac313c7eac9",
+    "prefix-progress-binary.onTMkL/revm-sim": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661",
+    "prefix-progress-binary.onTMkL/main.rs": "c0c05e20bc4c2b571794bd37a592232c6f15dd1e2f445d6f68f0de16f9a29ba6",
+    "prefix-progress-binary.onTMkL/diagnostic.rs": "8aaef92ce3ebbebfc8588c255d34ec528b63f25affc5d3a8c2c05ec5721d9e1e",
+    "warm-prefix-binary.DmlaI6/revm-sim": "1d814015f1fc3677a4435a24da8b5fad93c4915e6f531c46b9a65c5096611a0c",
+    "warm-prefix-binary.DmlaI6/main.rs": "5d7cacebfc42bb778db178da3ecd96ea768e85c57562e2f5c7587bbecaa9f868",
+    "warm-prefix-binary.DmlaI6/diagnostic.rs": "61b7c96dfd433e392910deae77042517477b86bce332adbbc96fb996d37c5f2d"
+  },
+  "commonRuntime": {
+    "path": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+    "sourceTreeSha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01",
+    "sourceFileCount": 1333,
+    "amountPropagationBothArmsSha256": "bb19c5245f011b09a0695bc4f5dc4695333ed7533436bb2854338e244ccf371a",
+    "packageSha256": "243badb28f6b4b13bcc8d4842fa1e22d2c3a08acdab8d09a3776a01fba1d2bc9",
+    "executorArtifactSha256": "0fc76fc76afc1838ce7d151078ef5bf40e6f0ba2e14fbaab97e3004b9bf0cc49",
+    "ownerBoundExecutorKeccak256": "0x75ac3cd7a45da42f6b4611f9203dad2b0df8693ced1a240eacaf8d98b94438ac",
+    "assets": {
+      "listener/searcher/pools/blockscan-view-overrides.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "listener/searcher/pools/discovery-queue.json": "de698d625965e2352066d0593fedbaa9891ec160bb8b6ac91297407e54ff022f",
+      "listener/searcher/pools/force-include-poolids.json": "4373519213045026484af0b63b2819dc927255b4b34dbc761f531839845aa799",
+      "listener/searcher/pools/force-include-routers.json": "9bc02e21154664a5e96caac1dc6edcf475bb9ebedc90ed8564765fa2a3dd1a59",
+      "listener/searcher/pools/pinned-warm-pools.json": "544b5fb0402047928771fa40c0fa455b00af22ba11b3c2703292270990c13df2",
+      "listener/searcher/pools/v2-lineages.json": "b72ee778b981c6413abba6587416e25332d1de0841fbdf0e4663c8abf9cedf6c",
+      "listener/tsconfig.json": "dead6b1b5a5e0a3a68a0a084ddbd9c0f9c3e6f98203427a9cd27eef40401c90e",
+      "listener/tsconfig.live.json": "7c4f41847282aed99d10dbee2aba44ff95517f879e04bbc0d9d30a906700d49d"
+    },
+    "inputs": {
+      "ready": {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/sat1-ready.json",
+        "sha256": "0bcbefca90fa703c30503f5d7f1994ca7a1932604cad124192099fb4ed882089"
+      },
+      "prices": {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/sat1/prices/prices.json",
+        "sha256": "918dbc1484ffec1431c33a663fdd2fea4c1fc109d7e76842bc17d6e1c7e0f031"
+      },
+      "input": {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/sat1/prices/input.json",
+        "sha256": "a681976102723801b8e719dc06eb4e5c2e4a7fdb531472d8c1c0d2ca46c7e42a"
+      },
+      "enumeration": {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/sat1/offline-1/enumeration.json",
+        "sha256": "712d77701b0046605b3d2dbb91fdf1878db46df8b1111731d9246f39beb7229f"
+      }
+    },
+    "binaryRealpathsAndCandidateSourceSnapshotBindingsMatch": true
+  },
+  "ranGate": {
+    "commonCommand": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin TSX_DISABLE_CACHE=1 SEARCHER_STATE_LATENCY_DIAGNOSTICS=1 SEARCHER_DRY_RUN=1 /opt/homebrew/Cellar/node/26.0.0/bin/node --import ./listener/node_modules/tsx/dist/loader.mjs <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-pair-timing.mts --spec <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-timing.json --experiment prefix-engine --candidate-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete --binary-a <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-binary.onTMkL/revm-sim --binary-b <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/warm-prefix-binary.DmlaI6/revm-sim",
+    "environment": "Clean env -i; fixed PATH, TSX_DISABLE_CACHE=1, diagnostics=1, dry-run=1; no endpoint. No --run or --out. Socket/process fence stays installed.",
+    "selfTest": {
+      "commandSuffix": "--self-test",
+      "exitCode": 0,
+      "checks": "Network/process fence, prefix rules, concurrent attribution, production registration and real nonempty strict-prefix compilation",
+      "commonRuntimeCount": 1,
+      "registeredActions": 54,
+      "wrappers": [
+        "actual-amount-flow",
+        "actual-amount-step",
+        "actual-amount-case"
+      ],
+      "compiledPrefixBytes": 1092,
+      "compiledPrefixSha256": "1de79d731a51d2e247947299debba7c22c6c2bcebe5728b096572dc02d4eb58e",
+      "transport": "Synthetic only:2 source reads/2 prefix reads; zero RPC/EVM execution."
+    },
+    "fixtureCheck": {
+      "commandSuffix": "--fixture-check",
+      "exitCode": 0,
+      "rpcCalls": 0,
+      "solverEntered": false,
+      "selectedRank": 8,
+      "P": "5195442",
+      "cap": "5000000000000",
+      "hops": 6,
+      "repeatedFirstLastInstance": true,
+      "graphEdges": 344,
+      "publicationSetHash": "a343dcb72689d751355dd59a5e44915da8dce6330363a371c294ff5ffaebddea",
+      "graphHash": "5ca7b6393686818a1c0a03e0797d78d915c5f291d5bab2fa68d8b97b8a9b525c"
+    },
+    "offlineDeclaration": {
+      "commandSuffix": "",
+      "exitCode": 0,
+      "pairedRuntimeValidated": true,
+      "rpcCalls": 0,
+      "independentlyAsserted": "Exactly rank8 ABBA, policy B both arms, same runtime, exact two binary hashes,30000ms per invocation; no files written."
+    },
+    "syntaxChecks": [
+      {
+        "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin /opt/homebrew/Cellar/node/26.0.0/bin/node --check <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/launch-warm-prefix.mjs",
+        "exitCode": 0
+      },
+      {
+        "command": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin /opt/homebrew/Cellar/node/26.0.0/bin/node --check <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/launch-cold-source.mjs",
+        "exitCode": 0
+      }
+    ],
+    "manifestCheck": "PASS: recomputed all listed hashes, asserted real binary paths and unchanged runner/helper; frozen runtime has1333 regular source files plus8 bound assets.",
+    "diffCheck": {
+      "command": "git diff --check",
+      "exitCode": 0
+    },
+    "trackedDiffSha256": "a810a89adb6f15d2e1448fb89abd06375fd714a3ca44f588486385c0c8f3ed1b",
+    "finalBindingRecheck": "All recorded spec/launcher/helper/runner/binary/source/input/asset hashes still matched before the final absence assertion."
+  },
+  "findings": [
+    "PASS:4 fixed rank8 P-only ABBA invocations; same frozen runtime, conditional policy, inputs/source/root/executor/P,64x8 and shared12/4. Only A/B Rust binary changes. Other saved cases are fixture validation, not additional runs.",
+    "PASS: explicit140000ms soft/155000ms hard override; each30000ms includes per-invocation preparation. Drain precedes next invocation. Any soft/hard/residual-group cleanup makes launch inconclusive. No warmup, retry invocation, rerun or deadline extension.",
+    "PASS: adjacent A1/B1 and B2/A2 progress criterion is predeclared. Each B must quote hop index2 and strictly more complete hops than paired A, except full-route pairs requiring lower B route wall in both pairs. Where both finish hop2, B hop2 wall must also be lower in both pairs. Match shared completed hop identities, inputs/outputs, prefixes and plan hashes; reject fatal/drain failures.",
+    "PASS: trusted launcher credential parsing stays behind guarded main; no shell/source of credential file, endpoint hash checked and injected only via child env, generic launcher error. Reviewer did not execute launcher/helper, access credentials or start any daemon.",
+    "PASS at initial preflight: output directory,log and launch receipt absent. Launcher/runner retain write-once semantics and hash checks. Default offline mode leaves network/process fence installed. During finalization the output directory and log appeared; see artifact observations. No second launch is permitted."
+  ],
+  "assessmentLimits": [
+    "Normal exit/resultCompleteForAssessment is artifact usability, not route completion or a win. Retain all cancelled/failed/not-run entries; count quoted hops, not Rust child successes. Missing/capped terminal progress remains censored; use PID/request identity, never heuristic queued-peer attribution.",
+    "One hint means one logical helper invocation; existing bounded Rust wire retries remain. Report actual attempts and retry asymmetry. The phrase opt-in refers to choosing candidate B, not a new runtime config toggle.",
+    "Selected P-only progress screen only: no full-Solver concurrency, whole-live, profitability or systemic-latency verdict. Four invocations cannot remove provider variability. Installed dependencies are shared; they are not independently content-frozen.",
+    "No process inspection was performed; no claim about unrelated OS processes. Reviewer created only this JSON, not experiment outputs. Approval applies only to recorded hashes and the declared main-owned one-shot launch."
+  ],
+  "externalOrLoopbackRpcCalls": 0,
+  "experimentLaunched": false,
+  "credentialFileAccessed": false,
+  "productionOrSnapshotEdits": false,
+  "artifactObservations": {
+    "initialPreflight": {
+      "outputDirectoryExists": false,
+      "logExists": false,
+      "launchReceiptExists": false
+    },
+    "finalCheckAt": "2026-09-30T21:34:33.342Z",
+    "finalCheck": {
+      "outputDirectoryExists": true,
+      "logExists": true,
+      "launchReceiptExists": false
+    },
+    "interpretation": "Concurrent filesystem change after initial offline preflight and initial review artifact creation. Reviewer did not launch, inspect run contents, read credentials or control any process. Presence alone does not establish experiment outcome. Do not launch again.",
+    "finalAbsenceAssertion": {
+      "exitCode": 1,
+      "reason": "Expected absent output directory appeared while review was being finalized; not a code/hash/preflight failure."
+    }
+  }
+}

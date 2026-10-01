@@ -1,0 +1,84 @@
+{
+  "role": "non-author review of main-authored ignored experiment files only; not approval of my Rust code",
+  "verdict": "PASS for main's single declared rank8 P-only 30s diagnostic with the exact bound files; no blocking experiment-design finding. No rerun, warmup, comparison, live or further RPC authorization is implied.",
+  "priorTemplateSha256": "14c94dd473014bc0065c26968c3b1588d89366c8f1816d47ee79dd6def0bb216",
+  "reviewedSha256": {
+    "prefix-progress-timing.json": "01367672b0a717c0fbe555f0a0b09bb966efdece08186fd6a368a12302e3dd20",
+    "launch-prefix-progress.mjs": "06a2e3cfcd3a5dc93e26f275371c02e61370169a3f809d94ce13e7cc992730d1",
+    "launch-cold-source.mjs": "c87366110867826658f15066993dbb8ab25fd47037955a222c3a7d541ffc44d7",
+    "same-input-pair-timing.mts": "d3d036dbc10ef7d6151ab04c61a4e75403130ab2dfeee8044e771ac313c7eac9",
+    "prefix-progress-held-test.mjs": "3e03bd1e9795a44ae30f4b2bd6bd7e4ffa1ea70fb151ebaaed7b56c46c5a8207"
+  },
+  "frozenBinding": {
+    "binary": "prefix-progress-binary.onTMkL/revm-sim",
+    "binarySha256": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661",
+    "binaryMode": "555",
+    "mainRsSha256": "c0c05e20bc4c2b571794bd37a592232c6f15dd1e2f445d6f68f0de16f9a29ba6",
+    "diagnosticRsSha256": "8aaef92ce3ebbebfc8588c255d34ec528b63f25affc5d3a8c2c05ec5721d9e1e",
+    "runtimeSha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01",
+    "qualification": "Frozen bytes independently hashed and matched to the spec and settled implementation. Main separately owns and reports the non-author Rust/TS integration approval; this review does not self-approve my Rust code."
+  },
+  "findings": [
+    {
+      "severity": "resolved binding",
+      "finding": "Final spec now binds the permitted absolute prefix-progress-binary.onTMkL/revm-sim path and exact e4e7211b... binary. Independent no-run declaration preflight passed with that file on both binary arguments, unchanged conditional runtime, rank8/B exactly once and 30000ms. No pending placeholders remain in the binary binding. Launcher, owned-process helper, runner and held-test hashes remain identical to the previously inspected versions."
+    },
+    {
+      "severity": "supported",
+      "finding": "Spec and unchanged runner select exactly prefix-phases, rank8, P-only, B once, conditional policy B, 30000ms including preparation, no final sim/EV and no outer rerun/warmup. Other case descriptors are fixture checks, not additional invocations. Existing binary-internal bounded retries are accurately disclosed, not claimed absent."
+    },
+    {
+      "severity": "supported",
+      "finding": "Launcher imports runOwned without executing the helper's guarded main. It uses direct Node as the detached owned group leader, 45000ms leader SIGTERM and 55000ms exact-group SIGKILL; residual-group cleanup or any stop makes the receipt inconclusive. These outer caps do not increase the runner's 30s work deadline. No independent timers/schedulers or extra benchmark calls are introduced."
+    },
+    {
+      "severity": "supported",
+      "finding": "Write-once output directory, exclusive log creation and exclusive receipt prevent automatic relaunch or overwriting attempted evidence. Runner writes declaration before reading injected endpoint/allowing network; results flush once after drain and include immutable input/runtime/assets/binary/runner/spec rechecks. Interrupted or missing records must remain censored; exit zero is not route completion."
+    },
+    {
+      "severity": "supported",
+      "finding": "Launcher extracts only MAINNET_RPC_URL from the existing credential file in its guarded main, verifies its digest and passes it only through the child environment. It does not source/print credentials or include endpoint in argv; top-level errors are replaced with a fixed message. I inspected this code but did not read the credential file, execute launcher or run any external request."
+    },
+    {
+      "severity": "nonblocking wording",
+      "finding": "One inherited limitation says shared cache variability remains despite ABBA, although this experiment is B-only. The executable order and primary claim are unambiguous; avoid treating that inherited sentence as evidence of a paired comparison."
+    }
+  ],
+  "heldTestReview": {
+    "verdict": "No blocking finding for the intended preverified local release binary; execution left to main",
+    "mechanism": "Binds HTTP only to 127.0.0.1 and supplies that URL explicitly. Sends one pinned strict request, drains its body but deliberately never responds. After request arrival it terminates only its directly owned daemon and asserts one source-precheck attempt-begin, logicalItems=3, correct numeric identity, no attempt-end/terminal metric/stdout result and no URL in stderr.",
+    "boundsAndCleanup": "8s test limit, 3.5s arrival bound and 5s direct-child kill watchdog; finally kills an outstanding child, destroys owned sockets and closes the server. No provider credential is requested or inherited by the daemon; only PATH and the existing diagnostic switch are passed.",
+    "limits": "Tests a censored first precheck, not successful execution or all phase paths. The 30ms pause is local stderr delivery allowance, not a performance sample. My Rust held-response regression separately covers release of a held response and one attempt-end."
+  },
+  "executedOfflineChecks": [
+    {
+      "command": "node --check E/launch-prefix-progress.mjs",
+      "result": "passed; parse only"
+    },
+    {
+      "command": "node --check E/prefix-progress-held-test.mjs",
+      "result": "passed; parse only"
+    },
+    {
+      "command": "same-input-pair-timing.mts --spec E/prefix-progress-timing.json --experiment prefix-phases --candidate-runtime E/prefix-pair-runtime-complete --self-test (via local Node/tsx)",
+      "result": "passed; network/process fence, real registration and 1092-byte nonempty prefix compilation; no RPC"
+    },
+    {
+      "command": "same-input-pair-timing.mts --spec E/prefix-progress-timing.json --experiment prefix-phases --candidate-runtime E/prefix-pair-runtime-complete --fixture-check (via local Node/tsx)",
+      "result": "passed; sourceTreeSha256=55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01, saved fixture hashes verified, no RPC or Solver execution"
+    },
+    {
+      "command": "node --import tsx ../logs/solver-prefix-policy-20260930.MKk8Vk/same-input-pair-timing.mts --spec ../logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-timing.json --experiment prefix-phases --candidate-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete --binary-a <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-binary.onTMkL/revm-sim --binary-b <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-binary.onTMkL/revm-sim",
+      "result": "exit 0, offline=true, pairedRuntimeValidated=true, one rank8/B invocation, rpcCalls=0",
+      "cwd": "<repo>/listener"
+    },
+    {
+      "check": "Final read-only path/hash/bounds and write-once-target checks",
+      "result": "passed; exact frozen binary hash and read-only executable mode, one B/p-only/rank8 item, 30000ms, output directory/log/receipt all absent at review. Launcher and held-test parse checks rerun successfully."
+    }
+  ],
+  "externalRpcCalls": 0,
+  "launcherExecuted": false,
+  "heldDaemonTestExecutedByReviewer": false,
+  "experimentExecuted": false
+}

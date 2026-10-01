@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 1,
+  "status": "READ-ONLY design review; no local V4 model implemented",
+  "implementationStopped": {
+    "productionEditsByThisAgent": 0,
+    "partialFiles": [],
+    "checkedAbsent": [
+      "listener/src/searcher/venues/swaps/univ4-family/local-single-step.ts",
+      "listener/src/searcher/venues/swaps/univ4-family/test/local-single-step.ts"
+    ],
+    "defaultWiringChanged": false
+  },
+  "scope": "Kyber simulator/math/UpdateBalance only. Main owns tracker/cache/reader investigation. Family skill used to keep protocol semantics and any future implementation Family-local; no historical replay or Family acceptance claimed.",
+  "upstream": {
+    "repository": "KyberNetwork/kyberswap-dex-lib",
+    "commit": "0867b088e490608f731e4e37eaf49ea72e7846b3",
+    "tree": "5aea65a3f808135ff03d4b9ce1faab960dc08050",
+    "commitDate": "2026-09-30T08:55:52Z",
+    "files": [
+      {
+        "path": "pkg/liquidity-source/uniswap/v4/pool_simulator.go",
+        "url": "https://raw.githubusercontent.com/KyberNetwork/kyberswap-dex-lib/0867b088e490608f731e4e37eaf49ea72e7846b3/pkg/liquidity-source/uniswap/v4/pool_simulator.go",
+        "sha256": "809e3f12e162ab12f7212c2c706f6b9e579ed5c5f140a078a0ce5c1a98d52054"
+      },
+      {
+        "path": "pkg/liquidity-source/uniswap/v3/pool_simulator.go",
+        "url": "https://raw.githubusercontent.com/KyberNetwork/kyberswap-dex-lib/0867b088e490608f731e4e37eaf49ea72e7846b3/pkg/liquidity-source/uniswap/v3/pool_simulator.go",
+        "sha256": "8384cd9a3c618fbbda61e972750505510a246553becbbac57cc32de5213e4d3a"
+      },
+      {
+        "path": "pkg/liquidity-source/uniswap/v3/math.go",
+        "url": "https://raw.githubusercontent.com/KyberNetwork/kyberswap-dex-lib/0867b088e490608f731e4e37eaf49ea72e7846b3/pkg/liquidity-source/uniswap/v3/math.go",
+        "sha256": "3364fdbfc4ebbaec8ef3573e03aee83205ce0e401abad1c2d560c8b76401890f"
+      },
+      {
+        "path": "pkg/liquidity-source/uniswap/v3/math_sdk.go",
+        "url": "https://raw.githubusercontent.com/KyberNetwork/kyberswap-dex-lib/0867b088e490608f731e4e37eaf49ea72e7846b3/pkg/liquidity-source/uniswap/v3/math_sdk.go",
+        "sha256": "df64e7e3e6968c30a83c90b8ea99fb3bee4a656c534be634ac676f90f2cc4bb2"
+      },
+      {
+        "path": "pkg/liquidity-source/uniswap/v4/util.go",
+        "url": "https://raw.githubusercontent.com/KyberNetwork/kyberswap-dex-lib/0867b088e490608f731e4e37eaf49ea72e7846b3/pkg/liquidity-source/uniswap/v4/util.go",
+        "sha256": "ef9267993fab86bb8a02d1bf876fa87edbc1c654b1df4ef7f90fecb463a32b70"
+      }
+    ],
+    "fetchAccounting": {
+      "sourceFileRequests": 6,
+      "successfulSourceFiles": 5,
+      "failedSourceRequests": [
+        {
+          "path": "pkg/liquidity-source/uniswap/v3/pool.go",
+          "status": 404,
+          "retried": false
+        }
+      ],
+      "metadataRequests": 2,
+      "metadata": "commit identity then recursive tree path discovery; selected metadata only printed, no commit diff output",
+      "chainRpcCalls": 0,
+      "credentialsRead": false
+    }
+  },
+  "observations": [
+    {
+      "id": "K1",
+      "anchors": [
+        "uniswap/v4/pool_simulator.go:21-26,66-75,158-162"
+      ],
+      "finding": "No-hook V4 embeds the V3 simulator, constructs it from ExtraTickU256, and directly delegates CalcAmountOut. It is a full multi-step engine, not a price-linear approximation or single-step fast path."
+    },
+    {
+      "id": "K2",
+      "anchors": [
+        "uniswap/v3/pool_simulator.go:74-118,139-156",
+        "uniswap/v3/math.go:54-86,252-269"
+      ],
+      "finding": "It filters zero-liquidityGross ticks, expects sorted initialized ticks, validates positive spacing/alignment and zero total liquidityNet, precomputes tick sqrt prices, and records outer tick limits. This validation is not proof a sparse/missing tick dataset is complete. A bounded word window need not have zero sum liquidityNet; do not copy full-list assumptions into a partial-cache design."
+    },
+    {
+      "id": "K3",
+      "anchors": [
+        "uniswap/v3/math.go:143-247,296-357"
+      ],
+      "finding": "Swap walks exactly one bitmap-word step at a time, including empty words; negative compression floors toward minus infinity and upward search starts at compressed+1. Per-word input/fee rounding is semantically necessary, so never skip directly across many empty words to the next initialized tick."
+    },
+    {
+      "id": "K4",
+      "anchors": [
+        "uniswap/v3/math.go:309-327,363-391"
+      ],
+      "finding": "Coverage exhaustion propagates ErrBelowSmallest/ErrAtOrAboveLargest rather than assuming empty words or constant liquidity beyond the known list. Empty list is rejected for ordinary construction; the hook-only bypass yields a remaining-input result, not a usable complete quote."
+    },
+    {
+      "id": "K5",
+      "anchors": [
+        "uniswap/v3/math.go:191-236",
+        "uniswap/v3/math_sdk.go:593-685"
+      ],
+      "finding": "Exact input floors remaining*(1e6-fee)/1e6; input delta rounds up, output delta down; a step finishing inside its target charges remaining-amountIn, otherwise fee=ceil(amountIn*fee/(1e6-fee)). Amount remaining and accumulated output update per step. At initialized crossing subtract liquidityNet down/add up, then tick=next-1 down or next up; otherwise recompute terminal tick only if sqrt changed."
+    },
+    {
+      "id": "K6",
+      "anchors": [
+        "uniswap/v3/pool_simulator.go:221-278",
+        "uniswap/v3/math.go:239-247"
+      ],
+      "finding": "Kyber can return a partial fill and explicitly exposes RemainingTokenAmountIn. This is not compatible with issuing this searcher's full-input exact handle unless remaining is zero. Do not clip input, accept partial output as complete, or silently adopt a narrower price limit."
+    },
+    {
+      "id": "K7",
+      "anchors": [
+        "uniswap/v4/pool_simulator.go:438-483",
+        "uniswap/v3/pool_simulator.go:281-305"
+      ],
+      "finding": "CalcAmountOut computes returned scalar post-state; CloneState separates the mutable Pool struct; UpdateBalance installs sqrt/liquidity/tick and allocates new reserve values by adding input/subtracting output. Ticks/precomputed sqrt arrays remain shared read-only; swaps do not alter liquidityNet/bitmap initialization. Hook state cloning/updating is separate and outside our no-hook scope. UpdateBalance uses caller amounts; copying it with a partial fill and unadjusted full input would be unsafe."
+    },
+    {
+      "id": "K8",
+      "anchors": [
+        "uniswap/v3/pool_simulator.go:250-265",
+        "uniswap/v4/pool_simulator.go:52-68",
+        "uniswap/v4/util.go:36-106"
+      ],
+      "finding": "The simulator checks computed output against entityPool.Reserves; V4 utilities include floating-point reserve estimates from ticks. Their actual tracker wiring is main's scope. Neither estimated liquidity reserves nor Kyber per-pool reserve updates establish exact shared PoolManager payout balance or cross-pool conservation. Retain the existing same-source native/ERC20 manager balance check, without clipping."
+    },
+    {
+      "id": "K9",
+      "anchors": [
+        "uniswap/v3/pool_simulator.go:64,102-108",
+        "uniswap/v3/math.go:29-36,192-193",
+        "uniswap/v4/pool_simulator.go:183-191"
+      ],
+      "finding": "Reviewed simulator code consumes a single entityPool.SwapFee / Pool.Fee; no directional protocolFee unpack/combine is present here. Hook override can replace that Fee, but that does not prove ordinary asymmetric V4 protocol-fee correctness. Main must reconcile its tracker findings; do not treat V3 delegation as evidence that V4 protocol fees are handled."
+    },
+    {
+      "id": "K10",
+      "anchors": [
+        "uniswap/v3/math.go:62-70"
+      ],
+      "finding": "Constructor requires sqrt(tick)<=price<sqrt(tick+1). A legitimate downward crossed-boundary state can have tick=t-1 with price=sqrt(t); this strict upper test rejects it. Do not copy that validation unchanged; preserve canonical boundary state semantics."
+    }
+  ],
+  "feeContract": {
+    "sourceOfRequirement": "Explicit user-approved V4 contract; not independently established by Kyber simulator's tracker inputs in this sidecar.",
+    "protocolPacking": "uint24 packed; low12bits for zeroForOne, high12bits for oneForZero; each directional pips<=1000. Validate both directions and no out-of-width bits.",
+    "lpFee": "Validate actual source slot0 LP fee uint24 and allowed fee range; do not substitute the PoolKey tier or hook/dynamic flags for the current LP fee.",
+    "combined": "f = protocolPips + lpFee - floor(protocolPips*lpFee/1000000), using selected direction before every swap.",
+    "example": {
+      "lpFee": 3000,
+      "protocolPips": 1000,
+      "combinedPips": 3997
+    },
+    "rounding": "Use combined f in each exact-input step with integer input-up/output-down/fee-up semantics; do not charge independently rounded protocol and LP fees sequentially per step. Protocol/LP fee accounting split is separate from swap-price input.",
+    "hundredPercent": "Kyber NewPool rejects Fee>=1e6. Current approved local domain should explicitly fall back at f==1e6 rather than divide by zero or fabricate a zero quote. Protocol-supported100% exact-input behavior requires its own exact canonical branch if later included."
+  },
+  "localComparison": {
+    "files": [
+      {
+        "path": "listener/src/searcher/solver/v3-math.ts",
+        "sha256": "15abc44ca43ae8da8b451e5fc04d8c0903ea1f735fbddf24cf50cf4e54cccc8e"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-family/exact.ts",
+        "sha256": "965c75cd171e9b8b70ebb13844f65ace417be2dd8348d832709e54226c8300f3"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-family/execution.ts",
+        "sha256": "488948cf265ac9d1117e9a3c15d45c35e72d5c665834d9f04a33196467c06dbc"
+      }
+    ],
+    "reusable": "getSqrtRatioAtTick/getTickAtSqrtRatio, integer deltas and nextInitializedTickWithinOneWord under valid domain guards. Existing bitmap helper already throws V3MissingBitmapWordError and uses correct negative floor compression. Keep the shared implementation unchanged.",
+    "unsafeAsFullWrapper": [
+      {
+        "anchor": "v3-math.ts:69-74",
+        "finding": "BigInt product/amount equality and denominator>=numerator are tautologies for nonnegative unlimited integers, so Solidity's uint256-overflow fallback branch is not selected. Kyber math_sdk.go:535-546 uses wrapping uint256 product/add to select the alternate expression."
+      },
+      {
+        "anchor": "v3-math.ts:374",
+        "finding": "Initialized tick missing from ticks map becomes0 liquidityNet. A V4 loop must fail closed/request the exact missing tick instead."
+      },
+      {
+        "anchor": "v3-math.ts:349,388-405",
+        "finding": "Hitting price limit can leave input unconsumed, but the wrapper returns only amountOut/state, not remaining input. Cannot safely issue a full-input quote directly from this wrapper."
+      },
+      {
+        "anchor": "v3-math.ts:18-24,81-93,341-384",
+        "finding": "No complete uint160/uint128/int128/result overflow/domain validation, fee guard or explicit progress/coverage bound in the wrapper. Arbitrary-precision products in FullMath are intentional; distinguish valid512bit multiplication from uint256 result overflow and branch-selecting overflow."
+      }
+    ],
+    "readOnlyArithmeticProbe": {
+      "executed": "node --import tsx pure v3-math import and integer calculations; no source writes, chain calls or model implementation",
+      "overflowCounterexample": {
+        "liquidity": "340282366920938463463374607431768211455",
+        "sqrtPriceX96": "1461446703485210103287273052203988822378723970341",
+        "amountIn": "1298074214633706907132624082305024",
+        "productExceedsUint256": true,
+        "sharedNextSqrt": "20769187434139015355122587177365804",
+        "overflowBranchNextSqrt": "20769187434139015355122587177365820",
+        "difference": "-16"
+      },
+      "qualification": "Demonstrates arithmetic branch divergence within uint128-liquidity/int128-input bounds, not a chain parity test or evidence of this amount fitting one step.",
+      "missingWordResult": "V3MissingBitmapWordError",
+      "crossedBoundaryExample": {
+        "tick": 9,
+        "sqrtPriceX96": "79267784519130042428790663799",
+        "equalsSqrtAtTick10": true
+      }
+    }
+  },
+  "recommendation": {
+    "verdict": "Build a Family-local complete exact-input walker across all verified covered ticks/words, not a one-step fast path. Full means full amount within a verified state domain, not unlimited invented coverage.",
+    "minimumContract": [
+      "Source-bound immutable slot0 (sqrt/tick/both protocol fee directions/current LP fee), uint128 liquidity, spacing, explicit known bitmap words (including known-zero), and initialized tick gross/net values. Main owns efficient population/reuse via existing request programs and common source cache.",
+      "A pure Family-local walker starts from a fresh scalar copy for every amount trial, returns consumed input/remaining/output/post sqrt/tick/liquidity, and preserves every empty-word boundary. Immutable tick/bitmap data may be reused; never share mutated price/liquidity between independent amount trials.",
+      "On absent word or initialized tick, request through existing budgeted source-pinned continuation if already supported, otherwise fall back for the ORIGINAL full amount. Never default missing data to zero or combine partial local output with a newly restarted whole-amount chain quote.",
+      "Use a checked Family-local V4 step/overflow branch where the shared helper is unsafe, or explicitly fall back for unsupported overflow-sensitive cases. Do not change global V3 math or assume arbitrary-precision equivalence. A practical design should address the overflow branch now, alongside across-tick behavior.",
+      "Validate tick/sqrt including the crossed-boundary upper equality, legal spacing1..32767, bitmap uint256, initialized tick alignment and gross/net widths, active liquidity uint128 after every crossing, and supported int128 input/output delta domain. Known zero-liquidity gaps can be traversed to a verified next initialized tick; zero liquidity does not imply a fabricated zero output.",
+      "Only a fully consumed input and canonical requested price-limit semantics qualify for a local full quote. On coverage/budget/progress exhaustion return unavailable/fallback, never clipping. Bound CPU using monotonic price/tick progress and the covered initialized-tick/word set, without increasing existing work deadlines.",
+      "Retain exact same-source manager output-balance capacity for native/ERC20. Do not import floating-point reserve estimates, per-pool reserve accounting or stateOnlyReads declarations for shared-manager balances.",
+      "Keep local amount quote evidence distinct from chain-return evidence. Do not copy Kyber UpdateBalance into shared global caches. Repeated-route projection remains the existing EVM full-prefix path until manager-balance/cross-pool effects and trial isolation are separately proven under the existing Family contract."
+    ],
+    "scope": "Family-local math/state/quote integration and corresponding tests; existing shared request/cache/authority mechanisms. No new central branches, scheduler, cache framework, RPC policy, budgets or Family discovery exception.",
+    "acceptanceBeforeDefault": [
+      "Integer differential parity across both directions, asymmetric protocol fees, fee rounding and100%fallback; production P and multiples, not only tiny amounts.",
+      "Multiple initialized ticks plus multiple empty-word boundaries, negative ticks/nondivisible spacing, downward crossed-boundary start, zero-liquidity gap and reversal post-state.",
+      "Missing word/tick, truncated coverage, incompatible source/generation, malformed widths, signed liquidity overflow, uint256 product/add overflow, int128 output, exact full consumption and price-limit partial fill must fail closed or fall back unchanged.",
+      "Independent same-source canonical V4 Quoter outputs and consumed input for representative across-tick states; offline shared-helper agreement alone is insufficient.",
+      "Cold preparation plus warm12amount workload and fallback overhead measured separately; no single-step-only success or reduced quote coverage presented as full practical acceptance."
+    ],
+    "openDependency": "Main tracker/cache review must establish reliable completeness/source binding and how Kyber produces SwapFee; this sidecar does not infer those contracts."
+  },
+  "nonClaims": [
+    "No production files or default wiring changed; prior experiments not repeated.",
+    "No local V4 model implemented, no chain RPC, no credentials, no live/fork execution.",
+    "Kyber is design/reference evidence, not protocol authority or permission to weaken this searcher's controls.",
+    "No promise of universal support or never needing later changes; unsupported domains remain explicit and fail closed."
+  ]
+}

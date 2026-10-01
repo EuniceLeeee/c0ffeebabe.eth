@@ -1,0 +1,25 @@
+{
+  "role": "non-author evaluator, main",
+  "author": "Mencius",
+  "trackedPatchSha256": "a498159d4de9d5b483b83764a7fbb021d838a69dfb43d34491128d7d1744f221",
+  "binarySha256": "71ebae8b45a5b406b7b5e90ebf2005449a2f6c14af20c33ac3f7866727e01462",
+  "ranGate": [
+    "Read full delta against frozen instrumented baseline and every new test",
+    "Independent cold-prefix tests11/11",
+    "Independent full Rust81/81, log cold-prefix-main-tests.log",
+    "Offline runner registry/compiler self-test passed",
+    "git diff --check passed"
+  ],
+  "reviewFindings": [
+    "Cache-only backend peeks directly, preserves cached absence/zero, no source fetch/cache population/counter/latch on deliberate miss",
+    "Scout stops at explicit prefix boundary before observations/finalization; all local state discarded",
+    "Missing existing code hash and fatal source errors cannot authorize repair hints",
+    "Different warm amounts skip hints; current-main/setup/observation-only misses do not trigger prefix hint",
+    "Optional prefix-only hint uses validated local executor code, returns keys only; actual state remains hash-pinned",
+    "Complete authoritative prefix/main run and mandatory pre/postchecks unchanged",
+    "Initial two test-only failures were strict body parsing of an op envelope; fixed fixtures, production validation retained"
+  ],
+  "verdict": "implemented, safe for declared bounded ABBA; no latency win yet",
+  "experiment": "New same-input-cold-prefix-1, rank8 P-only, ABBA four30s invocations, no retries of observations, no budget/search changes; all outcomes retained",
+  "safety": "No signing/broadcast/deployment/commit/push/merge; no new live before result"
+}

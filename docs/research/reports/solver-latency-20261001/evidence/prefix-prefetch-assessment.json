@@ -1,0 +1,24 @@
+{
+  "scope": "Selected rank8 P-only engine diagnostic, not full Solver/live",
+  "experiment": "same-input-prefix-prefetch-1",
+  "immutableInputs": true,
+  "order": "ABBA; every attempted result retained",
+  "status": "No completed route in either arm; all4 cancelled at unchanged30s total budget",
+  "baselineHop1Ms": [
+    15132.598417,
+    15109.480666
+  ],
+  "prefetchHop1Ms": [
+    21106.949708,
+    16815.647625
+  ],
+  "quotedHopsEach": 2,
+  "commonQuoteParity": "All completed hop0/hop1 outputs agree; full route parity cannot be claimed",
+  "finding": "Optional counterfactual trace-key prefetch did not establish a latency win. Extra trace work adds overhead to already-warm requests; serial daemon service still replays an identical prefix separately for the same hop's reserve/balance reads.",
+  "decision": "Withdraw latest prefetch patch only. Preserve earlier proven route-policy and mandatory-source-precheck batching changes. No live restart with failed experiment. Preserve readonly candidate binary and source for evidence.",
+  "candidateSource": "prefix-prefetch-binary.AovEsv/main.rs",
+  "candidateBinary": "prefix-prefetch-binary.AovEsv/revm-sim",
+  "candidateSha256": "13ca5325831770bae0ff676ad8999a24a0a09b0da91c1d5455413bb698ca35cb",
+  "next": "Design a bounded generic same-prefix read execution optimization with exact isolation/cancellation/source-gate tests before another real-RPC run; no speculative daemon pool or deadline widening.",
+  "goal": "active; no successful repeated-prefix optimization claim"
+}

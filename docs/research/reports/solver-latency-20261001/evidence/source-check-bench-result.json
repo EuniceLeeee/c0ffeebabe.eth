@@ -1,0 +1,295 @@
+{
+  "at": "2026-09-30T11:59:22.407Z",
+  "failed": false,
+  "warmups": [
+    {
+      "lane": "A",
+      "pair": -1,
+      "ms": 4605.244833000001,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": -1,
+      "ms": 3527.2827500000003,
+      "status": "pass"
+    }
+  ],
+  "rows": [
+    {
+      "lane": "A",
+      "pair": 0,
+      "ms": 1786.2305840000008,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 0,
+      "ms": 1169.2927089999994,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 1,
+      "ms": 1229.7146249999987,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 1,
+      "ms": 1951.2958749999998,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 2,
+      "ms": 2118.775917000001,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 2,
+      "ms": 1053.182166999999,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 3,
+      "ms": 1257.0181249999987,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 3,
+      "ms": 1764.9280830000025,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 4,
+      "ms": 1948.6147079999973,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 4,
+      "ms": 1194.409125000002,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 5,
+      "ms": 1032.3108329999995,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 5,
+      "ms": 1750.5264580000003,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 6,
+      "ms": 2573.001708,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 6,
+      "ms": 1024.974542,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 7,
+      "ms": 1319.5786659999976,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 7,
+      "ms": 3103.327083,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 8,
+      "ms": 2831.5392500000016,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 8,
+      "ms": 1249.3849590000027,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 9,
+      "ms": 4104.275874999999,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 9,
+      "ms": 2579.1739579999994,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 10,
+      "ms": 2573.2737080000006,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 10,
+      "ms": 2517.3069590000014,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 11,
+      "ms": 1776.7562919999982,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 11,
+      "ms": 2525.5772920000018,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 12,
+      "ms": 2405.4664580000026,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 12,
+      "ms": 1898.1707500000048,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 13,
+      "ms": 1769.4819999999963,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 13,
+      "ms": 2327.6747079999986,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 14,
+      "ms": 2500.3514169999908,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 14,
+      "ms": 1423.4491660000058,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 15,
+      "ms": 1351.8337499999907,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 15,
+      "ms": 2865.4165420000063,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 16,
+      "ms": 2285.8029589999933,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 16,
+      "ms": 1331.833249999996,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 17,
+      "ms": 1294.7336670000077,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 17,
+      "ms": 2559.9557910000003,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 18,
+      "ms": 2260.6226250000036,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 18,
+      "ms": 1287.7664579999982,
+      "status": "pass"
+    },
+    {
+      "lane": "B",
+      "pair": 19,
+      "ms": 1288.6601250000094,
+      "status": "pass"
+    },
+    {
+      "lane": "A",
+      "pair": 19,
+      "ms": 2271.8245000000024,
+      "status": "pass"
+    }
+  ],
+  "A": {
+    "n": 20,
+    "p50": 2327.6747079999986,
+    "p95": 2865.4165420000063
+  },
+  "B": {
+    "n": 20,
+    "p50": 1288.6601250000094,
+    "p95": 2517.3069590000014
+  },
+  "facts": {
+    "output": "0x0000000000000000000000000000000000000000000000000000000000000012",
+    "gasUsed": "23508",
+    "strict": {
+      "outcome": {
+        "kind": "Success",
+        "output": "0x0000000000000000000000000000000000000000000000000000000000000012",
+        "phase": "main"
+      },
+      "executionGasUsed": "23508",
+      "nativeDeltas": [],
+      "tokenDeltas": [],
+      "totalSupplyDeltas": [],
+      "logs": []
+    },
+    "attestation": {
+      "kind": "node-attested",
+      "chainId": 1,
+      "blockNumber": 26090118,
+      "blockHash": "0x1b82a49f4b235571e9e9aea4b1115aef53724c7d1859565f7c754cc63288d78f",
+      "stateRoot": "0xbb91fe1abe537d7b439aaa353f98ebd2e55a14709d13d09256b29bed839f5208",
+      "parentHash": "0x8a8e8b754d384823f887e0552f430ad94842e18f4e468f9b5dca3030041e0543"
+    }
+  },
+  "scope": "fixed read-only request; excludes startup warmups; all attempted trials retained; not whole Solver/prefix-route latency"
+}

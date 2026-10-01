@@ -1,0 +1,41 @@
+{
+  "role": "Main independent raw-results judgment before assessor and indexed tooling",
+  "experiment": "same-input-batch-split-1",
+  "inputs": "Declared identical frozen runtime/source/fixture, conditional no-prefix rank477; maxBatchSize64 versus1 only",
+  "all12Complete": true,
+  "allIntegrityChecks": true,
+  "logicalIssuances": 492,
+  "observedSolverMsA": [
+    4834.431042,
+    4425.8089169999985,
+    4764.183541999999,
+    5038.416583999999,
+    12841.602625,
+    10970.391042000003
+  ],
+  "observedSolverMsB": [
+    5323.891291999998,
+    5922.451333000001,
+    5865.548667000003,
+    6795.517458000002,
+    6870.525167,
+    8192.370332999999
+  ],
+  "nearestRankMedianMs": {
+    "A": 4834.431042,
+    "B": 5922.451333000001
+  },
+  "nearestRankP95Ms": {
+    "A": 12841.602625,
+    "B": 8192.370332999999
+  },
+  "adjacentPairBWins": 2,
+  "adjacentPairs": 6,
+  "manualOutputCheck": "All12 first-hop selected input sequences and all paired second-hop values match. Plan SHA e82b72ea693706138b4f987182f10261d62618121f6922c3e09aef67ab333eec repeats; top3 inputs22060215/23057372/21446047 and profits7987/7982/7975 rawUSDC repeat. Each run12amounts/8GSS/24hops. Every canonical pre/post succeeds; no drain errors. Assessor will verify full physical call multiset hashes separately.",
+  "mechanism": "All12 have15 actual eth_calls and22memo hits. A11physical envelopes andpeak1; B15envelopes andpeak3. The intervention ran, but the extra independent envelopes did not improve the fixed primary criterion.",
+  "decision": "Reject proposed batch-size default change. Keep current production64 batching. Do not rerun or widen deadline to improve the metric.",
+  "interpretation": "Sample median is worse for B and4/6adjacent pairs lose. The lower B maximum does not override the predeclared median/pair criteria. Later A slowdowns show time-varying provider effects; do not claim a population slowdown percentage.",
+  "scope": "Selected historical no-repeat Solver diagnostic, not live route-cohort evidence or finalsim/EV. Repeated-prefix full-route latency remains unresolved.",
+  "productionEditsThisSlice": 0,
+  "billedProviderCU": "unavailable;492conservative logical read reservations, no Rust requests; actual network call counts to be reconciled from telemetry"
+}

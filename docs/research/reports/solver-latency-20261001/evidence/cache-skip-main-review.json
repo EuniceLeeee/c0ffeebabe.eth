@@ -1,0 +1,40 @@
+{
+  "scope": "move existing process-local final-sim typed-revert cache check before Solver; original late guard remains",
+  "reviewer": "main agent; not patch author",
+  "generator": "Mencius 01a0f250-e06b-7c23-bfec-995ec4aae807",
+  "reviewPass": 2,
+  "reviewedPaths": [
+    "listener/src/searcher/main.ts",
+    "listener/src/searcher/blockscan-runtime-loop.ts",
+    "listener/src/searcher/test/blockscan-runtime-loop.ts"
+  ],
+  "executed": [
+    {
+      "command": "node --import tsx --test src/searcher/test/blockscan-runtime-loop.ts src/searcher/test/blockscan-sim-reject-cache.ts src/searcher/test/blockscan-solver-quote-concurrency.ts",
+      "passed": 48,
+      "exit": 0
+    },
+    {
+      "command": "npm run build:live",
+      "exit": 0
+    },
+    {
+      "command": "node --import tsx --test --test-name-pattern='sim reject policy|disabled independent Exact checks deadline' src/searcher/test/blockscan-runtime-loop.ts",
+      "passed": 10,
+      "exit": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit": 0
+    }
+  ],
+  "findings": [
+    "Predicate uses the identical cache and exact route identity as late final-sim rejection; no new rejection criterion, lifetime, persistence or token blacklist.",
+    "Checked at worker dispatch; late check retained for in-flight races. Cache hits produce no Solver quote counters, final sim or EV.",
+    "Natural candidate order and caps unchanged; no refill. Non-reverted and fresh-process routes continue normally.",
+    "Review1 target-block diagnostic issue corrected with optional source-block mode; production defaults unchanged and existing replay omits early predicate.",
+    "All-skipped aggregate may still say no_positive_quote, but explicit per-route rejection plus zero Solver counters distinguish policy skip; not an economic or simulation proof.",
+    "1424 old late skips are mostly local-quote routes; no claim this removes dominant V4 RPC waits."
+  ],
+  "verdict": "implemented_and_offline_reviewed; measured speedup pending; no merge/deployment approval"
+}

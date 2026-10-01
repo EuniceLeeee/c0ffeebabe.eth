@@ -1,0 +1,30 @@
+{
+  "reviewer": "01a0f215-60f3-7613-8bbc-726979aac750",
+  "verdict": "pass_for_bounded_dry_run_only",
+  "scope": [
+    "listener/src/searcher/solver/amount-propagation.ts",
+    "listener/src/searcher/test/solver-sequential-prefix.ts",
+    "listener/src/searcher/test/blockscan-solver-quote-concurrency.ts"
+  ],
+  "reported_executed_checks": {
+    "sequential_prefix": "5/5",
+    "quote_tolerance": "11/11",
+    "quote_concurrency": "pass at 1/4/16",
+    "bundle_router_safety": "6/6",
+    "in_memory_real_session_extra": "pass",
+    "diff_check": "pass"
+  },
+  "findings": [
+    "No blocking regression in reviewed patch",
+    "Unique instance routes omit priorQuotes; repeated instance routes retain complete ordered trial",
+    "Final simulation failure rejection unchanged",
+    "Distinct instances may share state: this is search policy, not output-equivalence proof",
+    "Aggregate timing alone cannot quantify mode-specific speedups"
+  ],
+  "baseline_failures_reported": [
+    "final-simulation header fixture lacks blockScanActivityProvider",
+    "historical grid harness amountPoints 1 != 5"
+  ],
+  "reviewer_no_mutations_or_rpc": true,
+  "terminal_review_unavailable": "configured terminal model unsupported by account; native read-only review used"
+}

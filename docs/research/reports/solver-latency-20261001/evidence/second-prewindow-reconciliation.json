@@ -1,0 +1,25 @@
+{
+  "scope": "stopped diagnostic before measurement; not a Solver performance comparison",
+  "sourceBytes": 533493705,
+  "sourceSha256": "1ab62daed68a27285a5a024542657a054f75bfc66ce11a0f560da7d67fd5dc9f",
+  "nonStartupTimingRows": 103,
+  "rangeSelection": [
+    26090329,
+    26090448
+  ],
+  "startupMs": 216432.234542,
+  "firstSteadyWindow": null,
+  "canonical": {
+    "tool": "analysis:blockscan-pass-latency",
+    "selectionManifest": "second-prewindow-tools.json",
+    "projection": "second-prewindow-latency.log.provenance.json",
+    "totalP50Ms": 12114.061875000014,
+    "totalP95Ms": 14103.80816700001,
+    "solverPlansMax": 0,
+    "solverWallMaxMs": 0,
+    "enumerationMaxMs": 0,
+    "exitCode": 0
+  },
+  "interpretation": "Canonical totals agree with manual state-only cancellation diagnosis. Three rows shorter than10s are cancelled preparations, not completed or successful passes. Log-anchor eligibility is not correctness or Solver completion. All103 failed preparations remain in evidence; no measured250 window was opened.",
+  "cleanup": "ended code0; owned pgid27643 empty; original and copied Ready plus frozen source hashes reverified"
+}

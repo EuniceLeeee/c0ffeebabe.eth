@@ -1,0 +1,23 @@
+{
+  "capabilityQuery": [
+    "latency"
+  ],
+  "manifest": "cold-prefix-tools.json",
+  "manifestSha256": "a715f403698046ca68e34e4c1416fbc3a69fcd79372cd3f13ffbd12344b0466f",
+  "selected": [
+    "analysis:blockscan-pass-latency"
+  ],
+  "executedExitCode": 0,
+  "logSha256": "32131d726eeb3cbec40208039ae7dcc510d9c64ffb70bc2565d9162e814395f2",
+  "resultsSha256": "3a9f7164fe8c38d486bda16da8d1b21e68aeee316588709a26a70ad7660893e4",
+  "manualFirst": "cold-prefix-assessment.json sealed before indexed execution",
+  "reconciliation": "Canonical tool correctly reports zero production passes and an ineligible window. This is a selected P-only diagnostic with Rust request phases, not a live pass. No fake pass anchors or simulator phase numbers inserted into live metrics.",
+  "toolDefect": "none: selected tool is pass-level, not a Rust phase parser",
+  "restoration": {
+    "rustTests": "70/70 passed",
+    "releaseBuild": "passed",
+    "diffCheck": "passed",
+    "restoredBinarySha256": "e278d6530f806787588984cfe445dc2395cc0dec334a264441aa73fc4c5b0d5b",
+    "ownedProcessesRemaining": 0
+  }
+}

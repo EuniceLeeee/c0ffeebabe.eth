@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "reviewType": "non-author design review only",
+  "pass": 1,
+  "verdict": "proportionate in principle; revise the eligibility and assessment clarifications before generation",
+  "generationApproved": false,
+  "rpcOrExperimentAuthorized": false,
+  "briefSha256": "08b4baa45ed6b79d24c18352aa9699f0e2135aca7525f448aaf4ecc5e531b0b7",
+  "codeInspected": {
+    "listener/revm-sim/src/main.rs": "c0c05e20bc4c2b571794bd37a592232c6f15dd1e2f445d6f68f0de16f9a29ba6",
+    "listener/revm-sim/src/diagnostic.rs": "8aaef92ce3ebbebfc8588c255d34ec528b63f25affc5d3a8c2c05ec5721d9e1e",
+    "cold-prefix-binary.Q0edHj/main.rs": "4bb9ce6fe4c9ee4ad92cf30f7f96651ccba9b7203c027bd33f1ee35bd5541250",
+    "cold-prefix-binary.Q0edHj/diagnostic.rs": "a35058c4a498a6aae8881d52f1f13b088d1a3fd2beb7ee4df498dfb3ffa88af0"
+  },
+  "evidence": {
+    "newIndependentReview": "prefix-progress-result-review.json",
+    "newIndependentReviewSha256": "85e1f8e82c6098cbb34cbaf09b93c3a7821ccf0141b0cdd1a5cda8cd870d3b2d",
+    "oldRawResults": "same-input-cold-prefix-1/results.json",
+    "oldRawResultsSha256": "3a9f7164fe8c38d486bda16da8d1b21e68aeee316588709a26a70ad7660893e4",
+    "oldRawLog": "same-input-cold-prefix-1.log",
+    "mainAssessmentsRead": false,
+    "newObservation": "PID64897 request4 reached a warm session's expanded two-hop prefix and issued56 serial prefix-phase attempts:55 single-storage reads and one account batch. At least16.687s was observed in that phase before cancellation. Funding used zero RPC. This is an actual remote demand-read mechanism, not CPU continuation or source-precheck dedup.",
+    "oldNegativeEvidence": "Old cold-first ABBA all cancelled. Hop1 A=17.378s with the other A censored at26.779s; B=19.711/17.249s. Initial B hints plus hydration cost5.275/4.304s; warm siblings issued zero hints. No stable whole-hop improvement was established.",
+    "additionalOldRawFinding": "Old B2 PID46074 request4 already completed its expanded-prefix strict request: trace-hints2 physical attempts in6605.953708ms, then prefix execution0 RPC in0.490208ms; request5 also completed with zero hints. The overall hop2 still failed at the30s deadline. Thus expanded-prefix key coverage has some prior narrow feasibility evidence, but deferring the first cold hint is the new untested scheduling decision, not a newly invented successful mechanism.",
+    "interpretation": "A later expensive prefix may amortize trace+hydration cost better than the first prefix. The observations are from different provider/time windows and do not predict a saving. Lower RPC count alone cannot pass. D-007 concerns local-reth multicall and does not establish this remote trace optimization; X-004 does not authorize another instrumentation round or automatic run."
+  },
+  "requiredClarifications": [
+    {
+      "id": "W1",
+      "finding": "Exclude ancestor-header-only misses from hint eligibility.",
+      "anchors": [
+        "main.rs:1322 block_hash_ref",
+        "main.rs:3401 seed_from_prestate",
+        "cold-prefix-binary.Q0edHj/main.rs:1396 block_hash_ref"
+      ],
+      "reason": "The old scout marks a missing ancestor as fetchable, but prestateTracer hydration only collects account/storage keys. It never fills ancestors. Reusing that classification buys a trace exchange while leaving the verified parent-header chain unchanged, and can repeat the waste on later requests.",
+      "minimalResolution": "A missing ancestor should abort the cache-only scout without authorizing a hint, just as non-repairable missing code does. Preserve authoritative ancestor reads and out-of-range zero behavior. Do not build a header-prefetch framework. Only account/storage misses that the existing hint path can hydrate authorize this candidate."
+    },
+    {
+      "id": "W2",
+      "finding": "Define one hint as one logical helper invocation, not one physical RPC attempt.",
+      "anchors": [
+        "main.rs:592 batch_call",
+        "main.rs:3318 trace_prefetch",
+        "main.rs:3429 warm_batch",
+        "diagnostic.rs:185 rpc_attempt_scope"
+      ],
+      "reason": "The path normally needs a trace HTTP exchange followed by pinned hydration, and existing bounded send recovery may issue additional physical attempts. Trace phase counters include hydration. A literal one-physical-attempt promise would contradict the reused transport.",
+      "minimalResolution": "No explicit candidate retry or second scout/hint loop per request. Keep existing recovery/fatal rules, count every physical attempt and hydrate call, and retain retry-contaminated/censored evidence. Do not change transport retry configuration."
+    },
+    {
+      "id": "W3",
+      "finding": "The proposed experiment's completed-hop minimum comparison is weaker than a no-regression condition.",
+      "reason": "Both B results can exceed min(A1,A2) while completing fewer hops than the better adjacent A. That would hide deadline-related coverage loss.",
+      "minimalResolution": "Before sealing any future run, specify adjacent pairs (A1,B1) and (B2,A2), require each B to complete no fewer hops than its paired A as well as the declared hop2 progress condition, and compare the same whole-hop timer when both complete. A censored A is only a lower bound. Main must separately approve the final criterion and run."
+    }
+  ],
+  "successHintContract": {
+    "storage": "One private default-false bit on the existing RemoteRevmDb lifetime is sufficient. It is not a quote, continuation, route identity, canonical attestation or global cache.",
+    "lifetimeAnchors": [
+      "main.rs:888 RemoteRevmDb",
+      "main.rs:948 RemoteRevmDb::new",
+      "main.rs:2733 take_pinned_session",
+      "main.rs:2105 Reset"
+    ],
+    "lifetime": "take_pinned_session reuses only equal endpoint URL and full VerifiedSource; replacement/reset drops the remote and its bit. No caller/amount/prefix fingerprint is needed because the bit only permits speculative key discovery and full authority is rerun.",
+    "setCondition": "Validated pinned trial prefix with validated executor_code, full authoritative result Ok with response.ok and success==Some(true), successful observations and required postcheck, and no fatal latch. Ok alone is insufficient because Revert/Halt are ordinary Ok responses. Scout/trace/prefix-only success and main/probe failure cannot establish the bit.",
+    "scalarPlacement": "main.rs:2714-2725: after verify_canonical and full-result inspection, before publishing the same session. Do not set inside strict_simulate_at, which precedes the postcheck.",
+    "pairPlacement": "main.rs:2788-2829: A can establish eligibility only after its successful bridge post(A)+pre(B); preferably mark after A's successful physical flush, before B execution. B can establish it after its own postcheck. Preserve the existing bridge evidence, A flush, B fatal check and individual results. A broken flush never launches B.",
+    "importantLimit": "This proves prior successful use of a source session, not warmth of every later prefix. An unrelated cold prefix in that same session can still qualify after a scout miss. Do not claim cold-first work is excluded per route or per amount. Warm changed amounts with the same touched keys skip hints; changed amounts touching new keys may hint again. No fingerprint set or suppression cache should be added to hide this risk."
+  },
+  "scoutAndAuthoritativeExecution": {
+    "safeReusableBoundary": "Old main.rs:3022-3150 uses the same strict engine with explicit Full versus PrefixOnly scope. It retains the original complete plan and stops after successful index0, before observation probes, later setup/main/state-read, finalization or commit. Prefix failure/Halt exits without authorizing hints unless the error was a repairable DB miss.",
+    "isolation": "Old main.rs:1363-1409 peeks maps and cached absent/zero values; main.rs:3036 clones only the prepared local cache over CacheOnlySource. No RemoteRevmDb getter, source RPC, shared write, lazy-cache counter or fatal-latch write is allowed in scout. Drop the entire scout journal, gas, refund, logs, access warmth and transient state.",
+    "context": "Current main.rs:3213-3238 sets tx.to=call.to and entry caller=call.from before load_accounts. At index0 this is the prefix executor, while plan.origin stays distinct. Main target DB hydration is not transaction warming. Preserve these exact semantics in both Full and scout; do not transplant a preloaded EVM continuation.",
+    "hint": "After unchanged funding, send only plan.calls[0] and validated plan.executor_code using the old optional code-override support at old main.rs:3202. Do not trace every main/sibling, choose code from cached accounts, or seed returned trace values. Current main.rs:3410 parses all hint keys before hash-pinned warm_batch.",
+    "traceLimit": "Remote debug_traceCall is only key discovery, not proof of matching local inner-frame origin, gas/warmth or control flow. It may omit useful keys or add irrelevant ones. Always rerun the full authoritative prefix/target from the original prepared DB; missing hints fall back to lazy reads and physical source faults remain fatal.",
+    "portRisk": "The frozen scout predates current strictPair/progress code. Port only its reader, explicit stop boundary and validated-code hint support; never replace current scalar/pair handlers or diagnostic module wholesale. Existing pair authority/flush/progress identities stay intact."
+  },
+  "minimumFutureScope": {
+    "files": [
+      "listener/revm-sim/src/main.rs",
+      "listener/revm-sim/src/diagnostic.rs"
+    ],
+    "sizeJudgment": "Proportionate if limited to the old cache-only reader/scoped engine boundary, one remote-lifetime bit with three success publication points, optional validated-code trace support and inline differential tests. It does not need TS changes, a new queue, cache protocol, continuation framework or new config.",
+    "diagnostics": "Add only prefix-scout to existing fixed phases. Suppress nested authoritative prefix/main phase entry while scouting; scout RPC count must remain0. Trace+hydration retains trace-hints ownership, terminal sums remain exclusive, current128-record cap and scalar/pair identities unchanged."
+  },
+  "minimumOfflineProofBeforeAnyRun": [
+    "Fresh real pinned session: first request with actual cold prefix reads issues neither scout nor hint; only complete main/observations/post success establishes eligibility. Prefix success followed by main Revert/Halt, observation failure, pre/post fault or broken A flush does not establish it.",
+    "Same source sequence: initial lazy success; differing-amount warm prefix zero hints; expanded account/storage branch exactly one logical prefix-only hint then pinned hydration; repeated expanded warm request zero hints. Assert physical trace/hydration separately and compare exact full responses against the lazy path.",
+    "Reset, new daemon/session, endpoint change and source hash/height change return to first-request lazy behavior. Already-true eligibility is not itself canonical evidence and never bypasses fresh checks.",
+    "Cached zero and absent account hit; uncached account/storage may authorize; missing code, fatal state, ancestor-only miss, main-only/state-read/observation miss and ordinary scout Revert/Halt do not. Malformed/unsupported hints fall back without partial hint-value publication.",
+    "Differential output/stage/gas/state/log/transient/origin/from/warmth parity, including partial scout writes before a miss, prefix failures, main failures and exact request-local executor code at a target different from main. Source-code/storage caches remain real.",
+    "Pair-specific publication, bridge fault and postB fault controls; hold B work and prove A still flushes first; fatal latch overrides optional hint outcomes. Existing bounded progress accounting and cancellation/drain regressions retained.",
+    "Full offline Rust tests/release and real TS/Rust loopback gates after implementation, followed by fresh non-author review. No tests or binary execution performed by this design review."
+  ],
+  "executedChecks": {
+    "readOnly": "Read current scalar/pair source validation, session lifetime, hydration/funding, strict execution and pinned trace hydration; inspected old scout and inline regressions as data; locally parsed old raw results/phases and computed SHA256 bindings.",
+    "instructions": "AGENTS/CLAUDE, HERMES/gates and requested D-007/X-004 consulted. Recorded native generator fallback retained; no generator or global configuration operations.",
+    "externalRpc": 0,
+    "loopbackRpc": 0,
+    "sourceWrites": 0,
+    "testsExecuted": 0
+  },
+  "recommendation": "Main may finalize a narrowly amended behavioral brief rather than another observability round. This review is not generation or experiment approval. Reject expansion into ancestor prefetch, context-result reuse or a broader cache/scheduler. Benefit remains unproven and must be judged on completed hop progress within the original deadline, not reduced demand-read counters alone."
+}

@@ -1,0 +1,18 @@
+// Repair offline-only packaging into a NEW snapshot; preserve failed preparation.
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const basis = path.resolve(here, '../live-solver-skip-settle-250.7MsLu8/runtime');
+const target = path.join(here, 'prefix-pair-runtime-complete');
+assert(!fs.existsSync(target));
+fs.cpSync(path.join(here, 'prefix-pair-runtime'), target, { recursive: true, verbatimSymlinks: true });
+fs.chmodSync(target, 0o700); fs.chmodSync(path.join(target, 'listener'), 0o700);
+fs.cpSync(path.join(basis, 'listener/searcher'), path.join(target, 'listener/searcher'), { recursive: true });
+for (const file of ['tsconfig.json', 'tsconfig.live.json']) fs.copyFileSync(path.join(basis, 'listener', file), path.join(target, 'listener', file));
+const seal = folder => { for (const e of fs.readdirSync(folder, { withFileTypes: true })) {
+  const p = path.join(folder, e.name); if (e.isDirectory()) seal(p); else if (e.isFile()) fs.chmodSync(p, 0o400);
+} fs.chmodSync(folder, 0o500); };
+seal(target);
+console.log(JSON.stringify({target,scope:'offline runtime asset copy; failed incomplete snapshot retained'}));

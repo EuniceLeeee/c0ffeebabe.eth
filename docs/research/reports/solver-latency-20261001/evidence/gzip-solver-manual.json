@@ -1,0 +1,41 @@
+{
+  "manualFirst": "Main inspected immutable raw results and computed full ordered first-hop amount->output->second-hop output/candidate/plan hashes before assessor/tool or reviewer conclusions.",
+  "experiment": "same-input-gzip-1",
+  "decision": "Predeclared performance criterion FAILED; do not launch live with this optimization or claim Solver speedup. Preserve candidate evidence; withdraw this source delta after independent reconciliation.",
+  "all20Complete": true,
+  "allInputHashesUnchanged": true,
+  "canonicalBeforeAfter": true,
+  "readReservations": 820,
+  "previousSlices": 500,
+  "combinedCounted": 1320,
+  "quotes": {
+    "points": 12,
+    "gss": 8,
+    "hops": 24,
+    "hash": "e737bd5384bcac7984a86cc42e7ac1a9a5ec537bebc990f617df5c12a1fa4fdb",
+    "candidateHash": "ff142a53dd1412d29b66423982dea3b9050042157bad06b8ee47e2b6765e572d",
+    "planSha256": "e82b72ea693706138b4f987182f10261d62618121f6922c3e09aef67ab333eec"
+  },
+  "A": {
+    "medianSolverMs": 4553.884040999983,
+    "p95SolverMs": 5751.443125000005,
+    "bytesPerInvocation": 154522,
+    "callsPerInvocation": 15,
+    "envelopesPerInvocation": 11
+  },
+  "B": {
+    "medianSolverMs": 4322.1654160000035,
+    "p95SolverMs": 7432.210250000004,
+    "wireBytesRange": [
+      16583,
+      16959
+    ],
+    "callsPerInvocation": 15,
+    "envelopesPerInvocation": 11,
+    "gzipResponsesPerInvocation": 11,
+    "pairedWins": 4,
+    "pairs": 10
+  },
+  "reason": "Median ratio~94.9% fails<=90%,4wins fails>=8,p95ratio~129.2% fails<=110%. Body-byte reduction is real but not a whole-Solver win; small sample/provider variance remains. No cancels, lost quotes, changed search points, prefix/Rust calls or drain errors.",
+  "scope": "One selected no-repeat historical route, not representative live or final sim/EV. No production distribution verdict; broader goal remains active."
+}

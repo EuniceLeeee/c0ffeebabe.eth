@@ -1,0 +1,71 @@
+{
+  "reviewPass": 2,
+  "role": "non-author experiment spec/launcher/held-test review; main separately evaluates my Rust implementation",
+  "verdict": "PASS for the exact single declared rank8 P-only progress diagnostic",
+  "blockingFindings": [],
+  "scope": "Exactly one B invocation, 30000ms work deadline, 45000ms soft and 55000ms hard owned-process limits; no warmup, rerun, comparison, live or additional experiments",
+  "bindings": {
+    "directory": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk",
+    "prefix-progress-timing.json": "336c1b78db482d975052b2e7c5789e1d2a62af363beff9cbf3b7595fc44c7f0b",
+    "launch-prefix-progress.mjs": "06a2e3cfcd3a5dc93e26f275371c02e61370169a3f809d94ce13e7cc992730d1",
+    "launch-cold-source.mjs": "c87366110867826658f15066993dbb8ab25fd47037955a222c3a7d541ffc44d7",
+    "same-input-pair-timing.mts": "d3d036dbc10ef7d6151ab04c61a4e75403130ab2dfeee8044e771ac313c7eac9",
+    "prefix-progress-held-test.mjs": "3e03bd1e9795a44ae30f4b2bd6bd7e4ffa1ea70fb151ebaaed7b56c46c5a8207",
+    "prefix-pair-runtime-complete": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01",
+    "prefix-progress-binary.onTMkL/revm-sim": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661",
+    "prefix-progress-binary.onTMkL/main.rs": "c0c05e20bc4c2b571794bd37a592232c6f15dd1e2f445d6f68f0de16f9a29ba6",
+    "prefix-progress-binary.onTMkL/diagnostic.rs": "8aaef92ce3ebbebfc8588c255d34ec528b63f25affc5d3a8c2c05ec5721d9e1e"
+  },
+  "resolved": [
+    "Final diagnosticBinary absolute path and binary hash match the frozen read-only executable and source copies; no placeholder remains.",
+    "Inherited ABBA wording is replaced with an explicit single-invocation/non-comparison limitation.",
+    "Launcher, owned-process helper, runner and held-test hashes remain identical to the inspected versions. Held test uses the actual serve subcommand, 3.5s startup/request wait, 5s kill watchdog and 8s test cap."
+  ],
+  "executedChecks": [
+    {
+      "check": "Independent full no-run declaration preflight against the final spec",
+      "commandSummary": "From listener: node --import tsx E/same-input-pair-timing.mts --spec E/prefix-progress-timing.json --experiment prefix-phases --candidate-runtime E/prefix-pair-runtime-complete --binary-a E/prefix-progress-binary.onTMkL/revm-sim --binary-b E/prefix-progress-binary.onTMkL/revm-sim; E paths were supplied as resolved paths, no --run or --out",
+      "exitCode": 0,
+      "result": {
+        "offline": true,
+        "pairedRuntimeValidated": true,
+        "order": [
+          {
+            "rank": 8,
+            "arm": "B",
+            "policy": "B"
+          }
+        ],
+        "budgetMsPerInvocation": 30000,
+        "rpcCalls": 0
+      }
+    },
+    {
+      "check": "node --check of launcher and held-test",
+      "exitCode": 0
+    },
+    {
+      "check": "Read-only frozen binary/source/spec/launcher/helper/runner/held-test hashes, exact selection and output-existence checks",
+      "result": "all matched; output directory, log and launch receipt were absent; binary executable mode 555"
+    }
+  ],
+  "safetyAssessment": {
+    "credentials": "No credential access by reviewer. Guarded launcher extracts only the approved variable, verifies its digest, passes it via child environment, and never prints it or places it in argv. Runner declaration precedes endpoint access/network enablement.",
+    "bounds": "One explicit rank8/B item, unchanged frozen conditional TS runtime and normal budgets. Existing binary-internal bounded wire retries remain disclosed; no outer attempt retry or warmup. Soft/hard stops target the owned leader/group only, with interrupted/residual receipt inconclusive.",
+    "writeOnceAndDrain": "Exclusive log/receipt creation and nonexisting output directory prevent automatic rerun/overwrite. Runner joins physical drain before one results flush. All completed outputs and immutable inputs must still be checked afterward.",
+    "heldTest": "Loopback-only single pinned request with withheld response; checks begin before source response, absent end/terminal/result after owned-child termination, numeric identity and no endpoint in stderr. Execution evidence belongs to main; reviewer only inspected and parsed this test.",
+    "interpretation": "Diagnostic evidence only. Missing terminal/end records or truncation stay censored/unknown, not zero. A successful launcher exit cannot establish full-route, Solver or live improvement."
+  },
+  "mainReportedGates": {
+    "rust": 84,
+    "tsRustLoopback": 259,
+    "heldResponse": 1,
+    "watchdog": 2,
+    "qualification": "Main reports independent execution; these counts are not claimed as newly executed by this experiment reviewer."
+  },
+  "externalRpcCallsByReviewer": 0,
+  "launcherExecutedByReviewer": false,
+  "heldTestExecutedByReviewer": false,
+  "experimentExecutedByReviewer": false,
+  "productionChanges": false
+}

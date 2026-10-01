@@ -1,0 +1,23 @@
+{
+  "startedAt": "2026-09-30T19:06:31.809Z",
+  "source": {
+    "number": 26029536,
+    "hash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+    "stateRoot": "0xa8c4eb4a5b7d2a90ee1ffa7ca44d1f90394210a46c77e4bf3fb76f68cfb64afe"
+  },
+  "order": [
+    "A",
+    "B",
+    "B",
+    "A"
+  ],
+  "callsCap": 8,
+  "runnerSha256": "038d785927eeb6a1d476fe3489ad0defa8ca3cc200271a132f94e4b0fc48843f",
+  "briefSha256": "d7d161129e64f91d7e2b979fd70a7232425037240a884bb96876609b92cdedd6",
+  "payloadSha256": "1108a03139313b0feecfafb90adf48566b09569ff1dccc606ceba7aa745f440f",
+  "calldataSha256": "a7e62ebee7ebc7db897da50da196f4ffbc05c487c4f403fd2576eda15450a227",
+  "endpointSha256": "860a9610cd135f044f125b2364ad22718483029de2022075cd8619cbd8ba6b4a",
+  "perRequestMs": 30000,
+  "retries": 0,
+  "scope": "Transport capability/byte parity only; no Solver/live speed claim."
+}

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "reviewer": "main-nonauthor",
+  "reviewPass": 2,
+  "harnessSha256": "013318f162ef7a6771df269d0ddb16f5bbfc71fdd28ab2fc73dfa0228cbfa9ff",
+  "decision": "approved for new offline-2 ABBA after cleanup-observer correction",
+  "ran_gate": [
+    "Read all changed code and complete drain checks",
+    "Independent isolated --check exit0; source-storage-offline-main-check-pass2.log"
+  ],
+  "priorAttempt": {
+    "path": "source-storage-offline-1/results.json",
+    "status": "failed and preserved; not a completed comparison",
+    "finding": "Baseline finished12amounts/8GSS/24hops and postcheck. All work and transport/scheduler counters zero. The test asserted sockets.size before per-socket close events had drained. Other arms were not run."
+  },
+  "repair": "Await owned socket close events subscribed before destroy, with a finite cleanup timeout; record socketsRemaining. All drain assertions and work deadlines unchanged. Disable new loopback connects before shutdown.",
+  "unchanged": [
+    "production files",
+    "A/B runtimes",
+    "search/config/controls",
+    "input artifacts",
+    "full prefixes",
+    "output parity gates",
+    "external network denial",
+    "no warmups or retry inside experiment"
+  ],
+  "limits": {
+    "newAttempts": 4,
+    "order": [
+      "A",
+      "B",
+      "B",
+      "A"
+    ],
+    "deadlineMsPerAttempt": 30000,
+    "externalCuBudget": 0,
+    "cuSpent": 0
+  },
+  "claimsExcluded": [
+    "live latency",
+    "new natural discovery",
+    "final sim",
+    "EV"
+  ]
+}

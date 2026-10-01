@@ -1,0 +1,66 @@
+{
+  "role": "Main independent primary-evidence judgment before indexed reconciliation and separate result review",
+  "experiment": "same-input-cold-source-1",
+  "bindings": {
+    "resultsSha256": "5fd407eff9eb99ec141c74ae1ebaac6ef81a91dc8ea5a716f9ffff32217e02af",
+    "declarationSha256": "f152d1ff98ff79715df3f35a731dfe7ada34c0325d837b9df26a8b29cfac7f0e",
+    "logSha256": "6836269a94d6dba1b57b10a64f76c8e13eac9120ab289ec623ae71e2629b19bd"
+  },
+  "order": [
+    "A",
+    "B",
+    "B",
+    "A"
+  ],
+  "firstPrefixHopWallMs": [
+    9318.2535,
+    9274.156542,
+    8851.134375,
+    8737.300333
+  ],
+  "criterion": "both B below both A, neither B fewer completed quoted hops than either A, identical completed quote/plan outputs, exercised combined phase and one observed cold exchange removed",
+  "performanceCriterionPassed": false,
+  "reason": "Both B durations exceed A2. One adjacent B win and one loss; no stable whole-hop speed benefit. Do not use shorter daemon-only timing as an acceptance substitute.",
+  "completedHopCounts": [
+    2,
+    2,
+    2,
+    2
+  ],
+  "fullRouteOutcomes": [
+    "cancelled at 30s",
+    "cancelled at 30s",
+    "cancelled at 30s",
+    "cancelled at 30s"
+  ],
+  "solverEntered": 0,
+  "sourcePreparationPlusHydrationMs": [
+    1916.398291,
+    1736.544501,
+    2017.739835,
+    2010.607041
+  ],
+  "coldRequestPhysicalAttempts": [
+    17,
+    16,
+    16,
+    17
+  ],
+  "completedFirstPrefixHopPhysicalAttempts": [
+    23,
+    22,
+    22,
+    23
+  ],
+  "mechanism": "Candidate co-batch exercised for request1, one physical attempt versus baseline precheck+hydration two attempts. Other terminal attempts unchanged. Pair record child IDs2/3 and bridge counted once, not once per child.",
+  "attribution": "Joined each invocation via its actual captured daemon PID, scalar identity.requestId=1 and pair childRequestIds=[2,3], then matching returned revmRequests exactCallId=2. All four first-prefix hops fully completed and attested. Next hop requests are censored and lack terminal phase records.",
+  "correctness": "All four plans have identical SHA; both common completed hop inputs/outputs and priorLengths0/1 match exactly. All frozen runtime/assets/binary/input/runner/spec hashes unchanged. No fatal diagnostics, source failures, drain errors or launcher stop/residual process reported.",
+  "decision": "Withdraw only cold-source-hydration working draft; preserve frozen candidate, all results and test/review evidence. Retain earlier separately validated conditional-prefix and source-check/pair changes. No rerun or blind live launch.",
+  "resourceAccounting": {
+    "observedCompletedHopRustPhysicalAttempts": 90,
+    "censoredNextHopAttempts": "unknown, not zero",
+    "billedProviderCu": "unknown; not exposed by RPC",
+    "extraAttemptsOrWarmups": 0
+  },
+  "scope": "Selected historical P-only diagnostic, not natural/live acceptance or whole Solver speedup. No final sim or EV run. Goal active and incomplete."
+}

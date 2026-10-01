@@ -1,0 +1,74 @@
+// Fixed four-attempt diagnostic; neither credentials nor endpoints appear in argv/output.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repo = path.resolve(here, '../..');
+// Direct Node is the owned group leader; its directly launched Rust processes
+// stay in that group. Only this exact child's group is ever signalled.
+export function runOwned(argv, options, softMs = 150000, hardMs = 160000) {
+  assert(process.platform !== 'win32');
+  assert(softMs > 0 && hardMs > softMs);
+  const child = spawn(process.execPath, argv, { ...options, detached: true });
+  let softStop = false, forcedStop = false, residualGroupStopped = false;
+  const signalGroup = signal => {
+    if (!child.pid) return false;
+    try { process.kill(-child.pid, signal); return true; }
+    catch (error) { if (error.code !== 'ESRCH') throw error; return false; }
+  };
+  const soft = setTimeout(() => { softStop = true; child.kill('SIGTERM'); }, softMs);
+  const hard = setTimeout(() => { forcedStop = true; signalGroup('SIGKILL'); }, hardMs);
+  const interrupted = () => { softStop = true; forcedStop = true; signalGroup('SIGKILL'); };
+  process.once('SIGINT', interrupted); process.once('SIGTERM', interrupted);
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(soft); clearTimeout(hard);
+      process.removeListener('SIGINT', interrupted); process.removeListener('SIGTERM', interrupted);
+    };
+    child.once('error', error => { cleanup(); reject(error); });
+    child.once('exit', (code, signal) => {
+      cleanup();
+      if (signalGroup(0)) { residualGroupStopped = true; signalGroup('SIGKILL'); }
+      resolve({ code, signal, pid: child.pid, softStop, forcedStop, residualGroupStopped });
+    });
+  });
+}
+
+async function main() {
+const out = path.join(here, 'same-input-cold-source-1');
+assert(!fs.existsSync(out), 'never overwrite earlier evidence');
+const logPath = path.join(here, 'same-input-cold-source-1.log');
+const fd = fs.openSync(logPath, 'wx', 0o600);
+let rpc = '';
+for (const line of fs.readFileSync('<user>/src/MEV/.env', 'utf8').split(/\r?\n/)) {
+  const match = line.trim().match(/^(?:export\s+)?MAINNET_RPC_URL=(.*)$/);
+  if (match) rpc = match[1].trim().replace(/^(['"])(.*)\1$/, '$2');
+}
+assert.equal(createHash('sha256').update(rpc).digest('hex'),
+  '860a9610cd135f044f125b2364ad22718483029de2022075cd8619cbd8ba6b4a');
+const argv = [path.join(here, 'same-input-pair-timing.mts'), '--spec', path.join(here, 'cold-source-timing.json'),
+  '--experiment', 'prefix-engine', '--candidate-runtime', path.join(here, 'prefix-pair-runtime-complete'),
+  '--binary-a', path.join(here, 'prefix-pair-binary/revm-sim'),
+  '--binary-b', path.join(here, 'cold-source-binary.KD2Xff/revm-sim'), '--run', '--out', out];
+const require = createRequire(path.join(repo, 'listener/package.json'));
+const result = await runOwned(['--import', pathToFileURL(require.resolve('tsx')).href, ...argv], {
+  cwd: repo, stdio: ['ignore', fd, fd],
+  env: { PATH: process.env.PATH, MAINNET_RPC_URL: rpc,
+    SEARCHER_STATE_LATENCY_DIAGNOSTICS: '1', SEARCHER_DRY_RUN: '1' },
+});
+fs.closeSync(fd);
+const interrupted = result.forcedStop || result.softStop || result.residualGroupStopped;
+fs.writeFileSync(path.join(here, 'cold-source-launch-receipt.json'), JSON.stringify({ ...result,
+  out, logPath, resultCompleteForAssessment: !interrupted && result.code === 0,
+  qualification: 'A forced/soft stop or residual group is censored/inconclusive; zero exit alone is not a timing win.' }, null, 2),
+  { flag: 'wx', mode: 0o600 });
+console.log(JSON.stringify({ ...result, out, logPath }));
+process.exitCode = interrupted ? 1 : result.code ?? 1;
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch(() => { console.error('diagnostic launcher failed'); process.exitCode = 1; });
+}

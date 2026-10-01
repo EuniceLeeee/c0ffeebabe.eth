@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "claim": "One selected repeated-route progress diagnostic for the censored hop; not a latency comparison or natural/live acceptance",
+  "source": {
+    "number": 26029536,
+    "hash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+    "generation": 1
+  },
+  "stateRoot": "0xa8c4eb4a5b7d2a90ee1ffa7ca44d1f90394210a46c77e4bf3fb76f68cfb64afe",
+  "executionMode": "source-block",
+  "budgetMs": 30000,
+  "search": {
+    "amountGrid": "multiples",
+    "gridHalfWidth": 2,
+    "gssMaxTries": 8,
+    "quoteConcurrency": 16,
+    "quoteToleranceRawUnits": "0"
+  },
+  "transport": {
+    "maxBatchSize": 64,
+    "maxConcurrentBatches": 8,
+    "capacity": 12,
+    "producerReserved": 4,
+    "transportTimeoutMs": 30000,
+    "jsRetries": 0,
+    "singleCallFallback": false
+  },
+  "inputs": {
+    "ready": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1-ready.json",
+      "sha256": "0bcbefca90fa703c30503f5d7f1994ca7a1932604cad124192099fb4ed882089"
+    },
+    "prices": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1/prices/prices.json",
+      "sha256": "918dbc1484ffec1431c33a663fdd2fea4c1fc109d7e76842bc17d6e1c7e0f031"
+    },
+    "input": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1/prices/input.json",
+      "sha256": "a681976102723801b8e719dc06eb4e5c2e4a7fdb531472d8c1c0d2ca46c7e42a"
+    },
+    "enumeration": {
+      "path": "logs/seven-p0002-repeat.6tTOwk/sat1/offline-1/enumeration.json",
+      "sha256": "712d77701b0046605b3d2dbb91fdf1878db46df8b1111731d9246f39beb7229f"
+    }
+  },
+  "runtimeBasis": "logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+  "runtimeBasisSourceSha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01",
+  "amountPropagation": {
+    "baselineHead": "baca79b03384a93fb656482c09a5e4de026f5fbc",
+    "A": "bb19c5245f011b09a0695bc4f5dc4695333ed7533436bb2854338e244ccf371a",
+    "B": "bb19c5245f011b09a0695bc4f5dc4695333ed7533436bb2854338e244ccf371a"
+  },
+  "artifactSha256": "0fc76fc76afc1838ce7d151078ef5bf40e6f0ba2e14fbaab97e3004b9bf0cc49",
+  "binarySha256": {
+    "old": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1",
+    "current": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661"
+  },
+  "diagnosticBinary": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-progress-binary.onTMkL/revm-sim",
+  "cases": [
+    {
+      "rank": 477,
+      "P": "5195442",
+      "hops": 2,
+      "repeated": false,
+      "cycleFingerprint": "0x58b576c783fd70d92f287fd17e2c4e47fca7e83d87dab8a842dd301184d31fd7"
+    },
+    {
+      "rank": 4,
+      "P": "2000000000000000",
+      "hops": 6,
+      "repeated": true,
+      "cycleFingerprint": "0x8c6b3d3ad8de8cdbaa04a6eea2b4e7f969b149b461380074365e10c4db7d05ba"
+    },
+    {
+      "rank": 8,
+      "P": "5195442",
+      "hops": 6,
+      "repeated": true,
+      "cycleFingerprint": "0x16a830b1dbe01d8715474fec1a43be64772e28e6805997e203506dc854d1d6c8"
+    }
+  ],
+  "experiments": {
+    "prefix-phases": {
+      "phase": "p-only",
+      "ranks": [
+        8
+      ],
+      "order": [
+        "B"
+      ],
+      "runtimePolicies": {
+        "A": "B",
+        "B": "B"
+      },
+      "binaries": {
+        "A": "current",
+        "B": "current"
+      }
+    }
+  },
+  "limitations": [
+    "The saved 512-candidate cohort allowed repeated tokens; rank477 is outside the present live100. No new enumeration or forced graph edges.",
+    "Rank4 retains ordered prefixes but its repeated core is local SAT1 math and may issue zero Rust prefix requests.",
+    "Rank8 is an optional separate P-only binary diagnostic, never appended automatically to primary.",
+    "One selected route at a time; outer16-route competition and concurrent producer traffic are not exercised.",
+    "Fresh session, backend memo and daemon for this single invocation; shared host/provider/OS caches remain possible. This is not a paired timing comparison.",
+    "No warmups or invocation reruns. Shared production permits and64x8 batching retained; JS transport recovery/fallback is disabled. Pinned Rust binaries retain their built-in bounded transport recovery; zero wire retries is NOT guaranteed and cannot be configured here.",
+    "30s includes root rehydration, canonical reads, strict session and Planner preparation plus Solver; mandatory physical drain is joined and reported separately, not a raised work deadline.",
+    "1424 previous late reject-cache drops were mostly local V2/V3; this does not establish a dominant V4 RPC fix or live speedup.",
+    "Unchanged production TS and retained pair logic. Only opt-in Rust progress observation differs. Existing terminal phase records remain authoritative for completed intervals; partial progress gives lower bounds, not complete timings."
+  ],
+  "predeclaredAssessment": {
+    "attempts": 1,
+    "workDeadlineMs": 30000,
+    "order": "B only",
+    "automaticReruns": 0,
+    "warmup": 0,
+    "primary": "Identify last active phase and outstanding RPC for hop index2 at cancellation. No end-to-end speed or success comparison.",
+    "correctness": "Full prefixes, source pre/post checks, quote policies and isolation unchanged. Check all completed outputs against prior same-input baseline; any drift/fatal or drain failure remains a failure, not a pass.",
+    "benefit": "Diagnostic only; no candidate speed criterion. A missing/truncated progress segment stays unknown. Never extend work deadline to complete the route.",
+    "cuPolicy": "Exactly one task-owned external diagnostic;30s operation deadline,45s graceful launcher cancellation,55s hard termination of exact owned group. RPC/CU totals recorded only if observed; provider billed CU is not supplied. No other task-owned external work, retries of this attempt, live or warmup.",
+    "onFailure": "Keep failed/truncated artifacts. Do not relaunch this write-once experiment. A further behavior-change brief requires independently reviewed mechanism."
+  }
+}

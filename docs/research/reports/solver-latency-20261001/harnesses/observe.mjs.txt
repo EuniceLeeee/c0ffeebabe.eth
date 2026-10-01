@@ -1,0 +1,37 @@
+// Read-only metrics from a fixed byte snapshot of production logs.
+import {createReadStream, statSync, writeFileSync, existsSync, readFileSync} from 'node:fs';
+import {createInterface} from 'node:readline';
+import {resolve} from 'node:path';
+const dir=resolve(process.argv[2]);
+const log=resolve(dir,'live.log'),bytes=statSync(log).size;
+const transitions=new Map(),rows=[],revm=[],sim=[],counts={},failures={};
+let first=null,startup=null,lines=0;
+const inc=(o,k)=>o[k]=(o[k]??0)+1;
+const parse=l=>{try{return JSON.parse(l.slice(l.indexOf('{')));}catch{return null;}};
+for await(const l of createInterface({input:createReadStream(log,{end:bytes-1}),crlfDelay:Infinity})){
+  lines++;
+  if(l.startsWith('[searcher/blockscan-activity-range] ')){const v=parse(l);if(v)transitions.set(v.sourceBlock,v.transitions);}
+  if(l.startsWith('[revm-request-timing] ')){const v=parse(l);if(v)revm.push(v);}
+  if(l.includes('solve_failed '))inc(failures,l.slice(l.indexOf(' error=')+7).replace(/0x[0-9a-fA-F]+/g,'<hex>'));
+  if(!l.includes('"type":"block_scan_timing"'))continue;
+  const v=parse(l);if(!v)continue;
+  if(v.startup_warm){startup={block:v.source_block,ms:v.total_ms};continue;}
+  if(first===null&&v.stages?.state?.status==='ran'&&transitions.get(v.source_block)===1)first=v.source_block;
+  if(first!==null&&v.source_block<=first+249){rows.push(v);inc(counts,v.outcome);}
+}
+const q=a=>{a=a.filter(x=>typeof x==='number'&&Number.isFinite(x)).sort((a,b)=>a-b);return{n:a.length,p50:a.length?a[Math.ceil(a.length*.5)-1]:null,p95:a.length?a[Math.ceil(a.length*.95)-1]:null,max:a.at(-1)??null};};
+const stages=rs=>({n:rs.length,total:q(rs.map(v=>v.total_ms)),state:q(rs.map(v=>v.stage_timing_ms?.state)),enumeration:q(rs.map(v=>v.stage_timing_ms?.enumeration)),solver:q(rs.map(v=>v.planner_solver_detail?.solverWallMs)),plans:q(rs.map(v=>v.planner_solver_detail?.solverPlans)),amounts:q(rs.map(v=>v.planner_solver_detail?.solverAmountPoints)),hops:q(rs.map(v=>v.planner_solver_detail?.solverHopExactCalls)),positive:rs.filter(v=>v.quote_positive>0).length,finalSim:q(rs.map(v=>v.stage_timing_ms?.final_sim))});
+const complete=rows.filter(v=>v.stages?.planner_solver?.status==='ran');
+const ranges=new Map(rows.map(v=>[v.source_block,v.stages?.planner_solver]));
+const solverRevm=revm.filter(v=>{const s=ranges.get(v.sourceBlock);return s?.started_at_ms!=null&&v.enqueuedAtMs>=s.started_at_ms&&v.enqueuedAtMs<=s.finished_at_ms;});
+const statuses={};for(const r of solverRevm)inc(statuses,r.status);
+if(existsSync(resolve(dir,'events.jsonl'))){
+  const p=resolve(dir,'events.jsonl'),size=statSync(p).size;
+  if(size)for await(const l of createInterface({input:createReadStream(p,{end:size-1}),crlfDelay:Infinity})){
+    const v=parse(l);if(v?.type==='simulation_result')sim.push(v);
+  }
+}
+const windowSim=sim.filter(v=>first!==null&&v.source_block>=first&&v.source_block<=first+249);
+const report={dir,snapshotBytes:bytes,lines,startup,window:first===null?null:{from:first,to:first+249,last:rows.at(-1)?.source_block,heightsSeen:rows.at(-1)?.source_block-first+1},outcomes:counts,all:stages(rows),solverCompleted:stages(complete),solverIncomplete:rows.length-complete.length,solverRevm:{requests:solverRevm.length,statuses,queueMs:q(solverRevm.map(v=>v.queueMs)),serviceMs:q(solverRevm.map(v=>v.serviceMs))},simulationWindow:{attempts:windowSim.length,successful:windowSim.filter(v=>v.ok===true).length,positive:windowSim.filter(v=>v.ok===true&&BigInt(v.simulated_profit??'0')>0n).length},allSimulationEvents:sim.length,simulationExamples:windowSim.slice(-2).map(v=>({sourceBlock:v.source_block,ok:v.ok,profit:v.simulated_profit,reason:v.failure_reason})),failuresAllLog:Object.entries(failures).sort((a,b)=>b[1]-a[1]).slice(0,8),ended:existsSync(resolve(dir,'ended.json'))?JSON.parse(readFileSync(resolve(dir,'ended.json'),'utf8')):null};
+if(process.argv[3])writeFileSync(resolve(process.argv[3]),JSON.stringify(report,null,2)+'\n',{flag:'wx',mode:0o600});
+console.log(JSON.stringify(report,null,2));

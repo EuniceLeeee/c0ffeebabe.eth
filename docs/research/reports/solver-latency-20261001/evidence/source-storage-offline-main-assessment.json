@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "evaluator": "main-nonauthor",
+  "claim": "Recorded real-route production Solver preserves outputs and reduces source-storage provider reads",
+  "verdict": "offline semantic and request-count contract passed; latency/live not established",
+  "resultPath": "source-storage-offline-2/results.json",
+  "resultSha256": "5571bf7021ac803ad5c0411418a1beb2934eae97cc8a073d4605a53c4348d341",
+  "runnerSha256": "013318f162ef7a6771df269d0ddb16f5bbfc71fdd28ab2fc73dfa0228cbfa9ff",
+  "method": "Main independently read raw results and compared ordered hop arrays, candidate/plan hashes and unique storage key/result hashes before indexed reconciliation.",
+  "experiment": {
+    "order": [
+      "A",
+      "B",
+      "B",
+      "A"
+    ],
+    "attempts": 4,
+    "completed": 4,
+    "freshRuntimeControlsEachAttempt": true,
+    "externalCuSpent": 0
+  },
+  "rawFacts": {
+    "storageReads": [
+      108,
+      9,
+      9,
+      108
+    ],
+    "distinctStorageKeys": [
+      9,
+      9,
+      9,
+      9
+    ],
+    "solverCodeReads": [
+      18,
+      18,
+      18,
+      18
+    ],
+    "solverEthCalls": [
+      78,
+      78,
+      78,
+      78
+    ],
+    "allPhysicalRequestsIncludingPreparationAndPostcheck": [
+      209,
+      110,
+      110,
+      209
+    ],
+    "perRunAmountPoints": 12,
+    "perRunGssPoints": 8,
+    "perRunSuccessfulHops": 24,
+    "prefixShape": "hop0=0, hop1=1 for every trial; full repeat-instance state preserved",
+    "selectedInputRawUsdc": "5538803",
+    "selectedQuotedProfitRawUsdc": "1427235",
+    "candidateAmountsRaw": [
+      "5538803",
+      "6600284",
+      "7256068"
+    ],
+    "allPerHopOutputsAndResolvedPlansExactlyEqual": true,
+    "allStorageKeyAndByteHashesEqual": true,
+    "allPendingTransportSchedulerAndSocketCountersZero": true,
+    "networkEscapeAttempts": 0,
+    "recordingFailures": 0,
+    "inputAndRuntimeDrift": false
+  },
+  "interpretation": "Nine immutable source slots previously re-read for each of12amounts now load once within the same solve signal/deadline.99fewer physical storage reads (91.6667%). This is raw-data reuse only; issued quote handles and per-amount trial state are not shared.",
+  "priorFailure": "offline-1 remains failed: baseline completed search but harness checked socket count before close events. B never ran. Corrected bounded close-event observer is a distinct new experiment; no production/search/state changes or erased evidence.",
+  "limitations": [
+    "Source is saved derived emptyN26029585 backed by parent26029584; this run replays exact bytes, not a newly authenticated fork",
+    "Post-selection diagnostic uses saved natural rank1; no new enumeration, final sim or EV",
+    "No artificial delay or external network; elapsed times are not live latency evidence",
+    "Saved17.641s historical continuation lacked production quote memoization and cannot be used as causal baseline",
+    "These two local-trial-state hops do not test Rust ordered-prefix execution; that separate performance gap remains open",
+    "No systemic fixed, merge-ready, deployment or goal-complete claim"
+  ]
+}

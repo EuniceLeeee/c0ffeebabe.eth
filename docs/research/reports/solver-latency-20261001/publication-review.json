@@ -1,0 +1,340 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-01",
+  "role": "independent non-author generated-artifact auditor",
+  "verdict": "PASS: no publication blocker found in the requested provenance, coverage and content-preservation audit",
+  "scope": "Final generated-artifact audit, not a fourth sanitizer design pass. Evidence handoff only; not production, historical acceptance or whole-Solver/live performance approval.",
+  "manifest": {
+    "path": "docs/research/reports/solver-latency-20261001/manifest.json",
+    "sha256": "1d414c2a71185feefc48d307b65bc9a9c13fe93e0bbac3b234ffc8538a493224",
+    "generatedAt": "2026-10-01T03:04:44.610Z",
+    "artifactEntries": 326,
+    "payloadFiles": 366,
+    "payloadBytes": 206111966,
+    "largestPayloadFile": {
+      "file": "live/live-solver-batched-prefix-250.I49DJ4/live.log.part-005.redacted.log.gz",
+      "bytes": 8092944
+    },
+    "allPayloadsBelow50MiB": true
+  },
+  "independentExecutedChecks": [
+    {
+      "gate": "Fresh allowlist inventory of evidence directory and four named live directories versus manifest sources and omissions",
+      "result": "pass",
+      "expectedArtifactEntries": 326,
+      "missing": [],
+      "extra": [],
+      "expectedOmissions": 56,
+      "unrecordedOmissions": [],
+      "extraOmissions": []
+    },
+    {
+      "gate": "Stream SHA-256 and byte count of all 326 original source artifacts, including read-only git diff --binary -- listener",
+      "result": "pass with declared append-only review-receipt history",
+      "exactCurrentMatches": 325,
+      "declaredHistoricalReceipt": 1,
+      "unexplainedSourceDrift": 0,
+      "sourceContainmentOrSymlinkFailures": 0
+    },
+    {
+      "gate": "Read and hash all 366 exported payloads; verify manifest byte count, SHA, path containment, uniqueness, realpath and 50MiB ceiling",
+      "result": "pass",
+      "failures": 0
+    },
+    {
+      "gate": "Independent original line counts for all 60 exported log sources",
+      "result": "pass",
+      "originalLogicalLines": 8886325,
+      "lineCountMismatches": 0,
+      "method": "Stream source bytes; count LF delimiters and any final unterminated line. All counts agree with sealed manifest."
+    },
+    {
+      "gate": "Independent recursive original-versus-exported comparisons of 235 JSON artifacts excluding the deliberately historical reviewer receipt",
+      "result": "pass after classifying one intentional authorization-metadata redaction",
+      "numberLeaves": 40692,
+      "numericStringLeaves": 5014,
+      "sourceOrBlockIdentityLeaves": 2069,
+      "redactedScalarLeaves": 741,
+      "unexplainedDifferences": 0,
+      "qualification": "latestAuthorization in solver-latency-current-progress.json is replaced by <redacted-secret> under the existing credential-key policy. Its original object contains four string fields (user/scope/status/plan), not timing numbers; this is disclosed metadata redaction, not hidden result loss."
+    },
+    {
+      "gate": "Line-by-line original/decompressed comparison of last live live.log, events.jsonl and routes.jsonl; recursive JSON comparison plus equal numeric projection digests",
+      "result": "pass",
+      "structuredNumericLeaves": 3323249,
+      "sourceIdentityLeaves": 1182492,
+      "unexplainedDifferences": 0
+    },
+    {
+      "gate": "Recursive generated-tree inventory including dotfiles",
+      "result": "pass",
+      "unexpectedUnmanifestedFiles": [],
+      "symlinks": [],
+      "qualification": "The original six declared manual metadata files plus explicitly declared .gitattributes and provisional PUBLICATION.json are the only nonpayload files."
+    },
+    {
+      "gate": "Read-only staged-path inspection while main staging was underway",
+      "result": "pass",
+      "stagedFilesAtCheck": 373,
+      "outsideReportDirectory": [],
+      "listenerFilesStaged": 0,
+      "qualification": "Snapshot check only, not a write, commit or final staging seal."
+    }
+  ],
+  "coverage": {
+    "artifactDestinations": {
+      "harnesses": 28,
+      "evidence": 193,
+      "experiments": 28,
+      "live": 75,
+      "codeReview": 2
+    },
+    "artifactTypes": {
+      "redactedText": 29,
+      "redactedJson": 236,
+      "linePreservingLog": 60,
+      "redactedReviewPatch": 1
+    },
+    "omissions": {
+      "runtimeSourceBinaryCopies": 12,
+      "nonAllowlistedEvidenceFiles": 5,
+      "readyPriceTableOrRuntimeArtifacts": 35,
+      "liveRuntimeDirectories": 4,
+      "total": 56
+    },
+    "experimentDirectories": [
+      "same-input-batch-split-1",
+      "same-input-cold-prefix-1",
+      "same-input-cold-source-1",
+      "same-input-gzip-1",
+      "same-input-prefix-engine-1",
+      "same-input-prefix-pair-1",
+      "same-input-prefix-phases-1",
+      "same-input-prefix-prefetch-1",
+      "same-input-prefix-progress-1",
+      "same-input-primary-1",
+      "same-input-primary-2-bootstrap-corrected",
+      "same-input-warm-prefix-1",
+      "source-storage-offline-1",
+      "source-storage-offline-2"
+    ],
+    "experimentChecks": {
+      "declarations": 14,
+      "results": 14,
+      "numericLeavesCompared": 28185,
+      "unexplainedOutputOrSourceDifferences": 0,
+      "qualification": "All files, array orders and non-redacted primitive values compared; endpoints/local paths and large raw hex remain deliberately redacted. Failed/bootstrap/cancelled/drain-failed evidence remains included."
+    }
+  },
+  "liveOriginals": [
+    {
+      "run": "live-raw-ready-250.ajvb1j",
+      "liveLogBytes": 1217494107,
+      "liveLogSha256": "a7fde1af6bfa8edeffb5dc5e2e01e52518144e6455127694d3991e82cd9617e6",
+      "liveLogLines": 1634867,
+      "eventsLines": 2730,
+      "routesLines": 18,
+      "shards": 19,
+      "allThreeOriginalHashesMatch": true
+    },
+    {
+      "run": "live-solver-unique-pools-250.YgUfBJ",
+      "liveLogBytes": 543616381,
+      "liveLogSha256": "13d082bc3d007182279f7f5bb4b57bc20a2439e344ce66ede4dfa1d2b95d2225",
+      "liveLogLines": 760726,
+      "eventsLines": 1765,
+      "routesLines": 26,
+      "shards": 9,
+      "allThreeOriginalHashesMatch": true
+    },
+    {
+      "run": "live-solver-batched-prefix-250.I49DJ4",
+      "liveLogBytes": 533493705,
+      "liveLogSha256": "1ab62daed68a27285a5a024542657a054f75bfc66ce11a0f560da7d67fd5dc9f",
+      "liveLogLines": 716245,
+      "eventsLines": 105,
+      "routesLines": 122,
+      "shards": 8,
+      "allThreeOriginalHashesMatch": true
+    },
+    {
+      "run": "live-solver-skip-settle-250.7MsLu8",
+      "liveLogBytes": 510894204,
+      "liveLogSha256": "f2853a757e01049cd663bc96e27e2d29a7a0b2a73c67c8193316f74deb77a543",
+      "liveLogLines": 715859,
+      "eventsLines": 6766,
+      "routesLines": 28,
+      "shards": 8,
+      "allThreeOriginalHashesMatch": true
+    }
+  ],
+  "lastLive": {
+    "run": "live-solver-skip-settle-250.7MsLu8",
+    "liveLog": {
+      "lines": 715859,
+      "byteIdenticalLogicalLines": 715836,
+      "structuredJsonRecords": 584108,
+      "numericLeaves": 3270584,
+      "sourceIdentityLeaves": 1168144,
+      "originalAndExportedNumericProjectionSha256": "a83a0e2dfdaa5ea738e9b2aa61d4c9263917dcd6183aca440aa3dee00c6b75ef",
+      "structuredChanges": 0,
+      "plainTextChanges": 23,
+      "plainTextDisposition": "All 23 differences are exclusively replacement of the local repository/user path; no URLs or numerical timing/source fields changed.",
+      "changedLines": [
+        7,
+        8,
+        9,
+        30,
+        31,
+        32,
+        203418,
+        203419,
+        203422,
+        203423,
+        203424,
+        271363,
+        271364,
+        271367,
+        271368,
+        271369,
+        715842,
+        715843,
+        715846,
+        715847,
+        715848,
+        715858,
+        715859
+      ]
+    },
+    "selectedUnchangedRecordCounts": {
+      "blockScanTiming": 250,
+      "sourceHeader": 250,
+      "strictEthCallTiming": 533416,
+      "quoteBatchDispatch": 3095,
+      "quoteBatchTiming": 3095,
+      "solverRouteTiming": 5206,
+      "effectiveQuoteTiming": 28488
+    },
+    "events": {
+      "lines": 6766,
+      "allLinesByteIdentical": true,
+      "blockScanResult": 250,
+      "simulationResult": 169,
+      "pipelineDropped": 6347,
+      "numericLeaves": 52540,
+      "originalAndExportedNumericProjectionSha256": "1ba56f88269f3446eb77dbc81b85e49c18c137cfa1b91ca40b6eb5f41597a439"
+    },
+    "routes": {
+      "lines": 28,
+      "allLinesByteIdentical": true,
+      "type": "block_scan_enumeration_solver",
+      "numericLeaves": 125,
+      "originalAndExportedNumericProjectionSha256": "63b7db69412c3a7ee306bf64411139b13ee4051988faba23bb2a3e12662c456c"
+    },
+    "boundaryTimingSamples": [
+      {
+        "originalAndExportedLine": 200751,
+        "sourceBlock": 26090567,
+        "totalMs": 154307.63958299998,
+        "exactSourceBlockHash": "0xc98ba53ebd782f9deb6936c876a195227853582b74688f40e5e07c54f587dbd5",
+        "outcome": "startup_warm"
+      },
+      {
+        "originalAndExportedLine": 715856,
+        "sourceBlock": 26090833,
+        "totalMs": 6732.77425000025,
+        "exactSourceBlockHash": null,
+        "outcome": "stale_state"
+      }
+    ],
+    "meaning": "This proves export preservation of the measured records, including startup/stale/censored/failed records. It does not reinterpret them as an optimization success."
+  },
+  "codeReviewArtifacts": {
+    "patch": {
+      "originalSha256": "793568b69413b2778fcdb63b9199c9528abfddda43fb7e5019e58c3ae94d7427",
+      "originalBytes": 230385,
+      "files": 13,
+      "currentReadOnlyDiffMatches": true
+    },
+    "unintegratedV4Draft": {
+      "source": "listener/src/searcher/venues/swaps/univ4-family/local-state.ts",
+      "originalSha256": "06b478975f0830918f07105249b98f40194770cda5c4837f89199d7b5e35b58d",
+      "bytes": 8909,
+      "currentSourceMatches": true,
+      "status": "Explicitly incomplete and unintegrated; missing local-math module. Export is review evidence, not executable or accepted production code."
+    }
+  },
+  "reviewChronology": {
+    "oldManifestReceiptSha256": "4dcaf674c92cf692feba1ce044eb06836f38fe73f01cb0cc068c2de2ab697204",
+    "currentReceiptSha256": "f84944b85d446ec991fdb85eed53dcfbd37ff2bcae40626e32178edcf2cc6e51",
+    "separateReviewerRegressionsSha256": "11758cf078361d3604d4ff68f5bf227e6489983c4fa500ad53d7bdf7c2527c79",
+    "verified": "Removing only finalReview from the current receipt and serializing with its original formatting reconstructs the exact old manifest source SHA. reviewer-regressions.json binds the current receipt SHA and equals its finalReview. No unexplained drift."
+  },
+  "manualMetadata": [
+    {
+      "file": "HANDOFF.md",
+      "sha256": "af468be8ca4109e1835c78d77076d86f202d67f8116fd4b373a6500f08c84238"
+    },
+    {
+      "file": "export-evidence.mjs",
+      "sha256": "61ffc31e24b3b0078233a231da3587b2f79ce4f41304d8cab4fa5ab268e57755"
+    },
+    {
+      "file": "export-evidence.test.mjs",
+      "sha256": "907b0681fd06b353a45782eed92d1199867268326d9a12495b301e7778993f82"
+    },
+    {
+      "file": "verify-evidence.mjs",
+      "sha256": "0dd225fe36e60a1eb35821ad1113c4b62ab23f85078bde43f95158bc18f140d0"
+    },
+    {
+      "file": "manifest.json",
+      "sha256": "1d414c2a71185feefc48d307b65bc9a9c13fe93e0bbac3b234ffc8538a493224"
+    },
+    {
+      "file": "reviewer-regressions.json",
+      "sha256": "11758cf078361d3604d4ff68f5bf227e6489983c4fa500ad53d7bdf7c2527c79"
+    },
+    {
+      "file": ".gitattributes",
+      "sha256": "709fc0039054866adc66884bff885bfd7ce504f6bd956d49867f46c103b075da",
+      "finding": "Only report-local review patch blank-at-eol and one archived launch-batch-split.mjs.txt blank-at-eof exceptions; payload bytes unchanged."
+    },
+    {
+      "file": "PUBLICATION.json",
+      "sha256AtReview": "48647c688752eb6cc2bbf4d58bce5283c983a2b13b364a29cbe530828e63534b",
+      "finding": "New explicitly declared manual metadata; reviewed counts and hashes agree. At audit time it correctly marks independent generated-artifact audit pending. Main may attach this completed audit; that metadata-only seal is separate from immutable manifest payloads."
+    }
+  ],
+  "mainReportedSeparateGate": {
+    "executedBy": "main, reported directly in this conversation; not claimed as this reviewer's execution",
+    "status": "pass",
+    "checks": "All 366 payload and decompressed hashes, line counts, JSON, endpoint/token/personal-path/rawhex scan and 50MiB ceiling.",
+    "countsReconciledIndependently": {
+      "payloadFiles": 366,
+      "artifactEntries": 326,
+      "sourceLogLines": 8886325,
+      "payloadBytes": 206111966,
+      "largestPayloadBytes": 8092944
+    },
+    "qualification": "Reviewer independently hashed all payloads and all original sources and compared last-live decompressed content. Reviewer did not redundantly rerun the sanitizer regressions or the all-output secrecy verifier; no claim that pattern scanning proves absence of arbitrarily encoded secrets."
+  },
+  "publicationBoundary": [
+    "No blocking finding in the audited immutable manifest/payload set. This receipt closes the requested independent coverage/provenance/numerical-preservation gate and complements main's completed all-artifact verification.",
+    "No production acceptance, final-sim correctness, complete-Solver/live win, new replay or deployment permission is conferred.",
+    "The exported patch and harnesses are redacted review snapshots, not standalone executable/applicable packages.",
+    "No further sanitizer design expansion or synthetic-case reruns were performed.",
+    "This ignored audit is created after export and is not silently inserted into the immutable manifest. Any subsequently published manual metadata should explicitly cite its final hash."
+  ],
+  "authority": {
+    "networkCalls": 0,
+    "chainRpcCalls": 0,
+    "credentialReads": 0,
+    "productionEdits": 0,
+    "gitWrites": 0,
+    "commits": 0,
+    "pushes": 0,
+    "exporterRuns": 0,
+    "onlyWrite": "logs/solver-prefix-policy-20260930.MKk8Vk/handoff-publication-audit.json"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-09-30T13:21:11.836Z",
+  "source": {
+    "number": 26090559,
+    "hash": "0x77363a9679e6c1cfc8a0915789db513df684dfdcf26f47918e10fe5e81a9b1fb"
+  },
+  "executor": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+  "owner": "0xb8578b6de173c8554ff0390db5a7effa567dda3c",
+  "actualRuntimeKeccak256": "0x75ac3cd7a45da42f6b4611f9203dad2b0df8693ced1a240eacaf8d98b94438ac",
+  "actualRuntimeBytes": 8461,
+  "artifactSha256": "0fc76fc76afc1838ce7d151078ef5bf40e6f0ba2e14fbaab97e3004b9bf0cc49",
+  "endpointSha256": "860a9610cd135f044f125b2364ad22718483029de2022075cd8619cbd8ba6b4a",
+  "ethCallCodeOverrideHonored": true,
+  "ethSimulateV1CodeOverrideHonored": true,
+  "probe": "view-only owner immutable changed in simulation",
+  "broadcast": false,
+  "signing": false
+}

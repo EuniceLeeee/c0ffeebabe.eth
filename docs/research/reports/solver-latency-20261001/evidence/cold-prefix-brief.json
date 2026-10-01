@@ -1,0 +1,47 @@
+{
+  "turnClass": "systemic-live implementation with selected-route diagnostic before further live",
+  "searcherBehaviorChange": true,
+  "author": "Mencius",
+  "evaluator": "main, non-author",
+  "basePatchSha256": "75d97cb2be70fc49217c64f9ebedb6cb075ede7c4532237fbe45ad049940b5c6",
+  "baseBinarySha256": "e278d6530f806787588984cfe445dc2395cc0dec334a264441aa73fc4c5b0d5b",
+  "allowedFiles": [
+    "listener/revm-sim/src/main.rs",
+    "listener/revm-sim/src/diagnostic.rs"
+  ],
+  "hypothesis": "Prefix-only key prefetch on a proven source-cache miss can replace measured serial cold reads without retracing warm sibling or amount trials",
+  "measuredCause": "First prefix5.640s/10RPC attempts, same warm prefix0.208/0.334ms/0RPC",
+  "decision": "Use a discarded cache-only prefix scout for eligibility, not a continuation cache or calldata fingerprint set",
+  "design": [
+    "Eligibility initially validated pinned trial-prefix with trusted counterfactual executor code, after unchanged funding/hydration",
+    "Read-only scout backend peeks source cache maps directly; clone only prepared request-local cache; no source RPC, cache population, counters or deliberate fatal latch",
+    "Reuse exact strict execution loop with explicit stop immediately after prefix, before observations/setup/main/finalization; no duplicated EVM semantics or truncated plan",
+    "Only fetchable account/storage/ancestor miss permits one prefix-only key-hint attempt; no loop. Missing code hash and existing fatal are not permission to repair faults",
+    "Trace may provide keys only. Actual values still fetched by existing hash-pinned hydration, with validated local executor code allowed only in hint overrides",
+    "Discard all scout state and always run original full execution from original prepared DB. Keep every canonical pre/postcheck and unchanged deadlines",
+    "No source check batching across requests, no cached semantic outputs, no Family changes, no new top-level knobs",
+    "Existing legacy and noneligible paths unchanged; fixed phase labels distinguish scout/hints from authoritative execution"
+  ],
+  "offlineGates": [
+    "Warm differing amounts/data cause zero scout RPC and zero hint dispatch",
+    "New branch miss causes at most one hint attempt; main-only miss causes none",
+    "Zero/absent cached values and ancestor boundaries correct; missing code and fatal precedence retained",
+    "Complete output/revert-stage/gas/state/temporary-storage parity, no scout writes/warmth/log leakage",
+    "Ordinary malformed/unavailable hints fall back; physical source faults remain fatal",
+    "Full Rust tests, release build, main independent review and targeted tests"
+  ],
+  "timingPlan": {
+    "notYetAuthorizedToAgent": "No network tests by author; main must review first",
+    "futureExperiment": "New P-only rank8 ABBA, four30s invocations, frozen identical TS runtime/Ready/P; instrumented baseline versus reviewed candidate",
+    "retainEveryAttempt": true,
+    "success": "Fewer prefix cold RPC attempts and lower quote-hop time with exact shared quote outputs; no extra trace on warm siblings",
+    "limitations": "One cold miss may not amortize tracing. No full-route or live speed claim from incomplete outcomes. If no mechanism/latency win, withdraw candidate only"
+  },
+  "notDoing": [
+    "Continuation journal cache",
+    "Fingerprint/byte-length heuristics",
+    "Search-budget or amount-count reductions",
+    "Unbounded live reruns",
+    "Signing, broadcast, deployment, push or merge"
+  ]
+}

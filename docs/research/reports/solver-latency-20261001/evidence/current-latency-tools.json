@@ -1,0 +1,130 @@
+{
+  "schema_version": 2,
+  "repo_root": "<repo>",
+  "pending_nonce": "d33983ce-0fba-46a1-a6d9-dc8feca6fc08",
+  "requested_capabilities": [
+    "latency"
+  ],
+  "recommended_tools": [
+    {
+      "id": "analysis:blockscan-pass-latency",
+      "package": "analysis",
+      "script": "blockscan-pass-latency",
+      "command": "cd analysis && npm run blockscan-pass-latency --",
+      "implementation": "src/cli/blockscan-pass-latency.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "analysis",
+        "block-scan",
+        "blockscan",
+        "latency",
+        "pass"
+      ],
+      "cost": "zero-cu",
+      "summary": "analysis package script: blockscan-pass-latency",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    }
+  ],
+  "related_tools": [
+    {
+      "id": "analysis:blockscan-pass-latency",
+      "package": "analysis",
+      "script": "blockscan-pass-latency",
+      "command": "cd analysis && npm run blockscan-pass-latency --",
+      "implementation": "src/cli/blockscan-pass-latency.ts",
+      "kind": "analysis",
+      "capabilities": [
+        "analysis",
+        "block-scan",
+        "blockscan",
+        "latency",
+        "pass"
+      ],
+      "cost": "zero-cu",
+      "summary": "analysis package script: blockscan-pass-latency",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    },
+    {
+      "id": "analysis:test:blockscan-pass-latency",
+      "package": "analysis",
+      "script": "test:blockscan-pass-latency",
+      "command": "cd analysis && npm run test:blockscan-pass-latency --",
+      "implementation": "src/test/blockscan-pass-latency.ts",
+      "kind": "test",
+      "capabilities": [
+        "analysis",
+        "block-scan",
+        "blockscan",
+        "latency",
+        "pass",
+        "test",
+        "verification"
+      ],
+      "cost": "zero-cu",
+      "summary": "analysis package script: test:blockscan-pass-latency",
+      "priority": 10,
+      "curated": false,
+      "window_binding": null
+    }
+  ],
+  "executions": [
+    {
+      "schema_version": 1,
+      "tool_id": "analysis:blockscan-pass-latency",
+      "descriptor_sha256": "1793207c4144c543feb3da93cb60b74431ce3f51f14416bcbab2d717ed01dded",
+      "started_at": "2026-09-30T12:20:26.042Z",
+      "finished_at": "2026-09-30T12:20:26.314Z",
+      "exit_code": 0,
+      "cwd": "analysis",
+      "argv_sha256": "2dc942c5732bad1978080a583b76396cc01ccfe3e20c14e2dbc9227616f4ce90",
+      "argv_redacted": [
+        "npm",
+        "run",
+        "blockscan-pass-latency",
+        "--",
+        "--log",
+        "../logs/solver-prefix-policy-20260930.MKk8Vk/current-progress-latency.log",
+        "--start-line",
+        "4",
+        "--min-run",
+        "1"
+      ],
+      "stdout_sha256": "48c75968221b8101f46816a17c376c47a1be9ae3e4ef9a62f9aa02bee381c091",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 3744,
+      "stderr_bytes": 0
+    },
+    {
+      "schema_version": 1,
+      "tool_id": "analysis:blockscan-pass-latency",
+      "descriptor_sha256": "1793207c4144c543feb3da93cb60b74431ce3f51f14416bcbab2d717ed01dded",
+      "started_at": "2026-09-30T12:37:00.974Z",
+      "finished_at": "2026-09-30T12:37:01.261Z",
+      "exit_code": 0,
+      "cwd": "analysis",
+      "argv_sha256": "6b81171765b7a4bdf4fe94070fb583d3c21628ef5bc003f8be69b3dda82fe2c4",
+      "argv_redacted": [
+        "npm",
+        "run",
+        "blockscan-pass-latency",
+        "--",
+        "--log",
+        "../logs/solver-prefix-policy-20260930.MKk8Vk/first250-latency.log",
+        "--start-line",
+        "4",
+        "--min-run",
+        "1"
+      ],
+      "stdout_sha256": "6c26a090790b635482bfdeb84bbc8b1465a9e5cc895d5dca132436ff7e2fde00",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 3730,
+      "stderr_bytes": 0
+    }
+  ],
+  "generated_at": "2026-09-30T12:20:01.731Z",
+  "updated_at": "2026-09-30T12:37:01.261Z"
+}

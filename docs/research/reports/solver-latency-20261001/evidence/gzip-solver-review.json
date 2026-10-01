@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "reviewerRole": "independent non-author",
+  "reviewPass": 1,
+  "verdict": "offline_review_pass_for_exact_declared_bounded_diagnostic_only",
+  "blockingFindings": [],
+  "scope": {
+    "reviewed": [
+      "same-input-gzip-timing.mts",
+      "gzip-transport-timing.json",
+      "launch-gzip-solver.mjs"
+    ],
+    "comparedAgainst": "same-input-batch-timing.mts",
+    "reviewerWrites": [
+      "gzip-solver-review.json"
+    ],
+    "externalRpcCalls": 0,
+    "credentialAccess": false,
+    "launcherExecuted": false,
+    "runFlagUsed": false,
+    "sourceOrSnapshotEdits": false,
+    "delegation": false,
+    "noNewExperimentOutputOrLogAtFinalCheck": true
+  },
+  "bindings": {
+    "runnerSha256": "2be619af4ec2c0ea9f48976c2f8d265f1dea5d684d4472e419e5d5f2cbc78b37",
+    "specSha256": "8af732f48eae4b2698b5a881f6f11c728e2844abede1a3d5d604aa9e22770142",
+    "launcherSha256": "bc3a9fa85b73fa25ff4563634db663b55b8c5047f9acf020faf3ce61faaefc06",
+    "comparedBatchRunnerSha256": "eef6dfb8324769c36216384a80a58d94735fdb405a1554af07021ef45a736260",
+    "sourceSnapshots": {
+      "A": {
+        "root": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+        "sha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01"
+      },
+      "B": {
+        "root": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/gzip-runtime-complete",
+        "sha256": "6e9daba094d50c1560c725445371b221b7e1d4621cf0a2ecb28a69a4f4e7b2ce"
+      }
+    },
+    "baselineStateBackendSha256": "ab2f48aa410d8a686301d7cf0a754844d28070153b7c2208fd23ffca0b79bcec",
+    "candidateStateBackendSha256": "06183228659c7c3863a948c347c5a965879e9177ae2c37fbbdba5961f13d3bfa",
+    "binaryPath": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-binary/revm-sim",
+    "binarySha256": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1",
+    "executor": {
+      "keccak256": "0x75ac3cd7a45da42f6b4611f9203dad2b0df8693ced1a240eacaf8d98b94438ac",
+      "counterfactual": true,
+      "address": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+      "owner": "0xb8578b6de173c8554ff0390db5a7effa567dda3c",
+      "note": "same owner-bound frozen BotVM code-only override for prefix quotation; not deployed-code or final-simulation proof"
+    },
+    "fixtureHashes": {
+      "ready": {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/sat1-ready.json",
+        "sha256": "0bcbefca90fa703c30503f5d7f1994ca7a1932604cad124192099fb4ed882089"
+      },
+      "prices": {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/sat1/prices/prices.json",
+        "sha256": "918dbc1484ffec1431c33a663fdd2fea4c1fc109d7e76842bc17d6e1c7e0f031"
+      },
+      "input": {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/sat1/prices/input.json",
+        "sha256": "a681976102723801b8e719dc06eb4e5c2e4a7fdb531472d8c1c0d2ca46c7e42a"
+      },
+      "enumeration": {
+        "path": "<repo>/logs/seven-p0002-repeat.6tTOwk/sat1/offline-1/enumeration.json",
+        "sha256": "712d77701b0046605b3d2dbb91fdf1878db46df8b1111731d9246f39beb7229f"
+      }
+    }
+  },
+  "snapshotCheck": {
+    "sourceFilesPerSnapshot": 1333,
+    "onlyChangedSourceFile": "listener/src/shared/state/state-backend.ts",
+    "runtimeAssetFiles": 6,
+    "assetHashesEqual": true,
+    "tsconfigHashesEqual": true,
+    "packageHashesEqual": true,
+    "installedDependencyRealpathEqual": true,
+    "executorArtifactEqual": true,
+    "newCompressionTestNotAddedToFrozenRuntime": true,
+    "notes": "Independently walked and hashed both frozen source trees in addition to runner validation. Baseline source matches reviewed production HEAD; candidate matches reviewed gzip source."
+  },
+  "executedChecks": [
+    {
+      "name": "offline self-test",
+      "command": "env -u MAINNET_RPC_URL TSX_DISABLE_CACHE=1 node --import tsx <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-gzip-timing.mts --spec <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/gzip-transport-timing.json --experiment gzip-transport --baseline-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete --candidate-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/gzip-runtime-complete --binary-b <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-binary/revm-sim --self-test",
+      "cwd": "<repo>/listener",
+      "exitCode": 0,
+      "result": "passed",
+      "checks": [
+        "network/process fence",
+        "prefix rules",
+        "concurrent attribution",
+        "real strict-session nonempty prefix compilation",
+        "full production registry identity/descriptor coverage",
+        "isolated registries"
+      ],
+      "runtimeRegressions": [
+        {
+          "runtime": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/gzip-runtime-complete",
+          "registeredActions": 54,
+          "wrappers": [
+            "actual-amount-flow",
+            "actual-amount-step",
+            "actual-amount-case"
+          ],
+          "sourceReads": 2,
+          "prefixReads": 2,
+          "compiledPrefixSha256": "1de79d731a51d2e247947299debba7c22c6c2bcebe5728b096572dc02d4eb58e",
+          "compiledPrefixBytes": 1092,
+          "scope": "offline registration/compilation only; synthetic transport responses; no RPC or EVM execution"
+        },
+        {
+          "runtime": "<repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete",
+          "registeredActions": 54,
+          "wrappers": [
+            "actual-amount-flow",
+            "actual-amount-step",
+            "actual-amount-case"
+          ],
+          "sourceReads": 2,
+          "prefixReads": 2,
+          "compiledPrefixSha256": "1de79d731a51d2e247947299debba7c22c6c2bcebe5728b096572dc02d4eb58e",
+          "compiledPrefixBytes": 1092,
+          "scope": "offline registration/compilation only; synthetic transport responses; no RPC or EVM execution"
+        }
+      ]
+    },
+    {
+      "name": "offline fixture check",
+      "command": "env -u MAINNET_RPC_URL TSX_DISABLE_CACHE=1 node --import tsx <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-gzip-timing.mts --spec <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/gzip-transport-timing.json --experiment gzip-transport --baseline-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete --candidate-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/gzip-runtime-complete --binary-b <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-binary/revm-sim --fixture-check",
+      "exitCode": 0,
+      "offline": true,
+      "pairedRuntimeValidated": false,
+      "rpcCalls": 0,
+      "solverEntered": false,
+      "receiptSummary": {
+        "instances": 170,
+        "funding": 2,
+        "graphEdges": 344,
+        "cutoff": {
+          "number": 26029537,
+          "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+          "generation": 26029537
+        },
+        "publicationSetHash": "a343dcb72689d751355dd59a5e44915da8dce6330363a371c294ff5ffaebddea",
+        "graphHash": "5ca7b6393686818a1c0a03e0797d78d915c5f291d5bab2fa68d8b97b8a9b525c",
+        "selected": {
+          "rank": 477,
+          "P": "5195442",
+          "cap": "5000000000000",
+          "repeated": false,
+          "edges": [
+            {
+              "canonicalEdgeId": "univ3-standard\u001f0x1ac1a8feaaea1900c4166deeed0c11cc10669d36\u001f0x1ac1a8feaaea1900c4166deeed0c11cc10669d36\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001ffc1a55cc59bce4baa79572a9b32adfd9df71c9174faea417dccb33e77dbc6d71",
+              "instance": "0x1ac1a8feaaea1900c4166deeed0c11cc10669d36"
+            },
+            {
+              "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc166577917ebda5da12c2549434ec31c0ffe5c418f3152f17d291971fce14505",
+              "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "offline paired declaration check",
+      "command": "env -u MAINNET_RPC_URL TSX_DISABLE_CACHE=1 node --import tsx <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/same-input-gzip-timing.mts --spec <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/gzip-transport-timing.json --experiment gzip-transport --baseline-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-runtime-complete --candidate-runtime <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/gzip-runtime-complete --binary-b <repo>/logs/solver-prefix-policy-20260930.MKk8Vk/prefix-pair-binary/revm-sim",
+      "exitCode": 0,
+      "offline": true,
+      "pairedRuntimeValidated": true,
+      "rpcCalls": 0,
+      "invocationCount": 20,
+      "order": "ABBAABBAABBAABBAABBA",
+      "allRanks477": true,
+      "allBatch64": true,
+      "conditionalPolicyBothArms": true,
+      "identicalBinary": true,
+      "budgetMsPerInvocation": 30000,
+      "note": "Validated declaration path in memory and stdout only. Did not create the real run declaration/output; run mode writes declaration before reading injected endpoint."
+    },
+    {
+      "name": "launcher syntax only",
+      "command": "node --check logs/solver-prefix-policy-20260930.MKk8Vk/launch-gzip-solver.mjs",
+      "exitCode": 0
+    },
+    {
+      "name": "independent snapshot/source/asset/dependency comparison",
+      "exitCode": 0
+    }
+  ],
+  "reviewedContract": {
+    "experiment": "gzip-transport",
+    "phase": "solver",
+    "rank": 477,
+    "P": "5195442",
+    "sourceHeight": 26029536,
+    "sourceHash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+    "stateRoot": "0xa8c4eb4a5b7d2a90ee1ffa7ca44d1f90394210a46c77e4bf3fb76f68cfb64afe",
+    "order": "ABBAx5",
+    "invocations": 20,
+    "workDeadlineMs": 30000,
+    "maximumWorkMs": 600000,
+    "wrapperAbortMs": 650000,
+    "maxLogicalIssuances": 1492,
+    "priorSliceReadReservations": 500,
+    "combinedReservedLogicalCalls": 1992,
+    "taskAdditionalCallLimit": 2000,
+    "amountPoints": 12,
+    "gssPoints": 8,
+    "hopQuotes": 24,
+    "batchSize": 64,
+    "maxConcurrentBatches": 8,
+    "sharedCapacity": 12,
+    "producerReserved": 4,
+    "jsRetries": 0,
+    "singleCallFallback": false,
+    "warmups": 0,
+    "automaticReruns": 0,
+    "finalSimulation": false,
+    "ev": false,
+    "acceptance": "All 20 complete, exact ordered amount/hop-output/candidate/plan and physical-call parity; B median <= 0.90 A, at least 8 of 10 adjacent pair wins, nearest-rank B p95 <= 1.10 A. No positive latency conclusion if any required criterion fails."
+  },
+  "findings": [
+    "Small runner diff confines the independent variable to the hash-bound generic HTTP transport. Both arms retain the conditional amount-propagation file, production strict session/Planner/AnvilSolver, batch64 and shared scheduler settings.",
+    "Both frozen runtime registries load full production bootstrap and compile the same real nonempty prefix with all actual-amount wrappers. The actual diagnostic still selects only the distinct-instance rank477 route; offline compilation of repeated rank8 is not a network trial.",
+    "Per-invocation state, memo backend and scheduler are fresh. Both arm closures are distinct but package/dependency/artifact/assets and all other source files match.",
+    "The unchanged strictSimulate and simulatePrefix guards abort the global experiment before issuing unexpected Rust/prefix work. Completion asserts 12 amounts, 8 GSS and 24 successful no-prefix hop quotes. Final simulation is forbidden.",
+    "Source pre/post checks remain inside the existing 30s invocation budget; failures/cancellations and not-run slots are retained. Backend/simulation drains and tracked promises settle before another invocation. Drain failure globally aborts.",
+    "Logical issuance is reserved before dispatch. An attempted issuance beyond 1492 aborts before sending; that rejected reservation may increment the recorded attempted counter to 1493, not permit another RPC.",
+    "Launcher statically points only to the new runner/spec/candidate and the verified shared prefix-pair binary. Output/log creation is write-once. No endpoint is passed in argv or printed. Launcher credential source code was inspected but credential file and launcher were not accessed/executed.",
+    "Spec/runner/input/source/binary/assets are bound before run-mode RPC and rechecked after measured work. Cross-arm equality and timing acceptance remain raw-evidence assessment gates, not a green launcher exit code."
+  ],
+  "caveats": [
+    "Telemetry supplies encoded/decoded body bytes and wall-time milestones for backend HTTP. No direct CPU measurement exists; body-end-to-settlement is residual wall time, not isolated CPU or decoder service time. Baseline decoded bytes can be inferred only from verified identity/body parity; its old transport does not emit the new fields.",
+    "The 650s wrapper is a cooperative abort trigger followed by physical drain, not a hard guarantee that drain finishes by 650s.",
+    "The prior500 reservation is a declared task-local accounting input, not independently verified account-wide usage or billing.",
+    "Two arm-local keep-alive pools remain warm across their own invocations. Fixed ABBA order does not eliminate provider, connection-warmth, OS or temporal variance.",
+    "Rank477 is a saved post-selection case outside the current live100; this is not natural current-live admission, outer16-route contention, repeated-prefix validation, profitability or systemic Solver improvement.",
+    "No outcome or performance claim is supported before the declared run and independent raw-evidence assessment."
+  ],
+  "approvalBoundary": "No blocking finding for the exact hash-bound single bounded experiment as declared. Main retains execution ownership. No retry/widening, live launch, or future experiment is approved by this record."
+}

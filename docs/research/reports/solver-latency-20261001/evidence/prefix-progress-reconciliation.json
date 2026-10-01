@@ -1,0 +1,37 @@
+{
+  "claim": "One selected repeated-route phase diagnostic; no speedup or full live acceptance",
+  "manualFirst": "prefix-progress-manual-assessment.json",
+  "manualSha256": "f3fc15f8a766be4747a9a4ab5663d2290ea2252981975b528bbd58b59fa86f08",
+  "independentReview": "prefix-progress-result-review.json",
+  "independentReviewSha256": "85e1f8e82c6098cbb34cbaf09b93c3a7821ccf0141b0cdd1a5cda8cd870d3b2d",
+  "canonical": {
+    "query": [
+      "latency"
+    ],
+    "catalogCheck": "passed361 tools before selection",
+    "manifest": "prefix-progress-tools.json",
+    "manifestSha256": "02c1a40ba08d27990811b2544eef255704a3d046342e04c8a051b4a6c581e9f7",
+    "successfulIds": [
+      "analysis:blockscan-pass-latency"
+    ],
+    "alternativesInspected": [
+      "analysis:test:blockscan-pass-latency"
+    ],
+    "execution": {
+      "exitCode": 0,
+      "startedAt": "2026-09-30T21:02:29.343Z",
+      "finishedAt": "2026-09-30T21:02:29.550Z",
+      "stdoutSha256": "195c859208aa3d351a310417294993bdaeb8875f1a4154566717edf6f4ccab6f",
+      "stdoutBytes": 2513
+    },
+    "sameInput": "same-input-prefix-progress-1.log",
+    "outcome": "0 production passes; ineligible expected_one_process_start:0; all live latency metrics null",
+    "coverage": "The indexed tool correctly refuses live qualification for a selected P-only diagnostic. It is not a Rust phase verifier; manual and independent primary-data checks own that narrow evidence. The test alternative cannot produce production evidence."
+  },
+  "agreement": "All sources agree the route remains cancelled30s,2 completed quotes, Solver not entered, no sim/EV. Independent reviewer reproduces quote/plan parity, source/identity/queue joins,81 begun/80 ended Rust attempts and the request4 serial prefix chain. No conflict or tooling defect.",
+  "precision": "Attempt-end is a scope boundary, not standalone RPC-success evidence. Rejected wrappers lack explicit ID: hop association also uses the sole pending cohort, targets and enqueue times. Missing terminal remains censored; no duration extrapolation.",
+  "result": "Localization complete. Expanded prefix is the measured cold-read bottleneck; no behavioral latency win established.",
+  "next": "warm-prefix-brief.json is a distinct behavior hypothesis in independent design review. No new network/production change until approved. No repeated diagnostic or blind live run.",
+  "taskOwnedExternalProcesses": "none",
+  "billedCu": "unknown; provider does not return billed CU"
+}

@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "status": "implemented_offline_checks_passed_pending_non_author_gate",
+  "searcher_behavior_change": true,
+  "sourceEditsFrozen": true,
+  "briefSha256": "f8406eeb4224dd685442d077fbcf763cde5bb4f11b2d4848d064282108956bf2",
+  "generator": "native fallback previously recorded for unsupported configured CLI model; no global configuration changes",
+  "changedFiles": [
+    "listener/revm-sim/src/main.rs",
+    "listener/revm-sim/src/diagnostic.rs"
+  ],
+  "base": {
+    "trackedPatchSha256": "0621702191948ea1142792abc84f65ab1d864dd6b6cc68cf6dbbeedd540a78b7",
+    "frozenSources": "prefix-progress-binary.onTMkL",
+    "binarySha256": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661",
+    "mainRsSha256": "c0c05e20bc4c2b571794bd37a592232c6f15dd1e2f445d6f68f0de16f9a29ba6",
+    "diagnosticRsSha256": "8aaef92ce3ebbebfc8588c255d34ec528b63f25affc5d3a8c2c05ec5721d9e1e",
+    "sourceEqualityAtEntry": "Both working Rust files matched the frozen prefix-progress sources before editing."
+  },
+  "finalHashes": {
+    "mainRsSha256": "5d7cacebfc42bb778db178da3ecd96ea768e85c57562e2f5c7587bbecaa9f868",
+    "diagnosticRsSha256": "61b7c96dfd433e392910deae77042517477b86bce332adbbc96fb996d37c5f2d",
+    "releaseBinaryPath": "listener/revm-sim/target/release/revm-sim",
+    "releaseBinarySha256": "1d814015f1fc3677a4435a24da8b5fad93c4915e6f531c46b9a65c5096611a0c",
+    "releaseBinaryBytes": 7802416,
+    "entireTrackedGitDiffBinarySha256": "a810a89adb6f15d2e1448fb89abd06375fd714a3ca44f588486385c0c8f3ed1b",
+    "frozenSourceDeltaSha256": "9ccfd8491ac874d29b6f424f03c319f91137c76f47c82b0044d03bbbc90007c4",
+    "frozenDeltaRecipe": "Concatenate diff -u outputs in main.rs, diagnostic.rs order, with labels a/listener/revm-sim/src/<file> and b/listener/revm-sim/src/<file>, comparing prefix-progress-binary.onTMkL/<file> to listener/revm-sim/src/<file>; SHA256 the UTF-8 bytes."
+  },
+  "deltaVsFrozen": {
+    "main.rs": {
+      "added": 790,
+      "removed": 10,
+      "newInlineTestAndHelperLines": 662,
+      "productionAdded": 128
+    },
+    "diagnostic.rs": {
+      "added": 3,
+      "removed": 2
+    },
+    "findings": [
+      "One default-false boolean in RemoteRevmDbInner, sharing exactly the existing endpoint/VerifiedSource session lifetime. No fingerprint set, result cache, mutable execution continuation or new config.",
+      "Scalar publication after canonical postcheck; pair A after bridge and successful physical flush; pair B after its postcheck. Full result must be Ok, response.ok and success==Some(true), with trial prefix, validated executor code and no fatal latch.",
+      "Cache-only reader peeks maps without source RPC, counters, shared writes or latch mutation. Only account/storage misses enable one logical hint. Missing code, ancestor-only miss, existing fatal, main-only miss and ordinary prefix Revert/Halt do not.",
+      "Explicit PrefixOnly engine scope retains the full plan/context and stops before observations, later calls, finalization or commit. All scout state/gas/refund/warmth/transient/logs are discarded; original prepared DB executes the full authoritative path.",
+      "Prefix-only hint uses validated executor target/code and prepared funding overrides. Pinned hint values are ignored; existing hash-pinned hydration supplies values. Trace, hydration and existing bounded transport recovery remain physical-attempt counted.",
+      "Only prefix-scout added to fixed diagnostics. Existing progress cap, pair identities, source pre/post authority, streaming order and terminal accounting retained."
+    ]
+  },
+  "preservationChecks": {
+    "all84ExistingInlineRustTestsByteIdentical": true,
+    "sourceValidationAndBridgeHelpersByteIdentical": true,
+    "existingWarmBatchHydrationByteIdentical": true,
+    "existingHintKeyParserByteIdentical": true,
+    "otherDirtyFilesEditedByGenerator": 0,
+    "otherDirtyFileCountAtCompletion": 9,
+    "otherDirtyContentManifestSha256AtCompletion": "81a7b1bd5be5a6777ccfe882cd96680e844caf35bdc1700d1b549d2765657317",
+    "note": "The full tracked diff includes the pre-existing TS and Rust work. Only the two authorized Rust source files were edited by this implementation. No TS, snapshots, earlier evidence, dependencies, search policy or budgets changed."
+  },
+  "executedChecks": [
+    {
+      "command": "cargo test --offline --locked warm_prefix",
+      "cwd": "listener/revm-sim",
+      "exitCode": 0,
+      "passed": 16,
+      "failed": 0,
+      "log": "warm-prefix-tests-1.log",
+      "logSha256": "16431f10e9f2a86a29c90b9e9f6307e2c058ac094326fbe2a00d04ab8b8c3e12"
+    },
+    {
+      "command": "cargo test --offline --locked",
+      "cwd": "listener/revm-sim",
+      "exitCode": 0,
+      "passed": 100,
+      "failed": 0,
+      "ignored": 0,
+      "durationSeconds": 16.17,
+      "log": "warm-prefix-full-tests-1.log",
+      "logSha256": "9261f2ba36f930d5796b5f4879cd96a87f920b125d19bd3265217983aa769b81"
+    },
+    {
+      "command": "cargo build --offline --locked --release",
+      "cwd": "listener/revm-sim",
+      "exitCode": 0,
+      "durationSeconds": 4.71,
+      "log": "warm-prefix-release-build.log",
+      "logSha256": "a059f92c279a703a38859573479262d5772eac6ad75b488b6e755b87be4ccfb0",
+      "warning": "Existing unchanged account_specific_storage_candidates is unused in release; no new build warning category."
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    },
+    {
+      "command": "Read-only Node assertions comparing frozen/current original tests and source validation/bridge/hydration/key parser",
+      "exitCode": 0
+    }
+  ],
+  "focusedCoverage": [
+    "Fresh eligibility false with actual cold storage read: zero scout/hint; later expanded storage uses one logical hint and two trace/hydration attempts; changed warm amount zero hints; full responses/gas/effects/attestations equal lazy control.",
+    "Cached absent/zero account/storage, immutable cache peeking, account/storage misses, missing code, fatal latch and ancestor-only non-eligibility.",
+    "Original prefix engine output, exact gas, failure stage, persistent state, logs, transient state and observations parity; partial scout writes discarded.",
+    "Main state-read/setup/observation-only misses cannot enable hints; malformed/unavailable hints fall back; validated request-local code never changes real remote code/storage.",
+    "Prefix/main Revert and Halt, failed observation, source precheck and canonical postcheck prevent establishing first eligibility. Ordinary Ok with success=false is not successful publication.",
+    "Same session retains eligibility; endpoint, source hash/height, reset or new remote drops it.",
+    "Pair A cannot mark before successful flush; broken flush and failed bridge do not establish eligibility or run B. B-only success establishes after postB; failed B postcheck does not. Cold A has zero scout, warm B scouts without remote hints.",
+    "Full suite retains pair scalar-equivalence/isolation/fatal/framing/flush tests, source-batch tests, diagnostics on/off and real held-loopback RPC begin/end regressions."
+  ],
+  "limitationsAndHandoff": [
+    "No external RPC, timing experiment, live run, credentials, process-control operation, commit or push. Tests use existing local mock HTTP infrastructure only.",
+    "Source-session eligibility is not route-local: unrelated cold prefixes after prior success may qualify. Changed amounts touching new keys may hint again. Benefit remains unproven.",
+    "One logical hint can perform trace plus hydration and existing bounded recovery; this is not a one-physical-RPC guarantee. Missing hint coverage remains lazy authoritative execution.",
+    "Main's independent Rust and actual TS-to-Rust loopback gates remain pending for this final hash. Earlier TS results reported by main are not claimed as generator-executed checks.",
+    "No further source edits pending. A separately sealed and reviewed timing declaration plus main authorization is still required before any experiment."
+  ]
+}

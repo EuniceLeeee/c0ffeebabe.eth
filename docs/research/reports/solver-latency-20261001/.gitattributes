@@ -1,0 +1,4 @@
+# Preserve literal diff context blanks and the archived harness EOF unchanged.
+# These are review artifacts, not executable production edits.
+code-review/*.patch whitespace=-blank-at-eol
+harnesses/launch-batch-split.mjs.txt whitespace=-blank-at-eof

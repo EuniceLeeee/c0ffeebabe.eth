@@ -1,0 +1,40 @@
+{
+  "scope": "Complete first local bounded dry-run; observation only, not paired Hermes acceptance",
+  "window": [
+    26090073,
+    26090322
+  ],
+  "rows": 250,
+  "sourceSha256": "13d082bc3d007182279f7f5bb4b57bc20a2439e344ce66ede4dfa1d2b95d2225",
+  "sourceBytes": 543616381,
+  "exit": "code0; completed_250_source_heights; owned process group empty; source and Ready unchanged verified",
+  "manual": "first250-final.json",
+  "rpcDecomposition": "first250-quote-waves.json",
+  "canonicalProjection": "first250-latency.log.provenance.json",
+  "canonicalExecutionManifest": "current-latency-tools.json",
+  "executedTool": "analysis:blockscan-pass-latency",
+  "solver": {
+    "nearestRankP50Ms": 5543.800083999988,
+    "canonicalFloorP50Ms": 5583.315874999855,
+    "p95Ms": 8622.636916999938,
+    "completedStages": 0,
+    "incompleteStages": 250,
+    "rustRequestsDuringSolver": 0,
+    "amountPointsMedianNearestRank": 228,
+    "hopQuotesMedianNearestRank": 1174
+  },
+  "finalSim": {
+    "attempts": 38,
+    "successful": 0,
+    "positive": 0
+  },
+  "drops": {
+    "sim_revert": 38,
+    "sim_revert_seen_this_live": 1424,
+    "blockscan_stale_state": 3
+  },
+  "reconciliation": "Same250 records. Manual sorted[ceil(n*p)-1] and canonical sorted[floor(n*p)] explain p50 difference; p95 agrees. Canonical fast-duration records do not imply Solver completion or successful sim. RPC interval analysis includes244 blocks with a non-null first Solver start; remaining6 are retained in overall250, never silently removed.",
+  "interpretation": "No whole-stage speedup proved. First snapshot omits unnecessary prefix; none of its Solver work uses Rust. Serial dependent amount-quote waves, predominantly V4 Quoter, cover most active Solver wall time. Original prior-run small medians had incompatible Rust trialPrefix rejection and cannot establish a fair policy comparison.",
+  "nextMeasuredSnapshot": "live-solver-batched-prefix-250.I49DJ4; launched only after first ended and verified clean",
+  "followup": "A separate candidate will move the SAME existing process-lifetime route-revert rejection before Solver, leaving late guard unchanged.1424 late drops prove repeated work, but nearly all are V2/V3; this is not asserted to solve dominant V4 RPC waiting. No graph reduction, new blacklist or changed rejection criterion authorized by this note."
+}

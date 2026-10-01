@@ -1,0 +1,28 @@
+{
+  "manualFirst": "batch-split-manual.json sealed before assessor and indexed tool execution",
+  "resultSha256": "58b4ae90f08f9e6fb3b320b05d6cb9494e4e4c457570f3204dfa90941f2d3cf2",
+  "declarationSha256": "e605175246e0603b324aa07ab60a1e2758a6c6b28b416a235dd25097acf2925f",
+  "capabilityQuery": [
+    "latency"
+  ],
+  "catalogCheck": "PASS361 indexed tools",
+  "manifest": "batch-split-tools.json",
+  "manifestSha256": "e73bb1de141b334992910863798b1f915a0d9385640bf117fe1dcc1f0c9727f3",
+  "selectedSuccessfulToolIds": [
+    "analysis:blockscan-pass-latency"
+  ],
+  "executedExitCode": 0,
+  "reconciliation": "Canonical pass-level tool reports zero live passes/ineligible window, correctly: selected Solver diagnostic is not a live pass. Assessor agrees with manual judgment: all12 complete and output parity, predeclared performance criterion failed. No canonical tool defect.",
+  "reviewer": "Mencius, independent raw result/spec/declaration review; batch-split-review.json",
+  "result": {
+    "A64SolverMedianMs": 4834.431042,
+    "B1SolverMedianMs": 5922.451333000001,
+    "Bwins": 2,
+    "pairs": 6,
+    "outputParity": true,
+    "criterionMet": false,
+    "decision": "Retain existing production batch64. No tracked default change."
+  },
+  "limits": "Single selected no-repeat route; no representative live, repeated-prefix or final sim/EV claim; billed CU unavailable.492 logical reservations,228 physical RPC items.",
+  "next": "Investigate repeated 152296-byte state response download lag with small pinned gzip capability probe; not a speedup claim."
+}

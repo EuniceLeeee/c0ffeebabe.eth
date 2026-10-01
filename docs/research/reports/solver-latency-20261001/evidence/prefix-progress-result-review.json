@@ -1,0 +1,354 @@
+{
+  "schemaVersion": 1,
+  "reviewType": "independent-primary-evidence-result-review",
+  "verdict": "usable censored-phase diagnostic; completed quote parity passes; no route completion or latency-win claim",
+  "independence": {
+    "mainAssessmentRead": false,
+    "externalCalls": 0,
+    "experimentsRun": 0,
+    "productionEdits": 0,
+    "writeScope": "prefix-progress-result-review.json only",
+    "readScope": "Four requested primary artifacts and original same-input-cold-source-1/results.json for the expressly requested frozen A comparison. No main assessment, current source, credentials or live state read."
+  },
+  "primaryArtifacts": {
+    "same-input-prefix-progress-1/declaration.json": {
+      "bytes": 364257,
+      "sha256": "33a9597f33d377e33955b4583b49f2af717ba95a8d9c7aceb5e68a2cc3304151"
+    },
+    "same-input-prefix-progress-1/results.json": {
+      "bytes": 29489,
+      "sha256": "443f46dd85562246ea7d4dce9115608cc4ac217482218a5dfeeefe2d4cf15604"
+    },
+    "same-input-prefix-progress-1.log": {
+      "bytes": 93342,
+      "sha256": "39bd3ef5805466f5c17eb603785dd2248dbab4cfd532fa40fa2f572d3803e052"
+    },
+    "prefix-progress-launch-receipt.json": {
+      "bytes": 589,
+      "sha256": "3e3dbaa7f0dc6b3530a74c2e9e2e4d2d6a90212526ade0074adee90d9e37f6f5"
+    }
+  },
+  "baselineArtifact": {
+    "path": "same-input-cold-source-1/results.json",
+    "bytes": 116805,
+    "sha256": "5fd407eff9eb99ec141c74ae1ebaac6ef81a91dc8ea5a716f9ffff32217e02af",
+    "comparisonArms": [
+      "A1",
+      "A2"
+    ],
+    "daemonPids": [
+      61900,
+      61948
+    ],
+    "binarySha256": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1"
+  },
+  "bindingChecks": {
+    "resultsDeclarationHashMatchesPrimaryBytes": true,
+    "embeddedSpecPrettyJsonWithNewlineHashMatches": true,
+    "specSha256": "336c1b78db482d975052b2e7c5789e1d2a62af363beff9cbf3b7595fc44c7f0b",
+    "declaredRunnerSha256": "d3d036dbc10ef7d6151ab04c61a4e75403130ab2dfeee8044e771ac313c7eac9",
+    "declaredRuntimeSha256": "55fb5d38a6efa65381852c6218f8c7f8a09cb6f7a1ca324f75cd6a474e1acd01",
+    "declaredAndResultBinarySha256": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661",
+    "binarySnapshot": "prefix-progress-binary.onTMkL/revm-sim",
+    "runtimeSnapshot": "prefix-pair-runtime-complete",
+    "orderAndResultAgree": true,
+    "allElevenRunnerPostRunUnchangedFlagsTrue": true,
+    "limitation": "Primary artifact bytes independently hashed here. Runtime, binary, runner, inputs, assets and executor post-run immutability are runner-reported assertions in results, not independent filesystem rehashes during this primary-only review."
+  },
+  "source": {
+    "number": 26029536,
+    "hash": "0x74b74f99490bac7f0074d6b440814d1fe64ce75707d3564858bd2bede37a1d06",
+    "generation": 1,
+    "stateRoot": "0xa8c4eb4a5b7d2a90ee1ffa7ca44d1f90394210a46c77e4bf3fb76f68cfb64afe",
+    "executionMode": "source-block",
+    "canonicalBefore": true,
+    "allSixClientTimingSourceIdentitiesMatch": true,
+    "allFiveProgressIntervalSourceHeightsMatch": true
+  },
+  "boundedOutcome": {
+    "invocations": 1,
+    "rank": 8,
+    "arm": "B",
+    "phase": "p-only",
+    "policy": "B",
+    "status": "cancelled",
+    "cancelCause": "deadline",
+    "solverEntered": false,
+    "complete": false,
+    "workDeadlineMs": 30000,
+    "preparationMs": 1752.028666,
+    "propagationMs": 28254.516709,
+    "measuredMs": 30006.551375,
+    "drainMs": 1.41025,
+    "totalWithDrainMs": 30007.973375,
+    "deadlineInterpretation": "Approximately 6.55ms scheduling/settlement over the declared work deadline, with physical drain separate; no completion attempt or widened work budget is evidenced.",
+    "declaredWarmups": 0,
+    "declaredInvocationReruns": 0,
+    "finalSimulation": "not-run",
+    "ev": "not-run"
+  },
+  "quoteParity": {
+    "pass": true,
+    "comparison": "Ordered id/hop/canonicalEdgeId/amountIn/amountOut/prefixLength/status projections exactly equal both original A cases; complete Ready data, selected plan hash, runtime and policy also equal.",
+    "planSha256": "a3552bd126bd6b699ea1b10e9ca1942484b649c5f5e8bc9c6565e9f6c1dc0d6b",
+    "planCount": 1,
+    "planIndex": 0,
+    "hops": [
+      {
+        "hop": 0,
+        "exactCallId": 1,
+        "prefixLength": 0,
+        "amountIn": "5195442",
+        "amountOut": "1874606836943428",
+        "status": "quoted",
+        "wallMs": 308.036166
+      },
+      {
+        "hop": 1,
+        "exactCallId": 2,
+        "prefixLength": 1,
+        "amountIn": "1874606836943428",
+        "amountOut": "378740087141681349621649",
+        "status": "quoted",
+        "wallMs": 10015.792708
+      },
+      {
+        "hop": 2,
+        "exactCallId": 3,
+        "prefixLength": 2,
+        "amountIn": "378740087141681349621649",
+        "amountOut": null,
+        "status": "failed-at-deadline",
+        "wallMs": 17930.053584
+      }
+    ],
+    "baselineHop1WallMs": [
+      9318.2535,
+      8737.300333
+    ],
+    "limits": "Both baselines also cancelled without hop2 output. These historical timings are not a paired comparison or proof of instrumentation/provider causality. Primary results do not contain raw per-read EVM return bytes/gas, so quote/plan parity is not a claim of full raw EVM transcript equality."
+  },
+  "identityAndQueue": {
+    "daemonPid": 64897,
+    "daemonCount": 1,
+    "clientEpochCount": 1,
+    "completedHop1Requests": [
+      {
+        "requestId": 1,
+        "dispatch": "scalar",
+        "queueMs": 0,
+        "serviceMs": 7633,
+        "status": "returned"
+      },
+      {
+        "requestId": 2,
+        "dispatch": "pair-first",
+        "pairFirstId": 2,
+        "queueMs": 7629,
+        "serviceMs": 941,
+        "status": "returned"
+      },
+      {
+        "requestId": 3,
+        "dispatch": "pair-second",
+        "pairFirstId": 2,
+        "queueMs": 7628,
+        "serviceMs": 2368,
+        "status": "returned"
+      }
+    ],
+    "cancelledHop2Requests": [
+      {
+        "requestId": 4,
+        "dispatch": "scalar",
+        "queueMs": 0,
+        "serviceMs": 17921,
+        "status": "rejected",
+        "aborted": true
+      },
+      {
+        "requestId": 5,
+        "dispatch": "never",
+        "queueMs": 17920,
+        "serviceMs": null,
+        "status": "rejected",
+        "aborted": true
+      },
+      {
+        "requestId": 6,
+        "dispatch": "never",
+        "queueMs": 17916,
+        "serviceMs": null,
+        "status": "rejected",
+        "aborted": false
+      }
+    ],
+    "interpretation": "Request6's prefix wrapper reports deadline reached; requests4/5 report cancellation. Request6 settled before the shared signal abort and did not escape cancellation into physical execution. There is no pair dispatch or Rust progress for5/6. Result-array settlement order is not execution order.",
+    "joinLimit": "Rust records join directly on captured PID and numeric requestId. Returned wrappers explicitly bind request1/2/3 to exactCallId2. Rejected wrappers omit epoch/requestId; hop2 association is corroborated by the sole pending cohort, matching targets/enqueue times and exact-reserves/input-balance/output-balance failures, not a direct rejected-wrapper ID field."
+  },
+  "progressIntegrity": {
+    "diagnosticRecords": 251,
+    "progressRecords": 249,
+    "scalarTerminalRecords": 1,
+    "pairTerminalRecords": 1,
+    "intervals": [
+      {
+        "interval": "scalar",
+        "requestId": 1,
+        "records": 68,
+        "attemptBegins": 17,
+        "attemptEnds": 17,
+        "logicalItems": 49,
+        "terminalWallMs": 7072.092916
+      },
+      {
+        "interval": "pair-first",
+        "requestId": 2,
+        "childRequestIds": [
+          2,
+          3
+        ],
+        "records": 24,
+        "attemptBegins": 2,
+        "attemptEnds": 2,
+        "logicalItems": 4,
+        "terminalWallMs": 603.557792
+      },
+      {
+        "interval": "pair-bridge",
+        "requestId": null,
+        "childRequestIds": [
+          2,
+          3
+        ],
+        "records": 4,
+        "attemptBegins": 1,
+        "attemptEnds": 1,
+        "logicalItems": 4,
+        "terminalWallMs": 336.348709
+      },
+      {
+        "interval": "pair-second",
+        "requestId": 3,
+        "childRequestIds": [
+          2,
+          3
+        ],
+        "records": 26,
+        "attemptBegins": 3,
+        "attemptEnds": 3,
+        "logicalItems": 5,
+        "terminalWallMs": 1426.321417
+      },
+      {
+        "interval": "scalar",
+        "requestId": 4,
+        "records": 127,
+        "attemptBegins": 58,
+        "attemptEnds": 57,
+        "logicalItems": 64,
+        "terminalWallMs": null
+      }
+    ],
+    "checks": [
+      "All interval sequences contiguous from1; elapsed and Unix timestamps monotonic within each interval.",
+      "Numeric attempt IDs contiguous within each interval; begin/end identities and phases match; no overlapping attempt scopes.",
+      "All observed method histograms complete and sum to logicalItems; no sampled-method loss.",
+      "Phase nesting/resumption consistent; completed interval exclusive phase walls and attempt sums match terminals; pair first/bridge/second sum exactly to pair terminal within floating-point tolerance.",
+      "All intervals below128 records; no truncation marker. Request4 has127 ordinary records, not evidence of a truncated stream. Its next event could have been the cap marker, but none is observed."
+    ],
+    "endSemantics": "An attempt-end means its scope ended, not independently proven RPC success. Request4's missing attempt-end/phase-exit/terminal must remain censored, never zero time or completed work."
+  },
+  "censoredRequest4": {
+    "prefixLengthFromHop": 2,
+    "sourcePrecheck": {
+      "attempts": 1,
+      "logicalItems": 3,
+      "attemptScopeMs": 313.732917
+    },
+    "hydration": {
+      "attempts": 1,
+      "logicalItems": 3,
+      "attemptScopeMs": 640.535333
+    },
+    "funding": {
+      "rpcAttempts": 0,
+      "outerInclusiveObservedMs": 2.351125
+    },
+    "prefix": {
+      "enteredAtElapsedMs": 961.313583,
+      "lastObservedElapsedMs": 17647.952875,
+      "observedPhaseLowerBoundMs": 16686.639292,
+      "attemptBegins": 56,
+      "attemptEnds": 55,
+      "logicalItems": 58,
+      "singleStorageAttempts": 55,
+      "balanceNonceCodeBatchAttempts": 1,
+      "closedAttemptScopeSumMs": 16646.528294,
+      "closedAttemptScopeMedianMs": 279.130708,
+      "closedAttemptScopeNearestRankP95Ms": 384.828541,
+      "closedAttemptScopeMaxMs": 768.823958,
+      "lastSequence": 127,
+      "openAttemptId": 58,
+      "openAttemptMethod": "eth_getStorageAt",
+      "openAttemptLogicalItems": 1
+    },
+    "mainReadSetupReached": false,
+    "canonicalPostcheckReached": false,
+    "resultAccepted": false,
+    "finding": "The predominant observed residual in the censored third hop is serial source storage RPC within full two-hop prefix execution. It is not waiting for queued sibling execution, funding probes, main quote reads or canonical postcheck. No slot/address/key metadata is recorded, so this does not identify duplicate keys, their dependencies, redundant work or a safe batching/cache mechanism."
+  },
+  "authorityAndPhysicalAccounting": {
+    "completedThreeRustChildren": {
+      "logicalValidationCalls": 12,
+      "physicalValidationAttempts": 5,
+      "composition": "scalar pre3/post1; pair pre-first3/bridge4/post-second1",
+      "bridgePostRequestId": 2,
+      "bridgePreRequestId": 3,
+      "bridgeLogicalCount": 4,
+      "pairEmittedChildren": 2,
+      "pairTotalRpcAttempts": 6,
+      "pairTerminalWallMs": 2366.227918
+    },
+    "cancelledRequest": "Fresh request4 precheck contributes3 logical calls in1 attempt. No postcheck or accepted result before abort; this is censored execution, not evidence of dropped authority.",
+    "observedDaemonAttemptBegins": 81,
+    "observedDaemonAttemptEnds": 80,
+    "observedDaemonLogicalItems": 126,
+    "jsExactBackendEnvelopes": 2,
+    "jsExactBackendLogicalItems": 3,
+    "directCanonicalEnvelopes": 2,
+    "directCanonicalLogicalItems": 2,
+    "combinedObservedPhysicalAttemptsOrEnvelopes": 85,
+    "combinedObservedLogicalItems": 131,
+    "doubleCountingRule": "Pair terminal totals are not added again to child/bridge records. Nested token phases are not added to their parent wall. JS exact backend and separately recorded direct calls are distinct from Rust sends.",
+    "limits": "These are observed attempt/envelope counts, including the open attempt, not successful responses, provider-billed CU or a guarantee of provider-side completion. No retry diagnostic stage appears; JS reports zero retries/fallback. Built-in Rust recovery remains allowed and absence of a retry stage is not a universal no-retry guarantee."
+  },
+  "cleanupAndFatal": {
+    "recordedFatal": false,
+    "scalarAndPairTerminalFatal": false,
+    "drainErrors": [],
+    "backendPendingItems": 0,
+    "backendLiveItems": 0,
+    "backendInFlightBatches": 0,
+    "backendActiveTransports": 0,
+    "backendBatchFailures": 0,
+    "backendAbortedBatches": 0,
+    "backendCompletedAfterScopeAbort": 0,
+    "backendPeakInFlightBatches": 1,
+    "backendMaxBatchItemsSent": 2,
+    "launcherExitCode": 0,
+    "launcherSignal": null,
+    "softStop": false,
+    "forcedStop": false,
+    "residualGroupStopped": false,
+    "diagnosticCompleted": true,
+    "limitations": "Cleanup is supported by recorded drain counters and launcher receipt, not a new process inspection. Runner reports24 suppressed ordinary log lines; no claim is made to have inspected suppressed content. Ordinary deadline/transport-cancellation errors are retained, not fatal success results."
+  },
+  "executedLocalChecks": [
+    "Read-only Node/crypto SHA256 and byte lengths for primary artifacts and baseline results; declaration digest binding and embedded spec serialization hash checked.",
+    "Node assert/strict exact comparison of all three ordered hop projections, Ready data, selected plan hash, runtime and policy against both frozen A results.",
+    "Node assert/strict progress grouping, identities, monotonicity, contiguous sequences/attempt IDs, matching end scopes, phase stack, complete histograms, cap and exclusive terminal sums.",
+    "Node assert/strict client dispatch/source, pair bridge counts, emitted children, result and backend drain invariants; log footer parsed and reconciled with results."
+  ],
+  "finalInterpretation": "The diagnostic meets its narrow localization purpose and preserves the two recorded completed quote outputs. The selected P-only route still cancels at30s with no third-hop output and Solver not entered. No systemic, whole-Solver, live or latency improvement is established. A separate mechanism brief remains necessary; this review authorizes no further run or implementation."
+}

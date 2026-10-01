@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "scope": "User-requested evidence publication, not a new runtime experiment or performance acceptance",
+  "manualFirst": "Main independently inspected archived per-window timing, quote-wave and same-input results plus current source before querying the current tool inventory.",
+  "capabilityQuery": [
+    "latency"
+  ],
+  "toolIndexCheck": "PASS:361 indexed tools",
+  "manifest": "handoff-latency-tools.json",
+  "manifestSha256": "c638d5bba68d2acfe0dbc9d18e485863261d545e76c8aa2b6fa91e15947da96f",
+  "executedTool": "analysis:blockscan-pass-latency",
+  "exitCode": 0,
+  "stdoutSha256": "5bdd89ccec6c65f16fb3522b148135a662756cb482bccd8500acfafafd3e6d29",
+  "source": "third250-latency.log",
+  "sourceWindow": [
+    26090582,
+    26090831
+  ],
+  "canonicalResult": {
+    "timedPasses": 246,
+    "totalP50Ms": 12143.909541999921,
+    "totalP95Ms": 18475.170708000194,
+    "solverAllRowsP50Ms": 4064.3752089999616,
+    "solverAllRowsP95Ms": 8189.761832999997,
+    "recordedDurationsBelow10Seconds": 7
+  },
+  "reconciliation": "Same246 records and p95 agree. Archived manual nearest-rank p50 and tool floor-index p50 differ by definition, not data. Tool counts7sub10s durations but these are cancelled/not-entered work, not completed search successes. eligibleForQualification is a log-anchor result, not a correctness or stage-completion verdict.211enteredSolver windows are a conditional subset, not the250height denominator.",
+  "performanceVerdict": "Not established; zero completed whole-Solver cohorts and169finalsim reverts retained",
+  "toolingDefect": false,
+  "chainRpcCalls": 0,
+  "externalCuSpent": 0
+}

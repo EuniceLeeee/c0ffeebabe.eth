@@ -1,0 +1,56 @@
+{
+  "role": "main non-author evaluator of Mencius production patch",
+  "verdict": "PASS for bounded opt-in observability only; no latency or whole-Solver claim",
+  "code": {
+    "mainRsSha256": "c0c05e20bc4c2b571794bd37a592232c6f15dd1e2f445d6f68f0de16f9a29ba6",
+    "diagnosticRsSha256": "8aaef92ce3ebbebfc8588c255d34ec528b63f25affc5d3a8c2c05ec5721d9e1e",
+    "binarySha256": "e4e7211b187aded58f75c89b9a4f7fde3d9d722c7ebdb5522b33f742254bc661",
+    "wholeTrackedPatchSha256": "0621702191948ea1142792abc84f65ab1d864dd6b6cc68cf6dbbeedd540a78b7",
+    "frozen": "prefix-progress-binary.onTMkL"
+  },
+  "findings": [
+    "Only two non-test main.rs anchors differ from the retained pair baseline: bind already-sanitized identity before I/O, and retain a diagnostic RAII guard at the existing physical-attempt count. Source verification, retry decisions, EVM state, pair streaming and RPC payloads remain unchanged.",
+    "New state stays in diagnostic.rs. When disabled, no payload traversal or progress records. Allowlisted method histogram scans at most128 logical items; no endpoint, parameters, raw errors or calldata are logged.",
+    "Progress is capped at128 records per scalar/pair interval including one truncation marker. Pair first/bridge/second identities remain distinct; physical terminal counts remain exclusive and untruncated.",
+    "Attempt end is scope completion, not successful response. RAII handles success/error/continue; killed processes retain a begin without manufacturing a completion. Missing/truncated endings must be classified as unknown/censored.",
+    "Observed stderr can add diagnostic overhead; no enabled-vs-disabled timing equivalence or optimization is claimed. Production policies and search settings did not change."
+  ],
+  "ranGate": [
+    {
+      "check": "full offline Rust suite",
+      "result": "84/84 pass",
+      "log": "prefix-progress-main-tests.log"
+    },
+    {
+      "check": "offline release build",
+      "result": "pass; existing dead-code warning remains",
+      "log": "prefix-progress-main-build.log"
+    },
+    {
+      "check": "real TS client and rebuilt Rust daemon against loopback fixtures, diagnostics enabled",
+      "result": "259/259 pass",
+      "log": "prefix-progress-main-integration.log"
+    },
+    {
+      "check": "main-authored actual daemon held-response termination fixture",
+      "result": "1/1 pass; exactly one outstanding source-precheck attempt, no end, no terminal record, no accepted result",
+      "file": "prefix-progress-held-test.mjs"
+    },
+    {
+      "check": "owned-process watchdog fixture",
+      "result": "2/2 pass",
+      "file": "cold-source-launcher-test.mjs"
+    },
+    {
+      "check": "unchanged diagnostic harness offline preflight with frozen binary/runtime/input bindings",
+      "result": "pass; no RPC",
+      "log": "prefix-progress-offline-preflight.log"
+    },
+    {
+      "check": "git diff --check",
+      "result": "pass"
+    }
+  ],
+  "scope": "No external RPC in these tests. No Family, configuration, signing, broadcast, deployment, commit/push/merge or live changes. Existing task goal remains incomplete.",
+  "next": "Pending independent review of main-authored one-attempt experiment launcher/spec. The reviewed code alone is not permission to repeat any closed experiment."
+}

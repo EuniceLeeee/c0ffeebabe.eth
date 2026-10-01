@@ -1,0 +1,55 @@
+{
+  "scope": "Single selected repeated-route P-only diagnostic, not complete Solver or live qualification",
+  "binarySha256": "e278d6530f806787588984cfe445dc2395cc0dec334a264441aa73fc4c5b0d5b",
+  "resultsSha256": "694350daa4ef1ce4a719472af50bff94e253a2538d401c76ef1c82a40ef85c60",
+  "logSha256": "dac273918cdfba760de88ca044738a304fa98441b6e6ae26853c2daea3ba0936",
+  "sourceBlock": 26029536,
+  "outcome": "cancelled at30006.42ms; two hops quoted, third incomplete; no Solver/finalsim/EV completion",
+  "inputsUnchanged": true,
+  "drainMs": 1.301667,
+  "ownedProcessesAfter": "empty",
+  "completedRequestEvidence": [
+    {
+      "id": 1,
+      "wallMs": 10625.326708,
+      "rpcAttempts": 17,
+      "initialFundingProbeMs": 1957.843042,
+      "initialFundingProbeRpcAttempts": 3,
+      "prefixMs": 5640.006375,
+      "prefixRpcAttempts": 10,
+      "sourcePrecheckMs": 1374.997208,
+      "sourcePostcheckMs": 311.488708
+    },
+    {
+      "id": 2,
+      "wallMs": 3545.588292,
+      "rpcAttempts": 3,
+      "prefixMs": 0.207832,
+      "prefixRpcAttempts": 0,
+      "sourcePrecheckMs": 2828.483083,
+      "sourcePostcheckMs": 299.379458
+    },
+    {
+      "id": 3,
+      "wallMs": 1746.383125,
+      "rpcAttempts": 4,
+      "prefixMs": 0.333541,
+      "prefixRpcAttempts": 0,
+      "sourcePrecheckMs": 323.449417,
+      "sourcePostcheckMs": 281.919833
+    }
+  ],
+  "censoring": "Request4 was started but has no terminal phase record; requests5/6 queued and not dispatched. Do not attribute their time to a completed phase.",
+  "decision": "Do not implement execution-continuation cache: observed warm local prefix is submillisecond. Next candidate must reduce genuinely cold state reads without extra hints on already warm sibling or amount trials. No source guards removed or cached.",
+  "remaining": "No repeated-route speedup and no uncensored whole-live Solver completion proven",
+  "reconciliation": {
+    "manifest": "prefix-phase-tools.json",
+    "sha256": "abf16418e38bef80dd1c4c11cfe2e858b836f4b99a08b4982fd9d75aecb1fc9d",
+    "capabilityQuery": [
+      "latency"
+    ],
+    "executedTool": "analysis:blockscan-pass-latency",
+    "result": "0 production pass records; ineligible for qualification, expected because this is a P-only internal diagnostic. No fabricated pass anchors/stage records were added.",
+    "phaseAttribution": "Read actual strict-phase-timing JSON; phase wall/trips are exclusive and mechanically tested. The selected tool is pass-level and does not purport to parse Rust subrequest phases; not a tool defect."
+  }
+}

@@ -1,0 +1,373 @@
+// Offline recorded-response contract; --check is default. Only main may authorize --run.
+// No search implementation, Family math, credential input, daemon, or external endpoint.
+import fs from "node:fs";
+import path from "node:path";
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { syncBuiltinESMExports } from "node:module";
+import net from "node:net";
+import http from "node:http";
+import childProcess from "node:child_process";
+
+const E = path.dirname(fileURLToPath(import.meta.url)), R = path.resolve(E, "../..");
+const planPath = path.join(E, "source-storage-offline-plan.json");
+const BASE = path.join(E, "prefix-pair-runtime-complete"), CANDIDATE = path.join(E, "storage-share-runtime.8WzAK5");
+const changed = "listener/src/searcher/strict-central-adapter-runtime.ts";
+const unimportedTest = "listener/src/searcher/test/strict-central-adapter-runtime.ts";
+const testPins = { A: "6b57a95a45528f7d015d1a1f88bb28ad6ffc2394c5e2bf4660983fea8a48ce46",
+  B: "b73cfa9848e5981c33df3413a4ee008b14e5d86cf834cef9faf96baebbb8a2ff" };
+const pins = { A: "5abf08753fc27b0249fbe6db5dff9d56b2cc8efe613e7994d33ff0bc1869ba77",
+  B: "cd5ad6ed30b147903d5c18f99110afc09c7f4a93ac58f72dbcb72da22f2baeba" };
+const SOCKET_CLEANUP_BUDGET_MS = 1_000;
+const digest = (v: string | Buffer) => createHash("sha256").update(v).digest("hex");
+const hash = (p: string) => digest(fs.readFileSync(p));
+const json = (v: any) => JSON.stringify(v, (_, x) => typeof x === "bigint" ? x.toString() : x, 2);
+const read = (p: string, tagged = false) => JSON.parse(fs.readFileSync(p, "utf8"), tagged
+  ? (_, v) => v?.$type === "bigint" ? BigInt(v.value) : v?.$type === "map" ? new Map(v.entries) : v : undefined);
+const plan = read(planPath), source = Object.freeze({ ...plan.source });
+assert.deepEqual(source, { number: 26029585, hash: "0x9659cc92d3abe53823e71a15e62873850687d5c50b195072bc0940a17ebc706d", generation: 1 });
+const pin = { blockHash: source.hash, requireCanonical: true }, height = `0x${source.number.toString(16)}`;
+const normalize = (v: any): any => Array.isArray(v) ? v.map(normalize) : v && typeof v === "object"
+  ? Object.fromEntries(Object.keys(v).sort().map(k => [k, normalize(v[k])]))
+  : typeof v === "string" && /^0x[0-9a-f]*$/i.test(v) ? v.toLowerCase() : v;
+const key = (q: any) => JSON.stringify(normalize({ method: q.method, params: q.params }));
+const clean = (e: any) => String(e?.message ?? e).replace(/https?://[^\s"']+/g, "[endpoint]").slice(0, 600);
+const options: any = {};
+for (let i = 2; i < process.argv.length; i++) {
+  const arg = process.argv[i]!; assert(!(arg in options), "duplicate option");
+  if (arg === "--check" || arg === "--run") options[arg] = true;
+  else { assert(["--baseline-runtime", "--candidate-runtime", "--out"].includes(arg), "unknown option");
+    const v = process.argv[++i]; assert(v && !v.startsWith("--"), "missing value"); options[arg] = path.resolve(v); }
+}
+assert(!(options["--run"] && options["--check"]), "exclusive modes");
+const roots = { A: options["--baseline-runtime"] ?? BASE, B: options["--candidate-runtime"] ?? CANDIDATE };
+
+// Imports/checks have no socket permission. Run mode allows only this process's
+// exact ephemeral loopback listener, never any other port/host or child process.
+let allowedPort: number | null = null;
+let escapeAttempts = 0;
+const connect = net.Socket.prototype.connect;
+const deny = () => { escapeAttempts++; throw new Error("offline network/process escape"); };
+net.Socket.prototype.connect = function (...args: any[]) {
+  const a = Array.isArray(args[0]) ? args[0] : args, q = a[0];
+  if (!(q && typeof q === "object" && q.host === "127.0.0.1" && Number(q.port) === allowedPort && allowedPort !== null)) return deny();
+  return (connect as any).apply(this, args);
+} as any;
+for (const name of ["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"]) (childProcess as any)[name] = deny;
+globalThis.fetch = deny as any;
+syncBuiltinESMExports();
+
+function tree(root: string) {
+  assert(root.startsWith(E + path.sep) && fs.realpathSync(root) === root && root !== R, "frozen task runtime required");
+  const files: Record<string, string> = {};
+  const walk = (relative: string) => {
+    const full = path.join(root, relative), st = fs.lstatSync(full);
+    if (st.isDirectory()) for (const name of fs.readdirSync(full).sort()) walk(path.join(relative, name));
+    else { assert(st.isFile(), "runtime source/assets cannot be symlinks"); files[relative] = hash(full); }
+  };
+  for (const name of ["listener/src", "listener/searcher", "listener/package.json", "listener/tsconfig.json",
+    "listener/tsconfig.live.json", "out/BotVM.sol/BotVM.json"]) walk(name);
+  return { root, files, sha256: digest(json(files)), dependencies: fs.realpathSync(path.join(root, "listener/node_modules")) };
+}
+function validateTrees(a: any, b: any) {
+  assert.deepEqual(Object.keys(a.files), Object.keys(b.files), "runtime file sets differ");
+  assert.equal(a.dependencies, b.dependencies, "installed dependencies differ");
+  assert.equal(a.files[changed], pins.A); assert.equal(b.files[changed], pins.B);
+  // Main's snapshots include the reviewed tests, but no test module is imported.
+  // Bind this exact non-runtime delta; all other files must remain identical.
+  assert.equal(a.files[unimportedTest], testPins.A); assert.equal(b.files[unimportedTest], testPins.B);
+  for (const f of Object.keys(a.files)) if (f !== changed && f !== unimportedTest)
+    assert.equal(a.files[f], b.files[f], `unexpected runtime delta: ${f}`);
+}
+const artifacts: any[] = [{ path: planPath, sha256: hash(planPath) }];
+function bound(p: string, expected: string, tagged = false) {
+  assert.equal(hash(p), expected, "input hash mismatch"); artifacts.push({ path: p, sha256: expected }); return read(p, tagged);
+}
+const spec = bound(path.resolve(E, plan.inputSpec), plan.inputSpecSha256, true);
+const responsePath = path.resolve(E, plan.responseFile);
+assert.equal(hash(responsePath), plan.responseFileSha256);
+artifacts.push({ path: responsePath, sha256: plan.responseFileSha256 });
+const f: any = {};
+for (const [name, prefix] of [["ready", "ready"], ["input", "input"], ["prices", "prices"], ["enumeration", "enum"]])
+  f[name] = bound(spec[prefix + "Path"], spec[prefix + "Sha256"], name !== "ready");
+assert.deepEqual(spec.source, source); assert.equal(spec.rank, 1);
+assert.equal(spec.executor, f.input.executor); assert.equal(spec.owner, f.input.owner);
+assert.equal(f.input.stateSource.hash, source.hash); assert.equal(f.input.stateSource.number, source.number);
+assert.equal(f.input.executionMode, "source-block"); assert.equal(f.input.broadcast, false);
+assert.equal(f.input.policy.dryRun, true); assert.equal(f.input.policy.blockScanSubmit, false);
+assert.equal(f.input.fixedEffectiveWethInput, 2_000_000_000_000_000n);
+assert.equal(f.prices.readySha256, spec.readySha256); assert.equal(f.prices.runtime.sourceBlockHash, source.hash);
+assert.equal(f.prices.runtime.sourceBlock, source.number); assert.equal(f.prices.runtime.generation, source.generation);
+assert.deepEqual(f.input.search, spec.search);
+assert.deepEqual(spec.search, { amountGrid: "multiples", gridHalfWidth: 2, gssMaxTries: 8, quoteConcurrency: 16, quoteToleranceRawUnits: 0n });
+assert.equal(f.enumeration.selectionMode, "production"); assert.equal(f.enumeration.forcedSelectionCount, 0);
+assert.equal(f.enumeration.selectionProvenance.kind, "natural_coarse_ranked");
+const original = f.enumeration.opportunities[0];
+assert.equal(original.cycleFingerprint, "0xd98184a812306f6b4cbb082aa54c08f16609ba544f4c85b606e49896d02c5216");
+assert.equal(original.seedEdges.length, 2); assert.equal(original.searchSeed.searchCenter, 5538803n);
+
+function validateRequest(q: any) {
+  assert(Array.isArray(q.params), "params must be an array");
+  if (q.method === "eth_chainId") return assert.deepEqual(q.params, []);
+  if (q.method === "eth_getBlockByNumber") return assert.deepEqual(normalize(q.params), [height, false]);
+  assert(["eth_call", "eth_getCode", "eth_getStorageAt"].includes(q.method), "unrecorded method forbidden");
+  assert.equal(q.params.length, q.method === "eth_getStorageAt" ? 3 : 2);
+  assert.deepEqual(normalize(q.params.at(-1)), pin, "source pin mismatch");
+}
+const recordings = new Map<string, any>();
+let diagnosticRows = 0, readRows = 0, ignoredRows = 0;
+for (const row of fs.readFileSync(responsePath, "utf8").trim().split("\n").map(line => JSON.parse(line))) {
+  if (!row.request) {
+    assert.equal(row.mode, "trace-transport-fallback"); assert.equal(row.method, "eth_call"); assert.equal(row.result, undefined);
+    diagnosticRows++; continue; // Not a request/result; no fabricated response.
+  }
+  try { validateRequest(row.request); } catch { ignoredRows++; continue; }
+  assert(Object.hasOwn(row, "result") && !Object.hasOwn(row, "error"), "accepted recording lacks successful raw result");
+  const k = key(row.request), previous = recordings.get(k);
+  if (previous) assert.deepEqual(normalize(previous.result), normalize(row.result), "ambiguous recording");
+  else recordings.set(k, { method: row.request.method, result: row.result });
+  if (["eth_call", "eth_getCode", "eth_getStorageAt"].includes(row.request.method)) readRows++;
+}
+const lookup = (q: any) => { validateRequest(q); const value = recordings.get(key(q));
+  assert(value, `missing recording ${q.method}:${digest(key(q))}`); return value.result; };
+assert.equal(lookup({ method: "eth_chainId", params: [] }), "0x1");
+assert.deepEqual(normalize(lookup({ method: "eth_getBlockByNumber", params: [height, false] })), normalize(f.input.sourceHeader));
+assert.throws(() => lookup({ method: "eth_getStorageAt", params: ["0x" + "00".repeat(20), "0x" + "ff".repeat(32), pin] }), /missing recording/);
+assert.throws(() => lookup({ method: "eth_getCode", params: [spec.executor, { ...pin, requireCanonical: false }] }), /pin mismatch/);
+assert.equal(readRows, 1417); assert.equal(diagnosticRows, 84);
+
+async function modules(root: string) {
+  const load = (p: string) => import(pathToFileURL(path.join(root, "listener/src", p + ".ts")).href);
+  await load("shared/adapters/index"); // Production registration, in each isolated runtime.
+  const paths: any = {
+    checkpoint: "searcher/universe-rebuild-checkpoint", ready: "searcher/strict-ready-runtime", rebuild: "searcher/universe-rebuild-production",
+    composition: "searcher/venues/production-family-composition", identifiers: "searcher/venues/adapter-family-identifiers",
+    session: "searcher/strict-production-runtime-session", central: "searcher/strict-central-adapter-runtime",
+    cache: "searcher/adapter-family-exact-quote-cache", backend: "searcher/pinned-reth-quote-backend", scheduler: "searcher/reth-transport-scheduler",
+    amount: "searcher/blockscan-amount-reference", refinement: "searcher/detector/blockscan-candidate-refinement",
+    planner: "searcher/planner/planner", templates: "searcher/templates/path-template", solver: "searcher/solver/solver",
+    valuation: "searcher/scanned-profit-token-valuation", actors: "searcher/venues/production-verified-actors", state: "shared/state/state-backend",
+  };
+  return Object.fromEntries(await Promise.all(Object.entries(paths).map(async ([name, p]) => [name, await load(String(p))])));
+}
+function rehydrate(m: any) {
+  assert(!f.ready.inProgressRun); assert.equal(m.checkpoint.envelopeFingerprint(f.ready), f.ready.checkpointFingerprint);
+  const { ready, graph } = m.ready.resolveStrictReadyRuntime(f.ready.readyGeneration);
+  assert.deepEqual(ready.cutoff, f.input.topologySource);
+  const catalog = m.composition.PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+  const wiring = m.rebuild.createRebuildWiring({ rpcUrl: "<redacted-endpoint>",
+    executionIdentity: { executor: spec.executor, transactionOrigin: spec.owner } });
+  const instances: any[] = [], funding: any[] = [];
+  for (const memo of m.checkpoint.activeReadyMemos(f.ready)) {
+    assert(wiring.isReadyMemoDefinitionCurrent(memo), "stale Ready definition");
+    const id = m.identifiers.familyId(memo.familyId), family = catalog.forStrictFamily(id);
+    const item = wiring.rehydrateVerifiedInstance({ memo, cutoff: ready.cutoff });
+    if (family.plugin.manifest.domain === "funding") funding.push({ familyId: id, asset: item.asset }); else instances.push(item);
+  }
+  const edges = original.seedEdges.map((saved: any) => {
+    const edge = graph.find((e: any) => e.canonicalEdgeId === saved.canonicalEdgeId); assert(edge, "saved edge missing");
+    for (const k of ["adapterId", "instanceKey", "executionVariantKey"]) assert.equal(edge[k], saved[k]);
+    for (const k of ["target", "tokenIn", "tokenOut"]) assert.equal(edge[k].toLowerCase(), saved[k].toLowerCase());
+    return edge;
+  });
+  assert.equal(edges[0].instanceKey, edges[1].instanceKey);
+  const refs = new m.amount.BlockScanAmountReference().prepare({ pricing: f.prices.runtime.pricing, opportunities: [original] });
+  const prepared = m.refinement.prepareBlockScanCandidatesWithoutExactRefinement([original], 1, { probeAmountsByOpportunity: refs, admissionSpreadBps: 0 });
+  assert.equal(prepared.opportunities.length, 1); const opportunity = prepared.opportunities[0];
+  assert.equal(opportunity.searchSeed.searchCenter, original.searchSeed.searchCenter);
+  assert.equal(opportunity.searchSeed.maxInput, original.searchSeed.maxInput);
+  const root = new m.session.StrictProductionRuntimeRoot({ catalog, readySource: ready.cutoff, readyGraph: graph,
+    readyInstances: instances, readyFundingAssets: funding });
+  return { root, edges, opportunity, receipt: { graphHash: ready.graphHash, publicationSetHash: ready.publicationSetHash,
+    instances: instances.length, funding: funding.length, edges: edges.map((e: any) => e.canonicalEdgeId) } };
+}
+
+async function closeOwnedLoopback(server: http.Server, sockets: Set<net.Socket>) {
+  // Subscribe before destroy: server.close's callback can precede socket close events.
+  const socketClosures = [...sockets].map(socket => new Promise<void>(yes => socket.once("close", () => yes())));
+  let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    server.closeIdleConnections();
+    const closed = new Promise<void>(yes => server.close(() => yes()));
+    for (const socket of sockets) socket.destroy();
+    await Promise.race([
+      Promise.all([closed, ...socketClosures]),
+      new Promise<never>((_, no) => { cleanupTimer = setTimeout(() => no(new Error("owned socket cleanup timeout")), SOCKET_CLEANUP_BUDGET_MS); }),
+    ]);
+  } finally { clearTimeout(cleanupTimer); }
+}
+
+async function invocation(m: any, arm: string) {
+  const start = performance.now(), abort = new AbortController(), deadlineAtMs = Date.now() + 30_000;
+  const control = { signal: abort.signal, deadlineAtMs }, pending = new Set<Promise<any>>();
+  const r: any = { arm, status: "preparing", phase: "preparation", physical: [], directReads: [], hops: [], candidates: [],
+    sourceFences: 0, timing: { quoteMs: 0, planBuildMs: 0, simMs: 0, amountPoints: 0, gssPoints: 0, hopExactCalls: 0 } };
+  const fail = (e: any) => { abort.abort(e); throw e; };
+  const guard = () => { if (Date.now() >= deadlineAtMs) abort.abort(new Error("30s operation deadline")); abort.signal.throwIfAborted(); };
+  const watch = <T,>(p: Promise<T>): Promise<T> => { pending.add(p); void p.then(() => pending.delete(p), () => pending.delete(p)); return p; };
+  const timer = setTimeout(() => abort.abort(new Error("30s operation deadline")), 30_000);
+  let backend: any, scheduler: any, activeHttp = 0;
+  const sockets = new Set<net.Socket>();
+  const server = http.createServer(async (req, res) => {
+    activeHttp++;
+    try {
+      assert.equal(req.method, "POST"); let body = "";
+      for await (const chunk of req) { body += chunk.toString(); assert(body.length <= 1_048_576, "wire body cap"); }
+      guard(); const payload = JSON.parse(body), requests = Array.isArray(payload) ? payload : [payload];
+      assert(requests.length > 0 && requests.length <= 64, "wire batch cap");
+      const responses = requests.map(q => {
+        assert(r.physical.length < 4096, "recorded-read issuance guard");
+        const result = lookup(q), k = key(q);
+        r.physical.push({ phase: r.phase, method: q.method, keySha256: digest(k), resultSha256: digest(JSON.stringify(normalize(result))) });
+        return { jsonrpc: "2.0", id: q.id, result };
+      });
+      res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(Array.isArray(payload) ? responses : responses[0]));
+    } catch (e) { r.recordingFailure = clean(e); abort.abort(e); res.destroy(); }
+    finally { activeHttp--; }
+  });
+  server.on("connection", socket => { sockets.add(socket); socket.on("close", () => sockets.delete(socket)); });
+  try {
+    await new Promise<void>((yes, no) => { server.once("error", no); server.listen(0, "127.0.0.1", () => yes()); });
+    allowedPort = (server.address() as net.AddressInfo).port;
+    const url = `<redacted-endpoint>}`;
+    scheduler = new m.scheduler.RethTransportScheduler({ capacity: 12, producerReserved: 4, transportTimeoutMs: 30_000 });
+    backend = new m.backend.PinnedRethQuoteBackend(url, source.hash, { ...control, maxBatchSize: 64, maxConcurrentBatches: 8,
+      transportScheduler: scheduler, retryRpcThrottle: false, allowSingleCallFallback: false,
+      onSourceUnavailable: (e: any) => abort.abort(e), onRpcThrottle: (e: any) => abort.abort(e) });
+    let rpcId = 0;
+    const rpc = (method: string, params: any[], work = control) => watch((async () => {
+      guard(); work.signal?.throwIfAborted();
+      try {
+        const reply = await m.state.postJsonRpc(url, { jsonrpc: "2.0", id: ++rpcId, method, params }, work.signal);
+        assert.equal(reply.statusCode, 200); assert(!reply.body.error && Object.hasOwn(reply.body, "result")); guard();
+        return reply.body.result;
+      } catch (e) { return fail(e); }
+    })());
+    const canonical = async () => {
+      assert.equal(await rpc("eth_chainId", []), "0x1");
+      assert.deepEqual(normalize(await rpc("eth_getBlockByNumber", [height, false])), normalize(f.input.sourceHeader));
+    };
+    await canonical(); r.canonicalBefore = true;
+    const provider = { call: (tx: any, block: number, work: any) => { assert.equal(block, source.number); return backend.call(tx, work); },
+      getCode: (address: string, block: number, work: any) => {
+        assert.equal(block, source.number); r.directReads.push({ phase: r.phase, kind: "get-code" });
+        return rpc("eth_getCode", [address, pin], work);
+      },
+      getStorage: (address: string, slot: string, block: number, work: any) => {
+        assert.equal(block, source.number); r.directReads.push({ phase: r.phase, kind: "get-storage" });
+        return rpc("eth_getStorageAt", [address, slot, pin], work);
+      } };
+    const poison = () => fail(new Error("simulation/prefix forbidden for this local-repeat control"));
+    const runtime = m.central.createStrictCentralAdapterRuntime({ provider, exactCallBackend: backend, producerCallCache: backend,
+      exactQuoteCache: m.cache.createAdapterFamilyExactQuoteCache(), executor: spec.executor, transactionOrigin: spec.owner,
+      verifiedActors: m.actors.PRODUCTION_STRICT_VERIFIED_ACTORS, simulator: { simulate: poison, simulatePrefix: poison },
+      transportScheduler: scheduler, generationFence: { assertCurrent(generation: number, actual: any) {
+        r.sourceFences++; assert.equal(generation, source.generation); assert.deepEqual(actual, source); guard();
+      } } });
+    const { root, edges, opportunity, receipt } = rehydrate(m); r.ready = receipt;
+    const actual = await root.createSession({ source, runtime, kind: "exact", control, fundingAssets: [opportunity.flashToken],
+      requiredEdgeIds: new Set(edges.map((e: any) => e.canonicalEdgeId)) });
+    const handles = new Set<object>(), trials = new WeakMap<object, number>(); let trial = 0, solverControl: any;
+    const session = new Proxy(actual, { get(target, k) {
+      if (k === "issueExact") return (input: any) => {
+        guard(); assert(input.control?.signal); assert.notEqual(input.control.signal, control.signal);
+        assert.equal(input.control.deadlineAtMs, deadlineAtMs);
+        if (!solverControl) solverControl = input.control;
+        else assert.equal(input.control, solverControl, "per-amount Solver control changed");
+        const hop = edges.findIndex((e: any) => e.canonicalEdgeId === input.edge.canonicalEdgeId);
+        assert(hop >= 0); assert.equal(input.priorQuotes?.length, hop);
+        const id = hop === 0 ? ++trial : trials.get(input.priorQuotes[0]); assert(id !== undefined);
+        const metric: any = { trial: id, hop, amountIn: input.amountIn, prefixLength: input.priorQuotes.length, status: "pending" };
+        r.hops.push(metric);
+        return watch(target.issueExact(input).then((value: any) => {
+          assert(!handles.has(value), "shared issued Exact handle"); handles.add(value); trials.set(value, id);
+          metric.amountOut = value.amountOut; metric.status = "quoted"; return value;
+        }, (e: any) => { metric.status = "failed"; throw e; }));
+      }
+      const value = Reflect.get(target, k, target); return typeof value === "function" ? value.bind(target) : value;
+    } });
+    const selected = { ...opportunity, seedEdges: edges.map((e: any) => {
+      const found = session.edges.find((v: any) => v.canonicalEdgeId === e.canonicalEdgeId); assert(found); return found;
+    }) };
+    const planner = new m.planner.TemplatePlanner(); planner.setGraph(selected.seedEdges); planner.setFlashLiquidity(session.fundingLiquidityView());
+    planner.setProfitTokenValuation(m.valuation.createScannedProfitTokenValuation(f.prices.runtime.pricing, source));
+    const plans = await planner.planBlockScanFromSeedEdges(selected, [m.templates.FLASH_LEND_SWAP_REPAY, m.templates.FLASH_SWAP_REPAY], { deadlineAtMs });
+    assert(plans.length); assert.deepEqual(plans[0].tokenPath.edges.map((e: any) => e.canonicalEdgeId), edges.map((e: any) => e.canonicalEdgeId));
+    r.planSha256 = digest(json(plans[0])); r.preparationMs = performance.now() - start; r.phase = "solver";
+    const solveStart = performance.now();
+    const solved = await new m.solver.AnvilSolver().solve(plans[0], backend, { executor: spec.executor, simulate: poison },
+      { ...control, deferPhase2Sim: true, finalSimTopN: 3, blockScanAmountGrid: spec.search.amountGrid, gridHalfWidth: spec.search.gridHalfWidth,
+        gssMaxTries: spec.search.gssMaxTries, quoteProfitFloorBps: 0n, quoteToleranceRawUnits: spec.search.quoteToleranceRawUnits,
+        strictSession: session, runtimeEvidence: [], timing: r.timing, onDeferredCandidates: (values: any[]) => {
+          r.candidates = values.map(v => ({ amount: v.flashAmount, profit: v.netProfit, profitToken: v.profitToken, planSha256: digest(json(v)) }));
+        } });
+    r.solverMs = performance.now() - solveStart; r.resolvedSha256 = digest(json(solved));
+    assert.equal(r.timing.amountPoints, 12); assert.equal(r.timing.gssPoints, 8); assert.equal(r.timing.hopExactCalls, 24);
+    assert.equal(r.hops.length, 24); assert(r.hops.every((h: any) => h.status === "quoted")); assert(r.candidates.length);
+    r.phase = "postcheck"; await canonical(); r.canonicalAfter = true; guard(); r.status = "complete";
+  } catch (e) { r.status = abort.signal.aborted ? "cancelled" : "failed"; r.error = clean(e); }
+  finally {
+    r.workMs = performance.now() - start; clearTimeout(timer); abort.abort(new Error("invocation settled"));
+    try { await backend?.closeAndDrain(); while (pending.size) await Promise.allSettled([...pending]); }
+    catch (e) { r.drainError = clean(e); r.status = "failed"; }
+    allowedPort = null;
+    try { await closeOwnedLoopback(server, sockets); }
+    catch (e) { r.drainError ??= clean(e); r.status = "failed"; }
+    r.backend = backend?.stats(); r.scheduler = scheduler?.snapshot(); r.pending = pending.size; r.activeHttp = activeHttp;
+    r.socketsRemaining = sockets.size;
+    r.drainMs = performance.now() - start - r.workMs; r.totalMs = performance.now() - start;
+    if (r.pending || activeHttp || sockets.size || r.backend?.activeTransports || r.backend?.liveItems || r.backend?.pendingItems ||
+      r.backend?.inFlightBatches || r.scheduler?.activeTotal || Object.values(r.scheduler?.queuedByLane ?? {}).some(Number)) {
+      r.status = "failed"; r.drainError ??= "pending work after cleanup";
+    }
+  }
+  return r;
+}
+
+async function main() {
+  const before = { A: tree(roots.A), B: tree(roots.B) }; validateTrees(before.A, before.B);
+  const loaded = { A: await modules(roots.A), B: await modules(roots.B) };
+  const ready = { A: rehydrate(loaded.A).receipt, B: rehydrate(loaded.B).receipt }; assert.deepEqual(ready.A, ready.B);
+  assert.equal(escapeAttempts, 0, "offline preflight attempted I/O");
+  const declaration = { schemaVersion: 1, mode: "offline recorded-response validation; not latency/live/finalsim",
+    runnerSha256: hash(fileURLToPath(import.meta.url)), artifacts, runtimes: before, source, search: spec.search, ready,
+    recordings: { acceptedKeys: recordings.size, readRows, diagnosticRows, ignoredRows, conflicts: 0 },
+    order: ["A", "B", "B", "A"], operationBudgetMs: 30_000, socketCleanupBudgetMs: SOCKET_CLEANUP_BUDGET_MS, maxWireItemsPerInvocation: 4096,
+    exactTransport: { maxBatchSize: 64, maxConcurrentBatches: 8, schedulerCapacity: 12, producerReserved: 4 } };
+  if (!options["--run"]) {
+    console.log(json({ status: "check-passed", runnerSha256: declaration.runnerSha256, artifacts, source, ready,
+      recordings: declaration.recordings, runtimes: Object.fromEntries(Object.entries(before).map(([arm, t]) =>
+        [arm, { root: t.root, sha256: t.sha256, centralSha256: t.files[changed], unimportedTestSha256: t.files[unimportedTest] }])) }));
+    return;
+  }
+  const out = options["--out"] ?? path.join(E, "source-storage-offline-2");
+  assert.equal(path.dirname(out), E); fs.mkdirSync(out);
+  fs.writeFileSync(path.join(out, "declaration.json"), json(declaration), { flag: "wx" });
+  const results: any[] = []; let error: string | null = null;
+  try {
+    for (const arm of declaration.order as ("A" | "B")[]) {
+      if (results.some(r => r.status !== "complete")) { results.push({ arm, status: "not-run-after-failure" }); continue; }
+      results.push(await invocation(loaded[arm], arm));
+    }
+    assert(results.every(r => r.status === "complete"), "incomplete ABBA retained; no retry");
+    const semantic = (r: any) => ({ plan: r.planSha256, resolved: r.resolvedSha256, candidates: r.candidates,
+      hops: [...r.hops].sort((a, b) => a.trial - b.trial || a.hop - b.hop) });
+    for (const r of results) assert.deepEqual(semantic(r), semantic(results[0]), "amount/output/prefix/plan parity failed");
+    const storage = (r: any) => r.physical.filter((p: any) => p.method === "eth_getStorageAt");
+    const words = (r: any) => [...new Set(storage(r).map((p: any) => p.keySha256 + ":" + p.resultSha256))].sort();
+    for (const r of results) assert.deepEqual(words(r), words(results[0]), "storage keys/bytes changed");
+    for (const b of results.filter(r => r.arm === "B")) for (const a of results.filter(r => r.arm === "A"))
+      assert(storage(b).length < storage(a).length, "no actual storage call reduction");
+  } catch (e) { error = clean(e); process.exitCode = 1; }
+  finally {
+    try {
+      assert.equal(escapeAttempts, 0, "network/process escape attempt invalidates result");
+      for (const item of artifacts) assert.equal(hash(item.path), item.sha256, "input drift");
+      assert.deepEqual(tree(roots.A), before.A); assert.deepEqual(tree(roots.B), before.B);
+      assert.equal(hash(fileURLToPath(import.meta.url)), declaration.runnerSha256);
+    } catch (e) { error = clean(e); process.exitCode = 1; }
+    fs.writeFileSync(path.join(out, "results.json"), json({ status: error ? "failed" : "passed", error, escapeAttempts, results }), { flag: "wx" });
+  }
+}
+main().catch(e => { console.error(clean(e)); process.exitCode = 1; });

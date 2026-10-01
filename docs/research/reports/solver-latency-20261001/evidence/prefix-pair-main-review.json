@@ -1,0 +1,47 @@
+{
+  "reviewer": "main, non-author of Rust slice",
+  "pass": 1,
+  "rustAuthor": "Mencius",
+  "rustScopedDiffSha256": "f87fa7f97e1a4dcf60a2319c64ddd756b795178f878013ffdf4840bfae4ec35b",
+  "binarySha256": "1f6620b86bc40a517ef93987e9974c1d6bacc07ac3a103a1e6e2c8a75ff82aa1",
+  "executedByReviewer": [
+    "cargo test --manifest-path listener/revm-sim/Cargo.toml:78/78 passed",
+    "cargo build --release --manifest-path listener/revm-sim/Cargo.toml:passed",
+    "git diff --check:passed",
+    "node --import tsx --test blockscan-runtime-loop,blockscan-solver-quote-concurrency,solver-sequential-prefix:67/67 passed"
+  ],
+  "findings": [
+    "No blocking Rust finding. Both bodies and immutable shared context are validated before I/O; two numeric monotonic child identities reserve once.",
+    "verify_pair_bridge sends four distinct logical RPC items, validates complete A post-header and independently obtained B pre-header/chain; no source-evidence reuse or logical deduplication.",
+    "A flush occurs before B main execution. Every strict_simulate_at still starts a new CacheDB; only existing immutable source-value cache/session reuse remains.",
+    "Fatal source/transport evidence bars further useful execution; B postcheck failure cannot retroactively fabricate or replace A output. Ordinary execution errors retain typed handling.",
+    "Scalar parsing/execution remains routed through the same refactored scalar handler; old scalar regression tests remain unchanged and pass.",
+    "Pair timing owns first/bridge/second exclusive intervals; individual daemon latency cannot be interpreted as complete sibling wall time.",
+    "Real TS-client-to-Rust pair integration is an additional gate before benchmarking, delegated as a local-only test slice. No live benefit yet proven."
+  ],
+  "tsIndependentReview": {
+    "reviewer": "Mencius, non-author of TS production slice",
+    "diffSha256BeforeAdditionalIntegrationTests": "cbd7b98ce07299736ab40e89d91d29ec4e6e025bfcf25c38497b8912398acdc8",
+    "executed": "308/308 related checks;18/18 pair-specific checks;current and sealed baseline typecheck both have identical8 existing errors",
+    "finding": "No blocking finding. Signal identity normalization stays slot-local; effective deadlines unchanged; live response framing remains ordered; late physical fatal evidence retained."
+  },
+  "additionalIntegration": {
+    "mainExecuted": "2/2 new real TS-client/real Rust/local-HTTP pair tests;461/461 full related tests with actual Rust binary",
+    "finding": "Exact scalar output/gas/attestation parity, source validations8logical in3physical batches versus4; first result settles while second main-read or postcheck is held. No copied pairing algorithm.",
+    "log": "prefix-pair-main-ts-tests.log"
+  },
+  "snapshotPreparation": "Initial offline preparation omitted runtime JSON assets. No measured run occurred. Failed snapshot retained; a new prefix-pair-runtime-complete copies every baseline runtime asset and both tsconfigs. Runner hashes exact assets before and after and compares both arms. No production change to fix packaging.",
+  "runnerIndependentReview": {
+    "reviewer": "Mencius, non-author",
+    "runnerSha256": "d3d036dbc10ef7d6151ab04c61a4e75403130ab2dfeee8044e771ac313c7eac9",
+    "launcherSha256": "37d1c77673b56e63a7d8040441fefdbafbe58a94cd58b5cec25338c7a4503b7b",
+    "executed": "offline self-test of both frozen runtimes and syntax checks of all4 scripts",
+    "finding": "No blocking finding after asset correction;160s launcher is a soft abort/drain watchdog, not an execution budget extension."
+  },
+  "decision": "Authorize one declared4x30s ABBA read-only diagnostic. Implementation gates passed; do not call fixed, complete Solver speedup, or merge-ready.",
+  "resourcesThisReview": {
+    "realRpcCalls": 0,
+    "providerCU": 0,
+    "network": "local stub tests only"
+  }
+}
