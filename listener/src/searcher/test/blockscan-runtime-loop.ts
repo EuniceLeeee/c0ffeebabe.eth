@@ -500,9 +500,12 @@ test("orphaned range anchor resets only after independent canonical check and ow
       if (kind === "ordinary-error") throw new Error("trace unavailable");
       throw new BlockActivityRangeInvalidatedError("fixture broken range");
     };
-    const result = assert.rejects(f.loop.runHead(103, {
+    const run = f.loop.runHead(103, {
       sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now(),
-    }), /fixture broken range|trace unavailable|anchor recheck failed/);
+    });
+    const result = kind === "orphaned"
+      ? assert.doesNotReject(run, "a separately confirmed reorg retires the pass without stopping the runtime")
+      : assert.rejects(run, /fixture broken range|trace unavailable|anchor recheck failed/);
     try {
       await until(() => closed);
       assert.equal(reset, false, "pending Funding still owns old generation work");
