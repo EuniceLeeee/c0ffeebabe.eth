@@ -42,10 +42,11 @@ import { effectiveMidRowCarried } from "../src/searcher/blockscan-effective-mid.
 import { ADDR } from "../src/shared/constants/addresses.js";
 import { distribution } from "./enumeration.js";
 import { redactToolOutput } from "../../analysis/src/tool-run-security.js";
+import { PrerequisiteCache, type PrerequisiteManifest } from "./prerequisite-cache.js";
 
 const sha256 = (v: string | Buffer) => createHash("sha256").update(v).digest("hex");
 export interface Head { number: number; hash: string }
-export type LiveBenchmarkStage = "effective-update" | "sim-amount";
+export type LiveBenchmarkStage = "effective-update" | "sim-amount" | "live-enumeration";
 type LiveDiagnostic = NonNullable<Parameters<BlockScanRuntimeLoop["runHead"]>[2]>;
 type LiveResult = Parameters<LiveDiagnostic["onComplete"]>[0];
 type Enumeration = Parameters<LiveDiagnostic["onEnumeration"]>[0];
@@ -56,16 +57,22 @@ type SolverRecord = Parameters<NonNullable<LiveDiagnostic["onSolver"]>>[0];
  * all source reads, work controls, publication, startup transition and drains. */
 export async function measureLiveHead(input: {
   head: Head; loop: Pick<BlockScanRuntimeLoop, "schedule" | "waitForIdle">; budgetMs: number; setup?: boolean; now?: () => number;
+  sizingBudgetMs?: number; signal?: AbortSignal;
   stage: LiveBenchmarkStage;
   setDiagnostic(diagnostic: LiveDiagnostic | undefined): void;
   noteHead(head: Head): void;
   latestPricing(): unknown;
   recordFailure?(error: unknown): void;
+  /** Changes only the diagnostic input transport, never live scheduling. */
+  onMeasuredStageStart?(): void;
 }) {
+  assert(input.sizingBudgetMs === undefined || (!input.setup && input.stage === "sim-amount" &&
+    Number.isFinite(input.sizingBudgetMs) && input.sizingBudgetMs > 0 && input.sizingBudgetMs <= 3_600_000),
+  "sizingBudgetMs requires a measured sim-amount head and must be in (0, 3600000]");
   const now = input.now ?? (() => performance.now()), start = now();
   const receivedAtMs = Date.now();
   let publicationReadyMs: number | null = null, snapshot: AdapterRuntimeSnapshot | undefined;
-  let sizingStartedAt: number | null = null;
+  let sizingStartedAt: number | null = null, enumerationStartedAt: number | null = null;
   let live: LiveResult | undefined, failure: unknown;
   let enumeration: Enumeration | undefined;
   const solvers: SolverRecord[] = [];
@@ -73,40 +80,63 @@ export async function measureLiveHead(input: {
     input.setDiagnostic({
       // Startup's own branch returns before enumeration and completes its normal
       // startup transition. through=prices would return too early to reset it.
-      through: input.setup ? "enumerate" : input.stage === "effective-update" ? "prices" : "solver",
-      onSnapshot(value) { snapshot = value; publicationReadyMs = now() - start; },
+      through: input.setup || input.stage === "live-enumeration" ? "enumerate" : input.stage === "effective-update" ? "prices" : "solver",
+      ...(input.sizingBudgetMs === undefined ? {} : { sizingBudgetMs: input.sizingBudgetMs }),
+      onSnapshot(value) {
+        snapshot = value; publicationReadyMs = now() - start;
+        if (!input.setup && input.stage === "live-enumeration") { enumerationStartedAt = now(); input.onMeasuredStageStart?.(); }
+      },
       onEnumeration(value) {
-        assert(!input.setup && input.stage === "sim-amount", "effective benchmark must not enumerate");
+        assert(!input.setup && input.stage !== "effective-update", "effective benchmark must not enumerate");
         enumeration = value;
       },
       onSolver(value) { solvers.push(value); },
-      onSizingStart() { sizingStartedAt = now(); },
+      onSizingStart() { sizingStartedAt = now(); input.onMeasuredStageStart?.(); },
       onComplete(value) { live = value; },
     });
+    if (!input.setup && input.stage === "effective-update") input.onMeasuredStageStart?.();
     input.noteHead(input.head);
     input.loop.schedule(input.head.number, { sourceHeadSeenAtMs: receivedAtMs, sourceHeadSeenAtMonotonicMs: start });
     await input.loop.waitForIdle();
     assert(live && snapshot, "live pass did not publish a terminal snapshot");
     assert(input.setup ? live.outcome === "startup_warm" : ["ran", "degraded"].includes(live.outcome), "live pass did not finish preparation");
     assertEffectivePublication(snapshot, input.latestPricing(), input.head);
-    if (input.setup || input.stage === "effective-update") assert.equal(live.planned, 0, "effective benchmark reached Planner");
+    if (input.setup || input.stage !== "sim-amount") assert.equal(live.planned, 0, "upstream benchmark reached Planner");
+    if (!input.setup && input.stage === "live-enumeration") assert(enumeration, "live enumeration not reached");
+    assert(enumeration?.outcome !== "budget_exceeded", "natural enumeration was budget truncated");
     assert.equal(live.atomicResults.length, 0, "effective benchmark reached sim/EV");
     assert.equal(live.timing.finalSimMs, 0, "stage benchmark reached independent final sim");
     assert.equal(live.timing.evMs, 0, "stage benchmark reached EV");
-    assert(now() - start < input.budgetMs, "live preparation/drain exceeded benchmark budget");
+    input.signal?.throwIfAborted();
+    if (input.sizingBudgetMs === undefined) {
+      assert(now() - start < input.budgetMs, "live preparation/drain exceeded benchmark budget");
+    } else {
+      assert(sizingStartedAt !== null, "live pass did not reach sizing");
+      assert(sizingStartedAt - start < input.budgetMs, "live prerequisites exceeded benchmark budget");
+      assert(now() - sizingStartedAt < input.sizingBudgetMs, "live sizing/drain exceeded benchmark budget");
+    }
   } catch (error) { failure = error; input.recordFailure?.(error); }
   finally { input.setDiagnostic(undefined); }
   if (failure !== undefined && live?.reason) input.recordFailure?.(new Error(live.reason));
   const totalMs = now() - start;
+  const boundary = input.stage === "live-enumeration" ? enumerationStartedAt : sizingStartedAt;
+  const prerequisitesMs = boundary === null ? null : boundary - start;
+  const stageMs = input.stage === "effective-update" ? totalMs : boundary === null ? null : now() - boundary;
+  const timedOut = live?.outcome === "budget_exceeded" || enumeration?.outcome === "budget_exceeded" || (input.sizingBudgetMs === undefined
+    ? totalMs >= input.budgetMs
+    : (prerequisitesMs ?? totalMs) >= input.budgetMs || (stageMs !== null && stageMs >= input.sizingBudgetMs));
+  const aborted = input.signal?.aborted || live?.reason === "source_head_superseded" || live?.reason === "pending_evidence_priority";
   return {
     snapshot, enumeration, solvers,
     metrics: { status: failure === undefined ? "completed" as const :
-      totalMs >= input.budgetMs || live?.outcome === "budget_exceeded" ? "timeout" as const : "failed" as const,
+      timedOut ? "timeout" as const : aborted ? "aborted" as const : "failed" as const,
       publicationReadyMs, totalMs,
+      budgets: { sharedPassBudgetMs: input.sizingBudgetMs === undefined ? input.budgetMs : null,
+        prerequisiteBudgetMs: input.sizingBudgetMs === undefined ? null : input.budgetMs,
+        sizingBudgetMs: input.sizingBudgetMs ?? null },
       // Native stage boundary, not a sum of concurrent workers. Keep null when
       // upstream never reached selection; zero would imply a fast sim sample.
-      stageMs: input.stage === "effective-update" ? totalMs : sizingStartedAt === null ? null : now() - sizingStartedAt,
-      prerequisitesMs: sizingStartedAt === null ? null : sizingStartedAt - start,
+      stageMs, prerequisitesMs,
       live: live ? { outcome: live.outcome, timing: live.timing, totalMs: live.totalMs,
         planned: live.planned, quotePositive: live.quotePositive, atomicResultCount: live.atomicResults.length,
         detail: live.detail,
@@ -150,13 +180,18 @@ export function parseHeads(value: unknown): Head[] {
 export const LIVE_STAGE_HELP = `Manual live-stage benchmark (no live restart, signing or broadcasting).
   npm run benchmark:effective-update -- --ready CHECKPOINT --heads HEADS.json --out NEW_DIR
   npm run benchmark:sim-amount -- --ready CHECKPOINT --heads HEADS.json --out NEW_DIR
+  npm run benchmark:live-enumeration -- --ready CHECKPOINT --heads HEADS.json --out NEW_DIR
   --env-file FILE             Only RPC/public execution identity/REVM settings are read.
   --executor ADDRESS --owner ADDRESS --revm-bin FILE
   --executor-runtime-code FILE Optional hash-bound {code,keccak256}; no deployment.
   --repetitions N             Default 1; fresh producer/cache and N-1 setup per repetition.
   --setup-budget-ms N         Default 300000, outside all measured distributions.
   --block-budget-ms N         Default live 11000 (large graph 30000); experiment-only.
+  --sizing-budget-ms N        Sim only, 1..3600000; fresh budget at planner_solver.
+                             With this flag, block-budget-ms bounds prerequisites.
   --save-prices               Save source-bound full snapshots after timing for later stage tests.
+  --prepare-cache NEW_DIR     Sim entry only, one repetition; capture reusable prerequisite reads.
+  --input-cache DIR           Restore prerequisites from a completed capture; no network fallback on a miss.
 HEADS.json is [{"number":N,"hash":"0x..."}, ...], 1..250 consecutive newHeads inputs.
 N-1 baseline must actually finish; it is not a measured sample. Measured N is never prewarmed.
 Both enter the actual live head scheduler. effective stops at through=prices;
@@ -164,31 +199,49 @@ sim uses through=solver with live's actual-profit selector, not an independent d
 The live loop owns activity, strict producer, effective build, natural enumeration, planning,
 trial dispatch, concurrency, deadlines, cancellation and drain. Sim prerequisites still run
 through live, but stageMs starts at the native sizing boundary and includes its final drain;
-native plannerSolverMs is also retained. Neither timer resets the remaining live pass budget.
+native plannerSolverMs is also retained. By default both share the whole-pass deadline.
+Only explicit --sizing-budget-ms renews it at the runtime's sizing boundary, including drain;
+prerequisite and sizing budgets are reported separately. Setup never receives this override.
 No independent final sim/EV is run. Negative/revert/deadline outcomes remain in the report.
 Heads are supplied sequentially. The real scheduler runs, but this does not stress overlapping
 head arrival/WS propagation or concurrent downstream contention. Reads archive RPC; do not
 claim realtime live acceptance or all routes complete on timeout.
 Completed effective tables can contain failed/disabled edges; their counts are reported.
+The cache stores pinned prerequisite RPC inputs, not live handles or measured results.
+Production rebuilds its own in-memory state/price tables and natural candidates from these
+local inputs. This local restoration is reported separately, never included in stageMs.
+Effective's measured N reads/quotes and sim's trial quotes/simulations always reach the real
+RPC through a loopback passthrough (whose overhead remains measured). Live-enumeration uses
+the same production scheduler/dispatcher, stopping before Planner. Source header validation,
+Ready loading and hash checks remain untimed. No signing/broadcast and no live default changes.
 `;
 
-export function parseLiveStageOptions(argv: string[]) {
+export function parseLiveStageOptions(argv: string[], stage: LiveBenchmarkStage) {
   const { values: v } = parseArgs({ args: argv, options: {
     ready: { type: "string" }, heads: { type: "string" }, out: { type: "string" }, help: { type: "boolean" },
     "env-file": { type: "string" }, executor: { type: "string" }, owner: { type: "string" }, "revm-bin": { type: "string" },
     "executor-runtime-code": { type: "string" }, repetitions: { type: "string" }, "save-prices": { type: "boolean" },
     "setup-budget-ms": { type: "string" }, "block-budget-ms": { type: "string" },
+    "sizing-budget-ms": { type: "string" },
+    "prepare-cache": { type: "string" }, "input-cache": { type: "string" },
   }, allowPositionals: false });
   if (v.help) return null;
   assert(v.ready && v.heads && v.out, "--ready, --heads and --out are required");
+  assert(v["sizing-budget-ms"] === undefined || stage === "sim-amount", "--sizing-budget-ms is only applicable to sim-amount");
+  assert(!(v["prepare-cache"] && v["input-cache"]), "choose prepare-cache or input-cache, not both");
+  assert(!v["prepare-cache"] || (stage === "sim-amount" && (v.repetitions === undefined || v.repetitions === "1")),
+    "prepare-cache requires the sim entry and exactly one repetition");
   const positive = (raw: string, max: number) => {
     assert(/^\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) && Number(raw) > 0 && Number(raw) <= max, "invalid benchmark integer");
     return Number(raw);
   };
   return { ...v, ready: realpathSync(v.ready), heads: realpathSync(v.heads), out: resolve(v.out),
+    prepareCache: v["prepare-cache"] ? resolve(v["prepare-cache"]) : undefined,
+    inputCache: v["input-cache"] ? realpathSync(v["input-cache"]) : undefined,
     repetitions: positive(v.repetitions ?? "1", 20),
     setupBudgetMs: v["setup-budget-ms"] === undefined ? undefined : positive(v["setup-budget-ms"], 3_600_000),
-    blockBudgetMs: v["block-budget-ms"] === undefined ? undefined : positive(v["block-budget-ms"], 3_600_000) };
+    blockBudgetMs: v["block-budget-ms"] === undefined ? undefined : positive(v["block-budget-ms"], 3_600_000),
+    sizingBudgetMs: v["sizing-budget-ms"] === undefined ? undefined : positive(v["sizing-budget-ms"], 3_600_000) };
 }
 
 function readEnvironment(path?: string): NodeJS.ProcessEnv {
@@ -218,13 +271,14 @@ export function assertLiveStageMode(env: NodeJS.ProcessEnv) {
 }
 
 export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = process.argv.slice(2)) {
-  const args = parseLiveStageOptions(argv);
+  const args = parseLiveStageOptions(argv, stage);
   if (!args) { console.log(LIVE_STAGE_HELP); return; }
   const env = readEnvironment(args["env-file"]);
   assertFamilyActivationEnvironment(PRODUCTION_FAMILY_ACTIVATIONS, env);
-  const rpcUrl = env.MAINNET_RPC_URL, executor = args.executor ?? env.BOTVM_ADDRESS, owner = args.owner ?? env.BOTVM_OWNER;
+  const upstreamRpcUrl = env.MAINNET_RPC_URL, executor = args.executor ?? env.BOTVM_ADDRESS, owner = args.owner ?? env.BOTVM_OWNER;
   const executableInput = args["revm-bin"] ?? env.SEARCHER_REVM_SIM_BIN;
-  assert(rpcUrl && /^https?:\/\//.test(rpcUrl), "MAINNET_RPC_URL required");
+  assert(upstreamRpcUrl && /^https?:\/\//.test(upstreamRpcUrl), "MAINNET_RPC_URL required");
+  let rpcUrl = upstreamRpcUrl;
   assert(executor && ethers.isAddress(executor) && owner && ethers.isAddress(owner), "public executor and owner required");
   assert(executableInput && existsSync(executableInput), "existing REVM binary required");
   const executablePath = realpathSync(executableInput);
@@ -268,21 +322,50 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
   save("declaration.json", { schema: 2, benchmark: stage, head: git("rev-parse", "HEAD"), bindings,
     notifications: heads, repetitions: args.repetitions, cfg, identity, executorRuntimeCodeHash: executorRuntimeCode?.keccak256,
     readySource: ready.cutoff, graphEdges: graph.length, topologyContainsFutureDiscovery: ready.cutoff.number > heads[0]!.number - 1,
-    settings, budgets: { blockBudgetMs, familyBudgetMs, reserveMs, setupBudgetMs },
-    experimentOverrides: { blockBudgetMs: args.blockBudgetMs, setupBudgetMs: args.setupBudgetMs },
+    settings, budgets: { blockBudgetMs, familyBudgetMs, reserveMs, setupBudgetMs,
+      sharedPassBudgetMs: args.sizingBudgetMs === undefined ? blockBudgetMs : null,
+      prerequisiteBudgetMs: args.sizingBudgetMs === undefined ? null : blockBudgetMs,
+      sizingBudgetMs: args.sizingBudgetMs ?? null },
+    experimentOverrides: { blockBudgetMs: args.blockBudgetMs, setupBudgetMs: args.setupBudgetMs, sizingBudgetMs: args.sizingBudgetMs },
     transport: { producerReserved, transportCapacity, policyOwner: "BlockScanRuntimeLoop/createBlockScanPriceRuntime" },
     cacheRegime: "fresh producer each repetition; real predecessor build excluded; consecutive hot updates; provider-side cache uncontrolled",
+    prerequisiteCache: { mode: args.prepareCache ? "capture" : args.inputCache ? "restore" : "none",
+      directory: args.prepareCache ?? args.inputCache, measuredRpc: args.prepareCache || args.inputCache ? "loopback-passthrough" : "direct",
+      localRestorationExcluded: true, measuredResultsCached: false },
     finalRevertCache: "fresh process cache; no independent final-sim decisions injected",
     scope: "actual head scheduler and runHead with diagnostic stop; sequential notifications; no independent final sim/EV",
-    liveStarted: false, broadcast: false, signing: false, enumeration: stage === "sim-amount", simSizing: stage === "sim-amount" });
+    liveStarted: false, broadcast: false, signing: false, enumeration: stage !== "effective-update", simSizing: stage === "sim-amount" });
   const records: Array<Record<string, unknown> & { status: string; totalMs: number; stageMs: number | null }> = [];
   const sanitizedError = (error: unknown) => redactToolOutput(error instanceof Error ? error.message : String(error), env).slice(0, 4000);
   const experimentAbort = new AbortController();
   const interrupt = () => experimentAbort.abort(new Error("benchmark interrupted"));
   process.once("SIGINT", interrupt); process.once("SIGTERM", interrupt);
+  let inputCache: PrerequisiteCache | undefined, inputManifest: PrerequisiteManifest | undefined;
+  const compatibility = { readySha256, heads, cfg, identity, refineCandidates: settings.refineCandidates,
+    executorRuntimeCodeHash: executorRuntimeCode?.keccak256 ?? null };
+  const capturedHeads: PrerequisiteManifest["heads"] = {};
+  const effectiveHash = (snapshot: AdapterRuntimeSnapshot) => sha256(atBlockJson([...snapshot.pricing.effectiveMids!.rows].map(([key, r]) =>
+    [key, r.status, r.amountIn, r.amountOut]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))));
+  const restorePhase = args.prepareCache ? "record" as const : "replay" as const;
   try {
+    if (args.prepareCache || args.inputCache) {
+      // Independent fresh canonical checks, never answered by the cassette.
+      const canonical = await Promise.all([heads[0]!.number - 1, ...heads.map(h => h.number)].map(number =>
+        readBlockScanObservedHeader(upstreamRpcUrl, 1n, number,
+          { signal: experimentAbort.signal, deadlineAtMs: Date.now() + 30_000 })));
+      for (let index = 1; index < canonical.length; index++) {
+        assert.equal(canonical[index]!.hash.toLowerCase(), heads[index - 1]!.hash, "cached cohort is not canonical");
+        assert.equal(canonical[index]!.parentHash.toLowerCase(), canonical[index - 1]!.hash.toLowerCase(), "cached cohort is not contiguous");
+      }
+      const opened = await PrerequisiteCache.open({ upstreamUrl: upstreamRpcUrl, mode: args.prepareCache ? "record" : "replay",
+        directory: (args.prepareCache ?? args.inputCache)!, compatibility, onFault: error => experimentAbort.abort(error) });
+      inputCache = opened.cache; inputManifest = opened.manifest; rpcUrl = opened.rpcUrl;
+      save("cache-source-check.json", { canonical: canonical.map(h => ({ number: h.number, hash: h.hash })),
+        reused: !!args.inputCache, measured: false });
+    }
     for (let repetition = 0; repetition < args.repetitions; repetition++) {
       experimentAbort.signal.throwIfAborted();
+      inputCache?.setPhase(restorePhase);
       const runtimeControl = createBenchmarkRuntimeAbort(experimentAbort.signal), abort = runtimeControl.controller;
       // Rehydrate per repetition; no target block dynamic cache is transplanted.
       const instances: PreparedFamilyInstance[] = [], funding: StrictReadyFundingAsset[] = [];
@@ -384,14 +467,17 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
         const predecessor = await readBlockScanObservedHeader(rpcUrl, chainId, heads[0]!.number - 1,
           { signal: abort.signal, deadlineAtMs: Date.now() + 30000 });
         const run = (head: Head, setup: boolean): ReturnType<typeof measureLiveHead> => withoutProductionConsole(async () => {
-          // Only an outer experiment safety stop: never resets or widens the
-          // production deadline. Startup may normally resume indefinitely.
+          inputCache?.setPhase(restorePhase);
+          // Outer experiment safety stop covers both diagnostic phases and
+          // joined cleanup. Startup may normally resume indefinitely.
           const budgetMs = setup ? setupBudgetMs * 2 : blockBudgetMs;
-          const guard = setTimeout(() => abort.abort(new Error("benchmark outer wall limit")), budgetMs + 60000);
+          const sizingBudgetMs = setup ? undefined : args.sizingBudgetMs;
+          const guard = setTimeout(() => abort.abort(new Error("benchmark outer wall limit")), budgetMs + (sizingBudgetMs ?? 0) + 60000);
           const failures: string[] = [];
-          try { return await measureLiveHead({ stage, head, setup, loop: loop!, budgetMs,
+          try { return await measureLiveHead({ stage, head, setup, loop: loop!, budgetMs, sizingBudgetMs, signal: abort.signal,
             setDiagnostic: value => { diagnostic = value; },
             noteHead: h => activity.noteHead(h.number, h.hash),
+            onMeasuredStageStart: () => inputCache?.setPhase("measured"),
             recordFailure: error => { failures.push(sanitizedError(error)); },
             latestPricing: () => prices.currentRuntimeCoordinator.latestPricingSnapshot() }); }
           finally {
@@ -400,17 +486,32 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
           }
         });
         const setup = await run(predecessor, true);
-        save(`setup-${repetition + 1}.json`, { measured: false, source: predecessor, ...setup.metrics });
+        inputCache?.assertHealthy();
+        save(`setup-${repetition + 1}.json`, { measured: false, source: predecessor, ...setup.metrics, prerequisiteCache: inputCache?.stats() });
         assert.equal(setup.metrics.status, "completed", "predecessor setup failed; no hot samples measured");
+        if (inputCache) {
+          const output = { effectiveSha256: effectiveHash(setup.snapshot!), candidatesSha256: null };
+          if (inputManifest) assert.equal(output.effectiveSha256, inputManifest.heads[String(predecessor.number)]?.effectiveSha256,
+            "restored predecessor differs from cached input; rebuild the prerequisite cache");
+          capturedHeads[String(predecessor.number)] = output;
+        }
         for (const head of heads) {
           assert.equal(prices.currentRuntimeCoordinator.latestPricingSnapshot()?.sourceBlock, head.number - 1, "missing genuine predecessor table");
           rpcReads = []; lastPublicationKind = undefined; amountEvents = []; solvedInputs = [];
+          const beforeCache = inputCache?.stats();
           const measured = await run(head, false), snapshot = measured.snapshot, effective = snapshot?.pricing.effectiveMids;
-          const outputSha256 = effective ? sha256(atBlockJson([...effective.rows].map(([key, r]) =>
-            [key, r.status, r.amountIn, r.amountOut]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))))) : null;
+          inputCache?.assertHealthy();
+          const outputSha256 = snapshot && effective ? effectiveHash(snapshot) : null;
           const enumerationInput = measured.enumeration?.opportunities.map(opp => ({ routeId: blockScanRouteId(opp.seedEdges),
             flashToken: opp.flashToken, searchSeed: opp.searchSeed, seedEdges: opp.seedEdges }));
           const candidateInputSha256 = enumerationInput ? sha256(atBlockJson(enumerationInput)) : null;
+          const expected = inputManifest?.heads[String(head.number)];
+          if (inputManifest && stage !== "effective-update") {
+            assert.equal(outputSha256, expected?.effectiveSha256, "restored effective input changed; rebuild the prerequisite cache");
+            if (stage === "sim-amount") assert.equal(candidateInputSha256, expected?.candidatesSha256,
+              "restored natural candidates changed; rebuild the prerequisite cache");
+          }
+          if (inputCache && outputSha256) capturedHeads[String(head.number)] = { effectiveSha256: outputSha256, candidatesSha256: candidateInputSha256 };
           const sizing = stage === "sim-amount" ? { candidateInputSha256,
             naturalSelection: measured.enumeration?.selection, enumerationOutcome: measured.enumeration?.outcome,
             planned: measured.metrics.live?.planned, dispatched: measured.solvers.length,
@@ -423,6 +524,9 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
               planBuildMs: a.planBuildMs + s.timing.planBuildMs, simMs: a.simMs + s.timing.simMs }), { quoteMs: 0, planBuildMs: 0, simMs: 0 }),
           } : null;
           const row = { repetition: repetition + 1, block: head.number, sourceHash: head.hash, ...measured.metrics,
+            prerequisiteCache: inputCache ? { before: beforeCache, after: inputCache.stats(),
+              restoredEffectiveMatches: expected ? outputSha256 === expected.effectiveSha256 : null,
+              restoredCandidatesMatch: expected ? candidateInputSha256 === expected.candidatesSha256 : null } : undefined,
             publicationKind: lastPublicationKind, rpcReads, outputSha256,
             sizing,
             effective: effective ? { complete: effective.complete, total: effective.rows.size,
@@ -430,7 +534,7 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
               carried: [...effective.rows.values()].filter(r => effectiveMidRowCarried(effective, r)).length,
               statuses: [...effective.rows.values()].reduce<Record<string, number>>((a, r) => { a[r.status] = (a[r.status] ?? 0) + 1; return a; }, {}) } : null };
           records.push(row); save(`run-${repetition + 1}-${head.number}.json`, row);
-          if (stage === "sim-amount") save(`sizing-${repetition + 1}-${head.number}.json`, {
+          if (stage !== "effective-update") save(`${stage === "sim-amount" ? "sizing" : "enumeration"}-${repetition + 1}-${head.number}.json`, {
             input: enumerationInput, candidateInputSha256, routeResults: measured.solvers, amountEvents, solvedInputs,
             environment: { state: head, execution: "production next-block (N+1)", sourceHeader: observedHeader },
           });
@@ -452,18 +556,36 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
       }
     }
     for (const b of bindings) assert.equal(sha256(readFileSync(b.path)), b.sha256, "benchmark input/source changed during run");
+    if (args.prepareCache) {
+      assert(records.length === heads.length && records.every(r => r.status === "completed"), "incomplete capture cannot become a reusable cache");
+      const manifest = inputCache!.save(args.prepareCache, { compatibility, heads: capturedHeads,
+        producer: { head: git("rev-parse", "HEAD"), bindings, createdAt: new Date().toISOString() } });
+      save("cache-built.json", { directory: args.prepareCache, entryCount: manifest.entryCount, rpcSha256: manifest.rpcSha256 });
+    }
     const measuredStages = records.flatMap(r => r.stageMs === null ? [] : [r.stageMs]);
     const summary = { status: "completed", benchmark: stage, runs: records.length, completed: records.filter(r => r.status === "completed").length,
       outcomes: records.reduce<Record<string, number>>((a, r) => { a[r.status] = (a[r.status] ?? 0) + 1; return a; }, {}),
       notReached: records.filter(r => r.stageMs === null).length,
       stageMs: measuredStages.length ? distribution(measuredStages) : null,
+      byBlock: heads.map(head => {
+        const rows = records.filter(r => r.block === head.number), values = rows.flatMap(r => r.stageMs === null ? [] : [r.stageMs]);
+        const complete = rows.length === args.repetitions && rows.every(r => r.status === "completed" && r.stageMs !== null);
+        return { block: head.number, expectedRuns: args.repetitions, samples: rows.map(r => ({ repetition: r.repetition, status: r.status,
+          stageMs: r.stageMs, prerequisitesMs: r.prerequisitesMs })),
+          completeMedianMs: complete ? distribution(values).p50 : null,
+          allObserved: values.length ? distribution(values) : null };
+      }),
       totalMs: distribution(records.map(r => r.totalMs)), coldStartIncluded: false, liveStarted: false, broadcast: false,
       interpretation: "isolated historical RPC stage timing, not real-time live acceptance", inputsUnchanged: true };
     save("summary.json", summary); console.log(atBlockJson(summary));
   } catch (error) {
     save("failure.json", { status: "failed", attemptedMeasuredHeads: records.length, plannedMeasuredHeads: heads.length * args.repetitions,
       failureType: error instanceof Error ? error.name : "UnknownError", reason: sanitizedError(error),
+      prerequisiteCache: inputCache?.stats(),
       completed: records.filter(r => r.status === "completed").length });
     throw error;
-  } finally { experimentAbort.abort(); process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", interrupt); }
+  } finally {
+    experimentAbort.abort(); await inputCache?.close();
+    process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", interrupt);
+  }
 }

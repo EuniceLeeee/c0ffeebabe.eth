@@ -17,6 +17,7 @@ import { StateCallAbortedError } from "../../shared/state/state-backend.js";
 import { BlockActivityRangeInvalidatedError } from "../blockscan-touched-state.js";
 import { isRpcThrottleError } from "../rpc-throttle-guard.js";
 import { BlockScanActivityPrefetch } from "../blockscan-activity-prefetch.js";
+import { PinnedRethQuoteBackend } from "../pinned-reth-quote-backend.js";
 import { blockScanEdgeKey, createVerifiedGraphView, exactSetHash, type VerifiedGraphView } from "../venues/blockscan-state-capability.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { AnvilSolver } from "../solver/solver.js";
@@ -1588,6 +1589,156 @@ test(`ordinary live factory selects actual sim profit through runtime (${backend
     assert(!logs.some(l => l.includes("ordinary live must not call old Solver")));
   } finally {
     AnvilSolver.prototype.solve = originalSolve; console.log = originalLog; await f.loop.shutdown();
+  }
+});
+
+for (const mode of ["live", "shared-diagnostic", "independent", "observer-throws",
+  "prerequisite-timeout", "sizing-timeout", "parent-abort", "new-head", "drain-timeout"] as const)
+test(`scheduled sizing budget controls survive long prerequisites: ${mode}`, async context => {
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+  const start = Date.now(), independent = mode !== "live" && mode !== "shared-diagnostic";
+  const contexts: Parameters<SourceSimulationFactory>[0][] = [], c = clients();
+  const quoteGate = deferred(); let quoteEntered = false, settled = false;
+  const logs: string[] = [];
+  context.mock.method(console, "log", (line: string) => { logs.push(line); });
+  context.mock.method(console, "warn", () => {});
+  const f = loopFixture(input => { contexts.push(input); return c.factory(input); });
+  const edges = twoWayPoolEdges([target, `0x${"dd".repeat(20)}`]);
+  let exactBackend: PinnedRethQuoteBackend | undefined;
+  let sessionRequest: any, solverDeadline: number | undefined, trialDeadline: number | undefined;
+  let sessionCalls = 0, quoteCalls = 0;
+  const expectedDeadline = start + (independent ? 89_000 : 60_000);
+  const session: any = {
+    source: source(), edges, runtimeEvidenceFromPendingExecution: () => [], familyIdForEdge: () => "fixture",
+    blocksPrefixInversion: () => false,
+    async issueExact(input: any) {
+      quoteCalls++;
+      solverDeadline = input.control.deadlineAtMs;
+      assert.equal(solverDeadline, expectedDeadline, "quotes receive the actual stage deadline, not the lifetime ceiling");
+      if (!quoteEntered) {
+        quoteEntered = true;
+        if (["sizing-timeout", "parent-abort", "new-head"].includes(mode)) await quoteGate.promise;
+        else context.mock.timers.tick(independent ? 2_000 : 500);
+      }
+      input.control.signal.throwIfAborted();
+      // The real pinned backend's scope and producer cache must remain usable
+      // past the original head deadline; no cache miss is dispatched as RPC.
+      assert.equal(await exactBackend!.callCached({ to: target, data: "0x" }, input.control), undefined);
+      const pricingBackend = f.inputs.find(i => i.kind === "runtime").pricingCallBackend;
+      assert.equal(await pricingBackend.callCached({ to: target, data: "0x" }, input.control), undefined);
+      await sessionRequest.simulationTransport.simulate({ ...invocation(), control: input.control });
+      assert.equal(c.made[0]!.controls.at(-1).deadlineAtMs, expectedDeadline,
+        "the real SourceSimulationWork owner must not clamp trials to preparation time");
+      return { amountIn: input.amountIn, amountOut: input.amountIn + 10n };
+    },
+    fundingActionIds: () => ["fixture-flash"],
+    buildExecution: () => ({ status: "resolved", fragment: { nodes: [], requirements: [] } }),
+    buildFundingRoot(input: any) { return { adapterId: "skip", target: actor, tokenIn: priceFundingToken,
+      tokenOut: priceFundingToken, amount: input.amount, children: [], params: {} }; },
+  };
+  f.coordinator.prepare = async (input: any) => {
+    f.inputs.push({ kind: "runtime", ...input });
+    assert.equal(input.deadlineAtMs, start + 60_000, "prerequisite control is never widened");
+    context.mock.timers.tick(50_000);
+    await input.simulationTransport.simulate({ ...invocation(), control: { signal: input.signal, deadlineAtMs: input.deadlineAtMs } });
+    assert.equal(c.made[0]!.controls[0].deadlineAtMs, start + 60_000);
+    return completeRuntimeFixture(input.graph);
+  };
+  type Diagnostic = NonNullable<Parameters<BlockScanRuntimeLoop["runHead"]>[2]>;
+  let completion: Parameters<Diagnostic["onComplete"]>[0] | undefined;
+  Object.assign(f.deps, {
+    passBudgetMs: 60_000, exactRefineEnabled: false,
+    solverAmountGrid: "multiples", solverGssMaxTries: 0, solverQuoteConcurrency: 1,
+    amountSelectorFactory: liveSimAmountFactory(), finalSimulationWorkers: [],
+    diagnosticForHead: mode === "live" ? undefined : () => ({ through: "solver",
+      ...(independent ? { sizingBudgetMs: 30_000 } : {}),
+      ...(mode === "observer-throws" ? { onSizingStart() { throw new Error("observer is not the budget owner"); } } : {}),
+      onSnapshot() {}, onEnumeration() {}, onComplete(value: Parameters<Diagnostic["onComplete"]>[0]) { completion = value; } }),
+    directFinalSimulation: { concurrency: 1, async simulate(_plan: any, control: any) {
+      trialDeadline = control.deadlineAtMs; assert.equal(trialDeadline, expectedDeadline);
+      control.signal.throwIfAborted();
+      if (mode === "drain-timeout") c.made[0]!.hold = true;
+      return { success: true, profitToken: priceFundingToken, grossProfit: 0n, netProfit: 0n, gasUsed: 1n,
+        calldata: "0x", scriptHex: "0x" };
+    } },
+    frozenTopology: { topologyKey: "fixture", async observeHeader(number: number) {
+      return { number, hash: hash(number), parentHash: hash(number - 1), timestamp: 1000,
+        baseFeePerGas: 1n, gasUsed: 0n, gasLimit: 30_000_000n, transactionHashes: [] };
+    } },
+    blockScanGraph: () => edges,
+    blockScanPlanner: () => ({ setFlashLiquidity() {}, setGraph() {}, async planBlockScanFromSeedEdges(opp: any) {
+      assert.equal(Date.now(), start + 59_000, "all prerequisite setup precedes the real sizing boundary");
+      return [{ opportunity: { ...opp, profitToken: opp.flashToken }, tokenPath: { edges: [...opp.seedEdges] },
+        templateName: "fixture", maxFlashAmount: 123n, flashAdapterIds: ["fixture-flash"],
+        flashAdapterId: "fixture-flash", cycleTokens: [opp.flashToken], borrowableTokens: [] }];
+    } }),
+    exactQuoteStateFactory: (input: any) => {
+      assert.equal(input.deadlineAtMs, start + (independent ? 90_000 : 60_000));
+      return exactBackend = new PinnedRethQuoteBackend(f.deps.rpcUrl, input.sourceBlockHash, input);
+    },
+    strictSession: async (input: any) => {
+      sessionCalls++; sessionRequest = input;
+      assert.equal(input.control.deadlineAtMs, start + 60_000);
+      assert(Object.isFrozen(input.control));
+      context.mock.timers.tick(mode === "prerequisite-timeout" ? 10_000 : 9_000);
+      return session;
+    },
+    amountReference: { prepare(input: any) { return new Map(input.opportunities.map((opp: any) => [opp, 123n])); } },
+    blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0, exactAdmissionSpreadBps: 0,
+      maxCandidates: 1, pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
+  });
+  try {
+    f.loop.schedule(101, { sourceHeadSeenAtMs: start, sourceHeadSeenAtMonotonicMs: performance.now() });
+    const pending = f.loop.waitForIdle().finally(() => { settled = true; });
+    if (["sizing-timeout", "parent-abort", "new-head"].includes(mode)) {
+      // Advance microtasks only: all phase time is controlled by the test clock.
+      while (!quoteEntered && !settled) await turn();
+      assert(quoteEntered);
+      if (mode === "sizing-timeout") context.mock.timers.tick(30_000);
+      if (mode === "parent-abort") f.runtimeAbort.abort(new Error("fixture parent abort"));
+      if (mode === "new-head") { f.loop.schedule(102); Object.assign(f.deps, { enabled: false }); }
+      assert(contexts[0]!.control.signal.aborted, "phase timeout, parent and new-head cancellation reach the source owner");
+      await turn(); assert.equal(settled, false, "scheduler cannot finish before in-flight quote drains");
+      quoteGate.resolve();
+    }
+    if (mode === "drain-timeout") {
+      while (c.made[0]?.closes !== 1 && !settled) await turn();
+      assert.equal(settled, false);
+      context.mock.timers.tick(expectedDeadline - Date.now());
+      assert(contexts[0]!.control.signal.aborted);
+      await turn(); assert.equal(settled, false, "drain stays joined after its sizing deadline");
+      c.made[0]!.release();
+    }
+    await pending;
+    assert.equal(sessionCalls, 1, "no second preparation/session or duplicate dispatch");
+    assert.equal(contexts.length, 1, "source authority is never rebound");
+    assert.equal(c.made[0]!.closes, 1);
+    const timing = logs.find(line => line.includes('"type":"block_scan_timing"'))!;
+    const receipt = JSON.parse(timing.slice(timing.indexOf("{")));
+    assert.equal(completion?.outcome ?? receipt.outcome,
+      mode.endsWith("timeout") ? "budget_exceeded" : ["parent-abort", "new-head"].includes(mode) ? "stale_state" : "ran");
+    if (mode === "prerequisite-timeout") assert.equal(quoteCalls, 0, "expired preparation never renews sizing");
+    else assert.equal(solverDeadline, expectedDeadline);
+    if (["live", "shared-diagnostic", "independent", "observer-throws", "drain-timeout"].includes(mode)) assert.equal(trialDeadline, expectedDeadline);
+    if (mode === "new-head") assert.equal(completion!.reason, "source_head_superseded");
+    const aborted = contexts[0]!.control.signal.aborted;
+    context.mock.timers.tick(100_000);
+    assert.equal(contexts[0]!.control.signal.aborted, aborted, "diagnostic phase timer must be cleared after drain");
+  } finally { quoteGate.resolve(); c.made[0]?.release(); await f.loop.shutdown(); }
+});
+
+test("sizing override is admitted only for bounded, non-startup solver diagnostics", async () => {
+  for (const through of ["prices", "enumerate", "ev"] as const) {
+    const f = loopFixture(() => { throw new Error("invalid diagnostic allocated a source"); });
+    await assert.rejects(f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() },
+      { through, sizingBudgetMs: 1000, onSnapshot() {}, onEnumeration() {}, onComplete() {} }), /sizingBudgetMs/);
+    await f.loop.shutdown();
+  }
+  for (const budget of [0, -1, NaN, Infinity, 3_600_001, 1000]) {
+    const f = loopFixture(() => { throw new Error("invalid diagnostic allocated a source"); }, budget === 1000);
+    await assert.rejects(f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() },
+      { through: "solver", sizingBudgetMs: budget, onSnapshot() {}, onEnumeration() {}, onComplete() {} }), /sizingBudgetMs/);
+    await f.loop.shutdown();
   }
 });
 

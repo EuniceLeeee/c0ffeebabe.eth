@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { getEventListeners } from "node:events";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspect } from "node:util";
-import { keccak256 } from "ethers";
+import { getCreateAddress, keccak256, toUtf8Bytes } from "ethers";
 import { erc20TransferAdapter } from "../../adapters/erc20.js";
 import { register } from "../../adapters/registry.js";
 import { compilePlan } from "../../shared/compiler/compiler.js";
@@ -24,6 +25,10 @@ const addr = (c: string): string => `0x${c.repeat(40)}`;
 const hex = (n: bigint | number): string => `0x${n.toString(16)}`;
 const word = (n: bigint): string => `0x${n.toString(16).padStart(64, "0")}`;
 const owner = addr("1"), executor = addr("2"), token = addr("3");
+const observerAddress = `0x${keccak256(toUtf8Bytes("mev.static-balance-observer.v3")).slice(-40)}`;
+const observerSender = `0x${keccak256(toUtf8Bytes("mev.static-balance-observer.sender.v3")).slice(-40)}`;
+const tag = keccak256(toUtf8Bytes("mev.static-balance-observer.result.v3"));
+const tagged = (n: bigint) => tag + word(n).slice(2);
 for (const flag of [undefined, "0"]) {
   for (const dryRun of [false, true]) for (const submit of [false, true]) {
     assert.equal(dryRunBotVmCodeOverrideEnabled(flag, dryRun, submit), false);
@@ -72,9 +77,24 @@ const calldata = buildExecuteCalldata(script), scriptHex = bytesToHex(script);
 const capture = () => buildEthSimulateV1ExecutionInput({ source, header, executor, owner,
   profitToken: token, scriptHex });
 const prepared = capture();
+for (const identity of [observerAddress, observerSender]) for (const field of ["owner", "executor", "profitToken"]) {
+  assert.throws(() => buildEthSimulateV1ExecutionInput({ source, header, executor, owner,
+    profitToken: token, scriptHex, [field]: identity }), /observer collision/);
+}
+for (const remaining of [60_000n, 60_001n, 1_000_001n, 43_222_784n]) {
+  const gasLimit = 0x1000000n + remaining;
+  const budgeted = buildEthSimulateV1ExecutionInput({ source, header: { ...header, gasLimit, gasUsed: 0n },
+    executor, owner, profitToken: token, scriptHex });
+  const gas = budgeted.simulateParams[0].blockStateCalls[0].calls.map(call => BigInt(call.gas));
+  assert.equal(gas[1], 0x1000000n);
+  assert(gas[0]! >= 30_000n && gas[2]! >= 30_000n);
+  assert(gas.every(limit => limit <= 0x1000000n));
+  assert(gas.reduce((sum, limit) => sum + limit, 0n) <= gasLimit);
+  assert(gas[2]! - gas[0]! <= 1n);
+}
 const serialized = JSON.stringify(prepared);
 type Mutable<T> = T extends object ? { -readonly [K in keyof T]: Mutable<T[K]> } : T;
-const reload = (): Mutable<EthSimulateV1ExecutionInput> => JSON.parse(serialized);
+const reload = (): Mutable<typeof prepared> => JSON.parse(serialized);
 assert.deepEqual(reload(), prepared);
 assert.deepEqual(validateEthSimulateV1ExecutionInput(reload()), prepared);
 assert.deepEqual(prepared.sourceHeader, { number: "100", hash: source.hash, parentHash: header.parentHash,
@@ -94,12 +114,13 @@ const detached = buildEthSimulateV1ExecutionInput({ source: mutableSource, heade
 mutableSource.hash = hash("d"); mutableSource.generation++;
 mutableHeader.hash = hash("d"); mutableHeader.gasUsed = 0n; mutableHeader.transactionHashes.push(hash("e"));
 assert.equal(JSON.stringify(detached), serialized);
-const result = (post = 125n) => [{ number: target.number, parentHash: source.hash,
+const result = (post = 125n, pre = 100n) => [{ number: target.number, parentHash: source.hash,
   timestamp: target.time, gasLimit: target.gasLimit, baseFeePerGas: target.baseFeePerGas,
   // Deliberately different from main gas: block/helper totals must never become EV gas.
   gasUsed: "0xf0000", calls: [
+    { status: "0x1", gasUsed: "0x10000", returnData: tagged(pre), logs: [] },
     { status: "0x1", gasUsed: "0x12345", returnData: "0x", logs: [] },
-    { status: "0x1", gasUsed: "0x23456", returnData: word(post), logs: [] },
+    { status: "0x1", gasUsed: "0x23456", returnData: tagged(post), logs: [] },
   ] }];
 type RpcRequest = { jsonrpc: string; id: number; method: string; params: unknown[] };
 const envelope = (request: RpcRequest, value: unknown) => ({ jsonrpc: "2.0", id: request.id, result: value });
@@ -160,7 +181,7 @@ try {
   const pin = { blockHash: source.hash, requireCanonical: true };
   const observer = { from: addr("0"), to: token,
     data: `0x70a08231${executor.slice(2).padStart(64, "0")}`, gasPrice: "0x0" };
-  const expectedWire: RpcRequest[] = [
+  const legacyWire: RpcRequest[] = [
     { jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ ...observer, gas: target.gasLimit }, pin] },
     { jsonrpc: "2.0", id: 2, method: "eth_simulateV1", params: [{
       blockStateCalls: [{ blockOverrides: target,
@@ -170,9 +191,32 @@ try {
       }], validation: false, traceTransfers: false, returnFullTransactions: false,
     }, pin] },
   ];
-  assert.deepEqual(requests.slice(0, 2), expectedWire);
-  assert.deepEqual(prepared.preBalanceParams, expectedWire[0]!.params);
-  assert.deepEqual(prepared.simulateParams, expectedWire[1]!.params);
+  const probe = { from: observerSender, to: observerAddress, data: "0x", value: "0x0", gasPrice: "0x0",
+    gas: "0x1000000" };
+  const probeCode = `0x6370a0823160e01b60005273${executor.slice(2)}600452602060206024600073${token.slice(2)}` +
+    `5afa3d60201416604f5760006000fd5b7f${tag.slice(2)}60005260406000f3`;
+  const expectedWire: RpcRequest[] = [{ jsonrpc: "2.0", id: 1, method: "eth_simulateV1", params: [{
+    blockStateCalls: [{ blockOverrides: target,
+      stateOverrides: { [owner]: { balance: hex(10_000n * 10n ** 18n) }, [observerAddress]: { code: probeCode } },
+      calls: [probe, { from: owner, to: executor, data: calldata, value: "0x0", gas: "0x1000000",
+        gasPrice: target.baseFeePerGas }, probe] }],
+    validation: false, traceTransfers: false, returnFullTransactions: false,
+  }, pin] }];
+  assert.equal(prepared.schemaVersion, 3);
+  assert(!Object.hasOwn(prepared, "preBalanceParams"));
+  assert.deepEqual(requests, Array.from({ length: 3 }, () => expectedWire[0]));
+  assert.deepEqual(prepared.simulateParams, expectedWire[0]!.params);
+  const { schemaVersion: _schema, simulateParams: _params, ...legacyPrimary } = prepared;
+  const legacyPrepared = { ...legacyPrimary, schemaVersion: 1,
+    preBalanceParams: legacyWire[0]!.params, simulateParams: legacyWire[1]!.params } as unknown as EthSimulateV1ExecutionInput;
+  assert.deepEqual(validateEthSimulateV1ExecutionInput(legacyPrepared), legacyPrepared);
+  const legacyResult = () => [{ ...result()[0], calls: [result()[0]!.calls[1],
+    { status: "0x1", gasUsed: "0x23456", returnData: word(125n), logs: [] }] }];
+  reset(legacyResult());
+  const legacyStart = requests.length;
+  assert.equal((await simulator.simulateExecutionInput(legacyPrepared, context())).grossProfit, 25n);
+  assert.deepEqual(requests.slice(legacyStart), legacyWire);
+  reset();
 
   // Opt-in code overlay is identical for the before/after balance worlds. It
   // changes neither executor account state nor either transaction's gas/fees.
@@ -182,12 +226,11 @@ try {
     profitToken: token, scriptHex, executorRuntimeCode: runtimeCode });
   runtimeCode.code = "0x00"; runtimeCode.keccak256 = keccak256(runtimeCode.code);
   assertFrozen(codePrepared);
-  assert.equal(codePrepared.schemaVersion, 2);
+  assert.equal(codePrepared.schemaVersion, 3);
   assert.deepEqual(codePrepared.executorRuntimeCode, loadedRuntime);
   assert.deepEqual(validateEthSimulateV1ExecutionInput(JSON.parse(JSON.stringify(codePrepared))), codePrepared);
   const codeWire = structuredClone(expectedWire);
-  codeWire[0]!.params.push({ [owner]: { balance: hex(10_000n * 10n ** 18n) }, [executor]: { code: loadedRuntime.code } });
-  Object.assign((codeWire[1]!.params[0] as { blockStateCalls: [{ stateOverrides: Record<string, unknown> }] })
+  Object.assign((codeWire[0]!.params[0] as { blockStateCalls: [{ stateOverrides: Record<string, unknown> }] })
     .blockStateCalls[0].stateOverrides, { [executor]: { code: loadedRuntime.code } });
   const counterfactualEvidence = { address: executor, keccak256: loadedRuntime.keccak256 };
   reset();
@@ -211,13 +254,19 @@ try {
     assert.throws(() => buildEthSimulateV1ExecutionInput({ source, header, executor, owner,
       profitToken: token, scriptHex, executorRuntimeCode: invalid as never }));
   }
-  const codeChanges: Array<(saved: Mutable<EthSimulateV1ExecutionInput>) => void> = [
-    saved => { saved.schemaVersion = 1; },
+  const legacyCodeWire = structuredClone(legacyWire);
+  legacyCodeWire[0]!.params.push({ [owner]: { balance: hex(10_000n * 10n ** 18n) }, [executor]: { code: loadedRuntime.code } });
+  Object.assign((legacyCodeWire[1]!.params[0] as { blockStateCalls: [{ stateOverrides: Record<string, unknown> }] })
+    .blockStateCalls[0].stateOverrides, { [executor]: { code: loadedRuntime.code } });
+  const legacyCodePrepared = { ...legacyPrepared, schemaVersion: 2, executorRuntimeCode: loadedRuntime,
+    preBalanceParams: legacyCodeWire[0]!.params, simulateParams: legacyCodeWire[1]!.params } as unknown as EthSimulateV1ExecutionInput;
+  const codeChanges: Array<(saved: Mutable<typeof codePrepared>) => void> = [
+    saved => { Object.assign(saved, { schemaVersion: 1 }); },
     saved => { saved.executorRuntimeCode!.code = "0x00"; },
     saved => { saved.executorRuntimeCode!.keccak256 = hash("0"); },
     saved => { Object.assign(saved.executorRuntimeCode!, { balance: "0x1" }); },
-    saved => { saved.preBalanceParams.splice(2); },
-    saved => { Object.assign(saved.preBalanceParams[2]![executor]!, { nonce: "0x1" }); },
+    saved => { Object.assign(saved, { preBalanceParams: legacyCodeWire[0]!.params }); },
+    saved => { Object.assign(saved.simulateParams[0].blockStateCalls[0].stateOverrides[executor]!, { nonce: "0x1" }); },
     saved => { Object.assign(saved.simulateParams[0].blockStateCalls[0].stateOverrides[executor]!, { state: {} }); },
     saved => { saved.simulateParams[0].blockStateCalls[0].stateOverrides[addr("4")] = { code: loadedRuntime.code }; },
     saved => { delete saved.simulateParams[0].blockStateCalls[0].stateOverrides[executor]; },
@@ -228,8 +277,26 @@ try {
     await assert.rejects(codeSimulator.simulateExecutionInput(changed, context()), sanitized);
   }
   assert.equal(requests.length, noCodeRequests, "code policy/tampering rejected before any RPC");
+  reset(legacyResult());
+  const legacyCodeStart = requests.length;
+  assert.deepEqual(validateEthSimulateV1ExecutionInput(legacyCodePrepared), legacyCodePrepared);
+  assert.deepEqual(await codeSimulator.simulateExecutionInput(legacyCodePrepared, context()), codeResult);
+  assert.deepEqual(requests.slice(legacyCodeStart), legacyCodeWire);
+  const beforeLegacyTamper = requests.length;
+  for (const [saved, runner] of [[legacyPrepared, simulator], [legacyCodePrepared, codeSimulator]] as const) {
+    for (const field of ["schema", "pre", "main", "source"]) {
+      const changed = JSON.parse(JSON.stringify(saved));
+      if (field === "schema") changed.schemaVersion = 3;
+      if (field === "pre") changed.preBalanceParams[0].from = owner;
+      if (field === "main") changed.simulateParams[0].blockStateCalls[0].calls[0].gas = "0x1";
+      if (field === "source") changed.sourceHeader.hash = hash("c");
+      assert.throws(() => validateEthSimulateV1ExecutionInput(changed), sanitized);
+      await assert.rejects(runner.simulateExecutionInput(changed, context()), sanitized);
+    }
+  }
+  assert.equal(requests.length, beforeLegacyTamper);
   const codeRevert = result();
-  Object.assign(codeRevert[0]!.calls[0]!, { status: "0x0", error: { code: 3, message: "reverted" } });
+  Object.assign(codeRevert[0]!.calls[1]!, { status: "0x0", error: { code: 3, message: "reverted" } });
   reset(codeRevert);
   const codeFailure = await codeSimulator.simulate(plan, context());
   assert.equal(codeFailure.success, false);
@@ -249,7 +316,7 @@ try {
   const liveResult = await fromPlan;
   const reloaded = reload(), replayControl = context();
   const fromSaved = simulator.simulateExecutionInput(reloaded, replayControl);
-  // Caller mutation during the first await cannot change the second request/result.
+  // Caller mutation during the request cannot change its captured input/result.
   reloaded.scriptHex = "0x"; reloaded.calldata = "0x"; reloaded.source.hash = hash("e");
   reloaded.simulateParams[0].blockStateCalls[0].calls[0].data = "0x";
   reloaded.simulateParams[0].blockStateCalls[0].calls[1].from = owner;
@@ -272,13 +339,13 @@ try {
     assert.deepEqual(await simulator.simulateExecutionInput(saved.execution_input, context()), liveResult);
     assert.deepEqual(requests.slice(beforeReplay), expectedWire);
     assert.deepEqual(await codeSimulator.simulateExecutionInput(codeSaved.execution_input, context()), codeResult);
-    assert.deepEqual(requests.slice(beforeReplay + 2), codeWire);
+    assert.deepEqual(requests.slice(beforeReplay + 1), codeWire);
   } finally { rmSync(evidenceDir, { recursive: true, force: true }); }
   assert.equal(getEventListeners(replayControl.signal, "abort").length, 0);
   assert.equal(JSON.stringify(prepared), serialized);
 
   const noValidationRequests = requests.length;
-  const changes: Array<(saved: Mutable<EthSimulateV1ExecutionInput>) => void> = [
+  const changes: Array<(saved: Mutable<typeof prepared>) => void> = [
     saved => Object.assign(saved, { schemaVersion: 2 }),
     saved => { saved.source.number++; },
     saved => { saved.source.hash = hash("c"); },
@@ -297,13 +364,16 @@ try {
     saved => { saved.scriptHex = "0x1"; },
     saved => { saved.scriptHex = "0x0102"; },
     saved => { saved.calldata = "0x"; saved.simulateParams[0].blockStateCalls[0].calls[0].data = "0x"; },
-    saved => { saved.preBalanceParams[1].blockHash = hash("c"); },
+    saved => Object.assign(saved, { schemaVersion: 4 }),
     saved => { saved.simulateParams[1].blockHash = hash("c"); },
     saved => Object.assign(saved.simulateParams[1], { requireCanonical: false }),
-    saved => { saved.preBalanceParams[0].from = owner; },
-    saved => { saved.simulateParams[0].blockStateCalls[0].calls[1].from = owner; },
+    saved => { saved.simulateParams[0].blockStateCalls[0].calls[0].from = owner; },
+    saved => { saved.simulateParams[0].blockStateCalls[0].calls[2].from = owner; },
     saved => { saved.simulateParams[0].blockStateCalls[0].calls[1].data = "0x"; },
     saved => { saved.simulateParams[0].blockStateCalls[0].calls[0].gas = "0x1"; },
+    saved => { saved.simulateParams[0].blockStateCalls[0].calls[1].gas = "0x1"; },
+    saved => { Object.assign(saved.simulateParams[0].blockStateCalls[0].stateOverrides[observerAddress]!, { code: "0x00" }); },
+    saved => { saved.simulateParams[0].blockStateCalls[0].calls[0].to = token; },
     saved => { saved.simulateParams[0].blockStateCalls[0].stateOverrides[addr("4")] = { balance: "0x1" }; },
     saved => Object.assign(saved.simulateParams[0].blockStateCalls[0].stateOverrides[owner]!, { nonce: "0x0" }),
     saved => Object.assign(saved.simulateParams[0].blockStateCalls[0].blockOverrides, { feeRecipient: owner }),
@@ -337,11 +407,11 @@ try {
     const sent = requests.at(-1)!.params[0] as { blockStateCalls: Array<{ blockOverrides: typeof target;
       calls: Array<{ gasPrice: string }> }> };
     assert.equal(sent.blockStateCalls[0]!.blockOverrides.baseFeePerGas, hex(nextFee));
-    assert.equal(sent.blockStateCalls[0]!.calls[0]!.gasPrice, hex(nextFee));
+    assert.equal(sent.blockStateCalls[0]!.calls[1]!.gasPrice, hex(nextFee));
   }
 
   const reverted = result();
-  Object.assign(reverted[0]!.calls[0]!, { status: "0x0", error: { code: 3, message: secret, data: secret } });
+  Object.assign(reverted[0]!.calls[1]!, { status: "0x0", error: { code: 3, message: secret, data: secret } });
   reset(reverted);
   const failure = await simulator.simulate(plan, context());
   assert.equal(failure.success, false);
@@ -362,37 +432,55 @@ try {
     { gasLimit: "0x1" }, { baseFeePerGas: "0x0" }, { calls: [] }, { calls: [result()[0]!.calls[0]] }]) {
     malformed.push([{ ...result()[0], ...patch }]);
   }
-  for (const index of [0, 1]) {
+  for (const index of [0, 1, 2]) {
     for (const patch of [{ status: undefined }, { status: "0x2" }, { status: 1 }, { status: "0x01" },
       { gasUsed: undefined }, { gasUsed: "0x00" }, { gasUsed: "0x0" }, { gasUsed: "0x100000000" },
       { returnData: "0xz" }, { returnData: "0x1" }, { error: null },
-      { status: "0x0" }, { status: "0x0", error: { code: "3", message: secret } },
+      { status: "0x0", error: undefined }, { status: "0x0", error: { code: "3", message: secret } },
       { status: "0x0", error: { code: -32000, message: secret } },
       { status: "0x0", error: { code: -32005, message: `rate limit ${secret}` } }]) {
       const raw = result(); Object.assign(raw[0]!.calls[index]!, patch); malformed.push(raw);
     }
   }
-  for (const value of ["0x", "0x01", `${word(1n)}00`]) {
-    const raw = result(); raw[0]!.calls[1]!.returnData = value; malformed.push(raw);
+  for (const index of [0, 2]) for (const value of ["0x", "0x01", word(1n), `${tagged(1n)}00`, hash("0") + word(1n).slice(2)]) {
+    const raw = result(); raw[0]!.calls[index]!.returnData = value; malformed.push(raw);
+  }
+  for (const index of [0, 2]) {
+    for (const data of [tagged(100n), tagged(999n), "0x1", null, {}, word(100n), `${tagged(100n)}00`]) {
+      const raw = result();
+      Object.assign(raw[0]!.calls[index]!, { status: "0x0", error: { code: 3, message: secret, data } });
+      malformed.push(raw);
+      const emptyReturn = structuredClone(raw); emptyReturn[0]!.calls[index]!.returnData = "0x";
+      malformed.push(emptyReturn);
+    }
   }
   // Balance-read failure, even with a confirmed main revert, is infrastructure failure.
   const badPost = structuredClone(reverted);
-  Object.assign(badPost[0]!.calls[1]!, { status: "0x0", error: { code: 3, message: secret } });
+  Object.assign(badPost[0]!.calls[2]!, { returnData: "0x", status: "0x0", error: { code: 3, message: secret } });
   malformed.push(badPost);
+  const badPre = structuredClone(reverted); badPre[0]!.calls[0]!.returnData = "0x"; malformed.push(badPre);
   for (const raw of malformed) {
     reset(raw); const before = requests.length;
     await assert.rejects(simulator.simulate(plan, context()), sanitized);
-    assert.equal(requests.length, before + 2);
+    assert.equal(requests.length, before + 1);
+  }
+  for (const index of [0, 2]) for (const code of [-32005, -32000]) {
+    const raw = result();
+    Object.assign(raw[0]!.calls[index]!, { status: "0x0", error: { code, message: code === -32005 ? `rate limit ${secret}` : secret } });
+    reset(raw);
+    await assert.rejects(simulator.simulate(plan, context()), error => {
+      sanitized(error); assert.equal(isRpcThrottleError(error), code === -32005); return true;
+    });
   }
 
-  // Every first/second-stage transport or envelope failure stops without retry/fallback.
-  for (const stage of [1, 2]) {
+  // New single-request and both legacy stages fail without retry/fallback.
+  for (const [stage, saved] of [[1, prepared], [1, legacyPrepared], [2, legacyPrepared]] as const) {
     for (const variant of ["http429", "http429revert", "http503", "rpc429", "rpcLimit", "rpcRevert",
       "unsupported", "wrongId", "wrongVersion", "both", "missing", "badError", "json", "null", "short"]) {
       const before = requests.length;
       reply = (req, res) => {
         if (req.id !== stage) { res.end(JSON.stringify(envelope(req, word(100n)))); return; }
-        const ok = envelope(req, stage === 1 ? word(100n) : result());
+        const ok = envelope(req, saved.schemaVersion !== 3 && stage === 1 ? word(100n) : result());
         if (variant.startsWith("http")) {
           res.writeHead(variant === "http503" ? 503 : 429, secret);
           res.end(variant === "http429revert" ? JSON.stringify(rpcError(req, 3)) : secret); return;
@@ -409,7 +497,7 @@ try {
           envelope(req, variant === "null" ? null : "0x01");
         res.end(variant === "json" ? secret : JSON.stringify(body));
       };
-      await assert.rejects(simulator.simulate(plan, context()), error => {
+      await assert.rejects(simulator.simulateExecutionInput(saved, context()), error => {
         sanitized(error);
         assert.equal(isRpcThrottleError(error), ["http429", "http429revert", "rpc429", "rpcLimit"].includes(variant));
         if (variant.startsWith("http")) assert.equal((error as { statusCode: number }).statusCode, variant === "http503" ? 503 : 429);
@@ -428,7 +516,9 @@ try {
     { source: { ...source, hash: "bad" } }, { deadlineAtMs: Infinity },
     { header: { ...header, baseFeePerGas: null } }, { header: { ...header, baseFeePerGas: 0n } },
     { header: { ...header, gasUsed: -1n } }, { header: { ...header, gasUsed: header.gasLimit + 1n } },
-    { header: { ...header, gasLimit: 0x1000000n } }, { header: { ...header, timestamp: NaN } }]) {
+    { header: { ...header, gasLimit: 0x1000000n } },
+    { header: { ...header, gasLimit: 0x1000000n + 59_999n, gasUsed: 0n } },
+    { header: { ...header, timestamp: NaN } }]) {
     await assert.rejects(simulator.simulate(plan, { ...context(), ...patch }), sanitized);
   }
   const aborted = new AbortController(); aborted.abort(new Error(secret));
@@ -440,12 +530,13 @@ try {
     { signal: new AbortController().signal, deadlineAtMs: Date.now() - 1 }), sanitized);
   assert.equal(requests.length, noRequests);
 
-  for (const [stage, replay] of [[1, false], [2, false], [1, true], [2, true]] as const) {
+  for (const [stage, replay, legacy] of [[1, false, false], [1, true, false],
+    [1, true, true], [2, true, true]] as const) {
     for (const kind of ["signal", "deadline"]) {
       const before = requests.length, closed = interrupted, caller = new AbortController();
       const liveControl = { signal: caller.signal,
         deadlineAtMs: Date.now() + (kind === "deadline" ? 100 : 5_000) };
-      const capturedBeforeDeadline = capture();
+      const capturedBeforeDeadline = legacy ? legacyPrepared : capture();
       assert(Date.now() < liveControl.deadlineAtMs, "pure capture finishes before the live deadline");
       reply = (req, res) => {
         if (req.id !== stage) res.end(JSON.stringify(envelope(req, word(100n))));
@@ -461,7 +552,7 @@ try {
       assert.equal(getEventListeners(caller.signal, "abort").length, 0);
       assert.equal(requests.length, before + stage);
       // Expiry/abort ends this control only; the saved execution remains replayable.
-      reset();
+      reset(legacy ? legacyResult() : result());
       assert.deepEqual(await simulator.simulateExecutionInput(
         JSON.parse(JSON.stringify(capturedBeforeDeadline)), context()), liveResult);
     }
@@ -476,4 +567,179 @@ try {
   const closed = new Promise<void>(resolve => server.close(() => resolve()));
   server.closeAllConnections();
   await closed;
+}
+
+// Mandatory real EVM regression. No fork URL, signer, deployment, chain access
+// or .env loader: all fixture writes target this test-owned loopback Anvil only.
+await localEvmRegression();
+
+async function localEvmRegression(): Promise<void> {
+  const child = spawn("anvil", ["--host", "127.0.0.1", "--port", "0", "--accounts", "0", "--no-mining",
+    "--hardfork", "cancun", "--gas-limit", "60000000", "--base-fee", "1000000000"],
+  { stdio: ["ignore", "pipe", "pipe"] });
+  let output = "", spawnError: Error | undefined;
+  child.stdout.on("data", chunk => { output += String(chunk); });
+  child.stderr.on("data", chunk => { output += String(chunk); });
+  child.on("error", error => { spawnError = error; });
+  const exited = new Promise<void>(resolve => child.once("close", () => resolve()));
+  try {
+    const startupDeadline = Date.now() + 5_000;
+    while (!/Listening on 127\.0\.0\.1:\d+/.test(output)) {
+      if (spawnError) throw spawnError;
+      assert(child.exitCode === null && Date.now() < startupDeadline, "local Anvil failed to start");
+      await delay(10);
+    }
+    const endpoint = `http://${output.match(/Listening on (127\.0\.0\.1:\d+)/)![1]}`;
+    const localRequests: string[] = [];
+    const rpc = async (method: string, params: unknown[]): Promise<any> => {
+      localRequests.push(method);
+      const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), signal: AbortSignal.timeout(5_000) });
+      const body = await response.json() as { result?: unknown; error?: unknown };
+      assert.equal(body.error, undefined, `local EVM ${method} failed: ${JSON.stringify(body.error)}`);
+      return body.result;
+    };
+    // balanceOf = slot0 + block.number. The transfer performed by the real
+    // compiled BotVM script increases slot0 by 25. N→N+1 contributes a passive 1.
+    const tokenCode = (balanceBody = "600054430160005260206000f3", transferBody = "600054601901600055600160005260206000f3") => {
+      const branch = "60003560e01c6370a0823114";
+      const destination = branch.length / 2 + 3 + transferBody.length / 2;
+      return `0x${branch}60${destination.toString(16).padStart(2, "0")}57${transferBody}5b${balanceBody}`;
+    };
+    await rpc("anvil_setCode", [token, tokenCode()]);
+    await rpc("anvil_setStorageAt", [token, word(0n), word(100n)]);
+    await rpc("anvil_setNonce", [owner, "0x7"]);
+    await rpc("anvil_setNonce", [observerSender, "0x9"]);
+    // Nonempty helper storage must survive the code-only simulation override.
+    await rpc("anvil_setStorageAt", [observerAddress, word(0n), word(77n)]);
+    const block = await rpc("eth_getBlockByNumber", ["latest", false]);
+    const localHeader: BlockScanObservedHeader = { number: Number(BigInt(block.number)), hash: block.hash,
+      parentHash: block.parentHash, timestamp: Number(BigInt(block.timestamp)),
+      baseFeePerGas: BigInt(block.baseFeePerGas), gasUsed: BigInt(block.gasUsed),
+      gasLimit: BigInt(block.gasLimit), transactionHashes: [] };
+    const localSource = { number: localHeader.number, hash: localHeader.hash, generation: 1 };
+    const snapshot = buildEthSimulateV1ExecutionInput({ source: localSource, header: localHeader,
+      executor, owner, profitToken: token, scriptHex, executorRuntimeCode: loadedRuntime });
+    const localSimulator = new EthSimulateV1Simulator(endpoint, executor, owner, loadedRuntime);
+    const localControl = () => ({ signal: new AbortController().signal, deadlineAtMs: Date.now() + 5_000 });
+    const simBlock = snapshot.simulateParams[0].blockStateCalls[0];
+    const raw = await rpc("eth_simulateV1", [...snapshot.simulateParams]);
+    assert.equal(raw[0].calls.length, 3);
+    assert.equal(raw[0].calls[0].status, "0x1");
+    assert.equal(raw[0].calls[0].error, undefined);
+    assert.equal(raw[0].calls[0].returnData, tagged(101n + BigInt(localHeader.number)));
+    assert.equal(raw[0].calls[2].returnData, tagged(126n + BigInt(localHeader.number)));
+    assert.equal(raw[0].calls[1].status, "0x1");
+    const delta = (calls: Array<{ returnData: string }>): bigint => {
+      for (const i of [0, 2]) {
+        assert.equal(calls[i]!.returnData.length, 130);
+        assert.equal(calls[i]!.returnData.slice(0, 66), tag);
+      }
+      return BigInt(`0x${calls[2]!.returnData.slice(66)}`) - BigInt(`0x${calls[0]!.returnData.slice(66)}`);
+    };
+    assert.equal(delta(raw[0].calls), 25n);
+    assert.deepEqual({ number: raw[0].number, timestamp: raw[0].timestamp,
+      gasLimit: raw[0].gasLimit, baseFeePerGas: raw[0].baseFeePerGas },
+    { number: simBlock.blockOverrides.number, timestamp: simBlock.blockOverrides.time,
+      gasLimit: simBlock.blockOverrides.gasLimit, baseFeePerGas: simBlock.blockOverrides.baseFeePerGas });
+    // Anvil 1.7.1 returns a zero parentHash for eth_simulateV1. Keep the
+    // production source-binding gate intact; this section proves EVM semantics,
+    // while the HTTP regressions exercise the complete provider/result contract.
+    const compatibleHeader = raw[0].parentHash === localSource.hash;
+    if (compatibleHeader) {
+      const actual = await localSimulator.simulateExecutionInput(snapshot, localControl());
+      assert.equal(actual.grossProfit, 25n); assert.equal(actual.gasUsed, BigInt(raw[0].calls[1].gasUsed));
+    } else {
+      assert.equal(raw[0].parentHash, hash("0"));
+      await assert.rejects(localSimulator.simulateExecutionInput(snapshot, localControl()), /source or target header mismatch/);
+    }
+
+    // Same main transaction, same initial storage, no probes: warm addresses,
+    // slots, refund counters and observer gas must not leak between transactions.
+    const mainOnly = [{ ...snapshot.simulateParams[0], blockStateCalls: [{ ...simBlock,
+      calls: [simBlock.calls[1]] }] }, snapshot.simulateParams[1]];
+    const alone = await rpc("eth_simulateV1", mainOnly);
+    assert.equal(raw[0].calls[1].gasUsed, alone[0].calls[0].gasUsed, "main cold-slot gas parity");
+    assert.equal(raw[0].calls[1].returnData, alone[0].calls[0].returnData);
+    // A test-only owner-code overlay exposes the actual post-main nonce through
+    // CREATE's address derivation (Anvil's transaction JSON reports default 0).
+    // The witness executes after the unchanged main and deploys only in the
+    // discarded simulation. Production has no such code/creation operation.
+    const witness = { from: addr("4"), to: owner, data: "0x", gas: "0x186a0", gasPrice: "0x0" };
+    for (const calls of [[...simBlock.calls], [simBlock.calls[1]]]) {
+      const witnessed = await rpc("eth_simulateV1", [{ ...snapshot.simulateParams[0],
+        blockStateCalls: [{ ...simBlock, stateOverrides: { ...simBlock.stateOverrides,
+          [owner]: { balance: hex(10_000n * 10n ** 18n), code: "0x600060006000f060005260206000f3" } },
+        calls: [...calls, witness] }] }, snapshot.simulateParams[1]]);
+      assert.equal(witnessed[0].calls.at(-1).status, "0x1");
+      assert.equal(witnessed[0].calls.at(-1).returnData,
+        `0x${getCreateAddress({ from: owner, nonce: 8 }).slice(2).toLowerCase().padStart(64, "0")}`);
+    }
+
+    const { schemaVersion: _schema, simulateParams: _params, ...primary } = snapshot;
+    const direct = { from: addr("0"), to: token,
+      data: `0x70a08231${executor.slice(2).padStart(64, "0")}`, gasPrice: "0x0" };
+    const legacyOverrides = { [owner]: { balance: hex(10_000n * 10n ** 18n) }, [executor]: { code: loadedRuntime.code } };
+    const legacy = { ...primary, schemaVersion: 2,
+      preBalanceParams: [{ ...direct, gas: hex(localHeader.gasLimit) }, snapshot.simulateParams[1], legacyOverrides],
+      simulateParams: [{ ...snapshot.simulateParams[0], blockStateCalls: [{ ...simBlock,
+        stateOverrides: legacyOverrides,
+        calls: [simBlock.calls[1], { ...direct, gas: hex(localHeader.gasLimit - 0x1000000n) }] }] }, snapshot.simulateParams[1]],
+    } as unknown as EthSimulateV1ExecutionInput;
+    const savedLegacy = validateEthSimulateV1ExecutionInput(legacy);
+    assert(savedLegacy.schemaVersion !== 3);
+    const legacyPre = await rpc("eth_call", [...savedLegacy.preBalanceParams]);
+    const legacyPost = await rpc("eth_simulateV1", [...savedLegacy.simulateParams]);
+    assert.equal(BigInt(legacyPost[0].calls[1].returnData) - BigInt(legacyPre), 26n,
+      "legacy N pre baseline includes passive transition; schema 3 excludes it");
+    for (const [post, expectedDelta] of [[100, 0n], [80, -20n]] as const) {
+      await rpc("anvil_setCode", [token, tokenCode(undefined, `60${post.toString(16)}600055600160005260206000f3`)]);
+      const measured = await rpc("eth_simulateV1", [...snapshot.simulateParams]);
+      assert.equal(delta(measured[0].calls), expectedDelta);
+    }
+    // A caller-sensitive read observes the exact same caller on both sides.
+    await rpc("anvil_setCode", [token, tokenCode("3360005260206000f3")]);
+    const callers = await rpc("eth_simulateV1", [...snapshot.simulateParams]);
+    assert.equal(callers[0].calls[0].returnData, tagged(BigInt(observerAddress)));
+    assert.equal(callers[0].calls[2].returnData, callers[0].calls[0].returnData);
+
+    // STATICCALL forbids the attempted write. A later ordinary diagnostic read
+    // returns slot1 *before* attempting its write, proving the probes left zero.
+    await rpc("anvil_setCode", [token, tokenCode("600154600052609960015560206000f3")]);
+    const isolated = await rpc("eth_simulateV1", [{ ...snapshot.simulateParams[0], blockStateCalls: [{ ...simBlock,
+      calls: [...simBlock.calls, { ...direct, gas: "0x186a0" }] }] }, snapshot.simulateParams[1]]);
+    assert.equal(isolated[0].calls[0].returnData, "0x");
+    assert.equal(isolated[0].calls[2].returnData, "0x");
+    assert.equal(isolated[0].calls[3].returnData, word(0n), "no token storage change from either observation");
+    assert.equal(isolated[0].calls[1].gasUsed, alone[0].calls[0].gasUsed);
+    await assert.rejects(localSimulator.simulateExecutionInput(snapshot, localControl()),
+      compatibleHeader ? /RPC error code/ : /source or target header mismatch/);
+
+    // Exact token revert bytes, wrong lengths, empty success and main revert all
+    // execute in the EVM, in addition to the transport/error mocks above.
+    for (const body of ["60006000f3", "6000600052601f6000f3", "600060005260216000f3",
+      `7f${tag.slice(2)}600052607b60205260406000fd`]) {
+      await rpc("anvil_setCode", [token, tokenCode(body)]);
+      const failed = await rpc("eth_simulateV1", [...snapshot.simulateParams]);
+      assert.equal(failed[0].calls[0].returnData, "0x", "token bytes cannot forge observer success");
+      assert.equal(failed[0].calls[2].returnData, "0x");
+      await assert.rejects(localSimulator.simulateExecutionInput(snapshot, localControl()),
+        compatibleHeader ? /RPC error code/ : /source or target header mismatch/);
+    }
+    await rpc("anvil_setCode", [token, tokenCode(undefined, "60006000fd")]);
+    const mainFailure = await rpc("eth_simulateV1", [...snapshot.simulateParams]);
+    assert.equal(mainFailure[0].calls[1].status, "0x0");
+    assert.equal(delta(mainFailure[0].calls), 0n);
+    assert.equal(await rpc("eth_getCode", [observerAddress, "latest"]), "0x", "helper overlay is simulation-only");
+    assert.equal(await rpc("eth_getStorageAt", [observerAddress, word(0n), "latest"]), word(77n));
+    assert.equal(await rpc("eth_getStorageAt", [token, word(0n), "latest"]), word(100n));
+    assert.equal(await rpc("eth_getStorageAt", [token, word(1n), "latest"]), word(0n));
+    assert.equal(await rpc("eth_getTransactionCount", [owner, "latest"]), "0x7");
+    assert.equal(await rpc("eth_getTransactionCount", [observerSender, "latest"]), "0x9");
+    assert(!localRequests.some(method => /send|sign/i.test(method)));
+    console.log("eth-simulate-v1 local EVM: PASS (STATICCALL isolation, tagged results, same caller, N+1 baseline, real BotVM main gas/nonce parity, simulation-only overlay)");
+  } finally {
+    child.kill("SIGTERM");
+    await exited;
+  }
 }

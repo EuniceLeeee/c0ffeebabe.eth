@@ -1929,6 +1929,8 @@ export class BlockScanRuntimeLoop {
     sourceHead: LatestHeadObservation,
     diagnostic?: {
       readonly through: "prices" | "enumerate" | "solver" | "ev";
+      /** Opt-in benchmark only: independent budget starting at planner_solver. */
+      readonly sizingBudgetMs?: number;
       readonly onSnapshot: (snapshot: AdapterRuntimeSnapshot) => void;
       readonly onEnumeration: (result: BlockScanOutcome) => void;
       /** Optional stage diagnostics; observe the live dispatcher, never replace it. */
@@ -1950,6 +1952,11 @@ export class BlockScanRuntimeLoop {
       }) => void;
     },
   ): Promise<void> => {
+    const sizingBudgetMs = diagnostic?.sizingBudgetMs;
+    if (sizingBudgetMs !== undefined && (diagnostic?.through !== "solver" ||
+        !Number.isFinite(sizingBudgetMs) || sizingBudgetMs <= 0 || sizingBudgetMs > 3_600_000)) {
+      throw new Error("sizingBudgetMs requires a solver diagnostic and must be in (0, 3600000]");
+    }
     // Runtime abort is independently authoritative; a standalone caller need
     // not have advanced its external shutdown flag before the next head drains.
     if (this.deps.runtimeAbort.signal.aborted) return;
@@ -2102,6 +2109,9 @@ export class BlockScanRuntimeLoop {
     }
     const startupWarmAttempt =
       this.startupWarmPending && !this.deps.blind.enabled;
+    if (sizingBudgetMs !== undefined && startupWarmAttempt) {
+      throw new Error("sizingBudgetMs is not applicable to startup setup");
+    }
     const passController = new AbortController();
     const detachRuntimeAbort = linkAbortController(
       this.deps.runtimeAbort.signal,
@@ -2136,12 +2146,26 @@ export class BlockScanRuntimeLoop {
         ? this.deps.largeGraphPassBudgetMs
         : this.deps.passBudgetMs
     );
-    const passDeadlineAtMs = startupWarmAttempt
+    let passDeadlineAtMs = startupWarmAttempt
       ? Math.max(
           hotPassDeadlineAtMs,
           passWorkerStartedAtMs + Math.max(1, this.deps.startupWarmBudgetMs),
         )
       : hotPassDeadlineAtMs;
+    // Diagnostic phases share source authority and drain ownership. Immutable
+    // transport scopes cover their bounded combined lifetime; request controls
+    // and this timer enforce the active phase's (possibly earlier) deadline.
+    // Ordinary live passes retain their existing shared deadline and timers.
+    const transportDeadlineAtMs = (deadline: number): number => deadline + (sizingBudgetMs ?? 0);
+    let diagnosticDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const armDiagnosticDeadline = (): void => {
+      if (sizingBudgetMs === undefined) return;
+      clearTimeout(diagnosticDeadlineTimer);
+      diagnosticDeadlineTimer = setTimeout(() => passController.abort(
+        new StateCallAbortedError("diagnostic stage deadline reached", "deadline"),
+      ), Math.max(0, passDeadlineAtMs - Date.now()));
+    };
+    armDiagnosticDeadline();
     const useNMinusOneFallback =
       this.deps.nMinusOneFallbackEnabled === true &&
       !startupWarmAttempt &&
@@ -2686,7 +2710,7 @@ export class BlockScanRuntimeLoop {
       const resumableStartupWarm = startupWarmAttempt && passMode === "periodic";
       const simulationTransport = resumableStartupWarm ? undefined : simulationWork.transportFor({
         number: graphView.sourceBlock, hash: graphView.sourceBlockHash, generation: graphView.generation,
-      }, { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs });
+      }, { signal: passSignal, deadlineAtMs: transportDeadlineAtMs(runtimeDeadlineAtMs) });
       if (!useNMinusOneFallback) {
         const backend = new PinnedRethQuoteBackend(
           this.deps.rpcUrl,
@@ -2694,7 +2718,7 @@ export class BlockScanRuntimeLoop {
           {
             ...(resumableStartupWarm
               ? { signal: this.deps.runtimeAbort.signal }
-              : { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs }),
+              : { signal: passSignal, deadlineAtMs: transportDeadlineAtMs(runtimeDeadlineAtMs) }),
             // Keep cold startup unchanged. Only steady source-N pricing uses
             // wider batches, within the configured provider's 1,000-item cap.
             maxBatchSize: startupWarmAttempt ? 64 : 1000,
@@ -3372,7 +3396,7 @@ export class BlockScanRuntimeLoop {
       const exactFactoryInput: ExactQuoteStateFactoryInput = {
         sourceBlockHash: exactSourceBlockHash,
         signal: passSignal,
-        deadlineAtMs: passDeadlineAtMs,
+        deadlineAtMs: transportDeadlineAtMs(passDeadlineAtMs),
         maxBatchSize: this.deps.exactRpcBatchSize ?? 64,
         maxConcurrentBatches:
           this.deps.exactRpcBatchConcurrency ?? 16,
@@ -3385,7 +3409,7 @@ export class BlockScanRuntimeLoop {
             exactSourceBlockHash,
             {
               signal: passSignal,
-              deadlineAtMs: passDeadlineAtMs,
+              deadlineAtMs: exactFactoryInput.deadlineAtMs,
               onSourceUnavailable: (error) => passController.abort(error),
               onRpcThrottle: (error) => this.deps.runtimeAbort.abort(error),
               maxBatchSize: exactFactoryInput.maxBatchSize,
@@ -3417,7 +3441,9 @@ export class BlockScanRuntimeLoop {
       const strictSession = await this.deps.strictSession({
         purpose: "exact-execution",
         source: exactSource,
-        simulationTransport: simulationWork.transportFor(exactSource, { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs }),
+        simulationTransport: simulationWork.transportFor(exactSource, {
+          signal: passSignal, deadlineAtMs: transportDeadlineAtMs(runtimeDeadlineAtMs),
+        }),
         control: Object.freeze({
           deadlineAtMs: exactRefineEnabled ? refineDeadline : passDeadlineAtMs,
           signal: passSignal,
@@ -3577,6 +3603,11 @@ export class BlockScanRuntimeLoop {
       }
 
       beginStage("planner_solver");
+      if (sizingBudgetMs !== undefined) {
+        passSignal.throwIfAborted();
+        passDeadlineAtMs = Date.now() + sizingBudgetMs;
+        armDiagnosticDeadline();
+      }
       try { diagnostic?.onSizingStart?.(); }
       catch { /* Diagnostics cannot alter the live stage. */ }
       if (useNMinusOneFallback && exactOpportunities.length > 0) {
@@ -3592,10 +3623,10 @@ export class BlockScanRuntimeLoop {
               graph: graphView,
               simulationTransport: simulationWork.transportFor({ number: graphView.sourceBlock,
                 hash: graphView.sourceBlockHash, generation: graphView.generation },
-                { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs }),
+                { signal: passSignal, deadlineAtMs: sizingBudgetMs === undefined ? runtimeDeadlineAtMs : passDeadlineAtMs }),
               fundingTokens: exactFundingTokens,
-              deadlineAtMs: runtimeDeadlineAtMs,
-              preparationSettleDeadlineAtMs,
+              deadlineAtMs: sizingBudgetMs === undefined ? runtimeDeadlineAtMs : passDeadlineAtMs,
+              preparationSettleDeadlineAtMs: sizingBudgetMs === undefined ? preparationSettleDeadlineAtMs : passDeadlineAtMs,
               signal: passSignal,
               requiredEdgeIds,
             });
@@ -4355,6 +4386,11 @@ export class BlockScanRuntimeLoop {
          */
         const activeStage = passTimeline.activeStage();
         if (activeStage) finishStage(activeStage, "failed");
+        if (sizingBudgetMs !== undefined && passSignal.reason instanceof StateCallAbortedError &&
+            passSignal.reason.kind === "deadline") {
+          outcome = "budget_exceeded";
+          skippedReason ??= "diagnostic_stage_deadline";
+        }
         completeAuditStages();
         recordPass();
       } finally {
@@ -4381,6 +4417,7 @@ export class BlockScanRuntimeLoop {
         if (this.activePass?.controller === passController) {
           this.activePass = null;
         }
+        clearTimeout(diagnosticDeadlineTimer);
         detachRuntimeAbort();
         if (activeEvidenceItem) {
           this.pendingEvidenceKeys.delete(activeEvidenceItem.key);

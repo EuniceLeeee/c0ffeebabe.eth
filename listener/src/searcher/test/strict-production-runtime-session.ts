@@ -333,6 +333,37 @@ const session = await root.createSession({
   fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
 });
 
+// An exact session prepared under the prerequisite budget must not retain that
+// budget as a hidden default for later sizing quotes or sealed Funding offers.
+{
+  const parent = new AbortController();
+  const preparationControl = Object.freeze({ signal: parent.signal, deadlineAtMs: Date.now() + 60_000 });
+  const prepared = await root.createSession({ source: CURRENT, runtime: runtime(CURRENT),
+    kind: "exact", fundingAssets: [UNIV2_FIXTURE_TOKEN0], control: preparationControl,
+    requiredEdgeIds: new Set(session.edges.map(edge => edge.canonicalEdgeId!)) });
+  const originalNow = Date.now;
+  Date.now = () => preparationControl.deadlineAtMs + 1;
+  try {
+    const sizingControl = Object.freeze({ signal: parent.signal, deadlineAtMs: Date.now() + 30_000 });
+    const edge = prepared.edges.find(edge => edge.tokenIn.toLowerCase() === UNIV2_FIXTURE_TOKEN0.toLowerCase())!;
+    for (const control of [undefined, sizingControl]) {
+      const exact = await prepared.issueExact({ edge, amountIn: 1_000_000n, executor: EXECUTOR,
+        runtimeEvidence: [], control });
+      assert(exact.amountOut > 0n, "expired preparation control must not cap later exact requests");
+      assert(prepared.fundingProjection(control).sources.size > 0, "Funding survives preparation settlement");
+    }
+    assert(prepared.buildFundingRoot({ actionAdapterId: prepared.fundingActionIds(UNIV2_FIXTURE_TOKEN0)[0]!,
+      asset: UNIV2_FIXTURE_TOKEN0, amount: 1_000_000n, minProfit: 1n, children: [] }));
+    await assert.rejects(prepared.issueExact({ edge, amountIn: 1_000_000n, executor: EXECUTOR,
+      runtimeEvidence: [], control: preparationControl }), /deadline/,
+    "an explicitly expired request still fails");
+    parent.abort(new Error("sizing parent aborted"));
+    await assert.rejects(prepared.issueExact({ edge, amountIn: 1_000_000n, executor: EXECUTOR,
+      runtimeEvidence: [], control: sizingControl }), /aborted|cancelled/);
+  } finally { Date.now = originalNow; }
+  console.log("strict prepared session: PASS sizing control and default do not retain prerequisite deadline");
+}
+
 function preparationGate() {
   let release!: () => void;
   const promise = new Promise<void>((resolve) => { release = resolve; });

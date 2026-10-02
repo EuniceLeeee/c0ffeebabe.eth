@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { measureSimHead } from "./sim-amount.js";
 import { BlockScanPassTimeline } from "../src/searcher/blockscan-pass-timeline.js";
 import type { BlockScanRuntimeLoop } from "../src/searcher/blockscan-runtime-loop.js";
 import type { AdapterRuntimeSnapshot } from "../src/searcher/adapter-runtime-coordinator.js";
 import { scheduledFixture } from "./live-stage-test-fixture.js";
-import { assertLiveStageMode, createBenchmarkRuntimeAbort } from "./live-stage.js";
+import { assertLiveStageMode, createBenchmarkRuntimeAbort, measureLiveHead, parseLiveStageOptions } from "./live-stage.js";
 
 type Diagnostic = NonNullable<Parameters<BlockScanRuntimeLoop["runHead"]>[2]>;
 const head = { number: 100, hash: `0x${"ab".repeat(32)}` };
@@ -104,5 +105,66 @@ test("benchmark mode admission uses live's 0/1 spelling, never treats false as a
   for (const key of ["SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK", "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED"]) {
     for (const value of [undefined, "0"]) assert.doesNotThrow(() => assertLiveStageMode({ [key]: value }));
     for (const value of ["false", "true", "", "no", "1"]) assert.throws(() => assertLiveStageMode({ [key]: value }));
+  }
+});
+
+for (const independent of [false, true]) test(`long prerequisites and sizing budgets are reported separately (independent=${independent})`, async () => {
+  const { snapshot, result } = fixture(); let time = 0;
+  const measured = await measureSimHead({ head, budgetMs: 60_000, sizingBudgetMs: independent ? 30_000 : undefined,
+    now: () => time, noteHead() {}, latestPricing: () => snapshot.pricing,
+    ...scheduledFixture({ async runHead(_n, _r, d) {
+      assert.equal(d!.sizingBudgetMs, independent ? 30_000 : undefined);
+      time = 59_000; d!.onSnapshot(snapshot); d!.onSizingStart!();
+      time = 88_000; d!.onComplete(result);
+    } }),
+  });
+  assert.equal(measured.metrics.status, independent ? "completed" : "timeout");
+  assert.equal(measured.metrics.prerequisitesMs, 59_000);
+  assert.equal(measured.metrics.stageMs, 29_000);
+  assert.equal(measured.metrics.totalMs, 88_000);
+  assert.deepEqual(measured.metrics.budgets, { sharedPassBudgetMs: independent ? null : 60_000,
+    prerequisiteBudgetMs: independent ? 60_000 : null, sizingBudgetMs: independent ? 30_000 : null });
+});
+
+for (const phase of ["prerequisites", "sizing", "drain", "parent-abort", "new-head"] as const)
+test(`independent budgets retain ${phase} classification`, async () => {
+  const { snapshot, result } = fixture(); let time = 0;
+  const abort = new AbortController();
+  const measured = await measureSimHead({ head, budgetMs: 60_000, sizingBudgetMs: 30_000, signal: abort.signal,
+    now: () => time, noteHead() {}, latestPricing: () => snapshot.pricing,
+    ...scheduledFixture({ async runHead(_n, _r, d) {
+      time = 59_000; d!.onSnapshot(snapshot);
+      if (phase === "prerequisites") { time = 60_000; d!.onComplete({ ...result, outcome: "budget_exceeded" }); return; }
+      d!.onSizingStart!(); time = phase === "sizing" ? 89_000 : 60_000;
+      if (phase === "parent-abort") abort.abort(new Error("fixture parent interrupt"));
+      d!.onComplete({ ...result, ...(phase === "new-head" ? { outcome: "stale_state", reason: "source_head_superseded" } : {}) });
+      if (phase === "drain") time = 89_000;
+    } }),
+  });
+  assert.equal(measured.metrics.status, phase === "parent-abort" || phase === "new-head" ? "aborted" : "timeout");
+  assert.equal(measured.metrics.stageMs, phase === "prerequisites" ? null : phase === "sizing" || phase === "drain" ? 30_000 : 1_000);
+});
+
+test("independent sizing rejects effective/setup and non-finite, nonpositive or unbounded budgets before scheduling", async () => {
+  for (const overrides of [{ stage: "effective-update" as const }, { setup: true },
+    ...[NaN, Infinity, -1, 0, 3_600_001].map(sizingBudgetMs => ({ sizingBudgetMs }))]) {
+    await assert.rejects(measureLiveHead({ stage: "sim-amount", head, budgetMs: 60_000, sizingBudgetMs: 30_000,
+      noteHead() { assert.fail("invalid mode must not reach notification"); }, latestPricing() {},
+      setDiagnostic() { assert.fail("invalid mode must not install a diagnostic"); },
+      loop: { schedule() { assert.fail("invalid mode must not schedule"); }, async waitForIdle() {} }, ...overrides }), /sizingBudgetMs/);
+  }
+});
+
+test("CLI keeps sizing opt-in and bounded, rejects it for effective, and preserves the planned separate budgets", () => {
+  const path = fileURLToPath(import.meta.url);
+  const argv = ["--ready", path, "--heads", path, "--out", `${path}.unused`];
+  assert.equal(parseLiveStageOptions(argv, "sim-amount")!.sizingBudgetMs, undefined);
+  const args = parseLiveStageOptions([...argv, "--block-budget-ms", "60000", "--sizing-budget-ms", "30000",
+    "--setup-budget-ms", "900000", "--repetitions", "3"], "sim-amount")!;
+  assert.equal(args.blockBudgetMs, 60_000); assert.equal(args.sizingBudgetMs, 30_000);
+  assert.equal(args.setupBudgetMs, 900_000); assert.equal(args.repetitions, 3);
+  assert.throws(() => parseLiveStageOptions([...argv, "--sizing-budget-ms", "30000"], "effective-update"), /only applicable/);
+  for (const value of ["NaN", "Infinity", "-1", "0", "30000.5", "3600001"]) {
+    assert.throws(() => parseLiveStageOptions([...argv, `--sizing-budget-ms=${value}`], "sim-amount"), /invalid benchmark integer/);
   }
 });

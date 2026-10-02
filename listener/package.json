@@ -10,6 +10,7 @@
     "searcher:rust-enumeration": "node --import tsx src/searcher/test/blockscan-rust-enumeration.ts",
     "build:live": "tsc -p tsconfig.live.json --noEmit",
     "benchmark:enumeration": "node --max-old-space-size=2048 --import tsx benchmarks/enumeration.ts",
+    "benchmark:live-enumeration": "node --max-old-space-size=8192 --import tsx benchmarks/live-enumeration.ts",
     "benchmark:sim-amount": "node --max-old-space-size=8192 --import tsx benchmarks/sim-amount.ts",
     "benchmark:effective-update": "node --max-old-space-size=8192 --import tsx benchmarks/effective-update.ts",
     "start": "node dist/searcher/main.js",
