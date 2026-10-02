@@ -72,6 +72,16 @@ test("generated index covers every analysis CLI and every curated package/repo t
   assert.ok(tools.length > 80, `expected analysis + listener inventory, got ${tools.length}`);
 });
 
+test("manual production-stage benchmarks declare archive RPC cost, not zero-CU or live evidence", () => {
+  const tools = discoverToolIndex(repoRoot);
+  for (const [capability, id] of [["effective-update", "listener:benchmark:effective-update"], ["sim-sizing", "listener:benchmark:sim-amount"]]) {
+    const selected = selectTools(tools, ["stage-timing", capability!]);
+    assert.equal(selected[0]?.id, id);
+    assert.equal(selected[0]?.cost, "archive-rpc");
+    assert.equal(selected[0]?.capabilities.includes("live-window"), false);
+  }
+});
+
 test("AppleDouble metadata is ignored without hiding an ordinary orphan CLI", () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "mev-tool-index-"));
   try {

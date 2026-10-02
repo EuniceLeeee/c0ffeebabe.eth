@@ -55,7 +55,8 @@ test("ordinary Blockscan live installs sim selection; compatibility callers and 
   const loop = readFileSync(new URL("../blockscan-runtime-loop.ts", import.meta.url), "utf8");
   const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
   assert.match(loop, /this\.deps\.amountSelectorFactory\(\{ source: exactSource, workerIndex,/);
-  assert.match(main, /amountSelectorFactory:.*createBlockScanSimAmountSelector/);
+  assert.match(main, /amountSelectorFactory: createBlockScanLiveAmountSelectorFactory\(/);
+  assert.match(main, /return \(\{ source, workerIndex, simulate \}\) => createBlockScanSimAmountSelector\(/);
   assert.match(main, /const solver = new AnvilSolver\(\)/);
   assert.match(main, /block-scan amount selection=sim/);
   assert.match(main, /main\(\)\.catch/);

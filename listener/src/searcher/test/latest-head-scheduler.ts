@@ -5,8 +5,26 @@ await coalescesToNewestWithOneWorker();
 await rerunsSameHeadForNewRevision();
 await continuesAfterWorkerFailure();
 await shutdownDropsPendingAndDrainsActive();
+await idleJoinPreservesAdmission();
 
 console.log("[latest-head-scheduler] newest-head/draining shutdown: PASS");
+
+async function idleJoinPreservesAdmission(): Promise<void> {
+  const first = deferred(), second = deferred(), runs: number[] = [];
+  const scheduler = new LatestHeadScheduler(async block => {
+    runs.push(block); await (block === 1 ? first : second).promise;
+  });
+  scheduler.schedule(1); scheduler.schedule(2);
+  let joined = false;
+  const drained = scheduler.waitForIdle().then(() => { joined = true; });
+  first.resolve(); await waitFor(() => runs.includes(2));
+  assert.equal(joined, false, "idle join includes the ordinary pending successor");
+  second.resolve(); await drained;
+  assert.deepEqual(runs, [1, 2]);
+  scheduler.schedule(3); await scheduler.waitForIdle();
+  assert.deepEqual(runs, [1, 2, 3], "join does not close head admission");
+  await scheduler.shutdown();
+}
 
 async function rerunsSameHeadForNewRevision(): Promise<void> {
   const first = deferred();

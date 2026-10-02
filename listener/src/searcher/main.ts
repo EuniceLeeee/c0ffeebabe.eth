@@ -733,6 +733,86 @@ export function resolveBlockScanRefineCandidates(env: NodeJS.ProcessEnv = proces
   return Math.max(maxCandidates, Number.isFinite(requested) ? Math.floor(requested) : DEFAULT_BLOCKSCAN_REFINE_CANDIDATES);
 }
 
+/** Live stage policy, shared by main and diagnostics. Preserve each setting's
+ * existing fallback/clamping rule; core enumeration config remains separate. */
+export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = process.env, maxCandidates = 0) {
+  const passBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
+  const passBudgetMs = Number.isFinite(passBudgetRaw)
+    ? Math.max(1, Math.floor(passBudgetRaw)) : 11_000;
+  const largeGraphPassBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS ?? "30000");
+  const largeGraphPassBudgetMs = Number.isFinite(largeGraphPassBudgetRaw)
+    ? Math.max(passBudgetMs, Math.floor(largeGraphPassBudgetRaw)) : Math.max(passBudgetMs, 30_000);
+  const largeGraphEdgeThresholdRaw = Number(env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_EDGE_THRESHOLD ?? "20000");
+  const largeGraphEdgeThreshold = Number.isFinite(largeGraphEdgeThresholdRaw)
+    ? Math.max(1, Math.floor(largeGraphEdgeThresholdRaw)) : 20_000;
+  const startupWarmBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_STARTUP_PREWARM_BUDGET_MS ?? "300000");
+  const startupWarmBudgetMs = Number.isSafeInteger(startupWarmBudgetRaw) && startupWarmBudgetRaw > 0
+    ? startupWarmBudgetRaw : 300_000;
+  const hotPricingFamilyBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_STATE_HOT_FAMILY_BUDGET_MS ?? "5000");
+  const hotPricingFamilyBudgetMs = Number.isFinite(hotPricingFamilyBudgetRaw) && hotPricingFamilyBudgetRaw > 0
+    ? Math.floor(hotPricingFamilyBudgetRaw) : 5_000;
+  const runtimePublicationReserveRaw = Number(env.SEARCHER_BLOCKSCAN_RUNTIME_PUBLICATION_RESERVE_MS ?? "1500");
+  const runtimePublicationReserveMs = Number.isFinite(runtimePublicationReserveRaw) && runtimePublicationReserveRaw > 0
+    ? Math.floor(runtimePublicationReserveRaw) : 1_500;
+  const solveReserveRaw = Number(env.SEARCHER_BLOCKSCAN_SOLVE_RESERVE_MS ?? "8000");
+  const solveReserveMs = Number.isFinite(solveReserveRaw) ? Math.max(0, Math.floor(solveReserveRaw)) : 8_000;
+  const solveConcurrencyRaw = Number(env.SEARCHER_BLOCKSCAN_SOLVE_CONCURRENCY ?? "4");
+  const solveConcurrency = Number.isFinite(solveConcurrencyRaw) ? Math.max(1, Math.floor(solveConcurrencyRaw)) : 4;
+  const solverSearch = resolveBlockScanSolverSearchConfig(env);
+  const finalSimulationConcurrencyRaw = Number(env.SEARCHER_BLOCKSCAN_FINAL_SIM_CONCURRENCY ?? "1");
+  const finalSimulationConcurrency = Number.isFinite(finalSimulationConcurrencyRaw)
+    ? Math.max(1, Math.floor(finalSimulationConcurrencyRaw)) : 1;
+  const refineCandidates = resolveBlockScanRefineCandidates(env, maxCandidates);
+  const exactRefineHardBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_EXACT_REFINE_HARD_BUDGET_MS ?? "4000");
+  const exactRefineHardBudgetMs = Number.isFinite(exactRefineHardBudgetRaw) && exactRefineHardBudgetRaw > 0
+    ? Math.max(1_000, Math.floor(exactRefineHardBudgetRaw)) : 4_000;
+  const exactConcurrencyRaw = Number(env.SEARCHER_BLOCKSCAN_EXACT_CONCURRENCY ??
+    // Backward-compatible read only. Exact has its own explicit name.
+    env.SEARCHER_BLOCKSCAN_MID_CONCURRENCY ?? String(refineCandidates));
+  const exactConcurrency = Number.isFinite(exactConcurrencyRaw) && exactConcurrencyRaw > 0
+    ? Math.max(1, Math.floor(exactConcurrencyRaw)) : refineCandidates;
+  const exactProbeTimeoutRaw = Number(env.SEARCHER_BLOCKSCAN_EXACT_PROBE_TIMEOUT_MS ?? "4000");
+  const exactProbeTimeoutMs = Number.isFinite(exactProbeTimeoutRaw) && exactProbeTimeoutRaw > 0
+    ? Math.max(100, Math.floor(exactProbeTimeoutRaw)) : 4_000;
+  const exactRpcBatchSizeRaw = Number(env.SEARCHER_BLOCKSCAN_EXACT_RPC_BATCH_SIZE ?? "64");
+  const exactRpcBatchSize = Number.isFinite(exactRpcBatchSizeRaw) && exactRpcBatchSizeRaw > 0
+    ? Math.max(1, Math.floor(exactRpcBatchSizeRaw)) : 64;
+  const exactRpcBatchConcurrencyRaw = Number(env.SEARCHER_BLOCKSCAN_EXACT_RPC_BATCH_CONCURRENCY ?? "16");
+  const exactRpcBatchConcurrency = Number.isFinite(exactRpcBatchConcurrencyRaw) && exactRpcBatchConcurrencyRaw > 0
+    ? Math.max(1, Math.floor(exactRpcBatchConcurrencyRaw)) : 16;
+  // Deliberately no rounding/fallback: the live transport constructor owns
+  // validation of non-integer/non-finite state concurrency, as before.
+  const stateRpcBatchConcurrency = Math.max(1, Number(env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4"));
+  return Object.freeze({ passBudgetMs, largeGraphPassBudgetMs, largeGraphEdgeThreshold,
+    startupWarmBudgetMs, hotPricingFamilyBudgetMs, runtimePublicationReserveMs, solveReserveMs,
+    solveConcurrency, solverSearch, finalSimulationConcurrency, refineCandidates,
+    sourceSimulationTimeoutMs: Number(env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
+    exactRefineHardBudgetMs, exactConcurrency, exactProbeTimeoutMs, exactRpcBatchSize, exactRpcBatchConcurrency,
+    stateRpcBatchConcurrency, transport: Object.freeze({
+      capacity: stateRpcBatchConcurrency + exactRpcBatchConcurrency, producerReserved: stateRpcBatchConcurrency,
+    }) });
+}
+
+export type BlockScanLiveStageSettings = ReturnType<typeof resolveBlockScanLiveStageSettings>;
+type BlockScanAmountSelectorFactory = NonNullable<BlockScanRuntimeLoopDependencies["amountSelectorFactory"]>;
+
+/** One live-runtime trial limit shared across every source/worker selector. */
+export function createBlockScanLiveAmountSelectorFactory(input: {
+  executor: string;
+  quoteConcurrency: number;
+  record?(input: {
+    source: Parameters<BlockScanAmountSelectorFactory>[0]["source"];
+    workerIndex: number;
+    event: Record<string, unknown>;
+  }): void;
+}): BlockScanAmountSelectorFactory {
+  const runTrial = createTrialLimiter(input.quoteConcurrency);
+  return ({ source, workerIndex, simulate }) => createBlockScanSimAmountSelector({
+    source, executor: input.executor, simulate, runTrial,
+    record: input.record === undefined ? undefined : event => input.record!({ source, workerIndex, event }),
+  });
+}
+
 export type BlockScanAtomicPolicy = Pick<LiveConfig,
   "finalVerifyFloorBps" | "maxProfitBpsOfFlash" | "profitHaircutBps" | "bribeBps" | "bribeAllAboveGas" | "evGate" | "minNetEth" | "blockScanSubmit" | "inclusionWatchBlocks" | "dryRun">;
 
@@ -1412,12 +1492,26 @@ async function main(): Promise<void> {
     shuttingDown = true;
     requestRuntimeStop.fatal(reason);
   };
-  const blockScanPassBudgetRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000",
-  );
-  const blockScanPassBudgetMs = Number.isFinite(blockScanPassBudgetRaw)
-    ? Math.max(1, Math.floor(blockScanPassBudgetRaw))
-    : 11_000;
+  const blockScanStageSettings = resolveBlockScanLiveStageSettings(process.env, blockScanCfg?.maxCandidates ?? 0);
+  const {
+    passBudgetMs: blockScanPassBudgetMs,
+    largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
+    largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
+    startupWarmBudgetMs: blockScanStartupWarmBudgetMs,
+    hotPricingFamilyBudgetMs: blockScanHotPricingFamilyBudgetMs,
+    runtimePublicationReserveMs: blockScanRuntimePublicationReserveMs,
+    solveReserveMs: blockScanSolveReserveMs,
+    solveConcurrency: blockScanSolveConcurrency,
+    solverSearch: blockScanSolverSearch,
+    finalSimulationConcurrency: blockScanFinalSimulationConcurrency,
+    refineCandidates: blockScanRefineCandidates,
+    exactRefineHardBudgetMs: blockScanExactRefineHardBudgetMs,
+    exactConcurrency: blockScanExactConcurrency,
+    exactProbeTimeoutMs: blockScanExactProbeTimeoutMs,
+    exactRpcBatchSize: blockScanExactRpcBatchSize,
+    exactRpcBatchConcurrency: blockScanExactRpcBatchConcurrency,
+    stateRpcBatchConcurrency: blockScanStateRpcConcurrency,
+  } = blockScanStageSettings;
   const blockScanNMinusOneStateBudgetRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_STATE_BUDGET_MS ?? "40000",
   );
@@ -1441,56 +1535,6 @@ async function main(): Promise<void> {
       blockScanNMinusOneMaxGraphLagRaw > 0
       ? Math.floor(blockScanNMinusOneMaxGraphLagRaw)
       : 10;
-  const blockScanLargeGraphPassBudgetRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS ?? "30000",
-  );
-  const blockScanLargeGraphPassBudgetMs = Number.isFinite(blockScanLargeGraphPassBudgetRaw)
-    ? Math.max(blockScanPassBudgetMs, Math.floor(blockScanLargeGraphPassBudgetRaw))
-    : Math.max(blockScanPassBudgetMs, 30_000);
-  const blockScanLargeGraphEdgeThresholdRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_EDGE_THRESHOLD ?? "20000",
-  );
-  const blockScanLargeGraphEdgeThreshold = Number.isFinite(blockScanLargeGraphEdgeThresholdRaw)
-    ? Math.max(1, Math.floor(blockScanLargeGraphEdgeThresholdRaw))
-    : 20_000;
-  const blockScanStartupWarmBudgetRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_STARTUP_PREWARM_BUDGET_MS ?? "300000",
-  );
-  const blockScanStartupWarmBudgetMs =
-    Number.isSafeInteger(blockScanStartupWarmBudgetRaw) &&
-      blockScanStartupWarmBudgetRaw > 0
-      ? blockScanStartupWarmBudgetRaw
-      : 300_000;
-  const blockScanHotPricingFamilyBudgetRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_STATE_HOT_FAMILY_BUDGET_MS ?? "5000",
-  );
-  const blockScanHotPricingFamilyBudgetMs =
-    Number.isFinite(blockScanHotPricingFamilyBudgetRaw) &&
-      blockScanHotPricingFamilyBudgetRaw > 0
-      ? Math.floor(blockScanHotPricingFamilyBudgetRaw)
-      : 5_000;
-  const blockScanRuntimePublicationReserveRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_RUNTIME_PUBLICATION_RESERVE_MS ?? "1500",
-  );
-  const blockScanRuntimePublicationReserveMs =
-    Number.isFinite(blockScanRuntimePublicationReserveRaw) &&
-      blockScanRuntimePublicationReserveRaw > 0
-      ? Math.floor(blockScanRuntimePublicationReserveRaw)
-      : 1_500;
-  const blockScanSolveReserveRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_SOLVE_RESERVE_MS ?? "8000",
-  );
-  const blockScanSolveReserveMs = Number.isFinite(blockScanSolveReserveRaw)
-    ? Math.max(0, Math.floor(blockScanSolveReserveRaw))
-    : 8_000;
-  const blockScanSolveConcurrencyRaw = Number(process.env.SEARCHER_BLOCKSCAN_SOLVE_CONCURRENCY ?? "4");
-  const blockScanSolveConcurrency = Number.isFinite(blockScanSolveConcurrencyRaw)
-    ? Math.max(1, Math.floor(blockScanSolveConcurrencyRaw))
-    : 4;
-  const blockScanSolverSearch = resolveBlockScanSolverSearchConfig();
-  // Bound the complete quote/build/sim trial across every amount worker, not
-  // only its final RPC. Matches the tested selector's shared concurrency cap.
-  const blockScanAmountTrials = createTrialLimiter(blockScanSolverSearch.quoteConcurrency);
   if (enableBlockScan && blockScanSolverSearch.amountGrid !== "multiples") {
     throw new Error("block-scan sim amount selection requires the P/10P/100P/1000P multiples grid");
   }
@@ -1507,61 +1551,9 @@ async function main(): Promise<void> {
     console.log(`[searcher/live] ${JSON.stringify({ counterfactualExecutorCode: true,
       keccak256: finalSimulationExecutorRuntimeCode.keccak256 })}`);
   }
-  const blockScanFinalSimulationConcurrencyRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_FINAL_SIM_CONCURRENCY ?? "1",
-  );
-  const blockScanFinalSimulationConcurrency = Number.isFinite(
-    blockScanFinalSimulationConcurrencyRaw,
-  )
-    ? Math.max(1, Math.floor(blockScanFinalSimulationConcurrencyRaw))
-    : 1;
   if (enableBlockScan) {
     console.log(`[searcher/live] block-scan amount selection=sim final simulation method=${blockScanFinalSimulationMethod} slots=${blockScanFinalSimulationConcurrency}`);
   }
-  const blockScanRefineCandidates = resolveBlockScanRefineCandidates(process.env, blockScanCfg?.maxCandidates ?? 0);
-  const blockScanExactRefineHardBudgetRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_EXACT_REFINE_HARD_BUDGET_MS ?? "4000",
-  );
-  const blockScanExactRefineHardBudgetMs =
-    Number.isFinite(blockScanExactRefineHardBudgetRaw) &&
-      blockScanExactRefineHardBudgetRaw > 0
-      ? Math.max(1_000, Math.floor(blockScanExactRefineHardBudgetRaw))
-      : 4_000;
-  const blockScanExactConcurrencyRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_EXACT_CONCURRENCY ??
-      // Backward-compatible read only. Exact now has its own explicit name.
-      process.env.SEARCHER_BLOCKSCAN_MID_CONCURRENCY ??
-      String(blockScanRefineCandidates),
-  );
-  const blockScanExactConcurrency = Number.isFinite(
-      blockScanExactConcurrencyRaw,
-    ) && blockScanExactConcurrencyRaw > 0
-    ? Math.max(1, Math.floor(blockScanExactConcurrencyRaw))
-    : blockScanRefineCandidates;
-  const blockScanExactProbeTimeoutRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_EXACT_PROBE_TIMEOUT_MS ?? "4000",
-  );
-  const blockScanExactProbeTimeoutMs = Number.isFinite(
-      blockScanExactProbeTimeoutRaw,
-    ) && blockScanExactProbeTimeoutRaw > 0
-    ? Math.max(100, Math.floor(blockScanExactProbeTimeoutRaw))
-    : 4_000;
-  const blockScanExactRpcBatchSizeRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_EXACT_RPC_BATCH_SIZE ?? "64",
-  );
-  const blockScanExactRpcBatchSize = Number.isFinite(
-      blockScanExactRpcBatchSizeRaw,
-    ) && blockScanExactRpcBatchSizeRaw > 0
-    ? Math.max(1, Math.floor(blockScanExactRpcBatchSizeRaw))
-    : 64;
-  const blockScanExactRpcBatchConcurrencyRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_EXACT_RPC_BATCH_CONCURRENCY ?? "16",
-  );
-  const blockScanExactRpcBatchConcurrency = Number.isFinite(
-      blockScanExactRpcBatchConcurrencyRaw,
-    ) && blockScanExactRpcBatchConcurrencyRaw > 0
-    ? Math.max(1, Math.floor(blockScanExactRpcBatchConcurrencyRaw))
-    : 16;
   let blockScanRethTransportScheduler: RethTransportScheduler | undefined;
   if (enableBlockScan) {
     const blockScanAnvilPort = Number(process.env.SEARCHER_BLOCKSCAN_ANVIL_PORT ?? "8556");
@@ -1647,17 +1639,7 @@ async function main(): Promise<void> {
         ...forkPreparation(workerState),
       });
     }
-    const blockScanStateRpcConcurrency = Math.max(
-      1,
-      Number(
-        process.env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4",
-      ),
-    );
-    blockScanRethTransportScheduler = new RethTransportScheduler({
-      capacity:
-        blockScanStateRpcConcurrency + blockScanExactRpcBatchConcurrency,
-      producerReserved: blockScanStateRpcConcurrency,
-    });
+    blockScanRethTransportScheduler = new RethTransportScheduler(blockScanStageSettings.transport);
     const familyStateReads = new JsonRpcBlockScanStateReadBackend(config.rpcUrl, {
       maxBatchSize: Math.max(
         1,
@@ -2294,7 +2276,7 @@ async function main(): Promise<void> {
   const sourceSimulationFactory = createLiveSourceSimulationFactory({
     rpcUrl: config.rpcUrl, chainId: Number(blockScanChainId),
     executablePath: process.env.SEARCHER_REVM_SIM_BIN,
-    timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
+    timeoutMs: blockScanStageSettings.sourceSimulationTimeoutMs,
     runtimeAbort: blockScanRuntimeAbort,
     onFatal: onSimulationFatal,
   });
@@ -2554,9 +2536,9 @@ async function main(): Promise<void> {
     blockScanConfig: blockScanCfg,
     executionWorkers: blockScanExecutionWorkers,
     finalSimulationWorkers: blockScanFinalSimulationWorkers,
-    amountSelectorFactory: ({ source, workerIndex, simulate }) => createBlockScanSimAmountSelector({
-      source, executor: executionIdentity.executor, simulate, runTrial: blockScanAmountTrials,
-      record(event) {
+    amountSelectorFactory: createBlockScanLiveAmountSelectorFactory({
+      executor: executionIdentity.executor, quoteConcurrency: blockScanSolverSearch.quoteConcurrency,
+      record({ source, workerIndex, event }) {
         try {
           console.log(`[searcher/sim-amount] ${JSON.stringify({ ...event,
             sourceBlock: source.number, generation: source.generation, workerIndex },
@@ -2922,13 +2904,7 @@ async function main(): Promise<void> {
               1,
               Number(process.env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_SIZE ?? "32"),
             ),
-            maxConcurrentBatches: Math.max(
-              1,
-              Number(
-                process.env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ??
-                  "4",
-              ),
-            ),
+            maxConcurrentBatches: blockScanStateRpcConcurrency,
             ...(blindBasePricingCachePath === undefined
               ? {}
               : {

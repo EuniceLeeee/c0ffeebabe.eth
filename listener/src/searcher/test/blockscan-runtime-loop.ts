@@ -8,7 +8,7 @@ import { ethers } from "ethers";
 import { BlockScanRuntimeLoop, SourceSimulationWork, startBlockScanBackgroundFork, type BlockScanRuntimeLoopDependencies,
   type SourceSimulationFactory } from "../blockscan-runtime-loop.js";
 import { createLiveRuntimeStop, createLiveSourceSimulationFactory, maybeSubmitBlockScanAtomic,
-  resolveBlockScanAtomicPolicy } from "../main.js";
+  resolveBlockScanAtomicPolicy, createBlockScanLiveAmountSelectorFactory } from "../main.js";
 import { BlockScanSimRejectCache } from "../blockscan-sim-reject-cache.js";
 import { blockScanRouteId } from "../blockscan-route-identity.js";
 import type { SimulationResult } from "../simulator/botvm-simulator.js";
@@ -1457,13 +1457,15 @@ function liveSimAmountFactory(): NonNullable<BlockScanRuntimeLoopDependencies["a
   visit(ast); assert(expression);
   return runInNewContext(ts.transpileModule(`(${expression.getText(ast)})`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
-  }).outputText, { createBlockScanSimAmountSelector, blockScanAmountTrials: createTrialLimiter(3),
+  }).outputText, { createBlockScanSimAmountSelector, createBlockScanLiveAmountSelectorFactory,
+    blockScanSolverSearch: { quoteConcurrency: 3 }, blockScanAmountTrials: createTrialLimiter(3),
     executionIdentity: { executor: actor }, console });
 }
 
 for (const backend of ["direct", "anvil"] as const)
 for (const outcome of ["positive", "nonpositive", "source-fault", "cancel"] as const)
-test(`ordinary live factory selects actual sim profit through runtime (${backend}, ${outcome})`, async () => {
+for (const stopAtSizing of [false, true])
+test(`ordinary live factory selects actual sim profit through runtime (${backend}, ${outcome}, sizingOnly=${stopAtSizing})`, async () => {
   const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } }, async closeAndDrain() {} }));
   const edges = twoWayPoolEdges([target, `0x${"dd".repeat(20)}`]);
   const trialAmounts: bigint[] = [], finalAmounts: bigint[] = [], logs: string[] = [];
@@ -1543,11 +1545,21 @@ test(`ordinary live factory selects actual sim profit through runtime (${backend
     },
   });
   try {
-    const run = f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
-    if (outcome === "cancel") await assert.rejects(run, /fixture new head/);
+    type Diagnostic = NonNullable<Parameters<BlockScanRuntimeLoop["runHead"]>[2]>;
+    let completion: Parameters<Diagnostic["onComplete"]>[0] | undefined, enumerationCalls = 0;
+    const routeRecords: Array<Parameters<NonNullable<Diagnostic["onSolver"]>>[0]> = [];
+    if (stopAtSizing) Object.assign(f.deps, { diagnosticForHead: (): Diagnostic => ({
+      through: "solver", onSnapshot() {}, onEnumeration() { enumerationCalls++; },
+      onSolver(value) { routeRecords.push(value); }, onComplete(value) { completion = value; },
+    }) });
+    const observation = { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() };
+    const run = stopAtSizing
+      ? (f.loop.schedule(101, observation), f.loop.waitForIdle())
+      : f.loop.runHead(101, observation);
+    if (outcome === "cancel" && !stopAtSizing) await assert.rejects(run, /fixture new head/);
     else await run;
     assert.deepEqual(trialAmounts, outcome === "positive" ? [123n, 1230n, 12300n, 123000n] : [123n]);
-    assert.deepEqual(finalAmounts, outcome === "positive" ? [1230n, 123n, 12300n] : []);
+    assert.deepEqual(finalAmounts, outcome === "positive" && !stopAtSizing ? [1230n, 123n, 12300n] : []);
     assert.equal(active, 0); assert.equal(peak, backend === "direct" && outcome === "positive" ? 3 : 1);
     assert.equal(trialForks, backend === "anvil" ? 1 : 0);
     assert.equal(finalForks, backend === "anvil" ? 1 : 0);
@@ -1559,6 +1571,19 @@ test(`ordinary live factory selects actual sim profit through runtime (${backend
     if (outcome === "source-fault") {
       assert(logs.some(l => l.includes("solve_failed") && l.includes(fault.message)));
       assert(!logs.some(l => l.includes("sim_amount_no_opportunity")));
+    }
+    if (stopAtSizing) {
+      assert.equal(enumerationCalls, 1, "diagnostic retains natural production enumeration");
+      assert.equal(routeRecords.length, 1, "real worker reports every outcome, including failure/cancel");
+      assert.equal(routeRecords[0]!.maxFlashAmount, 123000n);
+      assert.equal(routeRecords[0]!.opportunity.searchSeed.searchCenter, 123n);
+      assert.equal(routeRecords[0]!.timing.amountPoints, outcome === "positive" ? 4 : 1);
+      assert.equal(completion!.atomicResults.length, 0, "sizing stop never enters independent final sim/EV");
+      assert.equal(completion!.timing.finalSimMs, 0);
+      assert.equal(completion!.timing.evMs, 0);
+      assert.equal(completion!.detail!.solverPlans, 1);
+      assert(completion!.detail!.solverWallMs >= 0);
+      assert(completion!.timing.plannerSolverMs >= completion!.detail!.solverWallMs);
     }
     assert(!logs.some(l => l.includes("ordinary live must not call old Solver")));
   } finally {

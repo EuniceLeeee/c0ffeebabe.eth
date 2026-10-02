@@ -676,6 +676,8 @@ export class SourceSimulationWork {
 
 export interface BlockScanRuntimeLoopDependencies {
   readonly enabled: boolean;
+  /** Opt-in stage diagnostics, still dispatched by the ordinary head scheduler. */
+  readonly diagnosticForHead?: (blockNumber: number) => NonNullable<Parameters<BlockScanRuntimeLoop["runHead"]>[2]> | undefined;
   readonly blockScanConfig: BlockScanCoreConfig | undefined;
   readonly executionWorkers: readonly BlockScanExecutionWorker[];
   /** Dedicated S5 resources; never used by exact refinement or solver work. */
@@ -954,7 +956,7 @@ export class BlockScanRuntimeLoop {
     this.startupWarmPending =
       deps.startupWarmEnabled && !deps.blind.enabled;
     this.scheduler = new LatestHeadScheduler(
-      this.runHead,
+      (number, observation) => this.runHead(number, observation, this.deps.diagnosticForHead?.(number)),
       (blockNumber, error) => {
         console.log(
           `[searcher/blockscan-family] block=${blockNumber} error=` +
@@ -1010,6 +1012,11 @@ export class BlockScanRuntimeLoop {
     this.advanceLatestHead(blockNumber);
     this.scheduler.schedule(blockNumber, observation);
     this.maybeStartProducerAtObservation(blockNumber);
+  }
+
+  /** Join scheduled work without shutting down the production runtime. */
+  async waitForIdle(): Promise<void> {
+    await this.scheduler.waitForIdle();
   }
 
   /**
@@ -1924,9 +1931,22 @@ export class BlockScanRuntimeLoop {
       readonly through: "prices" | "enumerate" | "solver" | "ev";
       readonly onSnapshot: (snapshot: AdapterRuntimeSnapshot) => void;
       readonly onEnumeration: (result: BlockScanOutcome) => void;
+      /** Optional stage diagnostics; observe the live dispatcher, never replace it. */
+      readonly onSizingStart?: () => void;
+      readonly onSolver?: (result: {
+        solverIndex: number; opportunity: BlockScanOpportunity;
+        maxFlashAmount: bigint | undefined; wallMs: number; timing: SolverTiming;
+        outcome: string; positiveCandidates: number;
+      }) => void;
       readonly onComplete: (result: {
         outcome: string; reason: string | undefined; timing: typeof BlockScanPassTimeline.prototype.timing;
         totalMs: number; planned: number; quotePositive: number; atomicResults: readonly BlockScanAtomicResult[];
+        detail?: {
+          stages: typeof BlockScanPassTimeline.prototype.boundaries;
+          plannerBuildMs: number; solverWallMs: number; solverPlans: number;
+          solverQuoteWorkers: number; solverAmountPoints: number; solverGssPoints: number;
+          solverHopExactCalls: number; exactTransportDrainMs: number;
+        };
       }) => void;
     },
   ): Promise<void> => {
@@ -2260,7 +2280,10 @@ export class BlockScanRuntimeLoop {
     const recordPass = (): void => {
       const totalMs = Math.max(0, performance.now() - passStarted);
       diagnostic?.onComplete({ outcome, reason: skippedReason, timing: { ...timing }, totalMs,
-        planned: plannedCount, quotePositive, atomicResults });
+        planned: plannedCount, quotePositive, atomicResults,
+        detail: { stages: stageBoundaries, plannerBuildMs, solverWallMs, solverPlans,
+          solverQuoteWorkers, solverAmountPoints, solverGssPoints, solverHopExactCalls,
+          exactTransportDrainMs } });
       const preSimMs = firstFinalSimStartedAtMs === null
         ? null
         : Math.max(0, firstFinalSimStartedAtMs - passStartedAtMs);
@@ -3554,6 +3577,8 @@ export class BlockScanRuntimeLoop {
       }
 
       beginStage("planner_solver");
+      try { diagnostic?.onSizingStart?.(); }
+      catch { /* Diagnostics cannot alter the live stage. */ }
       if (useNMinusOneFallback && exactOpportunities.length > 0) {
         if (passSignal.aborted) throw passSignal.reason;
         /*
@@ -3987,6 +4012,11 @@ export class BlockScanRuntimeLoop {
           solverAmountPoints += solverTiming.amountPoints;
           solverHopExactCalls += solverTiming.hopExactCalls;
           solverGssPoints += solverTiming.gssPoints;
+          try {
+            diagnostic?.onSolver?.({ solverIndex: index, opportunity: item.opp,
+              maxFlashAmount: item.plan.maxFlashAmount, wallMs: performance.now() - solveStartedAt,
+              timing: { ...solverTiming }, outcome: solveOutcome, positiveCandidates: completed.length });
+          } catch { /* Diagnostics cannot alter scheduling, results or draining. */ }
           if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1") {
             try {
               const instances = item.plan.tokenPath.edges.map(edgeInstanceKey);

@@ -157,6 +157,11 @@ export class LatestHeadScheduler {
     await this.drainTask;
   }
 
+  /** Observe the ordinary worker drain without closing head admission. */
+  async waitForIdle(): Promise<void> {
+    await this.drainTask;
+  }
+
   telemetry(): LatestHeadSchedulerTelemetry {
     return Object.freeze({
       submitted: this.submitted,
