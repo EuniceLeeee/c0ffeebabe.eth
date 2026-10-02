@@ -2464,7 +2464,7 @@ export class BlockScanRuntimeLoop {
         blockNumber - activityBasis.sourceBlock <= MAX_ACTIVITY_TRANSITIONS
       ? Object.freeze({ number: activityBasis.sourceBlock, hash: activityBasis.sourceBlockHash })
       : undefined;
-    let activityBasisInvalidated = false;
+    let activityCanonicalBaseHash: string | null = null;
     let activityFinishedAtMs: number | null = null;
     let fundingStartedAtMs: number | null = null;
     let fundingFinishedAtMs: number | null = null;
@@ -2495,9 +2495,10 @@ export class BlockScanRuntimeLoop {
             if (Date.now() >= passDeadlineAtMs) throw new Error("activity published anchor recheck deadline exceeded");
             const canonicalBase = await observeCanonicalHeader(
               activityPreviousSource.number, "activity published anchor recheck");
-            activityBasisInvalidated = !passSignal.aborted &&
-              canonicalBase.number === activityPreviousSource.number &&
-              canonicalBase.hash.toLowerCase() !== activityPreviousSource.hash.toLowerCase();
+            if (!passSignal.aborted && canonicalBase.number === activityPreviousSource.number &&
+                canonicalBase.hash.toLowerCase() !== activityPreviousSource.hash.toLowerCase()) {
+              activityCanonicalBaseHash = canonicalBase.hash.toLowerCase();
+            }
           }
           throw error; // This pass never publishes or carries an invalid range.
         }
@@ -4270,6 +4271,14 @@ export class BlockScanRuntimeLoop {
         skippedReason = "source_head_superseded";
         return;
       }
+      if (error instanceof BlockActivityRangeInvalidatedError && activityCanonicalBaseHash !== null) {
+        // A separately confirmed reorg retires this pass, not the runtime.
+        // No invalid activity reaches pricing; finally still drains all work
+        // before discarding the orphaned publication and requesting warmup.
+        outcome = "stale_state";
+        skippedReason = "activity_published_source_reorg";
+        return;
+      }
       outcome = Date.now() >= passDeadlineAtMs
         ? "budget_exceeded"
         : "stale_state";
@@ -4319,7 +4328,7 @@ export class BlockScanRuntimeLoop {
               try { await simulationWork.closeAndDrain(); }
               finally {
                 await Promise.all([activity, fundingSettlement]);
-                if (activityBasisInvalidated &&
+                if (activityCanonicalBaseHash !== null &&
                     currentRuntimeCoordinator.latestPricingSnapshot() === activityBasis) {
                   // Only after all old-generation work has settled can the next
                   // head rebuild a new raw/effective epoch using the same Ready.
@@ -4327,6 +4336,8 @@ export class BlockScanRuntimeLoop {
                   this.startupWarmPending = this.deps.startupWarmEnabled;
                   console.log(`[searcher/blockscan-activity-anchor-retired] ${JSON.stringify({
                     previousSourceBlock: activityPreviousSource!.number,
+                    previousSourceHash: activityPreviousSource!.hash,
+                    canonicalSourceHash: activityCanonicalBaseHash,
                     sourceBlock: blockNumber,
                     startupWarmPending: this.startupWarmPending,
                   })}`);

@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { getBytes, Interface, keccak256 } from "ethers";
+import { getBytes, Interface, keccak256, toUtf8Bytes } from "ethers";
 import { compilePlan } from "../../shared/compiler/compiler.js";
 import { bytesToHex } from "../../shared/compiler/encoder.js";
 import { buildExecuteCalldata, type BotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
@@ -18,6 +18,27 @@ const OWNER_GAS_BALANCE = 10_000n * 10n ** 18n;
 const HASH = /^0x[0-9a-fA-F]{64}$/;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const hex = (value: bigint | number): string => `0x${value.toString(16)}`;
+// Code-only eth_simulateV1 state override: never deployed or sent on chain.
+// Neither synthetic infrastructure address may alias a participant.
+// Both observations have the same msg.sender (OBSERVER) and tx.origin (sender).
+// The sender's transaction nonce advances, but never the owner's/executor's.
+const OBSERVER = `0x${keccak256(toUtf8Bytes("mev.static-balance-observer.v3")).slice(-40)}`;
+const OBSERVER_SENDER = `0x${keccak256(toUtf8Bytes("mev.static-balance-observer.sender.v3")).slice(-40)}`;
+const BALANCE_TAG = keccak256(toUtf8Bytes("mev.static-balance-observer.result.v3"));
+const MIN_OBSERVER_GAS = 30_000n;
+
+/** STATICCALL balanceOf(executor), require success and exactly 32 bytes, then
+ * RETURN(tag || balance). Failure always reverts empty; token revert bytes are
+ * never forwarded. No SSTORE, transfer, deployment or retained logs are possible.
+ * The code-only overlay preserves this synthetic account's balance/storage and
+ * avoids creation probes' different pre/post balanceOf callers. */
+function observerCode(profitToken: string, executor: string): string {
+  const prefix = `6370a0823160e01b60005273${executor.slice(2)}600452` +
+    `602060206024600073${profitToken.slice(2)}5afa3d60201416`;
+  const successOffset = prefix.length / 2 + 8;
+  return `0x${prefix}60${successOffset.toString(16).padStart(2, "0")}5760006000fd` +
+    `5b7f${BALANCE_TAG.slice(2)}60005260406000f3`;
+}
 
 type Context = {
   source: CanonicalSource;
@@ -30,9 +51,11 @@ type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonl
 
 /** Versioned, endpoint-free snapshot. Source identity retains CanonicalSource's
  * safe integers; all source-header quantities are canonical decimal strings.
- * The two parameter tuples are the exact wire payloads, not RPC method names.
+ * Schema 3 measures pre/post in N+1, excluding passive N→N+1 yield. Schemas
+ * 1/2 retain their original N pre-balance and exact two-request wire replay.
  */
-export type EthSimulateV1ExecutionInput = DeepReadonly<ReturnType<typeof prepareExecutionInput>>;
+export type EthSimulateV1ExecutionInput = DeepReadonly<ReturnType<typeof prepareExecutionInput> |
+  ReturnType<typeof prepareLegacyExecutionInput>>;
 export type EthSimulateV1SimulationResult = SimulationResult & {
   readonly counterfactualExecutorCode?: { readonly address: string; readonly keccak256: string };
 };
@@ -43,15 +66,44 @@ export function buildEthSimulateV1ExecutionInput(input: {
   source: CanonicalSource; header: BlockScanObservedHeader; executor: string;
   owner: string; profitToken: string; scriptHex: string;
   executorRuntimeCode?: BotVmRuntimeCode;
-}): EthSimulateV1ExecutionInput {
+}) {
   return freezeInput(prepareExecutionInput(input));
 }
 
-function prepareExecutionInput({ source, header, executor, owner, profitToken, scriptHex, executorRuntimeCode: codeInput }: {
+type PreparationInput = {
   source: CanonicalSource; header: BlockScanObservedHeader; executor: string;
   owner: string; profitToken: string; scriptHex: string;
   executorRuntimeCode?: BotVmRuntimeCode;
-}) {
+};
+
+function prepareExecutionInput(input: PreparationInput) {
+  const legacy = prepareLegacyExecutionInput(input);
+  const { preBalanceParams: _pre, schemaVersion: _version, simulateParams, ...primary } = legacy;
+  if ([input.owner, input.executor, input.profitToken].some(address =>
+    [OBSERVER, OBSERVER_SENDER].includes(address.toLowerCase()))) {
+    throw new Error("invalid final simulation observer collision");
+  }
+  const remainingGas = input.header.gasLimit - TX_GAS;
+  // Also respect the transaction gas ceiling when the block is much larger.
+  const half = remainingGas / 2n;
+  const preGas = half < TX_GAS ? half : TX_GAS;
+  const rest = remainingGas - preGas;
+  const postGas = rest < TX_GAS ? rest : TX_GAS;
+  if (preGas < MIN_OBSERVER_GAS || postGas < MIN_OBSERVER_GAS) {
+    throw new Error("insufficient final simulation observer gas");
+  }
+  const block = simulateParams[0].blockStateCalls[0];
+  const observer = { from: OBSERVER_SENDER, to: OBSERVER, data: "0x", value: "0x0", gasPrice: "0x0" };
+  return { ...primary, schemaVersion: 3 as const,
+    simulateParams: [{ ...simulateParams[0], blockStateCalls: [{ ...block,
+      stateOverrides: { ...block.stateOverrides,
+        [OBSERVER]: { code: observerCode(input.profitToken, input.executor) } },
+      calls: [{ ...observer, gas: hex(preGas) }, block.calls[0], { ...observer, gas: hex(postGas) }] as const,
+    }] as const }, simulateParams[1]] as const };
+}
+
+// Private reconstruction only: no production mode/configuration switch.
+function prepareLegacyExecutionInput({ source, header, executor, owner, profitToken, scriptHex, executorRuntimeCode: codeInput }: PreparationInput) {
   const blockOverrides = targetContext(source, header);
   validateCaller(executor, owner);
   if (typeof profitToken !== "string" || !ADDRESS.test(profitToken) ||
@@ -60,7 +112,7 @@ function prepareExecutionInput({ source, header, executor, owner, profitToken, s
   }
   const calldata = buildExecuteCalldata(getBytes(scriptHex));
   const pinnedBlock = { blockHash: source.hash, requireCanonical: true as const };
-  // The zero-address observation cannot spend owner funds or change main state.
+  // Preserve historical direct-call wire semantics exactly (not STATICCALL).
   const observer = { from: ZERO_ADDRESS, to: profitToken,
     data: ERC20.encodeFunctionData("balanceOf", [executor]), gasPrice: "0x0" };
   const executorRuntimeCode = validateExecutorRuntimeCode(codeInput);
@@ -99,7 +151,7 @@ function prepareExecutionInput({ source, header, executor, owner, profitToken, s
 export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulateV1ExecutionInput {
   try {
     const saved = record(value), source = record(saved?.source), header = record(saved?.sourceHeader);
-    if (!saved || (saved.schemaVersion !== 1 && saved.schemaVersion !== 2) || !source || !header ||
+    if (!saved || ![1, 2, 3].includes(saved.schemaVersion as number) || !source || !header ||
         typeof source.number !== "number" || typeof source.hash !== "string" ||
         typeof source.generation !== "number" || typeof header.hash !== "string" ||
         typeof header.parentHash !== "string" || typeof saved.executor !== "string" ||
@@ -109,7 +161,7 @@ export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulate
       if (typeof field !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(field)) throw new Error();
       return BigInt(field);
     };
-    const canonical = buildEthSimulateV1ExecutionInput({
+    const canonical = freezeInput((saved.schemaVersion === 3 ? prepareExecutionInput : prepareLegacyExecutionInput)({
       source: { number: source.number, hash: source.hash, generation: source.generation },
       header: { number: Number(decimal(header.number)), hash: header.hash, parentHash: header.parentHash,
         timestamp: Number(decimal(header.timestamp)), baseFeePerGas: decimal(header.baseFeePerGas),
@@ -118,7 +170,7 @@ export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulate
       ...(saved.executorRuntimeCode === undefined ? {} : {
         executorRuntimeCode: validateExecutorRuntimeCode(saved.executorRuntimeCode),
       }),
-    });
+    }));
     if (!isDeepStrictEqual(value, canonical)) throw new Error();
     return canonical;
   } catch {
@@ -207,7 +259,7 @@ export class EthSimulateV1Simulator {
     if (!Number.isSafeInteger(deadlineAtMs) || !signal) {
       throw new Error("invalid final simulation control or profit token");
     }
-    const { profitToken, calldata, scriptHex, preBalanceParams, simulateParams } = saved;
+    const { profitToken, calldata, scriptHex, simulateParams } = saved;
     const codeEvidence = saved.executorRuntimeCode === undefined ? {} : {
       counterfactualExecutorCode: { address: this.executor.toLowerCase(), keccak256: saved.executorRuntimeCode.keccak256 },
     };
@@ -262,9 +314,9 @@ export class EthSimulateV1Simulator {
       assertOpen();
       signal.addEventListener("abort", onAbort, { once: true });
       armDeadline();
-      const pre = balance(await request(1, "eth_call", preBalanceParams));
-      const observerGas = quantity(blockOverrides.gasLimit) - TX_GAS;
-      const raw = await request(2, "eth_simulateV1", simulateParams);
+      const legacyPre = saved.schemaVersion === 3 ? undefined
+        : balance(await request(1, "eth_call", saved.preBalanceParams));
+      const raw = await request(saved.schemaVersion === 3 ? 1 : 2, "eth_simulateV1", simulateParams);
       if (!Array.isArray(raw) || raw.length !== 1) throw new Error("invalid final simulation block count");
       const block = record(raw[0]);
       if (!block || typeof block.parentHash !== "string" || !HASH.test(block.parentHash) ||
@@ -275,13 +327,19 @@ export class EthSimulateV1Simulator {
           quantity(block.baseFeePerGas) !== quantity(blockOverrides.baseFeePerGas)) {
         throw new Error("final simulation source or target header mismatch");
       }
-      if (!Array.isArray(block.calls) || block.calls.length !== 2) {
+      if (!Array.isArray(block.calls) || block.calls.length !== (saved.schemaVersion === 3 ? 3 : 2)) {
         throw new Error("invalid final simulation call count");
       }
-      const main = parseCall(block.calls[0], TX_GAS);
-      const post = parseCall(block.calls[1], observerGas);
-      if (post.status !== "0x1") throw rpcFailure(post.error);
-      const postBalance = balance(post.returnData);
+      const calls = simulateParams[0].blockStateCalls[0].calls;
+      const main = parseCall(block.calls[saved.schemaVersion === 3 ? 1 : 0], TX_GAS);
+      const pre = saved.schemaVersion === 3
+        ? observedBalance(parseCall(block.calls[0], quantity(calls[0].gas))) : legacyPre!;
+      const postIndex = saved.schemaVersion === 3 ? 2 : 1;
+      const post = parseCall(block.calls[postIndex], quantity(calls[postIndex]!.gas));
+      const postBalance = saved.schemaVersion === 3 ? observedBalance(post) : (() => {
+        if (post.status !== "0x1") throw rpcFailure(post.error);
+        return balance(post.returnData);
+      })();
       assertOpen();
       if (main.status === "0x0") {
         // Only the explicit execution-reverted RPC code is a confirmed revert.
@@ -343,6 +401,16 @@ function balance(value: unknown): bigint {
     throw new Error("invalid final simulation balance result");
   }
   return BigInt(value);
+}
+
+function observedBalance(call: Record<string, unknown>): bigint {
+  if (call.status !== "0x1") throw rpcFailure(call.error);
+  const data = call.returnData;
+  if (typeof data !== "string" ||
+      data.length !== 130 || data.slice(0, 66).toLowerCase() !== BALANCE_TAG) {
+    throw new Error("invalid final simulation static balance observation");
+  }
+  return balance(`0x${data.slice(66)}`);
 }
 
 function rpcFailure(value: unknown): Error {

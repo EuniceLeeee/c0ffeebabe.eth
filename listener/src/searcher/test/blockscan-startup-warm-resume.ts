@@ -1,5 +1,6 @@
 /** Runtime/coordinator/session/backend integration. All transport is a local HTTP fixture. */
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { once } from "node:events";
 import { createServer, type ServerResponse } from "node:http";
 import { ethers } from "ethers";
@@ -69,11 +70,13 @@ type Mode = "normal" | "resume" | "shutdown" | "fatal-source" | "fatal-429" | "r
   "initial-header-429" | "retry-header-429" | "publish-header-429" | "late-header-429" | "header-revert" | "header-bare-429" |
   "raw-header-429" | "raw-header-held" | "raw-header-shutdown" | "range";
 
-async function fixture(mode: Mode, exercise: (f: Awaited<ReturnType<typeof setup>>) => Promise<void>) {
-  const f = await setup(mode);
-  try { await exercise(f); assert.deepEqual(f.errors, []); }
-  catch (error) { f.restore(); console.error(mode, f.logs.slice(-6).join("\n")); throw error; }
-  finally { await f.loop.shutdown(); f.restore(); f.server.closeAllConnections(); await new Promise<void>(resolve => f.server.close(() => resolve())); }
+async function fixture(mode: Mode, exercise: (f: Awaited<ReturnType<typeof setup>>) => Promise<void>, name: string = mode) {
+  await test(name, async () => {
+    const f = await setup(mode);
+    try { await exercise(f); assert.deepEqual(f.errors, []); }
+    catch (error) { f.restore(); console.error(mode, f.logs.slice(-6).join("\n")); throw error; }
+    finally { await f.loop.shutdown(); f.restore(); f.server.closeAllConnections(); await new Promise<void>(resolve => f.server.close(() => resolve())); }
+  });
 }
 
 async function setup(mode: Mode) {
@@ -375,7 +378,7 @@ async function setup(mode: Mode) {
 function assertIdle(backend: PinnedRethQuoteBackend): void {
   const s = backend.stats();
   assert.deepEqual([s.pendingItems, s.liveItems, s.inFlightBatches, s.activeTransports], [0, 0, 0, 0]);
-  assert.equal(s.maxBatchSize, 64); assert.equal(s.maxConcurrentBatches, 8);
+  assert.equal(s.maxConcurrentBatches, 8);
   assert.equal(s.allowSingleCallFallback, false); assert.equal(s.persistentCacheConfigured, false);
 }
 const observe = () => ({ sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
@@ -387,7 +390,10 @@ function attachTransport(f: Awaited<ReturnType<typeof setup>>) {
   let transitions = 0;
   const completeStartup = () => {
     transitions++;
-    for (const backend of f.backends) assertIdle(backend);
+    for (const backend of f.backends) {
+      assertIdle(backend);
+      assert.equal(backend.stats().maxBatchSize, 64, "startup uses its bounded batch size");
+    }
     assert.equal(scheduler.snapshot().activeTotal, 0, "startup physical transport must drain before restoration");
     return scheduler.completeStartup();
   };
@@ -718,7 +724,7 @@ for (const failure of ["read", "trace", "reorg"] as const) {
     assert.equal(f.published.at(-1)!.mids, warm.mids, "read recovery retains the valid frozen raw basis");
     assert.equal(f.exacts.length, 2, "ordinary read recovery still carries clean effective rows");
     assert.deepEqual(f.resets, []);
-  });
+  }, `activity-reorg: fail closed on ${failure}`);
 }
 
 await fixture("range", async f => {
@@ -732,18 +738,31 @@ await fixture("range", async f => {
     async closeAndDrain() { closing = true; await drained; },
   });
   Object.assign(f.deps, { sourceSimulationFactory });
-  const failure = assert.rejects(f.loop.runHead(N + 1, observe()), /activity range canonical hash chain mismatch/);
+  const recovery = assert.doesNotReject(f.loop.runHead(N + 1, observe()),
+    "a confirmed published-source reorg must retire the pass without an unhandled runtime error");
   try {
     await until(() => closing, "reorg pass physical cleanup held");
     assert.equal(f.coordinator.latestPricingSnapshot(), warm, "old publication remains until all pass resources drain");
     assert.deepEqual(f.resets, [], "a confirmed reorg cannot reset before the drain boundary");
     assert.equal(f.published.length, 1, "the invalidated pass cannot publish even after confirming a reorg");
-  } finally { release(); await failure; }
+  } finally { release(); await recovery; }
   assert.equal(f.headers.filter(number => number === N).length, 3, "recovery independently rechecks the published base");
   assert.deepEqual(f.resets, [N + 1]);
   assert.equal(f.coordinator.latestPricingSnapshot(), null);
   assert.equal(f.loop.isStartupWarmPending(), true);
   assert.equal(f.requests.length, 1, "invalid activity cannot enter pricing preparation");
+  const retired = JSON.parse(f.logs.find(line => line.startsWith("[searcher/blockscan-activity-anchor-retired] "))!
+    .slice("[searcher/blockscan-activity-anchor-retired] ".length));
+  assert.equal(retired.previousSourceHash, hash(N));
+  assert.equal(retired.canonicalSourceHash, hash(N + 1000));
+  const terminal = JSON.parse(f.logs.filter(line => line.startsWith("[searcher/blockscan-family] {"))
+    .at(-1)!.slice("[searcher/blockscan-family] ".length));
+  assert.equal(terminal.outcome, "stale_state");
+  assert.equal(terminal.decision, "activity_published_source_reorg");
+  assert.equal(terminal.stages.state.status, "failed", "a retired source is not successful state preparation");
+  for (const stage of ["enumeration", "planner_solver", "final_sim", "ev"]) {
+    assert.equal(terminal.stages[stage].status, "not-run", "no downstream work may use orphaned prices");
+  }
 
   await f.loop.runHead(N + 2, observe());
   const recovered = f.published.at(-1)!;
@@ -766,7 +785,19 @@ await fixture("range", async f => {
   assert.deepEqual(f.activityCalls.at(-1), { number: N + 3, previousSource: { number: N + 2, hash: hash(N + 1002) } });
   assert.equal(f.exacts.length, 4);
   assert.deepEqual(f.resets, [N + 1], "the repaired chain resumes ordinary clean carry without repeated resets");
-});
+}, "activity-reorg: confirmed reorg drains, retires and bootstraps");
+
+await fixture("range", async f => {
+  await f.loop.runHead(N, observe());
+  for (let number = N; number <= N + 1; number++) f.activityBehavior.hashes.set(number, hash(number + 1000));
+  const sourceSimulationFactory: BlockScanRuntimeLoopDependencies["sourceSimulationFactory"] = () => ({
+    transport: { async simulate() { return { data: "0x" }; } },
+    async closeAndDrain() { throw new Error("fixture reorg cleanup failure"); },
+  });
+  Object.assign(f.deps, { sourceSimulationFactory });
+  await assert.rejects(f.loop.runHead(N + 1, observe()), /fixture reorg cleanup failure/);
+  assert.equal(f.published.length, 1, "reorg handling must not hide cleanup failures or publish new prices");
+}, "activity-reorg: cleanup failure still rejects");
 
 await fixture("range", async f => {
   await f.loop.runHead(N, observe());
@@ -779,7 +810,7 @@ await fixture("range", async f => {
   assert.deepEqual(f.resets, []);
   assert.equal(f.loop.isStartupWarmPending(), false);
   assert.equal(f.requests.length, 1);
-});
+}, "activity-reorg: unavailable canonical recheck cannot authorize reset");
 
 await fixture("range", async f => {
   await f.loop.runHead(N, observe());
@@ -802,6 +833,4 @@ await fixture("range", async f => {
   assert.deepEqual(f.resets, [], "a cancelled typed range error cannot authorize a reset");
   assert.equal(f.loop.isStartupWarmPending(), false);
   assert.equal(f.requests.length, 1);
-});
-
-console.log("blockscan-startup-warm-resume PASS (same-hash memo, real Ready Graph retry, published-anchor activity catch-up, clean carry/dirty requote, confirmed-reorg drain/reset/bootstrap recovery, fail-closed read/trace/recheck/cancellation, fresh sessions/generations, canonical publication, fatal controls, shutdown/queue drain)");
+}, "activity-reorg: cancellation cannot authorize reset");
