@@ -6,6 +6,7 @@ import {
 import {
   assertSource,
   decodeDeclaredFluidDexQuote,
+  describeFluidDexQuoteFailure,
   FLUID_DEX_INTERFACE,
   requireSuccessfulResult,
   sameAddress,
@@ -55,7 +56,8 @@ const fluidDexRequestProgram: ExactRequestProgram<
     const amountOut = decodeDeclaredFluidDexQuote(result);
     if (amountOut === null) {
       throw new Error(
-        "fluid-dex exact quote lacked the declared FluidDexSwapResult revert",
+        "fluid-dex exact quote lacked the declared FluidDexSwapResult revert; " +
+          describeFluidDexQuoteFailure(result),
       );
     }
     return Object.freeze({

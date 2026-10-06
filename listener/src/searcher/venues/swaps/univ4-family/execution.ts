@@ -25,6 +25,15 @@ export const univ4Execution = {
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertExecutionEvidence(input);
+    const leg = buildUniV4RuntimeLeg(input);
+    if (leg !== null) return Object.freeze({
+      requirements: Object.freeze([]),
+      nodes: Object.freeze([Object.freeze({
+        adapterId: "univ4-unlock", target: input.descriptor.managerBinding.manager,
+        tokenIn: input.route.tokenIn, tokenOut: input.route.tokenOut,
+        amount: input.amountIn, params: { runtimeAmountProgram: leg.program }, children: [],
+      })]),
+    });
     const key = input.descriptor.poolKey;
     const zeroForOne = input.route.direction === "zero-for-one";
     const inputIsNative = sameAddress(input.route.realTokenIn, ethers.ZeroAddress);

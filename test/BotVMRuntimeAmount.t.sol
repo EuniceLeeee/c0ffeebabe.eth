@@ -7,6 +7,9 @@ contract RuntimeTestToken {
     mapping(address => uint256) public balanceOf;
     function mint(address who, uint256 n) external { balanceOf[who] += n; }
     function burn(address who, uint256 n) external { balanceOf[who] -= n; }
+    function transfer(address who, uint256 n) external returns (bool) {
+        balanceOf[msg.sender] -= n; balanceOf[who] += n; return true;
+    }
 }
 contract RuntimeTestSwap {
     uint256 public received;
@@ -31,6 +34,17 @@ contract RuntimeTestCallback {
             (ok,) = msg.sender.call(abi.encodeWithSignature("callback(bytes)", script));
             require(ok, "second callback failed");
         }
+    }
+}
+contract RuntimeTestDebtCallback {
+    RuntimeTestToken public token;
+    uint256 public paid;
+    constructor(RuntimeTestToken t) { token = t; }
+    function run(int256 debt, bytes memory script) external {
+        uint256 beforeBalance = token.balanceOf(address(this));
+        (bool ok,) = msg.sender.call(abi.encodeWithSignature("settle(int256,bytes)", debt, script));
+        require(ok, "debt callback failed");
+        paid = token.balanceOf(address(this)) - beforeBalance;
     }
 }
 contract BotVMRuntimeAmountTest is Test {
@@ -155,5 +169,40 @@ contract BotVMRuntimeAmountTest is Test {
         vm.expectRevert("runtime program version"); bot.execute(script(hex"02", 1));
         vm.expectRevert("runtime flow config");
         bot.execute(abi.encodePacked(uint8(12), uint24(33), uint256(100), uint8(7)));
+    }
+    function debtProgram(RuntimeTestDebtCallback cb, int256 debt, uint256 cap, uint24 offset) internal view returns(bytes memory) {
+        bytes memory payment = abi.encodePacked(uint8(1), uint8(7), uint8(1), offset,
+            hex"0201020001", // r2 = cap - actual debt, checked before transfer
+            callOp(address(a), abi.encodeCall(RuntimeTestToken.transfer, (address(cb), 0)),
+                abi.encodePacked(uint24(36), uint8(1)), 0, 0));
+        return abi.encodePacked(uint8(1), callOp(address(cb),
+            abi.encodeCall(RuntimeTestDebtCallback.run, (debt, script(payment, cap))), "", 100, 100));
+    }
+    function testCallbackPartialAndFullPaymentUseActualDebt() public {
+        RuntimeTestDebtCallback cb = new RuntimeTestDebtCallback(a);
+        bot.execute(script(debtProgram(cb, 30, 100, 4), 100));
+        assertEq(cb.paid(), 30); assertEq(a.balanceOf(address(bot)), 1070);
+        bot.execute(script(debtProgram(cb, 100, 100, 4), 100));
+        assertEq(cb.paid(), 100); assertEq(a.balanceOf(address(bot)), 970);
+        bot.execute(script(debtProgram(cb, 0, 100, 4), 100));
+        assertEq(cb.paid(), 0); assertEq(a.balanceOf(address(bot)), 970);
+    }
+    function testCallbackDebtCannotExceedCapOrConsumeInventory() public {
+        RuntimeTestDebtCallback cb = new RuntimeTestDebtCallback(a);
+        vm.expectRevert("runtime external call"); bot.execute(script(debtProgram(cb, 101, 100, 4), 100));
+        vm.expectRevert("runtime external call"); bot.execute(script(debtProgram(cb, -1, 100, 4), 100));
+        assertEq(a.balanceOf(address(bot)), 1100); assertEq(cb.paid(), 0);
+    }
+    function testCallbackCalldataBoundsFailClosed() public {
+        RuntimeTestDebtCallback cb = new RuntimeTestDebtCallback(a);
+        vm.expectRevert("runtime external call"); bot.execute(script(debtProgram(cb, 1, 100, 4096), 100));
+        vm.expectRevert("runtime calldata instruction bounds"); bot.execute(script(hex"01070100", 100));
+    }
+    function testFuzzCallbackPaysDebtNotCap(uint128 cap, uint128 owed) public {
+        uint256 available = bound(cap, 1, 1100);
+        uint256 debt = bound(owed, 0, available);
+        RuntimeTestDebtCallback cb = new RuntimeTestDebtCallback(a);
+        bot.execute(script(debtProgram(cb, int256(debt), available, 4), available));
+        assertEq(cb.paid(), debt); assertEq(a.balanceOf(address(bot)), 1100 - debt);
     }
 }

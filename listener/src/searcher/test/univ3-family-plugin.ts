@@ -995,7 +995,17 @@ const legacyFragment = await univ3StandardAdapter.buildPlanFragment({
   executor: EXECUTOR,
   state: {} as StateBackend,
 });
-assert.deepEqual(strictFragment, legacyFragment);
+// Preserve route/amount ownership; the legacy nominal-transfer child is
+// intentionally replaced by the same bounded actual-debt program as runtime.
+assert.deepEqual(strictFragment.requirements, legacyFragment.requirements);
+assert.deepEqual(strictFragment.nodes.map(node => ({ ...node, params: {}, children: [] })),
+  legacyFragment.nodes.map(node => ({ ...node, params: {}, children: [] })));
+const runtimeLeg = univ3StrictFamilyPlugin.execution.buildRuntimeLeg?.({
+  descriptor, route: routes[0], executor: EXECUTOR, runtimeEvidence: [],
+});
+assert(runtimeLeg);
+assert.equal(strictFragment.nodes[0].params.runtimeAmountProgram, runtimeLeg.program);
+assert.equal(strictFragment.nodes[0].children.length, 0);
 assert.throws(
   () => univ3StrictFamilyPlugin.execution.buildFragment({
     descriptor,
@@ -1011,7 +1021,7 @@ assert.throws(
 );
 const summary = definedFamilyPluginContractSummary(univ3StrictFamilyPlugin);
 assert.deepEqual(summary.ownedActionAdapterIds, ["univ3-swap"]);
-const innerScript = new Uint8Array([1, 2, 3]);
+const innerScript = new Uint8Array();
 assert.deepEqual(
   univ3StrictFamilyPlugin.actionAdapters[0].encode(
     strictFragment.nodes[0],
@@ -1020,6 +1030,12 @@ assert.deepEqual(
   ),
   univ3Adapter.encode(strictFragment.nodes[0], EXECUTOR, innerScript),
   "strict ownership uses the existing UniV3 action encoder exactly",
+);
+const legacyInner = new Uint8Array([1, 2, 3]);
+assert.deepEqual(
+  univ3StrictFamilyPlugin.actionAdapters[0].encode(legacyFragment.nodes[0], EXECUTOR, legacyInner),
+  univ3Adapter.encode(legacyFragment.nodes[0], EXECUTOR, legacyInner),
+  "legacy captured callback scripts retain their encoder",
 );
 
 const swapLog = UNIV3_POOL_INTERFACE.encodeEventLog(

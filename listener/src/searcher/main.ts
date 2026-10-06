@@ -39,8 +39,8 @@ import {
 import { blockScanRouteId, blockScanRouteLocator } from "./blockscan-route-identity.js";
 import { createSolverExecutionInputRecorder } from "./solver-execution-input-recorder.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
-import { BlockScanAmountReference, TokenToWethReferenceCache } from "./blockscan-amount-reference.js";
-import { buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried } from "./blockscan-effective-mid.js";
+import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
+import { buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried, resolveEffectiveAmountCascade } from "./blockscan-effective-mid.js";
 import { effectiveEthPricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
 import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
@@ -1062,6 +1062,7 @@ export function createBlockScanPriceRuntime(input: {
     blockScanRethTransportScheduler, blockScanCfg } = input;
   const config = { rpcUrl: input.rpcUrl, botvmAddress: input.executor };
   const executionIdentity = { executor: input.executor, transactionOrigin: input.transactionOrigin };
+  const cascadeAmountChanges = resolveEffectiveAmountCascade(process.env.SEARCHER_BLOCKSCAN_EFFECTIVE_AMOUNT_CASCADE_ENABLED);
   const blockScanRouteTelemetry = { recordPricing: input.recordPricing };
   const strictSessionCache = new Map<
     string,
@@ -1235,14 +1236,12 @@ export function createBlockScanPriceRuntime(input: {
     return pending;
   };
   const blockScanAmountReference = new BlockScanAmountReference();
-  const blockScanTokenReferences = new TokenToWethReferenceCache(ADDR.WETH);
   // Network identity is established once, never guessed for activity reuse.
   const currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(
     strictSessionFor,
     () => strictSessionCache.clear(),
     (publication) => {
-      // Effective publication coverage is independent of the frozen raw sizing
-      // table. get(pricing) below indexes that original reference once, lazily.
+      // Effective sampling amounts come only from successful forward quotes.
       blockScanRouteTelemetry.recordPricing(publication);
       if (blockScanCfg !== undefined && publication.snapshot.effectiveMids?.complete) {
         const start = Date.now();
@@ -1278,10 +1277,10 @@ export function createBlockScanPriceRuntime(input: {
       ) : undefined;
       try {
         let session: StrictProductionRuntimeSession | undefined;
-        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} sizingSourceBlock=${pricing.sourceBlock} sizingRawMids=${pricing.mids.size}`);
+        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} samplingSource=effective-forward maxInputPathHops=3 cascadeAmountChanges=${cascadeAmountChanges}`);
         const effective = await buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
           fixedWethInput: input.fixedEffectiveWethInput,
-          tokenReferences: () => blockScanTokenReferences.get(pricing),
+          cascadeAmountChanges,
           previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
           disabledEdgeIds: reuse?.disabledEdgeIds,
           gasCostWei: blockScanAmountReference.estimateGasCost(source),
@@ -1318,10 +1317,10 @@ export function createBlockScanPriceRuntime(input: {
         });
         console.log(`[searcher/effective-mid] ${JSON.stringify({
           sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
-          sizingRawMids: pricing.mids.size, sizingSourceBlock: pricing.sourceBlock, reference: effective.reference,
+          samplingSource: "effective-forward", maxInputPathHops: 3, reference: effective.reference,
           referenceWethInput: effective.referenceWethInput.toString(),
           complete: effective.complete, wallMs: effective.wallMs,
-          tokenValuationWork: blockScanTokenReferences.stats,
+          cascadeAmountChanges,
           localQuoteCache: strictExactQuoteCache.snapshot(),
           carried: [...effective.rows.values()].filter(row => effectiveMidRowCarried(effective, row)).length,
           ...effectiveMidPairStatistics(effective),

@@ -5,6 +5,9 @@ import {
   effectiveEnumerationMids,
   effectiveMidPairStatistics,
   effectiveMidRowCarried,
+  effectiveAmountReferences,
+  effectiveRowAmountReference,
+  resolveEffectiveAmountCascade,
   type EffectiveMidRow,
   type EffectiveMidSnapshot,
   type EffectivePricingInput,
@@ -19,7 +22,7 @@ import { scannerConsumesEdge } from "../blockscan-pricing-delta.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 
 // Offline behavior tests only: callbacks are fixtures, not chain-quote evidence
-// or full production acceptance. Shapes follow blockscan-amount-reference.ts.
+// or full production acceptance. Sampling follows successful forward Exact quotes.
 const W = "weth", U = "usdc";
 const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
 const SOURCE = Object.freeze({ number: 42, hash: hash(0xabcdef), generation: 7 });
@@ -124,38 +127,28 @@ test("declared standing-position pricing shares Exact but does not grant scanner
   assert.equal(scannerConsumesEdge(credit), false);
   assert.equal(graph.scannerEdgeCount, 0);
   const unsupported = await build(prices);
-  noQuote(row(unsupported, credit), "unsupported");
+  assert.equal(unsupported.rows.has(blockScanEdgeKey(credit)), false,
+    "standing-position graph edge needs its declared pricing state capability");
 });
 
 for (const gasCostWei of [null, 100_000_000_000_000n]) {
-  test(`${gasCostWei === null ? "default 0.002 ETH" : "gas at 200 bps"}: every input token, three hops and raw units`, async () => {
+  test(`${gasCostWei === null ? "default 0.002 ETH" : "gas at 200 bps"}: forward inputs, three-hop references and raw units`, async () => {
     const rows: PriceRow[] = [
       // Deliberately order the four-hop chain backwards to catch in-pass propagation.
-      [edge("z", "y", "z-y"), 4], [edge("y", "x", "y-x"), 3],
-      [edge("x", "USDC", "x-u"), 2], [edge("USDC", "WETH", "u-w"), 5e8],
+      [edge("z", "unreachable", "z-out"), 4], [edge("y", "z", "y-z"), 3],
+      [edge("x", "y", "x-y"), 2], [edge("USDC", "x", "u-x"), 5e8],
       [edge(W, U, "w-u"), 2e-9],
       [edge(U, "output-only", "u-output"), 987_654_321],
       [edge(W, "reverse-only", "w-reverse"), 1],
       [edge("reverse-only", "output-only", "reverse-output"), 1],
       [edge("disconnected", "output-only", "disconnected"), 1],
       [edge("fee", W, "fee-w"), 100, 100],
-      [edge("fee2", "fee", "fee2-fee"), 2, 500],
-      [edge("third", W, "third-w"), 3],
-      [edge("large-unit", W, "large-w"), 1e16],
-      [edge("tiny-unit", W, "tiny-w"), 1e-20],
     ];
     // Independent expected values, not calls back into the amount-reference helper.
-    const expected = new Map<string, bigint | null>(gasCostWei === null ? [
-      [W, DEFAULT_RAW], [U, 4_000_000n], ["x", 2_000_000n], ["y", 666_667n],
-      ["fee", (DEFAULT_RAW + 98n) / 99n], ["fee2", (DEFAULT_RAW * 10n + 1880n) / 1881n],
-      ["third", 666_666_666_666_667n], ["large-unit", 1n], ["tiny-unit", 2n * 10n ** 35n],
-      ["z", null], ["reverse-only", null], ["disconnected", null],
-    ] : [
-      [W, 5_000_000_000_000_001n], [U, 10_000_001n], ["x", 5_000_001n], ["y", 1_666_667n],
-      ["fee", 5_000_000_000_000_000n / 99n + 1n],
-      ["fee2", 50_000_000_000_000_000n / 1881n + 1n],
-      ["third", 1_666_666_666_666_667n], ["large-unit", 1n], ["tiny-unit", 5n * 10n ** 35n + 1n],
-      ["z", null], ["reverse-only", null], ["disconnected", null],
+    const p = gasCostWei === null ? DEFAULT_RAW : 5_000_000_000_000_001n;
+    const expected = new Map<string, bigint | null>([
+      [W, p], [U, p * 7n + 1n], ["x", p * 49n + 8n], ["y", p * 343n + 57n],
+      ["z", null], ["reverse-only", p * 7n + 1n], ["disconnected", null], ["fee", null],
     ]);
     const prices = pricing(rows);
     const controller = new AbortController();
@@ -260,28 +253,33 @@ test("effective leaves original Exact method selection unset and preserves its r
   }
 });
 
-test("one immutable sizing pass; best available rates on shortest paths", async () => {
-  const direct = edge(U, W, "u-direct", "one");
+test("shortest forward layer wins; same-layer maximum and deterministic ties ignore raw marks", async () => {
+  const direct = edge(W, U, "a-direct", "one");
   const rows: PriceRow[] = [
-    [direct, 2], [edge(U, W, "u-variant", "one"), 100],
-    [edge(U, W, "u-second", "two"), 3], [edge(U, W, "u-third", "three"), 4],
-    [edge(U, "x", "longer"), 100], [edge("x", W, "x-direct"), 100],
-    [edge("linked", U, "linked-u"), 2],
+    [direct, 1e-300], [edge(W, U, "z-tie", "one"), 1e100],
+    [edge(W, U, "u-smaller", "two"), 1e200], [edge(W, U, "u-failed", "three"), 1e300],
+    [edge(W, "x", "x-direct"), 100], [edge("x", U, "longer"), 100],
+    [edge(U, "linked", "u-linked"), 2], [edge("linked", W, "cycle"), 2],
   ];
-  const prices = pricing(rows);
-  const mids = prices.mids as Map<string, RouteVenueMid>;
-  const original = mids.get(blockScanEdgeKey(direct))!;
-  const snapshot = await build(prices, {
-    concurrency: 1,
-    quote: async ({ amountIn }) => {
-      mids.set(blockScanEdgeKey(direct), { ...original, mid: 1e30 });
-      return { source: SOURCE, amountIn, amountOut: amountIn * 11n };
-    },
-  });
-  for (const [e] of rows) {
-    const expected = e.tokenIn === "linked" ? DEFAULT_RAW / 200n : DEFAULT_RAW / 100n;
-    assert.equal(row(snapshot, e).amountIn, expected, "later mid changes cannot reprice this pass");
-    assert.equal(row(snapshot, e).effectiveMid, 11);
+  for (const ordered of [rows, [...rows].reverse()]) {
+    const snapshot = await build(pricing(ordered), {
+      quote: async ({ edge: e, amountIn }) => {
+        if (e.target === "u-failed") throw new Error("finite amount unavailable");
+        const amountOut = e.target === "u-smaller" ? 5n
+          : e.target === "longer" ? 10n ** 25n
+          : e.tokenIn === W ? 10n : amountIn * 11n;
+        return { source: SOURCE, amountIn, amountOut };
+      },
+    });
+    const references = effectiveAmountReferences(snapshot)!;
+    assert.equal(references.get(U)!.amountIn, 10n);
+    assert.deepEqual(references.get(U)!.path.map(r => r.edgeId), ["a-direct"]);
+    assert.deepEqual(references.get("linked")!.path.map(r => r.edgeId), ["a-direct", "u-linked"]);
+    assert.equal(references.get(W)!.amountIn, DEFAULT_RAW, "cycle output cannot amplify WETH P");
+    assert.equal(references.get(W)!.path.length, 0);
+    assert.equal(row(snapshot, rows[6]![0]).amountIn, 10n);
+    assert.equal(row(snapshot, rows[7]![0]).amountIn, 110n);
+    noQuote(row(snapshot, rows[3]![0]), "quote-failed");
   }
 });
 
@@ -307,8 +305,8 @@ test("unresolved, invalid, absent and standing-position marks cannot manufacture
   let calls = 0;
   const snapshot = await build(prices, { quote: async () => { calls++; throw new Error("unexpected quote"); } });
   assert.equal(calls, 0);
-  assert.equal(snapshot.rows.size, rows.length);
-  assert.equal(snapshot.rows.has(blockScanEdgeKey(absent)), false, "no row without a ready mid");
+  assert.equal(snapshot.rows.size, rows.length + 1);
+  noQuote(row(snapshot, absent), "missing-valuation");
   for (const r of snapshot.rows.values()) {
     assert.equal(r.amountIn, null);
     noQuote(r, r.edgeId === "standing" ? "unsupported" : "missing-valuation");
@@ -339,7 +337,9 @@ test("unsupported, thrown errors and zero output stay distinct; positive coarse 
   });
   assert.deepEqual(new Set(calls), new Set(ids));
   assert.equal(calls.length, ids.length);
-  for (const e of edges) {
+  noQuote(row(snapshot, standing), "unsupported");
+  assert.equal(row(snapshot, standing).amountIn, null, "unsupported operation receives no fabricated sampling input");
+  for (const e of edges.slice(1)) {
     const r = row(snapshot, e);
     assert.equal(r.amountIn, DEFAULT_RAW);
     if (e.target === "good") {
@@ -398,11 +398,14 @@ test("returned source number, hash, generation and explicit amount must all matc
   assert.deepEqual(same.source, SOURCE);
 });
 
-test("explicit raw amounts below the probe floor and above safe integers reach Exact unchanged", async () => {
+test("forward raw amounts below the probe floor and above safe integers reach Exact unchanged", async () => {
   const edges = [edge("huge-value", W, "one-raw"), edge("tiny-value", W, "big-raw")];
+  const incoming = [edge(W, "huge-value", "to-one"), edge(W, "tiny-value", "to-big")];
   const calls: bigint[] = [];
-  const snapshot = await build(pricing([[edges[0]!, 1e16], [edges[1]!, 1e-20]]), {
-    quote: async ({ amountIn }) => {
+  const snapshot = await build(pricing([...incoming, ...edges].map(e => [e, NaN])), {
+    quote: async ({ edge: e, amountIn }) => {
+      if (e === incoming[0]) return { source: SOURCE, amountIn, amountOut: 1n };
+      if (e === incoming[1]) return { source: SOURCE, amountIn, amountOut: DEFAULT_RAW * 10n ** 20n };
       calls.push(amountIn);
       return { source: SOURCE, amountIn, amountOut: amountIn + 17n };
     },
@@ -416,13 +419,13 @@ test("explicit raw amounts below the probe floor and above safe integers reach E
   }
 });
 
-test("positive output with an unrepresentable effective rate fails closed; measured zero is retained", async () => {
-  const e = edge("tiny", W, "tiny");
-  for (const amountOut of [1n, 0n]) {
-    const snapshot = await build(pricing([[e, 1e-300]]), {
+test("positive unrepresentable effective output fails closed; measured zero is retained", async () => {
+  const e = edge(W, "tiny", "tiny");
+  for (const amountOut of [10n ** 400n, 0n]) {
+    const snapshot = await build(pricing([[e, 1e300]]), {
       quote: async ({ amountIn }) => ({ source: SOURCE, amountIn, amountOut }),
     });
-    assert.equal(row(snapshot, e).amountIn, DEFAULT_RAW * 10n ** 300n);
+    assert.equal(row(snapshot, e).amountIn, DEFAULT_RAW);
     if (amountOut > 0n) noQuote(row(snapshot, e), "quote-failed");
     else {
       assert.equal(row(snapshot, e).status, "no-output");
@@ -642,9 +645,9 @@ test("end-to-end raw USDC/WETH pair uses distinct instances even with a shared e
     quote: async ({ edge: e, amountIn }) => ({ source: SOURCE, amountIn,
       amountOut: e === forward ? 5_050_000_000_000_000n : 10_005_000n }),
   });
-  assert.equal(row(snapshot, forward).amountIn, DEFAULT_RAW / 500_000_000n);
+  assert.equal(row(snapshot, forward).amountIn, 10_005_000n);
   assert.equal(row(snapshot, reverse).amountIn, DEFAULT_RAW);
-  assert.equal(row(snapshot, forward).effectiveMid, 1_262_500_000);
+  assert.equal(row(snapshot, forward).effectiveMid, Number(5_050_000_000_000_000n) / Number(10_005_000n));
   assert.equal(row(snapshot, reverse).effectiveMid, 5.0025e-9);
   assert.deepEqual(effectiveMidPairStatistics(snapshot), {
     directions: 2, quoted: 2, byStatus: { quoted: 2 },
@@ -661,7 +664,7 @@ test("zero spread builds real amount quotes with the global fallback P, includin
     assert.equal(snapshot.reference, "default", "0% cannot define a gas-cover amount");
     assert.equal(snapshot.referenceWethInput, DEFAULT_RAW);
     assert.equal(row(snapshot, forward).amountIn, DEFAULT_RAW);
-    assert.equal(row(snapshot, reverse).amountIn, DEFAULT_RAW / 500_000_000n);
+    assert.equal(row(snapshot, reverse).amountIn, DEFAULT_RAW * 7n);
     for (const r of snapshot.rows.values()) {
       assert.equal(r.status, "quoted");
       assert.equal(r.amountOut, r.amountIn! * 7n);
@@ -669,7 +672,7 @@ test("zero spread builds real amount quotes with the global fallback P, includin
   }
 });
 
-test("invalid policy and a mid outside the graph reject before invoking quotes; empty input completes", async () => {
+test("invalid policy rejects before quotes; raw entries cannot expand the Ready Graph", async () => {
   const e = edge(W, U, "policy");
   const prices = pricing([[e, 1]]);
   let calls = 0;
@@ -684,7 +687,8 @@ test("invalid policy and a mid outside the graph reject before invoking quotes; 
     await assert.rejects(build(prices, { gasCostWei, quote }), /invalid gas cost/);
   }
   const outside = { ...prices, graph: { ...prices.graph, edges: [] } };
-  await assert.rejects(build(outside, { quote }), /outside the Ready Graph/);
+  assert.equal((await build(outside, { quote })).rows.size, 0,
+    "raw entries outside the Ready Graph are not consumed");
   assert.equal(calls, 0);
   const empty = await build(pricing([]), { quote });
   assert.equal(calls, 0);
@@ -890,7 +894,7 @@ test("offline reference contract for all 20 opaque Family IDs: clean reuse, unch
     },
   });
   assert.equal(touchedCalls.length, 40, "unchanged raw ratios do not override the raw state-key touched set");
-  assert.deepEqual(touchedCalls.map(call => call.edge), all);
+  assert.deepEqual(new Set(touchedCalls.map(call => call.edge)), new Set(all));
   assert.strictEqual(nextPrices.mids, prices.mids);
   for (const e of all) {
     assert.equal(row(touched, e).carried, undefined);
@@ -906,12 +910,12 @@ test("offline reference contract for all 20 opaque Family IDs: clean reuse, unch
   assert.deepEqual(previous, before, "current classification must not mutate original reference data");
 });
 
-test("previous raw sizes current quotes, including a recovered direction missing from that raw table", async () => {
-  const old = edge(U, W, "valuation");
-  const prices = pricing([[old, 5e8]]);
+test("forward references size a recovered direction absent from the frozen raw table", async () => {
+  const old = graphAt([edge(W, U, "valuation")], SOURCE).edges[0]!;
+  const prices = pricing([[old, 1e300]]);
   const current = { number: SOURCE.number + 1, hash: hash(700), generation: SOURCE.generation + 1 };
-  const quoteGraph = graphAt([edge(U, "new-output", "recovered")], current);
-  const recovered = quoteGraph.edges[0]!;
+  const quoteGraph = graphAt([old, edge(U, "new-output", "recovered")], current);
+  const recovered = quoteGraph.edges[1]!;
   const previous = await build(prices);
   const calls: QuoteInput[] = [];
   const result = await build(prices, { quoteGraph, previous, touchedStateKeys: new Set(["recovered"]),
@@ -919,19 +923,23 @@ test("previous raw sizes current quotes, including a recovered direction missing
   });
   assert.equal(calls.length, 1);
   assert.equal(calls[0]!.edge, recovered);
-  assert.equal(calls[0]!.amountIn, DEFAULT_RAW / 500_000_000n, "amount uses the old raw conversion, not a current quote");
+  assert.equal(calls[0]!.amountIn, DEFAULT_RAW * 7n, "amount uses the successful upstream quote, never the raw mark");
   assert.deepEqual(result.source, current);
   assert.deepEqual(row(result, recovered).quotedAt, current);
   assert.equal(row(result, recovered).amountOut, 456n);
-  assert.equal(result.rows.has(blockScanEdgeKey(old)), false, "delta removes a retired graph direction");
+  assert.equal(result.rows.has(blockScanEdgeKey(old)), true);
   assert.equal(previous.rows.has(blockScanEdgeKey(old)), true, "old table remains immutable");
   const wrong = await build(prices, { quoteGraph });
-  noQuote(row(wrong, recovered), "quote-failed");
+  noQuote(row(wrong, old), "quote-failed");
+  noQuote(row(wrong, recovered), "missing-valuation");
+  let newEdgeCalls = 0;
   const clean = await build(prices, { quoteGraph, previous, touchedStateKeys: new Set(),
-    quote: async () => { throw new Error("unpriced clean graph directions must not issue quotes"); } });
-  assert.equal(clean.rows.size, 0, "the current graph cannot silently broaden the raw touched work set");
+    quote: async ({edge, amountIn}) => {newEdgeCalls++; assert.equal(edge, recovered);
+      return {source: current, amountIn, amountOut: 457n};} });
+  assert.equal(clean.rows.size, 2, "new Ready Graph directions do not require raw-mid membership");
+  assert.equal(newEdgeCalls, 1);
   const later = { number: current.number + 1, hash: hash(702), generation: current.generation + 1 };
-  const laterGraph = graphAt([recovered], later);
+  const laterGraph = graphAt([old, recovered], later);
   let carryCalls = 0;
   const retained = await build(prices, { quoteGraph: laterGraph, previous: result, touchedStateKeys: new Set(),
     quote: async () => { carryCalls++; throw new Error("clean recovered effective row must carry without raw membership"); } });
@@ -944,7 +952,7 @@ test("previous raw sizes current quotes, including a recovered direction missing
   const failed = await build(prices, { quoteGraph: laterGraph, previous: retained,
     touchedStateKeys: new Set(["recovered"]), quote: async () => { throw new Error("new quote unavailable"); } });
   noQuote(row(failed, recovered), "quote-failed");
-  assert.equal(effectiveEnumerationMids({ ...currentPricing, effectiveMids: failed }).size, 0);
+  assert.equal(effectiveEnumerationMids({ ...currentPricing, effectiveMids: failed }).has(blockScanEdgeKey(recovered)), false);
   const cleanFailed = await build(prices, { quoteGraph: laterGraph, previous: failed, touchedStateKeys: new Set(),
     quote: async () => { carryCalls++; throw new Error("clean failed row stays unavailable"); } });
   assert.equal(carryCalls, 0);
@@ -961,7 +969,7 @@ test("all-clean steady work reuses the Map without even reading valuation covera
   const current = graphAt([edge(U, W, "clean-no-sizing"), ...unpriced], {
     number: SOURCE.number + 1, hash: hash(701), generation: SOURCE.generation + 1,
   });
-  const e = current.edges[0]!, prices = pricing([[e, 5e8]]);
+  const e = current.edges[0]!, prices = pricing(current.edges.map(e => [e, 5e8]));
   const previous = await build(prices);
   const noSizing = { ...prices, get coverage(): EffectivePricingInput["coverage"] {
     throw new Error("clean rows must not compute valuation");
@@ -970,22 +978,23 @@ test("all-clean steady work reuses the Map without even reading valuation covera
     quote: async () => { throw new Error("clean rows must not quote"); },
   });
   assert.strictEqual(result.rows, previous.rows);
-  assert.equal(result.rows.size, 1, "unpriced clean graph directions do not expand the table or work set");
+  assert.equal(result.rows.size, 2365);
   assert.equal(effectiveMidRowCarried(result, row(result, e)), true);
 });
 
 for (const change of ["gas", "mark", "gas-and-mark"] as const) {
   test("changed " + change + " affects dirty/new rows only, not a clean row's original amounts or rate", async () => {
     const clean = edge(U, W, "reference-clean"), dirty = edge(U, W, "reference-dirty");
-    const prices = pricing([[clean, 5e8], [dirty, 5e8]]);
+    const root = edge(W, U, "upstream-reference");
+    const prices = pricing([[root, 2e-9], [clean, 5e8], [dirty, 5e8]]);
     const previous = await build(prices);
     const original = row(previous, clean);
-    assert.equal(original.amountIn, DEFAULT_RAW / 500_000_000n);
+    assert.equal(original.amountIn, DEFAULT_RAW * 7n);
     const added = edge(W, U, "new-reference-row");
     const mark = change === "gas" ? 5e8 : 1e9;
     const gasCostWei = change === "mark" ? null : 100_000_000_000_000n;
     const current = { number: SOURCE.number + 1, hash: hash(555), generation: SOURCE.generation + 1 };
-    const currentPrices = atSource(pricing([[clean, mark], [dirty, mark], [added, 2e-9]]), current);
+    const currentPrices = atSource(pricing([[root, 1 / mark], [clean, mark], [dirty, mark], [added, 2e-9]]), current);
     const calls: QuoteInput[] = [];
     const next = await build(currentPrices, { previous, touchedStateKeys: new Set([dirty.instanceKey!]), gasCostWei,
       quote: async call => {
@@ -993,15 +1002,14 @@ for (const change of ["gas", "mark", "gas-and-mark"] as const) {
         return { source: current, amountIn: call.amountIn, amountOut: call.amountIn * 11n + 1n };
       },
     });
-    assert.deepEqual(calls.map(call => call.edge), [dirty, added]);
+    assert.deepEqual(new Set(calls.map(call => call.edge)), new Set([dirty, added]));
     assertReferenceRetained(row(next, clean), original);
-    const expectedDirtyAmount = change === "gas" ? 10_000_001n
-      : change === "mark" ? DEFAULT_RAW / 1_000_000_000n : 5_000_001n;
+    const expectedWethAmount = gasCostWei === null ? DEFAULT_RAW : 5_000_000_000_000_001n;
+    const expectedDirtyAmount = expectedWethAmount * 11n + 1n;
     assert.equal(row(next, dirty).amountIn, expectedDirtyAmount);
     assert.equal(row(next, dirty).amountOut, expectedDirtyAmount * 11n + 1n);
     assert.deepEqual(row(next, dirty).quotedAt, current);
     assert.equal(row(next, dirty).carried, undefined);
-    const expectedWethAmount = gasCostWei === null ? DEFAULT_RAW : 5_000_000_000_000_001n;
     assert.equal(next.referenceWethInput, expectedWethAmount);
     assert.equal(row(next, added).amountIn, expectedWethAmount);
     assert.equal(row(next, added).carried, undefined);
@@ -1010,18 +1018,19 @@ for (const change of ["gas", "mark", "gas-and-mark"] as const) {
   });
 }
 
-test("a lost sizing mark does not erase a clean reference; a touched unvalued row remains unavailable", async () => {
+test("lost raw marks do not erase successful forward references or prevent touched quoting", async () => {
   const clean = edge(U, W, "lost-mark-clean"), dirty = edge(U, W, "lost-mark-dirty");
-  const previous = await build(pricing([[clean, 5e8], [dirty, 5e8]]));
+  const root = edge(W, U, "root");
+  const previous = await build(pricing([[root, 2e-9], [clean, 5e8], [dirty, 5e8]]));
   let calls = 0;
-  const next = await build(pricing([[clean, 0], [dirty, 0]]), { previous, gasCostWei: 1n,
+  const next = await build(pricing([[root, 0], [clean, 0], [dirty, 0]]), { previous, gasCostWei: 1n,
     touchedStateKeys: new Set([dirty.instanceKey!]),
-    quote: async () => { calls++; throw new Error("no valued fresh input"); },
+    quote: async ({amountIn}) => { calls++; return {source: SOURCE, amountIn, amountOut: 123n}; },
   });
-  assert.equal(calls, 0);
+  assert.equal(calls, 1);
   assertReferenceRetained(row(next, clean), row(previous, clean));
-  assert.equal(row(next, dirty).amountIn, null);
-  noQuote(row(next, dirty), "missing-valuation");
+  assert.equal(row(next, dirty).amountIn, DEFAULT_RAW * 7n);
+  assert.equal(row(next, dirty).amountOut, 123n);
 });
 
 test("the declared raw state key, not target/instance/direction, chooses refresh; instance fallback remains supported", async () => {
@@ -1146,7 +1155,7 @@ for (const reason of ["abort", "deadline"] as const) {
   });
 }
 
-test("partial previous tables reuse completed rows only; every unquoted or absent row retries when valued", async () => {
+test("partial previous tables reuse completed rows and retry unfinished work through forward sources", async () => {
   const names = ["complete-a", "complete-b", "failed", "unsupported", "zero", "missing", "cancelled", "absent"];
   const all = names.map(id => edge(id === "missing" ? "newly-valued" : W, id === "missing" ? W : U, id));
   const controller = new AbortController(), initialCalls: TokenEdge[] = [];
@@ -1162,29 +1171,27 @@ test("partial previous tables reuse completed rows only; every unquoted or absen
   assert.equal(initialCalls.length, 6);
   assert.equal(previous.complete, false);
   assert.deepEqual([...previous.rows.values()].map(r => r.status),
-    ["quoted", "quoted", "quote-failed", "unsupported", "no-output", "missing-valuation", "cancelled"]);
-  // Leftover values/observation metadata cannot convert an unquoted status into a reference.
-  const pending: EffectiveMidSnapshot = { ...previous, rows: new Map([...previous.rows].map(([key, value]) => [key,
-    value.status === "quoted" ? value : { ...value, amountIn: 137n, amountOut: 89n, effectiveMid: 89 / 137, quotedAt: SOURCE },
-  ])) };
+    ["quoted", "quoted", "quote-failed", "unsupported", "no-output", "cancelled", "cancelled"],
+    "unfinished forward discovery is cancelled, not reported as definitively unreachable");
   for (const forward of [false, true]) {
     const current = { number: SOURCE.number + (forward ? 1 : 0), hash: forward ? hash(988) : SOURCE.hash,
       generation: SOURCE.generation + 1 };
     const calls: TokenEdge[] = [];
-    const result = await build(atSource(pricing(all.map(e => [e, 2])), current), {
-      previous: pending, touchedStateKeys: new Set(), gasCostWei: 1n,
+    const seed = edge(W, "newly-valued", "new-root");
+    const result = await build(atSource(pricing([...all, seed].map(e => [e, 2])), current), {
+      previous, touchedStateKeys: new Set(), gasCostWei: 1n,
       quote: async ({ edge, amountIn }) => {
         calls.push(edge);
         return { source: current, amountIn, amountOut: amountIn * 3n };
       },
     });
-    assert.deepEqual(calls, all.slice(2), "all six unquoted/absent rows require fresh requests");
+    assert.deepEqual(new Set(calls), new Set([...all.slice(2), seed]), "unquoted/absent rows retry after an actual forward source exists");
     assert.equal(result.complete, true);
-    assert.equal(result.rows.size, 8);
+    assert.equal(result.rows.size, 9);
     for (const e of all.slice(0, 2)) assertReferenceRetained(row(result, e), row(previous, e));
     for (const e of all.slice(2)) {
       assert.equal(row(result, e).carried, undefined);
-      assert.equal(row(result, e).amountIn, e.target === "missing" ? 26n : 51n);
+      assert.equal(row(result, e).amountIn, e.target === "missing" ? 153n : 51n);
       assert.deepEqual(row(result, e).quotedAt, current);
     }
   }
@@ -1222,8 +1229,8 @@ test("changed row identity cannot borrow a reference despite an unchanged opaque
         return { source: SOURCE, amountIn, amountOut: 89n };
       },
     });
-    assert.equal(calls, 1);
-    assert.equal(row(result, changed).amountOut, 89n);
+    assert.equal(calls, changed.tokenIn === W ? 1 : 0);
+    assert.equal(row(result, changed).amountOut, changed.tokenIn === W ? 89n : null);
     assert.equal(row(result, changed).carried, undefined);
   }
   const wrongId = { ...previous, rows: new Map([[blockScanEdgeKey(original), { ...row(previous, original), edgeId: "other" }]]) };
@@ -1235,32 +1242,39 @@ test("changed row identity cannot borrow a reference despite an unchanged opaque
   assert.equal(row(previous, original).amountOut, DEFAULT_RAW * 7n);
 });
 
-test("legacy quoted rows without quotedAt bind their previous snapshot source once, not each later carry", async () => {
+test("legacy and persisted snapshots cannot carry unproven amount sources into the new policy", async () => {
   const e = edge(W, U, "legacy-reference");
   const prices = pricing([[e, 2]]);
   const previous = snapshotOf([quoted("legacy-reference", W, U, "legacy-reference", 137n, 89n)]);
   const nextSource = { number: SOURCE.number + 1, hash: hash(991), generation: SOURCE.generation + 1 };
   let calls = 0;
-  const quote: Quote = async () => { calls++; throw new Error("legacy clean reference"); };
+  const quote: Quote = async ({amountIn}) => { calls++; return {source: nextSource, amountIn, amountOut: 999n}; };
   const next = await build(atSource(prices, nextSource), { previous, touchedStateKeys: new Set(), quote });
-  assert.deepEqual(row(next, e).quotedAt, SOURCE);
+  assert.deepEqual(row(next, e).quotedAt, nextSource);
+  assert.equal(calls, 1);
+  assert.equal(row(next, e).amountIn, DEFAULT_RAW);
+  assert.equal(row(next, e).amountOut, 999n);
   const laterSource = { ...nextSource, number: nextSource.number + 1, hash: hash(992), generation: nextSource.generation + 1 };
   const later = await build(atSource(prices, laterSource), { previous: next, touchedStateKeys: new Set(), gasCostWei: 1n, quote });
   assertReferenceRetained(row(later, e), row(next, e));
-  assert.equal(row(later, e).amountIn, 137n);
-  assert.equal(row(later, e).amountOut, 89n);
-  assert.equal(calls, 0);
+  assert.equal(row(later, e).amountIn, DEFAULT_RAW);
+  assert.equal(row(later, e).amountOut, 999n);
+  assert.equal(calls, 1);
   assert.equal(row(previous, e).quotedAt, undefined);
+  const persisted = structuredClone(next);
+  assert.equal(effectiveAmountReferences(persisted), undefined, "in-memory provenance is not forged by serializing data");
+  await build(atSource(prices, nextSource), {previous: persisted, touchedStateKeys: new Set(), quote});
+  assert.equal(calls, 2, "even quotedAt cannot substitute for the new in-memory policy identity");
 });
 
 test("quote session is prepared once for actual work, excluding carried and missing-price rows", async () => {
   const clean = Array.from({ length: 512 }, (_, i) => edge(W, U, `clean-${i}`));
   const dirty = edge(W, U, "dirty"), retry = edge(W, U, "unavailable"), missing = edge("unknown", U, "missing");
   const prices = pricing([...clean, dirty, retry, missing].map(e => [e, 1]));
-  const base = await build(prices);
-  const priorRows = new Map(base.rows);
-  priorRows.set(retry.canonicalEdgeId!, { ...row(base, retry), status: "unsupported", amountOut: null, effectiveMid: null });
-  const previous = { ...base, rows: priorRows };
+  const previous = await build(prices, {quote: async ({edge, amountIn}) => {
+    if (edge === retry) throw {code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE"};
+    return {source: SOURCE, amountIn, amountOut: amountIn * 7n};
+  }});
   const current = { number: SOURCE.number + 1, hash: hash(996), generation: SOURCE.generation + 1 };
   const prepared: string[][] = [], issued: string[] = [];
   let ready = false;
@@ -1326,32 +1340,23 @@ test("preparation cancellation issues no quote and preparation failure cannot pu
   assert.equal(calls, 0);
 });
 
-test("effective consumes the supplied raw valuation index lazily, once per pass", async () => {
-  const a = edge(U, W, "indexed-a"), b = edge(U, W, "indexed-b");
+test("raw marks and raw valuation coverage are never read to size effective inputs", async () => {
+  const a = edge(W, U, "forward-a"), b = edge(U, W, "forward-b");
   const prices = pricing([[a, 5e8], [b, 5e8]]);
-  let lookups = 0;
-  const tokenReferences = () => {
-    lookups++;
-    return new Map([[U, { num: 500_000_000n, den: 1n }]]);
+  const poisoned: EffectivePricingInput = {...prices,
+    coverage: { get resolvedEdgeKeys(): readonly string[] { throw new Error("raw valuation coverage read"); } },
+    mids: new Map([...prices.mids].map(([key, mid]) => [key, {...mid,
+      get mid(): number { throw new Error("raw mid read"); },
+      get feeBps(): number { throw new Error("raw fee read"); },
+    }])),
   };
-  const poisoned = { ...prices, coverage: { ...prices.coverage,
-    get resolvedEdgeKeys(): readonly string[] { throw new Error("effective rebuilt the raw valuation index"); },
-  } };
-  const first = await build(poisoned, { tokenReferences });
-  assert.equal(lookups, 1);
-  assert.equal(row(first, a).amountIn, DEFAULT_RAW / 500_000_000n);
-  assert.equal(row(first, b).amountIn, DEFAULT_RAW / 500_000_000n);
-  const clean = await build(poisoned, { previous: first, touchedStateKeys: new Set(),
-    gasCostWei: 100_000_000_000_000n,
-    tokenReferences: () => { throw new Error("clean rows must not request valuations"); },
-  });
+  const first = await build(poisoned);
+  assert.equal(row(first, b).amountIn, DEFAULT_RAW * 7n);
+  const clean = await build(poisoned, { previous: first, touchedStateKeys: new Set() });
   assert.strictEqual(clean.rows, first.rows);
-  const dirty = await build(poisoned, { previous: first, touchedStateKeys: new Set([a.instanceKey!]),
-    gasCostWei: 100_000_000_000_000n, tokenReferences,
-  });
-  assert.equal(lookups, 2);
-  assert.equal(row(dirty, a).amountIn, 10_000_001n);
-  assert.strictEqual(row(dirty, b), row(first, b));
+  const dirty = await build(poisoned, {previous: first, touchedStateKeys: new Set([b.instanceKey!])});
+  assert.equal(row(dirty, b).amountIn, DEFAULT_RAW * 7n);
+  assert.strictEqual(row(dirty, a), row(first, a));
 });
 
 test("run-disabled directions never prepare, value, quote or carry even on full/touched refresh", async () => {
@@ -1362,7 +1367,6 @@ test("run-disabled directions never prepare, value, quote or carry even on full/
   for (const touchedStateKeys of [undefined, new Set<string>(), new Set(["shared-instance"])]) {
     const result = await build(prices, { previous, touchedStateKeys,
       disabledEdgeIds: new Set([a.canonicalEdgeId!, b.canonicalEdgeId!]),
-      tokenReferences: () => { throw new Error("disabled work must not request valuations"); },
       prepareQuote: async () => { assert.fail("disabled work must not prepare a quote session"); },
       quote: async () => { assert.fail("disabled work must not quote"); },
     });
@@ -1392,6 +1396,161 @@ test("run-disabled work is absent from the prepared closure without suppressing 
   noQuote(row(result, a), "disabled-for-run");
   assert.equal(row(result, b).status, "quoted");
   assert.equal(row(result, b).amountOut, DEFAULT_RAW * 7n);
+});
+
+test("successful standing-position quotes do not manufacture debt-free sampling references", async () => {
+  const graph = graphAt([
+    {...edge(W, "borrowed", "credit-root"), slotKind: "lend" as const, edgeKind: "credit" as const,
+      leavesStandingPosition: true},
+    edge("borrowed", W, "borrowed-out"),
+  ], SOURCE);
+  const credit = graph.edges[0]!, downstream = graph.edges[1]!;
+  const base = pricing(graph.edges.map(e => [e, 999]));
+  const prices = {...base, pricingStateKeyByEdgeKey: new Map([...base.pricingStateKeyByEdgeKey!,
+    [blockScanEdgeKey(credit), credit.instanceKey!]])};
+  const calls: TokenEdge[] = [];
+  const result = await build(prices, {quoteGraph: graph, quote: async ({edge, amountIn}) => {
+    calls.push(edge); return {source: SOURCE, amountIn, amountOut: 10n ** 30n};
+  }});
+  assert.deepEqual(calls, [credit]);
+  assert.equal(row(result, credit).status, "quoted", "pricing a declared credit operation remains supported");
+  assert.equal(effectiveAmountReferences(result)!.has("borrowed"), false);
+  noQuote(row(result, downstream), "missing-valuation");
+});
+
+test("amount cascade is explicit opt-in and rejects ambiguous configuration", () => {
+  assert.equal(resolveEffectiveAmountCascade(undefined), false);
+  assert.equal(resolveEffectiveAmountCascade("0"), false);
+  assert.equal(resolveEffectiveAmountCascade("1"), true);
+  for (const value of ["", "true", "false", "2", " 1"]) {
+    assert.throws(() => resolveEffectiveAmountCascade(value), /must be 0 or 1/);
+  }
+});
+
+test("three-hop references quote depth-three outgoing directions but never create a fourth-hop input", async () => {
+  const edges = [edge(W, "a", "w-a"), edge("a", "b", "a-b"), edge("b", "c", "b-c"),
+    edge("c", "d", "c-d"), edge("d", W, "d-w")];
+  const calls: TokenEdge[] = [];
+  const result = await build(pricing([...edges].reverse().map(e => [e, NaN])), {quote: async ({edge, amountIn}) => {
+    calls.push(edge); return {source: SOURCE, amountIn, amountOut: amountIn + 1n};
+  }});
+  assert.deepEqual(calls, edges.slice(0, 4));
+  assert.equal(row(result, edges[3]!).amountIn, DEFAULT_RAW + 3n);
+  noQuote(row(result, edges[4]!), "missing-valuation");
+  const refs = effectiveAmountReferences(result)!;
+  assert.deepEqual(refs.get("c")!.path.map(r => r.edgeId), ["w-a", "a-b", "b-c"]);
+  assert.equal(refs.has("d"), false);
+  assert.deepEqual(effectiveRowAmountReference(row(result, edges[3]!)), refs.get("c"));
+});
+
+test("failed shortest sources do not poison amounts and successful longer sources may recover reachability", async () => {
+  const edges = [edge(W, "x", "failed-direct"), edge(W, "a", "root"), edge("a", "x", "valid-longer"),
+    edge("x", W, "back"), edge(W, "dead", "failed-only"), edge("dead", W, "unreachable")];
+  const calls: string[] = [];
+  const result = await build(pricing(edges.map(e => [e, e.target.startsWith("failed") ? 1e300 : 1e-300])), {
+    quote: async ({edge, amountIn}) => {
+      calls.push(edge.target);
+      if (edge.target.startsWith("failed")) throw new Error("fixture unavailable");
+      return {source: SOURCE, amountIn, amountOut: amountIn * 2n};
+    },
+  });
+  assert.equal(row(result, edges[3]!).amountIn, DEFAULT_RAW * 4n);
+  assert.deepEqual(effectiveAmountReferences(result)!.get("x")!.path.map(r => r.edgeId), ["root", "valid-longer"]);
+  assert.equal(calls.includes("unreachable"), false);
+  noQuote(row(result, edges[5]!), "missing-valuation");
+});
+
+test("default-off cascade preserves downstream tuples and their original in-memory input provenance", async () => {
+  const root = edge(W, "a", "root"), downstream = edge("a", "b", "downstream"), tail = edge("b", W, "tail");
+  const prices = pricing([root, downstream, tail].map(e => [e, 99]));
+  const previous = await build(prices);
+  const originalInput = effectiveRowAmountReference(row(previous, downstream));
+  assert.equal(originalInput!.path[0], row(previous, root));
+  const current = {...SOURCE, number: SOURCE.number + 1, hash: hash(1200), generation: SOURCE.generation + 1};
+  const calls: TokenEdge[] = [];
+  const next = await build(atSource(prices, current), {previous, touchedStateKeys: new Set(["root"]),
+    quote: async ({edge, amountIn}) => {calls.push(edge); return {source: current, amountIn, amountOut: amountIn * 13n};},
+  });
+  assert.deepEqual(calls, [root]);
+  assertReferenceRetained(row(next, downstream), row(previous, downstream));
+  assertReferenceRetained(row(next, tail), row(previous, tail));
+  assert.strictEqual(effectiveRowAmountReference(row(next, downstream)), originalInput);
+  assert.equal(row(next, downstream).amountIn, DEFAULT_RAW * 7n);
+  assert.equal(row(next, root).amountOut, DEFAULT_RAW * 13n);
+  assert.deepEqual(row(next, downstream).quotedAt, SOURCE);
+  calls.length = 0;
+  const enabled = await build(atSource(prices, current), {previous: next, touchedStateKeys: new Set(), cascadeAmountChanges: true,
+    quote: async ({edge, amountIn}) => {calls.push(edge); return {source: current, amountIn, amountOut: amountIn * 7n};},
+  });
+  assert.deepEqual(calls, [downstream, tail], "enabling cascade reconciles retained tuples against the current upstream amounts");
+  assert.equal(row(enabled, downstream).amountIn, DEFAULT_RAW * 13n);
+  assert.equal(row(enabled, tail).amountIn, DEFAULT_RAW * 91n);
+});
+
+test("enabled cascade propagates changed amounts only and stops when a downstream output is unchanged", async () => {
+  const root = edge(W, "a", "root"), downstream = edge("a", "b", "downstream"), tail = edge("b", W, "tail");
+  const other = edge(W, "independent", "independent");
+  const prices = pricing([root, downstream, tail, other].map(e => [e, 1]));
+  const previous = await build(prices, {quote: async ({edge, amountIn}) => ({source: SOURCE, amountIn,
+    amountOut: edge === downstream ? 123n : amountIn * 7n})});
+  const current = {...SOURCE, number: SOURCE.number + 1, hash: hash(1201), generation: SOURCE.generation + 1};
+  for (const change of [false, true]) {
+    const calls: TokenEdge[] = [];
+    const result = await build(atSource(prices, current), {previous, touchedStateKeys: new Set(["root"]), cascadeAmountChanges: true,
+      quote: async ({edge, amountIn}) => { calls.push(edge); return {source: current, amountIn,
+        amountOut: edge === downstream ? 123n : amountIn * (change ? 11n : 7n)}; },
+    });
+    assert.deepEqual(calls, change ? [root, downstream] : [root]);
+    assertReferenceRetained(row(result, tail), row(previous, tail));
+    assertReferenceRetained(row(result, other), row(previous, other));
+    assert.equal(row(result, downstream).amountIn, DEFAULT_RAW * (change ? 11n : 7n));
+    if (change) assert.deepEqual(effectiveRowAmountReference(row(result, downstream))!.path.map(r => r.quotedAt), [current]);
+  }
+});
+
+test("cascade notices a non-selected competitor becoming best and uses deterministic surviving fallback on failure", async () => {
+  const a = edge(W, "x", "a-root"), b = edge(W, "x", "b-root"), out = edge("x", W, "out");
+  const prices = pricing([[a, 1], [b, 999], [out, 1]]);
+  const previous = await build(prices, {quote: async ({edge, amountIn}) => ({source: SOURCE, amountIn, amountOut: edge === a ? 20n : 10n})});
+  const current = {...SOURCE, number: SOURCE.number + 1, hash: hash(1202), generation: SOURCE.generation + 1};
+  const calls: TokenEdge[] = [];
+  const promoted = await build(atSource(prices, current), {previous, touchedStateKeys: new Set(["b-root"]), cascadeAmountChanges: true,
+    quote: async ({edge, amountIn}) => {calls.push(edge); return {source: current, amountIn, amountOut: 30n};},
+  });
+  assert.deepEqual(calls, [b, out]);
+  assert.equal(row(promoted, out).amountIn, 30n);
+  assert.deepEqual(effectiveAmountReferences(promoted)!.get("x")!.path.map(r => r.edgeId), ["b-root"]);
+  calls.length = 0;
+  const failed = await build(atSource(prices, current), {previous: promoted, touchedStateKeys: new Set(["b-root"]), cascadeAmountChanges: true,
+    quote: async ({edge, amountIn}) => {calls.push(edge); if (edge === b) throw new Error("source lost");
+      return {source: current, amountIn, amountOut: 1n};},
+  });
+  assert.deepEqual(calls, [b, out]);
+  assert.equal(row(failed, out).amountIn, 20n);
+  assert.deepEqual(effectiveAmountReferences(failed)!.get("x")!.path.map(r => r.edgeId), ["a-root"]);
+});
+
+test("enabled cascade invalidates unreachable dependents without issuing quotes at stale amounts", async () => {
+  const root = edge(W, "x", "root"), out = edge("x", "y", "out"), tail = edge("y", W, "tail");
+  const prices = pricing([root, out, tail].map(e => [e, 999]));
+  const previous = await build(prices);
+  const current = {...SOURCE, number: SOURCE.number + 1, hash: hash(1203), generation: SOURCE.generation + 1};
+  const calls: TokenEdge[] = [];
+  const next = await build(atSource(prices, current), {previous, touchedStateKeys: new Set(["root"]), cascadeAmountChanges: true,
+    quote: async ({edge}) => {calls.push(edge); throw new Error("source unavailable");},
+  });
+  assert.deepEqual(calls, [root]);
+  noQuote(row(next, out), "missing-valuation");
+  noQuote(row(next, tail), "missing-valuation");
+  assert.equal(effectiveAmountReferences(next)!.has("x"), false);
+  assert.equal(effectiveAmountReferences(next)!.has("y"), false);
+  calls.length = 0;
+  const recovered = await build(atSource(prices, current), {previous: next, touchedStateKeys: new Set(["root"]), cascadeAmountChanges: true,
+    quote: async ({edge, amountIn}) => {calls.push(edge); return {source: current, amountIn, amountOut: amountIn + 2n};},
+  });
+  assert.deepEqual(calls, [root, out, tail], "recovering upstream source reopens previously unavailable clean dependents");
+  assert.equal(row(recovered, tail).amountIn, DEFAULT_RAW + 4n);
+  assert.equal(row(recovered, tail).status, "quoted");
 });
 
 let failed = 0;

@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { encodeRuntimeAmountNode } from "./runtime-amount-program.js";
 import {
   encodeSetField2,
   encodeCall,
@@ -46,6 +47,8 @@ export const univ4UnlockAdapter: ActionAdapter = {
   field2Offset: V4_UNLOCK_FIELD2,
 
   encode(node: ResolvedPlanNode, _executor: string, innerScript: Uint8Array) {
+    const runtime = encodeRuntimeAmountNode(node, innerScript);
+    if (runtime !== null) return runtime;
     // V4 RETURN: unlockCallback must return bytes. Append RETURN opcode.
     const abiCoder = ethers.AbiCoder.defaultAbiCoder();
     const returnData = ethers.getBytes(abiCoder.encode(["string"], [""]));

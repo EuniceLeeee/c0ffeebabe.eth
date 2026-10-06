@@ -105,6 +105,10 @@ export function createBlockScanSimAmountSelector(input: {
           // Record public route/amount identity and local categories, not raw
           // provider messages, URLs, request bodies or cancellation reasons.
           input.record?.({ type: "sim_amount_failure", ...identity,
+            sourceBlock: input.source.number, generation: input.source.generation,
+            familyId: error instanceof BlockScanFamilyAttributedError ? error.familyId : null,
+            failureStage: error instanceof BlockScanFamilyAttributedError ? error.stage : null,
+            quoteContext: error instanceof BlockScanFamilyAttributedError ? error.quoteContext : null,
             failureName: failure instanceof Error ? failure.name : "unknown",
             exactReasonCode: exactReason?.replace(/https?:\/\/[^\s"'`]+/gi, "[redacted]").slice(0,1024) ?? null,
             aborted: control.signal.aborted });

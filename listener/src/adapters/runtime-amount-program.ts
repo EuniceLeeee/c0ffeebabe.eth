@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { addressToBytes, concatBytes, uint24ToBytes, uint256ToBytes } from "../encoder.js";
-import type { ActionAdapter } from "../types.js";
+import type { ActionAdapter, ResolvedPlanNode } from "../types.js";
 
 /** Bounded protocol-neutral register program. r0 is the current leg's input.
  * Family modules own calldata, arithmetic and callback layout. No quote results
@@ -21,6 +21,9 @@ export class RuntimeAmountProgram {
   }
   equal(a: number, b: number): this { return this.push(new Uint8Array([3, reg(a), reg(b)])); }
   load(dst: number, offset: number): this { return this.push(new Uint8Array([6, reg(dst)]), uint24ToBytes(offset)); }
+  calldata(dst: number, offset: number): this {
+    return this.push(new Uint8Array([7, reg(dst)]), uint24ToBytes(offset));
+  }
   allowance(token: string, spender: string, amountReg = 0, grant = ethers.MaxUint256): this {
     return this.push(new Uint8Array([4]), addressToBytes(token), addressToBytes(spender),
       new Uint8Array([reg(amountReg)]), uint256ToBytes(grant));
@@ -53,6 +56,52 @@ function reg(n: number): number {
 }
 export function runtimeProgramScript(program: Uint8Array, amount = 0n): Uint8Array {
   return concatBytes(new Uint8Array([0x0e]), uint256ToBytes(amount), uint24ToBytes(program.length), program);
+}
+/** The quoted-construction path can execute the same Family runtime program
+ * with its fixed trial input. This is data, not a second execution policy. */
+export function encodeRuntimeAmountNode(node: ResolvedPlanNode, innerScript: Uint8Array): Uint8Array | null {
+  const program = node.params.runtimeAmountProgram;
+  if (program === undefined) return null;
+  if (typeof program !== "string" || !ethers.isHexString(program, true) ||
+      !program.startsWith("0x01") || program.length <= 4 || program.length > 2 + 65536 * 2 ||
+      node.amount <= 0n || node.amount > ethers.MaxUint256 || node.children.length || innerScript.length) {
+    throw new Error("runtime program node shape");
+  }
+  return runtimeProgramScript(ethers.getBytes(program), node.amount);
+}
+
+const TRANSFER = new ethers.Interface(["function transfer(address to,uint256 amount)"]);
+/** Bind a protocol-decoded unsigned debt to this invocation's input cap once.
+ * All payment forms and optional settlement-credit verification use that same
+ * debt register. ABI decoding and protocol-specific sync/wrap steps stay owned
+ * by the emitter; no additional chain reads or calls are introduced here. */
+export function runtimePayment(program: RuntimeAmountProgram, debtReg: number, checkReg: number) {
+  if (debtReg === 0 || checkReg === 0 || debtReg === checkReg) throw new Error("runtime payment registers");
+  program.math("sub", checkReg, 0, debtReg);
+  return {
+    transfer(token: string, recipient: string): void {
+      program.call(token, TRANSFER.encodeFunctionData("transfer", [recipient, 0n]), {
+        patches: [{ offset: 36, reg: debtReg }],
+      });
+    },
+    callValue(target: string, data: string): void {
+      program.call(target, data, { valueReg: debtReg });
+    },
+    verifySettled(resultReg: number): void {
+      if (resultReg === 0 || resultReg === debtReg) throw new Error("runtime settlement register");
+      program.load(resultReg, 0).equal(resultReg, debtReg);
+    },
+  };
+}
+/** Generic bounded callback settlement. The owner declares the debt word's ABI
+ * offset; the VM authenticates the callback scope and enforces this trial's cap.
+ * r0 is patched by the enclosing call with the current working amount. */
+export function runtimeCallbackPayment(token: string, recipient: string, debtOffset: number): {
+  script: Uint8Array; limitOffset: number;
+} {
+  const program = new RuntimeAmountProgram().calldata(1, debtOffset);
+  runtimePayment(program, 1, 2).transfer(token, recipient);
+  return { script: runtimeProgramScript(program.bytes()), limitOffset: 1 };
 }
 export interface RuntimeAmountLeg {
   readonly actionAdapterId: string;

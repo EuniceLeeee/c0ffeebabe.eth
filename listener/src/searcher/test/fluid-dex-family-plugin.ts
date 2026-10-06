@@ -17,6 +17,7 @@ import {
   FLUID_DEX_FACTORY_INTERFACE,
   FLUID_DEX_INTERFACE,
   FLUID_DEX_SWAP_SELECTOR,
+  describeFluidDexQuoteFailure,
 } from "../venues/swaps/fluid-dex-family/codec.js";
 import { FLUID_DEX_SWAP_CALL_PATTERN_ID } from
   "../venues/swaps/fluid-dex-family/discovery.js";
@@ -211,6 +212,26 @@ assert.throws(
   /lacked the declared FluidDexSwapResult revert/,
   "unknown custom errors fail closed",
 );
+
+const amountBoundaryRevert = success("exact-fluid-dex-declared-revert",
+  "0x2fee3e0e000000000000000000000000000000000000000000000000000000000000c769",
+  "reverted-as-declared");
+assert.throws(() => exactRequestMethod.program.decode({
+  programInput: { ...exactInput, amountIn: 38n },
+  initialResults: [amountBoundaryRevert], dependentEvidence: [],
+}), /selector=0x2fee3e0e error=FluidDexError code=51049 meaning=DexT1__LimitingAmountsSwapAndNonPerfectActions data=0x2fee3e0e/);
+for (const rejected of [declaredRevert("exact-fluid-dex-declared-revert", 0n), returnedCustomError("exact-fluid-dex-declared-revert", 100n)]) {
+  assert.throws(() => exactRequestMethod.program.decode({ programInput: exactInput,
+    initialResults: [rejected], dependentEvidence: [] }), /error=FluidDexSwapResult/);
+}
+const longPayload = success("diagnostic", "0xdeadbeef" + "ab".repeat(1024), "reverted-as-declared");
+assert(longPayload.ok);
+const description = describeFluidDexQuoteFailure(longPayload);
+assert(description.length < 512);
+assert(description.includes("truncated=true"));
+const malformedPayload = success("diagnostic", "https://example.invalid/private-key", "reverted-as-declared");
+assert(malformedPayload.ok);
+assert(!describeFluidDexQuoteFailure(malformedPayload).includes("example.invalid"));
 
 const fragment = fluidDexStrictFamilyPlugin.execution.buildFragment({
   descriptor,

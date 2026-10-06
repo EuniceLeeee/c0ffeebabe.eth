@@ -2704,8 +2704,8 @@ for (const path of ["coarse", "runtime"] as const) {
   console.log(`strict frozen raw/current effective: PASS ${path}`);
 }
 
-// A direction missing from bootstrap raw can recover in current effective,
-// without changing the original P/reference table or emitting raw history deltas.
+// Bootstrap raw failure cannot block successful forward Exact quotes. Later
+// refresh/carry keeps raw history immutable and still emits no raw deltas.
 {
   let rawReads = 0, amountReads = 0;
   let originalSizing: BlockScanStateSnapshot | undefined;
@@ -2734,10 +2734,15 @@ for (const path of ["coarse", "runtime"] as const) {
   });
   const bootstrap = await coordinator.prepareCoarsePricing({ graph: carryBaseGraph,
     deadlineAtMs: Date.now() + 10_000 });
-  assert.equal(bootstrap.status, "degraded");
+  assert.equal(bootstrap.status, "complete", "raw failure is not an effective quote admission gate");
   const missingKeys = carryBaseGraph.edges.filter(e => e.instanceKey === firstParallelTarget).map(blockScanEdgeKey);
   assert.equal(missingKeys.length, 2);
-  for (const key of missingKeys) assert.equal(bootstrap.snapshot.mids.has(key), false);
+  for (const key of missingKeys) {
+    assert.equal(bootstrap.snapshot.mids.has(key), false);
+    assert.equal(bootstrap.snapshot.effectiveMids!.rows.get(key)!.status, "quoted");
+    assert.equal(effectiveEnumerationMids(bootstrap.snapshot).has(key), true);
+  }
+  assert.equal(amountReads, carryBaseGraph.scannerEdgeCount);
   const bootstrapReads = rawReads;
   assert(bootstrapReads > 0);
   assert.deepEqual(originalSizing!.sourceBlock, CURRENT.number);
@@ -2747,7 +2752,7 @@ for (const path of ["coarse", "runtime"] as const) {
     deadlineAtMs: Date.now() + 10_000, canonicalActivity: { source: carryNextSource,
       parentHash: CURRENT.hash, touchedStateKeys: new Set([firstParallelTarget]), complete: true } });
   assert.equal(recovered.status, "complete");
-  assert.equal(amountReads, 2, "only the formerly absent touched direction pair is newly quoted");
+  assert.equal(amountReads, 2, "only the touched pair is requoted even though it remains absent from raw");
   for (const key of missingKeys) {
     assert.equal(recovered.snapshot.mids.has(key), false);
     assert.equal(recovered.snapshot.effectiveMids!.rows.get(key)!.status, "quoted");

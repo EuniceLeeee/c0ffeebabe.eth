@@ -609,7 +609,12 @@ await fixture("revert", async f => {
   await f.loop.runHead(N, observe());
   assert.equal(f.runtimeAbort.signal.aborted, false); assert.equal(f.requests.length, 1);
   assert.equal(f.published.length, 1);
-  assert([...f.published[0]!.effectiveMids!.rows.values()].every(row => row.status === "quote-failed"));
+  const rows = [...f.published[0]!.effectiveMids!.rows.values()];
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.equal(row.status, row.tokenIn === pool.token0.toLowerCase() ? "quote-failed" : "missing-valuation");
+    assert.equal(row.amountOut, null);
+  }
 });
 for (const mode of ["shutdown", "queued"] as const) {
   await fixture(mode, async f => {
