@@ -10,6 +10,7 @@ export const FLUID_DEX_SWAP_TOPIC =
 export const FLUID_DEX_INTERFACE = new ethers.Interface([
   "function swapIn(bool swap0to1_, uint256 amountIn_, uint256 amountOutMin_, address to_) payable returns (uint256 amountOut_)",
   "error FluidDexSwapResult(uint256 amountOut)",
+  "error FluidDexError(uint256 errorId)",
 ]);
 export const FLUID_DEX_SWAP_SELECTOR = FLUID_DEX_INTERFACE.getFunction(
   "swapIn",
@@ -124,6 +125,30 @@ export function decodeDeclaredFluidDexQuote(
   } catch {
     return null;
   }
+}
+
+/** Diagnostics only: none of these payloads may become successful quote evidence. */
+export function describeFluidDexQuoteFailure(
+  result: Extract<AdapterRequestResult, { readonly ok: true }>,
+): string {
+  const validHex = /^0x(?:[0-9a-fA-F]{2})*$/.test(result.data);
+  const selector = validHex && result.data.length >= 10
+    ? result.data.slice(0, 10).toLowerCase() : "none";
+  let detail = "error=unknown";
+  if (validHex && result.data.length === 74) {
+    if (selector === FLUID_DEX_INTERFACE.getError("FluidDexError")!.selector.toLowerCase()) {
+      const code = BigInt(FLUID_DEX_INTERFACE.decodeErrorResult("FluidDexError", result.data)[0]);
+      detail = `error=FluidDexError code=${code}`;
+      // This code covers both lower and upper bounds; don't infer which one failed.
+      if (code === 51049n) detail += " meaning=DexT1__LimitingAmountsSwapAndNonPerfectActions";
+    } else if (selector === FLUID_DEX_INTERFACE.getError("FluidDexSwapResult")!.selector.toLowerCase()) {
+      detail = `error=FluidDexSwapResult amountOut=${BigInt(FLUID_DEX_INTERFACE.decodeErrorResult("FluidDexSwapResult", result.data)[0])}`;
+    }
+  }
+  const payload = validHex
+    ? `data=${result.data.slice(0, 258).toLowerCase()} bytes=${(result.data.length - 2) / 2} truncated=${result.data.length > 258}`
+    : "data=non-hex";
+  return `completion=${result.completion} selector=${selector} ${detail} ${payload}`;
 }
 
 export function assertSource(

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
 import type { RuntimeAmountLeg } from "../../../../../adapters/runtime-amount-program.js";
+import { encodeRuntimeAmountNode, RuntimeAmountProgram, runtimeProgramScript } from "../../../../../adapters/runtime-amount-program.js";
+import { univ3Adapter } from "../../../../../adapters/univ3.js";
 import { MAX_SQRT_RATIO, MIN_SQRT_RATIO } from "../../../../solver/v3-math.js";
 import { quoteV2ExactInput } from "../../../../solver/v2-constant-product-math.js";
 import { instanceKey } from "../../../adapter-family-identifiers.js";
@@ -48,7 +50,7 @@ interface Allowance { token: string; spender: string; minimum: bigint; grant: bi
 // Decode emitted programs using synthetic return words. This tests Family math
 // and ABI patches only; it is not an EVM/fork or callback-authentication receipt.
 function run(leg: RuntimeAmountLeg | null, amount: bigint, onCall: (call: Call) => string,
-  onAllowance: (allowance: Allowance) => void = () => assert.fail("unexpected allowance")) {
+  onAllowance: (allowance: Allowance) => void = () => assert.fail("unexpected allowance"), calldata = "0x") {
   assert(leg);
   const bytes = ethers.getBytes(leg.program), registers = Array<bigint>(16).fill(0n);
   registers[0] = amount;
@@ -101,6 +103,10 @@ function run(leg: RuntimeAmountLeg | null, amount: bigint, onCall: (call: Call) 
       const dst = reg(), offset = Number(uint(3));
       assert(offset + 32 <= returned.length, "return word bounds");
       set(dst, BigInt(ethers.hexlify(returned.slice(offset, offset + 32))));
+    } else if (op === 7) {
+      const dst = reg(), offset = Number(uint(3)), input = ethers.getBytes(calldata);
+      assert(offset + 32 <= input.length, "calldata word bounds");
+      set(dst, BigInt(ethers.hexlify(input.slice(offset, offset + 32))));
     } else assert.fail(`unexpected Family opcode ${op}`);
   }
   assert.equal(registers[0], amount);
@@ -171,37 +177,93 @@ test("V2 explicitly declines pool-get-amount-out and rejects incompatible routes
   assert.throws(() => univ2Execution.buildRuntimeLeg({ ...input, executor: pool }), /addresses/);
 });
 
-test("V3 patches both signed swap input and callback transfer with exact ABI offsets", () => {
+test("V3 declares callback debt while shared settlement pays only that debt in both directions", () => {
+  for (const route of univ3Routes.project({ descriptor: v3 })) {
+    const amountIn = 100n, amountOut = 7n;
+    const leg = univ3Execution.buildRuntimeLeg({ descriptor: v3, route, executor, runtimeEvidence: [] });
+    const fragment = univ3Execution.buildFragment({ descriptor: v3, route, executor, runtimeEvidence: [],
+      amountIn, quotedAmountOut: amountOut, minAmountOut: 0n,
+      exactEvidence: { kind: "univ3-local-ticks",
+        source: { number: 20000000, hash: `0x${"aa".repeat(32)}`, generation: 1 },
+        pool, quoter: null, caller: executor, tokenIn: route.tokenIn, tokenOut: route.tokenOut,
+        fee: v3.fee, amountIn, amountOut, sqrtPriceX96After: 1n << 96n,
+        initializedTicksCrossed: 0, gasEstimate: 0n },
+    });
+    assert.equal(fragment.nodes.length, 1);
+    assert.deepEqual(univ3Adapter.encode(fragment.nodes[0], executor, new Uint8Array()),
+      runtimeProgramScript(ethers.getBytes(leg.program), amountIn),
+      "quoted V3 construction must share the runtime actual-debt program");
+  }
+});
+
+test("runtime program node is bounded and cannot hide legacy callback children", () => {
+  const node = { adapterId: "univ3-swap", target: pool, tokenIn: token0, tokenOut: token1,
+    amount: 100n, params: { runtimeAmountProgram: ethers.hexlify(new RuntimeAmountProgram().constant(1, 7n).bytes()) }, children: [] };
+  assert.deepEqual(encodeRuntimeAmountNode(node, new Uint8Array()),
+    runtimeProgramScript(ethers.getBytes(node.params.runtimeAmountProgram), node.amount));
+  assert.equal(encodeRuntimeAmountNode({ ...node, params: {} }, new Uint8Array()), null,
+    "legacy capture actions keep their existing encoder");
+  for (const program of [true, "0x", "0x01", "0x010", "0x02ff", "not-hex", "0x01" + "00".repeat(65536)]) {
+    assert.throws(() => encodeRuntimeAmountNode({ ...node, params: { runtimeAmountProgram: program } }, new Uint8Array()), /node shape/);
+  }
+  for (const amount of [0n, -1n, ethers.MaxUint256 + 1n]) {
+    assert.throws(() => encodeRuntimeAmountNode({ ...node, amount }, new Uint8Array()), /node shape/);
+  }
+  assert.throws(() => encodeRuntimeAmountNode({ ...node, children: [node] }, new Uint8Array()), /node shape/);
+  assert.throws(() => encodeRuntimeAmountNode(node, new Uint8Array([1])), /node shape/);
+});
+
+test("V3 runtime callback pays actual debt in both directions", () => {
   for (const route of univ3Routes.project({ descriptor: v3 })) for (const amount of [1n, 123456789n, (1n << 255n) - 1n]) {
     const leg = univ3Execution.buildRuntimeLeg({ descriptor: v3, route, executor, runtimeEvidence: [] });
     assert.equal(leg.actionAdapterId, "univ3-swap");
+    for (const debt of [0n, amount / 2n, amount]) {
     let calls = 0;
     run(leg, amount, call => {
       calls++; assert.equal(call.target, pool); assert(!call.static);
       assert.equal(call.incoming, 132); assert.equal(call.outgoing, 196);
-      assert.deepEqual(call.patches, [{ offset: 68, reg: 0 }, { offset: 256, reg: 0 }]);
+      assert.deepEqual(call.patches, [{ offset: 68, reg: 0 }, { offset: 197, reg: 0 }]);
       const zeroForOne = route.direction === "zero-for-one";
       const decoded = UNIV3_POOL_INTERFACE.decodeFunctionData("swap", call.data);
       assert.deepEqual([...decoded].slice(0, 4), [executor, zeroForOne, amount, zeroForOne ? MIN_SQRT_RATIO + 1n : MAX_SQRT_RATIO - 1n]);
       const script = ethers.getBytes(decoded[4]);
-      assert.equal(script[0], 0); assert.equal(ethers.hexlify(script.slice(1, 21)), route.tokenIn);
-      assert.equal(Number(BigInt(ethers.hexlify(script.slice(21, 24)))), 68); assert.equal(script.length, 24 + 68);
-      assert.deepEqual([...erc20.decodeFunctionData("transfer", script.slice(24))], [pool, amount]);
+      assert.equal(script[0], 14);
+      assert.equal(BigInt(ethers.hexlify(script.slice(1, 33))), amount);
+      assert.equal(Number(BigInt(ethers.hexlify(script.slice(33, 36)))), script.length - 36);
+      const args = zeroForOne ? [debt, -7n, decoded[4]] : [-7n, debt, decoded[4]];
+      const callbackData = ethers.id("uniswapV3SwapCallback(int256,int256,bytes)").slice(0, 10) + abi.encode(["int256", "int256", "bytes"], args).slice(2);
+      let payments = 0;
+      run({ actionAdapterId: "callback", program: ethers.hexlify(script.slice(36)) }, amount, payment => {
+        payments++; assert.equal(payment.target, route.tokenIn); assert(!payment.static);
+        assert.equal(payment.incoming, 0);
+        assert.deepEqual([...erc20.decodeFunctionData("transfer", payment.data)], [pool, debt]);
+        return "0x";
+      }, undefined, callbackData);
+      assert.equal(payments, 1);
       const dummy = UNIV3_POOL_INTERFACE.decodeFunctionData("swap", call.template);
       assert.equal(dummy[2], 0n);
-      assert.equal(erc20.decodeFunctionData("transfer", ethers.getBytes(dummy[4]).slice(24))[1], 0n);
-      return abi.encode(["int256", "int256"], zeroForOne ? [amount, -7n] : [-7n, amount]);
+      assert.equal(BigInt(ethers.hexlify(ethers.getBytes(dummy[4]).slice(1, 33))), 0n);
+      return abi.encode(["int256", "int256"], zeroForOne ? [debt, -7n] : [-7n, debt]);
     });
     assert.equal(calls, 1);
+    }
   }
 });
 
-test("V3 rejects partial fills, overpayment, negative debt, malformed returns and signed overflow", () => {
+test("V3 and shared settlement reject debt above cap, negative debt, malformed data and signed overflow", () => {
   for (const route of univ3Routes.project({ descriptor: v3 })) {
     const leg = univ3Execution.buildRuntimeLeg({ descriptor: v3, route, executor, runtimeEvidence: [] });
-    for (const debt of [0n, 99n, 101n, -100n]) {
+    for (const debt of [101n, -100n]) {
       assert.throws(() => run(leg, 100n, () => abi.encode(["int256", "int256"],
-        route.direction === "zero-for-one" ? [debt, -7n] : [-7n, debt])), /runtime amount mismatch/);
+        route.direction === "zero-for-one" ? [debt, -7n] : [-7n, debt])), /checked uint256 math/);
+      assert.throws(() => run(leg, 100n, call => {
+        const script = ethers.getBytes(UNIV3_POOL_INTERFACE.decodeFunctionData("swap", call.data)[4]);
+        const deltas = route.direction === "zero-for-one" ? [debt, -7n] : [-7n, debt];
+        const callbackData = "0x12345678" + abi.encode(["int256", "int256"], deltas).slice(2);
+        run({ actionAdapterId: "callback", program: ethers.hexlify(script.slice(36)) }, 100n,
+          () => assert.fail("invalid debt reached transfer"), undefined, callbackData);
+        return "0x";
+      }), /checked uint256 math/);
     }
     assert.throws(() => run(leg, 100n, () => "0x"), /return word bounds/);
     assert.throws(() => run(leg, 1n << 255n, () => assert.fail("overflow reached swap")), /runtime amount mismatch/);

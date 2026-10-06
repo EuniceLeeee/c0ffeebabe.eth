@@ -118,7 +118,12 @@ test("reject invalid rows, future/fork observations and standing positions", () 
   }
 });
 test("normal producer clean carry is reusable; a touched failure removes the mark", async () => {
-  const p = snapshot([[BTC, W, 100n, 200n]]), next = { number: 43, hash: hash(43), generation: 8 };
+  const base = snapshot([[W, BTC, 200n, 100n], [BTC, W, 100n, 200n]]);
+  const effectiveMids = await buildEffectiveMids({ pricing: base, weth: W,
+    gasCostWei: null, enumerationSpreadBps: 0, control: {}, concurrency: 1,
+    quote: async ({edge, amountIn}) => ({source, amountIn, amountOut: edge.tokenIn === W ? amountIn / 2n : amountIn * 2n}),
+  });
+  const p = {...base, effectiveMids}, next = { number: 43, hash: hash(43), generation: 8 };
   const current = { ...p, sourceBlock: next.number, sourceBlockHash: next.hash, generation: next.generation };
   let calls = 0;
   const build = (touched: ReadonlySet<string>) => buildEffectiveMids({ pricing: current, previous: p.effectiveMids,
@@ -126,9 +131,10 @@ test("normal producer clean carry is reusable; a touched failure removes the mar
     quote: async () => { calls++; throw new Error("fixture quote failure"); } });
   const carried = await build(new Set());
   assert.equal(calls, 0);
-  assert.equal(carried.rows.get("edge-0")!.quotedAt!.number, 42);
+  assert.strictEqual(carried.rows, effectiveMids.rows);
+  assert.equal(carried.rows.get("edge-1")!.quotedAt!.number, 42);
   assert.equal(createScannedProfitTokenValuation({ ...current, effectiveMids: carried }, next).valueInEth(BTC, 50n, 0), 100n);
-  const refreshed = await build(new Set(["edge-0"]));
+  const refreshed = await build(new Set(["edge-1"]));
   assert(calls > 0);
   assert.equal(createScannedProfitTokenValuation({ ...current, effectiveMids: refreshed }, next).canValue(BTC), false);
 });

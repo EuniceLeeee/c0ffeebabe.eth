@@ -125,6 +125,13 @@ abstract contract RuntimeAmountVM {
             } else if (op == 6) {
                 require(ip + 4 <= data.length, "runtime result bounds");
                 r[uint8(data[ip])] = _word(returned, _u24(data, ip + 1)); ip += 4;
+            } else if (op == 7) {
+                require(ip + 4 <= data.length, "runtime calldata instruction bounds");
+                uint256 offset = _u24(data, ip + 1);
+                require(offset <= msg.data.length && msg.data.length - offset >= 32, "runtime calldata bounds");
+                uint256 value;
+                assembly { value := calldataload(offset) }
+                r[uint8(data[ip])] = value; ip += 4;
             } else revert("runtime opcode");
         }
     }

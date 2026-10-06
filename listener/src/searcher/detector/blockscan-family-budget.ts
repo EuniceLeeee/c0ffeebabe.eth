@@ -63,6 +63,16 @@ export function blockScanRouteCircuitKeys(
   ]);
 }
 
+export interface BlockScanQuoteFailureContext {
+  /** Zero-based index; amountIn is the actual propagated raw-token input. */
+  readonly hopIndex: number;
+  readonly canonicalEdgeId: string | null;
+  readonly instanceKey: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly amountIn: string;
+}
+
 /** Typed proof that one route leg, rather than the whole route, failed. */
 export class BlockScanFamilyAttributedError extends Error {
   constructor(
@@ -70,6 +80,8 @@ export class BlockScanFamilyAttributedError extends Error {
     readonly stage: string,
     readonly failureCause: unknown,
     readonly canonicalEdgeId: string | null = null,
+    // Observability only. Do not use this context to change circuit attribution.
+    readonly quoteContext: BlockScanQuoteFailureContext | null = null,
   ) {
     // Preserve the legacy message contract for callers that classify a known
     // quote/build condition by text; ownership is carried in typed fields.

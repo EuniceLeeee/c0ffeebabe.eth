@@ -8,7 +8,6 @@ import { ethers } from "ethers";
 import { buildFamilyExecutionFragment, executeFamilyExactQuote } from "../../../venues/adapter-family-runtime.js";
 import type { CanonicalSource } from "../../../venues/adapter-request-program.js";
 import { buildEffectiveMids, type EffectivePricingInput } from "../../../blockscan-effective-mid.js";
-import { tokenToWethReferences } from "../../../blockscan-amount-reference.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 import type { RouteVenueMid } from "../../../venues/mid-readers.js";
 import { decodeSwapLog } from "../../../venues/swaps/balancer-v3-family/discovery.js";
@@ -139,9 +138,9 @@ async function run() {
       assert(referencePricing.graph?.edges && referencePricing.mids instanceof Map && referencePricing.coverage?.resolvedEdgeKeys,
         "valuation input must be an actual production prices.json/raw pricing serialization");
       report.valuationReference = { path: resolve(option("--valuation-prices")!), sha256: sha(bytes),
-        sourceBlock: referencePricing.sourceBlock, sourceBlockHash: referencePricing.sourceBlockHash };
+        sourceBlock: referencePricing.sourceBlock, sourceBlockHash: referencePricing.sourceBlockHash,
+        usage: "reference metadata only; raw mids no longer supply effective input amounts" };
     }
-    const marks = tokenToWethReferences(referencePricing, WETH);
     const exact = async (handle: (typeof instances)[number]["routeHandles"][number], amountIn: bigint) => {
       phase = "production";
       try { return await executeFamilyExactQuote({ family: admitted.family, route: handle, amountIn, source,
@@ -149,7 +148,7 @@ async function run() {
       finally { phase = "reference"; }
     };
     const effective = await buildEffectiveMids({ pricing, weth: WETH, gasCostWei: null, enumerationSpreadBps: 0,
-      tokenReferences: () => marks, control: {}, concurrency: 1,
+      control: {}, concurrency: 1,
       quote: async ({ edge, amountIn }) => {
         const projected = admitted.graph.handleByCanonicalEdgeId.get(edge.canonicalEdgeId!); assert(projected);
         const handle = selectedHandles.get(projected.routeKey); assert(handle);
@@ -157,7 +156,8 @@ async function run() {
         return { source, amountIn, amountOut: result.amountOut };
       } });
     report.effective = { complete: effective.complete, reference: effective.reference, referenceWethInput: effective.referenceWethInput,
-      rows: [...effective.rows.values()] };
+      rows: [...effective.rows.values()],
+      scope: "selected Family graph only; directions without a successful WETH path remain missing-valuation" };
     let recordedEffective: any[] = [];
     if (option("--production-effective-log")) {
       const bytes = readFileSync(option("--production-effective-log")!, "utf8");

@@ -1,8 +1,3 @@
-import type { ResolvedPlanNode } from "../../../../shared/types/plan.js";
-import {
-  MAX_SQRT_RATIO,
-  MIN_SQRT_RATIO,
-} from "../../../solver/v3-math.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { UNIV3_SWAP_ROUTER } from "../univ3-abi.js";
 import { canonicalAddress, sameAddress } from "./codec.js";
@@ -21,16 +16,7 @@ export const univ3Execution = {
   }),
   buildFragment(input) {
     assertExecutionEvidence(input);
-    const zeroForOne = input.route.direction === "zero-for-one";
-    const transfer: ResolvedPlanNode = {
-      adapterId: "erc20-transfer",
-      target: input.route.tokenIn,
-      tokenIn: input.route.tokenIn,
-      tokenOut: input.route.tokenIn,
-      amount: input.amountIn,
-      params: { to: input.descriptor.pool, amount: input.amountIn },
-      children: [],
-    };
+    const leg = buildUniV3RuntimeLeg(input);
     return Object.freeze({
       requirements: Object.freeze([]),
       nodes: Object.freeze([Object.freeze({
@@ -39,14 +25,8 @@ export const univ3Execution = {
         tokenIn: input.route.tokenIn,
         tokenOut: input.route.tokenOut,
         amount: input.amountIn,
-        params: {
-          zeroForOne,
-          amountSpecified: input.amountIn,
-          sqrtPriceLimit: zeroForOne
-            ? MIN_SQRT_RATIO + 1n
-            : MAX_SQRT_RATIO - 1n,
-        },
-        children: [transfer],
+        params: { runtimeAmountProgram: leg.program },
+        children: [],
       })]),
     });
   },

@@ -83,7 +83,7 @@ function evaluate(bytes: Uint8Array, amount: bigint, onCall: (call: Call) => str
   const reg = () => { const index = byte(); assert(index < 16); return index; };
   const set = (dst: number, value: bigint) => {
     assert(dst > 0 && dst < 16, "Family must preserve r0");
-    assert(value >= 0n && value <= ethers.MaxUint256); r[dst] = value;
+    assert(value >= 0n && value <= ethers.MaxUint256, "checked uint256 math"); r[dst] = value;
   };
   assert(bytes.length > 1 && bytes.length <= 65536); assert.equal(byte(), 1);
   while (ip < bytes.length) {
@@ -107,6 +107,7 @@ function evaluate(bytes: Uint8Array, amount: bigint, onCall: (call: Call) => str
     } else if (op === 2) {
       const kind = byte(), dst = reg(), a = r[reg()], b = r[reg()];
       switch (kind) {
+        case 1: set(dst, a - b); break;
         case 4: assert(b < 256n); set(dst, a >> b); break;
         case 5: set(dst, a & b); break;
         case 6:
@@ -158,11 +159,12 @@ function packedDelta(input: Input, inputDelta: bigint, outputDelta: bigint): str
   // Independent two's-complement packing: amount0 occupies the high int128.
   return ethers.concat(values.map(value => ethers.toBeHex(BigInt.asUintN(128, value), 16)));
 }
-interface ReplyOverrides { delta?: string; settled?: string }
+interface ReplyOverrides { debt?: bigint; delta?: string; settled?: string }
 function exercise(input: Input, amount: bigint, output: bigint, overrides: ReplyOverrides = {}, seen: string[] = []) {
   const leg = univ4Execution.buildRuntimeLeg(input);
   assert(leg); assert.equal(leg.actionAdapterId, "univ4-unlock");
   const { descriptor: d, route } = input, zero = route.direction === "zero-for-one";
+  const debt = overrides.debt ?? amount;
   const outputReg = zero ? 4 : 5;
   const expected: { name: string; target: string; data: string; valueReg: number; value: bigint;
     patches: Call["patches"]; reply: string }[] = [];
@@ -174,19 +176,19 @@ function exercise(input: Input, amount: bigint, output: bigint, overrides: Reply
   add("swap", managerAbi, manager,
     [[key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks],
       [zero, -amount, zero ? 4295128740n : 1461446703485210103287273052203988822378723970341n], "0x"],
-    [{ offset: 196, reg: 7 }], overrides.delta ?? packedDelta(input, -amount, output));
+    [{ offset: 196, reg: 7 }], overrides.delta ?? packedDelta(input, -debt, output));
   add("take", managerAbi, manager, [route.realTokenOut, executor, output], [{ offset: 68, reg: outputReg }]);
   if (route.realTokenOut === ethers.ZeroAddress) {
     add("deposit", tokenAbi, ADDR.WETH, [], [], "0x", outputReg, output);
   }
   if (route.realTokenIn === ethers.ZeroAddress) {
-    add("withdraw", tokenAbi, ADDR.WETH, [amount], [{ offset: 4, reg: 0 }]);
+    add("withdraw", tokenAbi, ADDR.WETH, [debt], [{ offset: 4, reg: 6 }]);
     add("sync", managerAbi, manager, [ethers.ZeroAddress]);
-    add("settle", managerAbi, manager, [], [], overrides.settled ?? abi.encode(["uint256"], [amount]), 0, amount);
+    add("settle", managerAbi, manager, [], [], overrides.settled ?? abi.encode(["uint256"], [debt]), 6, debt);
   } else {
     add("sync", managerAbi, manager, [route.realTokenIn]);
-    add("transfer", tokenAbi, route.realTokenIn, [manager, amount], [{ offset: 36, reg: 0 }]);
-    add("settle", managerAbi, manager, [], [], overrides.settled ?? abi.encode(["uint256"], [amount]));
+    add("transfer", tokenAbi, route.realTokenIn, [manager, debt], [{ offset: 36, reg: 6 }]);
+    add("settle", managerAbi, manager, [], [], overrides.settled ?? abi.encode(["uint256"], [debt]));
   }
   let outerCalls = 0, innerCalls = 0;
   evaluate(ethers.getBytes(leg.program), amount, unlock => {
@@ -224,14 +226,26 @@ for (const { name, input } of cases) {
         : ["swap", "take", "sync", "transfer", "settle"]);
     }
   });
-  test(`V4 ${name}: partial fill, excessive debt and negative output stop before take/settle`, () => {
-    for (const [debt, output] of [[-99n, 7n], [-101n, 7n], [0n, 7n], [100n, 7n], [-100n, -1n], [-100n, -(1n << 127n)]]) {
+  test(`V4 ${name}: partial and zero fills pay and verify actual debt, not the cap`, () => {
+    for (const amount of [1n, 100n, MAX_I128]) for (const debt of [0n, amount / 2n, amount - 1n]) {
+      const seen = exercise(input, amount, 7n, { debt });
+      assert.equal(seen[0], "swap"); assert.equal(seen.at(-1), "settle");
+    }
+  });
+  test(`V4 ${name}: excessive debt, wrong signs and negative output stop before take/settle`, () => {
+    for (const [debt, output] of [[-101n, 7n], [100n, 7n], [-(1n << 127n), 7n], [-100n, -1n], [-100n, -(1n << 127n)]]) {
       const seen: string[] = [];
-      assert.throws(() => exercise(input, 100n, 7n, { delta: packedDelta(input, debt, output) }, seen), /runtime amount mismatch/);
+      assert.throws(() => exercise(input, 100n, 7n, { delta: packedDelta(input, debt, output) }, seen), /runtime amount mismatch|checked uint256 math/);
       assert.deepEqual(seen, ["swap"]);
     }
   });
   test(`V4 ${name}: settlement credit cannot underpay, overpay or omit the return word`, () => {
+    for (const settled of [0n, 29n, 31n, 100n]) {
+      const seen: string[] = [];
+      assert.throws(() => exercise(input, 100n, 7n,
+        { debt: 30n, settled: abi.encode(["uint256"], [settled]) }, seen), /runtime amount mismatch/);
+      assert.equal(seen.at(-1), "settle");
+    }
     for (const settled of [0n, 99n, 101n, ethers.MaxUint256]) {
       const seen: string[] = [];
       assert.throws(() => exercise(input, 100n, 7n, { settled: abi.encode(["uint256"], [settled]) }, seen), /runtime amount mismatch/);
@@ -244,17 +258,17 @@ for (const { name, input } of cases) {
   });
 }
 
-test("V4 rejects amounts outside its supported positive int128 range before take/settle", () => {
+test("V4 rejects amounts outside its supported int128 range before swap", () => {
   for (const { input } of cases) for (const amount of [1n << 127n, (1n << 128n) + 100n, (1n << 255n) - 1n]) {
     const seen: string[] = [];
     assert.throws(() => exercise(input, amount, 7n, {}, seen), /runtime amount mismatch/);
-    assert.deepEqual(seen, ["swap"]);
+    assert.deepEqual(seen, []);
   }
-  // The primitive rejects the signed int256 boundary before it can issue swap.
+  // The same range check rejects the signed int256 boundary before swap.
   const input = fixture(false, false), leg = buildUniV4RuntimeLeg(input); assert(leg);
   evaluate(ethers.getBytes(leg.program), 1n << 255n, call => {
     const inner = unpackCallback(call, 1n << 255n);
-    assert.throws(() => evaluate(inner, 1n << 255n, () => assert.fail("signed overflow reached swap")), /runtime signed range/);
+    assert.throws(() => evaluate(inner, 1n << 255n, () => assert.fail("signed overflow reached swap")), /runtime amount mismatch/);
     return abi.encode(["bytes"], ["0x"]);
   });
 });

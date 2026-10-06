@@ -21,18 +21,11 @@ import { StrictCurrentRuntimeCoordinator } from "../../../../strict-current-runt
 import { buildFamilyRouteGraphView } from "../../../../adapter-family-graph-runtime.js";
 import { createVerifiedGraphView, blockScanEdgeKey } from "../../../blockscan-state-capability.js";
 import { buildEffectiveMids } from "../../../../blockscan-effective-mid.js";
-import { tokenToWethReferences } from "../../../../blockscan-amount-reference.js";
 import type { FluidCreditDescriptor } from "../types.js";
 import type { ResolvedPlanNode } from "../../../../../types.js";
 
 function required(name: string): string { const value = process.env[name]; assert(value, `${name} required`); return value; }
 function json(path: string): any { return JSON.parse(readFileSync(path, "utf8")); }
-function priceSnapshot(path: string): any {
-  return JSON.parse(readFileSync(path, "utf8"), (_key, value) =>
-    value?.$type === "bigint" ? BigInt(value.value) :
-    value?.$type === "map" ? new Map(value.entries) :
-    value?.$type === "set" ? new Set(value.values) : value);
-}
 async function run(): Promise<void> {
   const cache = required("FLUID_TX_CACHE");
   const boundary = json(resolve(cache, "boundary.json"));
@@ -116,7 +109,6 @@ async function run(): Promise<void> {
       edges: view.edges, familyIdForEdge: () => plugin.manifest.familyId });
     const root = new StrictProductionRuntimeRoot({ catalog, readySource: source, readyGraph: graph.edges,
       readyInstances: [lifecycle.instance], readyFundingAssets: [] });
-    const reference = priceSnapshot(pricesPath).pricing;
     const weth = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
     const exactSession = await root.createSession({ source, runtime, fundingAssets: [], kind: "exact",
       requiredEdgeIds: new Set(graph.edges.map(blockScanEdgeKey)), control });
@@ -125,7 +117,6 @@ async function run(): Promise<void> {
       runtime, fundingAssets: request.fundingAssets, kind: "pricing", control: request.control }), () => {}, undefined,
       (pricing, workControl, _backend, reuse) => buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph,
         weth, gasCostWei: null, enumerationSpreadBps: 0, control: workControl, concurrency: 1,
-        tokenReferences: () => tokenToWethReferences(reference, weth),
         quote: async input => {
           const result = await exactSession.issueExact({ ...input, edge, executor, runtimeEvidence: [] });
           assert("amountIn" in result); return result;
@@ -136,13 +127,21 @@ async function run(): Promise<void> {
     report.raw = { mid: published.mids.get(edgeId), coverage: published.coverage };
     const effective = published.effectiveMids?.rows.get(edgeId);
     report.effective = effective; save();
-    assert(published.effectiveMids?.complete && effective?.status === "quoted");
+    assert(published.effectiveMids?.complete && effective);
+    assert(effective.status === "quoted" || effective.status === "missing-valuation",
+      "isolated Credit graph may lack a WETH path, but other quote failures are not accepted");
     assert.equal(graph.scannerEdgeCount, 0, "pricing does not release standing-position policy");
     const row = prices.pricing.effectiveMids.rows.entries.map((pair: any[]) => pair[1])
       .find((r: any) => r.status === "quoted" && r.tokenIn.toLowerCase() === descriptor.supplyToken.toLowerCase());
     assert(row, "no production amount reference for collateral token; do not invent P");
     const productionAmount = BigInt(row.amountIn.value); report.referenceRow = row;
-    for (const [label, amountIn] of [["production-effective", effective.amountIn!], ["original-tx-input", txAmountIn]] as const) {
+    // This Family-only graph cannot invent WETH conversion edges. If no path
+    // exists, test the saved production input directly and label it separately.
+    const sample = effective.status === "quoted"
+      ? ["production-effective", effective.amountIn!] as const
+      : ["recorded-production-effective-input", productionAmount] as const;
+    report.amountReferenceKind = sample[0]; save();
+    for (const [label, amountIn] of [sample, ["original-tx-input", txAmountIn] as const]) {
       report.stage = label; save(); console.log(`Fluid ${label}: quote started`);
       const quote = await executeCreditRiskQuote({ family, route, collateralAmount: amountIn, debtBps: 10000n,
         executor, runtimeEvidence: [], source, generation: source.generation, runtime, control });

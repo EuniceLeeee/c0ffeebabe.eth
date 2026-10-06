@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { encodeRuntimeAmountNode } from "./runtime-amount-program.js";
 import {
   encodeSetField2,
   encodeCall,
@@ -23,6 +24,8 @@ export const univ3Adapter: ActionAdapter = {
   field2Offset: FIELD2,
 
   encode(node: ResolvedPlanNode, executor: string, innerScript: Uint8Array) {
+    const runtime = encodeRuntimeAmountNode(node, innerScript);
+    if (runtime !== null) return runtime;
     const zeroForOne = node.params.zeroForOne as boolean;
     const amountSpecified = node.params.amountSpecified as bigint;
     const sqrtPriceLimit = node.params.sqrtPriceLimit as bigint;

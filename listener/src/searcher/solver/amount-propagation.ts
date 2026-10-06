@@ -148,6 +148,15 @@ export async function propagateAmountsWithRawOutputs(
         blockScanEdgeFamilyId(edge),
         "amount propagation",
         error,
+        null,
+        {
+          hopIndex: rawOutputs.length,
+          canonicalEdgeId: edge.canonicalEdgeId ?? null,
+          instanceKey: edgeInstanceKey(edge),
+          tokenIn: edge.tokenIn,
+          tokenOut: edge.tokenOut,
+          amountIn: cur.toString(),
+        },
       );
     }
     if (out <= 0n) {
@@ -157,6 +166,15 @@ export async function propagateAmountsWithRawOutputs(
         new (out === 0n ? AmountNotExecutableError : Error)(
           `propagation produced zero at edge ${edge.adapterId} ${edge.tokenIn}->${edge.tokenOut}`,
         ),
+        null,
+        {
+          hopIndex: rawOutputs.length,
+          canonicalEdgeId: edge.canonicalEdgeId ?? null,
+          instanceKey: edgeInstanceKey(edge),
+          tokenIn: edge.tokenIn,
+          tokenOut: edge.tokenOut,
+          amountIn: cur.toString(),
+        },
       );
     }
     rawOutputs.push(out);

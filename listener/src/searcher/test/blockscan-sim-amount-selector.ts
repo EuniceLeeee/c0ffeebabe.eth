@@ -1,4 +1,5 @@
 import { AmountNotExecutableError } from "../solver/amount-rejection.js";
+import { BlockScanFamilyAttributedError, blockScanFailureCircuitAttribution } from "../detector/blockscan-family-budget.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createBlockScanSimAmountSelector } from "../simulator/blockscan-sim-amount-selector.js";
@@ -133,6 +134,41 @@ test(`production sim selection classifies ${kind} without quote-profit fallback`
       return error instanceof Error && !(error instanceof SimAmountNoOpportunityError);
     });
   assert.equal(trials, 1); assert(!published);
+});
+
+test("quote failure logs the failing hop input without changing rejection or circuit scope", async () => {
+  const f = fixture(), events: any[] = [];
+  const edge = f.plan.tokenPath.edges[1];
+  edge.canonicalEdgeId = "swap:fixture\u001ffixture-instance\u001freverse";
+  const fault = new Error(`strict exact unresolved for ${edge.canonicalEdgeId}: exact-decode:fixture-boundary data=0x12345678`);
+  f.session.issueExact = async ({ edge: current, amountIn }: any) => {
+    if (current === edge) { assert.equal(amountIn, 38n); throw fault; }
+    return { amountIn, amountOut: 38n };
+  };
+  const selector = createBlockScanSimAmountSelector({ source, executor, record: event => events.push(event),
+    async simulate() { throw new Error("quote rejection must never reach final sim"); } });
+  await assert.rejects(selector.solve(f.plan, f.state, f.probe, f.opts), error => {
+    assert(error instanceof BlockScanFamilyAttributedError);
+    assert.equal(error.failureCause, fault);
+    assert.equal(blockScanFailureCircuitAttribution(f.plan.tokenPath.edges, error).scope, "family");
+    return true;
+  });
+  const failures = events.filter(e => e.type === "sim_amount_failure");
+  assert.equal(failures.length, 1);
+  const logged = failures[0];
+  assert.equal(logged.amount, "10");
+  assert.equal(logged.sourceBlock, source.number);
+  assert.equal(logged.sourceBlockHash, source.hash);
+  assert.equal(logged.generation, source.generation);
+  assert.equal(logged.familyId, "swap:fixture");
+  assert.equal(logged.failureStage, "amount propagation");
+  assert.equal(logged.quoteContext.hopIndex, 1);
+  assert.equal(logged.quoteContext.canonicalEdgeId, edge.canonicalEdgeId);
+  assert.equal(logged.quoteContext.tokenIn, middle);
+  assert.equal(logged.quoteContext.tokenOut, token);
+  assert.equal(logged.quoteContext.amountIn, "38");
+  assert.equal(logged.exactReasonCode, "exact-decode:fixture-boundary data=0x12345678");
+  assert(!events.some(e => e.type === "sim_amount_execution"));
 });
 
 test("shared trial cap covers quotes and plan construction, not just the simulation RPC", async () => {

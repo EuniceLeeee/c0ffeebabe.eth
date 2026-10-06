@@ -1,6 +1,5 @@
 import { ethers } from "ethers";
-import { RuntimeAmountProgram, type RuntimeAmountLeg } from "../../../../adapters/runtime-amount-program.js";
-import { encodeCall } from "../../../../encoder.js";
+import { RuntimeAmountProgram, runtimeCallbackPayment, type RuntimeAmountLeg } from "../../../../adapters/runtime-amount-program.js";
 import { MAX_SQRT_RATIO, MIN_SQRT_RATIO } from "../../../solver/v3-math.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { UNIV3_POOL_INTERFACE } from "../univ3-abi.js";
@@ -10,7 +9,6 @@ import type { UniV3Descriptor, UniV3ExactEvidence, UniV3Route } from "./types.js
 
 type RuntimeInput = Pick<Parameters<ExecutionSemantics<UniV3Descriptor, UniV3Route, UniV3ExactEvidence>["buildFragment"]>[0],
   "descriptor" | "route" | "executor" | "transactionOrigin" | "runtimeEvidence">;
-const TRANSFER = new ethers.Interface(["function transfer(address to,uint256 amount)"]);
 
 export function buildUniV3RuntimeLeg(input: RuntimeInput): RuntimeAmountLeg {
   const { descriptor: d, route: r } = input;
@@ -29,19 +27,17 @@ export function buildUniV3RuntimeLeg(input: RuntimeInput): RuntimeAmountLeg {
     throw new Error("univ3 runtime invalid execution addresses");
   }
   const zeroForOne = r.direction === "zero-for-one";
-  const transfer = ethers.getBytes(TRANSFER.encodeFunctionData("transfer", [d.pool, 0n]));
-  const callbackScript = encodeCall(r.tokenIn, transfer);
+  const payment = runtimeCallbackPayment(r.tokenIn, d.pool, zeroForOne ? 4 : 36);
   const outgoingOffset = 4 + 5 * 32 + 32; // swap's dynamic bytes content
-  const transferAmountOffset = outgoingOffset + (callbackScript.length - transfer.length) + 4 + 32;
   const program = new RuntimeAmountProgram()
     // amountSpecified is signed. A high bit must never turn exact-input into exact-output.
     .constant(1, 255n).math("shr", 2, 0, 1).constant(3, 0n).equal(2, 3)
     .call(d.pool, UNIV3_POOL_INTERFACE.encodeFunctionData("swap", [executor, zeroForOne, 0n,
-      zeroForOne ? MIN_SQRT_RATIO + 1n : MAX_SQRT_RATIO - 1n, callbackScript]), {
-      patches: [{ offset: 68, reg: 0 }, { offset: transferAmountOffset, reg: 0 }],
+      zeroForOne ? MIN_SQRT_RATIO + 1n : MAX_SQRT_RATIO - 1n, payment.script]), {
+      patches: [{ offset: 68, reg: 0 }, { offset: outgoingOffset + payment.limitOffset, reg: 0 }],
       callback: { incomingOffset: 132, outgoingOffset },
     })
     .load(1, zeroForOne ? 0 : 32)
-    .equal(1, 0); // signed positive input debt must equal the full callback payment
+    .math("sub", 2, 0, 1); // partial fills are legal; input debt must stay within the cap
   return { actionAdapterId: "univ3-swap", program: ethers.hexlify(program.bytes()) };
 }

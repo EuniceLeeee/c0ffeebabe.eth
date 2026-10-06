@@ -169,10 +169,23 @@ for (const policy of [undefined, "on-touch", "each-block"] as const) {
   assert.deepEqual(after.rawMidSource, start);
   assert(cache.lookupState({ ...otherAddress, source: source(901) }), "unrelated state must remain reusable");
   assert.equal(Boolean(cache.lookupState({ ...cacheAddress, source: source(901) })), !eachBlock);
+  const verifyExact = eachBlock ? await root.createSession({source: source(901),
+    runtime: runtime(source(901), "verify-exact"), fundingAssets: [], kind: "exact",
+    requiredEdgeIds: new Set(edges.map(blockScanEdgeKey)), control: {}}) : undefined;
+  const forwardEdge = edges.find(e => e.tokenIn.toLowerCase() === ADDR.WETH.toLowerCase())!;
+  const forward = after.effectiveMids!.rows.get(blockScanEdgeKey(forwardEdge))!;
   for (const [key, row] of before.effectiveMids!.rows) {
     const updated = after.effectiveMids!.rows.get(key)!;
     if (eachBlock) {
-      assert.notEqual(updated.amountOut, row.amountOut);
+      const edge = edges.find(e => blockScanEdgeKey(e) === key)!;
+      const amountIn = edge === forwardEdge ? after.effectiveMids!.referenceWethInput : forward.amountOut!;
+      assert.equal(updated.amountIn, amountIn);
+      if (edge === forwardEdge) assert.notEqual(updated.amountOut, row.amountOut);
+      else assert.notEqual(updated.amountIn, row.amountIn, "downstream sampling follows the new forward output");
+      const exact = await verifyExact!.issueExact({edge, amountIn, executor, runtimeEvidence: [], control: {}});
+      assert("amountIn" in exact);
+      assert.equal(updated.amountOut, exact.amountOut, "fresh effective output agrees with current-source Exact at the new input");
+      assert.notStrictEqual(updated, row);
       assert.deepEqual(updated.quotedAt, source(901));
       assert.equal(after.pricingProvenanceByEdgeKey!.get(key), "refreshed");
     } else {
@@ -190,7 +203,9 @@ for (const policy of [undefined, "on-touch", "each-block"] as const) {
   const failure = await step(source(902));
   assert.strictEqual(failure.mids, before.mids);
   assert.equal(failure.effectiveMids!.rows.size, 2);
-  assert([...failure.effectiveMids!.rows.values()].every(row => row.status === "quote-failed"));
+  for (const row of failure.effectiveMids!.rows.values()) {
+    assert.equal(row.status, row.tokenIn === ADDR.WETH.toLowerCase() ? "quote-failed" : "missing-valuation");
+  }
   assert.equal(failure.coverage.resolvedEdgeKeys.length, 0);
   assert.equal(failure.coverage.unresolvedEdgeKeys.length, 2);
   const stillFailed = await step(source(903));
@@ -200,8 +215,8 @@ for (const policy of [undefined, "on-touch", "each-block"] as const) {
   failed = false;
   const recovered = await step(source(904));
   assert.equal(recovered.mids.size, 2); assert.equal(recovered.effectiveMids!.rows.size, 2);
-  // The original raw table survives the outage, so both inputs can be sized
-  // immediately without a raw refresh or a staged reference-price recovery.
+  // A recovered WETH quote restores downstream sizing in this same forward
+  // build; raw history remains untouched throughout the outage.
   assert.strictEqual(recovered.mids, before.mids);
   assert([...recovered.effectiveMids!.rows.values()].every(row => row.status === "quoted"));
   const fullyRecovered = await step(source(905));
