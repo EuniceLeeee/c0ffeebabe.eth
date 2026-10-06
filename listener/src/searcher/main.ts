@@ -202,7 +202,7 @@ import {
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
 import { EthSimulateV1Simulator, buildEthSimulateV1ExecutionInput } from "./simulator/eth-simulate-v1.js";
 import { createBlockScanSimAmountSelector } from "./simulator/blockscan-sim-amount-selector.js";
-import { createTrialLimiter } from "./simulator/sim-amount-selector.js";
+import { createTrialLimiter, SimAmountNoOpportunityError } from "./simulator/sim-amount-selector.js";
 import { resolveBlockScanFinalSimulationMethod } from "./blockscan-final-simulation-method.js";
 import {
   executeFinalSimulationWork,
@@ -800,6 +800,7 @@ type BlockScanAmountSelectorFactory = NonNullable<BlockScanRuntimeLoopDependenci
 export function createBlockScanLiveAmountSelectorFactory(input: {
   executor: string;
   quoteConcurrency: number;
+  simRejects: BlockScanSimRejectCache;
   record?(input: {
     source: Parameters<BlockScanAmountSelectorFactory>[0]["source"];
     workerIndex: number;
@@ -807,10 +808,34 @@ export function createBlockScanLiveAmountSelectorFactory(input: {
   }): void;
 }): BlockScanAmountSelectorFactory {
   const runTrial = createTrialLimiter(input.quoteConcurrency);
-  return ({ source, workerIndex, simulate }) => createBlockScanSimAmountSelector({
-    source, executor: input.executor, simulate, runTrial,
-    record: input.record === undefined ? undefined : event => input.record!({ source, workerIndex, event }),
-  });
+  return ({ source, workerIndex, simulate }) => {
+    let sequence = 0;
+    return { async solve(plan, state, probe, opts) {
+      const searchId = ++sequence;
+      let revert: SimulationResult | undefined;
+      const selector = createBlockScanSimAmountSelector({
+        source, executor: input.executor, runTrial,
+        async simulate(candidate, control) {
+          const sim = await simulate(candidate, control);
+          if (!sim.success && sim.failure?.kind === "revert" && sim.failure.code === "TRANSACTION_REVERTED") revert = sim;
+          return sim;
+        },
+        record: input.record === undefined ? undefined : event => input.record!({
+          source, workerIndex, event: { ...event, searchId },
+        }),
+      });
+      try { return await selector.solve(plan, state, probe, opts); }
+      catch (error) {
+        // A failed trial is not a failed route: another amount/funding action
+        // may work. Publish only after completed selection rejects the route.
+        if (error instanceof SimAmountNoOpportunityError && error.status !== "deadline" && revert &&
+            plan.opportunity.kind === "block-scan-arb") {
+          input.simRejects.record(blockScanRouteId(plan.opportunity.seedEdges), revert);
+        }
+        throw error;
+      }
+    } };
+  };
 }
 
 export type BlockScanAtomicPolicy = Pick<LiveConfig,
@@ -2538,6 +2563,7 @@ async function main(): Promise<void> {
     finalSimulationWorkers: blockScanFinalSimulationWorkers,
     amountSelectorFactory: createBlockScanLiveAmountSelectorFactory({
       executor: executionIdentity.executor, quoteConcurrency: blockScanSolverSearch.quoteConcurrency,
+      simRejects: blockScanSimRejects,
       record({ source, workerIndex, event }) {
         try {
           console.log(`[searcher/sim-amount] ${JSON.stringify({ ...event,

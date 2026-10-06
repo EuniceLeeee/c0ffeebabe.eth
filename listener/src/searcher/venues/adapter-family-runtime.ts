@@ -62,6 +62,7 @@ import type {
 } from "./adapter-request-program.js";
 import { createBoundedRequestExecutor, requestSetFingerprint } from "./adapter-request-program.js";
 import { hashCanonical, type CanonicalValue } from "./canonical-value.js";
+import { ExactAmountRejectedError } from "./adapter-amount-rejection.js";
 import { applyExactTrialState, emptyExactTrialState, ExactTrialStateConflictError,
   type ExactTrialSnapshot } from "../exact-trial-state.js";
 import { compileExactPrefix } from "../exact-prefix-plan.js";
@@ -245,7 +246,7 @@ export interface SealedFamilyExactQuoteHandle {
 export type ResolvedFamilyExactQuote = SealedFamilyExactQuoteHandle;
 
 export interface TerminalFamilyExactQuote {
-  readonly status: "unresolved" | "failed";
+  readonly status: "unresolved" | "failed" | "rejected";
   readonly outcome: AdapterInstanceOutcome;
 }
 
@@ -1522,6 +1523,8 @@ export async function executeFamilyExactQuote(
           attempt = validateLocalExactAttempt(requireSynchronousExactValue(
             method.trialState.quote(programInput), "trial state quote"));
         } catch (error) {
+          const rejected = exactAmountRejection(invocation, error, evidenceRefs);
+          if (rejected !== null) return rejected;
           if (error instanceof ExactTrialStateConflictError) return terminalExact(invocation, "failed",
             "exact-sequential-prefix-unsupported", [...evidenceRefs, `trial-state-conflict:${hashCanonical(error.message)}`]);
           return terminalExact(invocation, "failed", `trial-state-exact:${errorMessage(error)}`, evidenceRefs);
@@ -1561,6 +1564,8 @@ export async function executeFamilyExactQuote(
     try {
       attempt = validateLocalExactAttempt(method.quote(programInput));
     } catch (error) {
+      const rejected = exactAmountRejection(invocation, error, [...evidenceRefs, methodRef]);
+      if (rejected !== null) return rejected;
       return terminalExact(invocation, "failed",
         `local-exact-quote:${method.id}:${errorMessage(error)}`,
         [...evidenceRefs, methodRef]);
@@ -1869,6 +1874,8 @@ async function executeExactRequestMethod(input: {
     );
     validateExactQuote(quote);
   } catch (error) {
+    const rejected = exactAmountRejection(invocation, error, evidenceRefs);
+    if (rejected !== null) return rejected;
     if (error instanceof ExactTrialStateConflictError) return terminalExact(invocation, "failed",
       "exact-sequential-prefix-unsupported", [...evidenceRefs, `trial-state-conflict:${hashCanonical(error.message)}`]);
     return terminalExact(
@@ -2353,6 +2360,24 @@ function terminalExactFromWork(
   );
 }
 
+function exactAmountRejection(
+  invocation: ResolvedFamilyExactQuoteInvocation,
+  error: unknown,
+  evidenceRefs: readonly string[],
+): TerminalFamilyExactQuote | null {
+  if (!(error instanceof ExactAmountRejectedError)) return null;
+  const stopped = exactControlFailure(invocation, evidenceRefs);
+  if (stopped !== null) return stopped;
+  try {
+    invocation.runtime.generationFence.assertCurrent(invocation.generation, invocation.source);
+    invocation.callerContext.assertCurrent();
+  } catch (failure) {
+    return terminalExact(invocation, "unresolved", errorMessage(failure), evidenceRefs);
+  }
+  return terminalExact(invocation, "rejected", "exact-amount-not-executable",
+    [...evidenceRefs, `amount-rejection:${hashCanonical(error.message)}`]);
+}
+
 function exactControlFailure(
   invocation: ResolvedFamilyExactQuoteInvocation,
   evidenceRefs: readonly string[],
@@ -2713,6 +2738,50 @@ export interface FamilyExecutionInvocation {
   readonly minAmountOut: bigint;
   readonly executor: string;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
+}
+
+/** A separate execution contract, never a synthetic Exact quote. The route
+ * still comes from current-source strict admission and the original caller. */
+export function buildFamilyRuntimeAmountLeg(input: {
+  family: LoadedPricedFamilyPlugin;
+  route: FamilyRouteRuntimeHandle;
+  source: CanonicalSource;
+  runtime: CentralAdapterRuntime;
+  executor: string;
+  runtimeEvidence: readonly RuntimeEvidence[];
+  actionOwnership: Pick<FamilyCapabilityCatalog, "ownerOfAction">;
+}): import("../../adapters/runtime-amount-program.js").RuntimeAmountLeg | null {
+  assertIssuedLoadedFamilyBox(input.family);
+  const record = resolveFamilyRouteRuntimeHandle(input.family, input.route);
+  assertRouteHandleSource(record, input.source, input.source.generation, "runtime execution");
+  assertPreparedRoute(input.family, record.instance, record.route);
+  assertAddress(input.executor, "runtime executor");
+  validateRuntimeEvidence(input.runtimeEvidence, input.family.plugin.manifest.familyId,
+    record.instance.instanceKey, input.source);
+  const subject = Object.freeze({ familyId: input.family.plugin.manifest.familyId,
+    instanceKey: record.instance.instanceKey, routeKey: record.route.routeKey });
+  const binding = { stage: "exact-refine" as const, familyId: subject.familyId, subject,
+    subjectKey: adapterWorkSubjectKey(subject), source: input.source, callerRole: "executor" as const };
+  const caller = snapshotCentralCallerAuthority(input.runtime.callerAuthority.bind(binding));
+  if (caller.executor !== input.executor.toLowerCase()) throw new Error("runtime execution caller mismatch");
+  input.runtime.generationFence.assertCurrent(input.source.generation, input.source);
+  const builder = input.family.plugin.execution.buildRuntimeLeg;
+  if (!builder) return null;
+  const leg = builder(Object.freeze({ descriptor: record.instance.descriptor, route: record.route,
+    executor: input.executor, runtimeEvidence: Object.freeze([...input.runtimeEvidence]),
+    ...(caller.transactionOrigin === undefined ? {} : { transactionOrigin: caller.transactionOrigin }) }));
+  input.runtime.generationFence.assertCurrent(input.source.generation, input.source);
+  const current = snapshotCentralCallerAuthority(input.runtime.callerAuthority.bind(binding));
+  if (current.executor !== caller.executor || current.transactionOrigin !== caller.transactionOrigin) {
+    throw new Error("runtime execution caller changed");
+  }
+  if (leg === null) return null;
+  if (!input.family.plugin.manifest.ownedActionAdapterIds.includes(leg.actionAdapterId) ||
+      input.actionOwnership.ownerOfAction(leg.actionAdapterId) !== input.family.plugin.manifest.familyId ||
+      typeof leg.program !== "string" || !/^0x01(?:[a-fA-F0-9]{2})+$/.test(leg.program) || leg.program.length > 131074) {
+    throw new Error("runtime execution program ownership or bounds");
+  }
+  return Object.freeze({ actionAdapterId: leg.actionAdapterId, program: leg.program });
 }
 
 interface ResolvedFamilyExecutionInvocation {

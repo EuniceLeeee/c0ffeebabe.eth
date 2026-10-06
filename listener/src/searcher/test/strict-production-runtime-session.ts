@@ -3502,6 +3502,13 @@ if (victim.status === "resolved") {
   );
 }
 const simulationsBeforeEffective = fixtureAmountSimulations;
+const runtimeLeg = session.buildRuntimeAmountLeg({ edge, executor: EXECUTOR, runtimeEvidence: [] });
+assert(runtimeLeg !== null);
+assert.equal(runtimeLeg.actionAdapterId, "univ2-swap");
+assert.match(runtimeLeg.program, /^0x01/);
+assert.equal(fixtureAmountSimulations, simulationsBeforeEffective, "runtime construction must not simulate a quote");
+assert.throws(() => session.buildRuntimeAmountLeg({ edge, executor: ORIGIN, runtimeEvidence: [] }), /caller mismatch/);
+assert.throws(() => session.buildRuntimeAmountLeg({ edge: { ...edge, tokenIn: ORIGIN }, executor: EXECUTOR, runtimeEvidence: [] }), /diverged/);
 const effectiveExact = await session.issueExact({
   edge, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [],
 });

@@ -6,6 +6,7 @@ import {
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { UNIV3_SWAP_ROUTER } from "../univ3-abi.js";
 import { canonicalAddress, sameAddress } from "./codec.js";
+import { buildUniV3RuntimeLeg } from "./runtime-execution.js";
 import type {
   UniV3Descriptor,
   UniV3ExactEvidence,
@@ -13,6 +14,7 @@ import type {
 } from "./types.js";
 
 export const univ3Execution = {
+  buildRuntimeLeg: buildUniV3RuntimeLeg,
   runtimeProjection: () => Object.freeze({
     allowanceSpender: UNIV3_SWAP_ROUTER,
     prewarmQuoteCalls: Object.freeze([]),

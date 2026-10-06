@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { buildUniV4RuntimeLeg } from "./runtime-execution.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import type { ResolvedPlanNode } from "../../../../shared/types/plan.js";
 import {
@@ -20,6 +21,7 @@ const MAX_SQRT_PRICE =
   1461446703485210103287273052203988822378723970341n;
 
 export const univ4Execution = {
+  buildRuntimeLeg: buildUniV4RuntimeLeg,
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertExecutionEvidence(input);

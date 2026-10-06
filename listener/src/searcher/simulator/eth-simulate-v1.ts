@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 import { getBytes, Interface, keccak256, toUtf8Bytes } from "ethers";
 import { compilePlan } from "../../shared/compiler/compiler.js";
@@ -215,6 +216,8 @@ function validateExecutorRuntimeCode(value: unknown): BotVmRuntimeCode | undefin
  * zero priority fee. Other target header fields retain endpoint semantics.
  */
 export class EthSimulateV1Simulator {
+  private readonly revertDiagnosticsPath = process.env.SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH;
+  private recordedReverts = 0;
   private readonly executorRuntimeCode: BotVmRuntimeCode | undefined;
   constructor(
     private readonly rpcUrl: string,
@@ -224,6 +227,27 @@ export class EthSimulateV1Simulator {
   ) {
     validateCaller(executor, owner);
     this.executorRuntimeCode = validateExecutorRuntimeCode(executorRuntimeCode);
+  }
+
+  /** Opt-in bounded evidence only: exact endpoint-free input and public hex
+   * revert bytes. No extra RPC, provider messages, or change to the verdict. */
+  private recordRevert(input: EthSimulateV1ExecutionInput, call: Record<string, unknown>): void {
+    if (!this.revertDiagnosticsPath || this.recordedReverts >= 64) return;
+    this.recordedReverts++;
+    const hexEvidence = (value: unknown) => typeof value === "string" && /^0x(?:[0-9a-fA-F]{2})*$/.test(value)
+      ? { data: value.slice(0, 8194), truncated: value.length > 8194 } : null;
+    try {
+      appendFileSync(this.revertDiagnosticsPath, JSON.stringify({
+        schemaVersion: 1, type: "eth_simulateV1_revert", recordedAt: new Date().toISOString(),
+        executionInput: input,
+        failure: { code: 3, gasUsed: quantity(call.gasUsed).toString(),
+          returnData: hexEvidence(call.returnData), errorData: hexEvidence(record(call.error)?.data) },
+      }) + "\n", { mode: 0o600 });
+    } catch {
+      // Diagnostic I/O must not turn an economic revert into a runtime fault.
+      this.recordedReverts = 64;
+      console.error("[searcher/sim-revert-diagnostic] write failed; recording disabled");
+    }
   }
 
   async simulate(plan: ResolvedPlan, context: Context): Promise<EthSimulateV1SimulationResult> {
@@ -347,6 +371,7 @@ export class EthSimulateV1Simulator {
         // route reverts. Remote error text and data are deliberately discarded.
         const error = record(main.error);
         if (error?.code !== 3) throw rpcFailure(main.error);
+        this.recordRevert(saved, main);
         const cause = Object.assign(new Error("final simulation transaction reverted"), {
           kind: "revert", code: "TRANSACTION_REVERTED",
         });

@@ -1131,6 +1131,15 @@ export interface ExecutionSemantics<
   Route extends FamilyRouteDescriptor,
   ExactEvidence,
 > {
+  /** Optional quote-free runtime program, compiled solely from strict route
+   * authority. Null explicitly preserves the quoted path for unsupported variants. */
+  buildRuntimeLeg?(input: {
+    readonly descriptor: Descriptor;
+    readonly route: Route;
+    readonly executor: string;
+    readonly transactionOrigin?: string;
+    readonly runtimeEvidence: readonly RuntimeEvidence[];
+  }): import("../../adapters/runtime-amount-program.js").RuntimeAmountLeg | null;
   runtimeProjection(input: {
     readonly hop: ExecutionRuntimeHop;
   }): ExecutionRuntimeProjection;
@@ -2331,6 +2340,9 @@ function installSynchronousGuards(
     : pluginForDomain(plugin, "protocol");
 
   guardOptionalPriceCapabilities(pricedPlugin);
+  if (pricedPlugin.execution.buildRuntimeLeg !== undefined) {
+    guardSynchronousMethod(pricedPlugin.execution, "buildRuntimeLeg", "execution.buildRuntimeLeg");
+  }
   guardSynchronousMethod(
     pricedPlugin.execution,
     "buildFragment",
@@ -4071,10 +4083,13 @@ function validateExecution(execution: ExecutionSemantics<any, any, any>): void {
   assertPlainRecord(execution, "execution semantics");
   assertExactKeys(
     execution,
-    ["buildFragment", "expectedEffects", "runtimeProjection"],
+    ["buildFragment", "expectedEffects", "runtimeProjection", "buildRuntimeLeg"],
     "execution semantics",
+    false,
+    ["buildFragment", "expectedEffects", "runtimeProjection"],
   );
   assertSynchronousFunction(execution.buildFragment, "execution.buildFragment");
+  if (execution.buildRuntimeLeg !== undefined) assertSynchronousFunction(execution.buildRuntimeLeg, "execution.buildRuntimeLeg");
   assertSynchronousFunction(execution.expectedEffects, "execution.expectedEffects");
   assertSynchronousFunction(
     execution.runtimeProjection,

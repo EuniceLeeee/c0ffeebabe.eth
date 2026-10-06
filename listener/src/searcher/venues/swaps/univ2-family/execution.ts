@@ -3,6 +3,7 @@ import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { UNIV2_PAIR_INTERFACE, sameAddress } from "./codec.js";
 import { uniV2QuoteRouter } from "./router-quote.js";
 import { tokenTransferReceived } from "../../token-transfer-semantics/index.js";
+import { buildUniV2RuntimeLeg } from "./runtime-execution.js";
 import type {
   UniV2Descriptor,
   UniV2ExactEvidence,
@@ -10,6 +11,7 @@ import type {
 } from "./types.js";
 
 export const univ2Execution = {
+  buildRuntimeLeg: buildUniV2RuntimeLeg,
   runtimeProjection: ({ hop }) => Object.freeze({
     // Both execution models pay the pair directly; neither spends via a router.
     allowanceSpender: null,

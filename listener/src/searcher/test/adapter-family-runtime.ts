@@ -1,3 +1,4 @@
+import { ExactAmountRejectedError } from "../venues/adapter-amount-rejection.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
@@ -2920,6 +2921,38 @@ async function testOnlyLocalNotApplicableCanFallback(): Promise<void> {
   assert.equal(decodeControls.localExactCalls ?? 0, 0);
 }
 
+async function testExactAmountRejectionKeepsAuthorityFences(): Promise<void> {
+  for (const invalidation of ["none", "abort", "generation", "caller", "ordinary"] as const) {
+    const abort = new AbortController(), fence = new TestFence();
+    let origin = `0x${"ab".repeat(20)}`;
+    const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0 };
+    const family = defineFixture(`amount-rejection-${invalidation}`, controls);
+    const scheduler = new TestScheduler();
+    const prepared = await run({ family, pools: [GOOD], scheduler });
+    controls.onExactDecode = () => {
+      if (invalidation === "abort") abort.abort();
+      if (invalidation === "generation") fence.failAfter(0);
+      if (invalidation === "caller") origin = `0x${"cd".repeat(20)}`;
+      if (invalidation === "ordinary") throw new Error("ExactAmountRejectedError");
+      throw new ExactAmountRejectedError("fixture amount cannot be executed");
+    };
+    const result = await executeFamilyExactQuote({
+      family, route: issuedRoute(prepared.publications[0].instances[0]), amountIn: 10n,
+      executor: EXECUTOR, runtimeEvidence: [], source: SOURCE, generation: SOURCE.generation,
+      control: { signal: abort.signal },
+      runtime: { ...runtime(scheduler, fence),
+        callerAuthority: { bind: () => ({ executor: EXECUTOR, transactionOrigin: origin }) } },
+    });
+    if (invalidation === "none") {
+      assert.equal(result.status, "rejected");
+      assert.equal(result.outcome.reasonCode, "exact-amount-not-executable");
+    } else {
+      assert.equal(result.status, invalidation === "ordinary" ? "failed" : "unresolved");
+      assert.notEqual(result.outcome.reasonCode, "exact-amount-not-executable");
+    }
+  }
+}
+await testExactAmountRejectionKeepsAuthorityFences();
 async function testExactCacheIsolatedByIssuedFamilyBox(): Promise<void> {
   const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0 };
   const family = defineFixture("exact-cache-family-box", controls);

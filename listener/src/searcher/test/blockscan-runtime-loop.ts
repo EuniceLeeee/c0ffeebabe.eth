@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { initEvents } from "../events.js";
 import { runInNewContext } from "node:vm";
 import { test } from "node:test";
 import ts from "typescript";
@@ -22,7 +25,7 @@ import { blockScanEdgeKey, createVerifiedGraphView, exactSetHash, type VerifiedG
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { AnvilSolver } from "../solver/solver.js";
 import { createBlockScanSimAmountSelector } from "../simulator/blockscan-sim-amount-selector.js";
-import { createTrialLimiter } from "../simulator/sim-amount-selector.js";
+import { createTrialLimiter, SimAmountNoOpportunityError } from "../simulator/sim-amount-selector.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 
 const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
@@ -1047,9 +1050,96 @@ function liveSimRejectPredicate(cache: BlockScanSimRejectCache):
   }
   visit(ast);
   assert(expression, "main must wire the existing rejection cache into runtime dependencies");
+test("backfill preserves original enumeration indexes in Exact diagnostics", () => {
+  const text = readFileSync(new URL("../blockscan-runtime-loop.ts", import.meta.url), "utf8");
+  const ast = ts.createSourceFile("runtime.ts", text, ts.ScriptTarget.Latest, true);
+  let declaration: ts.VariableDeclaration | undefined;
+  function visit(node: ts.Node): void {
+    if (ts.isVariableDeclaration(node) && node.name.getText(ast) === "onRefinementDiagnostic") declaration = node;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert(declaration?.initializer);
+  const opportunities = [{ id: "rejected" }, { id: "first-survivor" }, { id: "rejected-again" }, { id: "last-survivor" }];
+  const records: Array<{ id: string; index: number }> = [];
+  const callback = runInNewContext(ts.transpileModule(`(function() { return (${declaration.initializer.getText(ast)}); }).call(owner)`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, {
+    owner: { deps: { blind: { enabled: false } } }, routeTelemetryPass: {},
+    coarse: { opportunities }, candidateOpportunities: [opportunities[1], opportunities[3]],
+    recordExact(opportunity: any, diagnostic: any) { records.push({ id: opportunity.id, index: diagnostic.index }); },
+  });
+  callback({ index: 0, status: "positive" }); callback({ index: 1, status: "nonpositive" });
+  assert.deepEqual(records, [{ id: "first-survivor", index: 1 }, { id: "last-survivor", index: 3 }]);
+});
+
   return runInNewContext(ts.transpileModule(`(${expression.getText(ast)})`, {}).outputText,
     { blockScanSimRejects: cache, blockScanRouteId });
 }
+for (const rejection of ["none", "first", "all", "all-but-last"] as const)
+test(`cached sim reverts backfill ranked candidates before the downstream cap: ${rejection}`, async context => {
+  const eventDir = mkdtempSync(join(tmpdir(), "blockscan-backfill-"));
+  const eventPath = join(eventDir, "events.jsonl");
+  const logs: string[] = [];
+  context.mock.method(console, "log", (...args: unknown[]) => logs.push(args.map(String).join(" ")));
+  initEvents(eventPath);
+  const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("unexpected sim"); } },
+    async closeAndDrain() {} }));
+  const edges = twoWayPoolEdges([target, `0x${"dd".repeat(20)}`, `0x${"ee".repeat(20)}`, `0x${"ff".repeat(20)}`]);
+  const cache = new BlockScanSimRejectCache(), predicate = liveSimRejectPredicate(cache);
+  const enumerated: string[] = [], planned: string[] = [], solved: string[] = [];
+  const rejected = new Set<string>();
+  const revert: SimulationResult = { success: false, profitToken: priceFundingToken, grossProfit: 0n,
+    netProfit: 0n, gasUsed: 0n, calldata: "0x", scriptHex: "0x",
+    failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: new Error("fixture revert") } };
+  context.mock.method(AnvilSolver.prototype, "solve", async (plan: any) => {
+    solved.push(blockScanRouteId(plan.tokenPath.edges));
+    return { netProfit: 0n } as any;
+  });
+  f.coordinator.prepare = async (input: any) => completeRuntimeFixture(input.graph);
+  Object.assign(f.deps, {
+    exactRefineEnabled: false, refineCandidates: 10,
+    blockScanGraph: () => edges,
+    isRouteSimRejected: predicate,
+    formatRouteKey: (opp: any) => blockScanRouteId(opp.seedEdges),
+    exactQuoteStateFactory: () => ({ async call() { throw new Error("unexpected amount quote"); } }),
+    strictSession: async () => ({ edges, runtimeEvidenceFromPendingExecution: () => [],
+      familyIdForEdge: () => "fixture", async issueExact() { throw new Error("unexpected Exact"); } }),
+    amountReference: { prepare(input: any) {
+      enumerated.push(...input.opportunities.map((opp: any) => blockScanRouteId(opp.seedEdges)));
+      assert(enumerated.length > 2, "natural enumeration must provide replacement candidates");
+      for (const [index, routeId] of enumerated.entries()) {
+        if (rejection === "all" || (rejection === "first" && index === 0) ||
+            (rejection === "all-but-last" && index < enumerated.length - 1)) {
+          cache.record(routeId, revert); rejected.add(routeId);
+        }
+      }
+      return new Map(input.opportunities.map((opp: any) => [opp, 123n]));
+    } },
+    blockScanPlanner: () => ({ setFlashLiquidity() {}, setGraph() {}, async planBlockScanFromSeedEdges(opp: any) {
+      planned.push(blockScanRouteId(opp.seedEdges));
+      return [{ opportunity: { ...opp, startToken: opp.flashToken, profitToken: opp.flashToken },
+        tokenPath: { edges: [...opp.seedEdges] }, templateName: "fixture", root: {},
+        maxFlashAmount: opp.searchSeed.maxInput, flashAdapterIds: ["fixture-flash"],
+        flashAdapterId: "fixture-flash", cycleTokens: [opp.flashToken], borrowableTokens: [] }];
+    } }),
+    blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0, exactAdmissionSpreadBps: 0,
+      hopTokensPerStep: 3, hopPoolsPerPair: 3, maxCandidates: 2,
+      pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
+  });
+  try {
+    await f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+    const expected = enumerated.filter(routeId => !rejected.has(routeId)).slice(0, 2);
+    assert.deepEqual(planned, expected, "filter before selection, keeping original rank and cap");
+    assert.deepEqual(solved, expected, "only surviving selected routes enter amount search");
+    const dropped = readFileSync(eventPath, "utf8").trim().split("\n").filter(Boolean).map(line => JSON.parse(line))
+      .filter(event => event.type === "pipeline_dropped" && event.reason === "sim_revert_seen_this_live");
+    assert.deepEqual(dropped.map(event => event.route_id), enumerated.filter(routeId => rejected.has(routeId)));
+    assert(dropped.every(event => event.plans === 0 && event.source_block === 101 && event.target_block === 102));
+  } finally {
+    await f.loop.shutdown(); initEvents("");
+    rmSync(eventDir, { recursive: true, force: true });
+  }
+});
+
 
 for (const cacheCase of ["absent", "known", "unknown", "queued", "in-flight", "fresh-cache", "cleared-cache"] as const)
 for (const historicalExecutionMode of cacheCase === "known" || cacheCase === "in-flight"
@@ -1324,7 +1414,7 @@ test(`disabled independent Exact keeps Solver strict-session wiring; sim reject 
     if (cacheCase !== "queued") assert(skipPayload.eligibleNotSelected > 0,
       "disabled mode must preserve coarse order and cap without promoting every valid route");
     assert.deepEqual(plannedRoutes, enumeratedRoutes.filter((_, index) => index !== 1).slice(0, skipPayload.selected),
-      "cache policy must not alter natural selection, rank or refill from outside selected candidates");
+      "reverts learned after selection must not trigger unbounded same-block refill");
     assert.equal(skipPayload.amountSource, "effective-first-edge");
     assert.equal(telemetryExact, 0, "disabled mode must not record compact Exact diagnostics");
     assert(telemetryEnumeration >= skipPayload.selected + skipPayload.rejectedOverCap);
@@ -1366,8 +1456,11 @@ test(`disabled independent Exact keeps Solver strict-session wiring; sim reject 
       assert.equal(f.deps.isRouteSimRejected, undefined);
       assert(simRejects.has(plannedRoutes[0]!));
     } else {
-      assert.deepEqual(predicateChecks, plannedRoutes.map((routeId, index) => ({ routeId,
-        rejected: cacheCase === "known" || (cacheCase === "queued" && index === 1) })));
+      assert.deepEqual(predicateChecks, [
+        ...enumeratedRoutes.map(routeId => ({ routeId, rejected: false })),
+        ...plannedRoutes.map((routeId, index) => ({ routeId,
+          rejected: cacheCase === "known" || (cacheCase === "queued" && index === 1) })),
+      ]);
     }
     assert.equal(atomicResults.length, sourceChecks);
     if (cacheCase === "known") {
@@ -1446,7 +1539,7 @@ test("Anvil preparation belongs to the pass, while cancelled leases drain before
   }
 });
 
-function liveSimAmountFactory(): NonNullable<BlockScanRuntimeLoopDependencies["amountSelectorFactory"]> {
+function liveSimAmountFactory(cache = new BlockScanSimRejectCache()): NonNullable<BlockScanRuntimeLoopDependencies["amountSelectorFactory"]> {
   const text = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
   const ast = ts.createSourceFile("main.ts", text, ts.ScriptTarget.Latest, true);
   let expression: ts.Expression | undefined;
@@ -1462,12 +1555,65 @@ function liveSimAmountFactory(): NonNullable<BlockScanRuntimeLoopDependencies["a
   return runInNewContext(ts.transpileModule(`(${expression.getText(ast)})`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText, { createBlockScanSimAmountSelector, createBlockScanLiveAmountSelectorFactory,
+    blockScanSimRejects: cache,
     blockScanSolverSearch: { quoteConcurrency: 3 }, blockScanAmountTrials: createTrialLimiter(3),
     executionIdentity: { executor: actor }, console });
 }
 
+for (const outcome of ["revert", "nonpositive", "rpc", "larger-revert", "funding-recovery", "revert-then-rpc", "deadline", "cancel"] as const)
+test(`live amount factory shares final-sim rejection policy: ${outcome}`, async () => {
+  const cache = new BlockScanSimRejectCache(), factory = liveSimAmountFactory(cache);
+  const edges = twoWayPoolEdges([target]), routeId = blockScanRouteId(edges);
+  const result = (profit: bigint): SimulationResult => ({ success: profit > 0n, profitToken: priceFundingToken,
+    netProfit: profit, grossProfit: profit, gasUsed: 10n, calldata: "0x", scriptHex: "0x" });
+  const fault = new Error("fixture infrastructure failure"), abort = new AbortController();
+  const reverted: SimulationResult = { ...result(0n),
+    failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: new Error("fixture EVM revert") } };
+  const multi = ["funding-recovery", "revert-then-rpc", "deadline", "cancel"].includes(outcome);
+  const session: any = {
+    source: source(1), edges, blocksPrefixInversion: () => false,
+    async issueExact(input: any) { return { amountIn: input.amountIn, amountOut: input.amountIn + 100n }; },
+    fundingActionIds: () => multi ? ["first", "second"] : ["first"],
+    buildExecution: () => ({ status: "resolved", fragment: { nodes: [], requirements: [] } }),
+    buildFundingRoot(input: any) { return { adapterId: "skip", target: actor, tokenIn: priceFundingToken,
+      tokenOut: priceFundingToken, amount: input.amount, children: [], params: { funding: input.actionAdapterId } }; },
+  };
+  const plan: any = { opportunity: { kind: "block-scan-arb", seedEdges: edges,
+    flashToken: priceFundingToken, profitToken: priceFundingToken, searchSeed: { searchCenter: 10n } },
+    tokenPath: { edges }, maxFlashAmount: 10000n, templateName: "fixture" };
+  let simulations = 0;
+  const selector = factory({ source: source(1), workerIndex: 0, async simulate(plan, control) {
+    simulations++;
+    if (outcome === "revert" || (outcome === "larger-revert" && plan.flashAmount > 10n) ||
+        (multi && plan.root.params.funding === "first")) return reverted;
+    if (outcome === "rpc" || outcome === "revert-then-rpc") {
+      return { ...result(0n), failure: { kind: "source-fault", code: 429, cause: fault } };
+    }
+    if (outcome === "cancel") { abort.abort(fault); control.signal.throwIfAborted(); }
+    if (outcome === "deadline") {
+      await new Promise<void>((_resolve, reject) => {
+        control.signal.addEventListener("abort", () => reject(control.signal.reason), { once: true });
+        if (control.signal.aborted) reject(control.signal.reason);
+      });
+    }
+    return result(outcome === "nonpositive" ? 0n : 1n);
+  } });
+  const solve = selector.solve(plan, { async call() { throw new Error("unexpected raw quote"); } } as any,
+    { executor: actor } as any, { strictSession: session, deferPhase2Sim: true, gssMaxTries: 0,
+      deadlineMs: outcome === "deadline" ? 50 : 10000, signal: abort.signal });
+  if (outcome === "larger-revert" || outcome === "funding-recovery") assert.equal((await solve).flashAmount, 10n);
+  else await assert.rejects(solve, error => {
+    if (["rpc", "revert-then-rpc", "cancel"].includes(outcome)) return error === fault;
+    return error instanceof SimAmountNoOpportunityError;
+  });
+  assert(simulations > 0);
+  assert.equal(cache.has(routeId), outcome === "revert", "only a rejected route with confirmed revert is remembered");
+  assert.equal(liveSimRejectPredicate(cache)({ seedEdges: edges }), outcome === "revert");
+  assert(!new BlockScanSimRejectCache().has(routeId), "a new live process starts fresh");
+});
+
 for (const backend of ["direct", "anvil"] as const)
-for (const outcome of ["positive", "nonpositive", "source-fault", "cancel"] as const)
+for (const outcome of ["positive", "nonpositive", "revert", "source-fault", "cancel"] as const)
 for (const stopAtSizing of [false, true])
 test(`ordinary live factory selects actual sim profit through runtime (${backend}, ${outcome}, sizingOnly=${stopAtSizing})`, async () => {
   const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } }, async closeAndDrain() {} }));
@@ -1483,6 +1629,8 @@ test(`ordinary live factory selects actual sim profit through runtime (${backend
       if (outcome === "cancel") f.runtimeAbort.abort(new Error("fixture new head"));
       await turn(); signal.throwIfAborted();
       if (outcome === "source-fault") throw fault;
+      if (outcome === "revert") return { ...result(0n),
+        failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: new Error("fixture EVM revert") } } as SimulationResult;
       return result(outcome === "nonpositive" ? 0n : plan.flashAmount === 1230n ? 55n : 1n);
     } finally { active--; }
   };
@@ -1510,9 +1658,12 @@ test(`ordinary live factory selects actual sim profit through runtime (${backend
   AnvilSolver.prototype.solve = async () => { throw new Error("ordinary live must not call old Solver"); };
   console.log = (...args: unknown[]) => { logs.push(args.map(String).join(" ")); };
   const cache = new BlockScanSimRejectCache();
+  let plannedRouteId = "";
+  const trialRoutes: string[] = [];
   Object.assign(f.deps, {
     exactRefineEnabled: false, solverGssMaxTries: 0, solverAmountGrid: "multiples", solverQuoteConcurrency: 3,
-    amountSelectorFactory: liveSimAmountFactory(), executionWorkers: [worker("trial")],
+    amountSelectorFactory: liveSimAmountFactory(cache), executionWorkers: [worker("trial")],
+    isRouteSimRejected: liveSimRejectPredicate(cache),
     finalSimulationWorkers: backend === "anvil" ? [worker("final")] : [],
     ...(backend === "direct" ? { directFinalSimulation: { concurrency: 1, async simulate(plan: any, context: any) {
       assert.deepEqual(context.source, source(1)); assert.equal(context.header.hash, hash(101));
@@ -1527,6 +1678,8 @@ test(`ordinary live factory selects actual sim profit through runtime (${backend
     exactQuoteStateFactory: () => ({ async call() { throw new Error("must use strict quotes"); } }),
     blockScanGraph: () => edges,
     blockScanPlanner: () => ({ setFlashLiquidity() {}, setGraph() {}, async planBlockScanFromSeedEdges(opp: any) {
+      plannedRouteId = blockScanRouteId(opp.seedEdges);
+      trialRoutes.push(plannedRouteId);
       return [{ opportunity: { ...opp, profitToken: opp.flashToken }, tokenPath: { edges: [...opp.seedEdges] },
         templateName: "fixture", maxFlashAmount: 123000n, flashAdapterIds: ["fixture-flash"],
         flashAdapterId: "fixture-flash", cycleTokens: [opp.flashToken], borrowableTokens: [] }];
@@ -1566,6 +1719,7 @@ test(`ordinary live factory selects actual sim profit through runtime (${backend
     assert.deepEqual(finalAmounts, outcome === "positive" && !stopAtSizing ? [1230n, 123n, 12300n] : []);
     assert.equal(active, 0); assert.equal(peak, backend === "direct" && outcome === "positive" ? 3 : 1);
     assert.equal(trialForks, backend === "anvil" ? 1 : 0);
+    assert.equal(cache.has(plannedRouteId), outcome === "revert");
     assert.equal(finalForks, backend === "anvil" ? 1 : 0);
     if (backend === "anvil" && ["cancel", "source-fault"].includes(outcome)) assert(retired > 0);
     if (outcome === "nonpositive") {
@@ -1590,6 +1744,15 @@ test(`ordinary live factory selects actual sim profit through runtime (${backend
       assert(completion!.timing.plannerSolverMs >= completion!.detail!.solverWallMs);
     }
     assert(!logs.some(l => l.includes("ordinary live must not call old Solver")));
+    if (outcome === "revert" && !stopAtSizing) {
+      const rejectedRoute = plannedRouteId;
+      await f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+      assert.equal(trialRoutes.filter(id => id === rejectedRoute).length, 1,
+        "a rejected route must not be planned or simulated again; other routes may backfill");
+      assert.equal(trialAmounts.length, trialRoutes.length);
+      assert(logs.filter(l => l.startsWith("[searcher/blockscan-candidate-filter]"))
+        .some(l => JSON.parse(l.slice(l.indexOf("{"))).simRejected > 0));
+    }
   } finally {
     AnvilSolver.prototype.solve = originalSolve; console.log = originalLog; await f.loop.shutdown();
   }

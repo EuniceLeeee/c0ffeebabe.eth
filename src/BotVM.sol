@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "./interfaces/IERC20.sol";
 import {Constants} from "./Constants.sol";
+import {RuntimeAmountVM} from "./RuntimeAmountVM.sol";
 
 /// @title BotVM — Readable replica of MEV bot's action interpreter
 /// @notice Implements 9 of the original bot's 15 opcodes, enough to replay the wstUSR arb.
@@ -18,7 +19,7 @@ import {Constants} from "./Constants.sol";
 ///   field1 (1B): callback_active flag
 ///   field2 (3B): resume_offset — calldata offset where sub-script bytes start
 ///   field3 (3B): auxiliary_offset
-contract BotVM {
+contract BotVM is RuntimeAmountVM {
     address public immutable owner;
 
     /// @dev Self-call selector: keccak256("execSubscript(bytes)")[:4]
@@ -80,6 +81,7 @@ contract BotVM {
         assembly {
             scriptLen := calldataload(sub(scriptStart, 32))
         }
+        _checkRuntimeCallback(scriptStart, scriptLen);
 
         // Copy sub-script from calldata to memory
         bytes memory script = new bytes(scriptLen);
@@ -236,6 +238,20 @@ contract BotVM {
                 require(address(this).balance == nativeBefore, "native wrap residual");
                 ip += 3 + size;
             }
+            else if (op == 0x0c) {
+                require(ip + 3 <= end, "runtime flow header");
+                uint256 size = _readUint24(script, ip);
+                require(ip + 3 + size <= end, "runtime flow bounds");
+                _runRuntimeAmountFlow(_readBytes(script, ip + 3, size));
+                ip += 3 + size;
+            }
+            else if (op == 0x0e) {
+                require(ip + 35 <= end, "runtime program header");
+                uint256 size = _readUint24(script, ip + 32);
+                require(ip + 35 + size <= end, "runtime program bounds");
+                _runRuntimeProgram(_readBytes(script, ip + 35, size), _readUint256(script, ip));
+                ip += 35 + size;
+            }
             else if (op == 0x0d) {
                 // ── REVERT ──
                 // Layout: [data_len:3][data:N]
@@ -266,6 +282,10 @@ contract BotVM {
             require(_tryApprove(token, spender, grant), "allowance approve failed");
         }
         require(_readAllowance(token, spender) == grant, "allowance not set");
+    }
+
+    function _runtimeEnsureAllowance(address token, address spender, uint256 minimum, uint256 grant) internal override {
+        _ensureAllowance(token, spender, minimum, grant);
     }
 
     function _readAllowance(address token, address spender) internal view returns (uint256 value) {

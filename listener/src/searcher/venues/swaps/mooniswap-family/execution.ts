@@ -1,7 +1,9 @@
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { MAX_UINT, MOONISWAP_ACTION, assertRoute, assertUint, lower, nonzero } from "./codec.js";
 import type { MooniswapDescriptor, MooniswapRoute, MooniswapQuoteEvidence } from "./types.js";
+import { buildMooniswapRuntimeLeg } from "./runtime-execution.js";
 export const mooniswapExecution = {
+  buildRuntimeLeg: buildMooniswapRuntimeLeg,
   runtimeProjection: ({ hop }) => ({ allowanceSpender: hop.target, prewarmQuoteCalls: [] }),
   buildFragment(input) {
     assertRoute(input.descriptor, input.route);

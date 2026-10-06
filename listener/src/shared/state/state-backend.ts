@@ -1387,7 +1387,9 @@ export function postJsonRpc(
       request.once("socket", () => { socketAssignedAtMs = Date.now(); });
       request.once("finish", () => { requestFlushedAtMs = Date.now(); });
     }
-    request.once("error", rejectOnce);
+    // Cancellation and socket teardown can both emit errors. Keep ownership
+    // until the request is collected; rejectOnce still settles only once.
+    request.on("error", rejectOnce);
     signal.addEventListener("abort", onAbort, { once: true });
     request.end(encoded);
   });

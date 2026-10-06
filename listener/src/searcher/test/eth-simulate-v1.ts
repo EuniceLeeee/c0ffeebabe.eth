@@ -301,6 +301,36 @@ try {
   const codeFailure = await codeSimulator.simulate(plan, context());
   assert.equal(codeFailure.success, false);
   assert.deepEqual(codeFailure.counterfactualExecutorCode, counterfactualEvidence);
+  const diagnosticsDir = mkdtempSync(join(tmpdir(), "mev-revert-diagnostics-"));
+  const priorDiagnostics = process.env.SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH;
+  try {
+    const diagnosticPath = join(diagnosticsDir, "reverts.jsonl");
+    process.env.SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH = diagnosticPath;
+    const diagnosticSimulator = new EthSimulateV1Simulator(url, executor, owner, loadedRuntime);
+    const diagnosticRevert = structuredClone(codeRevert);
+    Object.assign(diagnosticRevert[0]!.calls[1]!, { returnData: "0x1234",
+      error: { code: 3, message: secret, data: "0xabcd" } });
+    reset(diagnosticRevert);
+    const requestCount = requests.length;
+    for (let i = 0; i < 65; i++) {
+      assert.deepEqual(await diagnosticSimulator.simulate(plan, context()), codeFailure);
+    }
+    assert.equal(requests.length - requestCount, 65, "diagnostics must not add RPC");
+    const text = readFileSync(diagnosticPath, "utf8");
+    assert(!text.includes(secret)); assert(!text.includes(url));
+    const records = text.trim().split("\n").map(line => JSON.parse(line));
+    assert.equal(records.length, 64, "diagnostic capture is bounded");
+    assert.deepEqual(records[0].executionInput, codePrepared);
+    assert.deepEqual(records[0].failure, { code: 3, gasUsed: "74565",
+      returnData: { data: "0x1234", truncated: false }, errorData: { data: "0xabcd", truncated: false } });
+    process.env.SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH = diagnosticsDir;
+    assert.deepEqual(await new EthSimulateV1Simulator(url, executor, owner, loadedRuntime).simulate(plan, context()), codeFailure,
+      "failed diagnostic writes must not alter simulation");
+  } finally {
+    if (priorDiagnostics === undefined) delete process.env.SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH;
+    else process.env.SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH = priorDiagnostics;
+    rmSync(diagnosticsDir, { recursive: true, force: true });
+  }
   reset();
 
   // Capture before starting simulation, then discard the root's usable adapter.

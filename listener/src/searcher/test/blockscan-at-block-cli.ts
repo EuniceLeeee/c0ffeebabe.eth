@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { historicalCandidateSelection } from "../blockscan-at-block-cli.js";
+import { blockScanRouteId } from "../blockscan-route-identity.js";
 import { test } from "node:test";
 import { ethers } from "ethers";
 import { parseAtBlockArgs, atBlockJson, parseAtBlockJson, parseHistoricalExecutorRuntimeCode, historicalFundingStarts } from "../blockscan-at-block-cli.js";
@@ -8,6 +10,40 @@ import { DEFAULT_PROFIT_TOKEN_VALUATION } from "../profit-token-valuation.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
 
 const base = ["--ready", "ready.json", "--block", "123", "--out", "logs/new-run"];
+test("historical sim sizing is an explicit opt-in and never an offline or target-route shortcut", () => {
+  assert.equal(parseAtBlockArgs(base)?.amountSelector, "solver");
+  assert.equal(parseAtBlockArgs([...base, "--amount-selector", "sim"])?.amountSelector, "sim");
+  assert.throws(() => parseAtBlockArgs([...base, "--amount-selector", "unknown"]), /invalid --amount-selector/);
+  assert.throws(() => parseAtBlockArgs([...base, "--amount-selector", "sim", "--through", "prices"]), /online sizing/);
+  assert.throws(() => parseAtBlockArgs(["--prices", "p", "--block", "123", "--out", "o", "--offline", "--amount-selector", "sim"]), /online sizing/);
+});
+
+test("historical target selection only filters actual natural outputs and preserves production planning", async () => {
+  assert.equal(parseAtBlockArgs(base)?.onlyEnumeratedRank, undefined);
+  assert.equal(parseAtBlockArgs([...base, "--only-enumerated-rank", "25"])?.onlyEnumeratedRank, 25);
+  for (const rank of ["0", "-1", "1.5", "NaN"])
+    assert.throws(() => parseAtBlockArgs([...base, "--only-enumerated-rank", rank]));
+  assert.throws(() => parseAtBlockArgs([...base, "--only-enumerated-rank", "1", "--through", "enumerate"]));
+  const make = (digit: string) => ({ seedEdges: [{ adapterId: "fixture", target: `0x${digit.repeat(40)}`,
+    tokenIn: `0x${"a".repeat(40)}`, tokenOut: `0x${"b".repeat(40)}` }] });
+  const opportunities = [make("1"), make("2")], called: any[] = [];
+  const planner: any = { async planBlockScanFromSeedEdges(...input: any[]) { called.push(input); return ["original plan"]; } };
+  assert.throws(() => historicalCandidateSelection(planner, 101, 100));
+  const select = historicalCandidateSelection(planner, 2, 100);
+  await assert.rejects(planner.planBlockScanFromSeedEdges(opportunities[1], []), /enumeration must finish/);
+  const natural: any = { opportunities, selectionProvenance: { kind: "natural_coarse_ranked" },
+    forcedSelectionCount: 0, selectionMode: "production" };
+  assert.throws(() => select({ ...natural, forcedSelectionCount: 1 }));
+  assert.throws(() => select({ ...natural, opportunities: [] }));
+  const before = atBlockJson(natural);
+  assert.equal(select(natural).routeId, blockScanRouteId(opportunities[1].seedEdges));
+  assert.equal(atBlockJson(natural), before, "full natural output is never rewritten");
+  assert.deepEqual(await planner.planBlockScanFromSeedEdges(opportunities[0], []), []);
+  const templates: any[] = [], opts = { deadlineAtMs: 123 };
+  assert.deepEqual(await planner.planBlockScanFromSeedEdges(opportunities[1], templates, opts), ["original plan"]);
+  assert.deepEqual(called, [[opportunities[1], templates, opts]]);
+});
+
 test("fixed effective P requires online repricing and preserves live default", () => {
   assert.equal(parseAtBlockArgs(base)?.fixedEffectiveWethInput, undefined);
   assert.equal(parseAtBlockArgs([...base, "--effective-weth-input", "0.05"])?.fixedEffectiveWethInput, 50_000_000_000_000_000n);
@@ -137,7 +173,7 @@ test("CLI and live share joint-DFS defaults and retain explicit rollback methods
     SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"1"}).ethSignalPairsPerToken, 3);
   assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"0"}), /positive safe integer/);
   assert.equal(cfg.exactAdmissionSpreadBps, 0); assert.equal(cfg.maxCandidates, 100);
-  assert.equal(cfg.budgetMs, 1500);
+  assert.equal(cfg.budgetMs, 2000);
   assert.equal(resolveBlockScanCoreConfig({ SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS: "15000" }).budgetMs, 15000,
     "explicit historical budgets remain configurable");
   const policy = resolveBlockScanAtomicPolicy({});

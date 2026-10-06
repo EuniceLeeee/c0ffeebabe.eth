@@ -1,3 +1,4 @@
+import { AmountNotExecutableError } from "../solver/amount-rejection.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createBlockScanSimAmountSelector } from "../simulator/blockscan-sim-amount-selector.js";
@@ -80,6 +81,24 @@ test(`larger ${rejection} rejection retains profitable P without skipping infras
   assert.equal(selected.flashAmount, 10n); assert.equal(finalists.length, 2);
 });
 
+test("a typed amount rejection preserves successful amounts and is not a source failure", async () => {
+  const f = fixture(), simulated: bigint[] = [];
+  f.session.issueExact = async ({ amountIn }: any) => {
+    if (amountIn >= 1000n) throw new AmountNotExecutableError("exact-amount-not-executable");
+    return { amountIn, amountOut: amountIn + 5n };
+  };
+  const selector = createBlockScanSimAmountSelector({ source, executor, async simulate(plan) {
+    simulated.push(plan.flashAmount); return f.result(plan.flashAmount === 100n ? 20n : 10n);
+  } });
+  const selected = await selector.solve(f.plan, f.state, f.probe, f.opts);
+  assert.deepEqual(simulated.sort((a, b) => Number(a - b)), [10n, 100n]);
+  assert.equal(selected.flashAmount, 100n);
+  f.session.issueExact = async ({ amountIn }: any) => {
+    if (amountIn >= 1000n) throw new Error("exact-amount-not-executable");
+    return { amountIn, amountOut: amountIn + 5n };
+  };
+  await assert.rejects(selector.solve(f.plan, f.state, f.probe, f.opts));
+});
 test("an attributed quote source failure after profitable P still aborts the whole search", async () => {
   const f = fixture(), fault = new Error("fixture quote source unavailable"); let published = false;
   f.session.issueExact = async ({ amountIn }: any) => {
@@ -143,4 +162,54 @@ test(`production sim selection rejects missing/mismatched ${invalid} before simu
   const selector = createBlockScanSimAmountSelector({ source, executor, async simulate() { called = true; return f.result(5n); } });
   await assert.rejects(selector.solve(f.plan, f.state, f.probe, f.opts), /mismatch|missing verified funding/);
   assert(!called);
+});
+
+test("runtime trial constructs from admitted legs without any hop Exact and preserves amount search/finalists", async () => {
+  const f = fixture(), modes: unknown[] = [], tried: bigint[] = [];
+  f.session.issueExact = async () => { throw new Error("runtime trial must not issue Exact"); };
+  f.session.buildRuntimeAmountLeg = ({ edge, executor: caller }: any) => {
+    assert.equal(caller, executor); assert(f.plan.tokenPath.edges.includes(edge));
+    return { actionAdapterId: "fixture-owned", program: "0x010001" };
+  };
+  let finalists: any[] = [];
+  const selector = createBlockScanSimAmountSelector({ source, executor,
+    record: event => { if (event.type === "sim_amount_construction") modes.push(event.mode); },
+    async simulate(plan) {
+      tried.push(plan.flashAmount);
+      const flow = plan.root.children[0]!;
+      assert.equal(flow.adapterId, "runtime-amount-flow");
+      assert.equal(flow.amount, plan.flashAmount);
+      assert.equal(JSON.parse(flow.params.legs as string).length, 2);
+      return f.result(plan.flashAmount === 100n ? 55n : 1n);
+    },
+  });
+  const selected = await selector.solve(f.plan, f.state, f.probe,
+    { ...f.opts, gssMaxTries: 2, onDeferredCandidates: x => { finalists = [...x]; } });
+  assert.equal(selected.flashAmount, 100n); assert.equal(selected.netProfit, 55n);
+  assert(tried.length > 4, "positive runtime trials must retain fine search");
+  assert.equal(f.quotes.length, 0); assert.equal(f.builds.length, 0);
+  assert.equal(finalists.length, 3); assert(modes.every(mode => mode === "runtime-actual"));
+});
+
+test("one unsupported runtime leg preserves the complete quoted route and reports fallback", async () => {
+  const f = fixture(), events: any[] = [];
+  f.session.buildRuntimeAmountLeg = ({ edge }: any) => edge === f.plan.tokenPath.edges[0]
+    ? { actionAdapterId: "fixture-owned", program: "0x010001" } : null;
+  const selector = createBlockScanSimAmountSelector({ source, executor, record: event => events.push(event),
+    async simulate() { return f.result(1n); } });
+  await selector.solve(f.plan, f.state, f.probe, f.opts);
+  assert.equal(f.quotes.length, 8);
+  const construction = events.filter(e => e.type === "sim_amount_construction");
+  assert.equal(construction.length, 4);
+  assert(construction.every(e => e.mode === "quoted" && e.unsupportedLegs === 1));
+});
+
+test("quoted control never invokes runtime construction even when the session supports it", async () => {
+  const f = fixture();
+  f.session.buildRuntimeAmountLeg = () => { throw new Error("quoted control must not construct runtime legs"); };
+  const selector = createBlockScanSimAmountSelector({ source, executor, runtimeAmounts: false,
+    async simulate() { return f.result(1n); } });
+  await selector.solve(f.plan, f.state, f.probe, f.opts);
+  assert.equal(f.quotes.length, 8);
+  assert.equal(f.builds.length, 8);
 });

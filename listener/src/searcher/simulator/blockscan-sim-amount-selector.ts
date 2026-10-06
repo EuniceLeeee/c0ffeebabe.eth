@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { blockScanRouteId } from "../blockscan-route-identity.js";
 import { isStateCallAbortedError, withStateCallControl } from "../../shared/state/state-backend.js";
 import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
 import { buildResolvedPlanFromPath } from "../solver/plan-builder.js";
@@ -10,8 +11,9 @@ import type { SimulationResult } from "./botvm-simulator.js";
 import { createSimAmountSelector, type createTrialLimiter, type TrialControl } from "./sim-amount-selector.js";
 import type { AmountSimulation } from "./sim-amount-search.js";
 
-/** Same strict quote/encoding contracts as the quote-based selector. Quotes
- * construct transactions only; actual execution profit owns amount ranking.
+/** Strict runtime programs pass actual receipts between hops without Exact.
+ * Unsupported routes retain strict quoted construction; actual execution
+ * profit owns amount ranking in both cases.
  * The runtime owns backend/environment, trial slots, cancellation and final sim. */
 export function createBlockScanSimAmountSelector(input: {
   source: CanonicalSource;
@@ -19,6 +21,8 @@ export function createBlockScanSimAmountSelector(input: {
   simulate(plan: ResolvedPlan, control: TrialControl): Promise<SimulationResult>;
   runTrial?: ReturnType<typeof createTrialLimiter>;
   record?(event: Record<string, unknown>): void;
+  /** False is the frozen quoted-construction control for paired benchmarks. */
+  runtimeAmounts?: boolean;
 }) {
   return createSimAmountSelector({
     record: input.record,
@@ -33,9 +37,19 @@ export function createBlockScanSimAmountSelector(input: {
         }
         const tolerance = opts.quoteToleranceRawUnits ?? 0n;
         const controlledState = withStateCallControl(state, control);
+        const identity = { routeId: blockScanRouteId(plan.tokenPath.edges), sourceBlockHash: input.source.hash,
+          flashToken: plan.opportunity.flashToken.toLowerCase(), amount: amount.toString() };
         try {
           const quoteStart = performance.now();
-          const propagated = await propagateAmountsWithRawOutputs(plan.tokenPath, amount, controlledState, {
+          const legs = input.runtimeAmounts === false || !session.buildRuntimeAmountLeg ? null : plan.tokenPath.edges.map(edge => {
+            const leg = session.buildRuntimeAmountLeg({ edge, executor: input.executor, runtimeEvidence: opts.runtimeEvidence ?? [] });
+            return leg === null ? null : { ...leg, tokenIn: edge.tokenIn, tokenOut: edge.tokenOut };
+          });
+          const runtimeLegs = legs !== null && legs.every(leg => leg !== null) ? legs : null;
+          input.record?.({ type: "sim_amount_construction", mode: runtimeLegs ? "runtime-actual" : "quoted",
+            ...identity,
+            hops: plan.tokenPath.edges.length, unsupportedLegs: legs?.filter(leg => leg === null).length ?? null });
+          const propagated = runtimeLegs ? null : await propagateAmountsWithRawOutputs(plan.tokenPath, amount, controlledState, {
             executor: input.executor, strictSession: session, runtimeEvidence: opts.runtimeEvidence ?? [],
             adapterWorkControl: control, safetyBps: opts.quoteSafetyBps ?? 10000n,
             toleranceRawUnits: tolerance, shouldStop: () => control.signal.aborted,
@@ -48,9 +62,14 @@ export function createBlockScanSimAmountSelector(input: {
           for (const action of actions) {
             control.signal.throwIfAborted();
             const buildStart = performance.now();
-            const root = await buildResolvedPlanFromPath(plan.tokenPath, plan.opportunity.flashToken, amount,
-              propagated.amounts, input.executor, controlledState, plan.opportunity.targetNetProfit ?? 1n,
-              action, propagated.rawOutputs, session, propagated.exactHandles, tolerance);
+            const root = runtimeLegs ? session.buildFundingRoot({ actionAdapterId: action,
+              asset: plan.opportunity.flashToken, amount, minProfit: plan.opportunity.targetNetProfit ?? 1n,
+              children: [{ adapterId: "runtime-amount-flow", target: input.executor,
+                tokenIn: plan.opportunity.flashToken, tokenOut: plan.opportunity.flashToken, amount,
+                params: { legs: JSON.stringify(runtimeLegs), minimumReturn: amount + (plan.opportunity.targetNetProfit ?? 1n) }, children: [] }],
+            }) : await buildResolvedPlanFromPath(plan.tokenPath, plan.opportunity.flashToken, amount,
+              propagated!.amounts, input.executor, controlledState, plan.opportunity.targetNetProfit ?? 1n,
+              action, propagated!.rawOutputs, session, propagated!.exactHandles, tolerance);
             if (opts.timing) opts.timing.planBuildMs += performance.now() - buildStart;
             const candidate: ResolvedPlan = { root, flashAmount: amount, profitToken: plan.opportunity.profitToken,
               netProfit: 0n, templateName: plan.templateName };
@@ -59,6 +78,11 @@ export function createBlockScanSimAmountSelector(input: {
             try { sim = await input.simulate(candidate, control); }
             finally { if (opts.timing) opts.timing.simMs += performance.now() - simStart; }
             control.signal.throwIfAborted();
+            input.record?.({ type: "sim_amount_execution", mode: runtimeLegs ? "runtime-actual" : "quoted",
+              ...identity, fundingActionId: action,
+              amount: amount.toString(), success: sim.success, gasUsed: sim.gasUsed.toString(),
+              grossProfit: sim.grossProfit.toString(), netProfit: sim.netProfit.toString(),
+              failureKind: sim.failure?.kind ?? null, failureCode: sim.failure?.code ?? null });
             if (sim.profitToken.toLowerCase() !== candidate.profitToken.toLowerCase()) {
               throw new Error("sim amount selector profit token mismatch");
             }
@@ -75,6 +99,15 @@ export function createBlockScanSimAmountSelector(input: {
           }
           return best;
         } catch (error) {
+          const failure = error instanceof BlockScanFamilyAttributedError ? error.failureCause : error;
+          const exactReason = failure instanceof Error && failure.message.startsWith("strict exact unresolved for ")
+            ? failure.message.slice(failure.message.lastIndexOf(": ") + 2) : null;
+          // Record public route/amount identity and local categories, not raw
+          // provider messages, URLs, request bodies or cancellation reasons.
+          input.record?.({ type: "sim_amount_failure", ...identity,
+            failureName: failure instanceof Error ? failure.name : "unknown",
+            exactReasonCode: exactReason?.replace(/https?:\/\/[^\s"'`]+/gi, "[redacted]").slice(0,1024) ?? null,
+            aborted: control.signal.aborted });
           if (control.signal.aborted && isStateCallAbortedError(error) && error.kind === "signal") {
             throw control.signal.reason;
           }

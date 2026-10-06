@@ -8,7 +8,7 @@ export const BLOCKSCAN_ENUMERATION_DEFAULTS = {
   maxHops: 6,
   refineCandidates: 512, // Returned after coarse enumeration and ranking.
   maxCandidates: 100, // Downstream candidate selection / Planner / Solver.
-  budgetMs: 1500,
+  budgetMs: 2000,
   method: "joint-dfs" as "joint-dfs" | "dfs" | "layered", // Legacy half-path methods remain explicit rollback choices.
   allowRepeatedPools: true,
   allowRepeatedTokens: false, // Keep simple cycles; the final return to the start is allowed.

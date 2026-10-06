@@ -1,3 +1,4 @@
+import { ExactAmountRejectedError } from "../venues/adapter-amount-rejection.js";
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
@@ -310,6 +311,28 @@ assert.equal(exact.amountOut, 900_000n);
 const decodeWithBalance = (result: AdapterRequestResult) => exactRequestMethod.program.decode({
   programInput: exactInput, initialResults: [quoteResult, result], dependentEvidence: [],
 });
+const decodeWithQuote = (result: AdapterRequestResult) => exactRequestMethod.program.decode({
+  programInput: exactInput, initialResults: [result, balanceResult(900_000n)], dependentEvidence: [],
+});
+const revertedQuote: AdapterRequestResult = {
+  ...quoteResult, completion: "reverted-as-declared", data: "0x",
+};
+assert.throws(() => decodeWithQuote(revertedQuote), ExactAmountRejectedError);
+assert.throws(() => decodeWithBalance(balanceResult(899_999n)), ExactAmountRejectedError);
+for (const bad of [
+  { id: exactRequest.id, ok: false as const, source: SOURCE, failure: "rpc" as const },
+  { ...revertedQuote, source: { ...SOURCE, hash: `0x${"cd".repeat(32)}` } },
+  { ...quoteResult, data: "0x01" },
+]) {
+  assert.throws(() => decodeWithQuote(bad), (error: unknown) =>
+    error instanceof Error && !(error instanceof ExactAmountRejectedError));
+}
+// An unusable sibling read is not evidence that only the amount was rejected.
+assert.throws(() => exactRequestMethod.program.decode({
+  programInput: exactInput,
+  initialResults: [revertedQuote, { id: balanceRequest.id, ok: false, source: SOURCE, failure: "rpc" }],
+  dependentEvidence: [],
+}), (error: unknown) => error instanceof Error && !(error instanceof ExactAmountRejectedError));
 assert.equal(decodeWithBalance(balanceResult(900_001n)).amountOut, 900_000n);
 for (const balance of [0n, 899_999n]) {
   assert.throws(() => decodeWithBalance(balanceResult(balance)), /output-balance-capacity/);

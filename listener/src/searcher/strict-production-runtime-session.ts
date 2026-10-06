@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { AmountNotExecutableError } from "./solver/amount-rejection.js";
 import { types as nodeTypes } from "node:util";
 import type { BlockTouchedStateKeyResolver } from "./blockscan-touched-state.js";
 import type {
@@ -42,6 +43,7 @@ import type {
 } from "./venues/adapter-family-plugin.js";
 import {
   buildFamilyExecutionFragment,
+  buildFamilyRuntimeAmountLeg,
   executeFamilyVictimReplay,
   executeFamilyExactQuote,
   describeFamilyAmountQuoteReuse,
@@ -1381,6 +1383,9 @@ export class StrictProductionRuntimeSession {
           ? {} : { requireChainAmountQuote: input.requireChainAmountQuote }),
       });
       if (exact.status !== "resolved") {
+        if (exact.status === "rejected" && exact.outcome.reasonCode === "exact-amount-not-executable") {
+          throw new AmountNotExecutableError(exact.outcome.reasonCode);
+        }
         if (exact.outcome.reasonCode === "exact-chain-amount-quote-unavailable") {
           throw new ChainAmountQuoteUnavailableError();
         }
@@ -1395,6 +1400,19 @@ export class StrictProductionRuntimeSession {
     }
     this.#exactBindings.set(binding.exact, Object.freeze(binding));
     return binding.exact;
+  }
+
+  buildRuntimeAmountLeg(input: {
+    readonly edge: TokenEdge;
+    readonly executor: string;
+    readonly runtimeEvidence: readonly RuntimeEvidence[];
+  }): import("../adapters/runtime-amount-program.js").RuntimeAmountLeg | null {
+    this.#runtime.generationFence.assertCurrent(this.source.generation, this.source);
+    const route = this.#resolve(input.edge);
+    if (route.kind === "credit") return null;
+    return buildFamilyRuntimeAmountLeg({ family: route.family, route: route.handle,
+      source: this.source, runtime: this.#runtime, executor: input.executor,
+      runtimeEvidence: input.runtimeEvidence, actionOwnership: this.#catalog });
   }
 
   buildExecution(input: {

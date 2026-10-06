@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { ExactAmountRejectedError } from "../../adapter-amount-rejection.js";
 import {
   localZeroExactMethod,
   type ExactQuoteSemantics,
@@ -53,7 +54,7 @@ const univ4RequestProgram: ExactRequestProgram<
           hookData: "0x",
         }],
       ),
-      completion: "return-data" as const,
+      completion: "return-or-revert-data" as const,
     }), Object.freeze({
       id: OUTPUT_BALANCE_REQUEST_ID,
       kind: "eth-call" as const,
@@ -70,24 +71,31 @@ const univ4RequestProgram: ExactRequestProgram<
     assertRoute(programInput.descriptor, programInput.route);
     assertAmount(programInput.amountIn);
     if (programInput.amountIn === 0n) return zeroQuote(programInput);
-    const result = requireSuccessfulResult(results, EXACT_QUOTE_REQUEST_ID);
+    const result = results.find((candidate) => candidate.id === EXACT_QUOTE_REQUEST_ID);
+    if (result === undefined) throw new Error(`univ4 request result ${EXACT_QUOTE_REQUEST_ID} is missing`);
+    if (!result.ok) throw new Error(`univ4 request result ${EXACT_QUOTE_REQUEST_ID} is unresolved: ${result.failure}`);
     assertSource(result.source, programInput.source);
-    const decoded = UNIV4_QUOTER_INTERFACE.decodeFunctionResult(
-      "quoteExactInputSingle",
-      result.data,
-    );
-    const amountOut = BigInt(decoded[0]);
     const balanceResult = requireSuccessfulResult(results, OUTPUT_BALANCE_REQUEST_ID);
     assertSource(balanceResult.source, programInput.source);
     if (!ethers.isHexString(balanceResult.data, 32)) {
       throw new Error("univ4 output balance returned invalid uint256");
     }
     const outputBalance = BigInt(balanceResult.data);
+    // Only a completed, source-bound EVM refusal is amount-specific. Missing,
+    // malformed or transport-failed reads above must still abort the search.
+    if (result.completion === "reverted-as-declared") {
+      throw new ExactAmountRejectedError("univ4 exact-input quoter reverted");
+    }
+    const decoded = UNIV4_QUOTER_INTERFACE.decodeFunctionResult(
+      "quoteExactInputSingle",
+      result.data,
+    );
+    const amountOut = BigInt(decoded[0]);
     // The Quoter computes swap deltas without executing our take(). The
     // manager's shared balance is a payout ceiling, not this pool's reserves
     // or proof that the full route can execute. Never clip the quoted output.
     if (amountOut > outputBalance) {
-      throw new Error(
+      throw new ExactAmountRejectedError(
         `univ4 output-balance-capacity: amountOut=${amountOut} balance=${outputBalance}`,
       );
     }
