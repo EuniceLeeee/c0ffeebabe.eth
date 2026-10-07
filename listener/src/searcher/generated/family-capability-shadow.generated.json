@@ -4,6 +4,633 @@
     {
       "precision": "capability-exact",
       "identity": {
+        "familyId": "balancer-v1",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "61b3c170a80cf7faa70dfaa245e1c8a6945909ce752258571cfb54d1324013a1",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/discovery.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v1-family/capture.ts",
+        "entryExport": "capture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v1",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v1",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "9f832f1292bf575e928a15df1b7d7a74643e68b17caac4c60c11046e02c23eb0",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v1-family/discovery.ts",
+        "entryExport": "discovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v1",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "5890340d70c69dfad0345f21ae02887146bfe87e3df170c0471cd74d36a349b6",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/instance.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/routes.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/state.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v1-family/exact.ts",
+        "entryExport": "exact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v1",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "e8e1f2090166e35a8fd277e5affb1978d2c2ccde40cb3aa0cca392ef1ebccc84",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/action.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/instance.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/routes.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/runtime.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v1-family/execution.ts",
+        "entryExport": "execution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v1-family/action.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v1",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v1",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "bb5428334db093228849b86a8ab522bbcaea5278c2ef599bd2cbdbb283b17770",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v1-family/identity.ts",
+        "entryExport": "identity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v1",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "c0e3cab3044fa78c13437397cfc5cebf2139cdd6cf96911a42e6079135ae5eae",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v1-family/instance.ts",
+        "entryExport": "instance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v1",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "00e5ea4b8f7264b2505c2ceac7c1f457694677635d2ccbcf567ded6977049041",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/instance.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/routes.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/state.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v1-family/pricing.ts",
+        "entryExport": "pricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v1",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "c5b1c08f32975a090973f0ad9667ae55d1ead33470c57937109c59b9dd0961fb",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/instance.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v1-family/routes.ts",
+        "entryExport": "routes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v1",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "1cfc486c4a81d36d7c1d26e13a08bd81b7b88a350b5c0f0afd41e3e301349cd7",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:fs@node-es2022-v1",
+          "runtime:node:path@node-es2022-v1",
+          "runtime:node:url@node-es2022-v1",
+          "src/searcher/solver/v2-constant-product-math.ts",
+          "src/searcher/solver/v2-fee.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/landed-event-registry.ts",
+          "src/searcher/venues/swap-observation.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/discovery.ts",
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/v2-lineage.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v1-family/swap.ts",
+        "entryExport": "swap",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v1-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v2",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "d76fa340d92b67958ee6ee51ee86db3e83d6b4a511d6f3b8fe9c7b6835a3f028",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/discovery.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/nomination.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v2-family/capture.ts",
+        "entryExport": "capture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v2",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v2",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "15e5b0cb78012f0841dd22a3b5e838615fd787f5c460b30067387b7f650dad06",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/nomination.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v2-family/discovery.ts",
+        "entryExport": "discovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v2",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "70fea64c86a23361c11d5a650ee60bce783bf98acdfd8fcf95427f2ff26e9877",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/instance.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/routes.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v2-family/exact.ts",
+        "entryExport": "exact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v2",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "4dac1796ffc782b5cf0362ac6291a350176636e12fa93cd12ab50aaea33f00bc",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/action.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/instance.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/routes.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/runtime.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v2-family/execution.ts",
+        "entryExport": "execution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v2-family/action.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v2",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v2",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "7d062e10d0b65e7bb3a42417d517814b0d78c7473ba1c4bfdc4c90e88c924802",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v2-family/identity.ts",
+        "entryExport": "identity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v2",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "9bf3d1c8835ea2d6f7aa9a6adc2c5dbb1c29fe0104283bf462604188899870c9",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v2-family/instance.ts",
+        "entryExport": "instance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v2",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "2bd233791e243a5cfacb28171b7b983700b046d07d54b47104bb5ca2c05b6e0d",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/discovery.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/instance.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/nomination.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/routes.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v2-family/pricing.ts",
+        "entryExport": "pricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v2",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "ff8dd3a7c66f8d4d0e57b639db21f7f87e878bfca3ce3c59c350d7d96e9b9731",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/instance.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v2-family/routes.ts",
+        "entryExport": "routes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "balancer-v2",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "9d53702a4eed9ec2413c0c031d7fd3b7b036a4af923780175ac405a35f9ee9bb",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2",
+          "package:ethers@6.16.0",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/discovery.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v2-family/nomination.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": "src/searcher/venues/swaps/balancer-v2-family/swap.ts",
+        "entryExport": "swap",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/balancer-v2-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
         "familyId": "balancer-v3",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
@@ -4624,6 +5251,354 @@
       "precision": "capability-exact",
       "identity": {
         "familyId": "protocol:astra-multitoken",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "abfd24bb4384bfcb32fd9c525b3cf9deb4bcbdea9f31b8e5a08d9dbc72c69718",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:badger-sett-withdraw",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "c66cecb5d8bf579f33e5dcbbf076b94a99aebf2349475a4c71d854f348db82e6",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/codec.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/discovery.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/protocols/badger-sett-withdraw-family/capture.ts",
+        "entryExport": "capture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:badger-sett-withdraw",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:badger-sett-withdraw",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "8ee12ef767e8aab1145d55053c1c7e23ebee097e12dc16186f820ff106efe0fa",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/codec.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/protocols/badger-sett-withdraw-family/discovery.ts",
+        "entryExport": "discovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:badger-sett-withdraw",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "e37a079bdc74aaded7506bbfb97e62de179deccea35b836b87036bbc15702a55",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/local-state-models/resources.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/closure.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/codec.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/instance.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/pricing.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/routes.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/state.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/protocols/badger-sett-withdraw-family/exact.ts",
+        "entryExport": "exact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:badger-sett-withdraw",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "e458bfbee69f2b2ecb71eb54cd19e7d9540ef20a63d77a335b767610a867d870",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/action.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/closure.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/codec.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/instance.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/routes.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/state.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/protocols/badger-sett-withdraw-family/execution.ts",
+        "entryExport": "execution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/action.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:badger-sett-withdraw",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:badger-sett-withdraw",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "bb025fe16e6031681496fa21e58b7c43462d852c5cd0d16bd46188f5f18505d4",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/closure.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/codec.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/protocols/badger-sett-withdraw-family/identity.ts",
+        "entryExport": "identity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:badger-sett-withdraw",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "e51f012275d1511e671ff28443d7e95ddb739c7f4f7959dd5d902f122eecf02a",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/codec.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/protocols/badger-sett-withdraw-family/instance.ts",
+        "entryExport": "instance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:badger-sett-withdraw",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "48b52235395130c07a3245ca39cc09d05ba6fa824be9c239fb75ee9502cc9cae",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/closure.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/codec.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/instance.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/routes.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/state.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/protocols/badger-sett-withdraw-family/pricing.ts",
+        "entryExport": "pricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:badger-sett-withdraw",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "1d963916376912547acfd38f72155288b72424be91e724ba1cc276aebe424e5f",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/codec.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/instance.ts",
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/protocols/badger-sett-withdraw-family/routes.ts",
+        "entryExport": "routes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:badger-sett-withdraw",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
         "contentHash": "abfd24bb4384bfcb32fd9c525b3cf9deb4bcbdea9f31b8e5a08d9dbc72c69718",
@@ -10870,5 +11845,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "82a413bc7a863e7c05f0f1261dc77e8e4c13f813a0897aae8b4d96abca9a4511"
+  "artifactHash": "9a57561d66b1ab1acd63abaa565572da38fdf73ec01886fe15661f01f532826e"
 }

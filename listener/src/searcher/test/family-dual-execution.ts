@@ -21,6 +21,9 @@ import { EKUBO_SUPPORTED_CORE_HASH, EKUBO_SUPPORTED_ROUTER_HASH, EKUBO_SUPPORTED
 import { hookDataFor } from "../venues/swaps/univ4-fee-hook-family/sat1.js";
 import { UNIV4_FEE_HOOK_ADDRESS } from "../venues/swaps/univ4-fee-hook-family/manifest.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
+import { descriptor as balancerV1Fixture } from "../venues/swaps/balancer-v1-family/test/fixtures.js";
+import { setup as balancerV2Fixture, fixture as balancerV2Responses } from "../venues/swaps/balancer-v2-family/test/fixtures.js";
+
 
 const executor = ethers.getAddress("0x1000000000000000000000000000000000000002");
 const origin = ethers.getAddress("0x1000000000000000000000000000000000000003");
@@ -58,6 +61,21 @@ synthetic("protocol:set-redemption", { binding: { set: foreign,
   controller: ethers.getAddress("0x1000000000000000000000000000000000000006"),
   controllerCodeHash: word(4n), components: [ADDR.USDC, ADDR.WETH, ADDR.DAI, ADDR.USDT].map(a => a.toLowerCase()),
 } });
+// New installed entries receive offline emitter coverage even while disabled.
+// These descriptors remain synthetic; no Ready/admission objects are issued.
+fixtures.push(balancerV1Fixture(), balancerV2Fixture().descriptor,
+  balancerV2Fixture(balancerV2Responses([ADDR.WETH, ADDR.DAI, ADDR.USDC], [18, 18, 6])).descriptor);
+synthetic("protocol:badger-sett-withdraw", { binding: {
+  vault: foreign.toLowerCase(),
+  vaultImplementation: "0x1000000000000000000000000000000000000005",
+  strategy: "0x1000000000000000000000000000000000000006",
+  strategyImplementation: "0x1000000000000000000000000000000000000007",
+  asset: "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+  locker: "0x1000000000000000000000000000000000000008",
+  vaultAdmin: "0x1000000000000000000000000000000000000009",
+  strategyAdmin: "0x1000000000000000000000000000000000000009",
+} });
+
 const dFor = (id: string) => { const d = fixtures.find(d => d.familyId === id); assert(d, id); return d; };
 // Additional synthetic direction/variant fixtures are never written back to Ready.
 synthetic("protocol:erc4626", { asset: ADDR.USDC, verifiedDirections: { deposit: true, redeem: true } });
