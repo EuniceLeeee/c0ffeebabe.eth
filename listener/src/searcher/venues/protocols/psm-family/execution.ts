@@ -1,3 +1,6 @@
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
+import { PSM_INTERFACE, PSM_WAD } from "./codec.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
@@ -8,6 +11,24 @@ import { psmBuyQuote, psmSellQuote } from "./codec.js";
 import type { PsmDescriptor, PsmExactEvidence, PsmRoute } from "./types.js";
 
 export const psmExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertPsmInvocation(d, r); runtimeExecutor(executor, d.target);
+    const p = new RuntimeAmountProgram().allowance(r.tokenIn, d.target, 0, MAX_UINT256);
+    const sell = r.direction === "sell-gem";
+    if (!sell) {
+      // buyGem takes output gem units. Invert its integer cost in this transaction,
+      // using the current fee, not a stale chain-external quote.
+      p.call(d.target, PSM_INTERFACE.encodeFunctionData("tout"), { static: true }).load(1, 0)
+        .constant(2, PSM_WAD).math("sub", 6, 2, 1).constant(3, 1n)
+        .math("add", 4, 0, 3).math("mul", 4, 4, 2).math("sub", 4, 4, 3)
+        .math("add", 5, 2, 1).math("div", 4, 4, 5)
+        .constant(5, d.decimalScale).math("div", 4, 4, 5);
+    }
+    p.call(d.target, PSM_INTERFACE.encodeFunctionData(sell ? "sellGem" : "buyGem", [executor, 0n]),
+      { patches: [{ offset: 36, reg: sell ? 0 : 4 }] });
+    return runtimeLeg("psm", p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertPsmInvocation(input.descriptor, input.route);

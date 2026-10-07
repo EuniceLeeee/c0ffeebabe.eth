@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { RuntimeAmountProgram, type RuntimeAmountLeg } from "../../../../adapters/runtime-amount-program.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
-import { UNIV2_PAIR_INTERFACE, UNIV2_TOKEN_INTERFACE, sameAddress } from "./codec.js";
+import { UNIV2_PAIR_INTERFACE, UNIV2_POOL_QUOTE_INTERFACE, UNIV2_TOKEN_INTERFACE, sameAddress } from "./codec.js";
 import { univ2Routes } from "./routes.js";
 import type { UniV2Descriptor, UniV2ExactEvidence, UniV2Route } from "./types.js";
 
@@ -24,8 +24,21 @@ export function buildUniV2RuntimeLeg(input: RuntimeInput): RuntimeAmountLeg | nu
       sameAddress(r.tokenIn, r.tokenOut) || sameAddress(d.pool, executor)) {
     throw new Error("univ2 runtime invalid execution addresses");
   }
-  // This variant owns a different curve; the whole-route selector handles null.
-  if (d.quoteModel.kind === "pool-get-amount-out") return null;
+  // A verified non-xyk pair owns its amount function. Read it in the same
+  // transaction, after measuring this transfer's actual pair credit.
+  if (d.quoteModel.kind === "pool-get-amount-out") {
+    if (d.feeRule.kind !== "included-in-pool-quote") throw new Error("univ2 runtime incompatible pool quote fee");
+    const balance = UNIV2_TOKEN_INTERFACE.encodeFunctionData("balanceOf", [d.pool]);
+    const p = new RuntimeAmountProgram()
+      .call(r.tokenIn, balance, { static: true }).load(1, 0)
+      .call(r.tokenIn, TRANSFER.encodeFunctionData("transfer", [d.pool, 0n]), { patches: [{ offset: 36, reg: 0 }] })
+      .call(r.tokenIn, balance, { static: true }).load(2, 0).math("sub", 2, 2, 1)
+      .call(d.pool, UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionData("getAmountOut", [r.tokenIn, 0n]),
+        { static: true, patches: [{ offset: 36, reg: 2 }] }).load(3, 0)
+      .call(d.pool, UNIV2_PAIR_INTERFACE.encodeFunctionData("swap", [0n, 0n, executor, "0x"]),
+        { patches: [{ offset: r.direction === "zero-for-one" ? 36 : 4, reg: 3 }] });
+    return { actionAdapterId: "univ2-swap", program: ethers.hexlify(p.bytes()) };
+  }
   if (d.quoteModel.kind !== "constant-product" || d.feeRule.kind !== "constant-bps" ||
       d.feeRule.feeBps < 0n || d.feeRule.feeBps >= 10_000n) {
     throw new Error("univ2 runtime unsupported fee rule");

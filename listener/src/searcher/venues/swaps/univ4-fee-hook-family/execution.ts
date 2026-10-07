@@ -1,3 +1,6 @@
+import { runtimeExecutor, assertProjectedRuntimeRoute } from "../../runtime-execution.js";
+import { buildV4RuntimeProgram } from "../univ4-family/runtime-execution.js";
+import { univ4FeeHookRoutes } from "./routes.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import { hookDataFor, sat1Permissions } from "./sat1.js";
 import type { ResolvedPlanNode } from "../../../../shared/types/plan.js";
@@ -30,6 +33,16 @@ const MAX_SQRT_PRICE =
  * logic exists.
  */
 export const univ4FeeHookExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertProjectedRuntimeRoute(r, univ4FeeHookRoutes.project({ descriptor: d })); runtimeExecutor(executor, d.managerBinding.manager);
+    if (!sameAddress(d.hook, d.poolKey.hooks) ||
+        !(d.hookModel === "sat1" ? sat1Permissions(d.hook) : sameAddress(d.hook, UNIV4_FEE_HOOK_ADDRESS))) {
+      throw new Error("univ4 fee-hook runtime hook binding diverged");
+    }
+    return buildV4RuntimeProgram({ descriptor: d, route: r, executor, actionAdapterId: "univ4-fee-hook-unlock",
+      hookData: hookDataFor(d, executor, r.direction === "zero-for-one") });
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertExecutionEvidence(input);

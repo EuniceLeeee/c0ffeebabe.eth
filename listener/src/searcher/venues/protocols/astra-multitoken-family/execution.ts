@@ -1,3 +1,5 @@
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, runtimeExactApproval, runtimeClearApproval } from "../../runtime-execution.js";
 import { ethers } from "ethers";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
@@ -12,6 +14,16 @@ import type {
 } from "./types.js";
 
 export const astraMultiTokenExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertAstraRouteBinding(d, r); runtimeExecutor(executor, d.target);
+    const p = new RuntimeAmountProgram();
+    runtimeExactApproval(p, r.tokenIn, d.target);
+    p.call(d.target, new ethers.Interface(["function change(address,address,uint256,uint256)"]).encodeFunctionData("change",
+      [r.tokenIn, r.tokenOut, 0n, 1n]), { patches: [{ offset: 68, reg: 0 }] });
+    runtimeClearApproval(p, r.tokenIn, d.target);
+    return runtimeLeg("astra-multitoken-change", p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertExecutionEvidence(input);

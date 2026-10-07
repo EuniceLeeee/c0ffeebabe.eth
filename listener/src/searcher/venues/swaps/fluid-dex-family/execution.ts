@@ -1,3 +1,7 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, assertProjectedRuntimeRoute } from "../../runtime-execution.js";
+import { fluidDexRoutes } from "./routes.js";
 import {
   hopTargetExecutionRuntimeProjection,
   type ExecutionSemantics,
@@ -12,6 +16,14 @@ import type {
 const MAX_UINT = (1n << 256n) - 1n;
 
 export const fluidDexExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertProjectedRuntimeRoute(r, fluidDexRoutes.project({ descriptor: d })); runtimeExecutor(executor, d.pool);
+    const p = new RuntimeAmountProgram().allowance(r.tokenIn, d.pool, 0, MAX_UINT)
+      .call(d.pool, new ethers.Interface(["function swapIn(bool,uint256,uint256,address) payable"]).encodeFunctionData("swapIn",
+        [r.swap0To1, 0n, 1n, executor]), { patches: [{ offset: 36, reg: 0 }] });
+    return runtimeLeg("fluid-dex-swap", p);
+  },
   runtimeProjection: hopTargetExecutionRuntimeProjection,
   buildFragment(input) {
     assertExecutionEvidence(input);

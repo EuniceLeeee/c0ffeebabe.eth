@@ -1,3 +1,7 @@
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, runtimeWrapReceipt, RUNTIME_WRAP } from "../../runtime-execution.js";
+import { ADDR } from "../../../../shared/constants/addresses.js";
+import { ekuboRouterIface } from "../ekubo/abi.js";
 import { ethers } from "ethers";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { EKUBO_MAX_EXACT_INPUT, EKUBO_ROUTER } from "../ekubo/abi.js";
@@ -8,6 +12,20 @@ import { assertRoute } from "./routes.js";
 import type { EkuboDescriptor, EkuboExactEvidence, EkuboRoute } from "./types.js";
 
 export const ekuboExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertRoute(d, r); runtimeExecutor(executor, EKUBO_ROUTER);
+    const nativeInput = d.poolKey.token0 === ethers.ZeroAddress && !r.isToken1;
+    const nativeOutput = d.poolKey.token0 === ethers.ZeroAddress && r.isToken1;
+    const p = new RuntimeAmountProgram().constant(1, 127n).math("shr", 2, 0, 1).constant(3, 0n).equal(2, 3);
+    if (nativeInput) p.call(ADDR.WETH, RUNTIME_WRAP.encodeFunctionData("withdraw", [0n]), { patches: [{ offset: 4, reg: 0 }] });
+    else p.allowance(r.tokenIn, EKUBO_ROUTER, 0, MAX_UINT);
+    if (nativeOutput) p.nativeBalance(13);
+    p.call(EKUBO_ROUTER, ekuboRouterIface.encodeFunctionData("swap", [d.poolKey, r.isToken1, 0n, 0n, 0n, 1n, executor]),
+      { patches: [{ offset: 132, reg: 0 }], ...(nativeInput ? { valueReg: 0 } : {}) });
+    if (nativeOutput) runtimeWrapReceipt(p, ADDR.WETH);
+    return runtimeLeg(EKUBO_ACTION_ID, p);
+  },
   runtimeProjection: () => ({ allowanceSpender: EKUBO_ROUTER, prewarmQuoteCalls: [] }),
   buildFragment(input) {
     const { descriptor, route, exactEvidence: evidence } = input;

@@ -1,3 +1,6 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, runtimeExactApproval, runtimeClearApproval } from "../../runtime-execution.js";
 import {
   hopTargetExecutionRuntimeProjection,
   type ExecutionSemantics,
@@ -11,6 +14,16 @@ import type {
 } from "./types.js";
 
 export const eigenpieExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertEigenpieInvocation(d, r); runtimeExecutor(executor, d.target);
+    const p = new RuntimeAmountProgram();
+    runtimeExactApproval(p, r.tokenIn, d.target);
+    p.call(d.target, new ethers.Interface(["function depositAsset(address,uint256,uint256,address)"]).encodeFunctionData("depositAsset",
+      [r.tokenIn, 0n, 1n, ethers.ZeroAddress]), { patches: [{ offset: 36, reg: 0 }] });
+    runtimeClearApproval(p, r.tokenIn, d.target);
+    return runtimeLeg("eigenpie-deposit-asset", p);
+  },
   runtimeProjection: hopTargetExecutionRuntimeProjection,
   buildFragment(input) {
     assertEigenpieInvocation(input.descriptor, input.route);

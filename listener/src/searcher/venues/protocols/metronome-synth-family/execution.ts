@@ -1,3 +1,6 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
@@ -11,6 +14,14 @@ import type {
 } from "./types.js";
 
 export const metronomeSynthExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertMetronomeSynthInvocation(d, r); runtimeExecutor(executor, d.pool);
+    const p = new RuntimeAmountProgram().allowance(r.tokenIn, d.pool, 0, MAX_UINT256)
+      .call(d.pool, new ethers.Interface(["function swap(address,address,uint256)"]).encodeFunctionData("swap", [r.tokenIn, r.tokenOut, 0n]),
+        { patches: [{ offset: 68, reg: 0 }] });
+    return runtimeLeg(r.adapterId, p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertMetronomeSynthInvocation(input.descriptor, input.route);

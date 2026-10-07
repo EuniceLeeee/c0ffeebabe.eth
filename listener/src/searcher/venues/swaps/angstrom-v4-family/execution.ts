@@ -1,3 +1,8 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, assertProjectedRuntimeRoute } from "../../runtime-execution.js";
+import { ANGSTROM_ADAPTER_SWAP_ABI } from "../angstrom-attestation.js";
+import { angstromV4Routes } from "./routes.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { ANGSTROM_MAINNET_ADAPTER } from "../angstrom-attestation.js";
 import {
@@ -17,6 +22,22 @@ const UINT128_MAX = (1n << 128n) - 1n;
 const UINT256_MAX = (1n << 256n) - 1n;
 
 export const angstromV4Execution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertProjectedRuntimeRoute(r, angstromV4Routes.project({ descriptor: d })); runtimeExecutor(executor, d.immutableBinding.adapter);
+    if (!input.source) throw new Error("angstrom-v4 runtime requires canonical source");
+    const runtime = input.runtimeEvidence.length ? requireAngstromRuntimeEvidence({
+      descriptor: d, source: input.source, runtimeEvidence: input.runtimeEvidence,
+    }) : undefined;
+    const entries = runtime ? runtime.attestations.map(a => ({ blockNumber: a.blockNumber, unlockData: a.unlockData }))
+      : [{ blockNumber: BigInt(input.source.number), unlockData: "0x" }];
+    const p = new RuntimeAmountProgram().constant(1, 128n).math("shr", 2, 0, 1).constant(3, 0n).equal(2, 3)
+      .allowance(r.tokenIn, d.immutableBinding.adapter, 0, UINT256_MAX)
+      .call(d.immutableBinding.adapter, new ethers.Interface(ANGSTROM_ADAPTER_SWAP_ABI).encodeFunctionData("swap",
+        [d.poolKey, r.direction === "zero-for-one", 0n, 1n, entries, executor, UINT256_MAX]),
+        { patches: [{ offset: 196, reg: 0 }] });
+    return runtimeLeg("angstrom-v4-swap", p);
+  },
   runtimeProjection: () => Object.freeze({
     allowanceSpender: ANGSTROM_MAINNET_ADAPTER,
     prewarmQuoteCalls: Object.freeze([]),

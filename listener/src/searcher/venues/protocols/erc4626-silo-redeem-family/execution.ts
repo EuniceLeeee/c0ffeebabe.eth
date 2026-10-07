@@ -1,3 +1,6 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
@@ -11,6 +14,14 @@ import type {
 } from "./types.js";
 
 export const erc4626SiloRedeemExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertErc4626SiloInvocation(d, r); runtimeExecutor(executor, d.vault);
+    const p = new RuntimeAmountProgram().call(d.vault,
+      new ethers.Interface(["function redeem(address,uint256,address,address)"]).encodeFunctionData("redeem", [r.tokenOut, 0n, executor, executor]),
+      { patches: [{ offset: 36, reg: 0 }] });
+    return runtimeLeg(r.adapterId, p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertErc4626SiloInvocation(input.descriptor, input.route);

@@ -1,3 +1,7 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, assertProjectedRuntimeRoute } from "../../runtime-execution.js";
+import { curveUnderlyingRoutes } from "./routes.js";
 import {
   hopTargetExecutionRuntimeProjection,
   type ExecutionSemantics,
@@ -12,6 +16,14 @@ import type {
 const MAX_UINT = (1n << 256n) - 1n;
 
 export const curveUnderlyingExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertProjectedRuntimeRoute(r, curveUnderlyingRoutes.project({ descriptor: d })); runtimeExecutor(executor, d.pool);
+    const p = new RuntimeAmountProgram().allowance(r.tokenIn, d.pool, 0, MAX_UINT)
+      .call(d.pool, new ethers.Interface(["function exchange_underlying(int128,int128,uint256,uint256)"]).encodeFunctionData("exchange_underlying",
+        [r.i, r.j, 0n, 1n]), { patches: [{ offset: 68, reg: 0 }] });
+    return runtimeLeg("curve-exchange-underlying", p);
+  },
   runtimeProjection: hopTargetExecutionRuntimeProjection,
   buildFragment(input) {
     assertExecutionEvidence(input);

@@ -21,8 +21,7 @@ const expectedFamilyCount = GENERATED_PRODUCTION_FAMILY_ENTRIES.length;
 assert(expectedFamilyCount > 0);
 assert.equal(PRODUCTION_FAMILY_ACTIVATIONS.length, expectedFamilyCount);
 const defaultDisabledSources = new Set([
-  "balancer-v3.production.ts", "ekubo.production.ts", "fluid-credit.production.ts",
-  "token-conversion.production.ts",
+  "balancer-v3.production.ts", "curve-plain.production.ts", "curve-underlying.production.ts",
 ]);
 for (const activation of PRODUCTION_FAMILY_ACTIVATIONS) {
   assert.equal(activation.envKey, "SEARCHER_FAMILY_" +

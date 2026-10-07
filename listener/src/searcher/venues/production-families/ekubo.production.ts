@@ -12,7 +12,7 @@ import { ekuboPricing } from "../swaps/ekubo-family/pricing.js";
 import { ekuboRoutes } from "../swaps/ekubo-family/routes.js";
 import { ekuboSwap } from "../swaps/ekubo-family/swap.js";
 
-export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_EKUBO_ENABLED" });
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_EKUBO_ENABLED" });
 
 export const plugin = defineSwapFamily({ manifest: ekuboManifest, discovery: ekuboDiscovery,
   identity: ekuboIdentity, instance: ekuboInstance, routes: ekuboRoutes, pricing: ekuboPricing,
