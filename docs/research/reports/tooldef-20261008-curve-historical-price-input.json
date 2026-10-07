@@ -1,0 +1,34 @@
+{
+  "learning_case_id": "tooldef-20261008-curve-historical-price-input",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [
+    "swap"
+  ],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "Test-consumer artifact-schema mismatch, not competitor/execution gap.",
+  "evidence": {
+    "failed_receipt": "logs/curve-model-historical.Lm9tY5/dual-indexed.json",
+    "failure": "offline-inputs: undefined header.number, zero RPC and zero samples",
+    "producer": "blockscan-at-block-cli writes prices.json runtime and input.json stateSource/sourceHeader",
+    "independent_review": "Mencius reproduced exact failure and verified 12 current production rows offline; reviewed correction and rejected 23 independent negative mutations.",
+    "regression": "8 combined historical-input tests passed; both canonical 24-amount fork invocations passed after repair.",
+    "successful_receipts": [
+      "logs/curve-model-historical.Lm9tY5/dual-indexed-price-input.json",
+      "logs/curve-model-historical.Lm9tY5/dual-reference-price-input.json"
+    ],
+    "report": "docs/research/reports/curve-underlying-classic-meta-parity-20261008.json"
+  },
+  "tooling_defect": {
+    "tool": "listener:searcher:curve-runtime-dual-historical-fork",
+    "issue": "Assumed prices.header existed in all production artifacts; modern at-block CLI deliberately stores it separately.",
+    "evidence": "Original failed receipt retained, zero RPC; corrected consumer uses unmodified production input.json with Ready/hash/chain/state/environment checks and rechecks SHA after execution.",
+    "codify_target": "Family historical test supports --price-input; retains legacy inline header, rejects conflicts, hashes helper source and sidecar; regression tests cover positive and negative inputs.",
+    "codify_commit": "b6412b8031a63d4561e0f16e9769d247124e9b81",
+    "status": "codified"
+  },
+  "created_at": "2026-10-07T17:46:47.675Z",
+  "updated_at": "2026-10-07T17:46:47.675Z"
+}
