@@ -702,6 +702,38 @@
       },
       "created_at": "2026-10-07T07:45:16Z",
       "updated_at": "2026-10-07T07:45:16Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261007-redact-live-run-whole-log-string-limit",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "none_tooling_only",
+      "gap_detail": "redaction_materialized_entire_log_and_events",
+      "evidence": {
+        "finding": "The stopped final-2500 live.log is 792870357 bytes, above V8's 536870888-byte string limit; the canonical CLI failed with Invalid string length. Its events file contains 376991 rows.",
+        "independent_review": "A non-author confirmed the whole-file read/split/join defect and reproduced a late wallet-binding leak if the log grows between two streaming passes. Frozen-input identity/size/mtime/ctime checks close that race; append, same-length rewrite, inode replacement and late event append all fail before any report publication.",
+        "regression": "Seven CLI tests pass locally, on cloud and under independent review. A real log above 512 MiB preserves its byte hash with a 128 MiB heap. Late aliases, quoted multiline secrets, UTF-8/CRLF, summary ordering, incomplete-input and source-alias checks are retained.",
+        "canonical_after": "The full stopped 792870357-byte log and 376991 events were processed successfully through analysis:tool-run; no shortened qualification window, live restart or RPC was used.",
+        "execution_manifest": "/opt/mev-cloud/six-round-20261006/log-storage-audit-20261007/analysis-selection-redaction-streaming.json",
+        "execution_manifest_sha256": "e5b13ed417852dbb603b571631a51a869ca05c6e2d12a3663a19a5e61289adf7",
+        "cli_sha256": "3a48a0f7d1a51de5ca92c8c8cdf050649b28124a7e1e8e272c5643410fd90bee",
+        "scope": "Offline redaction and summary only; inputs must remain frozen while processing. This does not repair the historical price/route sidecar gap or certify SetToken chain execution."
+      },
+      "tooling_defect": {
+        "tool": "analysis:redact-live-run",
+        "issue": "Whole-file strings exceed the V8 string limit on legitimate long live logs. A two-pass replacement also needs frozen-source checks to avoid publishing earlier wallet references after a late binding.",
+        "evidence": "Full canonical input fails before the fix and succeeds with streaming; independent mutation regressions reject changing inputs without calling rename.",
+        "codify_target": "analysis/src/cli/redact-live-run.ts and analysis/src/test/redact-live-run-large.ts: bounded record streaming, incremental summaries, late alias scan, private staging and source-stability checks",
+        "codify_commit": "1ae432ef889fce2fb14540cc8ad5fce63aebda35",
+        "status": "codified"
+      },
+      "created_at": "2026-10-07T09:16:09Z",
+      "updated_at": "2026-10-07T09:16:09Z"
     }
   ]
 }
