@@ -115,24 +115,33 @@ export interface PassLatencyReport {
   readonly qualifyingRuns: readonly PassLatencyRunStats[];
 }
 
+interface PassLatencyOptions {
+  startLine: number;
+  endLine?: number;
+  minRun: number;
+  thresholdMs: number;
+  /** Original log line of the window start (slice anchor). */
+  logStartLine?: number;
+}
+
 export function analyzePassLatency(
   text: string,
-  options: {
-    startLine: number;
-    endLine?: number;
-    minRun: number;
-    thresholdMs: number;
-    /** Original log line of the window start (slice anchor). */
-    logStartLine?: number;
-  },
+  options: PassLatencyOptions,
 ): PassLatencyReport {
+  const analyzer = createPassLatencyAnalyzer(options);
   const lines = text.length === 0 ? [] : text.split(/\r?\n/);
   if (lines.at(-1) === "") lines.pop();
-  const lastInclusive = Math.min(
-    options.endLine ?? lines.length,
-    lines.length,
-  );
+  for (const line of lines) analyzer.pushLine(line);
+  return analyzer.finish();
+}
+
+/** Consume a log window without retaining unrelated lines or joining the whole file. */
+export function createPassLatencyAnalyzer(options: PassLatencyOptions): {
+  pushLine(line: string): void;
+  finish(): PassLatencyReport;
+} {
   const firstInclusive = Math.max(1, options.startLine);
+  let lineNumber = 0;
   let currentRuntimeCommit: string | null = null;
   const runtimeCommits = new Set<string>();
   let runtimeCommitLines = 0;
@@ -145,16 +154,17 @@ export function analyzePassLatency(
   let overThreshold = 0;
   let fast = 0;
 
-  for (let index = firstInclusive - 1; index < lastInclusive; index++) {
-    const line = lines[index] ?? "";
-    const oneBasedLine = index + 1;
+  const pushLine = (line: string): void => {
+    const oneBasedLine = ++lineNumber;
+    if (oneBasedLine < firstInclusive ||
+      (options.endLine !== undefined && oneBasedLine > options.endLine)) return;
     if (line.includes(PROCESS_START_MARKER)) {
       processStartLines.push(oneBasedLine);
       processSegment++;
       currentRuntimeCommit = null;
-      continue;
+      return;
     }
-    if (processSegment < 0) continue;
+    if (processSegment < 0) return;
     const commitAt = line.indexOf(RUNTIME_COMMIT_MARKER);
     if (commitAt >= 0) {
       const nextRuntimeCommit =
@@ -168,18 +178,18 @@ export function analyzePassLatency(
         processSegment++;
       }
       currentRuntimeCommit = nextRuntimeCommit;
-      continue;
+      return;
     }
     if (currentRuntimeCommit === null) {
       if (line.includes(TIMING_MARKER)) recordsBeforeRuntimeCommit++;
-      continue;
+      return;
     }
     const timingPayload = markerPayload(line, TIMING_MARKER);
-    if (timingPayload === null || !timingPayload.startsWith("{")) continue;
+    if (timingPayload === null || !timingPayload.startsWith("{")) return;
     const timing = parseObject(timingPayload);
-    if (!timing || timing.type !== "block_scan_timing") continue;
+    if (!timing || timing.type !== "block_scan_timing") return;
     const sourceBlock = nonNegativeInteger(timing.source_block);
-    if (sourceBlock === null) continue;
+    if (sourceBlock === null) return;
     const totalMs = numberOrNull(timing.total_ms);
     let invalidReason: string | null = null;
     if (totalMs === null) {
@@ -239,80 +249,84 @@ export function analyzePassLatency(
       fast: invalidReason === null,
       invalidReason,
     });
-  }
-
-  const runAnalysis = longestContiguousFastRun(records, options.minRun);
-  const processStartLine = processStartLines.length === 1
-    ? processStartLines[0] as number
-    : null;
-  const runtimeCommit = runtimeCommits.size === 1
-    ? [...runtimeCommits][0] as string
-    : null;
-  const ineligibleReason =
-    processStartLines.length !== 1
-      ? `expected_one_process_start:${processStartLines.length}`
-      : processStartLine !== firstInclusive
-        ? `process_start_not_scope_start:${processStartLine}`
-        : runtimeCommitLines !== 1 || runtimeCommits.size !== 1
-          ? `expected_one_nonempty_runtime_commit_line:` +
-            `${runtimeCommitLines}/${runtimeCommits.size}`
-          : recordsBeforeRuntimeCommit !== 0
-            ? `records_before_runtime_commit:${recordsBeforeRuntimeCommit}`
-            : null;
-  const eligibleForQualification = ineligibleReason === null;
-  const longestRun = eligibleForQualification
-    ? runAnalysis.longestRun
-    : null;
-  const qualifyingRuns: PassLatencyRunStats[] = [];
-  if (longestRun !== null) {
-    const split =
-      longestRun.count >= options.minRun * 2 ? options.minRun : null;
-    if (split !== null) {
-      qualifyingRuns.push(
-        runStats(records.slice(longestRun.startIndex, longestRun.startIndex + split)),
-        runStats(records.slice(longestRun.startIndex + split, longestRun.endIndex + 1)),
-      );
-    } else {
-      qualifyingRuns.push(
-        runStats(records.slice(longestRun.startIndex, longestRun.endIndex + 1)),
-      );
-    }
-  }
-
-  return {
-    schema_version: 1,
-    kind: "blockscan_pass_latency_window",
-    thresholdMs: options.thresholdMs,
-    scope: {
-      startLine: firstInclusive,
-      endLine: lastInclusive,
-      logStartLine: options.logStartLine ?? firstInclusive,
-      minRun: options.minRun,
-      runtimeCommit,
-      processStartLine,
-      processStartCount: processStartLines.length,
-      runtimeCommitLines,
-      recordsBeforeRuntimeCommit,
-      processIdentityBinding: "log-anchor-only",
-      externalPidBindingRequired: true,
-      eligibleForQualification,
-      ineligibleReason,
-    },
-    totals: {
-      passes: records.length,
-      fast,
-      missingTotalMs,
-      overThreshold,
-    },
-    metrics: summarizeMetrics(records),
-    invalidByReason: Object.fromEntries(invalidByReason),
-    continuityBreaks: runAnalysis.continuityBreaks,
-    longestRun:
-      longestRun === null
-        ? null
-        : runStats(records.slice(longestRun.startIndex, longestRun.endIndex + 1)),
-    qualifyingRuns,
   };
+
+  const finish = (): PassLatencyReport => {
+    const lastInclusive = Math.min(options.endLine ?? lineNumber, lineNumber);
+    const runAnalysis = longestContiguousFastRun(records, options.minRun);
+    const processStartLine = processStartLines.length === 1
+      ? processStartLines[0] as number
+      : null;
+    const runtimeCommit = runtimeCommits.size === 1
+      ? [...runtimeCommits][0] as string
+      : null;
+    const ineligibleReason =
+      processStartLines.length !== 1
+        ? `expected_one_process_start:${processStartLines.length}`
+        : processStartLine !== firstInclusive
+          ? `process_start_not_scope_start:${processStartLine}`
+          : runtimeCommitLines !== 1 || runtimeCommits.size !== 1
+            ? `expected_one_nonempty_runtime_commit_line:` +
+              `${runtimeCommitLines}/${runtimeCommits.size}`
+            : recordsBeforeRuntimeCommit !== 0
+              ? `records_before_runtime_commit:${recordsBeforeRuntimeCommit}`
+              : null;
+    const eligibleForQualification = ineligibleReason === null;
+    const longestRun = eligibleForQualification
+      ? runAnalysis.longestRun
+      : null;
+    const qualifyingRuns: PassLatencyRunStats[] = [];
+    if (longestRun !== null) {
+      const split =
+        longestRun.count >= options.minRun * 2 ? options.minRun : null;
+      if (split !== null) {
+        qualifyingRuns.push(
+          runStats(records.slice(longestRun.startIndex, longestRun.startIndex + split)),
+          runStats(records.slice(longestRun.startIndex + split, longestRun.endIndex + 1)),
+        );
+      } else {
+        qualifyingRuns.push(
+          runStats(records.slice(longestRun.startIndex, longestRun.endIndex + 1)),
+        );
+      }
+    }
+
+    return {
+      schema_version: 1,
+      kind: "blockscan_pass_latency_window",
+      thresholdMs: options.thresholdMs,
+      scope: {
+        startLine: firstInclusive,
+        endLine: lastInclusive,
+        logStartLine: options.logStartLine ?? firstInclusive,
+        minRun: options.minRun,
+        runtimeCommit,
+        processStartLine,
+        processStartCount: processStartLines.length,
+        runtimeCommitLines,
+        recordsBeforeRuntimeCommit,
+        processIdentityBinding: "log-anchor-only",
+        externalPidBindingRequired: true,
+        eligibleForQualification,
+        ineligibleReason,
+      },
+      totals: {
+        passes: records.length,
+        fast,
+        missingTotalMs,
+        overThreshold,
+      },
+      metrics: summarizeMetrics(records),
+      invalidByReason: Object.fromEntries(invalidByReason),
+      continuityBreaks: runAnalysis.continuityBreaks,
+      longestRun:
+        longestRun === null
+          ? null
+          : runStats(records.slice(longestRun.startIndex, longestRun.endIndex + 1)),
+      qualifyingRuns,
+    };
+  };
+  return { pushLine, finish };
 }
 
 function summarizeMetrics(
