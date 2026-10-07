@@ -122,6 +122,9 @@ abstract contract RuntimeAmountVM {
                 _runtimeEnsureAllowance(_address(data, ip), _address(data, ip + 20), r[uint8(data[ip + 40])], _word(data, ip + 41));
                 _setTransient(CALLBACK_TARGET, oldTarget);
                 ip += 73;
+            } else if (op == 5) {
+                require(ip < data.length, "runtime native balance bounds");
+                r[uint8(data[ip++])] = address(this).balance;
             } else if (op == 6) {
                 require(ip + 4 <= data.length, "runtime result bounds");
                 r[uint8(data[ip])] = _word(returned, _u24(data, ip + 1)); ip += 4;

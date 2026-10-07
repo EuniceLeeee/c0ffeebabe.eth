@@ -47,6 +47,15 @@ contract RuntimeTestDebtCallback {
         paid = token.balanceOf(address(this)) - beforeBalance;
     }
 }
+contract RuntimeTestNative {
+    function pay(uint256 amount) external {
+        (bool ok,) = msg.sender.call{value: amount}(""); require(ok, "native receipt");
+    }
+    function accept() external payable {}
+}
+contract RuntimeTestWrapped is RuntimeTestToken {
+    function deposit() external payable { balanceOf[msg.sender] += msg.value; }
+}
 contract BotVMRuntimeAmountTest is Test {
     BotVM bot;
     RuntimeTestToken a;
@@ -169,6 +178,32 @@ contract BotVMRuntimeAmountTest is Test {
         vm.expectRevert("runtime program version"); bot.execute(script(hex"02", 1));
         vm.expectRevert("runtime flow config");
         bot.execute(abi.encodePacked(uint8(12), uint24(33), uint256(100), uint8(7)));
+    }
+    function valueCall(address target, bytes memory payload, uint8 valueReg) internal pure returns(bytes memory) {
+        return abi.encodePacked(uint8(1), target, uint8(0), valueReg, uint24(0), uint24(0), uint8(0), uint24(payload.length), payload);
+    }
+    function testNativeReceiptWrapsOnlyThisLegNotExistingInventory() public {
+        RuntimeTestNative sender = new RuntimeTestNative();
+        RuntimeTestWrapped wrapped = new RuntimeTestWrapped();
+        vm.deal(address(sender), 1 ether); vm.deal(address(bot), 777);
+        bytes memory p = abi.encodePacked(hex"01050d", // native baseline r13
+            callOp(address(sender), abi.encodeCall(RuntimeTestNative.pay, (123)), "", 0, 0),
+            hex"050e02010e0e0d", // r14 = current native - baseline
+            valueCall(address(wrapped), abi.encodeCall(RuntimeTestWrapped.deposit, ()), 14));
+        bot.execute(script(p, 1));
+        assertEq(address(bot).balance, 777); assertEq(wrapped.balanceOf(address(bot)), 123);
+    }
+    function testNativeReceiptCannotHideNativeInventoryLoss() public {
+        RuntimeTestNative sink = new RuntimeTestNative(); vm.deal(address(bot), 777);
+        bytes memory p = abi.encodePacked(hex"01050d",
+            valueCall(address(sink), abi.encodeCall(RuntimeTestNative.accept, ()), 0),
+            hex"050e02010e0e0d");
+        vm.expectRevert(stdError.arithmeticError); bot.execute(script(p, 1));
+        assertEq(address(bot).balance, 777);
+    }
+    function testNativeBalanceInstructionBounds() public {
+        vm.expectRevert("runtime native balance bounds"); bot.execute(script(hex"0105", 1));
+        vm.expectRevert(stdError.indexOOBError); bot.execute(script(hex"010510", 1));
     }
     function debtProgram(RuntimeTestDebtCallback cb, int256 debt, uint256 cap, uint24 offset) internal view returns(bytes memory) {
         bytes memory payment = abi.encodePacked(uint8(1), uint8(7), uint8(1), offset,

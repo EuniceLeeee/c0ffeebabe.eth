@@ -7,7 +7,7 @@ import { univ3Adapter } from "../../../../../adapters/univ3.js";
 import { MAX_SQRT_RATIO, MIN_SQRT_RATIO } from "../../../../solver/v3-math.js";
 import { quoteV2ExactInput } from "../../../../solver/v2-constant-product-math.js";
 import { instanceKey } from "../../../adapter-family-identifiers.js";
-import { UNIV2_PAIR_INTERFACE } from "../../univ2-abi.js";
+import { UNIV2_PAIR_INTERFACE, UNIV2_POOL_QUOTE_INTERFACE } from "../codec.js";
 import { UNIV3_POOL_INTERFACE } from "../../univ3-abi.js";
 import { univ2Execution } from "../execution.js";
 import { UNIV2_FACTORY_LINEAGE_ID, UNIV2_FAMILY_ID } from "../manifest.js";
@@ -158,12 +158,40 @@ test("V2 runtime patches the nominal debit but prices the actual pair credit in 
   }
 });
 
-test("V2 explicitly declines pool-get-amount-out and rejects incompatible routes/fees", () => {
-  const descriptor: UniV2Descriptor = { ...v2, quoteModel: { kind: "pool-get-amount-out", probe0: 1n, probe1: 1n },
-    feeRule: { kind: "included-in-pool-quote", feeBps: 0n, evidence: "pool-quote" } };
-  for (const route of univ2Routes.project({ descriptor })) {
-    assert.equal(univ2Execution.buildRuntimeLeg({ descriptor, route, executor, runtimeEvidence: [] }), null);
+test("V2 non-xyk preserves pre-transfer quoting and callback settlement, including verified transfer tax", () => {
+  for (const taxed of [false, true]) {
+    const descriptor: UniV2Descriptor = { ...v2, quoteModel: { kind: "pool-get-amount-out", probe0: 1n, probe1: 1n },
+      feeRule: { kind: "included-in-pool-quote", feeBps: 0n, evidence: "pool-quote" },
+      ...(taxed ? { tokenTransfers: [token0, token1].map(token => ({ token,
+        kind: "verified-transfer-tax" as const, codeHash: "0x" + "ab".repeat(32), taxNumerator: 100n, taxDenominator: 10000n })) as any } : {}) };
+    for (const route of univ2Routes.project({ descriptor })) for (const amount of [100n, 123456789n]) {
+      const credit = amount - (taxed ? amount * 100n / 10000n : 0n), output = credit * 3n + 7n;
+      let step = 0, transfers = 0;
+      run(univ2Execution.buildRuntimeLeg({ descriptor, route, executor, runtimeEvidence: [] }), amount, call => {
+        assert.equal(call.target, pool);
+        if (step++ === 0) {
+          assert(call.static); assert.equal(transfers, 0, "non-xyk quote must see pre-transfer state");
+          assert.deepEqual([...UNIV2_POOL_QUOTE_INTERFACE.decodeFunctionData("getAmountOut", call.data)], [route.tokenIn, credit]);
+          return abi.encode(["uint256"], [output]);
+        }
+        assert(!call.static); assert.equal(call.incoming, 164); assert.equal(call.outgoing, 164);
+        const args = UNIV2_PAIR_INTERFACE.decodeFunctionData("swap", call.data);
+        assert.deepEqual([...args].slice(0, 3),
+          [route.direction === "zero-for-one" ? 0n : output, route.direction === "zero-for-one" ? output : 0n, executor]);
+        const callback = ethers.getBytes(args[3]);
+        assert.equal(callback[0], 14); assert.equal(BigInt(ethers.hexlify(callback.slice(1, 33))), amount);
+        run({ actionAdapterId: "payment", program: ethers.hexlify(callback.slice(36)) }, amount, payment => {
+          transfers++; assert.equal(payment.target, route.tokenIn);
+          assert.deepEqual([...erc20.decodeFunctionData("transfer", payment.data)], [pool, amount]); return "0x";
+        });
+        return "0x";
+      });
+      assert.equal(step, 2); assert.equal(transfers, 1);
+    }
   }
+});
+
+test("V2 runtime rejects incompatible routes/fees", () => {
   const route = univ2Routes.project({ descriptor: v2 })[0], input = { descriptor: v2, route, executor, runtimeEvidence: [] };
   for (const bad of [{ ...route, pool: factory }, { ...route, tokenIn: token1 }, { ...route, tokenOut: token0 },
     { ...route, direction: "one-for-zero" as const }, { ...route, feeBps: 25n }, { ...route, familyId: UNIV3_FAMILY_ID },

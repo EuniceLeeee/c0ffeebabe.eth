@@ -143,6 +143,8 @@
     "searcher:solver-execution-input-recorder": "node --import tsx src/searcher/test/solver-execution-input-recorder.ts",
     "searcher:blockscan-sim-reject-cache": "node --import tsx src/searcher/test/blockscan-sim-reject-cache.ts",
     "searcher:reth-adapter-work-runtime": "node --import tsx src/searcher/test/reth-adapter-work-runtime.ts",
+    "searcher:family-dual-execution": "node --import tsx src/searcher/test/family-dual-execution.ts",
+    "searcher:family-runtime-audit": "node --import tsx src/searcher/test/family-runtime-audit.ts",
     "searcher:adapter-family-plugin": "node --import tsx src/searcher/test/adapter-family-plugin.ts",
     "searcher:funding-credit-family-plugin": "node --import tsx src/searcher/test/funding-credit-family-plugin.ts",
     "searcher:funding-production-family-plugin": "node --import tsx src/searcher/test/funding-production-family-plugin.ts",

@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-07",
+  "stage": "family-dual-execution",
+  "verdict": "implemented_contract_verified_historical_runtime_parity_not_claimed",
+  "baseCommit": "a41afdc54b9ecf486bde332ac2277887ebecb294",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "safety": {
+    "broadcast": false,
+    "liveStarted": false,
+    "mainnetRpcRequests": 0,
+    "readyModified": false,
+    "runtimeSnapshotModified": false,
+    "defaultActivationChanged": false
+  },
+  "scope": {
+    "installed": 31,
+    "swapOrProtocol": 28,
+    "funding": 2,
+    "credit": 1,
+    "newRuntimeFamilies": 24,
+    "unchangedDefaultsDisabled": [
+      "balancer-v3",
+      "custom-swap:ekubo-router-v1",
+      "credit:fluid",
+      "protocol:token-conversion"
+    ],
+    "runtimeBehavior": "Family-owned buildRuntimeLeg uses actual input inside the transaction; original Exact and buildFragment retained. Runtime trial construction makes zero off-chain Exact calls in the production selector contract.",
+    "sharedContractChanges": [
+      "Optional validated frozen CanonicalSource to runtime emitter",
+      "nativeBalance opcode 5",
+      "generic projection/address, temporary approval and native-delta helpers"
+    ]
+  },
+  "validation": {
+    "liveBuild": "passed",
+    "fullTypecheck": {
+      "status": "baseline_errors",
+      "errors": 16,
+      "newErrors": 0,
+      "note": "Compared with a41 baseline; not an all-repository clean build."
+    },
+    "dualExecutionContract": {
+      "passed": 54,
+      "failed": 0,
+      "note": "Installed catalog, quoted capability retention, projected directions, production amount-selector Exact=0, multiple amounts and ABI/VM semantics. Sim responses in this suite are synthetic, not historical EVM parity."
+    },
+    "vm": {
+      "passed": 20,
+      "failed": 0,
+      "note": "Forge RuntimeAmountVM tests, including native delta and preserving prior inventory; no mainnet fork."
+    },
+    "runtimeRegression": {
+      "passed": 48,
+      "failed": 0,
+      "note": "Production sim selector plus existing V2/V3/V4/Mooniswap runtime tests; latest V2/V3/Mooniswap group separately re-run 9/9 after callback-order correction."
+    },
+    "packageRegressions": {
+      "status": "passed",
+      "scripts": [
+        "searcher:adapter-family-runtime",
+        "searcher:strict-central-adapter-runtime",
+        "searcher:strict-execution-projection",
+        "searcher:univ2-family-plugin",
+        "searcher:univ3-family-plugin",
+        "searcher:univ4-family-plugin",
+        "searcher:dodo-v2-family-plugin",
+        "searcher:angstrom-v4-family-plugin",
+        "searcher:curve-underlying-family-plugin",
+        "searcher:erc4626-family-plugin",
+        "searcher:fluid-dex-family-plugin",
+        "searcher:astra-multitoken-family-plugin",
+        "searcher:standard-protocol-family-direct-roots",
+        "searcher:special-protocol-family-direct-roots",
+        "searcher:special-protocol-family-plugins",
+        "searcher:funding-credit-family-plugin",
+        "searcher:funding-production-family-plugin",
+        "searcher:fluid-credit-family-plugin"
+      ]
+    },
+    "strictProductionRuntimeSession": "passed",
+    "quotedFamilyContracts": {
+      "passed": 78,
+      "filesMissingInput": 3,
+      "missing": [
+        "BTB cached TOKEN_CONVERSION_EVIDENCE and TOKEN_CONVERSION_ASSET_EVIDENCE",
+        "xWin cached TOKEN_CONVERSION_EVIDENCE",
+        "Migration TOKEN_MIGRATION_EVIDENCE_DIR"
+      ],
+      "note": "These three test files did not run without their historical inputs. They are not counted as passed."
+    },
+    "historicalReadyConstruction": {
+      "path": "/opt/mev-cloud/six-round-20261006/master/checkpoint.json",
+      "sha256": "c2736648d0aa56dbb78705e99460ae832c77b131d10d8cbe7e0be8c9fe018cbb",
+      "fromBlock": 26073751,
+      "toBlock": 26088150,
+      "cutoffHash": "0xcd1606be5437c39dae2f04fd1709e6016827cd05323e81674ce8b378f46f86b6",
+      "swapOrProtocolFamilies": 24,
+      "instances": 13976,
+      "directions": 28200,
+      "declined": 0,
+      "failed": 0,
+      "targetFamilies": {
+        "curve-plain": {
+          "instances": 337,
+          "directions": 819
+        },
+        "curve-underlying": {
+          "instances": 38,
+          "directions": 388
+        },
+        "balancer-v3": {
+          "instances": 37,
+          "directions": 300
+        }
+      },
+      "semantics": "Read-only stored-descriptor construction audit. Not current strict/Ready validation or EVM replay; old fingerprints must be revalidated on a copy before production consumption."
+    }
+  },
+  "limitations": [
+    "No new historical fork runtime parity, natural enumeration, final sim/EV or live latency claim in this stage.",
+    "Self-burn, Token Conversion, Metronome Synth and hgUSDC have no descriptors in this Ready; synthetic ABI fixtures cover their declared execution semantics only.",
+    "Additional ERC4626 redeem, V2 pool-get-amount-out/tax, V4 tiered fee hook and Ekubo TWAMM/native variants use contract fixtures, not newly issued strict evidence.",
+    "Mooniswap native routes remain unsupported by the current admitted Family; do not silently claim runtime coverage for them.",
+    "PSM inverse-cost rounding does not waive existing intermediate-inventory conservation; a dust-leaving route can still be rejected.",
+    "Funding and Credit retain domain-specific contracts; enabling standing-credit strategy is not authorized.",
+    "No Adapter Replay failure-to-pass/family_local merge verdict or production_gap_fixed verdict is asserted."
+  ],
+  "acceptanceRequirements": {
+    "project": "listener/src/searcher/templates/family-plugin/README.md",
+    "personalSkill": "family-plugin-adaptation (canonical skill and acceptance-entrypoints updated; validated separately)"
+  },
+  "evidenceDirectory": "logs/family-runtime-acceptance",
+  "nextStage": "Only after pushing this implementation, analyze Curve Underlying and confirm existing Plain/Balancer bottlenecks, then use same-input production-stage measurements; three representative blocks, three trials per block, preparation separate, failures retained."
+}

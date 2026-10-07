@@ -1,3 +1,6 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
@@ -15,6 +18,16 @@ export const erc4626Execution: ExecutionSemantics<
   Erc4626Route,
   Erc4626ExactEvidence
 > = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertErc4626Invocation(d, r); runtimeExecutor(executor, d.vault);
+    const p = new RuntimeAmountProgram();
+    const abi = new ethers.Interface(["function deposit(uint256,address)", "function redeem(uint256,address,address)"]);
+    if (r.direction === "deposit") p.allowance(r.tokenIn, d.vault, 0, MAX_UINT256);
+    p.call(d.vault, abi.encodeFunctionData(r.direction, r.direction === "deposit" ? [0n, executor] : [0n, executor, executor]),
+      { patches: [{ offset: 4, reg: 0 }] });
+    return runtimeLeg(r.adapterId, p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertErc4626Invocation(input.descriptor, input.route);

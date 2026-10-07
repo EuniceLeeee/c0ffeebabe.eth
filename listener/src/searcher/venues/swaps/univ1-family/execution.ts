@@ -1,9 +1,26 @@
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, runtimeWrapReceipt } from "../../runtime-execution.js";
+import { POOL, WRAP } from "./codec.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { lower, MAX_UINT, sourceEqual, WETH } from "./codec.js";
 import { ACTION } from "./manifest.js";
 import { assertRoute } from "./routes.js";
 import type { Descriptor, Evidence, Route } from "./types.js";
 export const execution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertRoute(d, r); runtimeExecutor(executor, d.pool, d.issuer, d.token);
+    const p = new RuntimeAmountProgram();
+    if (r.buy) {
+      p.call(WETH, WRAP.encodeFunctionData("withdraw", [0n]), { patches: [{ offset: 4, reg: 0 }] })
+        .call(d.pool, POOL.encodeFunctionData("ethToTokenSwapInput", [1n, MAX_UINT]), { valueReg: 0 });
+    } else {
+      p.allowance(r.tokenIn, d.pool, 0, MAX_UINT).nativeBalance(13)
+        .call(d.pool, POOL.encodeFunctionData("tokenToEthSwapInput", [0n, 1n, MAX_UINT]), { patches: [{ offset: 4, reg: 0 }] });
+      runtimeWrapReceipt(p, WETH);
+    }
+    return runtimeLeg(ACTION, p);
+  },
   runtimeProjection: ({ hop }) => ({ allowanceSpender: lower(hop.tokenIn) === WETH ? null : hop.target, prewarmQuoteCalls: [] }),
   buildFragment(i) {
     assertRoute(i.descriptor, i.route);

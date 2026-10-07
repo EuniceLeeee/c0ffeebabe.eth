@@ -1,3 +1,6 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
@@ -11,6 +14,15 @@ import type {
 } from "./types.js";
 
 export const wstethExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertWstethInvocation(d, r); runtimeExecutor(executor, d.target);
+    const p = new RuntimeAmountProgram();
+    if (r.direction === "wrap") p.allowance(r.tokenIn, d.target, 0, MAX_UINT256);
+    p.call(d.target, new ethers.Interface(["function wrap(uint256)", "function unwrap(uint256)"]).encodeFunctionData(r.direction, [0n]),
+      { patches: [{ offset: 4, reg: 0 }] });
+    return runtimeLeg(r.adapterId, p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertWstethInvocation(input.descriptor, input.route);

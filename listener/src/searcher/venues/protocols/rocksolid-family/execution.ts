@@ -1,3 +1,6 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
@@ -11,6 +14,14 @@ import type {
 } from "./types.js";
 
 export const rocksolidExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertRocksolidInvocation(d, r); runtimeExecutor(executor, d.target);
+    const p = new RuntimeAmountProgram().allowance(r.tokenIn, d.target, 0, MAX_UINT256)
+      .call(d.target, new ethers.Interface(["function syncDeposit(uint256,address,address)"]).encodeFunctionData("syncDeposit", [0n, executor, ethers.ZeroAddress]),
+        { patches: [{ offset: 4, reg: 0 }] });
+    return runtimeLeg("rocksolid-sync-deposit", p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertRocksolidInvocation(input.descriptor, input.route);

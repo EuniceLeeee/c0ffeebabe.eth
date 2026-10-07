@@ -1,3 +1,5 @@
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, runtimeWrapReceipt, RUNTIME_WRAP } from "../../runtime-execution.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
@@ -12,6 +14,14 @@ import type {
 } from "./types.js";
 
 export const etherTokenNativeRedeemExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertEtherTokenNativeInvocation(d, r); runtimeExecutor(executor, d.token);
+    const p = new RuntimeAmountProgram().nativeBalance(13)
+      .call(d.token, RUNTIME_WRAP.encodeFunctionData("withdraw", [0n]), { patches: [{ offset: 4, reg: 0 }] });
+    runtimeWrapReceipt(p, d.nativeAnchor);
+    return runtimeLeg(r.adapterId, p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertEtherTokenNativeInvocation(input.descriptor, input.route);

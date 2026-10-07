@@ -1,3 +1,6 @@
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, runtimeExactApproval, runtimeClearApproval } from "../../runtime-execution.js";
+import { ROUTER_ABI, PERMIT2, PERMIT2_ABI, MAX_EXPIRATION } from "./codec.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import type { PlanFragment } from "../../route-leg-adapter.js";
 import { ROUTER, MAX_INPUT, MAX_UINT, same } from "./codec.js";
@@ -6,6 +9,19 @@ import { assertRoute } from "./routes.js";
 import type { BalancerV3Descriptor, BalancerV3ExactEvidence, BalancerV3Route } from "./types.js";
 
 export const balancerV3Execution: ExecutionSemantics<BalancerV3Descriptor, BalancerV3Route, BalancerV3ExactEvidence> = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertRoute(d, r); runtimeExecutor(executor, d.pool, ROUTER, PERMIT2);
+    const p = new RuntimeAmountProgram().constant(1, 160n).math("shr", 2, 0, 1).constant(3, 0n).equal(2, 3);
+    runtimeExactApproval(p, r.tokenIn, PERMIT2);
+    p.call(PERMIT2, PERMIT2_ABI.encodeFunctionData("approve", [r.tokenIn, ROUTER, 0n, MAX_EXPIRATION]),
+      { patches: [{ offset: 68, reg: 0 }] })
+      .call(ROUTER, ROUTER_ABI.encodeFunctionData("swapSingleTokenExactIn",
+        [d.pool, r.tokenIn, r.tokenOut, 0n, 1n, MAX_UINT, false, "0x"]), { patches: [{ offset: 100, reg: 0 }] })
+      .call(PERMIT2, PERMIT2_ABI.encodeFunctionData("approve", [r.tokenIn, ROUTER, 0n, 0n]));
+    runtimeClearApproval(p, r.tokenIn, PERMIT2);
+    return runtimeLeg(ROUTER_ACTION, p);
+  },
   runtimeProjection: () => ({ allowanceSpender: null, prewarmQuoteCalls: [] }),
   buildFragment(input): PlanFragment {
     assertRoute(input.descriptor, input.route);

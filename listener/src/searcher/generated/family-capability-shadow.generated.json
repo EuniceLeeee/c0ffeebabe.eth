@@ -119,17 +119,19 @@
         "familyId": "balancer-v3",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "359f801fac680e3807d20562b8f28ca693ef50ad30e12da13a4cf7d30423d82e",
+        "contentHash": "d1e05b4271fba16ba56c070fcb222d5dc4d0c34200177726285f9953ce4c9274",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/erc20.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/balancer-v3-family/action.ts",
           "src/searcher/venues/swaps/balancer-v3-family/codec.ts",
           "src/searcher/venues/swaps/balancer-v3-family/instance.ts",
@@ -781,17 +783,19 @@
         "familyId": "curve-plain",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "d8e7904e8c175a00763a700658a238dafed49de664a0d37c8e488f320991eebd",
+        "contentHash": "c9b529ae0429b0b72d0d42034065b25484211bc869a0c20699a8b674a89db01c",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/curve.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/curve-plain-family/action.ts",
           "src/searcher/venues/swaps/curve-plain-family/codec.ts",
           "src/searcher/venues/swaps/curve-plain-family/instance.ts",
@@ -1099,21 +1103,25 @@
         "familyId": "curve-underlying",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "d2b9cf597dc36f8954029f596bd2f861cb1b94268c09c2478b708b230a5c5127",
+        "contentHash": "439d4dadd8f038690839a95e7ea931a8beacf071d46fb4978be02266311d697c",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/curve.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/curve-underlying-family/action.ts",
           "src/searcher/venues/swaps/curve-underlying-family/codec.ts",
-          "src/searcher/venues/swaps/curve-underlying-family/manifest.ts"
+          "src/searcher/venues/swaps/curve-underlying-family/instance.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/routes.ts"
         ],
         "provenanceCommit": null
       },
@@ -1462,13 +1470,14 @@
         "familyId": "custom-swap:angstrom-v4",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "f1c1f995b5a70ce91d3255adcf60177afaf4a96361f89c1cf90d8b46d4a1e109",
+        "contentHash": "90b8920480b61a29d8f203ceea147298fa23b276afecd7b10b4c6ed631548102",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/angstrom-v4.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/blockscan-multicall.ts",
           "src/searcher/detector/blockscan-sizing-constants.ts",
@@ -1479,12 +1488,14 @@
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/route-immutable-binding.ts",
           "src/searcher/venues/route-instance-identity.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/angstrom-attestation.ts",
           "src/searcher/venues/swaps/angstrom-v4-family/action.ts",
           "src/searcher/venues/swaps/angstrom-v4-family/binding.ts",
           "src/searcher/venues/swaps/angstrom-v4-family/codec.ts",
           "src/searcher/venues/swaps/angstrom-v4-family/evidence.ts",
           "src/searcher/venues/swaps/angstrom-v4-family/manifest.ts",
+          "src/searcher/venues/swaps/angstrom-v4-family/routes.ts",
           "src/searcher/venues/swaps/blockscan-state-shared.ts",
           "src/searcher/venues/swaps/univ4-common.ts",
           "src/shared/constants/addresses.ts"
@@ -1846,13 +1857,14 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "b449e695d24740e200d599141ff104bb0ab0fa2ef16de92f30ce2050609f39a2",
+        "contentHash": "2367937ba912deb95c13771a46c28d360f5a70ad1b621ed1ad9d7fe8904a059c",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/dodo-v2.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/blockscan-multicall.ts",
           "src/searcher/detector/blockscan-sizing-constants.ts",
@@ -1863,12 +1875,15 @@
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/route-immutable-binding.ts",
           "src/searcher/venues/route-instance-identity.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/blockscan-state-shared.ts",
           "src/searcher/venues/swaps/dodo-pmm-math.ts",
           "src/searcher/venues/swaps/dodo-v2-abi.ts",
           "src/searcher/venues/swaps/dodo-v2-family/action.ts",
           "src/searcher/venues/swaps/dodo-v2-family/codec.ts",
-          "src/searcher/venues/swaps/dodo-v2-family/manifest.ts"
+          "src/searcher/venues/swaps/dodo-v2-family/instance.ts",
+          "src/searcher/venues/swaps/dodo-v2-family/manifest.ts",
+          "src/searcher/venues/swaps/dodo-v2-family/routes.ts"
         ],
         "provenanceCommit": null
       },
@@ -2235,17 +2250,19 @@
         "familyId": "custom-swap:ekubo-router-v1",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "554ecf6adfc3941dc24d1f4505137cefcd0e0db232d6803bdbb0809ff152bfe3",
+        "contentHash": "d256d71ea28c6c346e8a2d408c287e451f46cf51c9c879582ccfcebf5d343b03",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/route-immutable-binding.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/ekubo-family/action.ts",
           "src/searcher/venues/swaps/ekubo-family/codec.ts",
           "src/searcher/venues/swaps/ekubo-family/extension.ts",
@@ -2589,16 +2606,18 @@
         "familyId": "custom-swap:uniswap-v1",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "50a90e7f8274068211a841e734f3c49b8d1442c5d69b2cb3901727928b50eea0",
+        "contentHash": "afce09f8e75e237836aa53780910c5484592dd08fb25be6f887f7ecccb2094a5",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/univ1-family/action.ts",
           "src/searcher/venues/swaps/univ1-family/codec.ts",
           "src/searcher/venues/swaps/univ1-family/instance.ts",
@@ -2914,16 +2933,18 @@
         "familyId": "ella-exchange",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "d4594b0973dce6c4a9f8979b28341ac134a5ff5b5864a1ff383d0bc5a3f86cbd",
+        "contentHash": "1731f8813891057a0c0779fc07da61045a69dc3ba05933f443fa86baa7b57a54",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/ella-exchange-family/action.ts",
           "src/searcher/venues/swaps/ella-exchange-family/codec.ts",
           "src/searcher/venues/swaps/ella-exchange-family/instance.ts",
@@ -3761,21 +3782,25 @@
         "familyId": "fluid-dex",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "a9c8ef11940eae969ae05f5c4060f20dd5843c15ab4c1ed8635ddbbc2f9547b9",
+        "contentHash": "e2647a5220b4aaa102e439a2486b94fccb164f43976ac825ae09a11be4dc90af",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/fluid-dex.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/fluid-dex-family/action.ts",
           "src/searcher/venues/swaps/fluid-dex-family/codec.ts",
-          "src/searcher/venues/swaps/fluid-dex-family/manifest.ts"
+          "src/searcher/venues/swaps/fluid-dex-family/instance.ts",
+          "src/searcher/venues/swaps/fluid-dex-family/manifest.ts",
+          "src/searcher/venues/swaps/fluid-dex-family/routes.ts"
         ],
         "provenanceCommit": null
       },
@@ -4091,7 +4116,7 @@
         "familyId": "mooniswap",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "bd74f11b19b64ef10e3ffd01dbf35f9d56e58f92f52d8b0b43a58298f93a89a8",
+        "contentHash": "d6355f56e2fbee62bdd7d8cb23acf3c4749fc86e5b7349a76035675cf03b141f",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -4426,13 +4451,14 @@
         "familyId": "protocol:astra-multitoken",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "8225ef14f02b9ee889c55fa231be1566c73ac21a66fc814d28ee3e24881e464c",
+        "contentHash": "6159bef3d37e25d885d6458df8eff0f9cdbb1a9244aba59dcc31e304738f7971",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/astra-multitoken.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -4441,7 +4467,8 @@
           "src/searcher/venues/protocols/astra-multitoken-family/action.ts",
           "src/searcher/venues/protocols/astra-multitoken-family/binding.ts",
           "src/searcher/venues/protocols/astra-multitoken-family/codec.ts",
-          "src/searcher/venues/protocols/astra-multitoken-family/manifest.ts"
+          "src/searcher/venues/protocols/astra-multitoken-family/manifest.ts",
+          "src/searcher/venues/runtime-execution.ts"
         ],
         "provenanceCommit": null
       },
@@ -4742,7 +4769,7 @@
         "familyId": "protocol:eigenpie",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "5ff7479876f40f14a06afc9678b99b0fa3f5ac44359aa80f644d20d516f05e59",
+        "contentHash": "8dc0e85e37f7f656910f06cdd17e530965765c7fc59d4d95009069dcb961b372",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -4750,6 +4777,7 @@
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/eigenpie-deposit.ts",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -4758,7 +4786,8 @@
           "src/searcher/venues/protocols/eigenpie-family/action.ts",
           "src/searcher/venues/protocols/eigenpie-family/binding.ts",
           "src/searcher/venues/protocols/eigenpie-family/manifest.ts",
-          "src/searcher/venues/protocols/standard-family/common.ts"
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts"
         ],
         "provenanceCommit": null
       },
@@ -5073,13 +5102,14 @@
         "familyId": "protocol:erc4626",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "c43bf84dac36df6246bcafbda75f7449846f6b44c40e717b589536ba927acc93",
+        "contentHash": "347682dce864840ddc6b969d2166383db76797920b2936cac06b588e9b100a0b",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -5088,7 +5118,8 @@
           "src/searcher/venues/protocols/erc4626-family/action.ts",
           "src/searcher/venues/protocols/erc4626-family/binding.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
-          "src/searcher/venues/protocols/standard-family/common.ts"
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts"
         ],
         "provenanceCommit": null
       },
@@ -5403,13 +5434,14 @@
         "familyId": "protocol:erc4626-silo-redeem",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "2ab3d123e4b60fc5a8dbe32587dd8fa99433d7629bda915607a085141cf9bda3",
+        "contentHash": "f178d14c0262b815a577fc4173e7252bd74ae90c765cdd3dec9a7c3cbdfff9b0",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -5418,7 +5450,8 @@
           "src/searcher/venues/protocols/erc4626-silo-redeem-family/action.ts",
           "src/searcher/venues/protocols/erc4626-silo-redeem-family/manifest.ts",
           "src/searcher/venues/protocols/erc4626-silo-redeem-family/shared.ts",
-          "src/searcher/venues/protocols/standard-family/common.ts"
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts"
         ],
         "provenanceCommit": null
       },
@@ -5737,7 +5770,7 @@
         "familyId": "protocol:ethertoken-native-redeem",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "840261410740b5aed4a27dfbbdd8908f2f710996a7d50baf5d30673e782df3d3",
+        "contentHash": "e5170bc216ea4093c78b1bc280934ebf418aa0b0aa486d396ee59383bc1d6cd9",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -5745,6 +5778,7 @@
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/ethertoken-native-redeem.ts",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -5754,6 +5788,7 @@
           "src/searcher/venues/protocols/ethertoken-native-redeem-family/manifest.ts",
           "src/searcher/venues/protocols/ethertoken-native-redeem-family/shared.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -6072,13 +6107,14 @@
         "familyId": "protocol:goldx",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "4d13c85db8130242d774c8a1dc8d4ea21ffbf5e83553b8eab97512668fa590f9",
+        "contentHash": "fade0f8dbd6a8f1d7ee6ae9c6084abd2acce141b877bfd9be4988c23ae379a8e",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -6087,7 +6123,8 @@
           "src/searcher/venues/protocols/goldx-family/action.ts",
           "src/searcher/venues/protocols/goldx-family/binding.ts",
           "src/searcher/venues/protocols/goldx-family/manifest.ts",
-          "src/searcher/venues/protocols/standard-family/common.ts"
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts"
         ],
         "provenanceCommit": null
       },
@@ -6408,7 +6445,7 @@
         "familyId": "protocol:metronome-hgusdc",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "80490f92dbb86ac4a78f2b799e987b3a7248af89b2ea34494525ae3233cfb9c9",
+        "contentHash": "66c290479dee9611a60b8660f680735fb26684e321d014a3f2c9f2c82ba1fa95",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -6416,6 +6453,7 @@
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/metronome-hgusdc.ts",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -6425,6 +6463,7 @@
           "src/searcher/venues/protocols/metronome-hgusdc-family/manifest.ts",
           "src/searcher/venues/protocols/metronome-hgusdc-family/shared.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -6750,13 +6789,14 @@
         "familyId": "protocol:metronome-synth",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "bb3dbbd1cffdc6703215b682884a60888a9066ad76a642c77614f077342d4c91",
+        "contentHash": "19388dae96739258f53f6ba6930867e6e10a7b365c83ce91a6b70bbc85c65d4a",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -6766,6 +6806,7 @@
           "src/searcher/venues/protocols/metronome-synth-family/manifest.ts",
           "src/searcher/venues/protocols/metronome-synth-family/shared.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -7102,13 +7143,14 @@
         "familyId": "protocol:psm",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "c6c4b956422895a2ca6a105775156f98bf5b05e10500bcab37fef5e5b221021c",
+        "contentHash": "21868cd5d80388708d75f184fe165b0cefa696153ecd3176b1d7e4f6f38dde64",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -7118,7 +7160,8 @@
           "src/searcher/venues/protocols/psm-family/binding.ts",
           "src/searcher/venues/protocols/psm-family/codec.ts",
           "src/searcher/venues/protocols/psm-family/manifest.ts",
-          "src/searcher/venues/protocols/standard-family/common.ts"
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts"
         ],
         "provenanceCommit": null
       },
@@ -7435,13 +7478,14 @@
         "familyId": "protocol:rocksolid",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "7d8df793c6cb5daeafd101f9615b008c0ebc0f84e45947852143591012b52511",
+        "contentHash": "34df699f2339a58ffe701d501bef59497f84382faf55e3dbdcf92e4f1826d6a0",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -7450,7 +7494,8 @@
           "src/searcher/venues/protocols/rocksolid-family/action.ts",
           "src/searcher/venues/protocols/rocksolid-family/binding.ts",
           "src/searcher/venues/protocols/rocksolid-family/manifest.ts",
-          "src/searcher/venues/protocols/standard-family/common.ts"
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts"
         ],
         "provenanceCommit": null
       },
@@ -7769,13 +7814,14 @@
         "familyId": "protocol:self-burn-native",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "08f0cd4e35b8222a06eda7fb5193b49c28045122601d4468e09dbdd3cd95c78c",
+        "contentHash": "873d9e06fa7afec5349d61819ed53cb9058fdaa5cb484fb7886d909f56963ee4",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/adapters/self-burn-native.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
@@ -7786,6 +7832,7 @@
           "src/searcher/venues/protocols/self-burn-native-family/manifest.ts",
           "src/searcher/venues/protocols/self-burn-native-family/shared.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/shared/constants/addresses.ts"
         ],
         "provenanceCommit": null
@@ -8119,7 +8166,7 @@
         "familyId": "protocol:token-conversion",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "70f50a00dcc7b9406592389d7b0861f0637fbc152a5f2034441c3ae82ecee68c",
+        "contentHash": "a3ab7359392840d6cf23471cf744bb4858fd2dbd3aa945d7bfc2bec1250a6141",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -8127,6 +8174,7 @@
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/erc20.ts",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -8137,7 +8185,8 @@
           "src/searcher/venues/protocols/token-conversion-family/binding.ts",
           "src/searcher/venues/protocols/token-conversion-family/manifest.ts",
           "src/searcher/venues/protocols/token-conversion-family/variants.ts",
-          "src/searcher/venues/protocols/token-conversion-family/xwin.ts"
+          "src/searcher/venues/protocols/token-conversion-family/xwin.ts",
+          "src/searcher/venues/runtime-execution.ts"
         ],
         "provenanceCommit": null
       },
@@ -8461,13 +8510,14 @@
         "familyId": "protocol:token-migration",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "52ba87bd3d1b180927f40f561de07a9c25906ab2557d9b59b359023c2614cda4",
+        "contentHash": "e769d8322809ed2c386911bb1f67dc9b15356c59622e3c39d950cfeeef014e7b",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -8477,7 +8527,8 @@
           "src/searcher/venues/protocols/token-migration-family/action.ts",
           "src/searcher/venues/protocols/token-migration-family/binding.ts",
           "src/searcher/venues/protocols/token-migration-family/codec.ts",
-          "src/searcher/venues/protocols/token-migration-family/manifest.ts"
+          "src/searcher/venues/protocols/token-migration-family/manifest.ts",
+          "src/searcher/venues/runtime-execution.ts"
         ],
         "provenanceCommit": null
       },
@@ -8793,13 +8844,14 @@
         "familyId": "protocol:wsteth",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "7e1e8b8cf0d039a23e7d3528a1d2e80277dc1d9298bbad178a9a46f21f86b3c7",
+        "contentHash": "2bf52d1afffcc99d2a56a8e6462e2a518a2d10e9a8d6972c98c28557d4980e60",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
@@ -8808,7 +8860,8 @@
           "src/searcher/venues/protocols/standard-family/common.ts",
           "src/searcher/venues/protocols/wsteth-family/action.ts",
           "src/searcher/venues/protocols/wsteth-family/binding.ts",
-          "src/searcher/venues/protocols/wsteth-family/manifest.ts"
+          "src/searcher/venues/protocols/wsteth-family/manifest.ts",
+          "src/searcher/venues/runtime-execution.ts"
         ],
         "provenanceCommit": null
       },
@@ -9135,7 +9188,7 @@
         "familyId": "univ2-standard",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "cee68ce70741f6c736bc3fb7a44425f12658a21d89c355ccebe921b9aba8fc59",
+        "contentHash": "7f6ad9431da143064104d0a7cd59c85b05e869252f953f69df1af5b047e86eca",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -9492,7 +9545,7 @@
         "familyId": "univ3-standard",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "be54521dfad91851890311bb2cc4a6724d81ed49aab57b3be6d779fde8c8e65a",
+        "contentHash": "ac2e62924a070d77118ffe233e4989c5a14f6753f48101365dba0570495a9f3f",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -9859,7 +9912,7 @@
         "familyId": "univ4",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "ae7239dfef403994eca27425b0201f07a4ba61c543feeb4d44b0c7a50cb23da1",
+        "contentHash": "aa31e1fe8eed4a919ea88a1f0b8e530f5ce63d11191ccb6ccfe094e1095b35f8",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -10239,7 +10292,7 @@
         "familyId": "univ4-fee-hook",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "e582ee5398265a255bcce669095d2818ceb36a02fadcf4a9c25c7ea81f35b510",
+        "contentHash": "61f932a129aae5c4b561626c51107e16ddce3a6010fa3397b536a7c725027924",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -10252,10 +10305,15 @@
           "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/binding.ts",
           "src/searcher/venues/swaps/univ4-family/codec.ts",
+          "src/searcher/venues/swaps/univ4-family/routes.ts",
+          "src/searcher/venues/swaps/univ4-family/runtime-execution.ts",
           "src/searcher/venues/swaps/univ4-fee-hook-family/action.ts",
           "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/routes.ts",
           "src/searcher/venues/swaps/univ4-fee-hook-family/sat1.ts",
           "src/shared/constants/addresses.ts"
         ],
@@ -10480,5 +10538,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "f2fd954155e4180d155dccd8bb6468361625b63050dfeece70fe40a16c7c65f0"
+  "artifactHash": "cfd44cc71d79ab0b41ba86ff68ff2d3dccd57223f15ffffb3f31951ade5ed1e8"
 }
