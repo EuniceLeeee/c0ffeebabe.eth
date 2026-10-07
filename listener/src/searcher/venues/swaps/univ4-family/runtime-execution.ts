@@ -18,6 +18,14 @@ export function buildUniV4RuntimeLeg(input: { descriptor: UniV4Descriptor; route
   // Hook-specific execution/account semantics remain an explicit unsupported
   // capability, not a central protocol branch or synthetic Exact evidence.
   if (d.hookPolicy !== "no-hook" || !sameAddress(d.poolKey.hooks, ethers.ZeroAddress)) return null;
+  return buildV4RuntimeProgram({ ...input, hookData: "0x", actionAdapterId: "univ4-unlock" });
+}
+
+/** PoolManager mechanics shared by the two owning V4 Families. Hook authority
+ * and hook data remain the caller Family's responsibility. */
+export function buildV4RuntimeProgram(input: { descriptor: UniV4Descriptor; route: UniV4Route;
+  executor: string; hookData: string; actionAdapterId: string }): RuntimeAmountLeg {
+  const { descriptor: d, route: r, executor } = input;
   const zero = r.direction === "zero-for-one", key = d.poolKey, manager = d.managerBinding.manager;
   if ((r.direction !== "zero-for-one" && r.direction !== "one-for-zero") ||
       r.instanceKey !== d.instanceKey || r.poolId !== d.poolId || !sameAddress(r.manager, manager) ||
@@ -29,7 +37,7 @@ export function buildUniV4RuntimeLeg(input: { descriptor: UniV4Descriptor; route
   const p = new RuntimeAmountProgram();
   p.constant(8, 127n).math("shr", 9, 0, 8).constant(10, 0n).equal(9, 10)
     .math("neg", 7, 0).call(manager, managerAbi.encodeFunctionData("swap", [key,
-    { zeroForOne: zero, amountSpecified: 0n, sqrtPriceLimitX96: zero ? 4295128740n : 1461446703485210103287273052203988822378723970341n }, "0x"]),
+    { zeroForOne: zero, amountSpecified: 0n, sqrtPriceLimitX96: zero ? 4295128740n : 1461446703485210103287273052203988822378723970341n }, input.hookData]),
     { patches: [{ offset: 196, reg: 7 }] }).load(1, 0);
   // BalanceDelta packs signed int128 amount0 high / amount1 low. Decode the
   // input debit's magnitude modulo 2^128; common payment bounds reject a positive
@@ -58,5 +66,5 @@ export function buildUniV4RuntimeLeg(input: { descriptor: UniV4Descriptor; route
   const outer = new RuntimeAmountProgram().call(manager, managerAbi.encodeFunctionData("unlock", [callback]), {
     callback: { incomingOffset: 68, outgoingOffset: 68 }, patches: [{ offset: 69, reg: 0 }],
   });
-  return { actionAdapterId: "univ4-unlock", program: ethers.hexlify(outer.bytes()) };
+  return { actionAdapterId: input.actionAdapterId, program: ethers.hexlify(outer.bytes()) };
 }

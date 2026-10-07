@@ -2768,6 +2768,7 @@ export function buildFamilyRuntimeAmountLeg(input: {
   const builder = input.family.plugin.execution.buildRuntimeLeg;
   if (!builder) return null;
   const leg = builder(Object.freeze({ descriptor: record.instance.descriptor, route: record.route,
+    source: Object.freeze({ ...input.source }),
     executor: input.executor, runtimeEvidence: Object.freeze([...input.runtimeEvidence]),
     ...(caller.transactionOrigin === undefined ? {} : { transactionOrigin: caller.transactionOrigin }) }));
   input.runtime.generationFence.assertCurrent(input.source.generation, input.source);

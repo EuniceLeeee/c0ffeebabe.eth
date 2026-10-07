@@ -1,3 +1,7 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, assertProjectedRuntimeRoute, RUNTIME_ERC20 } from "../../runtime-execution.js";
+import { dodoV2Routes } from "./routes.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
@@ -10,6 +14,17 @@ import type {
 } from "./types.js";
 
 export const dodoV2Execution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertProjectedRuntimeRoute(r, dodoV2Routes.project({ descriptor: d })); runtimeExecutor(executor, d.pool);
+    if (!input.transactionOrigin) throw new Error("dodo-v2 runtime requires transaction origin");
+    runtimeExecutor(input.transactionOrigin);
+    const p = new RuntimeAmountProgram()
+      .call(r.tokenIn, RUNTIME_ERC20.encodeFunctionData("transfer", [d.pool, 0n]), { patches: [{ offset: 36, reg: 0 }] })
+      .call(d.pool, new ethers.Interface(["function sellBase(address)", "function sellQuote(address)"])
+        .encodeFunctionData(r.direction === "sell-base" ? "sellBase" : "sellQuote", [executor]));
+    return runtimeLeg("dodo-v2-swap", p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertExecutionEvidence(input);

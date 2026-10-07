@@ -1134,6 +1134,8 @@ export interface ExecutionSemantics<
   /** Optional quote-free runtime program, compiled solely from strict route
    * authority. Null explicitly preserves the quoted path for unsupported variants. */
   buildRuntimeLeg?(input: {
+    /** Canonical source already validated by the execution issuer. */
+    readonly source?: CanonicalSource;
     readonly descriptor: Descriptor;
     readonly route: Route;
     readonly executor: string;

@@ -21,6 +21,10 @@ export class RuntimeAmountProgram {
   }
   equal(a: number, b: number): this { return this.push(new Uint8Array([3, reg(a), reg(b)])); }
   load(dst: number, offset: number): this { return this.push(new Uint8Array([6, reg(dst)]), uint24ToBytes(offset)); }
+  /** Current executor native balance, without an external RPC or helper call. */
+  nativeBalance(dst: number): this {
+    return this.push(new Uint8Array([5, reg(dst)]));
+  }
   calldata(dst: number, offset: number): this {
     return this.push(new Uint8Array([7, reg(dst)]), uint24ToBytes(offset));
   }

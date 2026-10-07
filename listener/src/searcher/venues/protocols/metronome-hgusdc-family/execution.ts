@@ -1,3 +1,8 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, RUNTIME_ERC20 } from "../../runtime-execution.js";
+import { METRONOME_HGUSDC_PATH } from "../../../../adapters/metronome-hgusdc.js";
+import { METRONOME_HGUSDC_ROUTER_INTERFACE } from "./shared.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
@@ -13,6 +18,17 @@ import type {
 } from "./types.js";
 
 export const metronomeHgUsdcExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertMetronomeHgUsdcInvocation(d, r); runtimeExecutor(executor, d.router, d.curve, d.vault);
+    const data = METRONOME_HGUSDC_ROUTER_INTERFACE.encodeFunctionData("executePath", [METRONOME_HGUSDC_PATH, [0n], ethers.ZeroAddress]);
+    // ABI offsets are encoded in the head; patch the first amounts[] value, not path bytes.
+    const amountOffset = 4 + Number(BigInt(ethers.dataSlice(data, 36, 68))) + 32;
+    const p = new RuntimeAmountProgram()
+      .call(r.tokenIn, RUNTIME_ERC20.encodeFunctionData("transfer", [d.curve, 0n]), { patches: [{ offset: 36, reg: 0 }] })
+      .call(d.router, data, { patches: [{ offset: amountOffset, reg: 0 }] });
+    return runtimeLeg(r.adapterId, p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertMetronomeHgUsdcInvocation(input.descriptor, input.route);

@@ -1,3 +1,5 @@
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, runtimeWrapReceipt, RUNTIME_ERC20 } from "../../runtime-execution.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
@@ -12,6 +14,14 @@ import type {
 } from "./types.js";
 
 export const selfBurnNativeExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertSelfBurnNativeInvocation(d, r); runtimeExecutor(executor, d.token);
+    const p = new RuntimeAmountProgram().nativeBalance(13)
+      .call(d.token, RUNTIME_ERC20.encodeFunctionData("transfer", [d.token, 0n]), { patches: [{ offset: 36, reg: 0 }] });
+    runtimeWrapReceipt(p, d.nativeAnchor);
+    return runtimeLeg(r.adapterId, p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertSelfBurnNativeInvocation(input.descriptor, input.route);

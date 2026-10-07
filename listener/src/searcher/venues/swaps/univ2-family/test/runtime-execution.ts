@@ -7,7 +7,7 @@ import { univ3Adapter } from "../../../../../adapters/univ3.js";
 import { MAX_SQRT_RATIO, MIN_SQRT_RATIO } from "../../../../solver/v3-math.js";
 import { quoteV2ExactInput } from "../../../../solver/v2-constant-product-math.js";
 import { instanceKey } from "../../../adapter-family-identifiers.js";
-import { UNIV2_PAIR_INTERFACE } from "../../univ2-abi.js";
+import { UNIV2_PAIR_INTERFACE, UNIV2_POOL_QUOTE_INTERFACE } from "../codec.js";
 import { UNIV3_POOL_INTERFACE } from "../../univ3-abi.js";
 import { univ2Execution } from "../execution.js";
 import { UNIV2_FACTORY_LINEAGE_ID, UNIV2_FAMILY_ID } from "../manifest.js";
@@ -158,12 +158,37 @@ test("V2 runtime patches the nominal debit but prices the actual pair credit in 
   }
 });
 
-test("V2 explicitly declines pool-get-amount-out and rejects incompatible routes/fees", () => {
+test("V2 non-xyk amount function runs in the transaction on actual credit, in both directions", () => {
   const descriptor: UniV2Descriptor = { ...v2, quoteModel: { kind: "pool-get-amount-out", probe0: 1n, probe1: 1n },
     feeRule: { kind: "included-in-pool-quote", feeBps: 0n, evidence: "pool-quote" } };
-  for (const route of univ2Routes.project({ descriptor })) {
-    assert.equal(univ2Execution.buildRuntimeLeg({ descriptor, route, executor, runtimeEvidence: [] }), null);
+  for (const route of univ2Routes.project({ descriptor })) for (const amount of [100n, 123456789n]) {
+    const credit = amount * 9n / 10n, output = credit * 3n + 7n;
+    let step = 0;
+    run(univ2Execution.buildRuntimeLeg({ descriptor, route, executor, runtimeEvidence: [] }), amount, call => {
+      switch (step++) {
+        case 0: case 2:
+          assert.equal(call.target, route.tokenIn); assert(call.static);
+          return abi.encode(["uint256"], [999n + (step === 3 ? credit : 0n)]);
+        case 1:
+          assert.equal(call.target, route.tokenIn); assert(!call.static);
+          assert.deepEqual([...erc20.decodeFunctionData("transfer", call.data)], [pool, amount]); return "0x";
+        case 3:
+          assert.equal(call.target, pool); assert(call.static);
+          assert.deepEqual([...UNIV2_POOL_QUOTE_INTERFACE.decodeFunctionData("getAmountOut", call.data)], [route.tokenIn, credit]);
+          return abi.encode(["uint256"], [output]);
+        case 4:
+          assert.equal(call.target, pool); assert(!call.static);
+          assert.deepEqual([...UNIV2_PAIR_INTERFACE.decodeFunctionData("swap", call.data)],
+            [route.direction === "zero-for-one" ? 0n : output, route.direction === "zero-for-one" ? output : 0n, executor, "0x"]);
+          return "0x";
+        default: assert.fail("unexpected V2 call");
+      }
+    });
+    assert.equal(step, 5);
   }
+});
+
+test("V2 runtime rejects incompatible routes/fees", () => {
   const route = univ2Routes.project({ descriptor: v2 })[0], input = { descriptor: v2, route, executor, runtimeEvidence: [] };
   for (const bad of [{ ...route, pool: factory }, { ...route, tokenIn: token1 }, { ...route, tokenOut: token0 },
     { ...route, direction: "one-for-zero" as const }, { ...route, feeBps: 25n }, { ...route, familyId: UNIV3_FAMILY_ID },

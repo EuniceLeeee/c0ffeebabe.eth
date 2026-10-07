@@ -1,3 +1,6 @@
+import { ethers } from "ethers";
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
@@ -11,6 +14,14 @@ import type {
 } from "./types.js";
 
 export const goldxExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertGoldxInvocation(d, r); runtimeExecutor(executor, d.target);
+    const p = new RuntimeAmountProgram().allowance(r.tokenIn, d.target, 0, MAX_UINT256)
+      .call(d.target, new ethers.Interface(["function mint(address,uint256)"]).encodeFunctionData("mint", [executor, 0n]),
+        { patches: [{ offset: 36, reg: 0 }] });
+    return runtimeLeg("goldx-mint", p);
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertGoldxInvocation(input.descriptor, input.route);

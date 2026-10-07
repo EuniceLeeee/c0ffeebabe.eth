@@ -1,9 +1,28 @@
+import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
+import { runtimeLeg, runtimeExecutor, RUNTIME_ERC20 } from "../../runtime-execution.js";
+import { executionData } from "./codec.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { MAX_UINT, pullsInput } from "./codec.js";
 import { actionId, assertRoute } from "./routes.js";
 import type { CurvePlainDescriptor, CurvePlainExactEvidence, CurvePlainRoute } from "./types.js";
 
 export const curvePlainExecution = {
+  buildRuntimeLeg(input) {
+    const { descriptor: d, route: r, executor } = input;
+    assertRoute(d, r); runtimeExecutor(executor, d.pool);
+    const p = new RuntimeAmountProgram(), pulls = pullsInput(r.executionMode);
+    if (pulls) p.allowance(r.tokenIn, d.pool, 0, MAX_UINT);
+    else {
+      // Measure this transfer's receipt; existing pool inventory is not its input.
+      const balance = RUNTIME_ERC20.encodeFunctionData("balanceOf", [d.pool]);
+      p.call(r.tokenIn, balance, { static: true }).load(1, 0)
+        .call(r.tokenIn, RUNTIME_ERC20.encodeFunctionData("transfer", [d.pool, 0n]), { patches: [{ offset: 36, reg: 0 }] })
+        .call(r.tokenIn, balance, { static: true }).load(2, 0).math("sub", 3, 2, 1);
+    }
+    p.call(d.pool, executionData(r.executionMode, r.i, r.j, 0n, 1n, executor),
+      { patches: [{ offset: 68, reg: pulls ? 0 : 3 }] });
+    return runtimeLeg(actionId(r.executionMode), p);
+  },
   runtimeProjection: ({ hop }) => ({ allowanceSpender: ["curve-exchange-plain", "curve-exchange-uint"].includes(hop.adapterId) ? hop.target : null,
     prewarmQuoteCalls: [] }),
   buildFragment(input) {
