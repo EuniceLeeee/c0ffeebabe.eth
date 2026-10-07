@@ -109,7 +109,7 @@ assert.equal(isRpcThrottleError(atBound), true);
 assert.equal(isRpcThrottleError(new Error("execution reverted", { cause: atBound })), false);
 
 const provider = new JsonRpcProvider("http://127.0.0.1:1", 1, { staticNetwork: true });
-const payload = { id: 1, jsonrpc: "2.0", method: "eth_call",
+const payload = { id: 1, jsonrpc: "2.0" as const, method: "eth_call",
   params: [{ to: "0x0000000000000000000000000000000000000001", data: "0x12345678" }, "0x64"] };
 for (const [error, throttle, exhausted] of [
   [{ code: 429, message: "compute units per second capacity exceeded" }, true, false],

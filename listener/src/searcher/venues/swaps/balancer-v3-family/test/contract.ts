@@ -397,7 +397,7 @@ test("non-swap hook variants retain both amount interfaces and conservative bloc
     assert.equal(s.descriptor.binding.hooks.address, POOL);
     for (const route of s.routes) {
       const current = currentPricing(s, route);
-      assert.equal(plugin.pricing.refreshPolicyForInstance({
+      assert.equal(plugin.pricing.refreshPolicyForInstance!({
         descriptor: current.descriptor, routes: [route],
       }), "each-block", "hooked/unknown pool math must not receive a static-price promise");
       for (const amountIn of [12345n, 123450n]) {
@@ -412,7 +412,7 @@ test("non-swap hook variants retain both amount interfaces and conservative bloc
         const fragment = plugin.execution.buildFragment({ ...input, quotedAmountOut: quote.amountOut,
           minAmountOut: 1n, exactEvidence: quote.evidence });
         assert.equal(fragment.nodes[0].amount, amountIn);
-        const runtime = plugin.execution.buildRuntimeLeg({ descriptor: s.descriptor, route,
+        const runtime = plugin.execution.buildRuntimeLeg!({ descriptor: s.descriptor, route,
           executor: EXECUTOR, runtimeEvidence: [], source: SOURCE });
         assert(runtime && runtime.actionAdapterId === "balancer-v3-router-swap");
         assert(runtime.program.startsWith("0x01"));

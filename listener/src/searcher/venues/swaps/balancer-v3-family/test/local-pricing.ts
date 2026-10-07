@@ -175,7 +175,7 @@ for (const model of BALANCER_MODEL_TEMPLATES.map(item => item.model)) {
       const pricing = a.instance.pricingInstances.find(item => item.routes.some(r => r.routeKey === route.routeKey))!;
       const pricingDescriptor = pricing.pricingDescriptor as BalancerV3PricingDescriptor;
       const pricingRoutes = pricing.routes as readonly Route[];
-      assert.equal(plugin.pricing.refreshPolicyForInstance({ descriptor: pricingDescriptor, routes: pricingRoutes }),
+      assert.equal(plugin.pricing.refreshPolicyForInstance!({ descriptor: pricingDescriptor, routes: pricingRoutes }),
         model.startsWith("weighted-") ? "on-touch" : "each-block");
       const snapshot = pricing.snapshot as BalancerV3Snapshot;
       const small = localQuote(f, a.descriptor, route, snapshot.amountIn);
@@ -534,7 +534,7 @@ test("state-only refresh proof excludes every clock/rate/hook/unknown variant; c
   ];
   for (const { observation, expected } of cases) {
     assert.deepEqual([...root.resolveBlockTouchedStateKeys(observation, SOURCE)].sort(), expected);
-    const individual = new Set(a.instance.pricingInstances.flatMap(pricing => plugin.pricing.mutation.affectedStateKeys({
+    const individual = new Set(a.instance.pricingInstances.flatMap(pricing => plugin.pricing.mutation!.affectedStateKeys({
       descriptor: pricing.pricingDescriptor as BalancerV3PricingDescriptor,
       routes: pricing.routes as readonly Route[], observation,
     })));

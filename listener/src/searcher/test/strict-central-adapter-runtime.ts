@@ -89,7 +89,7 @@ function mockProvider() {
 
 test("ethers RPC wrappers do not turn transport failures into admission reverts", async () => {
   const provider = new JsonRpcProvider("http://127.0.0.1:1", 1, { staticNetwork: true });
-  const payload = { id: 1, jsonrpc: "2.0", method: "eth_call",
+  const payload = { id: 1, jsonrpc: "2.0" as const, method: "eth_call",
     params: [{ to: WSTETH, data: "0x12345678" }, "0x64"] };
   const request = { id: "wrapped-transport", kind: "eth-call" as const,
     to: WSTETH, data: "0x12345678", completion: "return-data" as const };
