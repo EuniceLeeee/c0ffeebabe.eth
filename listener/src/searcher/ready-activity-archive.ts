@@ -29,7 +29,7 @@ type Receipt = Key & {
 type Classification = { schema: "ready-activity-classified/v1"; classifierKey: string; rawReceiptSha256: string };
 type Entry = {
   key: Key; classification?: Classification; path: string; receipt: Receipt;
-  receiptText: string; dataStamp: string; fence: string;
+  receiptText: string; dataStamp: string; rawDataStamp?: string; fence: string;
 };
 export interface ReadyActivityArchiveCoverage {
   complete: boolean;
@@ -326,8 +326,11 @@ export class ReadyActivityArchive {
         !/^[0-9a-f]{64}$/.test(receipt.rawSha256) || !/^[0-9a-f]{64}$/.test(receipt.gzipSha256)) fail("entry metadata mismatch");
     if (!classification && receipt.rawBytes > this.maxEntryBytes) entryLimit("entry exceeds configured read byte limit");
     const dataStamp = await pathStamp(join(path, "data.json.gz"));
-    return { key, classification, path, receipt, receiptText, dataStamp,
-      fence: [context, root, directory, receiptStamp, dataStamp, hash(receiptText)].join("|") };
+    let rawDataStamp: string | undefined;
+    try { rawDataStamp = await pathStamp(join(path, "data.json")); }
+    catch (error) { if (!hasCode(error, "ENOENT")) throw error; }
+    return { key, classification, path, receipt, receiptText, dataStamp, rawDataStamp,
+      fence: [context, root, directory, receiptStamp, dataStamp, rawDataStamp, hash(receiptText)].join("|") };
   }
 
   private async unchanged(entry: Entry): Promise<void> {
@@ -382,7 +385,18 @@ export class ReadyActivityArchive {
         },
       });
       const input = handle.createReadStream({ autoClose: false });
-      if (decode) await pipeline(input, compressed, createGunzip(), output);
+      // A retained raw copy avoids gunzip, never gzip integrity or JSON/count checks.
+      if (decode && entry.rawDataStamp !== undefined) {
+        await pipeline(input, compressed, new Writable({ write(_chunk, _encoding, callback) { callback(); } }));
+        const raw = await open(join(path, "data.json"), constants.O_RDONLY | constants.O_NOFOLLOW);
+        try {
+          const rawStat = await raw.stat({ bigint: true });
+          if (!rawStat.isFile() || rawStat.size !== BigInt(receipt.rawBytes)) fail("raw copy size mismatch");
+          if (stamp(rawStat) !== entry.rawDataStamp) fail("raw copy changed before read");
+          await pipeline(raw.createReadStream({ autoClose: false }), output);
+          if (stamp(rawStat) !== stamp(await raw.stat({ bigint: true }))) fail("raw copy changed during read");
+        } finally { await raw.close(); }
+      } else if (decode) await pipeline(input, compressed, createGunzip(), output);
       else await pipeline(input, compressed, output);
       if (gzipBytes !== receipt.gzipBytes || compressedHash.digest("hex") !== receipt.gzipSha256 ||
           (decode && (rawBytes !== receipt.rawBytes || rawHash.digest("hex") !== receipt.rawSha256))) fail("entry hash mismatch");

@@ -161,6 +161,83 @@ test("gzip roundtrip preserves full raw nested JSON, empty arrays and Unicode", 
   assert.equal(await archive.readLogs({ fromBlock: 100, toBlock: 101 }), null);
 }));
 
+test("uncompressed copies survive new handles and coverage with zero gunzip; originals stay unchanged", async t => fixture(async (directory, options) => {
+  const writer = new ReadyActivityArchive(options);
+  await complete(writer);
+  const names = [logsName, ...[100, 101, 102].map(block => `trace-${method}-${block}-${block}`)];
+  const originals = await Promise.all(names.map(async name => {
+    const gzip = await readFile(join(directory, name, "data.json.gz"));
+    const receipt = await readFile(join(directory, name, "receipt.json"));
+    await writeFile(join(directory, name, "data.json"), gunzipSync(gzip));
+    return { gzip, receipt };
+  }));
+  const counts = workCounts(t);
+  for (const archive of [new ReadyActivityArchive(options), new ReadyActivityArchive(options).withEntryLimit(16)]) {
+    assert.deepEqual(await archive.readLogs(range), []);
+    assert.deepEqual(await archive.readTrace({ blockNumber: 100, method }), []);
+    assert.equal((await archive.assertComplete({ method })).complete, true);
+  }
+  assert.equal(counts.decompressions, 0);
+  for (let i = 0; i < names.length; i++) {
+    assert.deepEqual(await readFile(join(directory, names[i], "data.json.gz")), originals[i].gzip);
+    assert.deepEqual(await readFile(join(directory, names[i], "receipt.json")), originals[i].receipt);
+  }
+}));
+
+test("uncompressed copies fail closed on wrong bytes, size, symlinks and original gzip damage", async () => fixture(async (directory, options) => {
+  const archive = new ReadyActivityArchive(options);
+  await archive.writeLogs({ ...range, logs: ["a"] });
+  const rawPath = join(directory, logsName, "data.json"), gzipPath = join(directory, logsName, "data.json.gz");
+  const gzip = await readFile(gzipPath), raw = gunzipSync(gzip);
+  await writeFile(rawPath, '["b"]');
+  await assert.rejects(archive.readLogs(range), /hash mismatch/);
+  await writeFile(rawPath, "[]");
+  await assert.rejects(archive.readLogs(range), /raw copy size mismatch/);
+  await rm(rawPath);
+  await symlink(gzipPath, rawPath);
+  await assert.rejects(archive.readLogs(range), /invalid archive file/);
+  await rm(rawPath);
+  await writeFile(rawPath, raw);
+  const damaged = Buffer.from(gzip); damaged[damaged.length - 1] ^= 1;
+  await writeFile(gzipPath, damaged);
+  await assert.rejects(archive.readLogs(range), /hash mismatch/);
+  await writeFile(gzipPath, gzip);
+  assert.deepEqual(await archive.readLogs(range), ["a"]);
+}));
+
+test("uncompressed copy rewrites invalidate warm coverage even with restored mtime and equal size", async () => fixture(async (directory, options) => {
+  const writer = new ReadyActivityArchive(options);
+  await writer.writeLogs({ ...range, logs: ["a"] });
+  for (let blockNumber = 100; blockNumber <= 102; blockNumber++) await writer.writeTrace({ blockNumber, method, trace: [] });
+  for (const name of [logsName, ...[100, 101, 102].map(block => `trace-${method}-${block}-${block}`)]) {
+    await writeFile(join(directory, name, "data.json"), gunzipSync(await readFile(join(directory, name, "data.json.gz"))));
+  }
+  const archive = new ReadyActivityArchive(options);
+  assert.equal((await archive.assertComplete({ method })).complete, true);
+  const rawPath = join(directory, logsName, "data.json"), before = await stat(rawPath);
+  await writeFile(rawPath, '["b"]');
+  await utimes(rawPath, before.atime, before.mtime);
+  await assert.rejects(archive.assertComplete({ method }), /hash mismatch/);
+}));
+
+test("uncompressed copy mutation during JSON parse is fenced before returning data", async t => fixture(async (directory, options) => {
+  const archive = new ReadyActivityArchive(options);
+  await archive.writeLogs({ ...range, logs: ["raw-copy"] });
+  const rawPath = join(directory, logsName, "data.json"), raw = gunzipSync(await readFile(join(directory, logsName, "data.json.gz")));
+  await writeFile(rawPath, raw);
+  const parse = JSON.parse;
+  let fired = false;
+  const mock = t.mock.method(JSON, "parse", (text: string) => {
+    const result = parse(text);
+    if (text === raw.toString() && !fired) { fired = true; writeFileSync(rawPath, raw); }
+    return result;
+  });
+  await assert.rejects(archive.readLogs(range), /changed/);
+  assert.equal(fired, true);
+  mock.mock.restore();
+  assert.deepEqual(await archive.readLogs(range), ["raw-copy"]);
+}));
+
 test("manifest pins identity and source metadata, rejects every context mismatch without changing bytes", async () => fixture(async (directory, options) => {
   const archive = new ReadyActivityArchive(options);
   await archive.writeLogs({ ...range, logs: ["original"] });
