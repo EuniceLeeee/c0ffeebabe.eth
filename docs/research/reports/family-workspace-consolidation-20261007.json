@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "Authorized cloud workspace consolidation; not adapter or production-gap acceptance",
   "date": "2026-10-07",
-  "status": "partial_pending_concurrent_live_defaults_release",
+  "status": "completed_workspace_consolidation",
   "workspace": "/opt/mev-cloud/family-runtime-20261007",
   "branch": "codex/family-runtime-actual-20261007",
   "publishedCodeTip": "cae44bb2493f54037eab4a56e3bb98e9742a3ea9",
@@ -122,6 +122,15 @@
       "backup": "analysis-tooling-source.tar.gz",
       "recovery": "retired-analysis-tooling-source",
       "retainedAtOriginalPath": ".git only; core.bare=true; no development checkout"
+    },
+    {
+      "path": "/opt/mev-cloud/live-defaults-20261007",
+      "sourceHead": "03acff5ac3215e1865c9068f5fa24dd05859bb42",
+      "evidence": "Set published first; fresh 45-file containment audit: 40 identical, five reviewed superseded Set/generated/test differences, none missing; archive comparison passed",
+      "backup": "live-defaults-concurrent-source-20261007.tar.gz",
+      "historyBackup": "live-defaults-final-ref-03acff5.bundle",
+      "localBranchDeleted": "codex/live-defaults-fluid-ekubo-20261007",
+      "remoteBranch": "already absent; no remote delete issued"
     }
   ],
   "sharedGit": {
@@ -131,18 +140,16 @@
     "independentChecks": "git archive of Family, live-defaults and former primary HEADs all completed without borrowed objects",
     "familyAnalysisDependencies": "retargeted existing symlink to its same verified backing directory /opt/mev-cloud/app/listener/node_modules; ethers resolution passed",
     "remainingLinkedWorktrees": [
-      "/opt/mev-cloud/family-runtime-20261007",
-      "/opt/mev-cloud/live-defaults-20261007"
+      "/opt/mev-cloud/family-runtime-20261007"
     ],
     "knownHistoryLimit": "prior all-ref bundle encountered missing historical parent 2215e755; not repaired or treated as a new failure; scoped published bundles succeed"
   },
   "liveDefaults": {
     "path": "/opt/mev-cloud/live-defaults-20261007",
-    "retired": false,
-    "gate": "Set verification/publication complete; final retirement held for concurrent source-workflow use",
+    "retired": true,
+    "gate": "passed: Set published; user authorized removal after fresh checks; other workflow stopped with no additional rounds; no source process/FD/symlink consumers; verified recoverable backups",
     "lastReadOnlyAudit": "45 changed/untracked business files: 40 byte-identical, none missing; five reviewed differences are generated shadow, composition fixture and Set execution/contract/refresh improvements",
     "defaultSetActivation": false,
-    "warning": "recheck source for additional uncommitted changes immediately before archive/removal",
     "sourceHead": "03acff5ac3215e1865c9068f5fa24dd05859bb42",
     "concurrentUse": {
       "observedAtUtc": "2026-10-07T12:26:31Z",
@@ -154,7 +161,19 @@
       ],
       "reason": "Another workflow just copied source, and preparation still executes git against live-defaults. Its attempt failed; a retry would require that source directory.",
       "process": "PID64656 initially had live-defaults/listener cwd, later moved to its own runtime snapshot; none of this task's three agents owns it",
-      "action": "No signal, move, rewrite or deletion of the other workflow. Source retained until coordinated release; open-FD absence alone is not sufficient."
+      "action": "Preserved during concurrent-use hold; no signals or edits to the other workflow. Retired source only after the latest user request and its stopped/noAdditionalRounds status.",
+      "release": {
+        "statusArtifact": "/opt/mev-cloud/family-three-live-20261007.oRLa3M/status.json",
+        "statusAtUtc": "2026-10-07T13:03:13.428Z",
+        "status": "stopped",
+        "noAdditionalRounds": true,
+        "processCheckAtUtc": "2026-10-07T13:05:22.527Z",
+        "sourceCwdOrCommandOrFdReferences": 0,
+        "remainingOtherProcess": "idle bash 64656 in independent runtime/listener; no children",
+        "sourceSymlinkConsumers": 0,
+        "oldScriptReferences": "retained as old workflow evidence; not rewritten or deleted",
+        "independentRuntimePreserved": true
+      }
     },
     "remoteBranch": "refs/heads/codex/live-defaults-fluid-ekubo-20261007",
     "remoteBranchPresentAtPublication": false,
@@ -163,12 +182,30 @@
     "latestBackup": {
       "file": "live-defaults-concurrent-source-20261007.tar.gz",
       "sha256": "883e6a1fe4b1de204cf6ea5961cd0578052d2687fe8470ba4d3ace8d341b023d",
-      "compare": "pass at capture; recheck again before any future deletion"
-    }
+      "compare": "passed immediately before retirement; SHA256 rechecked",
+      "bytes": 193015677
+    },
+    "historyBackup": {
+      "file": "live-defaults-final-ref-03acff5.bundle",
+      "sha256": "e9acc1f4660b5f9403d618e894a46dcd4fec0825090cd2c88febb234ac2c0aa1",
+      "verified": true,
+      "requiresExistingCommits": [
+        "8bcf6b31091d77836f1c7d4d345d6fdaab3f41ec",
+        "a41afdc54b9ecf486bde332ac2277887ebecb294"
+      ],
+      "commonGitPreserved": true
+    },
+    "localBranchRemoved": true,
+    "remoteBranchPresentAtRetirement": false,
+    "originalPathAbsentAtUtc": "2026-10-07T13:10:20Z"
   },
   "pending": [
-    "coordinate release of live-defaults source from the other recent three-family preparation, then fresh containment/backup checks and retirement",
-    "Balancer V1/V2/Aura three-TX work after consolidation",
+    "Balancer V1/V2/graviAURA Family implementation and single-block dual-interface acceptance; read-only three-TX preflight captured",
     "Curve Underlying production wiring and 24 raw-unit comparisons; remaining scoped latency verification"
+  ],
+  "completedAtUtc": "2026-10-07T13:10:20Z",
+  "activeCloudDevelopmentWorkspaces": [
+    "/opt/mev-cloud/family-runtime-20261007",
+    "/opt/mev-cloud/app-run2"
   ]
 }

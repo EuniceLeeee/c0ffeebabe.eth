@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-07",
+  "scope": "Read-only three-TX Family intake and source semantics; no new implementation/strict/Ready/Graph/quote/fork/EV acceptance",
+  "sourceHead": "98403385019f3bc52c4e28bece445065cc31826b",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "rawEvidenceDirectory": "logs/family-three-preflight-20261007.VQzzh5",
+  "captureSummarySha256": "64e7eab3609e2e8c9c2eb6aadcc9f6515d199f66cb8fd1a8846592d36080e358",
+  "poolReadsSha256": "83d7be53037bad4138e49319b42fd8dbe455a1804518dd8d75be47cfef5cc5f6",
+  "common": {
+    "sender": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+    "executor": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+    "funding": "Morpho WETH flash loan",
+    "sameSenderTransactionsPerBlock": 1,
+    "otherDirectExecutorTransactionsPerBlock": 0,
+    "senderCodeAtParentAndEnd": "0x",
+    "causality": "blockscan/backrun not established by this preflight",
+    "cashConvention": "WETH proceeds minus WETH flash repayment before gas/coinbase; gas already includes priority fee; root ETH input refunded, not double-counted; token residue reported separately",
+    "balancerV2Identity": "N pinned getPoolId/getVault/Vault getPool/getPoolTokens reciprocal reads pass for all three pools; not strict or all-variant proof"
+  },
+  "samples": [
+    {
+      "tx": "0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8",
+      "block": 26138731,
+      "index": 138,
+      "blockHash": "0x696b86358440cc2b7a0a5e80dc87c2542a2e1535cd21502b99b317fef1d4d266",
+      "rawSha256": "1b86178916fe3d648f13247afae9b94112ef63a207fb921820c39e9082919283",
+      "route": "WETH -> NMR (Balancer V1) -> WETH (V2)",
+      "legs": [
+        {
+          "pool": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+          "selector": "0x8201aa3f",
+          "amountIn": "8444695829171278",
+          "amountOut": "1313743479005274328"
+        },
+        {
+          "pool": "0xb784ced6994c928170b417bbd052a096c6fb17e2",
+          "amountIn": "1313743479005274390",
+          "amountOut": "8477498869733467"
+        }
+      ],
+      "grossCashWei": "32803040562189",
+      "gasWei": "27821103226560",
+      "directCoinbasePaymentWei": "373954662384",
+      "netCashWei": "4607982673245",
+      "unpricedResidual": {
+        "token": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+        "raw": "-62",
+        "note": "Second leg consumed 62 raw NMR of pre-existing dust; runtime path must use actual receipt only"
+      },
+      "identityEvidence": "N pinned finalized/publicSwap/tokens/fee getters only; factory/source reverse proof still needed"
+    },
+    {
+      "tx": "0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",
+      "block": 26138724,
+      "index": 245,
+      "blockHash": "0xcad9e81827cbe1f29ff77fc163855dfe1647a17b8b4a44b209e900273ac4f70b",
+      "rawSha256": "8530a8a5a22c33781d053f2d7218a9a001381385ce0773a4e9c669093c4b3a31",
+      "route": "WETH -> GTC (Balancer V2) -> WETH (UniV3)",
+      "legs": [
+        {
+          "pool": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88",
+          "poolId": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",
+          "amountIn": "6917984563928420",
+          "amountOut": "95034526410411689937",
+          "weightedPoolTokens": 2,
+          "weights": [
+            "200000000000000000",
+            "800000000000000000"
+          ]
+        },
+        {
+          "pool": "0xd017617f6f0fd22796e137a8240cc38f52a147b2",
+          "amountIn": "95034526410411689937",
+          "amountOut": "6923045267075593"
+        }
+      ],
+      "grossCashWei": "5060703147173",
+      "gasWei": "28324826816706",
+      "directCoinbasePaymentWei": "130566141012",
+      "netCashWei": "-23394689810545",
+      "qualification": "Valid Family leg input; negative fee-adjusted cash, not a positive-EV replay result"
+    },
+    {
+      "tx": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+      "block": 26138511,
+      "index": 248,
+      "blockHash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771",
+      "rawSha256": "8001501f4ff663a5b562972ca5e2514082fa09b40ffc7443509706e49d40d843",
+      "route": "WETH -> graviAURA (Balancer V2) -> AURA (share withdrawal) -> WETH (Balancer V2)",
+      "legs": [
+        {
+          "pool": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5",
+          "poolId": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+          "amountIn": "1273805887338394",
+          "amountOut": "131502308044455713821",
+          "weightedPoolTokens": 3,
+          "notStablePool": true
+        },
+        {
+          "target": "0xba485b556399123261a5f9c95d413b4f93107407",
+          "selector": "0x2e1a7d4d",
+          "amountIn": "131502308044455713821",
+          "amountOut": "141331862836870691964",
+          "semantics": "Badger Vault 1.5 with vlAURA Strategy 1.2 share withdrawal, not ERC4626 or reward claim"
+        },
+        {
+          "pool": "0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9",
+          "poolId": "0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274",
+          "amountIn": "141331862836870691964",
+          "amountOut": "1326301699728453",
+          "weightedPoolTokens": 2,
+          "weights": [
+            "500000000000000000",
+            "500000000000000000"
+          ]
+        }
+      ],
+      "grossCashWei": "52495812390059",
+      "gasWei": "33486080383821",
+      "directCoinbasePaymentWei": "1790107202499",
+      "netCashWei": "17219624803739"
+    }
+  ],
+  "graviAura": {
+    "directory": "logs/graviaura-preflight-20261007.KVf2ht",
+    "designSha256": "48f898f489d0d76444939e3e2729ef84ae493783742b4b39247be78b5a5a9f18",
+    "provenanceSha256": "65e6e4ae8a1542d8a1cf17f823ce8c7579f93a6acb4a2650f2324d0a6a1fe979",
+    "rpcCalls": 45,
+    "sourceProof": "Vault/strategy proxy and implementation executable bodies match N runtimes; CBOR metadata differs. Token/locker full runtime matches after declared immutable binding.",
+    "reverseBinding": "vault.strategy -> strategy; strategy.vault -> vault; vault.token=strategy.want=locker.stakingToken=AURA; EIP1967 implementations verified",
+    "quoteDesign": "Read-once Family-local amount formula floor(backing*shares/supply), then exact liquidity and fee branches; do not linearly multiply rounded pricePerFullShare",
+    "runtimeDesign": "withdraw(current shares); use independently measured AURA receipt; no quote or amount reads during construction; existing generic VM sufficient",
+    "sampleScope": "N fee=0, no locked balance, vault/strategy unpaused and fully liquid; does not validate unlock/fee/upgrade cases"
+  },
+  "tools": {
+    "flow": {
+      "query": [
+        "single-transaction",
+        "flow"
+      ],
+      "selected": "analysis:tx-flow",
+      "manifest": "logs/family-three-preflight-20261007.VQzzh5/tool-selection.json",
+      "manifestSha256": "f8ab51d880c18ab3189220b1752e5852946bed1223547b80c187a657010339fa",
+      "exit": 0,
+      "outputSha256": "7b34d85465733030637d14d98fd26909655bb7a16f331514f2eef4f36a222a7f",
+      "reconciliation": "matches receipt flow including NMR -62 raw"
+    },
+    "pnl": {
+      "query": [
+        "single-transaction",
+        "pnl"
+      ],
+      "selected": "analysis:tx-profit",
+      "manifest": "logs/family-three-preflight-20261007.VQzzh5/tool-pnl-selection.json",
+      "manifestSha256": "de6169c45a93ccbc889d9ec16eadd2d3f67b362d8412da4a6d0256b9f8799654",
+      "jsonAttempt": {
+        "exit": 1,
+        "stderrSha256": "b692762e650bbd1fe28e34a5e374554c2e9c8eecd58dc11bf8d47fdb6111d61b",
+        "defect": "tx-profit-json-unpriced-bigint",
+        "status": "open_frozen",
+        "independentReview": "Copernicus independently reproduced NMR -62n serialization failure; existing documented defect, no analyzer changes"
+      },
+      "textAttempt": {
+        "exit": 0,
+        "stdoutSha256": "4d733255a228b2d01bada72562d12bc4d1986916cf15f8d87670ea86a7a000bb",
+        "stderrSha256": "0b016005fa40d222c684aae0fb62b699d4a7055c83f916a28046b5f896d1cfec",
+        "reconciliation": "positive/negative/positive priced cash matches manual evidence; first TX retains one unpriced token; not complete NAV valuation"
+      }
+    }
+  },
+  "capabilityGaps": [
+    "Balancer V1 swap Family not installed; old BPT-exit fixture is unrelated",
+    "Balancer V2 swap Family not installed; existing V2 funding is not swap capability",
+    "graviAURA withdrawal ABI/semantics not implemented by current ERC4626, token-conversion or native-withdraw Families"
+  ],
+  "acceptanceStillRequired": [
+    "Family implementation, tests and strict admission",
+    "N-state/N-environment natural single-block Ready, Graph and production mid/effective",
+    "production P and TX amount same-state explicit quote/execution and actual-received next-hop parity",
+    "direction/variant and dynamic-dependency safety coverage",
+    "Original pre-call state if claiming exact equality to landed outputs; full route/EV separate"
+  ],
+  "safety": {
+    "productionCodeChanged": false,
+    "implTouched": false,
+    "liveStarted": false,
+    "newWorktree": false,
+    "signing": false,
+    "broadcast": false
+  }
+}
