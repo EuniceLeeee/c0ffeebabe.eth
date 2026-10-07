@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-08",
+  "scope": "Completion audit of the authorized cloud Family implementation, workspace consolidation and bounded historical validation; not deployment or a full-live performance verdict.",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "1fef6a3b2086d4ced1b4be4b705647a10a27bbb0",
+  "productionSourceSha256": "fab02ce6992b7733707dc7c6bd4c0b3f1f3ef1ae23eb1cbdb95ca0ae4425e17c",
+  "verdict": "authorized_implementation_and_bounded_validation_completed_with_explicit_limits",
+  "completionBasis": "Review the whole current goal, not only V1. Existing same-source evidence is reused as permitted by family-plugin-adaptation; the user reserved full-live/14400-block timing validation. The failed final native V1 retry remains failed. Authenticated current-code recomputation closes saved-evidence reuse, not the fresh native rerun.",
+  "requirements": [
+    {
+      "id": "workspace-consolidation",
+      "status": "complete",
+      "result": "Unique streaming and live-defaults code integrated, tested and published before retirement. Set actual-received support completed before live-defaults removal. Only Family and protected impl remain active cloud development checkouts; shared Git, dependency backing directories, snapshots and historical evidence retained.",
+      "report": "family-workspace-consolidation-20261007.json",
+      "reportSha256": "623126cbeb6dd2d041db0d5b4e4d8fd2f0db05717005af1aefeeb477ce69bc77",
+      "recoverableArchiveRoot": "/opt/mev-cloud/worktree-archive-20261007.DQR9uH",
+      "retiredLiveDefaults": "/opt/mev-cloud/live-defaults-20261007",
+      "remoteBranchRetired": "codex/live-defaults-fluid-ekubo-20261007",
+      "latestCheck": "Already absent; no active source consumers. Historical freeze/prepare script references are retained for the stopped/noAdditionalRounds workflow, not treated as active retry consumers. Cleanup was not repeated."
+    },
+    {
+      "id": "all-installed-dual-execution",
+      "status": "implementation_and_contract_coverage_complete",
+      "installedFamilies": 35,
+      "swapOrProtocolFamilies": 32,
+      "fundingFamilies": 2,
+      "creditFamilies": 1,
+      "result": "All 32 installed Swap/Protocol Families, including disabled entries, retain explicit-amount Exact and actual-received runtime emitters. Registry-derived fixtures cover their projected directions and supported ABI variants; production sim selector construction poisons Exact/quoted construction and asserts zero calls. Funding/Credit retain their domain contracts.",
+      "test": "listener/src/searcher/test/family-dual-execution.ts",
+      "currentSharedContractTestsPassed": 67,
+      "priorStageReport": "family-runtime-actual-20261007-stage1.json",
+      "priorStageReportSha256": "be589b45097a593b54286ee00ddaddf815829225826b2d1957bad8810f60b0c2",
+      "missingInputResolutionReport": "family-offline-prestate-progress-20261008.json",
+      "missingInputResolutionReportSha256": "41cc61646ef637e3e93586b0c1419d7af39f775d8d227195b4ca65c87cd775c7",
+      "resolvedMissingOfflineInputs": "BTB 7, xWin 11, Migration 12: 30/30 saved-input tests passed; earlier missing-input results remain historical records.",
+      "acceptanceRequirements": [
+        "listener/src/searcher/templates/family-plugin/README.md",
+        "personal family-plugin-adaptation SKILL.md and references/acceptance-entrypoints.md"
+      ],
+      "limit": "Synthetic ABI/selector contracts are not all-Family historical execution, strict or profitability proof. Historical and unrepresented variants retain the explicit limits in the individual reports."
+    },
+    {
+      "id": "three-requested-transactions",
+      "status": "supported-family-samples-accepted",
+      "result": "Balancer V1, Balancer V2 and the graviAURA Badger Sett liquid-withdrawal semantics implemented; all three new Families remain default disabled. Three real single-block Ready runs naturally discover/admit five target instances, 13 directions with mid/effective; 26 amount samples produce 52 same-N dual single-leg executions.",
+      "historicalReport": "family-three-historical-integration-20261007.json",
+      "historicalReportSha256": "c354b6193869266e908fe8551fe544ee17be315ae388157f4a8bd4e228dd19ea",
+      "originalRuntimeReport": "family-original-runtime-parity-20261008.json",
+      "originalRuntimeReportSha256": "5ce08bb1d3beeeec4e376ebc8a1886f4fba19abbaf199cd4ba03ec2ccc62af2d",
+      "originalExactReport": "family-original-exact-parity-20261008.json",
+      "originalExactReportSha256": "a495a8af9f0ec46bcf394aaa4a139ba336dd2d62c60f8d4229404527bf559a14",
+      "originalOutputComparison": "Five target legs across the three TXs match original integer outputs for Exact, quoted execution and actual-received execution using authenticated captured prestate/native execution. V2 and graviAURA have final native verifier passes. V1 combines its earlier native pass with the new current-code offline proof below.",
+      "limits": [
+        "The first TX closes on a UniV2-style pair, not Balancer V2; original 62 raw NMR dust use is not reproduced.",
+        "Aura support means liquid TheVault1.5/Badger Sett graviAURA withdrawal, not arbitrary Aura deposits, locker unlocking or every strategy branch.",
+        "Balancer V2 historical coverage is the observed 2/3-token pools, not all stable/managed/composable variants.",
+        "Captured touched account/storage prestate plus checked execution environment is not a reconstructed full-trie root or complete original financing replay.",
+        "No natural opportunity/whole-route funding, final repayment/EV, adapter_merge_ready or production_gap_fixed claim."
+      ]
+    },
+    {
+      "id": "set-actual-received",
+      "status": "complete_for_supported_semantics",
+      "result": "Family-local nested subprograms check all basket component receipts and chain actual output; explicit quotes preserved, zero construction Exact/RPC calls, central VM capacity unchanged. Four-component historical basket: eight samples and 16 dual executions. Larger-basket safety, shortfall, callback and rollback tests are synthetic.",
+      "report": "set-runtime-nested-20261007.json",
+      "reportSha256": "c6b915db71c16610be0c3af508d14c39d51ff2dbeeb34816c489639be2a20e58",
+      "testedEmitterLimit": "187 components; 188 rejected by the existing 64KiB program bound, no quoted fallback",
+      "defaultEnabled": false,
+      "limit": "Not unlimited basket/gas support, every Set variant, original pre-call or historical whole-route EV proof."
+    },
+    {
+      "id": "curve-underlying-fee-parity",
+      "status": "complete_for_bound_classic_meta_3pool_model",
+      "result": "Implemented distinct base-to-meta mint fee/rounding, base-to-base exchange fee/precision order and meta-to-base rate/withdrawal semantics. Original 15/24 equality with nine mismatches becomes 24/24 equality. Both original and current-effective P/10P amount sets retained: 96 strict dual executions and 48 additional diagnostics pass, zero raw-unit tolerance and zero old inventory consumed.",
+      "report": "curve-underlying-classic-meta-parity-20261008.json",
+      "reportSha256": "3f85230552f482ffc606e03bef9305f60f5dc18c1e46dfb6f83abfe21a78b572",
+      "limit": "Unknown implementations keep prior chain quote behavior; active amplification ramps fail closed. Not universal Curve math or all-variant execution evidence."
+    },
+    {
+      "id": "three-family-latency",
+      "status": "bounded_analysis_and_evidenced_optimizations_complete_full_live_owned_by_user",
+      "plain": "Dual runtime path removes off-chain Exact from sim construction. Current hot Exact declares get_dy and required refresh guards in the same request round. Small historical profiles did not reproduce a seconds-long permit queue; no blanket Plain full-load speedup claimed.",
+      "balancerV3": "Eligible static no-hook/no-rate Weighted pools avoid unchanged-head refresh: seven physical eth_call items and six quote tasks removed in the control. Hooked sample still refreshes each block and passed same-state dual execution; arbitrary swap-hook support is not inferred. Stable aggregate stage speedup was not proven.",
+      "underlying": "Remove 27 duplicate code hashes per complete positive decode and irrelevant bound LP Transfer/Approval refreshes; keep donation, mint/burn, malformed/unknown, source, code, topology and ramp safety handling. Actual positive-update work remains 147 logical/21 physical calls.",
+      "performanceReport": "curve-underlying-refresh-latency-20261008.json",
+      "performanceReportSha256": "31d04699513fd109f04d9c2fd2213c84650c2126abd50a178e55fe474c1dfe89",
+      "earlierProfileReport": "family-latency-20261007-hot-profile.json",
+      "earlierProfileReportSha256": "bb54c40831dce3e16ba3f3f8a064762b79361bebdaeb8a18876d5649c45e439b",
+      "productionStage": "BlockScanRuntimeLoop through prices; same-input historical comparison, N-1 setup outside timer, three repetitions per block and side",
+      "mediansMs": [
+        { "block": 26138094, "before": 1533.182634, "after": 1408.243587 },
+        { "block": 26138136, "before": 1257.506175, "after": 1065.487819 },
+        { "block": 26138179, "before": 1325.334325, "after": 1103.658181 }
+      ],
+      "measuredPositiveSamples": { "beforeCompleted": 9, "afterCompleted": 9, "failures": 0 },
+      "outputs": "All 140 compared effective rows equal across variants/repetitions; unrelated failed rows retained. Diagnostic/freshness metadata is not claimed byte-identical.",
+      "limit": "55-instance/140-edge topology on shared infrastructure. RPC cache/network variation means these observed medians do not prove causal aggregate/full-live speedup. No new live or 14400-block run."
+    }
+  ],
+  "v1SavedEvidence": {
+    "kind": "current-production-code-recomputation-against-authenticated-prior-native-evidence",
+    "test": "listener/src/searcher/test/family-integration/three-family/original-v1-cached.test.ts",
+    "testSha256": "d61d4459d5c65004274d2c09e4045a56007fed145af8eb1382433bf26d77eb4a",
+    "nativeReport": "logs/family-original-exact.QKi5qR/26138731.1FvqMO/26138731.exact-report.json",
+    "nativeReportSha256": "da0d71f9839f93189e886dc5b54183a2c3e8fb8005244d429b9e4eab8260164f",
+    "fixedSample": {
+      "tx": "0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8",
+      "block": 26138731,
+      "amountInRawWeth": "8444695829171278",
+      "amountOutRawNmr": "1313743479005274328"
+    },
+    "checks": [
+      "Authenticate published report, captured receipt/prestate, canonical payload, fixture, Ready, request/reply and native logs by their pinned hashes and cross-bindings.",
+      "Recompute current production Exact from the saved native responses; assert exact integer output and consume exactly the expected reads.",
+      "Recompute production quoted calldata/script and runtime program; match saved native proof and BotVM bytes, with runtime-construction RPC entrances poisoned.",
+      "Authenticate current native reader full bytes before normalizing its two additional fixture-binding assertions; also bind unchanged native runtime/prestate verifiers.",
+      "Reject altered bytes/digests, foreign anchors/prefixes/replies, absent/skipped/duplicate/wrong-target native tests and changed predicates behind unchanged assertion messages."
+    ],
+    "currentReaderSha256": "cdce9764f536842bbafe38674a43558515d22f224cf641ad28cb7873dca65f36",
+    "oldReaderSha256": "13c264a1bcd04f30007597622e22da93b4c3a26e24a478a9daa073bf368c8caf",
+    "networkIsolation": "unshare -n, env -i; no provider credentials supplied",
+    "newRpcRequests": 0,
+    "newNativeEvmRuns": 0,
+    "passed": 5,
+    "failed": 0,
+    "log": "logs/family-v1-cached.xgsdVI/test-attempt3.log",
+    "logSha256": "41865834dd70470cc8e533c0cf12bd17f574fba96513f41949f0a4404b58836d",
+    "independentReview": {
+      "reviewer": "Mencius, non-author",
+      "passes": 2,
+      "firstFinding": "P2: assertion-message normalization did not authenticate the new predicate bytes; require(false,same message) could survive normalization.",
+      "resolution": "Pin current reader full hash first and add individual false-predicate rejection controls.",
+      "findingProbeLog": "logs/family-v1-cached-review.mEN828/reader-binding-probe.log",
+      "findingProbeLogSha256": "a1a01eedb19f2e545976d4de9e6fd4c45f726c9aa2a444861ea01b0670eba07e",
+      "finalFinding": "P2 closed; no new findings in the scoped correction. Independently executed 5/5 tests exit0; source bytes unchanged.",
+      "log": "logs/family-v1-cached-review-final.xJvSAq/test.log",
+      "logSha256": "62d4de5ea28c11fbaa811ac1c209a452fd9e36dc69fff7aac4ce75334020e024"
+    },
+    "retainedAttempts": [
+      {
+        "path": "logs/family-v1-cached.xgsdVI/test-attempt1.log",
+        "sha256": "0f7050faf95d386946a5ff02a2d411e055b20d04f5c2e6d85c0129c6384eb5df",
+        "status": "failed before quote; test launcher omitted Balancer V1 enable flag, no RPC"
+      },
+      {
+        "path": "logs/family-v1-cached.xgsdVI/test-attempt2.log",
+        "sha256": "a7592a5aefd3b49b97be5cd78aacb37ad075e38f93b0e3e1a6e546fada52d4de",
+        "status": "earlier 4/4 pass before reviewer gate-strengthening; not substituted for final test"
+      },
+      {
+        "path": "logs/family-original-exact.QKi5qR/26138731.xIGYGM/26138731.exact-report.json",
+        "sha256": "4c21c7f8784c43b2b2c49a9aa7a5a6397a5e7b798a7ff02a5d0244ba1bb474dc",
+        "status": "native final-verifier retry remains failed: HTTP429 Monthly capacity limit exceeded; no resolved Exact output",
+        "notReclassifiedAsPass": true
+      }
+    ],
+    "limit": "No fresh native EVM pass under the final reader is claimed. A future explicitly needed native rerun requires restored authorized RPC capacity; it is not needed merely to authenticate unchanged-source saved evidence."
+  },
+  "currentRegression": {
+    "buildLive": {
+      "exit": 0,
+      "log": "logs/family-v1-cached.xgsdVI/build-final.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    "dualExecution": {
+      "passed": 67,
+      "failed": 0,
+      "log": "logs/family-v1-cached.xgsdVI/dual-execution.log",
+      "sha256": "6e0dadd9aa0428b52cdce4c34d3dd156d0ece38cf476305d170df0be4eb0adbc"
+    },
+    "fullTypecheck": {
+      "exit": 2,
+      "existingDiagnostics": 16,
+      "newDiagnostics": 0,
+      "log": "logs/family-v1-cached.xgsdVI/typecheck-final.log",
+      "sha256": "5e638905057c7d675363ff2359934630ccea2c6ea070ee9afe312762bc9cf2d6",
+      "note": "Identical complete diagnostic output to prior baseline; not a whole-repository typecheck pass."
+    },
+    "diffCheck": "pass",
+    "toolReconciliation": {
+      "query": ["family", "dual"],
+      "manifest": "logs/family-v1-cached.xgsdVI/tool-selection.json",
+      "manifestSha256": "f09b824368558d3c0ae7235870a745b394e5d19c116f4793f1de6b14e6920771",
+      "selected": "listener:searcher:family-dual-execution",
+      "exit": 0,
+      "log": "logs/family-v1-cached.xgsdVI/indexed-dual.log",
+      "logSha256": "885c33bee3751b5bba39529d87006001d7d3fe3b9941cd9546fb8da05183bb12",
+      "descriptorSha256": "18a05f45ebf5c24dd895c571415f2842a221754f4b5a8f560fa79336b4f51a6d",
+      "argvSha256": "87c64f0c555bd8d1673f2810e50ff252c46e517a3815f0746d0960878f14f2d9",
+      "stdoutSha256": "40fbeb1877207e0d72e72af2c4f9a209650e1fcdf8631ac324e2bd60a02ecbb6",
+      "interpretation": "Agrees on installed dual-interface ABI/production-selector contract coverage, not historical EVM proof. Historical/source reuse is checked separately by the fixed cached test."
+    }
+  },
+  "remainingOutsideCompletionClaim": [
+    "Full-live/full-14400-topology latency, aggregate speedup and opportunity/EV acceptance remain unmeasured here, as reserved by the user.",
+    "All-Family/all-direction/all-variant historical execution is not inferred from interface availability or synthetic contracts; unsupported variants remain fail-closed and listed in stage reports.",
+    "Fresh final-reader native V1 rerun remains quota-blocked; prior successful native evidence and current offline recomputation are explicitly distinguished.",
+    "No impl merge/deployment or formal adapter_merge_ready/production_gap_fixed verdict is part of this completion."
+  ],
+  "safety": {
+    "protectedImpl": "/opt/mev-cloud/app-run2",
+    "protectedImplModified": false,
+    "localDirtyWorktreePreserved": true,
+    "productionSourceChangedThisCloseout": false,
+    "readyOrRuntimeSnapshotsModified": false,
+    "otherProcessesInterrupted": false,
+    "newDevelopmentWorkspace": false,
+    "newLive": false,
+    "rebuild14400": false,
+    "signing": false,
+    "broadcast": false,
+    "newRpcRequests": 0,
+    "rawLogsCommitted": false
+  }
+}
