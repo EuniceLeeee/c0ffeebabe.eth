@@ -509,7 +509,9 @@ function renderEventStats(stats?: EventStats): string {
   if (!stats) return "- events: not supplied";
   const blocks = stats.blocks;
   const blockRange =
-    blocks.length > 0 ? `${Math.min(...blocks)}-${Math.max(...blocks)}` : "n/a";
+    blocks.length > 0
+      ? `${blocks.reduce((min, block) => Math.min(min, block))}-${blocks.reduce((max, block) => Math.max(max, block))}`
+      : "n/a";
   return [
     `- event rows: \`${stats.rows}\``,
     `- invalid rows: \`${stats.invalidRows}\``,

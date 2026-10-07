@@ -649,6 +649,59 @@
       },
       "created_at": "2026-09-16T13:52:28Z",
       "updated_at": "2026-09-16T13:52:28Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261007-blockscan-pass-latency-large-log",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": ["swap"],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "latency_analyzer_join_exceeded_v8_string_limit",
+      "evidence": {
+        "finding": "The Balancer V3 250-block live.log exceeded 1.17 GB; analysis:blockscan-pass-latency failed at Array.join with RangeError: Invalid string length, leaving the full qualification window unanalyzed.",
+        "independent_review": "A non-author reviewer confirmed the CLI accumulated and joined the entire selected window while the core split it again; slicing the qualification window would change its process and continuity judgment.",
+        "regression": "The CLI now streams lines to the shared incremental analyzer; eight targeted tests and TypeScript build pass. The regression covers sliced and empty-window parity plus an aggregate logical input larger than V8's string limit. Non-author short-sequence differential check: 781 cases, zero mismatches."
+      },
+      "tooling_defect": {
+        "tool": "analysis:blockscan-pass-latency",
+        "issue": "The CLI materialized and joined an entire live log, exceeding V8's maximum string length on a valid 250-block window.",
+        "evidence": "Balancer V3 live.log was 1.178 GB and the canonical tool failed with RangeError: Invalid string length; an independently reviewed streaming replacement preserves process/commit anchors and relative line semantics.",
+        "codify_target": "analysis/src/cli/blockscan-pass-latency.ts and analysis/src/blockscan-pass-latency.ts: incremental line feed with unchanged string API and large-window/parity regressions",
+        "codify_commit": "3b22ae81b3edd21e43df91c590e151cd9896a6aa",
+        "status": "codified"
+      },
+      "created_at": "2026-10-07T00:09:42Z",
+      "updated_at": "2026-10-07T00:09:42Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261007-redact-live-run-event-range-stack",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": ["swap"],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "live_summary_expanded_event_blocks_into_function_arguments",
+      "evidence": {
+        "finding": "The 548-source-height snapshot contains 276199 block-bearing events, including 275651 pipeline_dropped rows. The canonical redaction tool failed while rendering Math.min(...blocks), not while the live process wrote its logs.",
+        "independent_review": "Non-author redaction_stack_review reproduced the exact renderer in memory: 548 entries succeed, 276199 entries throw. Both Math.min and Math.max spreads independently exceed the argument limit.",
+        "regression": "The new CLI fixture reproduces the baseline failure and passes after bounded-arity reductions, preserving all 276199 public rows, exact event counts and block range 26138356-26138903. Empty and blockless fixtures also pass. Analysis TypeScript build and both tests pass locally and on the cloud analysis workspace.",
+        "failed_execution_manifest": "/opt/mev-cloud/six-round-20261006/tx80334-audit-1791357543766/analysis-selection.json",
+        "fixed_execution_manifest": "/opt/mev-cloud/six-round-20261006/tx80334-audit-1791357543766/analysis-selection-redaction-fixed.json",
+        "scope": "Offline analysis only; the separate live price-history 2 GiB cap and its incomplete sidecar are not repaired by this summary change. Frozen live source is unchanged."
+      },
+      "tooling_defect": {
+        "tool": "analysis:redact-live-run",
+        "issue": "Summary rendering spreads one block per event as function arguments, exceeding the V8 argument limit on valid large live snapshots.",
+        "evidence": "Canonical 276199-row input fails with Maximum call stack size exceeded; the independently verified CLI regression flips failure to success with unchanged event content.",
+        "codify_target": "analysis/src/cli/redact-live-run.ts: bounded-arity min/max reductions; analysis/src/test/redact-live-run-large.ts: large-event, empty and blockless CLI regressions.",
+        "codify_commit": "3bda3661f6bb1e4ec978aac36d36b034f9371e19",
+        "status": "codified"
+      },
+      "created_at": "2026-10-07T07:45:16Z",
+      "updated_at": "2026-10-07T07:45:16Z"
     }
   ]
 }
