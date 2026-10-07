@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "scope": "Authorized cloud workspace consolidation; not adapter or production-gap acceptance",
+  "date": "2026-10-07",
+  "status": "partial_pending_Set_historical_acceptance_and_live_defaults_retirement",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "publishedCodeTip": "2b183f0de6d88b99b9505bffc62c55e075613cc7",
+  "latestUserOrdering": [
+    "merge unique live-defaults changes",
+    "complete and verify Set actual-received execution",
+    "commit and push",
+    "only then retire live-defaults",
+    "finish redundant cloud workspace cleanup",
+    "adapt the three supplied TXs for Balancer V1, Balancer V2 and Aura according to their actual routes",
+    "finish remaining Curve Underlying parity and scoped three-family latency work"
+  ],
+  "preserved": {
+    "impl": "/opt/mev-cloud/app-run2",
+    "implSourceModified": false,
+    "readyAndHistoricalEvidence": true,
+    "broadcast": false,
+    "signing": false,
+    "newLiveOr14400Rebuild": false,
+    "newDevelopmentWorkspace": false,
+    "actualLogCleanupRun": false
+  },
+  "publishedIntegrations": [
+    {
+      "commit": "2265943f",
+      "scope": "streaming large-log latency/statistics fixes",
+      "remoteBranchRetired": "codex/blockscan-latency-streaming-20261007",
+      "note": "prior verified exact remote ref deletion; not repeated"
+    },
+    {
+      "commit": "5441edf",
+      "relatedCommit": "94a717b1",
+      "scope": "streaming frozen-input redaction plus tooling defect record",
+      "tests": {
+        "passed": 15,
+        "includesRealInputLargerThan512MiB": true
+      }
+    },
+    {
+      "commit": "86214f64f50ff7e0428dac7ff3cb2518e76502a3",
+      "scope": "compact effective history/restoration, activity analysis, offline replay and guarded dry-run log preflight",
+      "tests": {
+        "history": 10,
+        "blockActivity": 25,
+        "cleanup": 4,
+        "total": 39
+      },
+      "buildLive": "pass",
+      "historyByteCap": "retained upstream explicit 16 GiB change",
+      "cleanupSafety": "not applied to any actual logs; open-handle checks alone do not protect intermittent writers"
+    },
+    {
+      "commit": "2b183f0de6d88b99b9505bffc62c55e075613cc7",
+      "scope": "verified retained raw Ready archive copies, preserving gzip/payload hashes and fail-closed reader checks",
+      "tests": {
+        "readyArchivePassed": 39
+      },
+      "actualArchiveDataModified": false
+    }
+  ],
+  "recoverableArchiveRoot": "/opt/mev-cloud/worktree-archive-20261007.DQR9uH",
+  "retired": [
+    {
+      "path": "/opt/mev-cloud/live-defaults-main-20261007",
+      "evidence": "tree identical to published impl 561416e3",
+      "backup": "live-defaults-main.tar.gz"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-latency-20261007/baseline-cachefix",
+      "evidence": "changes contained by Family; fractional/scientific queue wait support retained",
+      "backup": "baseline-cachefix.tar.gz"
+    },
+    {
+      "path": "/opt/mev-cloud/sim-stage-20261002/baseline-check",
+      "backup": "sim-stage-complete.tar.gz"
+    },
+    {
+      "path": "/opt/mev-cloud/sim-stage-20261002/app",
+      "recovery": "retired-sim-stage-app",
+      "backup": "sim-stage-complete.tar.gz"
+    },
+    {
+      "path": "source directory recorded by sim-diagnosis-control.tar.gz",
+      "recovery": "retired-sim-diagnosis-control",
+      "backup": "sim-diagnosis-control.tar.gz",
+      "note": "two source modifications contained; sparse-export omissions not imported as source deletions; original path is retained by the backup"
+    },
+    {
+      "path": "/opt/mev-cloud/seven-amount-20261005-xHmFvp/app",
+      "evidence": "30 modified/new source files byte-identical to Family or protected app-run2",
+      "backup": "seven-amount-app.tar.gz"
+    },
+    {
+      "path": "/opt/mev-cloud/seven-amount-20261005-xHmFvp/runtime-actual-debt-20261006.4j0Nqv",
+      "evidence": "source contained through a41 ancestry",
+      "backup": "runtime-actual-debt.tar.gz",
+      "retainedAtOriginalPath": "604 MB historical logs; directory is evidence-only, not a Git worktree"
+    },
+    {
+      "path": "/opt/mev-cloud/six-round-20261006/analysis-tooling-repo-3b22ae81",
+      "evidence": "five unique analysis files integrated or superseded by tested streaming fixes; archive comparison passed; no source cwd/open-FD references observed before retirement",
+      "backup": "analysis-tooling-source.tar.gz",
+      "recovery": "retired-analysis-tooling-source",
+      "retainedAtOriginalPath": ".git only; core.bare=true; no development checkout"
+    }
+  ],
+  "sharedGit": {
+    "commonDirectory": "/opt/mev-cloud/six-round-20261006/analysis-tooling-repo-3b22ae81/.git",
+    "backup": "family-common-git-before-retire.tar.gz",
+    "alternateObjects": "copied existing app-run2 object files read-only, checksum comparison matched; removed alternate pointer recoverably to family-original-alternates",
+    "independentChecks": "git archive of Family, live-defaults and former primary HEADs all completed without borrowed objects",
+    "familyAnalysisDependencies": "retargeted existing symlink to its same verified backing directory /opt/mev-cloud/app/listener/node_modules; ethers resolution passed",
+    "remainingLinkedWorktrees": [
+      "/opt/mev-cloud/family-runtime-20261007",
+      "/opt/mev-cloud/live-defaults-20261007"
+    ],
+    "knownHistoryLimit": "prior all-ref bundle encountered missing historical parent 2215e755; not repaired or treated as a new failure; scoped published bundles succeed"
+  },
+  "liveDefaults": {
+    "path": "/opt/mev-cloud/live-defaults-20261007",
+    "retired": false,
+    "gate": "Set actual-received implementation plus verification and publication required first",
+    "lastReadOnlyAudit": "all changed/untracked business paths present in Family; remaining differences are reviewed current activation defaults, generated capability shadow, and evolving Set runtime/tests",
+    "defaultSetActivation": false,
+    "warning": "recheck source for additional uncommitted changes immediately before archive/removal"
+  },
+  "pending": [
+    "Set multi-component runtime completion and historical N-state/N-environment Ready/price/dual-execution evidence",
+    "publish Set source and final redacted acceptance limits",
+    "final live-defaults containment/backup/retirement",
+    "Balancer V1/V2/Aura three-TX work",
+    "Curve Underlying production wiring and 24 raw-unit comparisons; remaining scoped latency verification"
+  ]
+}
