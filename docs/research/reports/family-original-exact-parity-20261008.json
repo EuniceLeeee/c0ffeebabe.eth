@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-08",
+  "scope": "Original-amount production Exact quote and quoted-encoder output comparison for the five supplied legs. Test-only evidence, no production edits.",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "e17c92d6dc31858ee38bcd8ac8ceb6238f82bfd1",
+  "status": "Two samples/four legs pass final native verifier; V1 has a genuine earlier native pass, while its post076 retry failed at native prestate creation due to explicit monthly RPC capacity exhaustion. Preserve both, not a 3/3 final-code rerun.",
+  "productionSourceSha256": "fab02ce6992b7733707dc7c6bd4c0b3f1f3ef1ae23eb1cbdb95ca0ae4425e17c",
+  "files": [
+    {
+      "path": "listener/src/searcher/test/family-integration/three-family/original-exact.ts",
+      "sha256": "ef802d2ff98fc83d8802bfda8fe44d97f6a72edc937132c19150c77a406c8c7e"
+    },
+    {
+      "path": "listener/src/searcher/test/family-integration/three-family/original-reads.t.sol",
+      "sha256": "cdce9764f536842bbafe38674a43558515d22f224cf641ad28cb7873dca65f36"
+    }
+  ],
+  "typeOnlyFinalCorrection": {
+    "testedTypeScriptSha256": "8ea219f257af5c01667605c600c5334208339f48fc5e22537d3bcf7c9927ac22",
+    "change": "Explicit ReturnType<typeof activeReadyMemos> annotation only; no runtime code change",
+    "beforeAndAfterErasedJavaScriptSha256": "6c827bdf9d5a89766860b40f3c178a239170dd6147a3dc256b06881a3b47db26",
+    "transform": "esbuild transformSync loader=ts format=esm target=es2022 sourcemap=false; executed before and after"
+  },
+  "mechanism": {
+    "entry": "Current production executeFamilyExactQuote -> buildFamilyExecutionFragment -> planFragmentNodes -> current actionAdapters.encode",
+    "nativeTransport": "Fixed-sample tests only, not a new live/replay architecture. Fresh native transaction fork for each request batch; complete captured canonical prestate/environment checked before actor setup. No stored N-end prices used.",
+    "prefix": "Aura reads occur after 0,1,2 production runtime prefix legs respectively. Actual prefix receipts and allowance cleanup checked. No fake prefix/trial handles and no cross-leg Exact cache.",
+    "calls": "eth_call uses production provider from address and ordinary CALL, snapshot/rollback per query; getCode/address.code and getStorage/vm.load. V1 finalized/public membership, code, fee and weights are checked against the descriptor at original prestate.",
+    "output": "Each quoted script is compiled in the same process from its issued Exact result. Aura quoted fragments are combined and executed as one script from native prestate; OriginalRuntimeOutputProof independently checks every canonical event/transfer, final balances and cleared approvals.",
+    "bindings": "TX/block/full compact canonical payload/Ready/production source/runtime bytecode, request-response payload hashes, complete prefix byte strings; fresh actor setup is the same as prior runtime proof.",
+    "limitation": "Fresh actors and WETH funding, not original Morpho/callback transaction replay. Captured accounts/slots and seven environment fields, not full trie-root proof."
+  },
+  "priorRuntimeProof": {
+    "commit": "e17c92d6dc31858ee38bcd8ac8ceb6238f82bfd1",
+    "report": "docs/research/reports/family-original-runtime-parity-20261008.json",
+    "result": "3 samples / 5 runtime legs pass"
+  },
+  "samples": [
+    {
+      "block": 26138731,
+      "tx": "0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8",
+      "status": "earlier-native-pass-reused; final-verifier-rerun-blocked",
+      "report": "logs/family-original-exact.QKi5qR/26138731.1FvqMO/26138731.exact-report.json",
+      "reportSha256": "da0d71f9839f93189e886dc5b54183a2c3e8fb8005244d429b9e4eab8260164f",
+      "quotedFixtureSha256": "1d918b1d99138c36b560e07a00a9afed5337fd8ecf7fff847da81cb73615369d",
+      "quotedExecutionLogSha256": "d5cecfd4dd5f893cb175c662b774a242b72e5d2dbda82720997b4162878f4569",
+      "nativeRequestBatches": 3,
+      "providerReadItems": 12,
+      "legs": [
+        {
+          "family": "balancer-v1",
+          "prefixLegs": 0,
+          "inputRaw": "8444695829171278",
+          "outputToken": "NMR",
+          "originalOutputRaw": "1313743479005274328",
+          "quoteOutputRaw": "1313743479005274328",
+          "quotedExecutionOutputRaw": "1313743479005274328",
+          "runtimeExecutionOutputRaw": "1313743479005274328",
+          "signedDeltaRaw": "0"
+        }
+      ]
+    },
+    {
+      "block": 26138724,
+      "tx": "0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",
+      "status": "pass-final-native-verifier",
+      "report": "logs/family-original-exact.QKi5qR/26138724.F8yd48/26138724.exact-report.json",
+      "reportSha256": "c901848e2d2f5f2b41e012db78e7a25ca7706f77e9b5e9163bab439a18b9dda9",
+      "quotedFixtureSha256": "9d4bb69c127335a441129e78980be22483a8873da1fc609961646bcf957873bb",
+      "quotedExecutionLogSha256": "45be620232412e0e1c930431c012c81ef27cdb0ecc0849988ec623159873b8f8",
+      "nativeRequestBatches": 1,
+      "providerReadItems": 1,
+      "legs": [
+        {
+          "family": "balancer-v2",
+          "prefixLegs": 0,
+          "inputRaw": "6917984563928420",
+          "outputToken": "GTC",
+          "originalOutputRaw": "95034526410411689937",
+          "quoteOutputRaw": "95034526410411689937",
+          "quotedExecutionOutputRaw": "95034526410411689937",
+          "runtimeExecutionOutputRaw": "95034526410411689937",
+          "signedDeltaRaw": "0"
+        }
+      ]
+    },
+    {
+      "block": 26138511,
+      "tx": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+      "status": "pass-final-native-verifier",
+      "report": "logs/family-original-exact.QKi5qR/26138511.g1eZfw/26138511.exact-report.json",
+      "reportSha256": "ec4975ad2f842cb5fadbccfb51155a966f5d014a90b73b5c55af4495633583c2",
+      "quotedFixtureSha256": "5af98852a3f94d95c640e465a25d171c2b7bdd07084066c6046091f2df5740f9",
+      "quotedExecutionLogSha256": "8716cd2beca041ab4660a87770949eae291bd1c9664abf44e6f2f37f29cebd0e",
+      "nativeRequestBatches": 5,
+      "providerReadItems": 32,
+      "legs": [
+        {
+          "family": "balancer-v2",
+          "prefixLegs": 0,
+          "inputRaw": "1273805887338394",
+          "outputToken": "graviAURA shares",
+          "originalOutputRaw": "131502308044455713821",
+          "quoteOutputRaw": "131502308044455713821",
+          "quotedExecutionOutputRaw": "131502308044455713821",
+          "runtimeExecutionOutputRaw": "131502308044455713821",
+          "signedDeltaRaw": "0"
+        },
+        {
+          "family": "protocol:badger-sett-withdraw",
+          "prefixLegs": 1,
+          "inputRaw": "131502308044455713821",
+          "outputToken": "AURA",
+          "originalOutputRaw": "141331862836870691964",
+          "quoteOutputRaw": "141331862836870691964",
+          "quotedExecutionOutputRaw": "141331862836870691964",
+          "runtimeExecutionOutputRaw": "141331862836870691964",
+          "signedDeltaRaw": "0"
+        },
+        {
+          "family": "balancer-v2",
+          "prefixLegs": 2,
+          "inputRaw": "141331862836870691964",
+          "outputToken": "WETH",
+          "originalOutputRaw": "1326301699728453",
+          "quoteOutputRaw": "1326301699728453",
+          "quotedExecutionOutputRaw": "1326301699728453",
+          "runtimeExecutionOutputRaw": "1326301699728453",
+          "signedDeltaRaw": "0"
+        }
+      ]
+    }
+  ],
+  "v1LatestFailure": {
+    "report": "logs/family-original-exact.QKi5qR/26138731.xIGYGM/26138731.exact-report.json",
+    "reportSha256": "4c21c7f8784c43b2b2c49a9aa7a5a6397a5e7b798a7ff02a5d0244ba1bb474dc",
+    "log": "logs/family-original-exact.QKi5qR/26138731.xIGYGM/26138731.2.reads.log",
+    "logSha256": "aed493d5c25f501164d1345f50d50d36c801bf64fa9ed17ad26d80ce37095369",
+    "cause": "HTTP429 Monthly capacity limit exceeded; native createSelectFork prefix-state read failed before Exact result",
+    "elapsedMs": 134375,
+    "additionalRpcAfterFailure": 0,
+    "notReplacedByEarlierSuccess": true,
+    "resolvedExactProduced": false
+  },
+  "offlineSavedEvidenceCheck": {
+    "main": "Executed current post076 verdict code against all four earlier V1 native logs; all four pass target contract/method, unique pass and exact suite counts. Six empty/skipped/wrong-contract/wrong-method/duplicate-pass/failed-suite variants rejected. Zero RPC.",
+    "review": "Independent network-isolated file/JSON inspection found no contradictory binding in inspected prior V1 requests, replies, logs and retry report. It supports retaining the prior native pass separately from the failed post076 retry. Reviewer stopped before recomputing the complete hash chain or replaying the current decoder; type-only emitted-JS equality remains main-verified."
+  },
+  "codeReview": {
+    "agent": "Mencius",
+    "agentId": "01a11740-7b48-70e1-8bdc-3e0aa98eb3c7",
+    "verdict": "Final post076 two-file review: no blocking findings; exact target execution gate and canonical/fixture cross-binding corrections closed",
+    "executedNegative": "Independent unshare -n native tests: foreign read TX and missing prefix rejected; exit0, 2 passed, 0 failed, 0 skipped",
+    "log": "logs/family-original-exact.QKi5qR/26138511.negative.1791407518854.log",
+    "logSha256": "318040a36ae3553e9b659a1b9813a8862a3232c08efeee4d598b3e63158921f7",
+    "receiptSha256": "606accd8a3ebf50d94765c810106dfee8f7120373cb6b6f6f20b1195699643ad",
+    "limitation": "Reviewer did not rerun positive RPC proofs"
+  },
+  "checks": {
+    "productionBuild": {
+      "command": "npm run build:live",
+      "exitCode": 0,
+      "evidence": "Main-agent terminal receipt"
+    },
+    "fullTypecheck": {
+      "exitCode": 2,
+      "diagnostics": 16,
+      "changedTestFileDiagnostics": 0,
+      "status": "Known preexisting diagnostics remain; not a clean full-repository typecheck",
+      "log": "logs/family-original-exact.QKi5qR/full-typecheck-final.log",
+      "sha256": "5e638905057c7d675363ff2359934630ccea2c6ea070ee9afe312762bc9cf2d6"
+    },
+    "diffCheck": "pass"
+  },
+  "preservedAttempts": [
+    {
+      "root": "logs/family-original-exact.51BI2A",
+      "result": "Fixture trailing whitespace changed across envString; byte-binding check rejected before RPC. Fixed compact transport, not relaxed hashing."
+    },
+    {
+      "root": "logs/family-original-exact.OzVd5m",
+      "result": "Canonical prestate/reads passed, result write blocked by missing Foundry file permission; env setting not recognized."
+    },
+    {
+      "root": "logs/family-original-exact.QKi5qR",
+      "result": "Initial explicit config basename rejected by Foundry before fork; changed to isolated foundry.toml with scoped output permission."
+    },
+    {
+      "root": "logs/family-original-exact.QKi5qR/26138731.1FvqMO",
+      "result": "Genuine V1 native quote/quoted execution pass before two verifier-only strengthenings."
+    },
+    {
+      "root": "logs/family-original-exact.QKi5qR/26138731.xIGYGM",
+      "result": "Final verifier retry failed due to explicit monthly provider capacity exhaustion; preserved."
+    }
+  ],
+  "timing": "All elapsed times include historical native-fork preparation and test execution. Not a live/solver/effective latency experiment; no performance conclusion or median.",
+  "remaining": [
+    "V1 full native rerun using strengthened verifier requires restored authorized RPC capacity; no further retries started.",
+    "No all-variant historical coverage, full original financing replay, mandatory route final-sim repayment/EV, formal adapter_merge_ready or full-live latency verdict is claimed."
+  ],
+  "safety": {
+    "productionChanges": 0,
+    "implModified": false,
+    "newWorktrees": 0,
+    "readyModified": false,
+    "wholeLive": false,
+    "rebuild14400": false,
+    "signing": false,
+    "broadcast": false,
+    "rawLogsCommitted": false,
+    "rpcSecretsCommitted": false
+  },
+  "runner": {
+    "path": "/tmp/run-original-exact.mjs",
+    "sha256": "218856cc863cef340ffc7332e99fb0af3e7555cc8edcf164bdf874d874c7ff35",
+    "notes": "Temporary environment-injection wrapper retained under /tmp; private RPC config never enters arguments or publications. No active process remains."
+  }
+}
