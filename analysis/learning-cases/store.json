@@ -613,6 +613,31 @@
       },
       "created_at": "2026-09-16T13:52:28Z",
       "updated_at": "2026-09-16T13:52:28Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261007-blockscan-pass-latency-large-log",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": ["swap"],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "latency_analyzer_join_exceeded_v8_string_limit",
+      "evidence": {
+        "finding": "The Balancer V3 250-block live.log exceeded 1.17 GB; analysis:blockscan-pass-latency failed at Array.join with RangeError: Invalid string length, leaving the full qualification window unanalyzed.",
+        "independent_review": "A non-author reviewer confirmed the CLI accumulated and joined the entire selected window while the core split it again; slicing the qualification window would change its process and continuity judgment.",
+        "regression": "The CLI now streams lines to the shared incremental analyzer; eight targeted tests and TypeScript build pass. The regression covers sliced and empty-window parity plus an aggregate logical input larger than V8's string limit. Non-author short-sequence differential check: 781 cases, zero mismatches."
+      },
+      "tooling_defect": {
+        "tool": "analysis:blockscan-pass-latency",
+        "issue": "The CLI materialized and joined an entire live log, exceeding V8's maximum string length on a valid 250-block window.",
+        "evidence": "Balancer V3 live.log was 1.178 GB and the canonical tool failed with RangeError: Invalid string length; an independently reviewed streaming replacement preserves process/commit anchors and relative line semantics.",
+        "codify_target": "analysis/src/cli/blockscan-pass-latency.ts and analysis/src/blockscan-pass-latency.ts: incremental line feed with unchanged string API and large-window/parity regressions",
+        "codify_commit": "3b22ae81b3edd21e43df91c590e151cd9896a6aa",
+        "status": "codified"
+      },
+      "created_at": "2026-10-07T00:09:42Z",
+      "updated_at": "2026-10-07T00:09:42Z"
     }
   ]
 }
