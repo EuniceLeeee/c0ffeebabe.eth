@@ -335,7 +335,7 @@ test("xWin explicit simulation repeated-instance Exact replays the complete pref
   const doubled = { ...input, prefix: [...prefix, { descriptor: d, route: redeem, amountIn: 13n, amountOut: 11n }, { descriptor: d, route: mint, amountIn: 11n, amountOut: 13n }] };
   assert.equal(xwinPrefix(doubled).length, 3, "full prefix is retained without a hardcoded hop count");
 });
-test("xWin coordinator fixture with explicit simulation Exact refreshes empty blocks; startup NAV stays frozen", async () => {
+test("xWin coordinator freezes startup raw NAV but refreshes effective sizing each block", async () => {
   const fixtureCatalog = simulationFixtureCatalog();
   const publication = await runStrictFamilyLifecycle({ catalog: fixtureCatalog, familyId: FAMILY, source: SOURCE,
     runtime: fixture().runtime, observations: [{ kind: "call", source: SOURCE, target: TARGET,
@@ -371,9 +371,18 @@ test("xWin coordinator fixture with explicit simulation Exact refreshes empty bl
       assert.equal(row.status, "quoted"); assert.deepEqual(row.quotedAt, at);
       assert.notEqual(row.amountOut, before.effectiveMids!.rows.get(key)!.amountOut);
       assert.equal(after.pricingProvenanceByEdgeKey!.get(key), "refreshed");
-      assert.equal(row.amountIn, before.effectiveMids!.rows.get(key)!.amountIn,
-        "the refreshed amount quote must keep startup raw sizing");
     }
+    const rows = [...after.effectiveMids!.rows.values()];
+    const mint = rows.find(row => row.tokenIn === ASSET.toLowerCase());
+    const redeem = rows.find(row => row.tokenIn === TARGET.toLowerCase());
+    assert(mint?.status === "quoted" && redeem?.status === "quoted");
+    const reference = after.effectiveMids!.referenceWethInput;
+    const multiplier = BigInt(generation + 1);
+    assert.equal(mint.amountIn, reference, "anchor input stays at production P");
+    assert.equal(mint.amountOut, reference * multiplier);
+    assert.equal(redeem.amountIn, mint.amountOut,
+      "refreshed redeem sizing follows this block's effective mint output");
+    assert.equal(redeem.amountOut, reference * multiplier * multiplier);
     for (const lane of ["raw", "exact"]) {
       const entries = rounds.filter(r => r.lane === lane);
       assert.equal(entries.flatMap(r => r.f.simulated).length, lane === "raw" ? 0 : 2);
@@ -399,7 +408,19 @@ test("xWin coordinator fixture with explicit simulation Exact refreshes empty bl
     const failed = await harness.step(source(generation));
     assert.strictEqual(failed.mids, startupMids);
     assert.equal(failed.effectiveMids!.rows.size, 2);
-    assert([...failed.effectiveMids!.rows.values()].every(row => row.status === "quote-failed"));
+    const failedRows = [...failed.effectiveMids!.rows.values()];
+    const mint = failedRows.find(row => row.tokenIn === ASSET.toLowerCase());
+    const redeem = failedRows.find(row => row.tokenIn === TARGET.toLowerCase());
+    assert(mint && redeem);
+    assert.equal(mint.status, "quote-failed");
+    assert.equal(mint.amountIn, failed.effectiveMids!.referenceWethInput);
+    assert.equal(redeem.status, "missing-valuation", "failed anchor cannot size the next direction");
+    assert.equal(redeem.amountIn, null);
+    for (const row of failedRows) {
+      assert.equal(row.amountOut, null);
+      assert.equal(row.effectiveMid, null);
+      assert.equal(row.quotedAt, undefined, "failed refresh cannot retain a stale successful quote");
+    }
     assert.equal(failed.coverage.resolvedEdgeKeys.length, 0);
     assert.equal(failed.coverage.unresolvedEdgeKeys.length, 2);
   }
