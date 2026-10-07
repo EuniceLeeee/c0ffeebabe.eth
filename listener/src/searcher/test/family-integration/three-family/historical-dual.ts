@@ -42,7 +42,7 @@ const SHARES = "0xba485b556399123261a5f9c95d413b4f93107407";
 const ERC20 = new ethers.Interface(["function balanceOf(address) view returns(uint256)",
   "function allowance(address,address) view returns(uint256)", "event Transfer(address indexed from,address indexed to,uint256 value)"]);
 type Case = { family:string; instance:string; pool:string; tokenIn:string; tokenOut:string; amountIn:bigint; amountOut:bigint; directions:number };
-const SAMPLES: Record<number, {tx:string; hash:string; cases:Case[]}> = {
+export const SAMPLES: Record<number, {tx:string; hash:string; cases:Case[]}> = {
   26138731: {tx:"0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8", hash:"0x696b86358440cc2b7a0a5e80dc87c2542a2e1535cd21502b99b317fef1d4d266", cases:[
     {family:"balancer-v1",instance:"0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",pool:"0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",tokenIn:WETH,tokenOut:NMR,amountIn:8444695829171278n,amountOut:1313743479005274328n,directions:2}]},
   26138724: {tx:"0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",hash:"0xcad9e81827cbe1f29ff77fc163855dfe1647a17b8b4a44b209e900273ac4f70b",cases:[
@@ -56,7 +56,7 @@ type Overrides = Record<string,{code?:string;balance?:string;stateDiff?:Record<s
 type Rpc = (method:string,params:unknown[])=>Promise<any>;
 const git = (...args:string[]) => execFileSync("git",["-c","safe.directory="+ROOT.replace(/\/$/,""),...args],
   {cwd:ROOT,encoding:"utf8",timeout:15000,maxBuffer:8*1024*1024,stdio:["ignore","pipe","pipe"]});
-function sourcePin() {
+export function sourcePin() {
   const files:[string,string][]=[];
   const visit=(path:string)=>{for(const e of readdirSync(resolve(ROOT,"listener/src",path),{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))){
     if(e.name==="test"||e.name==="templates")continue;
@@ -79,15 +79,15 @@ function options(argv:string[]) {
   assert(parent===logs||parent.startsWith(logs+sep));assert.equal(git("check-ignore","--",out).trim(),out);
   return {ready:resolve(v.get("--ready")!),prices:resolve(v.get("--prices")!),rpcFile:resolve(v.get("--rpc-file")!),out,block};
 }
-function botvm() {
+export function botvm(owner=OWNER) {
   const a=JSON.parse(readFileSync(resolve(ROOT,"out/BotVM.sol/BotVM.json"),"utf8"));
   const m=typeof a.metadata==="string"?JSON.parse(a.metadata):a.metadata;
   assert.equal(m?.settings?.compilationTarget?.["src/BotVM.sol"],"BotVM");assert(Object.keys(m.sources).length>0);
   for(const [name,entry]of Object.entries(m.sources)as[string,{keccak256:string}][]){const p=resolve(ROOT,name);assert(!relative(ROOT,p).startsWith(".."));assert.equal(ethers.keccak256(readFileSync(p)),entry.keccak256,"stale artifact "+name);}
   const groups=Object.values(a.deployedBytecode.immutableReferences)as{start:number;length:number}[][];
-  assert.equal(groups.length,1);assert(groups[0].length>0&&groups[0].every(r=>r.length===32));return loadBotVmRuntimeCode(OWNER);
+  assert.equal(groups.length,1);assert(groups[0].length>0&&groups[0].every(r=>r.length===32));return loadBotVmRuntimeCode(owner);
 }
-function receiptChecks(receipt:any,sample:typeof SAMPLES[number],block:number) {
+export function receiptChecks(receipt:any,sample:typeof SAMPLES[number],block:number) {
   assert(same(receipt.transactionHash,sample.tx)&&same(receipt.blockHash,sample.hash));
   assert.equal(Number(BigInt(receipt.blockNumber)),block);assert.equal(BigInt(receipt.status),1n);
   const transfers=(receipt.logs as any[]).filter(l=>l.topics[0]===ERC20.getEvent("Transfer")!.topicHash)
