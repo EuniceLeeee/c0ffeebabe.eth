@@ -63,6 +63,28 @@ const inputFor = (d: any, route: any) => ({ descriptor: d, route, executor, tran
 const build = (d: any, r: any) => { const l = family(d.familyId).execution.buildRuntimeLeg(inputFor(d, r)); assert(l); return l; };
 const routes = (d: any): any[] => family(d.familyId).routes.project({ descriptor: d });
 
+// These existing ABI variants also go through the production selector contract,
+// not only the local instruction interpreter. They remain synthetic descriptors.
+const curveBase = dFor("curve-plain");
+const curveModeFixtures = MODES.map(mode => ({ ...curveBase,
+  directions: curveBase.directions.map((r: any) => ({ ...r, executionMode: mode })) }));
+const normal = dFor("custom-swap:ekubo-router-v1");
+const baseIdentity = ekuboIdentity();
+const found = ekuboCandidate({ ...normal.poolKey, token0: ethers.ZeroAddress });
+// As in the Family extension-native contract: a synthetic descriptor with
+// the known Core/Router behavior binding, NOT a fabricated strict result.
+const native = ekuboFixture({ ...baseIdentity, subject: found.poolId, facts: { ...baseIdentity.facts, ...found,
+  coreCodeHash: EKUBO_SUPPORTED_CORE_HASH, routerCodeHash: EKUBO_SUPPORTED_ROUTER_HASH, decimals: [18, 6] } });
+const extension = "0xd47f1b1edcfeabb08f6ebd8fc337c27e636c75ba";
+const twamm = [normal.poolKey, native.poolKey].map(key => {
+  const found = ekuboCandidate({ ...key, config: extension + "00c49ba5e353f7ce00000000" });
+  return ekuboFixture({ ...baseIdentity, subject: found.poolId, facts: { ...baseIdentity.facts, ...found,
+    coreCodeHash: EKUBO_SUPPORTED_CORE_HASH, routerCodeHash: EKUBO_SUPPORTED_ROUTER_HASH,
+    extensionCodeHash: EKUBO_SUPPORTED_TWAMM_HASH, decimals: [18, 6] } });
+});
+const ekuboVariants = [normal, native, ...twamm];
+fixtures.push(...curveModeFixtures, native, ...twamm);
+
 test("every installed swap/protocol Family, including disabled entries, has both real interfaces and a behavior fixture", () => {
   assert.deepEqual([...new Set(fixtures.map(d => d.familyId))].sort(), priced.map(x => x.familyId).sort());
   for (const entry of priced) {
@@ -187,9 +209,8 @@ test("Balancer V3 exact temporary ERC20/Permit2 approvals, recipient policy and 
 });
 
 test("Curve all five admitted execution modes: received dx is credit delta, never pool inventory", () => {
-  const base = dFor("curve-plain");
-  for (const mode of MODES) {
-    const d = { ...base, directions: base.directions.map((r: any) => ({ ...r, executionMode: mode })) };
+  for (const d of curveModeFixtures) {
+    const mode: (typeof MODES)[number] = d.directions[0].executionMode;
     for (const r of routes(d)) for (const amount of [100n, 123456789n]) {
       let reads = 0; const credited = amount * 9n / 10n;
       const trace = inspectRuntime(build(d, r).program, amount, { call(c) {
@@ -287,21 +308,7 @@ test("Angstrom source-unlocked input retains the real source block and uint128 a
 });
 
 test("Ekubo covers ERC20 and native both ways without changing signed input semantics", () => {
-  const normal = dFor("custom-swap:ekubo-router-v1");
-  const baseIdentity = ekuboIdentity();
-  const found = ekuboCandidate({ ...normal.poolKey, token0: ethers.ZeroAddress });
-  // As in the Family extension-native contract: a synthetic descriptor with
-  // the known Core/Router behavior binding, NOT a fabricated strict result.
-  const native = ekuboFixture({ ...baseIdentity, subject: found.poolId, facts: { ...baseIdentity.facts, ...found,
-    coreCodeHash: EKUBO_SUPPORTED_CORE_HASH, routerCodeHash: EKUBO_SUPPORTED_ROUTER_HASH, decimals: [18, 6] } });
-  const extension = "0xd47f1b1edcfeabb08f6ebd8fc337c27e636c75ba";
-  const twamm = [normal.poolKey, native.poolKey].map(key => {
-    const found = ekuboCandidate({ ...key, config: extension + "00c49ba5e353f7ce00000000" });
-    return ekuboFixture({ ...baseIdentity, subject: found.poolId, facts: { ...baseIdentity.facts, ...found,
-      coreCodeHash: EKUBO_SUPPORTED_CORE_HASH, routerCodeHash: EKUBO_SUPPORTED_ROUTER_HASH,
-      extensionCodeHash: EKUBO_SUPPORTED_TWAMM_HASH, decimals: [18, 6] } });
-  });
-  for (const d of [normal, native, ...twamm]) for (const r of routes(d)) {
+  for (const d of ekuboVariants) for (const r of routes(d)) {
     let balance = 999n;
     const trace = inspectRuntime(build(d, r).program, 551n, { nativeBalance: () => balance, call(c) {
       if (same(c.target, EKUBO_ROUTER)) balance += 343n;
