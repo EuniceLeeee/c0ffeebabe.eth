@@ -30,10 +30,11 @@
         "issue": "Default HTTP keep-alive expiry races with long synchronous Ready restoration in the same event loop, resetting a previously healthy reusable connection before request handling.",
         "evidence": "Deterministic actual-cache failure before fix and 60/60 regression pass after keepAliveTimeout=0, including closure while the client agent still retains an idle socket.",
         "codify_target": "listener/benchmarks/prerequisite-cache.ts and prerequisite-cache.test.ts: disable local idle expiry, retain explicit abort/drain/close, test real persistent connection across blocked restoration.",
-        "status": "open"
+        "status": "codified",
+        "codify_commit": "4895fbe5ca68b27417cd62b0bc6bfca600ca80c2"
       },
       "created_at": "2026-10-07T07:14:41Z",
-      "updated_at": "2026-10-07T07:14:41Z"
+      "updated_at": "2026-10-07T07:40:00Z"
     },
     {
       "learning_case_id": "tooldef-20260706-share-token-venue-check",
