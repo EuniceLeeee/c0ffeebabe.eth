@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-07",
+  "scope": "Set Redemption nested actual-received execution; Family-local implementation and single-block integration, not formal adapter merge or full-route profit acceptance",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baselineHead": "68323fbf104da8c0e11e0e6f17d36413970a1a2e",
+  "latestUserDecision": "Reuse existing executor-only execSubscript in Set; do not expand central VM",
+  "implementation": {
+    "family": "protocol:set-redemption",
+    "defaultEnabled": false,
+    "explicitAmountQuoteAndFragment": "preserved",
+    "runtimeExactRpcAndAmountGetterCallsDuringConstruction": 0,
+    "centralVmSourceModified": false,
+    "componentsPerInvocation": 8,
+    "allComponentReceiptsChecked": true,
+    "redemptionCallsPerExecution": 1,
+    "nextHopAmount": "independently measured actual receipt, not thresholds or old inventory",
+    "capacity": {
+      "maximumTestedEmitterComponents": 187,
+      "bytes": 65313,
+      "nextCount": 188,
+      "nextOutcome": "existing 64KiB fail-closed program-size gate; no silent quoted fallback",
+      "identityComponentLimitAdded": false
+    }
+  },
+  "checks": {
+    "buildLive": "pass",
+    "strictProductionDeclarations": "pass",
+    "strictExecutionProjection": "pass",
+    "defaultComposition": "pass: 28/32 active",
+    "setEnabledComposition": "pass: 29/32 active",
+    "offlineAuthor": {
+      "passed": 81,
+      "failed": 0
+    },
+    "syntheticBotVmEvm": {
+      "passed": 12,
+      "failed": 0,
+      "coverage": [
+        "9-component all directions and two amounts",
+        "187-component construction all directions, EVM first/last and two amounts",
+        "17-component cross-group shortfall, membership, units and atomic rollback",
+        "callback authentication/restoration, missing/changed/repeated callback rejection",
+        "single redemption, exact Set debit, actual next-hop receipt and standing inventory isolation"
+      ]
+    },
+    "independentNonAuthor": {
+      "confirmedFindings": 0,
+      "executedOffline": 79,
+      "refresh": "pass",
+      "strictLifecycleProjectionComposition": "3/3 pass",
+      "evmReceipt": "reviewed, not rerun"
+    },
+    "mainHistoricalObserverOffline": {
+      "passed": 5,
+      "failed": 0
+    },
+    "typecheck": {
+      "ownedNewHistoricalFilesDiagnostics": 0,
+      "fullSuiteBaselineDiagnostics": 16,
+      "fullSuiteCandidateDiagnostics": 16,
+      "sameOutsideOwned": true,
+      "notAWholeRepositoryTypecheckPass": true
+    }
+  },
+  "historical": {
+    "tx": "0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e",
+    "block": 26130046,
+    "blockHash": "0xebe62a2654fcaff75910a7d71dc65d34cff1c721d372cd8bf51c807c532932a8",
+    "environment": "N end-state and verified N EVM environment, not original pre-call state",
+    "instanceKey": "0xdece030c4538ae391aa8660c8e8209aa0e3225a3:0xba1030459e75f6041f938c5470f4e0f6468d5253",
+    "ready": {
+      "candidates": 65,
+      "verified": 55,
+      "rejected": 9,
+      "retryableExcluded": 1,
+      "targetAdmitted": true,
+      "inProgressRun": null
+    },
+    "targetGraphDirections": 4,
+    "targetRawMid": 4,
+    "targetEffectiveQuoted": 4,
+    "globalEffective": {
+      "quoted": 111,
+      "total": 112,
+      "unrelatedUniv4FailureRetained": true
+    },
+    "amounts": {
+      "productionP": "110232218640402497",
+      "originalTx": "66538227599871553"
+    },
+    "samplesPassed": 8,
+    "executionsPassed": 16,
+    "executions": "4 directions x 2 amounts x old fragment and runtime program",
+    "allComponentQuoteMinusReceiptDeltas": [
+      "0",
+      "0",
+      "0",
+      "0"
+    ],
+    "originalAmountNEndStateMinusReceiptDeltas": [
+      "0",
+      "0",
+      "0",
+      "0"
+    ],
+    "originalPreCallReplay": "not verified despite matching integers",
+    "sourceAndInputPinsStable": true,
+    "forkStopped": true,
+    "errors": [],
+    "outputsAtProductionP": [
+      {
+        "symbol": "DEXTF",
+        "token": "0x5f64ab1544d28732f0a24f4713c2c8ec0da089f0",
+        "amountOut": "1790171230720136551"
+      },
+      {
+        "symbol": "LCX",
+        "token": "0x037a54aab062628c9bbae1fdb1583c195585fe41",
+        "amountOut": "42666482546954190488"
+      },
+      {
+        "symbol": "LINK",
+        "token": "0x514910771af9ca656af840dff83e8264ecf986ca",
+        "amountOut": "57320753693009298"
+      },
+      {
+        "symbol": "eRSDL",
+        "token": "0x5218e472cfcfe0b64a064f055b43b4cdc9efd3a6",
+        "amountOut": "1871743072514034399"
+      }
+    ]
+  },
+  "retainedFailures": [
+    {
+      "path": "logs/set-historical-acceptance.owakWI/execution-01.json",
+      "samples": 0,
+      "reason": "owned Anvil fork EVM coinbase was zero despite canonical header",
+      "followup": "test-only anvil_setCoinbase restores exact N miner; opcode environment probe verifies all fields, no protocol state changes",
+      "notAPerformanceSample": true
+    },
+    {
+      "paths": [
+        "logs/set-runtime-nested-20261007.5V8AHI/offline-attempt1.log",
+        "logs/set-runtime-nested-20261007.5V8AHI/evm-attempt1.log"
+      ],
+      "reason": "wrong hand-calculated byte length in test expectation; production emitter unchanged for corrected test"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "logs/set-historical-acceptance.owakWI/execution-02.json",
+      "sha256": "c18da10b58f9692c0beaadf0655e806c69b4e5647b5b489b48f16367d6ca8b4b"
+    },
+    {
+      "path": "logs/set-historical-acceptance.owakWI/execution-01.json",
+      "sha256": "760cd3fde0ac9941c172333d7eb31029bfb0f1ad79309595d057dd85732af6d1"
+    },
+    {
+      "path": "logs/set-historical-acceptance.owakWI/ready.json",
+      "sha256": "6668725ee5458aaa580f2bce43af4a1ede86673a58a3906ca1a183a32a8ea2ff"
+    },
+    {
+      "path": "logs/set-historical-acceptance.owakWI/prices/prices.json",
+      "sha256": "3029be04b1de7ced4a06e17cc3b32002fd41a03407aa612ee34f978a5b9362a2"
+    },
+    {
+      "path": "logs/set-historical-acceptance.owakWI/prices/input.json",
+      "sha256": "a5835f69d70132b1254b63f844ca148429dd5aca2561f8a5a7e1f23ed09f317b"
+    },
+    {
+      "path": "logs/set-runtime-nested-20261007.5V8AHI/result.json",
+      "sha256": "f1491c3d0f23bbd6df7378912745482606fe97edfd6ac50b856dc876f12e5ab1"
+    }
+  ],
+  "sourcePins": {
+    "executionSha256": "b1d853766f874aded2c74f90b221679b0b86a2346718280a5fb14100257a5503",
+    "testedWorkspaceSourceTreeSha256": "87b7960377432f998086cc1b6254e83bf2926b0766c98d870f0010435eb1990b",
+    "historicalTestSha256": "fcea5ee19cdf2b35d35a2c2038bfd7885a6913ec4fdf8b5208679186e8f450c8",
+    "observationHelperSha256": "214d2ab962904994e00bacd7e69c0370f3c638b8c0ce8b01b905c375972b4d07",
+    "memoDefinitionHash": "3d8ab29299d4581e070d31225e997dad06f5726c420a9586b91295c87d316a63",
+    "workspaceNote": "Unrelated untracked Curve Underlying math/test are not wired into production and excluded from this Set commit; workspace source digest is not claimed to be a pristine commit tree digest"
+  },
+  "limitations": [
+    "No original TX pre-call replay, historical next-hop or full-route EV claim",
+    "Historical basket has four components; larger-basket evidence is synthetic only",
+    "No universal all-Set-variant or unlimited basket/gas support claim",
+    "No route-pinned baseline-to-candidate Adapter Replay/conformance merge verdict",
+    "No new live or 14400-block rebuild, no signing/broadcast, protected impl unchanged"
+  ],
+  "consolidationGate": "Set implementation and scoped checks complete; publish before retiring live-defaults after fresh containment/dependency/backup checks"
+}

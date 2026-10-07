@@ -8023,6 +8023,337 @@
     {
       "precision": "capability-exact",
       "identity": {
+        "familyId": "protocol:set-redemption",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "f554eb170929b3a897cae6640e7dce72495b1424b08c6d85a8e7ecc24b12836c",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/set-redemption-family/codec.ts",
+          "src/searcher/venues/protocols/set-redemption-family/discovery.ts",
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts",
+          "src/searcher/venues/protocols/set-redemption-family/nomination.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/protocols/set-redemption-family/capture.ts",
+        "entryExport": "capture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:set-redemption",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:set-redemption",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "3fd977e0524e6cfbb25d98e8e7225b838fb843d880231dec066b948aa09aac29",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/set-redemption-family/codec.ts",
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts",
+          "src/searcher/venues/protocols/set-redemption-family/nomination.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/protocols/set-redemption-family/discovery.ts",
+        "entryExport": "discovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:set-redemption",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "7011008fe5c0a775e81a559fa6a94ece39c8baacb4dd508e59badeac39873cbf",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/set-redemption-family/codec.ts",
+          "src/searcher/venues/protocols/set-redemption-family/instance.ts",
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts",
+          "src/searcher/venues/protocols/set-redemption-family/routes.ts",
+          "src/searcher/venues/protocols/set-redemption-family/state.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/protocols/set-redemption-family/exact.ts",
+        "entryExport": "exact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:set-redemption",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "ea442b38ae32b5e30c11af66d1d1cd5046b219e9b66a22fb264ea23147192eda",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/set-redemption-family/action.ts",
+          "src/searcher/venues/protocols/set-redemption-family/codec.ts",
+          "src/searcher/venues/protocols/set-redemption-family/instance.ts",
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts",
+          "src/searcher/venues/protocols/set-redemption-family/routes.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/protocols/set-redemption-family/execution.ts",
+        "entryExport": "execution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/set-redemption-family/action.ts",
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:set-redemption",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:set-redemption",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "5edd88e450465f2d6a3b4a137983cafe934426e2e195de79c738c2e22953673c",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/set-redemption-family/codec.ts",
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/protocols/set-redemption-family/identity.ts",
+        "entryExport": "identity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:set-redemption",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "4be975a809c8849b24cc9c63cdc2213c94aa53dbbeef28bb33d5d6691ef74fe1",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "package:ethers@6.16.0",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/set-redemption-family/codec.ts",
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/protocols/set-redemption-family/instance.ts",
+        "entryExport": "instance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:set-redemption",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "ad59f59fb544d210539a2e73a649122b63c1a1a95a8de4f6cc7116b6736667aa",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/set-redemption-family/codec.ts",
+          "src/searcher/venues/protocols/set-redemption-family/instance.ts",
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts",
+          "src/searcher/venues/protocols/set-redemption-family/routes.ts",
+          "src/searcher/venues/protocols/set-redemption-family/state.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/protocols/set-redemption-family/pricing.ts",
+        "entryExport": "pricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:set-redemption",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "187ca28ea1d5d92955e8cd9d2129824ed5539fa1b0caf43a5c3ad9d159a07f78",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/set-redemption-family/codec.ts",
+          "src/searcher/venues/protocols/set-redemption-family/instance.ts",
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/protocols/set-redemption-family/routes.ts",
+        "entryExport": "routes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/set-redemption-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:set-redemption",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "abfd24bb4384bfcb32fd9c525b3cf9deb4bcbdea9f31b8e5a08d9dbc72c69718",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
         "familyId": "protocol:token-conversion",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
@@ -10539,5 +10870,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "7938fb9e3a14b9f11dc0206e5869b899da603fdfd797364bb4e52125cbebbb7f"
+  "artifactHash": "82a413bc7a863e7c05f0f1261dc77e8e4c13f813a0897aae8b4d96abca9a4511"
 }

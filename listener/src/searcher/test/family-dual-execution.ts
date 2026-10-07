@@ -52,6 +52,12 @@ synthetic("protocol:metronome-synth", { pool: foreign, tokens: [ADDR.MSETH, ADDR
 synthetic("protocol:token-conversion", { variant: "btb-bear-v1", asset: ADDR.USDC, codeHash: word(1n), assetCodeHash: word(2n) });
 const xwin = synthetic("protocol:token-conversion", { variant: "xwin-allocations-v1", asset: ADDR.USDC,
   codeHash: word(3n), proxyAdmin: ethers.getAddress("0x1000000000000000000000000000000000000005") }, 1);
+// Synthetic Set basket: ABI/selector coverage only, not historical admission.
+synthetic("protocol:set-redemption", { binding: { set: foreign,
+  module: ethers.getAddress("0x1000000000000000000000000000000000000005"),
+  controller: ethers.getAddress("0x1000000000000000000000000000000000000006"),
+  controllerCodeHash: word(4n), components: [ADDR.USDC, ADDR.WETH, ADDR.DAI, ADDR.USDT].map(a => a.toLowerCase()),
+} });
 const dFor = (id: string) => { const d = fixtures.find(d => d.familyId === id); assert(d, id); return d; };
 // Additional synthetic direction/variant fixtures are never written back to Ready.
 synthetic("protocol:erc4626", { asset: ADDR.USDC, verifiedDirections: { deposit: true, redeem: true } });
