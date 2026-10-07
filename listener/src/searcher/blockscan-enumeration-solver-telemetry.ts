@@ -21,7 +21,7 @@ const DEFAULT_MAX_BATCH_BYTES = 2 * 1024 * 1024;
 // Evidence cap only; does not change the scanner's 512 / Solver's 100 caps.
 const DEFAULT_MAX_ROUTES = 2_048;
 const DEFAULT_MAX_LEGS = 8;
-const DEFAULT_MAX_MID_FILE_BYTES = 2 * 1024 * 1024 * 1024;
+const DEFAULT_MAX_MID_FILE_BYTES = 16 * 1024 * 1024 * 1024;
 const DEFAULT_MAX_MID_RECORD_BYTES = 128 * 1024 * 1024;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 2_000;
 const ROUTE_LOCATOR_CACHE_ENTRIES = 2_048;
@@ -562,8 +562,8 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
     if (!this.reserve(sourceBlock, "mid")) return;
     try {
       const snapshot = publication.snapshot;
-      // Each source owns a fresh full snapshot, independent of raw-mid deltas.
-      // Map traversal, summaries and BigInt formatting stay in the worker.
+      // Effective changes are independent of raw-mid deltas. The worker owns
+      // diffing against its last persisted snapshot and BigInt formatting.
       const effective = snapshot.effectiveMids === undefined ? {} : {
         effectiveMids: snapshot.effectiveMids,
       };
