@@ -1,0 +1,718 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-07 19:02:14 UTC",
+  "authored_by": "Codex",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "base_commit": "d06e06346a34109e80c239db30e7eeb57ab98f98",
+  "code_commit": "18ab75c5cb1d62db44af1787786f921abc2a8290",
+  "claim": "Family-local redundant work removed and small historical production-stage output/resource comparison completed. Not full-live latency acceptance, original-TX replay, final sim/EV or a formal adapter_merge_ready verdict.",
+  "changes": [
+    {
+      "kind": "decode-guard-dedup",
+      "scope": "curve-underlying/classic-meta-quote.ts",
+      "mechanism": "Use the binding returned by guards once per decode; private baseState consumes that binding. NextRound validates independently. No identity/cross-round cache, guard-body, formula, request or encoding change.",
+      "deterministic_effect": "Nine base-input directions no longer repeat three code hashes during one complete 12-direction decode: 27 redundant hashes removed."
+    },
+    {
+      "kind": "lp-refresh-filter",
+      "scope": "curve-underlying/quote-model.ts and pricing.ts",
+      "mechanism": "For the verified classic 3pool model's bound baseLPToken only, ignore well-formed ordinary nonzero-to-nonzero Transfer and Approval logs. Still observe the dependency; mint/burn, unknown/malformed logs and unbound/unknown descriptors remain conservative.",
+      "preserved": [
+        "base pool donation call handling",
+        "USDT controls",
+        "rate/ramp/source/code/topology guards",
+        "failed-refresh no-stale-publication",
+        "compiled and uncompiled mutation parity",
+        "central protocol-independent scheduler"
+      ]
+    }
+  ],
+  "candidate_source_bindings": [
+    {
+      "path": "listener/src/searcher/generated/family-capability-shadow.generated.json",
+      "sha256": "d8b09ddc3fb924506fbf032ef140c1f74ccbb9a44f90179edae32cae0ef01528"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/classic-meta-quote.ts",
+      "sha256": "22c1ed656e625ea7267214c73c650bd090e2b41ca5448fb76a6254bf08df8a96"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/pricing.ts",
+      "sha256": "fe94e7a3ca43b38f33d223b9f8731b0636de52d3cc92404b8ca298f663d89598"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
+      "sha256": "09dab238fea708d332565714789c6195c40540b41032675498e079939b69b76e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-quote.ts",
+      "sha256": "e23071b3f6ea706dc9d19f3d8d13cba1882c71aae45e779c21f4347e13bfd4db"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-refresh.ts",
+      "sha256": "c35fb4bc13575e1f48ffae2646f042665ab626df08fc098d245b78f9ddcdff9b"
+    }
+  ],
+  "source_patch_sha256": "2077836cbac1641f3647b74b5281d0a540388871155d58a3b6beb8a97c2dee57",
+  "ready": {
+    "original": "logs/family-latency-20261007/single-block-26138094/candidate/checkpoint.json",
+    "original_sha256": "19d010389a71ac2c006de677f0e6afef2154dc374779d75b8ac0a11c4d9f1eca",
+    "method": "Selective production revalidation on copies at 26138094 with all three families enabled; no history scan, no bypass. The older 138-edge Ready had Bv3 disabled and was not used as the comparison baseline.",
+    "instances": 55,
+    "edges": 140,
+    "all_variants_exact_same_edge_objects": true,
+    "target_directions": {
+      "curve-plain": 22,
+      "curve-underlying": 24,
+      "balancer-v3-hook": 2
+    },
+    "artifact_sha256": {
+      "ready.json": "4129f30ba12d57e2ba0dc604b7036773442af5a4b2b903f073e932dc281f0b7e",
+      "guard-ready.json": "90aa6db370b871fffec1b1afab354279856f322c5cf78a0ee5a5831e5b00dcce",
+      "candidate-ready.json": "6e75cbd0bc986c404c9780ab15dc4dda5a5770c74dd4ff004c05ddd21b32d9d5"
+    }
+  },
+  "benchmark": {
+    "entry": "listener:benchmark:effective-update / production BlockScanRuntimeLoop, through prices",
+    "evidence_root": "logs/family-latency-refresh.oHBqtz",
+    "setup": "Each independent block/repetition prepares real N-1 outside the timer; no cached N result is substituted. Setup costs are listed separately.",
+    "measurement_budget_ms": 11000,
+    "setup_cap_ms": 600000,
+    "repetitions_per_block": 3,
+    "latency_diagnostics": true,
+    "cohort_selection": "26138094 plus the first two later blocks in a bounded 128-block log search with actual base/metapool activity; chosen before timing. The later two have base 3pool exchanges.",
+    "positive": [
+      {
+        "block": 26138094,
+        "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+        "before": {
+          "variant": "baseline",
+          "completed": 3,
+          "stage_ms": [
+            1936.558267,
+            1533.1826339999998,
+            1348.4815479999997
+          ],
+          "stage_median_ms": 1533.1826339999998,
+          "predecessor_setup_ms": [
+            2099.653348,
+            1712.1105120000002,
+            1376.846485
+          ],
+          "predecessor_setup_median_ms": 1712.1105120000002,
+          "output_sha256": "aeb817826f6b7cd5d1f3b49bd5be0aca1ee2fd7e0aefc7885744f58e015d7a88",
+          "all_repetitions_same_output": true,
+          "family_profile": {
+            "curve-plain": {
+              "tasks": 22,
+              "physicalEthCalls": 24,
+              "logicalEthCalls": 26,
+              "quoted": 22,
+              "fresh": 22,
+              "spanMs": 352,
+              "countsStable": true
+            },
+            "curve-underlying": {
+              "tasks": 12,
+              "physicalEthCalls": 21,
+              "logicalEthCalls": 147,
+              "quoted": 24,
+              "fresh": 12,
+              "spanMs": 315,
+              "countsStable": true
+            },
+            "balancer-v3": {
+              "tasks": 2,
+              "physicalEthCalls": 2,
+              "logicalEthCalls": 2,
+              "quoted": 2,
+              "fresh": 2,
+              "spanMs": 353,
+              "countsStable": true
+            }
+          },
+          "summary": "logs/family-latency-refresh.oHBqtz/baseline-26138094/summary.json",
+          "summary_sha256": "c439a13beb7e8dde45f90c9acab3a489a7948918685bb1a496369709d3062e72",
+          "declaration_sha256": "cf0747c6c6008deac0d88488f6fff85beb40f9fa39f64918157149198d592b7f"
+        },
+        "after": {
+          "variant": "candidate",
+          "completed": 3,
+          "stage_ms": [
+            1408.243587,
+            1298.7708920000005,
+            1462.4387829999996
+          ],
+          "stage_median_ms": 1408.243587,
+          "predecessor_setup_ms": [
+            2184.302522,
+            1159.6247139999996,
+            1412.972984
+          ],
+          "predecessor_setup_median_ms": 1412.972984,
+          "output_sha256": "aeb817826f6b7cd5d1f3b49bd5be0aca1ee2fd7e0aefc7885744f58e015d7a88",
+          "all_repetitions_same_output": true,
+          "family_profile": {
+            "curve-plain": {
+              "tasks": 22,
+              "physicalEthCalls": 24,
+              "logicalEthCalls": 26,
+              "quoted": 22,
+              "fresh": 22,
+              "spanMs": 328,
+              "countsStable": true
+            },
+            "curve-underlying": {
+              "tasks": 12,
+              "physicalEthCalls": 21,
+              "logicalEthCalls": 147,
+              "quoted": 24,
+              "fresh": 12,
+              "spanMs": 286,
+              "countsStable": true
+            },
+            "balancer-v3": {
+              "tasks": 2,
+              "physicalEthCalls": 2,
+              "logicalEthCalls": 2,
+              "quoted": 2,
+              "fresh": 2,
+              "spanMs": 363,
+              "countsStable": true
+            }
+          },
+          "summary": "logs/family-latency-refresh.oHBqtz/candidate-26138094/summary.json",
+          "summary_sha256": "60dbb6a5ddb7d55217a29cc9b3e3a5528f6d8e90796aa6e5a8397fd58c79160e",
+          "declaration_sha256": "cf24f8d6cadbb2b904d7919a7ddcad2ec3fad9de810569c1057d55eb7dd6c32e"
+        }
+      },
+      {
+        "block": 26138136,
+        "hash": "0x979f669835d153b80a821e2423d9db7e0c5b74dbff0ac34c724598a309995919",
+        "before": {
+          "variant": "baseline",
+          "completed": 3,
+          "stage_ms": [
+            1596.1983050000003,
+            1257.5061750000004,
+            1226.5989390000013
+          ],
+          "stage_median_ms": 1257.5061750000004,
+          "predecessor_setup_ms": [
+            2122.328422,
+            1608.2602630000001,
+            1157.5337150000005
+          ],
+          "predecessor_setup_median_ms": 1608.2602630000001,
+          "output_sha256": "9551dabe11afe4fa79fb36de1ec4857a93a16242b2e1856f9df8e338cd219ece",
+          "all_repetitions_same_output": true,
+          "family_profile": {
+            "curve-plain": {
+              "tasks": 18,
+              "physicalEthCalls": 20,
+              "logicalEthCalls": 22,
+              "quoted": 22,
+              "fresh": 18,
+              "spanMs": 260,
+              "countsStable": true
+            },
+            "curve-underlying": {
+              "tasks": 12,
+              "physicalEthCalls": 21,
+              "logicalEthCalls": 147,
+              "quoted": 24,
+              "fresh": 12,
+              "spanMs": 252,
+              "countsStable": true
+            },
+            "balancer-v3": {
+              "tasks": 2,
+              "physicalEthCalls": 2,
+              "logicalEthCalls": 2,
+              "quoted": 2,
+              "fresh": 2,
+              "spanMs": 263,
+              "countsStable": true
+            }
+          },
+          "summary": "logs/family-latency-refresh.oHBqtz/baseline-26138136/summary.json",
+          "summary_sha256": "effd9b5e9375d78a20a02f467e961eb9909824221a05e06c9ca7a47b74c2348a",
+          "declaration_sha256": "279db053dcd90f4a843f43e9be27a414b75b71290b279dd24ec5032235628673"
+        },
+        "after": {
+          "variant": "candidate",
+          "completed": 3,
+          "stage_ms": [
+            1065.4878190000004,
+            964.4131549999993,
+            1080.308357
+          ],
+          "stage_median_ms": 1065.4878190000004,
+          "predecessor_setup_ms": [
+            1730.4648240000001,
+            1228.760897,
+            1231.6707239999996
+          ],
+          "predecessor_setup_median_ms": 1231.6707239999996,
+          "output_sha256": "9551dabe11afe4fa79fb36de1ec4857a93a16242b2e1856f9df8e338cd219ece",
+          "all_repetitions_same_output": true,
+          "family_profile": {
+            "curve-plain": {
+              "tasks": 18,
+              "physicalEthCalls": 20,
+              "logicalEthCalls": 22,
+              "quoted": 22,
+              "fresh": 18,
+              "spanMs": 223,
+              "countsStable": true
+            },
+            "curve-underlying": {
+              "tasks": 12,
+              "physicalEthCalls": 21,
+              "logicalEthCalls": 147,
+              "quoted": 24,
+              "fresh": 12,
+              "spanMs": 214,
+              "countsStable": true
+            },
+            "balancer-v3": {
+              "tasks": 2,
+              "physicalEthCalls": 2,
+              "logicalEthCalls": 2,
+              "quoted": 2,
+              "fresh": 2,
+              "spanMs": 188,
+              "countsStable": true
+            }
+          },
+          "summary": "logs/family-latency-refresh.oHBqtz/candidate-26138136/summary.json",
+          "summary_sha256": "9f7accb53b9c391af4d069170ab29642dc76ea5f0dc811b2f2615bae5d214967",
+          "declaration_sha256": "c762dc2313c977bca9c1b3ace8636c1aaa61ccb6f3134d8d47749a6908401652"
+        }
+      },
+      {
+        "block": 26138179,
+        "hash": "0x1f84f56451258ce184c179efd5a83830695f51d81ad232651792aa36d175ae60",
+        "before": {
+          "variant": "baseline",
+          "completed": 3,
+          "stage_ms": [
+            1325.3343250000003,
+            1815.684827,
+            1106.8221160000012
+          ],
+          "stage_median_ms": 1325.3343250000003,
+          "predecessor_setup_ms": [
+            1512.4494070000003,
+            1421.039995,
+            1414.6804319999992
+          ],
+          "predecessor_setup_median_ms": 1421.039995,
+          "output_sha256": "d67bc5a0136eb9f1152b44d0a37ab1f91a3e973e68a8f0ae045c89e648372b19",
+          "all_repetitions_same_output": true,
+          "family_profile": {
+            "curve-plain": {
+              "tasks": 18,
+              "physicalEthCalls": 20,
+              "logicalEthCalls": 22,
+              "quoted": 22,
+              "fresh": 18,
+              "spanMs": 286,
+              "countsStable": true
+            },
+            "curve-underlying": {
+              "tasks": 12,
+              "physicalEthCalls": 21,
+              "logicalEthCalls": 147,
+              "quoted": 24,
+              "fresh": 12,
+              "spanMs": 276,
+              "countsStable": true
+            },
+            "balancer-v3": {
+              "tasks": 2,
+              "physicalEthCalls": 2,
+              "logicalEthCalls": 2,
+              "quoted": 2,
+              "fresh": 2,
+              "spanMs": 271,
+              "countsStable": true
+            }
+          },
+          "summary": "logs/family-latency-refresh.oHBqtz/baseline-26138179/summary.json",
+          "summary_sha256": "5326039b3e80b19b5d44086d941393c0e8272921ef410b07a02e643d9fcb543f",
+          "declaration_sha256": "f46a7ae107d5b7024609984542355d7a12c4b00767d4a10611f82f2f93bd3fa9"
+        },
+        "after": {
+          "variant": "candidate",
+          "completed": 3,
+          "stage_ms": [
+            1050.253451,
+            1343.1017460000003,
+            1103.6581810000007
+          ],
+          "stage_median_ms": 1103.6581810000007,
+          "predecessor_setup_ms": [
+            1578.5576099999998,
+            1485.1191520000002,
+            1198.316386999999
+          ],
+          "predecessor_setup_median_ms": 1485.1191520000002,
+          "output_sha256": "d67bc5a0136eb9f1152b44d0a37ab1f91a3e973e68a8f0ae045c89e648372b19",
+          "all_repetitions_same_output": true,
+          "family_profile": {
+            "curve-plain": {
+              "tasks": 18,
+              "physicalEthCalls": 20,
+              "logicalEthCalls": 22,
+              "quoted": 22,
+              "fresh": 18,
+              "spanMs": 288,
+              "countsStable": true
+            },
+            "curve-underlying": {
+              "tasks": 12,
+              "physicalEthCalls": 21,
+              "logicalEthCalls": 147,
+              "quoted": 24,
+              "fresh": 12,
+              "spanMs": 271,
+              "countsStable": true
+            },
+            "balancer-v3": {
+              "tasks": 2,
+              "physicalEthCalls": 2,
+              "logicalEthCalls": 2,
+              "quoted": 2,
+              "fresh": 2,
+              "spanMs": 196,
+              "countsStable": true
+            }
+          },
+          "summary": "logs/family-latency-refresh.oHBqtz/candidate-26138179/summary.json",
+          "summary_sha256": "720100a1c44d6f00d08ba2d6e14ea513d1fc06f8f8fb0643a04dc1fd6f9a0f58",
+          "declaration_sha256": "79d0431696f32f4a146a484503265a53ac35ff8e29c0754b786666a7f30a5bfd"
+        }
+      }
+    ],
+    "positive_completed": {
+      "before": 9,
+      "after": 9,
+      "failed_measured_samples": 0
+    },
+    "unchanged_true_update_work": "Underlying still refreshes 12 directions with 147 logical eth_call requests deduplicated to 21 physical call items in each positive block. Physical items are not HTTP batch counts.",
+    "output_comparison": "All 140 effective rows have equal compared identity/amount/status outputs across variants and repetitions. This is not byte identity of diagnostic/source-freshness metadata. Plain 22, Underlying 24 and Bv3 2 rows are quoted; unrelated V4/valuation failures are retained.",
+    "interpretation": "Serial RPC waves on a shared VM with provider cache/network variability; observed median differences cannot establish a stable causal full-stage/live speedup. No samples excluded or replaced."
+  },
+  "lp_control": {
+    "block": 26138093,
+    "hash": "0x51e652c659e14113473f1cf10d626391c9f776318f518d7b990254e8f01a28c7",
+    "selection": "Separate predeclared LP-transfer negative control, not a replacement for any positive sample.",
+    "comparison": "Guard-only variant versus guard plus LP filtering; the guard optimization is present on both sides.",
+    "before": {
+      "variant": "guard",
+      "completed": 3,
+      "stage_ms": [
+        858.1423100000002,
+        832.5251310000003,
+        811.176649
+      ],
+      "stage_median_ms": 832.5251310000003,
+      "predecessor_setup_ms": [
+        1762.224074,
+        1592.8404659999997,
+        1466.0504690000007
+      ],
+      "predecessor_setup_median_ms": 1592.8404659999997,
+      "output_sha256": "499a15d27bb0945d523588c4b75b2c802ac3924be28d53d3f42ac13f40508c58",
+      "all_repetitions_same_output": true,
+      "family_profile": {
+        "curve-plain": {
+          "tasks": 18,
+          "physicalEthCalls": 20,
+          "logicalEthCalls": 22,
+          "quoted": 22,
+          "fresh": 18,
+          "spanMs": 214,
+          "countsStable": true
+        },
+        "curve-underlying": {
+          "tasks": 12,
+          "physicalEthCalls": 21,
+          "logicalEthCalls": 147,
+          "quoted": 24,
+          "fresh": 12,
+          "spanMs": 202,
+          "countsStable": true
+        },
+        "balancer-v3": {
+          "tasks": 2,
+          "physicalEthCalls": 2,
+          "logicalEthCalls": 2,
+          "quoted": 2,
+          "fresh": 2,
+          "spanMs": 219,
+          "countsStable": true
+        }
+      },
+      "summary": "logs/family-latency-refresh.oHBqtz/guard-26138093/summary.json",
+      "summary_sha256": "3fb76178e49178ea1f140d2153e74a5cb015fa1e72d5280b0d363cdaa1168020",
+      "declaration_sha256": "01fd267150c39fee06118ebaa1c6b4d8d7411f1366e4feb155a92636f8af0501"
+    },
+    "after": {
+      "variant": "candidate",
+      "completed": 3,
+      "stage_ms": [
+        705.7151400000002,
+        381.63867800000025,
+        723.6934339999998
+      ],
+      "stage_median_ms": 705.7151400000002,
+      "predecessor_setup_ms": [
+        1287.5590189999998,
+        1127.5907889999994,
+        1900.8696730000001
+      ],
+      "predecessor_setup_median_ms": 1287.5590189999998,
+      "output_sha256": "499a15d27bb0945d523588c4b75b2c802ac3924be28d53d3f42ac13f40508c58",
+      "all_repetitions_same_output": true,
+      "family_profile": {
+        "curve-plain": {
+          "tasks": 18,
+          "physicalEthCalls": 20,
+          "logicalEthCalls": 22,
+          "quoted": 22,
+          "fresh": 18,
+          "spanMs": 114,
+          "countsStable": true
+        },
+        "curve-underlying": {
+          "tasks": 0,
+          "physicalEthCalls": 0,
+          "logicalEthCalls": 0,
+          "quoted": 24,
+          "fresh": 0,
+          "spanMs": null,
+          "countsStable": true
+        },
+        "balancer-v3": {
+          "tasks": 2,
+          "physicalEthCalls": 2,
+          "logicalEthCalls": 2,
+          "quoted": 2,
+          "fresh": 2,
+          "spanMs": 160,
+          "countsStable": true
+        }
+      },
+      "summary": "logs/family-latency-refresh.oHBqtz/candidate-26138093/summary.json",
+      "summary_sha256": "6b4fbac561f92f3b3421d0ee8eb4d2087895495b8b438ae599a092dfaa3694e7",
+      "declaration_sha256": "53721d84697768f088e114ca47acfff57bb785c9eb9067cc886f6e8ee665335a"
+    },
+    "result": "Underlying quote tasks 12 -> 0; physical eth_call items 21 -> 0; logical requests 147 -> 0. All 24 rows remain quoted, carrying previous amounts. Full compared effective output unchanged.",
+    "failed_measured_samples": 0
+  },
+  "lp_source_proof": {
+    "address": "0x6c3f90f043a72fa612cbac8115ee7e52bde6e490",
+    "block": 26138094,
+    "runtime_keccak256": "0xb731b7a9a74c6c60d715f0c791d663f1530743a48337e7fab9cf3481afdd9feb",
+    "source_sha256": "99bd6bab003434e82cec2af037f4ee328bc89da84cb37f0977990feb42556c2e",
+    "compiler": "Vyper 0.2.4+commit.7949850",
+    "comparison": "Public verified/recompiled runtime bytes equal actual historical eth_getCode bytes. No new independent local compiler run claimed.",
+    "behavior": "transfer/transferFrom/approve do not change total_supply; mint/burnFrom do and emit zero-address Transfer. The quote reads totalSupply, not balances/allowances.",
+    "evidence": "lp-source-proof.json, lp-public-source.json, lp-historical-code.json under evidence_root"
+  },
+  "regressions": {
+    "production_build": "build:live PASS",
+    "family_quote_math_overflow_refresh": {
+      "passed": 75,
+      "failed": 0
+    },
+    "shared_dual_execution": {
+      "passed": 67,
+      "failed": 0
+    },
+    "exact_quote_cache": "PASS",
+    "generated_manifest": "PASS",
+    "diff_check": "PASS",
+    "full_typecheck": "exit 2; 16 unchanged pre-existing diagnostics. No errors in touched files; not a clean whole-repository build.",
+    "tests": "Includes source/code/topology/rate/ramp/uint/USDT/failed evidence mutated in place after success; independent decode/NextRound rejection. LP tests exercise production reader -> resolver -> coordinator -> publication.",
+    "guard_test_baseline": "New guard read-count assertion fails old implementation with 2 != 1; candidate passes."
+  },
+  "reused_execution_evidence": {
+    "report": "docs/research/reports/curve-underlying-classic-meta-parity-20261008.json",
+    "report_commit": "d06e06346a34109e80c239db30e7eeb57ab98f98",
+    "strict_dual_executions": 96,
+    "additional_diagnostics": 48,
+    "amount_tolerance_raw_units": 0,
+    "reuse_reason": "No encoding, math or request semantics changed. These previous same-N execution checks were not needlessly rerun; current selective Ready and production prices were revalidated.",
+    "original_tx_precall": "Not verified by N-end evidence.",
+    "new_final_sim_or_ev": false
+  },
+  "independent_review": {
+    "agent": "01a11740-7b48-70e1-8bdc-3e0aa98eb3c7",
+    "name": "Mencius",
+    "scope": "LP filter; did not self-review guard dedup",
+    "finding": "No blocking findings; bound token ordinary transfers/approval cannot change total supply. Unknown, malformed, zero-address events and unbound descriptors still refresh. Compiled/fallback parity and production reader/resolver/publication regression hold.",
+    "ran_gate": [
+      "LP scoped diff --check",
+      "75 quote/math/overflow/refresh tests",
+      "build:live",
+      "curve-underlying-family-plugin",
+      "adapter-family-exact-quote-cache",
+      "67 family-dual-execution tests",
+      "family capability manifest check",
+      "full tsc: original 16 diagnostics unchanged"
+    ],
+    "lp_patch_sha256": "7a68972d51f29018fdf163426ca2863d3350850fe138d32971de2899ea83bdfd",
+    "source_unchanged_during_checks": true,
+    "optional_nonblocking": [
+      "malformed Approval combination",
+      "LP mint/burn failure followed by ordinary LP transfer"
+    ]
+  },
+  "source_binding_note": {
+    "differences": [
+      {
+        "block": 26138094,
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-refresh.ts",
+        "recorded": "ca6ddb64234086430d32f75baf5af6fee8f442d61b8046dc10958fd765823313",
+        "current": "c35fb4bc13575e1f48ffae2646f042665ab626df08fc098d245b78f9ddcdff9b"
+      },
+      {
+        "block": 26138136,
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-refresh.ts",
+        "recorded": "ca6ddb64234086430d32f75baf5af6fee8f442d61b8046dc10958fd765823313",
+        "current": "c35fb4bc13575e1f48ffae2646f042665ab626df08fc098d245b78f9ddcdff9b"
+      },
+      {
+        "block": 26138179,
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-refresh.ts",
+        "recorded": "ca6ddb64234086430d32f75baf5af6fee8f442d61b8046dc10958fd765823313",
+        "current": "c35fb4bc13575e1f48ffae2646f042665ab626df08fc098d245b78f9ddcdff9b"
+      }
+    ],
+    "explanation": "After the positive candidate runs, only test type annotations changed (explicit string[] and readonly string[]); every production binding still matches. Candidate LP-control runs were made after this correction. Original declarations remain unchanged."
+  },
+  "preserved_failures": [
+    {
+      "path": "logs/family-latency-refresh.oHBqtz/benchmark-lp-control-26138093.log",
+      "receipt": "logs/family-latency-refresh.oHBqtz/benchmark-lp-control-26138093-receipt.json",
+      "cause": "Initial LP-control head input used a full header instead of strict {number,hash}; failed before RPC and timed samples. Original retained; corrected input uses head-lp-control-v2.json.",
+      "measured_samples": 0
+    },
+    {
+      "path": "logs/family-latency-refresh.oHBqtz/tool-selection.log",
+      "cause": "Initial Git safe-directory ownership check failed; corrected per-command Git settings only. No shared/global configuration change."
+    },
+    {
+      "cause": "Intermediate patch syntax and test-only inference/assertion mistakes were corrected before final checks; their original logs remain under evidence_root. No failed timed run was replaced."
+    }
+  ],
+  "reconciliation": {
+    "capabilities": [
+      "benchmark",
+      "stage-timing",
+      "effective-update"
+    ],
+    "executions": [
+      {
+        "tool": "listener:benchmark:effective-update",
+        "exit": 0,
+        "descriptor": "d04d6c64b2d93922ff73daef7b20c4a44ceb5a2f0a495fadcd6d5f70f1a7ffcf",
+        "argv": "896237856335acfe46bfa752a6b2571b048fc8fa7d1d55f0982c2e77f2dd8be1"
+      },
+      {
+        "tool": "listener:benchmark:effective-update",
+        "exit": 0,
+        "descriptor": "d04d6c64b2d93922ff73daef7b20c4a44ceb5a2f0a495fadcd6d5f70f1a7ffcf",
+        "argv": "a80a446c4bdb4cd7682da4d733ad4cc804870bc539e1d2c410ae3a7ad956a9cf"
+      },
+      {
+        "tool": "listener:benchmark:effective-update",
+        "exit": 0,
+        "descriptor": "d04d6c64b2d93922ff73daef7b20c4a44ceb5a2f0a495fadcd6d5f70f1a7ffcf",
+        "argv": "568a0bc7fdfe201582fc6c787e0c439dc6f36fe2184e1eeb3b47473512a6be64"
+      },
+      {
+        "tool": "listener:benchmark:effective-update",
+        "exit": 0,
+        "descriptor": "d04d6c64b2d93922ff73daef7b20c4a44ceb5a2f0a495fadcd6d5f70f1a7ffcf",
+        "argv": "4d81159195f5ce1c895aae79b1ff9635949cc6d9b668f0781a2db4d7f790d0c6"
+      },
+      {
+        "tool": "listener:benchmark:effective-update",
+        "exit": 0,
+        "descriptor": "d04d6c64b2d93922ff73daef7b20c4a44ceb5a2f0a495fadcd6d5f70f1a7ffcf",
+        "argv": "9b78c3040ae08f81b2b4c82949c8811a1c749b06f0f0549cd6cd15b3baa97e97"
+      }
+    ],
+    "manifest": "logs/family-latency-refresh.oHBqtz/tool-selection.json",
+    "manifest_sha256": "53cc886c79da7413e3e1a1ba095b6345eec42b4a135ba587e4571e8f620aa7de",
+    "inspected_alternatives": [
+      "live-enumeration",
+      "sim-amount",
+      "standalone enumeration"
+    ],
+    "execution_scope": "Five successful indexed invocations: guard LP control, three candidate positive blocks, candidate LP control. Baseline positive runs directly called the same production benchmark. All completed measured outputs are retained."
+  },
+  "artifact_sha256": {
+    "ready.json": "4129f30ba12d57e2ba0dc604b7036773442af5a4b2b903f073e932dc281f0b7e",
+    "guard-ready.json": "90aa6db370b871fffec1b1afab354279856f322c5cf78a0ee5a5831e5b00dcce",
+    "candidate-ready.json": "6e75cbd0bc986c404c9780ab15dc4dda5a5770c74dd4ff004c05ddd21b32d9d5",
+    "cohort.json": "815e411e65e3bafa1f78e766456dd905abfb88c35a7e0ed21fc7dcbfd7719015",
+    "lp-control-cohort.json": "b9e49da7e35aaabfeb82dcdca025a49b80944cee428d961a3ccd21a3fef4e1e8",
+    "guard-lp-control-cohort.json": "f3ef23358f9a520d4f944dd3fcc2a1af91c0c1a3bfdcd3438bd458108e3a13ec",
+    "candidate-lp-control-cohort.json": "35a40e5cb3b9a2a2bdae4a858fad3457fe6d276181c91be3fb9f155647d6d7a6",
+    "lp-source-proof.json": "f8188048ed30bfbf9e70cbd67e98a9548126d96e39225a1ca04106082f28cd5b",
+    "lp-public-source.json": "d61a3d662665c0a1157f4266685847bf6fee21daa8161b93857579933808dd03",
+    "lp-historical-code.json": "51cc82b33152b9762785c361363238fbcb6c69296db6954cce4d4e39dd5cd13d",
+    "tool-selection.json": "53cc886c79da7413e3e1a1ba095b6345eec42b4a135ba587e4571e8f620aa7de"
+  },
+  "check_artifacts": [
+    {
+      "path": "final-family-tests.log",
+      "sha256": "2f8e403a30048374bddb48dab0b781900fc939959a74f0f91f589f3d92703950"
+    },
+    {
+      "path": "build-live.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "path": "full-typecheck-final.log",
+      "sha256": "5e638905057c7d675363ff2359934630ccea2c6ea070ee9afe312762bc9cf2d6"
+    },
+    {
+      "path": "final-dual-execution.log",
+      "sha256": "9b67d6ed0ef6dbeac08749c85a2fb268964b677561d5c410a7c6f1f3d7c8002a"
+    },
+    {
+      "path": "final-exact-cache.log",
+      "sha256": "1a4928d1add479b53622b221098eb274a292acfc27f5bce88e352ba3b3f31765"
+    },
+    {
+      "path": "final-manifest-check.log",
+      "sha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef"
+    },
+    {
+      "path": "benchmark-lp-control-26138093.log",
+      "sha256": "7dbe1e69bb9ff79e2a2b972dd9d239e584610fe37c2cd4c441a799fb4ced96a2"
+    }
+  ],
+  "safety": {
+    "signing": false,
+    "broadcast": false,
+    "full_live_started": false,
+    "history_14400_rebuilt": false,
+    "original_ready_modified": false,
+    "protected_impl_modified": false,
+    "central_pipeline_modified": false
+  },
+  "remaining_limits": [
+    "Small 55-instance/140-edge historical topology, not full-graph or whole-live acceptance. User retains full-live validation.",
+    "Balancer V3 sample is hooked; each-block refresh retained. No general hook-trigger narrowing is justified.",
+    "Broader Curve implementations, active amplification ramps and other unrepresented variants are not claimed validated by this cohort.",
+    "This publication does not merge or deploy into protected impl, and does not complete unrelated historical route/EV acceptance."
+  ]
+}
