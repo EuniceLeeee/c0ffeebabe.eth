@@ -149,12 +149,59 @@ export async function measureLiveHead(input: {
 
 /** Production may log RPC error strings. This CLI silences them locally; only
  * benchmark-owned structured summaries cross stdout. No live logging change. */
-export async function withoutProductionConsole<T>(run: () => Promise<T>): Promise<T> {
+export async function withoutProductionConsole<T>(run: () => Promise<T>, observe?: (line: string) => void): Promise<T> {
   const keys = ["log", "warn", "error", "debug", "info"] as const;
   const original = keys.map(key => console[key]);
-  for (const key of keys) console[key] = () => {};
+  for (const key of keys) console[key] = (...args: unknown[]) => {
+    // Observation must never stringify arbitrary provider errors or alter work.
+    if (args.length === 1 && typeof args[0] === "string") {
+      try { observe?.(args[0]); } catch { /* diagnostics are non-authoritative */ }
+    }
+  };
   try { return await run(); }
   finally { keys.forEach((key, index) => { console[key] = original[index]!; }); }
+}
+
+// Closed field vocabulary: never persist free-form error/cause/payload fields,
+// including fields added to production log records in a later version.
+const LATENCY_FIELDS = (`batchId sourceBlock sourceBlockHash generation lane scopeLabel method createdAtMs startedAtMs wallMs
+  permitQueueWaitMs schedulerActiveTotal items status statusCode edgeId adapterId aborted phase atMs familyId requestId to from
+  subjectKey instanceKey routeKey calldataSha256 outcome purpose requestedFundingAssets readyInstanceCount selectedInstanceCount
+  refreshedInstanceCount skippedCleanInstanceCount failedInstanceCount requestedFundingAssetCount fundingOfferCount projectedRouteCount
+  cleanAuthorityReissueCount pricingMs fundingMs routeProjectionMs totalMs heapUsedBytes allowSingleCallFallback maxBatchSize
+  maxConcurrentBatches currentConcurrentBatchLimit currentBatchSizeLimit throttleRetries timeoutRetries totalCalls memoHits batchesSent
+  batchedItems batchLatencyMs maxBatchItemsSent pendingItems liveItems inFlightBatches peakInFlightBatches activeTransports abortedBatches
+  completedAfterScopeAbort transportQueueWaitMs maxTransportQueueWaitMs peakSchedulerActiveTotal peakSchedulerLaneActive batchFailures
+  singleCallFallbacks batchesOnNewSocket batchesOnReusedSocket drainMs persistentCacheConfigured persistentCacheEntries persistentCacheHits
+  persistentCacheWrites`).split(/\s+/);
+const HTTP_LATENCY_FIELDS = (`startedAtMs socketAssignedAtMs requestFlushedAtMs responseHeadersAtMs firstBodyByteAtMs
+  responseEndedAtMs settledAtMs requestBytes responseBytes reusedSocket`).split(/\s+/);
+function pickDiagnosticFields(value: unknown, fields: readonly string[]): Record<string, string | number | boolean | null> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const data = value as Record<string, unknown>;
+  return Object.fromEntries(fields.filter(key => Object.hasOwn(data, key) &&
+    (data[key] === null || ["string", "number", "boolean"].includes(typeof data[key]))).map(key => [key, data[key]])) as Record<string, string | number | boolean | null>;
+}
+
+/** Retain only existing production latency records, never arbitrary console text. */
+export function parseLatencyDiagnostic(line: string, env: NodeJS.ProcessEnv) {
+  const structured = /^\[(?:searcher\/)?(quote-batch-dispatch|quote-batch-timing|effective-quote-timing|strict-session-timing|strict-eth-call-timing|blockscan-source-n-call-stats(?:-final)?)\] (\{.*\})$/.exec(line);
+  if (structured) {
+    try {
+      const parsed: unknown = JSON.parse(structured[2]!);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      const raw = parsed as Record<string, unknown>;
+      const selected: Record<string, unknown> = pickDiagnosticFields(raw, LATENCY_FIELDS);
+      if (structured[1] === "quote-batch-dispatch" && Array.isArray(raw.calls)) selected.calls = raw.calls.map(call =>
+        pickDiagnosticFields(call, ["rpcId", "target", "from", "selector", "calldataSha256", "enqueuedAtMs"]));
+      if (structured[1] === "quote-batch-timing" && raw.http) selected.http = pickDiagnosticFields(raw.http, HTTP_LATENCY_FIELDS);
+      if (Object.keys(selected).length) return { event: structured[1]!, data: JSON.parse(redactToolOutput(JSON.stringify(selected), env)) as object };
+    } catch { /* malformed diagnostics do not affect the measured pass */ }
+  }
+  const strict = /^\[strict-exec\] lane=([a-z-]+) rethCalls=(\d+) simCalls=(\d+) wallMs=(\d+) queueWaitMs=(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?) family=([a-z0-9-]+)$/.exec(line);
+  if (strict && Number.isFinite(Number(strict[5]))) return { event: "strict-exec", data: { lane: strict[1], rethCalls: Number(strict[2]),
+    simCalls: Number(strict[3]), wallMs: Number(strict[4]), queueWaitMs: Number(strict[5]), family: strict[6] } };
+  return null;
 }
 
 /** loop.shutdown retires its own runtime controller. It must not poison a
@@ -190,6 +237,8 @@ export const LIVE_STAGE_HELP = `Manual live-stage benchmark (no live restart, si
   --sizing-budget-ms N        Sim only, 1..3600000; fresh budget at planner_solver.
                              With this flag, block-budget-ms bounds prerequisites.
   --save-prices               Save source-bound full snapshots after timing for later stage tests.
+  --latency-diagnostics       Collect existing production quote/batch logs after redaction.
+                             Collection overhead is measured; files are written after each pass.
   --prepare-cache NEW_DIR     Sim entry only, one repetition; capture reusable prerequisite reads.
   --input-cache DIR           Restore prerequisites from a completed capture; no network fallback on a miss.
 HEADS.json is [{"number":N,"hash":"0x..."}, ...], 1..250 consecutive newHeads inputs.
@@ -221,6 +270,7 @@ export function parseLiveStageOptions(argv: string[], stage: LiveBenchmarkStage)
     ready: { type: "string" }, heads: { type: "string" }, out: { type: "string" }, help: { type: "boolean" },
     "env-file": { type: "string" }, executor: { type: "string" }, owner: { type: "string" }, "revm-bin": { type: "string" },
     "executor-runtime-code": { type: "string" }, repetitions: { type: "string" }, "save-prices": { type: "boolean" },
+    "latency-diagnostics": { type: "boolean" },
     "setup-budget-ms": { type: "string" }, "block-budget-ms": { type: "string" },
     "sizing-budget-ms": { type: "string" },
     "prepare-cache": { type: "string" }, "input-cache": { type: "string" },
@@ -334,6 +384,7 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
       localRestorationExcluded: true, measuredResultsCached: false },
     finalRevertCache: "fresh process cache; no independent final-sim decisions injected",
     scope: "actual head scheduler and runHead with diagnostic stop; sequential notifications; no independent final sim/EV",
+    latencyDiagnostics: args["latency-diagnostics"] === true,
     liveStarted: false, broadcast: false, signing: false, enumeration: stage !== "effective-update", simSizing: stage === "sim-amount" });
   const records: Array<Record<string, unknown> & { status: string; totalMs: number; stageMs: number | null }> = [];
   const sanitizedError = (error: unknown) => redactToolOutput(error instanceof Error ? error.message : String(error), env).slice(0, 4000);
@@ -347,6 +398,8 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
   const effectiveHash = (snapshot: AdapterRuntimeSnapshot) => sha256(atBlockJson([...snapshot.pricing.effectiveMids!.rows].map(([key, r]) =>
     [key, r.status, r.amountIn, r.amountOut]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))));
   const restorePhase = args.prepareCache ? "record" as const : "replay" as const;
+  const previousLatencyDiagnostics = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+  if (args["latency-diagnostics"]) process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = "1";
   try {
     if (args.prepareCache || args.inputCache) {
       // Independent fresh canonical checks, never answered by the cassette.
@@ -466,7 +519,16 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
         });
         const predecessor = await readBlockScanObservedHeader(rpcUrl, chainId, heads[0]!.number - 1,
           { signal: abort.signal, deadlineAtMs: Date.now() + 30000 });
-        const run = (head: Head, setup: boolean): ReturnType<typeof measureLiveHead> => withoutProductionConsole(async () => {
+        const run = async (head: Head, setup: boolean): ReturnType<typeof measureLiveHead> => {
+          const diagnosticEvents: Array<{ observedAtMs: number; event: string; data: object }> = [];
+          let droppedEvents = 0, ignoredConsoleLines = 0;
+          const observe = args["latency-diagnostics"] ? (line: string) => {
+            const event = parseLatencyDiagnostic(line, env);
+            if (!event) { ignoredConsoleLines++; return; }
+            if (diagnosticEvents.length >= 200_000) { droppedEvents++; return; }
+            diagnosticEvents.push({ observedAtMs: Date.now(), ...event });
+          } : undefined;
+          try { return await withoutProductionConsole(async () => {
           inputCache?.setPhase(restorePhase);
           // Outer experiment safety stop covers both diagnostic phases and
           // joined cleanup. Startup may normally resume indefinitely.
@@ -484,7 +546,15 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
             clearTimeout(guard);
             if (failures.length) save(`diagnostics-${repetition + 1}-${head.number}.json`, { failures });
           }
-        });
+          }, observe); }
+          finally {
+            if (observe) save(`latency-${setup ? "setup-" : ""}${repetition + 1}-${head.number}.json`, {
+              measured: !setup, repetition: repetition + 1, head, events: diagnosticEvents, droppedEvents, ignoredConsoleLines,
+              scope: "existing production diagnostics; mixed-family batches; strict-exec only logs work over 200ms",
+              collectionOverheadMeasured: true, fileWriteExcluded: true,
+            });
+          }
+        };
         const setup = await run(predecessor, true);
         inputCache?.assertHealthy();
         save(`setup-${repetition + 1}.json`, { measured: false, source: predecessor, ...setup.metrics, prerequisiteCache: inputCache?.stats() });
@@ -585,7 +655,10 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
       completed: records.filter(r => r.status === "completed").length });
     throw error;
   } finally {
-    experimentAbort.abort(); await inputCache?.close();
+    experimentAbort.abort();
     process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", interrupt);
+    if (previousLatencyDiagnostics === undefined) delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+    else process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = previousLatencyDiagnostics;
+    await inputCache?.close();
   }
 }

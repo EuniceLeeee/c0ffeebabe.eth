@@ -1,0 +1,271 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-07",
+  "status": "partial-no-full-live-claim",
+  "scope": {
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "productionCode": "933ccfe6a44ef4575d18a289fd3a47c7e1ad1d8c",
+    "latestUserBoundary": "User will run 14400-block live; this task runs only single-block Ready and small historical diagnostic cohorts.",
+    "liveStarted": false,
+    "broadcast": false,
+    "fullRebuildStarted": false,
+    "predecessorSetupExcluded": true,
+    "measuredStage": "actual BlockScanRuntimeLoop head notification through effective publication and drain; stops before enumeration",
+    "repetitionsPerHead": 3,
+    "diagnostics": "Existing production records captured by benchmark only; no changes to live scheduling, price calculation, family refresh policy or default logging in this increment.",
+    "topologyPrebuiltAtFirstMeasuredHead": true,
+    "discoveryAndReadyBuildOutsideMeasurement": true
+  },
+  "codeChange": {
+    "files": [
+      "listener/benchmarks/live-stage.ts",
+      "listener/benchmarks/latency-diagnostics.test.ts"
+    ],
+    "flag": "--latency-diagnostics",
+    "fieldsAllowlisted": true,
+    "errorsAndPayloadsExcluded": true,
+    "maxEventsPerHead": 200000,
+    "writeAfterMeasuredPass": true,
+    "envRestored": true,
+    "reviewCorrection": "Fractional finite nonnegative direct permit wait values are now accepted; original instrumented runs retained the earlier integer-only parser, which can omit strict-exec records. JSON batch timing and physical-request attribution are unaffected."
+  },
+  "weighted": {
+    "pool": "0x7311f2cf3cf6033b6e23274b9b2cbe2a82551069",
+    "variant": "weighted-v1; STANDARD tokens; no rate/yield provider or Hook",
+    "discoveryTx": "0x7473494ca3e1a67ac4678caf9fd7f1055c69ede1f0bd562da5003895bfd5b427",
+    "singleBlockReady": 26083365,
+    "heads": [
+      26083365,
+      26083366,
+      26083367
+    ],
+    "instances": 31,
+    "edges": 66,
+    "graphEqualitySha256": "3b93f17bd6111c3ceb9745ca65f7aa37a43cce45bb0f884419ee73b29bc86082",
+    "baselineProductionCode": "a41afdc54b9ecf486bde332ac2277887ebecb294",
+    "baselineDiagnosticPatches": "cache keep-alive harness fix plus the same opt-in latency collector; immutable baseline production semantics retained",
+    "silentRuns": {
+      "completedPerSide": 9,
+      "baselineP50Ms": 996.097808,
+      "candidateP50Ms": 1011.566545,
+      "byBlock": [
+        {
+          "block": 26083365,
+          "baselineMedianMs": 996.097808,
+          "candidateMedianMs": 968.25288
+        },
+        {
+          "block": 26083366,
+          "baselineMedianMs": 1066.647186,
+          "candidateMedianMs": 1144.340497
+        },
+        {
+          "block": 26083367,
+          "baselineMedianMs": 874.635256,
+          "candidateMedianMs": 866.271459
+        }
+      ],
+      "baselineSummarySha256": "ab1cfa28de4b41193e8119c845775bf49ecb45f030a65dabfb14d84f4e1d73ca",
+      "candidateSummarySha256": "558a31adffec5fb78867fdf62422784a1f1fefe0be1a517e9ef54812b9bcb083"
+    },
+    "instrumentedRuns": {
+      "completedPerSide": 9,
+      "byBlock": [
+        {
+          "block": 26083365,
+          "baselineMedianMs": 1250.960906,
+          "candidateMedianMs": 947.094546,
+          "baselinePhysicalItems": 72,
+          "candidatePhysicalItems": 72,
+          "baselineBalancerPhysicalItems": 7,
+          "candidateBalancerPhysicalItems": 7,
+          "baselineBalancerQuoteTasks": 6,
+          "candidateBalancerQuoteTasks": 6
+        },
+        {
+          "block": 26083366,
+          "baselineMedianMs": 1071.78967,
+          "candidateMedianMs": 1001.055813,
+          "baselinePhysicalItems": 41,
+          "candidatePhysicalItems": 34,
+          "baselineBalancerPhysicalItems": 7,
+          "candidateBalancerPhysicalItems": 0,
+          "baselineBalancerQuoteTasks": 6,
+          "candidateBalancerQuoteTasks": 0
+        },
+        {
+          "block": 26083367,
+          "baselineMedianMs": 771.792749,
+          "candidateMedianMs": 739.887582,
+          "baselinePhysicalItems": 31,
+          "candidatePhysicalItems": 24,
+          "baselineBalancerPhysicalItems": 7,
+          "candidateBalancerPhysicalItems": 0,
+          "baselineBalancerQuoteTasks": 6,
+          "candidateBalancerQuoteTasks": 0
+        }
+      ],
+      "physicalCountsIdenticalAcrossRepetitions": true,
+      "outputHashesEqualAcrossAllNinePairs": true,
+      "counterDefinition": "physicalItems are dispatch items, not HTTP envelopes or logical calls; seven unique Balancer calls serve 42 logical route reads. Retry attempts and unique physical keys were separately recomputed."
+    },
+    "conclusion": "On unchanged heads the guarded static-Weighted policy removes seven physical eth_call items and six amount quote tasks while retaining byte-identical effective amounts/statuses. No stable aggregate stage latency gain is claimed: the prior silent pair was slightly slower overall and the graph contains only one Balancer instance."
+  },
+  "curveAndHook": {
+    "ready": 26138094,
+    "edges": 140,
+    "heads": [
+      26138094,
+      26138095,
+      26138096
+    ],
+    "completed": 9,
+    "rows": [
+      {
+        "block": 26138094,
+        "wholeStageMedianMs": 1220.73145,
+        "plain": {
+          "freshDirections": 22,
+          "physicalCallItems": 24,
+          "effectiveSpanMedianMs": 214
+        },
+        "underlying": {
+          "freshDirections": 12,
+          "physicalCallItems": 12,
+          "effectiveSpanMedianMs": 173
+        },
+        "hookBalancer": {
+          "freshDirections": 2,
+          "physicalCallItems": 2,
+          "effectiveSpanMedianMs": 280
+        }
+      },
+      {
+        "block": 26138095,
+        "wholeStageMedianMs": 597.999806,
+        "plain": {
+          "freshDirections": 18,
+          "physicalCallItems": 20,
+          "effectiveSpanMedianMs": 100
+        },
+        "underlying": {
+          "freshDirections": 0,
+          "physicalCallItems": 0,
+          "effectiveSpanMedianMs": null
+        },
+        "hookBalancer": {
+          "freshDirections": 2,
+          "physicalCallItems": 2,
+          "effectiveSpanMedianMs": 128
+        }
+      },
+      {
+        "block": 26138096,
+        "wholeStageMedianMs": 692.588905,
+        "plain": {
+          "freshDirections": 22,
+          "physicalCallItems": 24,
+          "effectiveSpanMedianMs": 125
+        },
+        "underlying": {
+          "freshDirections": 0,
+          "physicalCallItems": 0,
+          "effectiveSpanMedianMs": null
+        },
+        "hookBalancer": {
+          "freshDirections": 2,
+          "physicalCallItems": 2,
+          "effectiveSpanMedianMs": 139
+        }
+      }
+    ],
+    "observedHotRequestIds": {
+      "plain": [
+        "exact-get-dy",
+        "refresh-ramp-current-A",
+        "refresh-ramp-future"
+      ],
+      "underlying": [
+        "exact-get-dy-underlying"
+      ],
+      "hookBalancer": [
+        "exact-in"
+      ]
+    },
+    "correction": "The extra decimals/balance requests found by inspecting Curve Underlying pricing.current are not executed in these effective hot updates; delaying that fallback is not a justified hot-path optimization.",
+    "hookBoundary": "Pool 0xaa8a8a383fffcc4f370e1840b38766211fddb9e3 has initialize/liquidity hooks, not swap callbacks. Both directions quote every block. Historical same-state dual execution proof is in family-latency-20261007-single-block.json. Arbitrary swap hooks are not claimed supported.",
+    "conclusion": "Small-topology updates show no second-scale transport permit queue. Plain retains code/ramp guards; Underlying was freshly quoted only on the first measured head and reused on the next two. This is not three independent fresh-Underlying performance proofs, a full-graph comparison, or a Curve latency-fix verdict.",
+    "freshnessBoundary": "Underlying mutation is pool-log based; declarations of registry/coin dependencies do not by themselves prove all external-dependency changes are observed. No historical stale-output failure has been established here."
+  },
+  "evidence": {
+    "root": "/opt/mev-cloud/family-runtime-20261007/logs/family-latency-20261007",
+    "audit": "/opt/mev-cloud/family-runtime-20261007/logs/family-runtime-acceptance/latency-profile-audit.json",
+    "auditSha256": "c48d5698f166468b0cce8bbc6110522f1213fffc665b3e2000cdcecaea175732",
+    "declarationSha256": {
+      "weightedBaseline": "859e232182d6caad2e220b8f1d69319cb0dcce22bf5f18ae67f39c17ccf17431",
+      "weightedCandidate": "057078052b70e53b337a926e6465fc1d56beb42e92abfdebbb618cf79c37abc5",
+      "curveCandidate": "d18a578a4128c627334f599fa9ee3ddc789472c4731608ac0e0edca52bc7f097"
+    },
+    "failedInvocation": {
+      "path": "logs/family-runtime-acceptance/weighted-candidate-profile.log",
+      "reason": "Launcher mistakenly passed tool-run --window to a benchmark whose source window is supplied through --heads; rejected before any measured run. Corrected only the ignored launcher and retained failure.",
+      "measuredRuns": 0
+    },
+    "reconciliation": {
+      "capabilities": [
+        "benchmark",
+        "stage-timing",
+        "effective-update"
+      ],
+      "toolId": "listener:benchmark:effective-update",
+      "successfulExecutions": 3,
+      "manifests": [
+        {
+          "path": "logs/family-runtime-acceptance/weighted-stage-tools.json",
+          "sha256": "3db7c84d1874be99cb41de238e6514bcdbc400edc75aabd7376a3db10485e194"
+        },
+        {
+          "path": "logs/family-runtime-acceptance/weighted-baseline-stage-tools.json",
+          "sha256": "22ee7ee940e3148cf9bacf85d87744e12b25d94ddb680abff0e2861f48215c3c"
+        },
+        {
+          "path": "logs/family-runtime-acceptance/curve-stage-tools.json",
+          "sha256": "1506038e5bf5b2a662d8de3325941adb7c5b20f5fce64517b8ad4872a4708eaa"
+        }
+      ],
+      "windowBinding": "Each successful benchmark declaration binds the heads file hash and exact canonical head numbers/hashes. The generic tool-run receipt has no --window for this file-input tool."
+    }
+  },
+  "limitations": [
+    "Small shared-VM diagnostic, not exclusive CPU or production live acceptance.",
+    "Instrumented and uninstrumented timings are separate experiments, not directly interchangeable.",
+    "Family task spans overlap and must not be summed into total stage time.",
+    "Direct get-code/get-storage reads lack per-item eth_call attribution; mixed-family work is shared/unattributed, not forcibly assigned.",
+    "No independent final sim/EV ran in these effective profiles.",
+    "Phase1 dual-interface tests and the single Hook execution sample do not prove historical execution for all Family variants; previous missing historical evidence remains missing."
+  ],
+  "verification": {
+    "buildLive": "pass",
+    "benchmarkRegressions": {
+      "pass": 35,
+      "fail": 0,
+      "diagnostics": 5,
+      "effective": 7,
+      "simAmount": 15,
+      "cacheWiring": 8
+    },
+    "typescript": {
+      "status": "baseline-errors-remain",
+      "totalErrors": 16,
+      "newBenchmarkErrors": 0
+    },
+    "diffCheck": "pass",
+    "nonAuthorReview": {
+      "agent": "Dirac",
+      "result": "pass after one P2 correction",
+      "checked": "executed 35 tests, diff --check, source hashes unchanged across tests",
+      "rpcOrMeasurementsRun": false
+    }
+  }
+}
