@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { JsonRpcProvider } from "ethers";
 import {
   createStrictCentralAdapterRuntime,
   type StrictSimulationTransport,
@@ -84,6 +85,58 @@ function mockProvider() {
     getStorage: async () => `0x${"0".repeat(64)}`,
   });
 }
+
+
+test("ethers RPC wrappers do not turn transport failures into admission reverts", async () => {
+  const provider = new JsonRpcProvider("http://127.0.0.1:1", 1, { staticNetwork: true });
+  const payload = { id: 1, jsonrpc: "2.0", method: "eth_call",
+    params: [{ to: WSTETH, data: "0x12345678" }, "0x64"] };
+  const request = { id: "wrapped-transport", kind: "eth-call" as const,
+    to: WSTETH, data: "0x12345678", completion: "return-data" as const };
+  const failures = [
+    { code: 429, message: "compute units per second capacity exceeded" },
+    { code: -32000, message: "request timed out" },
+    { code: -32603, message: "upstream unavailable" },
+  ];
+  try {
+    for (const failure of failures) for (const recovers of [false, true]) {
+      const error = provider.getRpcError(payload, { id: 1, error: failure });
+      let calls = 0;
+      const runtime = createStrictCentralAdapterRuntime({
+        provider: { ...mockProvider(), call: async () => {
+          calls++;
+          if (recovers && calls === 2) return "0x1234";
+          throw error;
+        } } as never,
+        generationFence: Object.freeze({ assertCurrent() {} }),
+      });
+      const issued = runtime.scheduler.issueExecutor({} as never);
+      const [result] = await issued.executor.execute({ requests: [request], source: SOURCE } as never);
+      assert.equal(calls, 2, "transport failures use the existing bounded retry");
+      assert.equal(result!.ok, recovers);
+      if (result!.ok) { assert.equal(result.completion, "returned"); assert.equal(result.data, "0x1234"); }
+      else assert(["rpc", "deadline"].includes(result!.failure));
+    }
+    for (const failure of [
+      { code: 3, message: "execution reverted: quota exhausted" },
+      { code: -32000, message: "execution reverted" },
+      { code: 3, message: "execution reverted: rate limit", data: "0x1234" },
+    ]) {
+      let calls = 0;
+      const error = provider.getRpcError(payload, { id: 1, error: failure });
+      const runtime = createStrictCentralAdapterRuntime({
+        provider: { ...mockProvider(), call: async () => { calls++; throw error; } } as never,
+        generationFence: Object.freeze({ assertCurrent() {} }),
+      });
+      const issued = runtime.scheduler.issueExecutor({} as never);
+      const [result] = await issued.executor.execute({ requests: [request], source: SOURCE } as never);
+      assert.equal(calls, 1, "deterministic empty/data reverts never retry");
+      assert(result!.ok);
+      assert.equal(result.completion, "reverted-as-declared");
+      assert.equal(result.data, failure.data ?? "0x");
+    }
+  } finally { provider.destroy(); }
+});
 
 async function main(): Promise<void> {
   const runtime = createStrictCentralAdapterRuntime({

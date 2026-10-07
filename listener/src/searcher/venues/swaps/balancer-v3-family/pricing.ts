@@ -8,6 +8,7 @@ import { assertRoute } from "./routes.js";
 import { decodeSwapLog } from "./discovery.js";
 import type { BalancerV3Descriptor, BalancerV3PricingDescriptor, BalancerV3Route, BalancerV3Snapshot } from "./types.js";
 import { decodeLocalState, localStateRequests, quoteLocal } from "./local-state.js";
+import { hasStateOnlyWeightedPrice, directRefreshAddresses } from "./refresh-scope.js";
 
 function state(descriptor: BalancerV3PricingDescriptor, results: Parameters<typeof resultSource>[0]) {
   assertRoute(descriptor.instance, descriptor.route);
@@ -26,9 +27,9 @@ function state(descriptor: BalancerV3PricingDescriptor, results: Parameters<type
   return { balanceIn, balanceOut, amounts: probeAmounts(binding.decimals[descriptor.route.i], balanceIn) };
 }
 export const balancerV3Pricing = {
-  // A ramps and rate providers can change with block time without pool logs.
-  // The existing coordinator refreshes raw and effective together; no private cache.
-  refreshPolicy: "each-block" as const,
+  // Only proven fixed-weight/no-rate/no-hook models are state-only.
+  // Unknown models, A ramps and rate providers retain the clock refresh.
+  refreshPolicyForInstance: ({ descriptor }) => hasStateOnlyWeightedPrice(descriptor.instance) ? "on-touch" : "each-block",
   stateKey: route => route.routeKey,
   staticBindingProjection: ({ descriptor, routes }) => ({ ...staticBinding(descriptor), routeKeys: routes.map(route => route.routeKey) }),
   snapshotCompatibilityProjection: ({ descriptor, routes }) => ({ ...staticBinding(descriptor), routeKeys: routes.map(route => route.routeKey) }),
@@ -119,27 +120,33 @@ export const balancerV3Pricing = {
   mutation: {
     compile({ entries }): CompiledMutationIndex {
       const direct = compileAddressMutations(entries, ({ descriptor, routes }) => ({
-        addresses: [descriptor.instance.pool, ...descriptor.instance.binding.tokens,
-          descriptor.instance.binding.hooks.address, ...descriptor.instance.binding.tokenInfo.map(info => info.rateProvider)],
+        addresses: directRefreshAddresses(descriptor.instance),
         keys: routes.map(route => route.routeKey),
       }), { kinds: ["log", "call"] });
       const vault = VAULT.toLowerCase();
       const pools = createMutationLookup();
+      const vaultWideKeys = new Set<string>();
       for (const entry of entries) {
         // Preserve the old per-entry dependency gate, not merely its union.
         if (entry.dependencies.some(address => address.toLowerCase() === vault)) {
           pools.add(entry.descriptor.instance.pool, entry.routes.map(route => route.routeKey));
+          if (hasStateOnlyWeightedPrice(entry.descriptor.instance)) {
+            for (const route of entry.routes) vaultWideKeys.add(route.routeKey);
+          }
         }
       }
+      const vaultWide = Object.freeze([...vaultWideKeys]);
       return {
         dependencies: [...new Set([...direct.dependencies, ...(pools.addresses().length === 0 ? [] : [vault])])],
         affectedStateKeys({ observation }) {
-          // Vault logs always take this branch, including when Vault also
-          // appears as a token/hook dependency. Decode once for all directions.
+          // A decoded swap binds its pool. Other Vault activity may change
+          // pool balances/config or global guards: conservatively invalidate
+          // all state-only models, including calls without a usable event.
           if (observation.kind === "log" && observation.address.toLowerCase() === vault) {
             const swap = decodeSwapLog(observation);
-            return swap === null ? [] : pools.get(swap.pool);
+            return swap === null ? vaultWide : pools.get(swap.pool);
           }
+          if (observation.kind === "call" && observation.target.toLowerCase() === vault) return vaultWide;
           return direct.affectedStateKeys({ observation });
         },
       };
@@ -147,11 +154,12 @@ export const balancerV3Pricing = {
     affectedStateKeys({ descriptor, routes, observation }) {
     if (observation.kind === "log" && same(observation.address, VAULT)) {
       const swap = decodeSwapLog(observation);
-      return swap && same(swap.pool, descriptor.instance.pool) ? routes.map(route => route.routeKey) : [];
+      return (swap ? same(swap.pool, descriptor.instance.pool) : hasStateOnlyWeightedPrice(descriptor.instance))
+        ? routes.map(route => route.routeKey) : [];
     }
     const target = observation.kind === "call" ? observation.target : observation.kind === "log" ? observation.address : null;
-    return target && [descriptor.instance.pool, ...descriptor.instance.binding.tokens,
-      descriptor.instance.binding.hooks.address, ...descriptor.instance.binding.tokenInfo.map(info => info.rateProvider)].some(address => same(address, target))
+    return target && ((same(target, VAULT) && hasStateOnlyWeightedPrice(descriptor.instance)) ||
+      directRefreshAddresses(descriptor.instance).some(address => same(address, target)))
       ? routes.map(route => route.routeKey) : [];
   } },
   liveStateProjection: { project: ({ descriptor, snapshot }) => ({ kind: descriptor.instance.binding.localModel

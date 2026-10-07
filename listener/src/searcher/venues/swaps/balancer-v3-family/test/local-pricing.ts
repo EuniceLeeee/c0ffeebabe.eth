@@ -23,6 +23,7 @@ import { BALANCER_MODEL_TEMPLATES } from "../local-math/model-templates.js";
 import type { BalancerV3Descriptor, BalancerV3PricingDescriptor, BalancerV3Snapshot } from "../types.js";
 import { BALANCER_VAULT_EXTENSION, BALANCER_VAULT_ADMIN } from "../vault-model.js";
 import { syntheticBalancerVaultCodes } from "./local-vault-fixture.js";
+import { hasStateOnlyWeightedPrice } from "../refresh-scope.js";
 
 // Synthetic state/transport fixtures exercise real production issuers and
 // consumers. These are NOT historical on-chain, fork-execution or latency proofs.
@@ -54,7 +55,8 @@ function modelCode(model: BalancerLocalModel, tokenCount = 2): string {
   return code;
 }
 
-function fixture(model: BalancerLocalModel | null = "weighted-v1", decimals = [18, 18], withRates = false) {
+function fixture(model: BalancerLocalModel | null = "weighted-v1", decimals = [18, 18], withRates = false,
+  pool = POOL) {
   const tokens = decimals.map((_, index) => TOKENS[index] ?? ethers.toBeHex(0x22 + index, 20));
   const values = {
     decimals,
@@ -107,7 +109,7 @@ function fixture(model: BalancerLocalModel | null = "weighted-v1", decimals = [1
       if (is(LOCAL_VAULT_ABI, "isQueryDisabled")) return word(values.queryDisabled ? 1n : 0n);
       if (is(LOCAL_VAULT_ABI, "getMinimumTradeAmount")) return word(values.minimumTrade);
     }
-    if (lower(tx.to) === lower(POOL)) {
+    if (lower(tx.to) === lower(pool)) {
       if (is(LOCAL_POOL_ABI, "getNormalizedWeights")) return LOCAL_POOL_ABI.encodeFunctionResult("getNormalizedWeights", [values.weights]);
       if (is(LOCAL_POOL_ABI, "getMinTokenBalances")) return LOCAL_POOL_ABI.encodeFunctionResult("getMinTokenBalances", [values.minTokenBalances]);
       if (is(LOCAL_POOL_ABI, "getAmplificationParameter")) return LOCAL_POOL_ABI.encodeFunctionResult("getAmplificationParameter", [values.amp, true, 1000n]);
@@ -124,7 +126,7 @@ function fixture(model: BalancerLocalModel | null = "weighted-v1", decimals = [1
     async call(tx: { to: string; data: string }, _block?: number) { return answer(tx); },
     async getCode(address: string) {
       const index = [VAULT, BALANCER_VAULT_EXTENSION, BALANCER_VAULT_ADMIN].map(lower).indexOf(lower(address));
-      return index >= 0 ? vaultCodes[index] : lower(address) === lower(POOL) ? code : "0x60006000";
+      return index >= 0 ? vaultCodes[index] : lower(address) === lower(pool) ? code : "0x60006000";
     },
     async getStorage() { throw new Error("unexpected storage read"); },
   };
@@ -134,14 +136,14 @@ function fixture(model: BalancerLocalModel | null = "weighted-v1", decimals = [1
     return { id: request.id, ok: true, completion: "returned", data: answer(request), source,
       provenance: { kind: "fixture", fingerprint: "balancer-local-state-fixture" } };
   };
-  return { model, values, calls, code, vaultCodes, answer, provider, result };
+  return { model, pool, values, calls, code, vaultCodes, answer, provider, result };
 }
 
 const catalogPromise = localCatalog();
 async function admitted(f: ReturnType<typeof fixture>, source = SOURCE) {
   const catalog = await catalogPromise;
   const observation = { kind: "log" as const, address: VAULT, source,
-    ...SWAP_ABI.encodeEventLog(SWAP_ABI.getEvent("Swap")!, [POOL, ...TOKENS, WAD, WAD - 1n, 0, 0]) };
+    ...SWAP_ABI.encodeEventLog(SWAP_ABI.getEvent("Swap")!, [f.pool, ...TOKENS, WAD, WAD - 1n, 0, 0]) };
   const result = await admitToGraph({ catalog, source, executor: EXECUTOR, provider: f.provider, observations: [observation] });
   assert(result.lifecycle.publication, JSON.stringify(result.lifecycle.outcomes));
   const instance = result.lifecycle.publication.instances[0];
@@ -169,11 +171,12 @@ for (const model of BALANCER_MODEL_TEMPLATES.map(item => item.model)) {
     assert.equal(a.descriptor.binding.localModel, model);
     assert.equal(a.instance.routes.length, 2);
     assert.equal(a.graph.edges.length, 2);
-    assert.equal(plugin.pricing.refreshPolicy, "each-block");
     for (const route of a.routes) {
       const pricing = a.instance.pricingInstances.find(item => item.routes.some(r => r.routeKey === route.routeKey))!;
       const pricingDescriptor = pricing.pricingDescriptor as BalancerV3PricingDescriptor;
       const pricingRoutes = pricing.routes as readonly Route[];
+      assert.equal(plugin.pricing.refreshPolicyForInstance({ descriptor: pricingDescriptor, routes: pricingRoutes }),
+        model.startsWith("weighted-") ? "on-touch" : "each-block");
       const snapshot = pricing.snapshot as BalancerV3Snapshot;
       const small = localQuote(f, a.descriptor, route, snapshot.amountIn);
       const large = localQuote(f, a.descriptor, route, 100n * WAD);
@@ -503,11 +506,49 @@ test("local execution evidence binds route, executor and exact amounts; unknown 
   assert.throws(() => plugin.execution.buildFragment({ ...input, descriptor: b.descriptor, route: b.routes[0] }), /evidence|descriptor/);
 });
 
-test("production raw/effective and Solver share source-pinned physical state reads; new source refreshes without touches", async () => {
-  const f = fixture("stable-v3", [18, 18], true), a = await admitted(f);
+test("state-only refresh proof excludes every clock/rate/hook/unknown variant; compiled mutations preserve Vault changes", async () => {
+  const a = await admitted(fixture()), descriptor = a.descriptor, binding = descriptor.binding;
+  assert(hasStateOnlyWeightedPrice(descriptor));
+  for (const alteration of [
+    { localModel: null }, { localModel: "stable-v3" as const },
+    { tokenInfo: binding.tokenInfo.map(info => ({ ...info, tokenType: 1 })) },
+    { tokenInfo: binding.tokenInfo.map(info => ({ ...info, rateProvider: RATE })) },
+    { tokenInfo: binding.tokenInfo.map(info => ({ ...info, paysYieldFees: true })) },
+    { hooks: { ...binding.hooks, address: OTHER } },
+    { hooks: { ...binding.hooks, flags: binding.hooks.flags.map((flag, i) => flag || i === 0) } },
+  ]) assert.equal(hasStateOnlyWeightedPrice({ ...descriptor, binding: { ...binding, ...alteration } }), false);
   const root = new StrictProductionRuntimeRoot({ catalog: a.catalog, readySource: SOURCE,
     readyGraph: a.graph.edges, readyInstances: a.lifecycle.publication!.instances, readyFundingAssets: [] });
-  assert.equal(root.pricingIndex().perBlockRefreshStateKeys.length, 2);
+  const keys = a.routes.map(route => route.routeKey).sort();
+  const log = (address: string) => ({ kind: "log" as const, address, topics: [], data: "0x", source: SOURCE });
+  const swap = (pool: string) => ({ ...log(VAULT), ...SWAP_ABI.encodeEventLog(SWAP_ABI.getEvent("Swap")!,
+    [pool, ...TOKENS, WAD, WAD / 2n, 10n ** 15n, 10n ** 15n]) });
+  const cases = [
+    { observation: log(TOKENS[0]), expected: [] },
+    { observation: { kind: "call" as const, target: TOKENS[0], data: "0x", source: SOURCE }, expected: [] },
+    { observation: log(POOL), expected: keys },
+    { observation: log(VAULT), expected: keys },
+    { observation: { kind: "call" as const, target: VAULT, data: "0x", source: SOURCE }, expected: keys },
+    { observation: swap(POOL), expected: keys },
+    { observation: swap(OTHER), expected: [] },
+  ];
+  for (const { observation, expected } of cases) {
+    assert.deepEqual([...root.resolveBlockTouchedStateKeys(observation, SOURCE)].sort(), expected);
+    const individual = new Set(a.instance.pricingInstances.flatMap(pricing => plugin.pricing.mutation.affectedStateKeys({
+      descriptor: pricing.pricingDescriptor as BalancerV3PricingDescriptor,
+      routes: pricing.routes as readonly Route[], observation,
+    })));
+    assert.deepEqual([...individual].sort(), expected, "compiled/individual dependency semantics agree");
+  }
+});
+
+for (const clockSensitive of [true, false]) {
+test(`production shared reads: ${clockSensitive ? "clock/rate refresh" : "state-only weighted carry and Vault invalidation"}`, async () => {
+  const f = clockSensitive ? fixture("stable-v3", [18, 18], true) : fixture("weighted-v1");
+  const a = await admitted(f);
+  const root = new StrictProductionRuntimeRoot({ catalog: a.catalog, readySource: SOURCE,
+    readyGraph: a.graph.edges, readyInstances: a.lifecycle.publication!.instances, readyFundingAssets: [] });
+  assert.equal(root.pricingIndex().perBlockRefreshStateKeys.length, clockSensitive ? 2 : 0);
   const physical: { hash: string; to: string; data: string; from?: string }[] = [];
   const server = createServer((request, response) => {
     const chunks: Buffer[] = [];
@@ -551,13 +592,16 @@ test("production raw/effective and Solver share source-pinned physical state rea
     perSourceCoverage: [{ familyId: plugin.manifest.familyId, sourceId: "fixture", sourceFingerprint: "local-pricing",
       completeThroughBlock: at.number, completeThroughHash: at.hash }] });
   const coordinator = new StrictCurrentRuntimeCoordinator(request => root.createSession({ source: request.source,
-    runtime: runtime(request.source), fundingAssets: [], kind: "pricing", touchedPools: request.touchedPools, control: request.control }),
+    runtime: runtime(request.source), fundingAssets: [],
+    kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+    touchedPools: request.touchedPools, requiredEdgeIds: request.requiredEdgeIds, control: request.control }),
   () => {}, undefined, async (pricing, control, _backend, reuse) => {
     const target = reuse?.quoteGraph ?? pricing;
     const at = { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation };
     let session: StrictProductionRuntimeSession | undefined;
     return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, previous: reuse?.previous,
       touchedStateKeys: reuse?.touchedStateKeys, control, weth: TOKENS[0], gasCostWei: null,
+      disabledEdgeIds: reuse?.disabledEdgeIds,
       enumerationSpreadBps: 50, concurrency: 2,
       prepareQuote: async requiredEdgeIds => { session = await root.createSession({ source: at, runtime: runtime(at),
         fundingAssets: [], kind: "exact", requiredEdgeIds, control }); },
@@ -568,11 +612,11 @@ test("production raw/effective and Solver share source-pinned physical state rea
       } });
   });
   try {
-    const step = async (at: CanonicalSource, parentHash?: string) => {
-      const touched = new Set<string>();
+    const step = async (at: CanonicalSource, parentHash?: string, observed: readonly string[] = []) => {
+      const touched = new Set(observed);
       await coordinator.prepareCoarsePricing({ graph: graph(at), deadlineAtMs: Date.now() + 10_000,
         touchedPools: touched, canonicalActivity: { source: at, parentHash, touchedStateKeys: touched, complete: true } });
-      assert.equal(touched.size, 0);
+      assert.deepEqual([...touched], observed, "the producer must not mutate observed activity");
       return coordinator.latestPricingSnapshot()!;
     };
     const before = await step(SOURCE);
@@ -589,6 +633,51 @@ test("production raw/effective and Solver share source-pinned physical state rea
     }
     assert.equal(physical.length, expectedReads, "new source-bound Solver handles still reuse successful producer bytes");
     const next = { number: 901, hash: ethers.toBeHex(901, 32), generation: 2 };
+    if (!clockSensitive) {
+      const quiet = await step(next, SOURCE.hash);
+      assert.equal(physical.length, expectedReads, "quiet static model needs no new physical state reads");
+      for (const [key, row] of before.effectiveMids!.rows) {
+        assert.strictEqual(quiet.effectiveMids!.rows.get(key), row);
+        assert.equal(quiet.pricingProvenanceByEdgeKey!.get(key), "carried");
+      }
+      const changedSource = { number: 902, hash: ethers.toBeHex(902, 32), generation: 3 };
+      const touched = root.resolveBlockTouchedStateKeys({ kind: "call", target: VAULT, data: "0x" }, changedSource);
+      assert.equal(touched.length, 2, "a Vault call without a decoded event still invalidates both directions");
+      f.values.balancesRaw[1] *= 2n;
+      const changed = await step(changedSource, next.hash, touched);
+      assert.equal(physical.length, expectedReads * 2);
+      for (const [key, row] of changed.effectiveMids!.rows) {
+        assert.equal(row.status, "quoted");
+        assert.deepEqual(row.quotedAt, changedSource);
+        const edge = a.graph.edges.find(item => blockScanEdgeKey(item) === key)!;
+        const route = a.routes.find(item => lower(item.tokenIn) === lower(edge.tokenIn))!;
+        assert.equal(row.amountOut, localQuote(f, a.descriptor, route, row.amountIn!, changedSource).result.amountOut);
+      }
+      f.values.paused = true;
+      const failedSource = { number: 903, hash: ethers.toBeHex(903, 32), generation: 4 };
+      const failed = await step(failedSource, changedSource.hash, touched);
+      for (const row of failed.effectiveMids!.rows.values()) {
+        assert.equal(row.status, row.tokenIn === lower(TOKENS[0]) ? "quote-failed" : "missing-valuation");
+        assert.equal(row.amountOut, null);
+        assert.equal(row.quotedAt, undefined, "pause invalidation must not carry executable stale prices");
+      }
+      // Only the WETH direction was attempted; missing valuation is not a
+      // second failed quote and therefore does not retire this instance.
+      f.values.paused = false;
+      const expirySource = { number: 904, hash: ethers.toBeHex(904, 32), generation: 5 };
+      const readsBeforeExpiry = physical.length;
+      const expired = await step(expirySource, failedSource.hash);
+      assert.equal(physical.length, readsBeforeExpiry, "quiet pause expiry does not introduce automatic retries");
+      for (const [key, row] of failed.effectiveMids!.rows) {
+        assert.strictEqual(expired.effectiveMids!.rows.get(key), row);
+        assert.equal(row.amountOut, null);
+        assert.equal(row.effectiveMid, null);
+        assert(!expired.coverage.resolvedEdgeKeys.includes(key));
+      }
+      const resumed = await step({ number: 905, hash: ethers.toBeHex(905, 32), generation: 6 }, expirySource.hash, touched);
+      assert([...resumed.effectiveMids!.rows.values()].every(row => row.status === "quoted"));
+      return;
+    }
     f.values.rates[1] += WAD / 10n; f.values.amp += 1000n;
     const after = await step(next, SOURCE.hash);
     assert.equal(physical.length, expectedReads * 2, "quiet new source must not reuse stale rates/A");
@@ -604,7 +693,7 @@ test("production raw/effective and Solver share source-pinned physical state rea
       "raw mids remain the frozen startup amount-reference table, not current executable prices");
     assert.equal(failed.effectiveMids!.rows.size, 2);
     for (const row of failed.effectiveMids!.rows.values()) {
-      assert.equal(row.status, "quote-failed");
+      assert.equal(row.status, row.tokenIn === lower(TOKENS[0]) ? "quote-failed" : "missing-valuation");
       assert.equal(row.amountOut, null);
       assert.equal(row.effectiveMid, null);
       assert.equal(row.quotedAt, undefined, "failed rows must not retain executable prices from an earlier source");
@@ -614,5 +703,184 @@ test("production raw/effective and Solver share source-pinned physical state rea
     await Promise.all(backends.map(item => item.closeAndDrain()));
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+}
+
+type PublishedPricing = NonNullable<ReturnType<StrictCurrentRuntimeCoordinator["latestPricingSnapshot"]>>;
+
+// A second genuinely admitted pool supplies token valuation even when the
+// subject's WETH direction fails, so both subject directions can be attempted.
+async function coordinatorFixture(primary = fixture(),
+  support = fixture("weighted-v1", [18, 18], false, OTHER), startupSource = SOURCE) {
+  const fixtures = [primary, support];
+  const admittedPools = await Promise.all(fixtures.map(f => admitted(f, startupSource)));
+  const edges = admittedPools.flatMap(a => a.graph.edges);
+  const primaryEdges = admittedPools[0].graph.edges;
+  const primaryKeys = primaryEdges.map(blockScanEdgeKey);
+  const root = new StrictProductionRuntimeRoot({ catalog: admittedPools[0].catalog, readySource: startupSource,
+    readyGraph: edges, readyInstances: admittedPools.flatMap(a => a.lifecycle.publication!.instances), readyFundingAssets: [] });
+  assert.deepEqual(root.pricingIndex().perBlockRefreshStateKeys, []);
+  const attempts: { source: CanonicalSource; edgeId: string }[] = [];
+  const source = (offset: number): CanonicalSource => ({
+    number: startupSource.number + offset, hash: ethers.toBeHex(startupSource.number + offset, 32),
+    generation: startupSource.generation + offset,
+  });
+  const runtime = (at: CanonicalSource) => createStrictCentralAdapterRuntime({
+    executor: EXECUTOR,
+    generationFence: { assertCurrent(generation, current) {
+      assert.equal(generation, at.generation); assert.deepEqual(current, at);
+    } },
+    provider: {
+      async getCode() { throw new Error("unexpected current-state code read"); },
+      async getStorage() { throw new Error("unexpected current-state storage read"); },
+      async call(tx, block) {
+        assert.equal(block, at.number);
+        if (lower(tx.to) === lower(VAULT)) {
+          const decoded = VAULT_ABI.parseTransaction({ data: tx.data }) ??
+            LOCAL_VAULT_ABI.parseTransaction({ data: tx.data });
+          assert(decoded, "only declared Vault reads are supported");
+          if (decoded.args.length === 0) return primary.answer(tx);
+          const owner = fixtures.find(f => lower(f.pool) === lower(String(decoded.args[0])));
+          assert(owner, "Vault read must bind an admitted fixture pool");
+          return owner.answer(tx);
+        }
+        const owner = fixtures.find(f => lower(f.pool) === lower(tx.to));
+        assert(owner, "only admitted pool parameter reads are supported");
+        return owner.answer(tx);
+      },
+    },
+  });
+  const coordinator = new StrictCurrentRuntimeCoordinator(request => root.createSession({
+    source: request.source, runtime: runtime(request.source), fundingAssets: [],
+    kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+    touchedPools: request.touchedPools, requiredEdgeIds: request.requiredEdgeIds, control: request.control,
+  }), () => {}, undefined, async (pricing, control, _backend, reuse) => {
+    const target = reuse?.quoteGraph ?? pricing;
+    const at = { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation };
+    let session: StrictProductionRuntimeSession | undefined;
+    return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, previous: reuse?.previous,
+      touchedStateKeys: reuse?.touchedStateKeys, disabledEdgeIds: reuse?.disabledEdgeIds,
+      control, weth: TOKENS[0], gasCostWei: null, enumerationSpreadBps: 50, concurrency: 1,
+      prepareQuote: async requiredEdgeIds => {
+        session = await root.createSession({ source: at, runtime: runtime(at),
+          fundingAssets: [], kind: "exact", requiredEdgeIds, control });
+      },
+      quote: async request => {
+        assert(session);
+        attempts.push({ source: at, edgeId: blockScanEdgeKey(request.edge) });
+        const exact = await session.issueExact({ ...request, executor: EXECUTOR, runtimeEvidence: [] });
+        assert("amountIn" in exact); return exact;
+      },
+    });
+  });
+  const step = async (offset: number, vaultTouch = false) => {
+    const at = source(offset);
+    const observed = vaultTouch ? root.resolveBlockTouchedStateKeys({ kind: "call", target: VAULT, data: "0x" }, at) : [];
+    if (vaultTouch) assert.equal(observed.length, edges.length);
+    const touched = new Set(observed);
+    const graph = createVerifiedGraphView({ id: "balancer-failure-fixture-" + at.number, edges,
+      sourceBlock: at.number, sourceBlockHash: at.hash, generation: at.generation,
+      completenessWatermark: at.number, familyIdForEdge: () => plugin.manifest.familyId,
+      perSourceCoverage: [{ familyId: plugin.manifest.familyId, sourceId: "fixture", sourceFingerprint: "local-pricing-failures",
+        completeThroughBlock: at.number, completeThroughHash: at.hash }] });
+    await coordinator.prepareCoarsePricing({ graph, deadlineAtMs: Date.now() + 10_000, touchedPools: touched,
+      canonicalActivity: { source: at, parentHash: ethers.toBeHex(at.number - 1, 32), touchedStateKeys: touched, complete: true } });
+    assert.deepEqual([...touched], observed);
+    const snapshot = coordinator.latestPricingSnapshot();
+    assert(snapshot?.effectiveMids?.complete);
+    return snapshot;
+  };
+  const rows = (snapshot: PublishedPricing) => primaryKeys.map(key => snapshot.effectiveMids!.rows.get(key)!);
+  const attemptedPrimaryKeys = () => attempts.filter(attempt => primaryKeys.includes(attempt.edgeId)).map(attempt => attempt.edgeId).sort();
+  const poolData = LOCAL_VAULT_ABI.encodeFunctionData("getPoolData", [primary.pool]);
+  const primaryStateReadCount = () => primary.calls.filter(call => call.data === poolData).length;
+  return { primary, support, source, step, rows, primaryKeys, attempts, attemptedPrimaryKeys, primaryStateReadCount };
+}
+
+test("production coordinator retires fully attempted all-failed pools until a new live startup", async () => {
+  const h = await coordinatorFixture();
+  const before = await h.step(0);
+  assert(h.rows(before).every(row => row.status === "quoted"));
+  h.attempts.length = 0;
+  h.primary.values.failLocalData = true;
+  const failed = await h.step(1, true);
+  assert.deepEqual(h.attemptedPrimaryKeys(), [...h.primaryKeys].sort(), "both directions actually attempted Exact");
+  for (const row of h.rows(failed)) {
+    assert.equal(row.status, "quote-failed");
+    assert(row.amountIn !== null && row.amountIn > 0n, "missing valuation cannot stand in for a failed attempt");
+    assert.equal(row.amountOut, null);
+    assert.equal(row.effectiveMid, null);
+    assert.equal(row.quotedAt, undefined);
+  }
+  assert([...failed.effectiveMids!.rows.values()].filter(row => !h.primaryKeys.includes(row.edgeId))
+    .every(row => row.status === "quoted"), "independent valuation remains available");
+
+  h.primary.values.failLocalData = false;
+  h.attempts.length = 0;
+  const readsAfterFailure = h.primaryStateReadCount();
+  for (const [offset, touch] of [[2, false], [3, true], [4, false]] as const) {
+    const retired = await h.step(offset, touch);
+    for (const row of h.rows(retired)) {
+      assert.equal(row.status, "disabled-for-run");
+      assert.equal(row.amountOut, null);
+      assert.equal(row.effectiveMid, null);
+      assert.equal(row.quotedAt, undefined);
+      assert(retired.coverage.unavailableEdgeKeys.includes(row.edgeId));
+      assert(!retired.coverage.resolvedEdgeKeys.includes(row.edgeId));
+    }
+    assert.deepEqual(h.attemptedPrimaryKeys(), [], "restored reads and Vault touches must not retry a retired pool");
+    assert.equal(h.primaryStateReadCount(), readsAfterFailure);
+  }
+  const restarted = await coordinatorFixture(h.primary, h.support, h.source(5));
+  const recovered = await restarted.step(0);
+  assert.deepEqual(restarted.attemptedPrimaryKeys(), [...restarted.primaryKeys].sort());
+  for (const row of restarted.rows(recovered)) {
+    assert.equal(row.status, "quoted");
+    assert(row.amountOut !== null && row.amountOut > 0n);
+    assert.deepEqual(row.quotedAt, h.source(5));
+  }
+});
+
+test("production coordinator carries partial failed rows safely and refreshes eligible directions on touch", async () => {
+  const h = await coordinatorFixture();
+  const before = await h.step(0);
+  const originalBalance = h.primary.values.balancesRaw[0];
+  // A real local MaxInRatio failure in WETH->token; the independent pool
+  // values token input, so token->WETH can still quote successfully.
+  h.primary.values.balancesRaw[0] = before.effectiveMids!.referenceWethInput;
+  h.attempts.length = 0;
+  const partial = await h.step(1, true);
+  assert.deepEqual(h.attemptedPrimaryKeys(), [...h.primaryKeys].sort());
+  const failed = h.rows(partial).find(row => row.tokenIn === lower(TOKENS[0]))!;
+  const successful = h.rows(partial).find(row => row.tokenIn === lower(TOKENS[1]))!;
+  assert.equal(failed.status, "quote-failed");
+  assert(failed.amountIn !== null && failed.amountIn > 0n);
+  assert.equal(successful.status, "quoted");
+  assert(successful.amountOut !== null && successful.amountOut > 0n);
+  h.attempts.length = 0;
+  const readsAfterPartial = h.primaryStateReadCount();
+  const quiet = await h.step(2);
+  assert.strictEqual(quiet.effectiveMids!.rows.get(failed.edgeId), failed);
+  assert.equal(failed.amountOut, null);
+  assert.equal(failed.effectiveMid, null);
+  assert.equal(failed.quotedAt, undefined);
+  assert(quiet.coverage.unresolvedEdgeKeys.includes(failed.edgeId));
+  assert(!quiet.coverage.resolvedEdgeKeys.includes(failed.edgeId));
+  assert.strictEqual(quiet.effectiveMids!.rows.get(successful.edgeId), successful);
+  assert.equal(quiet.pricingProvenanceByEdgeKey!.get(successful.edgeId), "carried");
+  assert(quiet.coverage.resolvedEdgeKeys.includes(successful.edgeId));
+  assert.deepEqual(h.attemptedPrimaryKeys(), [], "partial failure does not introduce quiet retries");
+  assert.equal(h.primaryStateReadCount(), readsAfterPartial);
+
+  h.primary.values.balancesRaw[0] = originalBalance;
+  const refreshed = await h.step(3, true);
+  assert.deepEqual(h.attemptedPrimaryKeys(), [...h.primaryKeys].sort(), "a successful direction kept the instance eligible");
+  for (const row of h.rows(refreshed)) {
+    assert.equal(row.status, "quoted");
+    assert(row.amountOut !== null && row.amountOut > 0n);
+    assert.deepEqual(row.quotedAt, h.source(3));
+    assert.equal(refreshed.pricingProvenanceByEdgeKey!.get(row.edgeId), "refreshed");
+    assert.notStrictEqual(row, quiet.effectiveMids!.rows.get(row.edgeId));
   }
 });

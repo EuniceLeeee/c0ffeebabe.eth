@@ -91,7 +91,10 @@ export class PrerequisiteCache {
   private counts = { replayed: 0, recorded: 0, forwarded: 0, measured: 0, misses: 0, throttled: 0 };
   private readonly active = new Set<Promise<void>>();
   private readonly controllers = new Set<AbortController>();
-  private readonly server = createServer((request, response) => {
+  // Ready restoration can block the local event loop beyond the default idle
+  // timeout. Keep these loopback sockets until explicit close(), which destroys
+  // idle connections as well as in-flight requests; live never imports this cache.
+  private readonly server = createServer({ keepAliveTimeout: 0 }, (request, response) => {
     const phase = this.phase; // Requests retain their dispatch phase across a boundary.
     const controller = new AbortController();
     this.controllers.add(controller);

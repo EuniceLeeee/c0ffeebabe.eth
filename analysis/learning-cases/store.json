@@ -1,6 +1,41 @@
 {
   "cases": [
     {
+      "learning_case_id": "tooldef-20261007-prerequisite-cache-idle-socket-reset",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "diagnostic_prerequisite_restore_reused_expired_loopback_connection",
+      "evidence": {
+        "failedRuns": [
+          "logs/family-latency-20261007/combined/baseline-effective/failure.json",
+          "logs/family-latency-20261007/combined/baseline-effective-remaining/failure.json"
+        ],
+        "observation": "Both attempts completed the first three measured heads, then failed during untimed repetition-two prerequisite restoration with ECONNRESET, no cache misses and no cache health fault. Failed attempts remain separate, not combined with later successful runs.",
+        "regressionBefore": "logs/family-runtime-acceptance/cache-keepalive-before.log: actual PrerequisiteCache + keep-alive Agent + 6.5s synchronous event-loop stall reproduces ECONNRESET.",
+        "regressionAfter": "logs/family-runtime-acceptance/cache-transport-after.log: all 60 tests passed; same request contents, pinning/hash checks, replay isolation, measured forwarding and bounded cleanup remain.",
+        "independentReview": {
+          "agent": "01a11519-74f4-7780-ad82-4cdac58a7bd0",
+          "verdict": "Narrow benchmark transport fix justified. Actual repeated benchmark still requires separate validation; no live latency claim."
+        },
+        "scope": "Loopback benchmark cache only; production live never imports it."
+      },
+      "tooling_defect": {
+        "tool": "listener/benchmarks/prerequisite-cache.ts",
+        "issue": "Default HTTP keep-alive expiry races with long synchronous Ready restoration in the same event loop, resetting a previously healthy reusable connection before request handling.",
+        "evidence": "Deterministic actual-cache failure before fix and 60/60 regression pass after keepAliveTimeout=0, including closure while the client agent still retains an idle socket.",
+        "codify_target": "listener/benchmarks/prerequisite-cache.ts and prerequisite-cache.test.ts: disable local idle expiry, retain explicit abort/drain/close, test real persistent connection across blocked restoration.",
+        "status": "open"
+      },
+      "created_at": "2026-10-07T07:14:41Z",
+      "updated_at": "2026-10-07T07:14:41Z"
+    },
+    {
       "learning_case_id": "tooldef-20260706-share-token-venue-check",
       "status": "manual_required",
       "strategy_kind": "block-scan",

@@ -17,6 +17,7 @@ import {
 import type { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import { createHash } from "node:crypto";
 import { ethers } from "ethers";
+import { getEthersCallRpcError, isRpcThrottleError } from "./rpc-throttle-guard.js";
 import {
   createBoundedRequestExecutor,
   physicalAdapterRequestFingerprint,
@@ -700,6 +701,9 @@ async function executeRequest(
           // it as reverted-as-declared so the family decode can reject or
           // accept on its own semantics. Transport failures without a revert
           // shape (deadline, node errors, rate limits) stay unresolved/rpc.
+          // An ethers wrapper alone is not proof of EVM execution. Keep the
+          // original provider failure in the bounded transport retry path.
+          if (getEthersCallRpcError(error) !== undefined && !isCallException(error)) throw error;
           const revertData = extractStrictRevertData(error);
           if (revertData !== null || isCallException(error)) {
             return {
@@ -906,15 +910,20 @@ async function executeRequest(
 }
 
 function isCallException(error: unknown): boolean {
-  return typeof error === "object" && error !== null &&
-    (error as { readonly code?: unknown }).code === "CALL_EXCEPTION";
+  if (typeof error !== "object" || error === null ||
+    (error as { readonly code?: unknown }).code !== "CALL_EXCEPTION") return false;
+  const rpc = getEthersCallRpcError(error);
+  // In-process simulator reverts retain their existing explicit contract.
+  if (rpc === undefined) return true;
+  return !isRpcThrottleError(rpc) && (rpc.code === 3 ||
+    typeof rpc.message === "string" && /\bexecution revert(?:ed)?\b/i.test(rpc.message));
 }
 
 /**
  * One bounded retry for transport-level RPC failures (timeouts, node
  * overload, rate limits). Declared reverts never retry: they are evidence.
- * A CALL_EXCEPTION on a return-data request is a semantic revert and is also
- * not retried, so a genuinely reverting read cannot double RPC load.
+ * A genuine execution revert on a return-data request is not retried either;
+ * ethers-wrapped provider errors retain their original transport semantics.
  */
 async function withRpcRetry<T>(
   work: () => Promise<T>,

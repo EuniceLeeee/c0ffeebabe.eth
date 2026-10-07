@@ -1,9 +1,25 @@
 import type { StateBackend } from "../shared/state/state-backend.js";
 
+type RpcErrorShape = { code?: unknown; data?: unknown; message?: unknown };
+
+/** ethers labels every JSON-RPC eth_call error CALL_EXCEPTION, including 429
+ * and provider failures. Only its structured original error supplies evidence. */
+export function getEthersCallRpcError(error: unknown): RpcErrorShape | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const item = error as { code?: unknown; info?: { error?: unknown; payload?: { method?: unknown } } };
+  const method = item.info?.payload?.method;
+  const inner = item.info?.error;
+  return item.code === "CALL_EXCEPTION" && (method === "eth_call" || method === "eth_estimateGas") &&
+    inner !== null && typeof inner === "object" ? inner as RpcErrorShape : undefined;
+}
+
+
 export function isRpcThrottleError(error: unknown): boolean {
   let cause: unknown = error;
   for (let depth = 0; depth < 8 && cause; depth++) {
     const item = cause as { code?: unknown; data?: unknown; status?: unknown; statusCode?: unknown; message?: unknown; cause?: unknown };
+    const rpcError = getEthersCallRpcError(cause);
+    if (rpcError !== undefined) { cause = rpcError; continue; }
     // Contract revert text is not evidence of transport throttling.
     if (item.code === 3 || item.code === "CALL_EXCEPTION" ||
         (item.code === -32000 && typeof item.data === "string" && /^0x[0-9a-f]*$/i.test(item.data))) return false;
@@ -26,6 +42,8 @@ export function isRpcQuotaExhaustedError(error: unknown): boolean {
   if (!isRpcThrottleError(error)) return false;
   let cause: unknown = error;
   for (let depth = 0; depth < 8 && cause; depth++) {
+    const rpcError = getEthersCallRpcError(cause);
+    if (rpcError !== undefined) { cause = rpcError; continue; }
     const item = cause as { code?: unknown; status?: unknown; statusCode?: unknown; message?: unknown; cause?: unknown };
     const message = typeof item.message === "string" ? item.message : String(cause);
     if (item.code !== 429 && item.status !== 429 && item.statusCode !== 429 &&

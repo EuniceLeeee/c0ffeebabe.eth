@@ -34,11 +34,15 @@ function clone<T>(value: T): T {
   ) as T;
   return value;
 }
-function definition(refreshPolicy?: "on-touch" | "each-block") {
+type RefreshPolicy = "on-touch" | "each-block" | ((input: {
+  readonly descriptor: object; readonly routes: readonly unknown[];
+}) => "on-touch" | "each-block");
+function definition(refreshPolicy?: RefreshPolicy) {
   return defineSwapFamily({
     ...clone(productionPlugin),
     actionAdapters: productionPlugin.actionAdapters,
-    pricing: { ...clone(productionPlugin.pricing), ...(refreshPolicy ? { refreshPolicy } : {}) },
+    pricing: { ...clone(productionPlugin.pricing), ...(typeof refreshPolicy === "function"
+      ? { refreshPolicyForInstance: refreshPolicy } : refreshPolicy ? { refreshPolicy } : {}) },
   });
 }
 assert.throws(() => defineSwapFamily({
@@ -47,7 +51,15 @@ assert.throws(() => defineSwapFamily({
   pricing: { ...clone(productionPlugin.pricing), refreshPolicy: "invalid" as "each-block" },
 }), /refreshPolicy/);
 
-for (const policy of [undefined, "on-touch", "each-block"] as const) {
+assert.throws(() => definition((async () => "each-block") as unknown as RefreshPolicy), /synchronous|async/i);
+
+for (const declared of [undefined, "on-touch", "each-block"] as const) for (const callable of [false, true]) {
+  let invalid = false;
+  const policy: RefreshPolicy | undefined = callable ? ({ descriptor, routes }) => {
+    assert.equal(Reflect.get(descriptor, "pool"), pool);
+    assert.equal(routes.length, 2);
+    return invalid ? "invalid" as "each-block" : declared ?? "on-touch";
+  } : declared;
   const plugin = definition(policy);
   const entries = FAMILY_CAPABILITY_NAMES.map(capability => ({
     familyId: plugin.manifest.familyId, capability, contractVersion: "refresh-fixture-v1",
@@ -69,7 +81,13 @@ for (const policy of [undefined, "on-touch", "each-block"] as const) {
       route, handle: instance.routeHandles[i] }))) }).edges;
   const root = new StrictProductionRuntimeRoot({ catalog, readySource: start,
     readyGraph: edges, readyInstances: ready.instances, readyFundingAssets: [] });
-  const eachBlock = policy === "each-block";
+  if (callable) {
+    invalid = true;
+    assert.throws(() => new StrictProductionRuntimeRoot({ catalog, readySource: start,
+      readyGraph: edges, readyInstances: ready.instances, readyFundingAssets: [] }), /invalid policy/);
+    invalid = false;
+  }
+  const eachBlock = declared === "each-block";
   const stateKey = root.pricingIndex().stateKeyByEdgeKey.get(blockScanEdgeKey(edges[0]!))!;
   assert.deepEqual(root.pricingIndex().perBlockRefreshStateKeys, eachBlock ? [stateKey] : []);
   const graph = (at: CanonicalSource) => createVerifiedGraphView({
