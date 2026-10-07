@@ -133,8 +133,8 @@ function guards(input: Input, results: readonly AdapterRequestResult[]): CurveUn
 function needsComposedWithdrawal(input: Input): boolean {
   return input.route.i === 0 && binding(input).metaRateMultiplier % (10n ** 18n) !== 0n;
 }
-function baseState(input: Input, results: readonly AdapterRequestResult[]): ClassicBasePoolState {
-  const model = guards(input, results);
+function baseState(input: Input, results: readonly AdapterRequestResult[],
+  model: CurveUnderlyingClassicMetaBinding): ClassicBasePoolState {
   return {
     balances: model.baseCoins.map((_coin, index) => uint(read(input, results, "classic-base-balance:" + index))),
     precisions: model.basePrecisions,
@@ -158,7 +158,8 @@ export function classicUnderlyingQuoteNextRound(input: Input, completedRound: nu
       [call(WITHDRAWAL, model.basePool, "calc_withdraw_one_coin", [lp, input.route.j - 1])]);
   }
   if (input.route.i === 0 || input.route.j !== 0) return null;
-  const amountLP = classicBaseMintAmount(baseState(input, initialResults), input.route.i - 1, input.amountIn);
+  const model = guards(input, initialResults);
+  const amountLP = classicBaseMintAmount(baseState(input, initialResults, model), input.route.i - 1, input.amountIn);
   if (amountLP <= 0n) throw new Error("curve-underlying base deposit produces no LP");
   return bindRequestResultRound({ transports: ["eth-call"] },
     [call(QUOTE, input.descriptor.pool, "get_dy", [1, 0, amountLP])]);
@@ -166,7 +167,7 @@ export function classicUnderlyingQuoteNextRound(input: Input, completedRound: nu
 
 export function decodeClassicUnderlyingQuote(input: Input, initialResults: readonly AdapterRequestResult[],
   dependentEvidence: readonly unknown[]): bigint {
-  guards(input, initialResults);
+  const model = guards(input, initialResults);
   const results = collectRequestProgramResults(initialResults, dependentEvidence);
   if (needsComposedWithdrawal(input)) {
     if (uint(read(input, initialResults, QUOTE)) <= 0n || dependentEvidence.length !== 1) {
@@ -176,11 +177,11 @@ export function decodeClassicUnderlyingQuote(input: Input, initialResults: reado
   }
   if (input.route.i > 0 && input.route.j > 0) {
     if (dependentEvidence.length !== 0) throw new Error("curve-underlying unexpected base exchange round");
-    return classicBaseExchangeAmount(baseState(input, initialResults), input.route.i - 1, input.route.j - 1, input.amountIn);
+    return classicBaseExchangeAmount(baseState(input, initialResults, model), input.route.i - 1, input.route.j - 1, input.amountIn);
   }
   if (input.route.i > 0) {
     // Revalidate amount/state even when consuming already completed dependent evidence.
-    const minted = classicBaseMintAmount(baseState(input, initialResults), input.route.i - 1, input.amountIn);
+    const minted = classicBaseMintAmount(baseState(input, initialResults, model), input.route.i - 1, input.amountIn);
     if (minted <= 0n || dependentEvidence.length !== 1) throw new Error("curve-underlying missing actual-mint quote round");
   } else if (dependentEvidence.length !== 0) throw new Error("curve-underlying unexpected meta withdrawal round");
   return uint(read(input, results, QUOTE));

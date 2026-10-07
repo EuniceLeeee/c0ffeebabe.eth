@@ -120,3 +120,20 @@ export function curveUnderlyingAcceptMutation(observation: UnifiedObservation): 
   return !sameAddress(observation.address, BASE_COINS[2]) ||
     USDT_CONTROL_TOPICS.has(observation.topics[0]?.toLowerCase() ?? "");
 }
+
+const LP_TRANSFER = ethers.id("Transfer(address,address,uint256)").toLowerCase();
+const LP_APPROVAL = ethers.id("Approval(address,address,uint256)").toLowerCase();
+const ZERO_TOPIC = ethers.zeroPadValue(ethers.ZeroAddress, 32).toLowerCase();
+
+/** Only for the bound 3pool LP dependency: quotes read its total supply,
+ * not holder balances/allowances. Its verified Vyper 0.2.4 mint/burn paths
+ * emit zero-address Transfer; keep those, unknown and malformed events. */
+export function curveUnderlyingAcceptLpMutation(observation: UnifiedObservation): boolean {
+  if (observation.kind !== "log") return false;
+  const topic = observation.topics[0]?.toLowerCase();
+  if (topic !== LP_TRANSFER && topic !== LP_APPROVAL) return true;
+  if (observation.topics.length !== 3 || !/^0x[0-9a-fA-F]{64}$/.test(observation.data) ||
+      !observation.topics.slice(1).every(value => /^0x0{24}[0-9a-fA-F]{40}$/.test(value))) return true;
+  if (topic === LP_APPROVAL) return false;
+  return observation.topics.slice(1).some(value => value.toLowerCase() === ZERO_TOPIC);
+}

@@ -216,3 +216,109 @@ test("active base/meta ramps cannot be carried by on-touch pricing", () => {
     assert.throws(() => quote(input, results => results.map(r => r.id === id ? output(id, ethers.toBeHex(123, 32)) : r)), /active A ramp/);
   }
 });
+
+test("each decode validates code bindings once for every saved direction and amount", () => {
+  const ids = ["classic-pool-code", "classic-implementation-code", "classic-base-code"];
+  for (const sample of fixture.samples) {
+    const input = invocation(sample), m = method(input);
+    const reads = new Map<string, number>();
+    const initial = m.program.buildRequests(input).map(answer).map(result => {
+      assert(result.ok);
+      if (!ids.includes(result.id)) return result;
+      return { ...result, get data() {
+        reads.set(result.id, (reads.get(result.id) ?? 0) + 1);
+        return result.data;
+      } };
+    });
+    const buildNext = m.program.buildDependentProgram;
+    assert(buildNext);
+    const next = buildNext({ programInput: input, completedRound: 0,
+      initialResults: initial, priorEvidence: [] });
+    const dependentEvidence = next ? [next.decode(next.requests.map(answer))] : [];
+    for (const id of ids) {
+      assert.equal(reads.get(id) ?? 0, sample.i > 0 && sample.j === 0 ? 1 : 0,
+        "NextRound must perform its own guards when preparing the actual-mint quote");
+    }
+    // Repeat with the same objects: validation must be per decode, not cached by identity.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      reads.clear();
+      const result = m.program.decode({ programInput: input, initialResults: initial, dependentEvidence });
+      assert.equal(result.amountOut, BigInt(sample.actual));
+      assert.equal(result.evidence.amountIn, input.amountIn);
+      for (const id of ids) {
+        assert.equal(reads.get(id), 1,
+          sample.i + "->" + sample.j + " " + sample.multiplier + "P " + id + " decode " + attempt);
+      }
+    }
+  }
+});
+
+test("decode and NextRound independently reject evidence corrupted after a valid dependent round", () => {
+  for (const sample of fixture.samples.filter((s: any) => s.i > 0 && s.j === 0)) {
+    const input = invocation(sample), m = method(input);
+    const initial = m.program.buildRequests(input).map(answer);
+    const buildNext = m.program.buildDependentProgram;
+    assert(buildNext);
+    const nextInput = { programInput: input, completedRound: 0, initialResults: initial, priorEvidence: [] };
+    const next = buildNext(nextInput);
+    assert(next);
+    const dependentEvidence = [next.decode(next.requests.map(answer))];
+    const decode = () => m.program.decode({ programInput: input, initialResults: initial, dependentEvidence });
+    assert.equal(decode().amountOut, BigInt(sample.actual));
+    const replace = (id: string, data: string) => {
+      const index = initial.findIndex(result => result.id === id);
+      assert(index >= 0, "required evidence " + id);
+      initial[index] = output(id, data);
+    };
+    const rejectChanged = (change: () => void, expected: RegExp) => {
+      const saved = initial.slice();
+      try {
+        // Keep the same input/array/evidence identities across the phase boundary.
+        change();
+        assert.throws(decode, expected);
+        assert.throws(() => buildNext(nextInput), expected);
+      } finally {
+        initial.splice(0, initial.length, ...saved);
+      }
+      assert.equal(decode().amountOut, BigInt(sample.actual));
+    };
+    for (const id of ["classic-pool-code", "classic-implementation-code", "classic-base-code"]) {
+      rejectChanged(() => replace(id, "0x6000"), /implementation changed/);
+    }
+    for (const id of ["classic-meta-coin", "classic-meta-lp"]) {
+      rejectChanged(() => replace(id, ethers.toBeHex(99, 32)), /topology changed/);
+    }
+    rejectChanged(() => replace("classic-meta-rate", ethers.toBeHex(99, 32)), /rate binding changed/);
+    for (const id of ["classic-base-future-A", "classic-meta-future-A"]) {
+      rejectChanged(() => replace(id, ethers.toBeHex(1n << 128n, 32)), /active A ramp/);
+    }
+    for (const id of ["classic-base-A", "classic-base-fee", "classic-base-supply", "classic-base-balance:0"]) {
+      rejectChanged(() => replace(id, "0x01"), /malformed uint256/);
+    }
+    for (const changedSource of [
+      { ...source, number: source.number + 1 },
+      { ...source, hash: ethers.ZeroHash },
+      { ...source, generation: source.generation + 1 },
+    ]) {
+      rejectChanged(() => { initial[0] = { ...initial[0], source: changedSource }; }, /source mismatch/);
+    }
+    rejectChanged(() => { initial.splice(0, 1); }, /missing/);
+    rejectChanged(() => {
+      initial[0] = { id: initial[0].id, source, ok: false, failure: "rpc" };
+    }, /unresolved/);
+    rejectChanged(() => {
+      const first = initial[0];
+      assert(first.ok);
+      initial[0] = { ...first, completion: "reverted-as-declared" };
+    }, /unexpectedly completed by revert/);
+    if (sample.i === 3) {
+      for (const id of ["classic-usdt-paused", "classic-usdt-deprecated"]) {
+        rejectChanged(() => replace(id, ethers.toBeHex(1, 32)), /transfer mode/);
+      }
+      rejectChanged(() => {
+        replace("classic-usdt-basisPointsRate", ethers.toBeHex(1, 32));
+        replace("classic-usdt-maximumFee", ethers.toBeHex(1, 32));
+      }, /transfer mode/);
+    }
+  }
+});

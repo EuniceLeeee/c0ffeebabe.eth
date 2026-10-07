@@ -1,4 +1,4 @@
-import { curveUnderlyingAcceptBaseCall, curveUnderlyingAcceptMutation, curveUnderlyingQuoteModelProjection, curveUnderlyingRefreshAddresses } from "./quote-model.js";
+import { curveUnderlyingAcceptBaseCall, curveUnderlyingAcceptLpMutation, curveUnderlyingAcceptMutation, curveUnderlyingQuoteModelProjection, curveUnderlyingRefreshAddresses } from "./quote-model.js";
 import { compileAddressMutations } from "../../mutation-index.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import type { TokenEdge } from "../../../planner/token-graph.js";
@@ -203,16 +203,28 @@ export const curveUnderlyingPricing = {
   mutation: {
     compile: ({ entries }) => {
       const logs = compileAddressMutations(entries, ({ descriptor, routes }) => ({
-        addresses: curveUnderlyingRefreshAddresses(descriptor), keys: routes.map(route => route.routeKey),
+        addresses: curveUnderlyingRefreshAddresses(descriptor).filter(address => !descriptor.quoteModel ||
+          !sameAddress(address, descriptor.quoteModel.baseLPToken)),
+        keys: routes.map(route => route.routeKey),
       }), { kinds: ["log"], accept: curveUnderlyingAcceptMutation });
+      const lp = compileAddressMutations(entries, ({ descriptor, routes }) => ({
+        addresses: descriptor.quoteModel ? [descriptor.quoteModel.baseLPToken] : [],
+        keys: routes.map(route => route.routeKey),
+      }), { kinds: ["log"], accept: curveUnderlyingAcceptLpMutation });
       const calls = compileAddressMutations(entries, ({ descriptor, routes }) => ({
         addresses: descriptor.quoteModel ? [descriptor.quoteModel.basePool] : [],
         keys: routes.map(route => route.routeKey),
       }), { kinds: ["call"], accept: curveUnderlyingAcceptBaseCall });
       return Object.freeze({
-        dependencies: Object.freeze([...new Set([...logs.dependencies, ...calls.dependencies])]),
-        affectedStateKeys: ({ observation }: Parameters<typeof logs.affectedStateKeys>[0]) => observation.kind === "call"
-          ? calls.affectedStateKeys({ observation }) : logs.affectedStateKeys({ observation }),
+        dependencies: Object.freeze([...new Set([...logs.dependencies, ...lp.dependencies, ...calls.dependencies])]),
+        affectedStateKeys: ({ observation }: Parameters<typeof logs.affectedStateKeys>[0]) => {
+          if (observation.kind === "call") return calls.affectedStateKeys({ observation });
+          const logKeys = logs.affectedStateKeys({ observation });
+          const lpKeys = lp.affectedStateKeys({ observation });
+          if (lpKeys.length === 0) return logKeys;
+          if (logKeys.length === 0) return lpKeys;
+          return Object.freeze([...new Set([...logKeys, ...lpKeys])]);
+        },
       });
     },
     affectedStateKeys({ descriptor, routes, observation }) {
@@ -221,6 +233,9 @@ export const curveUnderlyingPricing = {
           sameAddress(observation.target, descriptor.quoteModel.basePool)
           ? Object.freeze(routes.map(route => route.routeKey)) : [];
       }
+      if (observation.kind === "log" && descriptor.quoteModel &&
+          sameAddress(observation.address, descriptor.quoteModel.baseLPToken) &&
+          !curveUnderlyingAcceptLpMutation(observation)) return [];
       if (
         observation.kind !== "log" || !curveUnderlyingAcceptMutation(observation) ||
         !curveUnderlyingRefreshAddresses(descriptor).some(address => sameAddress(observation.address, address))

@@ -286,3 +286,56 @@ test("a failed donation refresh cannot republish the old quote, including the ne
   assert.equal(clean.row.status, "quote-failed"); assert.equal(clean.row.amountOut, null);
   assert.equal(clean.row.quotedAt, undefined);
 });
+
+test("bound LP ordinary transfers and approvals carry quotes; mint/burn and unknown events refresh", async () => {
+  const h = await setup(), before = await h.step();
+  const address = h.descriptor.quoteModel!.baseLPToken;
+  const actor = ethers.zeroPadValue(ACTOR, 32), other = ethers.zeroPadValue(OTHER, 32);
+  const zero = ethers.zeroPadValue(ethers.ZeroAddress, 32);
+  for (const topics of [[TRANSFER, actor, other], [ethers.id("Approval(address,address,uint256)"), actor, other]]) {
+    const next = await h.step({ kind: "log", address, topics, data: word(1n) });
+    assert(!next.touched.has(h.route.routeKey.toLowerCase()), "LP activity must not dirty this Family's price state");
+    assert.deepEqual(next.calls, [], "ordinary LP balance/allowance changes must not issue any quote");
+    assert.strictEqual(next.row, before.row);
+  }
+  for (const topics of [[TRANSFER, zero, actor], [TRANSFER, actor, zero], [ethers.id("UnknownLpStateChange()")],
+    [TRANSFER], [TRANSFER, word((1n << 160n) + 1n), other]]) {
+    const next = await h.step({ kind: "log", address, topics, data: word(1n) });
+    assert(next.touched.has(h.route.routeKey.toLowerCase()));
+    assert(next.calls.includes(h.key));
+    assert.equal(next.row.status, "quoted");
+    assert.deepEqual(next.row.quotedAt, next.source);
+  }
+  const malformed = await h.step({ kind: "log", address, topics: [TRANSFER, actor, other], data: "0x01" });
+  assert(malformed.touched.has(h.route.routeKey.toLowerCase()));
+  assert(malformed.calls.includes(h.key));
+});
+
+test("LP filtering remains bound-model-only and compiled/uncompiled mutation agree", async () => {
+  const h = await setup();
+  const address = h.descriptor.quoteModel!.baseLPToken;
+  const unknown: CurveUnderlyingDescriptor = { ...h.descriptor, quoteModel: undefined,
+    pool: address, instanceKey: instanceKey(address.toLowerCase()) };
+  const mutation = plugin.pricing.mutation; assert(mutation?.compile);
+  const entries = [h.descriptor, unknown].map(descriptor => {
+    const route = plugin.routes.project({ descriptor })[0];
+    const pd = plugin.pricing.finalizePricingDescriptor({ sharedBindings: [],
+      draft: plugin.pricing.compileDraft({ descriptor, routes: [route], stateKey: route.routeKey }) });
+    return { descriptor: pd, routes: [route], stateKey: route.routeKey,
+      dependencies: plugin.pricing.dependencies({ descriptor: pd, routes: [route] }) };
+  });
+  const index = mutation.compile({ entries });
+  const ordinary: UnifiedObservation = { kind: "log", source: START, address,
+    topics: [TRANSFER, ethers.zeroPadValue(ACTOR, 32), ethers.zeroPadValue(OTHER, 32)], data: word(1n) };
+  assert.deepEqual(mutation.affectedStateKeys({ ...entries[0], observation: ordinary }), []);
+  assert.deepEqual(mutation.affectedStateKeys({ ...entries[1], observation: ordinary }), [entries[1].stateKey]);
+  assert.deepEqual(index.affectedStateKeys({ observation: ordinary }), [entries[1].stateKey.toLowerCase()]);
+  for (const topics of [[TRANSFER, ethers.zeroPadValue(ethers.ZeroAddress, 32), ethers.zeroPadValue(ACTOR, 32)],
+    [ethers.id("UnknownLpStateChange()")], [TRANSFER]]) {
+    const observation: UnifiedObservation = { ...ordinary, topics };
+    const direct: string[] = [...new Set(entries.flatMap((entry): readonly string[] =>
+      mutation.affectedStateKeys({ ...entry, observation })).map(k => k.toLowerCase()))];
+    assert.deepEqual(new Set(index.affectedStateKeys({ observation })), new Set(direct));
+    assert.equal(direct.length, 2);
+  }
+});
