@@ -3,6 +3,8 @@
 // production requirement materializer and standing-allowance semantics.
 // Not a Ready writer, full-route sim,
 // original-TX replay, latency benchmark, or adapter/production acceptance gate.
+import { curveHistoricalAmounts } from "./historical-amounts.js";
+import { curveHistoricalHeader } from "./historical-price-input.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -57,19 +59,22 @@ function sourcePin(name: string) {
     .split("\0").filter(p => /\.(ts|sol)$/.test(p) && !p.includes("/test/")).sort();
   return { sourceSha256: sha(files.map(p => `${p}\0${sha(readFileSync(resolve(ROOT, p)))}`).join("\n")),
     fileCount: files.length, testSha256: sha(readFileSync(SELF)),
+    testInputHelperSha256: sha(readFileSync(new URL("./historical-amounts.ts", import.meta.url))),
+    testPriceInputHelperSha256: sha(readFileSync(new URL("./historical-price-input.ts", import.meta.url))),
     artifactSha256: sha(readFileSync(resolve(ROOT, "out/BotVM.sol/BotVM.json"))),
     familyDefinitionHash: familyDefinitionHash(name), familyMemoDefinitionHash: familyMemoDefinitionHash(name) };
 }
 
 function options(argv: string[]) {
   const names = ["--ready", "--prices", "--pool", "--family", "--rpc-file", "--out", "--port"];
+  const allowedNames = [...names, "--reference-executions", "--price-input"];
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
-    assert(names.includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
+    assert(allowedNames.includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
     assert(argv[i + 1] && !argv[i + 1].startsWith("--"), "missing option value");
     values.set(argv[i], argv[i + 1]);
   }
-  assert.equal(values.size, names.length, "required: --ready --prices --pool --family --rpc-file --out --port");
+  assert(names.every(name => values.has(name)), "required: --ready --prices --pool --family --rpc-file --out --port");
   assert.equal(values.get("--port"), "8591", "this narrow test owns only loopback port 8591");
   const name = values.get("--family")!;
   assert(name === "curve-plain" || name === "curve-underlying", "only the two Curve families are in scope");
@@ -79,6 +84,8 @@ function options(argv: string[]) {
   assert(!existsSync(out), "output exists; choose a new receipt path (never overwrite failures)");
   assert.equal(git("check-ignore", "--", out).trim(), out, "output must be gitignored");
   return { ready: realpathSync(values.get("--ready")!), prices: realpathSync(values.get("--prices")!),
+    priceInput: values.has("--price-input") ? realpathSync(values.get("--price-input")!) : undefined,
+    reference: values.has("--reference-executions") ? realpathSync(values.get("--reference-executions")!) : undefined,
     name, rpcFile: realpathSync(values.get("--rpc-file")!), pool: lower(ethers.getAddress(
       values.get("--pool")!.startsWith("0x") ? values.get("--pool")! : `0x${values.get("--pool")!}`)), out };
 }
@@ -119,6 +126,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   // Reserve before any fork; write once in finally, including failed attempts.
   const fd = openSync(args.out, "wx", 0o600);
   const report: Record<string, any> = { schemaVersion: 1, result: "failed", pool: args.pool,
+    limits: { loopbackReadCalls: 2000, wallMs: 480000 },
     claim: "Family-local single-leg quote/old-fragment/runtime-program parity at N; NOT full-route sim, original-TX replay, latency or merge acceptance",
     actor: { executor: EXECUTOR, owner: OWNER }, samples: [], errors: [],
     safety: { broadcast: false, signing: false, remoteSubmission: false, minedBlocks: 0,
@@ -146,7 +154,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const sameBlock = (number: number, hash: string) => {
       assert.equal(number, source.number); assert.equal(hash.toLowerCase(), source.hash.toLowerCase());
     };
-    sameBlock(saved.header.number, saved.header.hash);
+    const priceInputBytes = args.priceInput ? readFileSync(args.priceInput) : undefined;
+    const header = curveHistoricalHeader(saved, source,
+      priceInputBytes ? parseAtBlockJson(priceInputBytes.toString()) : undefined);
+    if (args.priceInput) report.priceInput = { path: args.priceInput, sha256: sha(priceInputBytes!) };
+    sameBlock(header.number, header.hash);
     sameBlock(saved.runtime.sourceBlock, saved.runtime.sourceBlockHash);
     sameBlock(saved.runtime.pricing.sourceBlock, saved.runtime.pricing.sourceBlockHash);
     const family = asPricedFamily(catalog.forStrictFamily(familyId(args.name)));
@@ -183,10 +195,15 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       return { row, route: handles[0], definition: routes[0] };
     });
     report.expectedSamples = rows.length * 2;
+    const reference = args.reference ? JSON.parse(readFileSync(args.reference, "utf8")) : undefined;
+    if (args.reference) report.referenceExecutions = { path: args.reference,
+      sha256: sha(readFileSync(args.reference)), use: "saved executed inputs and independent outputs only; not admission" };
+    // Validate every reference direction before opening the owned fork.
+    for (const { row } of rows) curveHistoricalAmounts({ source, pool: args.pool, family: args.name, row, reference });
     report.scope = { family: args.name, directions: rows.map(r => r.route.routeKey), tokenCount: tokens.length };
     const botvm = currentBotVm();
     report.inputs = { ready: args.ready, prices: args.prices, readySha256: sha(readyBytes), pricesSha256: sha(priceBytes),
-      source, priceGeneration: saved.runtime.generation, timestamp: saved.header.timestamp,
+      source, priceGeneration: saved.runtime.generation, timestamp: header.timestamp,
       memoFingerprint: memo.memoFingerprint, familyDefinitionHash: memo.familyDefinitionHash,
       descriptor, candidate: memo.candidateSnapshot, runtimeCodeHash: botvm.keccak256 };
     const privateConfig = JSON.parse(readFileSync(args.rpcFile, "utf8"));
@@ -198,7 +215,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const rpc: Rpc = async (method, params) => {
       if (constructing) { constructionAttempts++; throw new Error("RPC during runtime construction"); }
       assert(allowed.has(method), "non-read-only method blocked");
-      abort.signal.throwIfAborted(); assert(Date.now() < deadline && ++calls <= 1000, "test read budget exceeded");
+      // Additional same-source base/LP/code guards are bounded loopback reads.
+      abort.signal.throwIfAborted(); assert(Date.now() < deadline && ++calls <= report.limits.loopbackReadCalls, "test read budget exceeded");
       const response = await fetch(loopback, { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: calls, method, params }),
         signal: AbortSignal.any([abort.signal, AbortSignal.timeout(30_000)]) });
@@ -211,8 +229,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const headerCheck = async () => {
       const h = await rpc("eth_getBlockByNumber", ["latest", false]);
       sameBlock(Number(BigInt(h.number)), h.hash);
-      assert.equal(Number(BigInt(h.timestamp)), saved.header.timestamp, "N timestamp changed");
-      assert.equal(BigInt(h.baseFeePerGas), BigInt(saved.header.baseFeePerGas));
+      assert.equal(Number(BigInt(h.timestamp)), header.timestamp, "N timestamp changed");
+      assert.equal(BigInt(h.baseFeePerGas), header.baseFeePerGas);
       return { number: source.number, hash: h.hash, timestamp: Number(BigInt(h.timestamp)), baseFeePerGas: h.baseFeePerGas };
     };
     stage = "owned-fork-start";
@@ -287,6 +305,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const adapter = adapters.find(a => a.id === node.adapterId); assert(adapter, "missing production action encoder");
       return adapter.encode(node, EXECUTOR, concatBytes(...node.children.map(compile)));
     };
+    // Exact may compose reads of the admitted metapool's proven base, LP and
+    // coins. This is a test read boundary, not another quote implementation.
+    const model = "quoteModel" in descriptor ? descriptor.quoteModel : undefined;
+    const quoteTargets = new Set([args.pool, ...(model
+      ? [model.basePool, model.baseLPToken, model.implementation, ...model.baseCoins] : [])].map(lower));
     for (const { row, route, definition } of rows) {
       let overrides: Overrides = {};
       const queryCalls: any[] = [];
@@ -296,12 +319,18 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         } }, provider: {
           async call(tx, block) {
             assert.equal(block, source.number, "quote must request N");
-            assert(same(tx.to, args.pool), "Curve Exact must quote its admitted pool");
+            assert(quoteTargets.has(lower(tx.to)), "Curve Exact read outside admitted pool/bound dependencies");
             queryCalls.push({ target: tx.to, selector: tx.data.slice(0, 10), from: tx.from ?? null });
             return rpc("eth_call", [{ ...tx, gas: "0x800000" }, pin, overrides]);
           },
-          async getCode(address, block) { assert.equal(block, source.number); return rpc("eth_getCode", [address, pin]); },
-          async getStorage(address, key, block) { assert.equal(block, source.number); return rpc("eth_getStorageAt", [address, key, pin]); },
+          async getCode(address, block) {
+            assert.equal(block, source.number); assert(quoteTargets.has(lower(address)));
+            return rpc("eth_getCode", [address, pin]);
+          },
+          async getStorage(address, key, block) {
+            assert.equal(block, source.number); assert(quoteTargets.has(lower(address)));
+            return rpc("eth_getStorageAt", [address, key, pin]);
+          },
         } });
       stage = "runtime-construction";
       const beforeCalls = calls;
@@ -317,28 +346,32 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       } finally { constructing = false; }
       assert(leg, "Family returned null runtime leg");
       assert.equal(calls - beforeCalls, 0); assert.equal(constructionAttempts, 0);
-      for (const multiplier of [1n, 10n]) {
-        const amountIn = row.amountIn * multiplier, inputSentinel = 101n, outputSentinel = 103n;
+      for (const point of curveHistoricalAmounts({ source, pool: args.pool, family: args.name, row, reference })) {
+        const { multiplier, amountIn, priorActualOut } = point;
+        const inputSentinel = 101n, outputSentinel = 103n;
         const tokenIn = lower(row.tokenIn), tokenOut = lower(row.tokenOut);
         const inSlot = slots.get(tokenIn)!, outSlot = slots.get(tokenOut)!;
         overrides = { [OWNER]: { balance: ethers.toQuantity(100n * 10n ** 18n) }, [EXECUTOR]: { code: botvm.code },
           [tokenIn]: { stateDiff: { [inSlot]: word(amountIn + inputSentinel) } },
           [tokenOut]: { stateDiff: { [outSlot]: word(outputSentinel) } } };
         const sample: Record<string, any> = { edgeId: row.edgeId, routeKey: route.routeKey, tokenIn, tokenOut,
+          amountSource: reference ? "saved-execution-reference" : "current-production-effective", priorActualOut,
           multiplier, amountIn, productionP: row.amountIn, savedPriceOut: row.amountOut,
           runtimeConstructionRpc: 0, programHash: ethers.keccak256(leg.program), status: "failed", executions: [] };
         report.samples.push(sample);
         try {
           stage = "production-exact";
           const queryStart = queryCalls.length;
+          // Match production effective's original Exact selection. A proven local
+          // or hybrid method is not a chain-only get_dy helper.
           const quote = await executeFamilyExactQuote({ family, route, amountIn, source, generation: source.generation,
-            executor: EXECUTOR, runtimeEvidence: [], runtime, requireChainAmountQuote: true });
+            executor: EXECUTOR, runtimeEvidence: [], runtime });
           sample.quote = { status: quote.status, outcome: quote.outcome, queryCalls: queryCalls.slice(queryStart) };
           assert.equal(quote.status, "resolved", "production Exact unresolved");
           if (quote.status !== "resolved") throw new Error("production Exact unresolved");
           assert(quote.amountOut > 0n); sample.quote.amountOut = quote.amountOut;
-          assert(queryCalls.length > queryStart, "chain Exact must actually query this sample amount");
-          if (multiplier === 1n) assert.equal(quote.amountOut, row.amountOut, "fresh P quote differs from saved production price");
+          assert(queryCalls.length > 0, "quote/state source was never read for this route");
+          if (!reference && multiplier === 1n) assert.equal(quote.amountOut, row.amountOut, "fresh P quote differs from saved production price");
           const fragment = buildFamilyExecutionFragment({ family, route, exact: quote, minAmountOut: quote.amountOut,
             executor: EXECUTOR, runtimeEvidence: [], actionOwnership: catalog });
           assert.equal(fragment.status, "resolved");
@@ -394,7 +427,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               assert.equal(await balance(tokenIn, EXECUTOR, overrides), amountIn + inputSentinel);
               assert.equal(await balance(tokenOut, EXECUTOR, overrides), outputSentinel);
               const tx = { from: OWNER, to: EXECUTOR, data: buildExecuteCalldata(script), gas: "0x800000",
-                gasPrice: ethers.toQuantity(saved.header.baseFeePerGas) };
+                gasPrice: ethers.toQuantity(header.baseFeePerGas!) };
               result.callTrace = await rpc("debug_traceCall", [tx, pin, { tracer: "callTracer", timeout: "30s", stateOverrides: overrides }]);
               result.evmSucceeded = !result.callTrace.error;
               assert(result.evmSucceeded, "encoded BotVM execution reverted");
@@ -433,6 +466,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               result.oldInventoryConsumed = 0n; result.executionChecks = "pass";
               if (encoding !== "quoted-minimum-1-diagnostic") assert.equal(output.delta, quote.amountOut,
                 "exact quote and independently observed output differ (no tolerance)");
+              if (priorActualOut !== undefined) assert.equal(output.delta, priorActualOut,
+                "same historical input produced a different actual output");
               result.status = "pass";
             } catch (error) { result.error = failure(error); }
           }
@@ -458,6 +493,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     assert.equal(await rpc("eth_getCode", [EXECUTOR, pin]), "0x", "actor code override persisted");
     assert.equal(sha(readFileSync(args.ready)), report.inputs.readySha256);
     assert.equal(sha(readFileSync(args.prices)), report.inputs.pricesSha256);
+    if (args.priceInput) assert.equal(sha(readFileSync(args.priceInput)), report.priceInput.sha256);
     assert.deepEqual(sourcePin(args.name), startPin, "source/code changed during test");
     assert.equal(constructionAttempts, 0);
     assert(report.samples.length === report.expectedSamples && report.samples.every((s: any) => s.status === "pass"), "one or more samples failed; retained in receipt");
@@ -482,6 +518,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591");
+  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--price-input INPUT_JSON] [--reference-executions SAVED_JSON]");
   else main().catch(() => { console.error("historical-runtime-dual: input/output setup failed; no RPC started if no receipt was reserved"); process.exitCode = 1; });
 }

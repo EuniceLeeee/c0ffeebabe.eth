@@ -1,3 +1,4 @@
+import { curveUnderlyingQuoteModelProjection } from "./quote-model.js";
 import type {
   InstanceSemantics,
   RuntimeRequirement,
@@ -32,6 +33,7 @@ export const curveUnderlyingInstance = {
       pool: canonicalAddress(identity.facts.pool),
       coins: Object.freeze([...identity.facts.coins]),
       registryBinding: identity.facts.registryBinding,
+      ...(identity.facts.quoteModel ? { quoteModel: identity.facts.quoteModel } : {}),
       verifiedDirections: Object.freeze([...identity.facts.verifiedDirections]),
     };
   },
@@ -59,6 +61,7 @@ export function curveUnderlyingStaticBindingProjection(
   return {
     pool: descriptor.pool,
     coins: descriptor.coins,
+    quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
     registryBinding: {
       registry: descriptor.registryBinding.registry,
       handlers: descriptor.registryBinding.handlers,

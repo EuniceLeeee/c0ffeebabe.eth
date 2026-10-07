@@ -9020,14 +9020,6 @@ async function buildCurveUnderlyingCaseCapture(input: {
         order,
       }),
     }));
-  const exactMethod = curveUnderlyingExact.methods().find(
-    (method) => method.kind === "request-program" &&
-      method.id === "curve-get-dy",
-  );
-  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
-    throw new Error("curve-underlying exact request program is missing");
-  }
-  const program = exactMethod.program;
   const exactByRouteKey = new Map<
     string,
     {
@@ -9055,6 +9047,13 @@ async function buildCurveUnderlyingCaseCapture(input: {
         executor: MIGRATION_CAPTURE_EXECUTOR,
         runtimeEvidence: Object.freeze([]),
       });
+      const exactMethod = curveUnderlyingExact.methods(exactInput).find(
+        (method) => method.kind === "request-program",
+      );
+      if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+        throw new Error("curve-underlying exact request program is missing");
+      }
+      const program = exactMethod.program;
       const requests = program.buildRequests(exactInput);
       const results = requests.map((request) =>
         curveUnderlyingSuccessResult(request, input.source)

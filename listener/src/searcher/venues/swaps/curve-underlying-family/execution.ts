@@ -90,7 +90,7 @@ function assertExecutionEvidence(input: {
 }): void {
   const evidence = input.exactEvidence;
   if (
-    evidence.kind !== "curve-underlying-get-dy" ||
+    evidence.kind !== (input.descriptor.quoteModel ? "curve-underlying-classic-meta" : "curve-underlying-get-dy") ||
     !sameAddress(evidence.pool, input.descriptor.pool) ||
     evidence.routeKey !== input.route.routeKey ||
     evidence.i !== input.route.i ||
