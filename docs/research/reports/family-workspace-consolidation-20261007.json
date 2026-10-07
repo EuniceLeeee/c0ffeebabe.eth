@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "Authorized cloud workspace consolidation; not adapter or production-gap acceptance",
   "date": "2026-10-07",
-  "status": "partial_pending_Set_historical_acceptance_and_live_defaults_retirement",
+  "status": "partial_pending_concurrent_live_defaults_release",
   "workspace": "/opt/mev-cloud/family-runtime-20261007",
   "branch": "codex/family-runtime-actual-20261007",
-  "publishedCodeTip": "2b183f0de6d88b99b9505bffc62c55e075613cc7",
+  "publishedCodeTip": "cae44bb2493f54037eab4a56e3bb98e9742a3ea9",
   "latestUserOrdering": [
     "merge unique live-defaults changes",
     "complete and verify Set actual-received execution",
@@ -61,6 +61,21 @@
         "readyArchivePassed": 39
       },
       "actualArchiveDataModified": false
+    },
+    {
+      "commit": "cae44bb2493f54037eab4a56e3bb98e9742a3ea9",
+      "scope": "Set Redemption with explicit quotes and Family-local nested actual-received execution; default disabled, central VM unchanged",
+      "report": "docs/research/reports/set-runtime-nested-20261007.json",
+      "verification": {
+        "buildLive": "pass",
+        "offline": 81,
+        "syntheticEvm": 12,
+        "singleBlock": 26130046,
+        "graphMidEffectiveDirections": 4,
+        "historicalSamples": 8,
+        "historicalExecutions": 16
+      },
+      "limits": "N end-state/N environment dual single-leg parity; not original pre-call, historical next-hop, full-route EV or adapter_merge_ready"
     }
   ],
   "recoverableArchiveRoot": "/opt/mev-cloud/worktree-archive-20261007.DQR9uH",
@@ -124,16 +139,36 @@
   "liveDefaults": {
     "path": "/opt/mev-cloud/live-defaults-20261007",
     "retired": false,
-    "gate": "Set actual-received implementation plus verification and publication required first",
-    "lastReadOnlyAudit": "all changed/untracked business paths present in Family; remaining differences are reviewed current activation defaults, generated capability shadow, and evolving Set runtime/tests",
+    "gate": "Set verification/publication complete; final retirement held for concurrent source-workflow use",
+    "lastReadOnlyAudit": "45 changed/untracked business files: 40 byte-identical, none missing; five reviewed differences are generated shadow, composition fixture and Set execution/contract/refresh improvements",
     "defaultSetActivation": false,
-    "warning": "recheck source for additional uncommitted changes immediately before archive/removal"
+    "warning": "recheck source for additional uncommitted changes immediately before archive/removal",
+    "sourceHead": "03acff5ac3215e1865c9068f5fa24dd05859bb42",
+    "concurrentUse": {
+      "observedAtUtc": "2026-10-07T12:26:31Z",
+      "filesChangedAtUtc": "2026-10-07T12:16:18Z",
+      "runtimeSnapshot": "/opt/mev-cloud/family-three-live-20261007.oRLa3M/runtime",
+      "sourceConsumers": [
+        "/opt/mev-cloud/family-three-live-20261007.oRLa3M/freeze.mjs",
+        "/opt/mev-cloud/family-three-live-20261007.oRLa3M/prepare.mjs"
+      ],
+      "reason": "Another workflow just copied source, and preparation still executes git against live-defaults. Its attempt failed; a retry would require that source directory.",
+      "process": "PID64656 initially had live-defaults/listener cwd, later moved to its own runtime snapshot; none of this task's three agents owns it",
+      "action": "No signal, move, rewrite or deletion of the other workflow. Source retained until coordinated release; open-FD absence alone is not sufficient."
+    },
+    "remoteBranch": "refs/heads/codex/live-defaults-fluid-ekubo-20261007",
+    "remoteBranchPresentAtPublication": false,
+    "oldBackup": "live-defaults-before-set-retirement.tar.gz",
+    "oldBackupComparison": "stale after concurrent file updates; not used to authorize deletion",
+    "latestBackup": {
+      "file": "live-defaults-concurrent-source-20261007.tar.gz",
+      "sha256": "883e6a1fe4b1de204cf6ea5961cd0578052d2687fe8470ba4d3ace8d341b023d",
+      "compare": "pass at capture; recheck again before any future deletion"
+    }
   },
   "pending": [
-    "Set multi-component runtime completion and historical N-state/N-environment Ready/price/dual-execution evidence",
-    "publish Set source and final redacted acceptance limits",
-    "final live-defaults containment/backup/retirement",
-    "Balancer V1/V2/Aura three-TX work",
+    "coordinate release of live-defaults source from the other recent three-family preparation, then fresh containment/backup checks and retirement",
+    "Balancer V1/V2/Aura three-TX work after consolidation",
     "Curve Underlying production wiring and 24 raw-unit comparisons; remaining scoped latency verification"
   ]
 }
