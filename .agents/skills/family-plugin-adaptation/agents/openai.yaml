@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adapter Family 适配验收"
+  short_description: "用真实交易对照与历史单块 Ready 完成 strict、入图及价格验收"
+  default_prompt: "使用 $family-plugin-adaptation，按真实交易所在 N 的证据和 N 环境完成 Family 适配、strict、单块 Ready 入图及报价执行对照；不要混用机会复现的 N−1 环境。"
