@@ -14,6 +14,7 @@ import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { EffectiveMidHistoryReplay } from "../../../listener/src/searcher/blockscan-effective-mid-history.js";
 import {
   blockScanActivityAtBlock,
   blockScanSourceBlockForTarget,
@@ -45,6 +46,7 @@ interface ReconstructedMidTable extends MidAnchor {
   readonly baselineSourceBlock: number;
   readonly appliedDeltas: number;
   readonly mids: readonly (readonly [string, CompactMid])[];
+  readonly effectiveMids?: JsonRecord;
 }
 
 interface RouteCatalogEntry {
@@ -575,6 +577,7 @@ function midTableRecord(table: ReconstructedMidTable): JsonRecord {
     }),
     mid_count: table.mids.length,
     mids: table.mids,
+    ...(table.effectiveMids === undefined ? {} : { effective_mids: table.effectiveMids }),
   };
 }
 
@@ -1220,6 +1223,8 @@ async function reconstructMidHistory(
   let appliedDeltas = 0;
   let previousSequence = 0;
   let lineNumber = 0;
+  const effectiveReplay = new EffectiveMidHistoryReplay();
+  let effectiveMids: JsonRecord | null = null;
   for await (const line of lines) {
     lineNumber++;
     if (!line) continue;
@@ -1261,6 +1266,10 @@ async function reconstructMidHistory(
       anchor = common;
       baselineSourceBlock = common.sourceBlock;
       appliedDeltas = 0;
+      effectiveReplay.reset();
+      effectiveMids = effectiveReplay.apply(record.effective_mids, {
+        number: common.sourceBlock, hash: common.sourceBlockHash, generation: common.generation,
+      });
       continue;
     }
     if (anchor === null || mids === null || baselineSourceBlock === null) {
@@ -1295,6 +1304,8 @@ async function reconstructMidHistory(
       mids = null;
       baselineSourceBlock = null;
       appliedDeltas = 0;
+      effectiveReplay.reset();
+      effectiveMids = null;
       continue;
     }
     const updates = parseMidEntries(record.updates, "updates", lineNumber);
@@ -1319,6 +1330,9 @@ async function reconstructMidHistory(
     for (const edgeKey of removals) mids.delete(edgeKey);
     anchor = common;
     appliedDeltas++;
+    effectiveMids = effectiveReplay.apply(record.effective_mids, {
+      number: common.sourceBlock, hash: common.sourceBlockHash, generation: common.generation,
+    });
   }
   if (
     runId === null ||
@@ -1341,6 +1355,7 @@ async function reconstructMidHistory(
     baselineSourceBlock,
     appliedDeltas,
     mids: sortedMids,
+    ...(effectiveMids === null ? {} : { effectiveMids }),
   });
 }
 

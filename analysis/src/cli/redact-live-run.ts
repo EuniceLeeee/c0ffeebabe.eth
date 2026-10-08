@@ -1,5 +1,8 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, mkdtemp, readdir, rename, rmdir, stat } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs, writeText } from "../util.js";
 
@@ -25,7 +28,8 @@ type EventStats = {
   rows: number;
   invalidRows: number;
   typeCounts: Map<string, number>;
-  blocks: number[];
+  firstBlock: number | null;
+  lastBlock: number | null;
   dropCounts: Map<string, number>;
   // Drill-down of no_candidate_plans / plan_budget_exhausted drops by the planner's
   // no_candidate_diagnostic.classification — the "why can't we build a loop" reason
@@ -37,6 +41,17 @@ type SensitiveValue = {
   value: string;
   redaction: string;
 };
+
+type LogStats = {
+  startupFacts: Set<string>;
+  timings: Set<string>;
+  lastCounters?: string;
+  filteredSubscription: boolean;
+  rpcBackend: boolean;
+};
+
+const ENV_NAME = "[A-Z0-9_]*(?:PRIVATE_KEY|SECRET|API_KEY|AUTH_KEY|MNEMONIC|SEED|RPC_URL|WS_URL|ALCHEMY|INFURA|TENDERLY)[A-Z0-9_]*";
+const MAX_RECORD_CODE_UNITS = 16 * 1024 * 1024;
 
 export type InputLocations = {
   currentLog: string;
@@ -72,26 +87,51 @@ async function main() {
   const outDir = resolve(readString(args["out-dir"]) ?? defaultReportsDir);
   const label = readString(args.label) ?? deriveLabel(logPath, eventsPath);
 
-  const rawLog = await readFile(logPath, "utf8");
-  options.sensitiveValues = collectSensitiveValues(rawLog);
-  const redactedLog = redactText(rawLog, options);
-
-  let eventStats: EventStats | undefined;
-  let redactedEvents = "";
-  if (eventsPath) {
-    const eventResult = await redactEvents(eventsPath, options);
-    eventStats = eventResult.stats;
-    redactedEvents = eventResult.redactedJsonl;
-  }
-
   const logReportName = `${label}-redacted.log`;
   const eventReportName = `${label}-events.redacted.jsonl`;
   const summaryReportName = `${label}-summary.md`;
-
-  await writeText(join(outDir, logReportName), redactedLog);
-  if (eventsPath) await writeText(join(outDir, eventReportName), redactedEvents);
+  const inputPaths = [logPath, ...(eventsPath ? [eventsPath] : [])];
+  const inputs = await Promise.all(inputPaths.map(path => stat(path)));
+  const assertInputsUnchanged = async () => {
+    for (const [index, path] of inputPaths.entries()) {
+      const before = inputs[index], after = await stat(path);
+      if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size ||
+          before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs)
+        throw new Error("Live inputs changed during redaction; freeze or copy logs before generating a report");
+    }
+  };
+  for (const name of [logReportName, eventReportName, summaryReportName]) {
+    const existing = await existingFile(join(outDir, name));
+    if (existing) {
+      const output = await stat(existing);
+      if (inputs.some(input => input.dev === output.dev && input.ino === output.ino))
+        throw new Error("Redacted output must not overwrite an input file or its alias");
+    }
+  }
+  // Discover aliases before any output: a wallet binding late in the log must
+  // also redact references earlier in that log and throughout the events.
+  const sensitive = new Map<string, SensitiveValue>();
+  for await (const line of fileLines(logPath)) {
+    for (const value of collectSensitiveValues(line)) {
+      if (!sensitive.has(value.value.toLowerCase())) sensitive.set(value.value.toLowerCase(), value);
+    }
+  }
+  options.sensitiveValues = [...sensitive.values()];
+  await assertInputsUnchanged();
+  await mkdir(outDir, { recursive: true });
+  const staging = await mkdtemp(join(outDir, ".live-summary-"));
+  const logStats: LogStats = { startupFacts: new Set(), timings: new Set(), filteredSubscription: false, rpcBackend: false };
+  await pipeline(Readable.from(redactedLogFrames(logPath, options, logStats)),
+    createWriteStream(join(staging, logReportName), { flags: "wx", mode: 0o600 }));
+  let eventStats: EventStats | undefined;
+  if (eventsPath) {
+    eventStats = { rows: 0, invalidRows: 0, typeCounts: new Map(), firstBlock: null, lastBlock: null,
+      dropCounts: new Map(), noCandidateClassCounts: new Map() };
+    await pipeline(Readable.from(redactEvents(eventsPath, options, eventStats)),
+      createWriteStream(join(staging, eventReportName), { flags: "wx", mode: 0o600 }));
+  }
   await writeText(
-    join(outDir, summaryReportName),
+    join(staging, summaryReportName),
     renderSummary({
       label,
       logPath,
@@ -99,10 +139,16 @@ async function main() {
       profile,
       logReportName,
       eventReportName: eventsPath ? eventReportName : undefined,
-      redactedLog,
+      logStats,
       eventStats,
     }),
   );
+  // Publish only complete files; failed streaming attempts remain separate
+  // diagnostic staging artifacts and never replace a successful report.
+  await assertInputsUnchanged();
+  for (const name of [logReportName, ...(eventsPath ? [eventReportName] : []), summaryReportName])
+    await rename(join(staging, name), join(outDir, name));
+  await rmdir(staging);
 
   console.log(`[redact-live-run] wrote ${join(outDir, summaryReportName)}`);
   console.log(`[redact-live-run] wrote ${join(outDir, logReportName)}`);
@@ -220,7 +266,7 @@ function redactText(input: string, options: RedactOptions): string {
     "$1<REDACTED>",
   );
   out = out.replace(
-    /\b([A-Z0-9_]*(?:PRIVATE_KEY|SECRET|API_KEY|AUTH_KEY|MNEMONIC|SEED|RPC_URL|WS_URL|ALCHEMY|INFURA|TENDERLY)[A-Z0-9_]*)=("[^"]*"|'[^']*'|[^\s]+)/g,
+    new RegExp(`\\b(${ENV_NAME})=("[^"]*"|'[^']*'|[^\\s]+)`, "g"),
     "$1=<REDACTED>",
   );
   out = out.replace(/\b(wallet)=0x[a-fA-F0-9]{40}\b/g, "$1=<REDACTED_WALLET>");
@@ -285,38 +331,90 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function redactEvents(
-  eventsPath: string,
-  options: RedactOptions,
-): Promise<{ redactedJsonl: string; stats: EventStats }> {
-  const raw = await readFile(eventsPath, "utf8");
-  const stats: EventStats = {
-    rows: 0,
-    invalidRows: 0,
-    typeCounts: new Map(),
-    blocks: [],
-    dropCounts: new Map(),
-    noCandidateClassCounts: new Map(),
-  };
-  const output: string[] = [];
+async function* fileLines(path: string): AsyncGenerator<string> {
+  let pending = "";
+  for await (const chunk of createReadStream(path, { encoding: "utf8" })) {
+    pending += chunk;
+    let start = 0, end: number;
+    while ((end = pending.indexOf("\n", start)) >= 0) {
+      if (end + 1 - start > MAX_RECORD_CODE_UNITS) throw new Error("Redaction record exceeds the safe streaming limit");
+      yield pending.slice(start, end + 1);
+      start = end + 1;
+    }
+    pending = pending.slice(start);
+    if (pending.length > MAX_RECORD_CODE_UNITS) throw new Error("Redaction record exceeds the safe streaming limit");
+  }
+  if (pending) yield pending;
+}
 
-  for (const line of raw.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    stats.rows++;
-    try {
-      const parsed = JSON.parse(line) as JsonValue;
-      collectEventStats(parsed, stats);
-      output.push(JSON.stringify(redactJsonValue(parsed, options)));
-    } catch {
-      stats.invalidRows++;
-      output.push(redactText(line, options));
+async function* redactedLogFrames(path: string, options: RedactOptions, stats: LogStats): AsyncGenerator<string> {
+  const assignment = new RegExp(`\\b${ENV_NAME}=`, "g");
+  let quote: string | null = null, frame = "";
+  for await (const line of fileLines(path)) {
+    let cursor = 0;
+    if (quote !== null) {
+      const end = line.indexOf(quote);
+      if (end < 0) continue;
+      cursor = end + 1;
+      quote = null;
+    }
+    while (cursor < line.length) {
+      assignment.lastIndex = cursor;
+      const match = assignment.exec(line);
+      if (!match) { frame += line.slice(cursor); break; }
+      const valueAt = match.index + match[0].length;
+      frame += line.slice(cursor, valueAt);
+      const delimiter = line[valueAt];
+      if (delimiter === '"' || delimiter === "'") {
+        // Discard quoted secret contents, including internal newlines, without
+        // buffering them. Empty quotes let the unchanged redactor retain its
+        // exact assignment and suffix behavior once the public frame closes.
+        frame += delimiter + delimiter;
+        const end = line.indexOf(delimiter, valueAt + 1);
+        if (end < 0) { quote = delimiter; break; }
+        cursor = end + 1;
+      } else {
+        const token = line.slice(valueAt).match(/^[^\s]+/)?.[0] ?? "";
+        frame += token;
+        cursor = valueAt + token.length;
+      }
+    }
+    if (frame.length > MAX_RECORD_CODE_UNITS) throw new Error("Redaction frame exceeds the safe streaming limit");
+    if (quote === null) {
+      const redacted = redactText(frame, options);
+      for (const fact of extractStartupFacts(redacted)) stats.startupFacts.add(fact);
+      for (const timing of redacted.match(/match=\d+ms fork=\d+ms prep=\d+ms detect=\d+ms total=\d+ms/g) ?? []) stats.timings.add(timing);
+      stats.lastCounters = extractLastCounters(redacted) ?? stats.lastCounters;
+      stats.filteredSubscription ||= redacted.includes("mempool filtered subscription");
+      stats.rpcBackend ||= redacted.includes("liveBackend=rpc");
+      yield redacted;
+      frame = "";
     }
   }
+  if (quote !== null) throw new Error("Unterminated quoted sensitive assignment");
+}
 
-  return {
-    redactedJsonl: output.length > 0 ? `${output.join("\n")}\n` : "",
-    stats,
-  };
+async function* redactEvents(
+  eventsPath: string,
+  options: RedactOptions,
+  stats: EventStats,
+): AsyncGenerator<string> {
+  for await (const rawLine of fileLines(eventsPath)) {
+    const line = rawLine.replace(/\r?\n$/, "");
+    if (!line.trim()) continue;
+    stats.rows++;
+    let parsed: JsonValue;
+    try {
+      parsed = JSON.parse(line) as JsonValue;
+    } catch {
+      stats.invalidRows++;
+      yield redactText(line, options) + "\n";
+      continue;
+    }
+    // Redaction and write failures must propagate, never fall back to raw JSON.
+    collectEventStats(parsed, stats);
+    yield JSON.stringify(redactJsonValue(parsed, options)) + "\n";
+  }
 }
 
 function collectEventStats(value: JsonValue, stats: EventStats): void {
@@ -325,7 +423,10 @@ function collectEventStats(value: JsonValue, stats: EventStats): void {
   addCount(stats.typeCounts, type);
 
   const block = numberLike(value.target_block ?? value.block);
-  if (block !== undefined) stats.blocks.push(block);
+  if (block !== undefined) {
+    stats.firstBlock = stats.firstBlock === null ? block : Math.min(stats.firstBlock, block);
+    stats.lastBlock = stats.lastBlock === null ? block : Math.max(stats.lastBlock, block);
+  }
 
   if (type === "pipeline_dropped") {
     const stage = typeof value.stage === "string" ? value.stage : "unknown";
@@ -410,15 +511,13 @@ function renderSummary(input: {
   profile: Profile;
   logReportName: string;
   eventReportName?: string;
-  redactedLog: string;
+  logStats: LogStats;
   eventStats?: EventStats;
 }): string {
-  const startupFacts = extractStartupFacts(input.redactedLog);
-  const lastCounters = extractLastCounters(input.redactedLog);
-  const timings = uniqueMatches(
-    input.redactedLog.match(/match=\d+ms fork=\d+ms prep=\d+ms detect=\d+ms total=\d+ms/g) ?? [],
-  ).slice(-12);
-  const observations = buildObservations(input.redactedLog, lastCounters, input.eventStats);
+  const startupFacts = [...input.logStats.startupFacts];
+  const lastCounters = input.logStats.lastCounters;
+  const timings = [...input.logStats.timings].slice(-12);
+  const observations = buildObservations(input.logStats, lastCounters, input.eventStats);
 
   return [
     `# ${input.label} Redacted Live Run`,
@@ -507,9 +606,10 @@ function extractLastCounters(log: string): string | undefined {
 
 function renderEventStats(stats?: EventStats): string {
   if (!stats) return "- events: not supplied";
-  const blocks = stats.blocks;
   const blockRange =
-    blocks.length > 0 ? `${Math.min(...blocks)}-${Math.max(...blocks)}` : "n/a";
+    stats.firstBlock !== null
+      ? `${stats.firstBlock}-${stats.lastBlock}`
+      : "n/a";
   return [
     `- event rows: \`${stats.rows}\``,
     `- invalid rows: \`${stats.invalidRows}\``,
@@ -534,15 +634,15 @@ function renderNoCandidateDrill(stats?: EventStats): string {
     .join("\n");
 }
 
-function buildObservations(log: string, lastCounters: string | undefined, stats?: EventStats): string[] {
+function buildObservations(log: LogStats, lastCounters: string | undefined, stats?: EventStats): string[] {
   const out: string[] = [];
-  if (log.includes("mempool filtered subscription")) {
+  if (log.filteredSubscription) {
     out.push("Filtered mempool subscription was active in this run.");
   }
   if (lastCounters && /\bcuProxyRpcCalls=0\b/.test(lastCounters)) {
     out.push("Mempool CU proxy calls stayed at zero, which indicates the filtered subscription path avoided the pending-hash getTransaction firehose.");
   }
-  if (log.includes("liveBackend=rpc")) {
+  if (log.rpcBackend) {
     out.push("The run used `liveBackend=rpc`, so downstream fork/prep work may still be on the slower remote-fork path.");
   }
   if (lastCounters && /\bsolverEntered=0\b/.test(lastCounters)) {

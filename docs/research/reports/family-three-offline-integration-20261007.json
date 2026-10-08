@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-07",
+  "status": "implemented_offline_integration_passed_history_pending",
+  "scope": "Default-disabled Balancer V1, Balancer V2 and Badger Sett liquid withdrawal Family implementation and offline production-interface integration. Not historical strict/Ready/effective execution, adapter_fixed, adapter_merge_ready or production_gap_fixed.",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "parentCommit": "1d2b93e286113812ec1a8e2a00674905a6590c5b",
+  "preflight": "docs/research/reports/family-three-preflight-20261007.json",
+  "workspaceCleanup": {
+    "status": "completed_previously",
+    "report": "docs/research/reports/family-workspace-consolidation-20261007.json",
+    "retired": "/opt/mev-cloud/live-defaults-20261007",
+    "protectedImpl": "/opt/mev-cloud/app-run2",
+    "recheckedAbsent": true,
+    "newDeletionThisStage": false
+  },
+  "claimBoundaries": {
+    "allThreeDefaultDisabled": true,
+    "dualInterfaces": "Retain Exact + quoted buildFragment and independent quote-free buildRuntimeLeg; production sim selector contracts assert zero off-chain Exact/quoted fallback for tested directions.",
+    "centralProtocolLogicAdded": false,
+    "newSharedVmInstructions": false,
+    "syntheticEvidenceIsNotHistorical": true,
+    "originalTxPrestateRestored": false,
+    "newHistoricalReadyIssued": false,
+    "newRpcMainStage": false,
+    "broadcast": false,
+    "signing": false,
+    "fullLive": false,
+    "rebuild14400": false,
+    "newWorkspace": false
+  },
+  "families": [
+    {
+      "familyId": "balancer-v1",
+      "sampleTx": "0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8",
+      "block": 26138731,
+      "scope": "Source-proven finalized public BPool; canonical BFactory create-only membership reverse-checked. Every ordered token pair of the supported 2..8-token model, exact-in execution only; exact-out traces nominate but do not imply exact-out execution support.",
+      "pricing": "Recorded pool balances, on-chain calcOutGivenIn and source-exact integer/ratio/spot-price guards. No substitute linear point-rate quote.",
+      "runtime": "Temporary exact approval, final zero allowance, exact input debit and actual receipt guards; source pool math enforces capacity. Does not consume the original transaction's extra 62 raw NMR inventory.",
+      "tests": {
+        "contractsAndProductionLifecycle": 14,
+        "syntheticEvm": 10,
+        "historicalFork": 0
+      },
+      "sourceEvidence": {
+        "publicStateSha256": "8d919d1e99a31844f21929d678acfabbf96ce81c66e246c5c02fdc7c39c730ef",
+        "pinnedAmountViewsSha256": "78861223994008b4575a43e95c1ee44ca577ccfcb3a30db04f1cc01479ccbf6a",
+        "compiledSourceSha256": "9f359226bcc8a7bf71e00f0cbb00051bb484cf195d9c4455c37b311a72dbfe09",
+        "note": "Saved N end-state view outputs and runtime/source commitments, not the original transaction pre-call output or actual new execution."
+      },
+      "review": {
+        "nonAuthor": "Gauss",
+        "passes": 2,
+        "initialFinding": "Identity declared get-code in later call-only rounds, rejected by strict runtime.",
+        "resolution": "Family requirements follow actual round transports; added production catalog/lifecycle/Graph/public receipt and memo-recheck regression.",
+        "secondPass": "14/14 executed; no remaining findings in review scope."
+      },
+      "evidence": [
+        "logs/balancer-v1-evidence-20261007.Ji62hU",
+        "logs/balancer-v1-review.4U4xIF",
+        "logs/balancer-v1-lifecycle-fix.2JOlcf",
+        "logs/balancer-v1-review-pass2.BU2OuB"
+      ],
+      "baselineFailure": {
+        "path": "logs/balancer-v1-lifecycle-fix.2JOlcf/before-validated-harness.txt",
+        "sha256": "58a862464a42e5f128ab81eb8b588cd18f106bbbcaaba73f7e0e1a1dddb135f4",
+        "note": "Two intended production integration failures before one-line declaration correction; initial harness typo log separately retained, not used as baseline."
+      },
+      "finalContract": {
+        "path": "logs/balancer-v1-lifecycle-fix.2JOlcf/after.txt",
+        "sha256": "fe057bb1f90c1bbe3ef99d29a42789e59936dfe270de0eb53bc517a52eb779ec"
+      }
+    },
+    {
+      "familyId": "balancer-v2",
+      "sampleTxs": [
+        "0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8",
+        "0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",
+        "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d"
+      ],
+      "scope": "Reciprocal pool.getPoolId/getVault and canonical Vault.getPool/getPoolTokens. General Vault GIVEN_IN quote/settlement ABI, not an assertion that every registered pool variant is historically accepted.",
+      "pricing": "queryBatchSwap signed-delta chain quote for the exact input and executor. Current pricing retains first-success bounded fallback, each-block refresh, registration-token binding checks and recheck-identity.",
+      "runtime": "Family-owned Vault.swap with actual incoming amount; no internal balances/native-ETH sentinel. Shared Family program checks exact allowance after grant and zero after clear; supports optional-return ERC20 without relying on boolean return bytes.",
+      "graphAndReceipt": "Graph/mid logical target is the pool address, while the action settles via Vault. Observer checks descriptor.poolId and emits only the actual admitted graph identity; no legacy poolId injection into generic edge.",
+      "tests": {
+        "contractsAndProductionLifecycle": 17,
+        "syntheticEvm": 7,
+        "historicalFork": 0
+      },
+      "review": {
+        "nonAuthor": "Copernicus",
+        "passes": 2,
+        "initialFindings": [
+          "Receipt observed poolId could not match actual issued Graph.",
+          "Mutable token registration omitted memo identity recheck.",
+          "Temporary approval helper alone ignored ineffective false return."
+        ],
+        "resolution": "All three addressed Family-locally, production lifecycle/public detector and memo recheck plus both emitters' allowance regressions added.",
+        "secondPass": "17/17 and build:live personally executed; no remaining/new findings within reviewed scope."
+      },
+      "evidence": [
+        "logs/balancer-v2-contracts.WcwgTd",
+        "logs/balancer-v2-review.C3Er2b"
+      ],
+      "finalContract": {
+        "path": "logs/balancer-v2-review.C3Er2b/offline-final.txt",
+        "sha256": "e8767fecf193be8803dc31f56282d28b86370d43f128ad6aa1c4adb5109ea0a5"
+      },
+      "finalEvm": {
+        "path": "logs/balancer-v2-review.C3Er2b/evm-review-scoped.txt",
+        "sha256": "b30345dfd6cb9ff1a23b84e9d518f90fb4aee0f49f6b4e2c5eac7226b200e30f"
+      },
+      "retainedFailedAttempts": [
+        "Initial test incorrectly demanded per-hop rejection of an additional closing-token debit; production net-inventory accounting correctly reduces profit. No VM safety change made; corrected expectation independently reviewed.",
+        "First review EVM command selected no tests despite exit0; only explicit scoped seven-test output counts."
+      ],
+      "unverified": "Real deployed weighted/stable/managed/composable variants, production effective amount and transaction-amount same-state executions, historical next-hop receipt isolation."
+    },
+    {
+      "familyId": "protocol:badger-sett-withdraw",
+      "sampleTx": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+      "block": 26138511,
+      "scope": "TheVault 1.5 shares -> AURA through void withdraw(uint256); liquid vault/strategy branch only. Not generic Aura, ERC4626, deposit/mint, arbitrary strategies or locker unlocking.",
+      "identity": "Exact deployed runtime/source commitments, both EIP1967 proxy bindings and reciprocal vault/strategy/asset/locker getters; no instance-address allowlist.",
+      "pricing": "Source-exact full-share-amount integer withdrawal, fee and fee-share mint ordering; locked backing permitted only when this amount requires no unlocking. Changed bindings fail old descriptor and require re-admission.",
+      "runtime": "Family-local transaction-time bindings/capacity/share-debit/receipt checks, no Exact/RPC/amount read during construction; fixed quoted path preserved.",
+      "tests": {
+        "portableOfflinePassed": 25,
+        "portableArchiveOnlySkipped": 1,
+        "explicitRetainedArchivePassed": 26,
+        "syntheticEvm": 0,
+        "historicalFork": 0
+      },
+      "testPortability": "Committed minimal public runtimes, seven encoded view results, 21 independently verified ABI fragments, source hash commitments; no raw request envelopes, URLs or credentials. Original archive verification only with explicit BADGER_SETT_PREFLIGHT; missing explicit archive fails.",
+      "publicFixtureSha256": "f1d855985a81a1a2e76268463f439805e3b09108c276993779188d5cb53574d4",
+      "review": "Main independently checked source/formula/runtime code and reran original25 tests; Dirac made only test portability changes. Actual EVM/history is still unverified.",
+      "evidence": [
+        "logs/badger-sett-offline.fhnFI4",
+        "logs/badger-offline-portability-20261007.7SXYzy"
+      ],
+      "explicitDeclines": [
+        "Amounts requiring locker processExpiredLocks/unlock/deviation branches.",
+        "Treasury equals executor when fee-share mint would change net burn.",
+        "Applicable pause, insufficient liquid capacity, zero output, overflow or contradictory bindings."
+      ]
+    }
+  ],
+  "sharedChecks": {
+    "scriptsPassed": [
+      "searcher:family-dual-execution",
+      "searcher:production-family-composition",
+      "searcher:strict-production-family-declarations",
+      "searcher:strict-family-lifecycle-runner",
+      "searcher:strict-central-adapter-runtime",
+      "searcher:strict-execution-projection",
+      "searcher:strict-ready-runtime",
+      "searcher:strict-ready-graph-view",
+      "searcher:adapter-family-exact-quote-cache",
+      "searcher:strict-solver-consumer"
+    ],
+    "dualExecutionTests": 67,
+    "buildLive": "pass",
+    "catalog": "regenerated; production declaration/default-off composition checks pass; 35 installed/28 default active",
+    "combinedFinalOffline": "56 pass, one archive-only skip; explicit Badger archive separately26 pass",
+    "fullBuild": "not passed: npm run build requires rustc for legacy Rust enumerator; rustc ENOENT in this environment; no toolchain installed",
+    "fullTypecheck": "not passed:16 errors outside this write-set, byte-identical to earlier captured outside-scope diagnostics; no new Family-path diagnostics after corrections",
+    "typecheckBaseline": "logs/badger-sett-offline.fhnFI4/typecheck.1.log",
+    "evidenceDirectory": "logs/family-three-shared.NSipX2",
+    "latestCatalogChecks": "logs/balancer-v1-lifecycle-fix.2JOlcf/final-*",
+    "finalOfflineArtifacts": [
+      "logs/family-three-shared.NSipX2/family-three-final-offline.txt",
+      "logs/family-three-shared.NSipX2/badger-final-with-archive.txt",
+      "logs/family-three-shared.NSipX2/build-live-final.txt"
+    ]
+  },
+  "remaining": [
+    "Run bounded production single-block Ready with natural discovery for supplied sample blocks; no 14400/live.",
+    "Real target strict memos, Graph, raw/effective at N end-state + N environment and both execution interfaces at production P and transaction amounts; preserve original Ready and failures.",
+    "Original transaction exact leg-output comparison needs actual call-prestate; N end-state parity is a separate claim.",
+    "Badger liquid branch needs actual BotVM/EVM checks, including downstream receipt versus pre-existing inventory; locked variants explicitly unimplemented.",
+    "Formal adapter/production-gap verdicts require their repository gates, not these fixture contracts.",
+    "Curve Underlying production wiring/24-case raw-unit parity and remaining scoped three-family latency work; existing untracked math files not included in this change."
+  ]
+}

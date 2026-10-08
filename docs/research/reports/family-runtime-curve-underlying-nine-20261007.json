@@ -1,0 +1,450 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-07",
+  "classification": "historical_single_leg_diagnostic_not_full_route_acceptance",
+  "title": "Curve dual execution evidence and nine underlying quote/execution differences",
+  "repository": {
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "productionHead": "8a69fb33bfee9400dc5495fbd5f44c44696293e7",
+    "productionSourceSha256": "802a8d526c034f4fcdd879da02d464121164364d34bd6857a222d3a9d9eba857",
+    "productionFileCount": 917,
+    "botvmArtifactSha256": "d4539aad04ae998cd51cf8831521874e93b797081351197e9ab000cfb4f13c4c",
+    "changes": "Historical test, synthetic selector variant coverage, package script and this redacted report only; no production quote, minimum-output or tolerance changes"
+  },
+  "boundaries": {
+    "no14400Scan": true,
+    "noLive": true,
+    "noBroadcast": true,
+    "noSigning": true,
+    "noReadyEdits": true,
+    "noMerge": true,
+    "noPoolOrLiquidityOverrides": true,
+    "state": "N block-end state and N execution environment; not original TX call-prestate"
+  },
+  "input": {
+    "number": 26138094,
+    "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+    "generation": 26138094,
+    "timestamp": 1791347015,
+    "ready": "logs/family-latency-20261007/single-block-26138094/candidate/checkpoint.json",
+    "readySha256": "19d010389a71ac2c006de677f0e6afef2154dc374779d75b8ac0a11c4d9f1eca",
+    "prices": "logs/family-latency-20261007/single-block-26138094/candidate/curve-candidate-profile/prices-1-26138094.json",
+    "pricesSha256": "a6a509903022caac99c8fea7fe2960036b41d196a242e0816f68bbb3a2b731f8"
+  },
+  "historicalEvidence": [
+    {
+      "family": "curve-plain",
+      "variant": "exchange",
+      "pool": "0x4dece678ceceb27446b35c672dc7d61f30bad69e",
+      "samples": 4,
+      "amounts": "P and 10P for both admitted directions",
+      "executions": 8,
+      "status": "same_state_quote_old_fragment_runtime_equal",
+      "receipt": "logs/family-latency-20261007/single-block-26138094/candidate/curve-exchange-dual-attempt2.json",
+      "sha256": "a5422cdc6dba8b4ff58b500d55b80a4b1d29935fc599a34779b4f36b3e3db82f",
+      "testSha256": "1ad12a0600bcc24d941360d6a0b674251136ea1adcda2a4cc9f586faca72cdae",
+      "rpcCalls": 119
+    },
+    {
+      "family": "curve-plain",
+      "variant": "exchange_received",
+      "pool": "0x5018be882dcce5e3f2f3b0913ae2096b9b3fb61f",
+      "samples": 4,
+      "amounts": "P and 10P for both admitted directions",
+      "executions": 8,
+      "status": "same_state_quote_old_fragment_runtime_equal",
+      "receipt": "logs/family-latency-20261007/single-block-26138094/candidate/curve-received-dual-attempt1.json",
+      "sha256": "4b2efef90cbdf0953592f5ef3721f4e04f9eb34786d8d30ee325e3b75a4e9a78",
+      "testSha256": "1ad12a0600bcc24d941360d6a0b674251136ea1adcda2a4cc9f586faca72cdae",
+      "rpcCalls": 109
+    },
+    {
+      "family": "curve-underlying",
+      "pool": "0xc270b3b858c335b6ba5d5b10e2da8a09976005ad",
+      "samples": 24,
+      "directions": 12,
+      "amounts": "P and 10P using actual effective amountIn",
+      "status": "failed_quote_parity",
+      "quoteEqualSamples": 15,
+      "quoteDifferentSamples": 9,
+      "runtimeEvmSuccesses": 24,
+      "runtimeBalanceInventoryAllowanceChecks": 24,
+      "runtimeAndDiagnosticOldMinimum1Equal": 24,
+      "originalOldFragmentMinimumQuoteReverts": 7,
+      "minimum1Diagnostic": "Isolated single-leg comparison only; no production tolerance or minimum was changed",
+      "receipt": "logs/family-latency-20261007/single-block-26138094/candidate/curve-underlying-dual-attempt3.json",
+      "sha256": "4629d3a6ff8049f12fa8314d75cc09c73601534b3a1bd18bd1c3ddcc831c430b",
+      "testSha256": "43fa10f2862724c8b13518bdd1f0c10cd23ad66b49e2405aeafd00a4d31108a1",
+      "rpcCalls": 604
+    }
+  ],
+  "retainedEarlierFailures": [
+    {
+      "path": "logs/family-latency-20261007/single-block-26138094/candidate/curve-exchange-dual-attempt1.json",
+      "sha256": "6f6ab036a937f29097d8355215dcb2fe1300f1dbc44767d16e820115fcfe1ba6",
+      "reason": "Nonstandard token balance mapping unavailable in fast mapper; no execution evidence"
+    },
+    {
+      "path": "logs/family-latency-20261007/single-block-26138094/candidate/curve-underlying-dual-attempt1.json",
+      "sha256": "fa0effb543c922ba37a90add1ec7083d1a7892c32067b55ddb137de694227dd8",
+      "reason": "Single-block Graph lacked positive DAI holder; failed before exchanges"
+    },
+    {
+      "path": "logs/family-latency-20261007/single-block-26138094/candidate/curve-underlying-dual-attempt2.json",
+      "sha256": "5231fc2d6980a6741187b703e8df0ab916d1a5e3c717105b6f9a7974e2251591",
+      "reason": "Same nine quote mismatches before addition of independently reported minimum1 diagnostic"
+    },
+    {
+      "path": "logs/family-runtime-acceptance/curve-dual-tools.json",
+      "reason": "Wrong-price-path attempt failed before RPC/receipt reservation, preserved as failed tool invocation"
+    }
+  ],
+  "diagnosis": {
+    "status": "all_nine_explained_not_fixed",
+    "receipt": "logs/family-runtime-acceptance/curve-underlying-nine-diagnosis.json",
+    "sha256": "a1e3038cfe46bca35ee7eba5872f55713892c3f8998b567fd56d794ff4a285eb",
+    "script": "logs/family-runtime-acceptance/curve-underlying-nine-diagnosis.mts",
+    "scriptSha256": "52bf6dbb896e9a71004113db178358a2727e0b8327f304dad62d3f1e95a55efd",
+    "method": "Diagnostic arithmetic from public reference source, fresh pinned state and prior independently observed EVM balances; not a second production quote implementation or acceptance substitute",
+    "rpcCalls": 31,
+    "forkStopped": true,
+    "headerBefore": {
+      "number": 26138094,
+      "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+      "timestamp": 1791347015
+    },
+    "headerAfter": {
+      "number": 26138094,
+      "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+      "timestamp": 1791347015
+    },
+    "state": {
+      "baseBalances": [
+        "48584016423561599164952509",
+        "47983845606201",
+        "63151726663480"
+      ],
+      "metaBalances": [
+        "3325443319715033584637",
+        "757923033976030914694"
+      ],
+      "baseFee": "1500000",
+      "baseA": "4000",
+      "metaFee": "4000000",
+      "metaAPrecise": "100000",
+      "virtualPrice": "1039823717416659423",
+      "lpTotalSupply": "153602243283618865987372153",
+      "metaRateMultiplierInference": "1000000000000000000",
+      "metaRateNote": "18-decimal USDP normalization; validated numerically below, not a verified source/storage layout claim"
+    },
+    "codeHashes": [
+      {
+        "address": "0xc270b3b858c335b6ba5d5b10e2da8a09976005ad",
+        "keccak": "0xb03eac48901ed5f36399381b3bbbaa60db83ea38ea7b05acc2a46c42c9f6b6ce"
+      },
+      {
+        "address": "0x213be373fdff327658139c7df330817dad2d5bbe",
+        "keccak": "0x86092e83f01ab6d7a368475cdf5c75f0a18352f943cdc4de65248f10d4881267"
+      },
+      {
+        "address": "0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7",
+        "keccak": "0x954a1e212c557c85043985931498ffa3e2fcbe7dfe9cd61513f36eb47d6f4dfc"
+      }
+    ],
+    "sourceQualification": "Public reference source was not compiler/bytecode-matched to this deployment. All nine quote and execution outputs reproduce exactly at this state; on-chain traces confirm actual methods and mint amounts. Claims remain limited to these samples.",
+    "references": [
+      {
+        "url": "https://github.com/curvefi/curve-factory/blob/master/contracts/implementations/meta/MetaUSD.vy",
+        "blob": "4b0ca582038987b2f2192a987daab98a416cfd31",
+        "relevant": "get_dy_underlying: approximate base deposit fee; exchange_underlying: actual minted LP balance delta"
+      },
+      {
+        "url": "https://github.com/curvefi/curve-contract/blob/master/contracts/pools/3pool/StableSwap3Pool.vy",
+        "blob": "04d170189a1b5ddfecfc0af9ea3fe23eb0840423",
+        "relevant": "get_dy: convert to token units then fee; exchange: fee in normalized units then convert"
+      }
+    ],
+    "sixBaseToMeta": {
+      "count": 6,
+      "cause": "get_dy_underlying estimates base LP using fee-free calc_token_amount then half base fee; execution uses imbalance-dependent per-coin deposit fees and actual minted LP",
+      "provenChecks": [
+        "fee-free LP quote reconstructed",
+        "per-coin exact deposit fee and minted LP match EVM trace",
+        "approximate fee path reproduces underlying quote",
+        "actual LP path reproduces observed USDP",
+        "pool get_dy(1,0,actualMintedLP) equals observed USDP"
+      ],
+      "signs": "DAI/USDC actual below quote; USDT actual above quote"
+    },
+    "threeBaseToBase": {
+      "count": 3,
+      "cause": "3pool get_dy vs exchange rounding order",
+      "directions": "DAI->USDT 10P and USDC->USDT P/10P",
+      "signedRawOutputDelta": "-1",
+      "outputToken": "USDT",
+      "decimalDelta": "-0.000001",
+      "provenChecks": [
+        "direct base get_dy equals Family quote",
+        "conversion-before-fee reproduces quote",
+        "fee-before-conversion reproduces EVM output"
+      ]
+    },
+    "samples": [
+      {
+        "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "multiplier": "1",
+        "amountIn": "5215439882447199582",
+        "quote": "5229685503617564103",
+        "actual": "5229669495768405967",
+        "delta": "-16007849158136",
+        "cause": "base-deposit fee approximation in get_dy_underlying",
+        "feeFreeLpQuote": "5015808893624287726",
+        "exactMintedLp": "5015417355582850964",
+        "perCoinDepositFees": [
+          "204128533894600",
+          "88",
+          "115"
+        ],
+        "quotedVirtualInput": "5215165882841227008",
+        "actualVirtualInput": "5215149919078191692",
+        "reconstructedQuote": "5229685503617564103",
+        "reconstructedExecution": "5229669495768405967",
+        "directLpQuote": "5229669495768405967",
+        "status": "explained"
+      },
+      {
+        "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "multiplier": "10",
+        "amountIn": "52154398824471995820",
+        "quote": "52286883869850030320",
+        "actual": "52286713826780397222",
+        "delta": "-170043069633098",
+        "cause": "base-deposit fee approximation in get_dy_underlying",
+        "feeFreeLpQuote": "50158088931638791254",
+        "exactMintedLp": "50154163934550920172",
+        "perCoinDepositFees": [
+          "2041285339027916",
+          "881",
+          "1159"
+        ],
+        "quotedVirtualInput": "52151658823625191313",
+        "actualVirtualInput": "52151489186349287545",
+        "reconstructedQuote": "52286883869850030320",
+        "reconstructedExecution": "52286713826780397222",
+        "directLpQuote": "52286713826780397222",
+        "status": "explained"
+      },
+      {
+        "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "multiplier": "10",
+        "amountIn": "52154398824471995820",
+        "quote": "52149953",
+        "actual": "52149952",
+        "delta": "-1",
+        "cause": "base get_dy converts precision before fee; exchange deducts normalized fee before conversion",
+        "normalizedGrossDy": "52157776504633053074",
+        "normalizedFee": "7823666475694957",
+        "reconstructedQuote": "52149953",
+        "reconstructedExecution": "52149952",
+        "directBaseQuote": "52149953",
+        "status": "explained"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "multiplier": "1",
+        "amountIn": "5216204",
+        "quote": "5230470056693702460",
+        "actual": "5230450973829933903",
+        "delta": "-19082863768557",
+        "cause": "base-deposit fee approximation in get_dy_underlying",
+        "feeFreeLpQuote": "5016561377978652975",
+        "exactMintedLp": "5016166834399038532",
+        "perCoinDepositFees": [
+          "89253347497806",
+          "205",
+          "116"
+        ],
+        "quotedVirtualInput": "5215948275236050057",
+        "actualVirtualInput": "5215929244926964886",
+        "reconstructedQuote": "5230470056693702460",
+        "reconstructedExecution": "5230450973829933903",
+        "directLpQuote": "5230450973829933903",
+        "status": "explained"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "multiplier": "10",
+        "amountIn": "52162040",
+        "quote": "52294726509241037994",
+        "actual": "52294533746095695711",
+        "delta": "-192763145342283",
+        "cause": "base-deposit fee approximation in get_dy_underlying",
+        "feeFreeLpQuote": "50165613775045657423",
+        "exactMintedLp": "50161666415796898242",
+        "perCoinDepositFees": [
+          "892533474893718",
+          "2052",
+          "1160"
+        ],
+        "quotedVirtualInput": "52159482747431198810",
+        "actualVirtualInput": "52159290444288329232",
+        "reconstructedQuote": "52294726509241037994",
+        "reconstructedExecution": "52294533746095695711",
+        "directLpQuote": "52294533746095695711",
+        "status": "explained"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "multiplier": "1",
+        "amountIn": "5216204",
+        "quote": "5215778",
+        "actual": "5215777",
+        "delta": "-1",
+        "cause": "base get_dy converts precision before fee; exchange deducts normalized fee before conversion",
+        "normalizedGrossDy": "5216560135799989488",
+        "normalizedFee": "782484020369998",
+        "reconstructedQuote": "5215778",
+        "reconstructedExecution": "5215777",
+        "directBaseQuote": "5215778",
+        "status": "explained"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "multiplier": "10",
+        "amountIn": "52162040",
+        "quote": "52157777",
+        "actual": "52157776",
+        "delta": "-1",
+        "cause": "base get_dy converts precision before fee; exchange deducts normalized fee before conversion",
+        "normalizedGrossDy": "52165601346139942110",
+        "normalizedFee": "7824840201920991",
+        "reconstructedQuote": "52157777",
+        "reconstructedExecution": "52157776",
+        "directBaseQuote": "52157777",
+        "status": "explained"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "multiplier": "1",
+        "amountIn": "5216514",
+        "quote": "5230423798799510394",
+        "actual": "5230460873543839641",
+        "delta": "37074744329247",
+        "cause": "base-deposit fee approximation in get_dy_underlying",
+        "feeFreeLpQuote": "5016517010882514387",
+        "exactMintedLp": "5016176328748590927",
+        "perCoinDepositFees": [
+          "89252558130040",
+          "88",
+          "177"
+        ],
+        "quotedVirtualInput": "5215902144737259161",
+        "actualVirtualInput": "5215939117376810911",
+        "reconstructedQuote": "5230423798799510394",
+        "reconstructedExecution": "5230460873543839641",
+        "directLpQuote": "5230460873543839641",
+        "status": "explained"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "multiplier": "10",
+        "amountIn": "52165140",
+        "quote": "52294264102727882602",
+        "actual": "52294629701718193141",
+        "delta": "365598990310539",
+        "cause": "base-deposit fee approximation in get_dy_underlying",
+        "feeFreeLpQuote": "50165170105954074199",
+        "exactMintedLp": "50161758476245313940",
+        "perCoinDepositFees": [
+          "892525581249323",
+          "881",
+          "1774"
+        ],
+        "quotedVirtualInput": "52159021444387409177",
+        "actualVirtualInput": "52159386170926027888",
+        "reconstructedQuote": "52294264102727882602",
+        "reconstructedExecution": "52294629701718193141",
+        "directLpQuote": "52294629701718193141",
+        "status": "explained"
+      }
+    ],
+    "impact": [
+      "The Family value equals the pool inquiry; pool inquiry is not byte-exact with actual execution for these inputs",
+      "Effective inherits the quote deviation; near-threshold ranking can be affected",
+      "Runtime single-leg outputs are actual balances and match old encoding at the same minimum; no full-route/EV pass is inferred",
+      "Old quoted minOut equal to inquiry reverted on seven lower-output samples; two higher-output USDT-to-USDP samples do not revert for this reason",
+      "No blanket tolerance or automatic one-unit deduction introduced"
+    ]
+  },
+  "regressions": {
+    "buildLive": "pass",
+    "familyDualExecution": {
+      "passed": 62,
+      "failed": 0,
+      "coverage": "Synthetic all-installed swap/protocol selector contracts now include Curve five modes and Ekubo native/TWAMM variants; not historical per-Family proof",
+      "log": "logs/family-runtime-acceptance/expanded-dual-indexed.log"
+    },
+    "fullTsc": {
+      "status": "16 baseline errors, 0 new",
+      "log": "logs/family-runtime-acceptance/curve-dual-checked-tsc.log"
+    },
+    "diffCheck": "pass"
+  },
+  "toolReconciliation": [
+    {
+      "query": "curve,runtime,dual,historical,fork",
+      "selected": "listener:searcher:curve-runtime-dual-historical-fork",
+      "manifest": "logs/family-runtime-acceptance/curve-dual-tools.json",
+      "sha256": "fdefa28008c62ff2bdbf6c4527adec3a15986aef6687f74aee39ca77f7faa910",
+      "note": "Plain successes and Underlying failures retained separately. Failed runs are not execution acceptance."
+    },
+    {
+      "query": "family,dual,execution",
+      "selected": "listener:searcher:family-dual-execution",
+      "manifest": "logs/family-runtime-acceptance/expanded-family-dual-tools.json",
+      "sha256": "377e0595aeebcaf071934bae7420dde84910c0e63058a2cb0f85c1861184f515",
+      "result": "62 pass"
+    }
+  ],
+  "independentReview": {
+    "reviewer": "Dirac, non-author",
+    "result": "No P1/P2 test-observation blocker; 9 quote failures remain. 24 diagnostic parity cases are not quote or full-route acceptance.",
+    "boundaries": "Read-only saved receipts/current test; no RPC or edits"
+  },
+  "currentDefaultSnapshot": {
+    "installed": 31,
+    "swapProtocol": 28,
+    "funding": 2,
+    "credit": 1,
+    "enabled": 28,
+    "disabled": [
+      "balancer-v3",
+      "custom-swap:ekubo-router-v1",
+      "credit:fluid"
+    ],
+    "tokenConversionEnabled": true,
+    "qualifier": "Default production-module snapshot at productionHead without test environment overrides; NOT deployed live activation config"
+  },
+  "remaining": [
+    "Curve Underlying quote/execution correctness not fixed; exact parity 15/24",
+    "Historical full-session/full-route dual acceptance for all installed Families is not complete",
+    "Only representative Curve exchange and exchange_received variants have the added historical evidence; other fixture variants are not promoted",
+    "No new latency measurement in this supplement; prior small-graph profile cannot prove full-live improvement",
+    "Existing stage1 report remains historical; activation snapshot above supersedes its TokenConversion-off statement only for this current head"
+  ],
+  "priorReports": [
+    "docs/research/reports/family-runtime-actual-20261007-stage1.json",
+    "docs/research/reports/family-latency-20261007-single-block.json",
+    "docs/research/reports/family-latency-20261007-hot-profile.json"
+  ]
+}

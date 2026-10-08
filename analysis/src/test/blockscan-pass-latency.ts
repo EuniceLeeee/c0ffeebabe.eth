@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { analyzePassLatency } from "../blockscan-pass-latency.js";
+import { constants } from "node:buffer";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { analyzePassLatency, createPassLatencyAnalyzer } from "../blockscan-pass-latency.js";
 
 const PROCESS = "[searcher/live] starting V5 searcher";
 const COMMIT = "[searcher/live] runtime_commit=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -171,4 +177,55 @@ test("duplicate source block breaks consecutive continuity", () => {
   assert.equal(report.longestRun?.count, 3);
   assert.equal(report.longestRun?.startBlock, 1_001);
   assert.equal(report.continuityBreaks.source_block_duplicate_or_regression, 1);
+});
+
+test("sliced CLI stream matches the string API with relative line numbers", () => {
+  const dir = mkdtempSync(join(tmpdir(), "blockscan-pass-latency-"));
+  try {
+    const log = join(dir, "live.log");
+    const lines = ["unrelated first", "unrelated second", PROCESS, COMMIT,
+      passRecord(1_000, 8_000), passRecord(1_001, 9_000), "", "after window"];
+    writeFileSync(log, lines.join("\n") + "\n");
+    const cli = fileURLToPath(new URL("../cli/blockscan-pass-latency.ts", import.meta.url));
+    const report = JSON.parse(execFileSync(process.execPath,
+      ["--import", "tsx", cli, "--log", log, "--start-line", "3", "--end-line", "6", "--min-run", "2"],
+      { encoding: "utf8" }));
+    const expected = analyzePassLatency(lines.slice(2, 6).join("\n") + "\n", {
+      startLine: 1, logStartLine: 3, minRun: 2, thresholdMs: 10_000,
+    });
+    assert.deepEqual(report, expected);
+    assert.equal(report.longestRun?.startLine, 3);
+    assert.equal(report.scope.logStartLine, 3);
+    const trailingBlank = JSON.parse(execFileSync(process.execPath,
+      ["--import", "tsx", cli, "--log", log, "--start-line", "3", "--end-line", "7", "--min-run", "2"],
+      { encoding: "utf8" }));
+    assert.deepEqual(trailingBlank, expected);
+    const emptyWindow = JSON.parse(execFileSync(process.execPath,
+      ["--import", "tsx", cli, "--log", log, "--start-line", "100", "--min-run", "2"],
+      { encoding: "utf8" }));
+    assert.deepEqual(emptyWindow, analyzePassLatency("\n", {
+      startLine: 1, logStartLine: 100, minRun: 2, thresholdMs: 10_000,
+    }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("incremental analysis handles a logical window larger than V8's string limit", () => {
+  const analyzer = createPassLatencyAnalyzer({
+    startLine: 1, minRun: 100, thresholdMs: 10_000,
+  });
+  analyzer.pushLine(PROCESS);
+  analyzer.pushLine(COMMIT);
+  for (let block = 1_000; block < 1_249; block++) {
+    analyzer.pushLine(passRecord(block, 9_000));
+  }
+  const irrelevant = "x".repeat(1024 * 1024);
+  for (let index = 0; index <= Math.floor(constants.MAX_STRING_LENGTH / irrelevant.length); index++) {
+    analyzer.pushLine(irrelevant);
+  }
+  const report = analyzer.finish();
+  assert.equal(report.totals.passes, 249);
+  assert.equal(report.longestRun?.count, 249);
+  assert.equal(report.scope.eligibleForQualification, true);
 });

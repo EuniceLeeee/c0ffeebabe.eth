@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-07T17:46:47.671Z",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "code_commit": "b6412b8031a63d4561e0f16e9769d247124e9b81",
+  "base_commit": "120cb6219cc8d0c6380d1d88f54028efc675364f",
+  "claim": "Single-instance, same-N quote and independently observed execution parity; not original-TX pre-call replay, full-route EV, latency acceptance or formal adapter_merge_ready.",
+  "family": "curve-underlying",
+  "pool": "0xc270b3b858c335b6ba5d5b10e2da8a09976005ad",
+  "discovery_transaction": "0x73f75256979894103b5bcb045266cf802103e23d0d937c907e50b035663e48e4",
+  "discovery_log_index": 1017,
+  "discovery_source": "underlying-swap-log; real single-block production discovery",
+  "state": {
+    "block": 26138094,
+    "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+    "environment": "N-end state / N execution; no mined block",
+    "timestamp": 1791347015
+  },
+  "model": {
+    "kind": "classic-meta-base-3pool-v1",
+    "admission": "Existing MetaRegistry identity and behavior checks remain; exact immutable runtime/topology selects quote semantics, not a pool allowlist.",
+    "implementation": "0x213be373fdff327658139c7df330817dad2d5bbe",
+    "implementation_code_hash": "0x86092e83f01ab6d7a368475cdf5c75f0a18352f943cdc4de65248f10d4881267",
+    "base_pool": "0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7",
+    "base_code_hash": "0x954a1e212c557c85043985931498ffa3e2fcbe7dfe9cd61513f36eb47d6f4dfc",
+    "deployed_source_proof": "logs/curve-binding-sidecar-20261007.Tgn060; Vyper 0.2.15/0.2.4 byte-for-byte runtime compilation",
+    "direction_semantics": [
+      "base-to-meta: actual one-coin LP mint fee and rounding, then metapool quote at the pre-deposit rate state",
+      "base-to-base: deployed exchange fee-before-precision and checked intermediate multiplication order",
+      "meta-to-base: bound integer-rate underlying view; fractional-rate composition through direct LP quote and withdrawal"
+    ],
+    "unknown_implementations": "retain previous chain-quote method; no universal Curve math claim",
+    "refresh": "Family-local dependency declarations and eventless donate_admin_fees call mapping; no central protocol branch. Ordinary underlying token logs/irrelevant calls do not broaden refresh.",
+    "limits": [
+      "Active amplification ramps fail closed; per-block ramp quoting not implemented.",
+      "Classic base deposit/exchange post-state trial modeling unsupported; runtime actual-received execution remains available.",
+      "Raw mid retains the pre-existing view; corrected amount-sensitive Exact serves effective and explicit quote paths."
+    ]
+  },
+  "integration": {
+    "ready": "logs/curve-model-historical.Lm9tY5/ready.json",
+    "ready_sha256": "2ac1ad568c3ae3bb7c0f021c773def74c90f2d6ac3a6b2b80f9b414238dd34d6",
+    "strict": "admitted",
+    "graph_directions": 12,
+    "effective_quoted": 12,
+    "prices": "logs/curve-model-historical.Lm9tY5/prices/prices.json",
+    "price_input": "logs/curve-model-historical.Lm9tY5/prices/input.json",
+    "price_input_sha256": "d3eaca17f3b590ed81be0fbfe0f48176d9f559a8445d9fe8c811d392c9d5a317",
+    "family_memo_definition_hash": "d71aca7e833f7582cab83c8a6726e20b9fdcfc227956f006c62512500dfcb397"
+  },
+  "comparison": {
+    "input_policy": "Both amount sets retained: all 12 directions at P and 10P. Original amounts are not replaced by current P.",
+    "baseline": {
+      "receipt": "logs/family-latency-20261007/single-block-26138094/candidate/curve-underlying-dual-attempt3.json",
+      "sha256": "4629d3a6ff8049f12fa8314d75cc09c73601534b3a1bd18bd1c3ddcc831c430b",
+      "amounts": 24,
+      "quote_parity": 15,
+      "runtime_execution_checks": 24,
+      "quote_mismatches": 9
+    },
+    "current_effective": {
+      "receipt": "logs/curve-model-historical.Lm9tY5/dual-indexed-price-input.json",
+      "sha256": "d3344fe6ee79ecc86bb792c7ace6a4eada7285e27d7da3296cbb2c9d909948a6",
+      "amounts": 24,
+      "quoted_fragment_pass": 24,
+      "actual_received_program_pass": 24,
+      "isolated_minimum_one_diagnostic_pass": 24,
+      "loopback_read_calls": 998
+    },
+    "original_amounts": {
+      "receipt": "logs/curve-model-historical.Lm9tY5/dual-reference-price-input.json",
+      "sha256": "efe076e0ecff19e56846083d7a52aec1af6a80a990399f99f5bfb8f39fc9c074",
+      "amounts": 24,
+      "quoted_fragment_pass": 24,
+      "actual_received_program_pass": 24,
+      "isolated_minimum_one_diagnostic_pass": 24,
+      "loopback_read_calls": 998,
+      "all_outputs_equal_previous_independent_actual": true
+    },
+    "strict_dual_executions_passed": 96,
+    "extra_diagnostic_executions": 48,
+    "amount_tolerance_raw_units": 0,
+    "construct_runtime_rpc_attempts": 0,
+    "old_inventory_consumed": "0",
+    "diagnostic_minimum_one": "Extra comparison only; not used to waive strict quoted-fragment minimum or quote/output equality.",
+    "source_sha256": "a3d731d6667519e78c061a8d95ea9b3b74977d1a5afdcc29c4a328782ed82759",
+    "test_sha256": "b668dd8d7115b3a8d8c359a6a62e7c1e1f2d93151cff98e43d91b4b4f999eee3"
+  },
+  "regressions": {
+    "production_build": "build:live pass",
+    "generated_manifest": "check pass",
+    "model_and_math_tests": 58,
+    "refresh_and_overflow_tests": 13,
+    "historical_input_tests": 8,
+    "shared_dual_execution_tests": 67,
+    "family_contract": "pass",
+    "exact_cache": "pass",
+    "strict_solver_consumer": "pass",
+    "full_typecheck": "16 existing errors; no new errors. Not a clean full-repository build.",
+    "legacy_compiled_family_mutation": "Existing synthetic Curve Plain descriptor lacks binding.codeHash; this extra suite remains failed and is not claimed as passing.",
+    "logs": "logs/curve-model-wiring-20261008.SezyNp"
+  },
+  "independent_review": {
+    "reviewer": "Mencius / 01a11740-7b48-70e1-8bdc-3e0aa98eb3c7",
+    "production_findings_resolved": [
+      "Eventless base donation missed by log-only mutation mapping",
+      "Algebraically cancelled multiplication incorrectly widened Vyper uint256 domain"
+    ],
+    "harness_review": "Confirmed stale inline-header assumption; after correction, real split files and legacy inline header load, 23 independent negative mutations rejected, no actionable findings.",
+    "test_authorship": "Reviewer authored refresh/overflow tests; main separately inspected and ran those 13 tests. Reviewer did not self-review them."
+  },
+  "preserved_failures": [
+    {
+      "path": "logs/curve-model-historical.AlVUH1",
+      "cause": "Duplicate normalized USDT dependency prevented pricing materialization; fixed with Family-owned unique address declarations."
+    },
+    {
+      "path": "logs/curve-model-historical.Lm9tY5/dual-indexed.json",
+      "cause": "Historical test expected inline prices.header; current production CLI stores header in input.json.",
+      "rpc_calls": 0,
+      "samples": 0
+    }
+  ],
+  "tool_reconciliation": {
+    "query": [
+      "curve",
+      "historical",
+      "dual"
+    ],
+    "manifest": "logs/curve-model-historical.Lm9tY5/tool-selection-price-input.json",
+    "sha256": "1becf57754c8afbad72d7f636a5a66765e8db8bd76f1c1c6a59f32bbf003a85c",
+    "successful_ids": [
+      "listener:searcher:curve-runtime-dual-historical-fork",
+      "listener:searcher:curve-underlying-family-plugin",
+      "listener:searcher:family-dual-execution"
+    ],
+    "historical_invocations": 2
+  },
+  "safety": {
+    "mainnet_broadcast": false,
+    "signing": false,
+    "local_fork_only": true,
+    "full_live_started": false,
+    "history_14400_rebuilt": false,
+    "original_ready_unchanged_sha256": "19d010389a71ac2c006de677f0e6afef2154dc374779d75b8ac0a11c4d9f1eca",
+    "protected_impl_not_modified": true
+  },
+  "remaining": [
+    "Three-family latency comparison and any further evidenced optimization are separate; no speedup is inferred from these fork runtimes.",
+    "Broader Curve implementation variants and original-TX pre-call/full-route/EV acceptance remain outside this specific parity evidence."
+  ]
+}

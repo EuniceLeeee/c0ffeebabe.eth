@@ -299,7 +299,13 @@ export class StrictProductionRuntimeRoot {
           routes: pricing.routes, stateKey: pricing.stateKey, dependencies: pricing.dependencies }));
         mutationGroups.set(semantics, entries);
         const stateKey = String(pricing.stateKey).toLowerCase();
-        if (semantics.refreshPolicy === "each-block") perBlockRefreshStateKeys.add(stateKey);
+        const refreshPolicy = semantics.refreshPolicyForInstance === undefined
+          ? semantics.refreshPolicy ?? "on-touch"
+          : semantics.refreshPolicyForInstance({ descriptor: pricing.pricingDescriptor, routes: pricing.routes });
+        if (refreshPolicy !== "on-touch" && refreshPolicy !== "each-block") {
+          throw new Error("pricing.refreshPolicy returned an invalid policy");
+        }
+        if (refreshPolicy === "each-block") perBlockRefreshStateKeys.add(stateKey);
         const stateIndexes = instanceIndexesByStateKey.get(stateKey) ?? [];
         if (!stateIndexes.includes(index)) stateIndexes.push(index);
         instanceIndexesByStateKey.set(stateKey, stateIndexes);

@@ -1,3 +1,4 @@
+import { curveUnderlyingAcceptBaseCall, curveUnderlyingAcceptLpMutation, curveUnderlyingAcceptMutation, curveUnderlyingQuoteModelProjection, curveUnderlyingRefreshAddresses } from "./quote-model.js";
 import { compileAddressMutations } from "../../mutation-index.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import type { TokenEdge } from "../../../planner/token-graph.js";
@@ -39,6 +40,7 @@ export const curveUnderlyingPricing = {
   stateKey: (route) => route.routeKey,
   staticBindingProjection: ({ descriptor, routes }) => ({
     pool: descriptor.pool,
+    quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
     coins: descriptor.coins,
     registryBinding: {
       registry: descriptor.registryBinding.registry,
@@ -55,6 +57,7 @@ export const curveUnderlyingPricing = {
   }),
   snapshotCompatibilityProjection: ({ descriptor, routes }) => ({
     pool: descriptor.pool,
+    quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
     registry: descriptor.registryBinding.registry,
     directions: routes.map((route) => ({
       i: route.i,
@@ -74,6 +77,7 @@ export const curveUnderlyingPricing = {
       pool: descriptor.pool,
       registry: descriptor.registryBinding.registry,
       coins: Object.freeze([...descriptor.coins]),
+      ...(descriptor.quoteModel ? { quoteModel: descriptor.quoteModel } : {}),
       route,
     });
   },
@@ -191,19 +195,50 @@ export const curveUnderlyingPricing = {
       })]]);
     },
   },
-  dependencies: ({ descriptor }) => Object.freeze([
-    descriptor.pool,
+  dependencies: ({ descriptor }) => Object.freeze([...new Set([
+    ...curveUnderlyingRefreshAddresses(descriptor),
     descriptor.registry,
     ...descriptor.coins,
-  ]),
+  ].map(address => address.toLowerCase()))]),
   mutation: {
-    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
-      addresses: [descriptor.pool], keys: routes.map(route => route.routeKey),
-    }), { kinds: ["log"] }),
+    compile: ({ entries }) => {
+      const logs = compileAddressMutations(entries, ({ descriptor, routes }) => ({
+        addresses: curveUnderlyingRefreshAddresses(descriptor).filter(address => !descriptor.quoteModel ||
+          !sameAddress(address, descriptor.quoteModel.baseLPToken)),
+        keys: routes.map(route => route.routeKey),
+      }), { kinds: ["log"], accept: curveUnderlyingAcceptMutation });
+      const lp = compileAddressMutations(entries, ({ descriptor, routes }) => ({
+        addresses: descriptor.quoteModel ? [descriptor.quoteModel.baseLPToken] : [],
+        keys: routes.map(route => route.routeKey),
+      }), { kinds: ["log"], accept: curveUnderlyingAcceptLpMutation });
+      const calls = compileAddressMutations(entries, ({ descriptor, routes }) => ({
+        addresses: descriptor.quoteModel ? [descriptor.quoteModel.basePool] : [],
+        keys: routes.map(route => route.routeKey),
+      }), { kinds: ["call"], accept: curveUnderlyingAcceptBaseCall });
+      return Object.freeze({
+        dependencies: Object.freeze([...new Set([...logs.dependencies, ...lp.dependencies, ...calls.dependencies])]),
+        affectedStateKeys: ({ observation }: Parameters<typeof logs.affectedStateKeys>[0]) => {
+          if (observation.kind === "call") return calls.affectedStateKeys({ observation });
+          const logKeys = logs.affectedStateKeys({ observation });
+          const lpKeys = lp.affectedStateKeys({ observation });
+          if (lpKeys.length === 0) return logKeys;
+          if (logKeys.length === 0) return lpKeys;
+          return Object.freeze([...new Set([...logKeys, ...lpKeys])]);
+        },
+      });
+    },
     affectedStateKeys({ descriptor, routes, observation }) {
+      if (observation.kind === "call") {
+        return descriptor.quoteModel && curveUnderlyingAcceptBaseCall(observation) &&
+          sameAddress(observation.target, descriptor.quoteModel.basePool)
+          ? Object.freeze(routes.map(route => route.routeKey)) : [];
+      }
+      if (observation.kind === "log" && descriptor.quoteModel &&
+          sameAddress(observation.address, descriptor.quoteModel.baseLPToken) &&
+          !curveUnderlyingAcceptLpMutation(observation)) return [];
       if (
-        observation.kind !== "log" ||
-        !sameAddress(observation.address, descriptor.pool)
+        observation.kind !== "log" || !curveUnderlyingAcceptMutation(observation) ||
+        !curveUnderlyingRefreshAddresses(descriptor).some(address => sameAddress(observation.address, address))
       ) {
         return [];
       }

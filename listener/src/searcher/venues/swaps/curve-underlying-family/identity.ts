@@ -1,3 +1,5 @@
+import { hasClassicUnderlyingQuoteModel, underlyingQuoteModelBindingRequests, decodeUnderlyingQuoteModel,
+  curveUnderlyingQuoteModelProjection } from "./quote-model.js";
 import type {
   IdentityDecision,
   IdentitySemantics,
@@ -42,10 +44,10 @@ export const curveUnderlyingIdentity = {
     lineageId: CURVE_UNDERLYING_REGISTRY_LINEAGE_ID,
     applies: () => true,
     requirements(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>) {
-      return identityEvidence(input.evidence) === undefined
-        ? {
-            transports: ["eth-call" as const, "get-code" as const],
-          }
+      const evidence = identityEvidence(input.evidence);
+      if (evidence === undefined) return { transports: ["eth-call" as const, "get-code" as const] };
+      return evidence.phase === "registry-surface" && hasClassicUnderlyingQuoteModel(evidence.poolCode)
+        ? { transports: ["eth-call" as const, "get-code" as const, "get-storage" as const] }
         : { transports: ["eth-call" as const] };
     },
     buildRequests(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>) {
@@ -111,7 +113,7 @@ function behaviorRequests(
     { readonly phase: "registry-surface" }
   >,
 ): readonly AdapterRequest[] {
-  const requests: AdapterRequest[] = [];
+  const requests: AdapterRequest[] = [...underlyingQuoteModelBindingRequests(evidence.poolCode, evidence.pool)];
   for (let i = 0; i < evidence.coins.length; i++) {
     for (let j = 0; j < evidence.coins.length; j++) {
       if (i === j) continue;
@@ -152,6 +154,7 @@ function decodeRegistrySurface(
     handlers: decodeHandlers(handlersResult.data),
     coins: decodeUnderlyingCoins(coinsResult.data),
     poolHasCode: codeResult.data !== "0x",
+    poolCode: codeResult.data,
   });
 }
 
@@ -186,12 +189,14 @@ function decodeBehaviorProof(
       if (witness !== null) verifiedDirections.push(witness);
     }
   }
+  const quoteModel = decodeUnderlyingQuoteModel(prior.poolCode, prior.pool, prior.coins, results);
   return Object.freeze({
     phase: "behavior-proof" as const,
     pool: prior.pool,
     handlers: prior.handlers,
     coins: prior.coins,
     verifiedDirections: Object.freeze(verifiedDirections),
+    ...(quoteModel ? { quoteModel } : {}),
   });
 }
 
@@ -274,6 +279,7 @@ function decideIdentity(
   const evidenceHash = hashCanonical({
     pool: evidence.pool,
     coins: evidence.coins,
+    quoteModel: curveUnderlyingQuoteModelProjection(evidence.quoteModel),
     registryBinding: {
       registry: registryBinding.registry,
       handlers: registryBinding.handlers,
@@ -303,6 +309,7 @@ function decideIdentity(
         pool: evidence.pool,
         coins: Object.freeze([...evidence.coins]),
         registryBinding,
+        ...(evidence.quoteModel ? { quoteModel: evidence.quoteModel } : {}),
         verifiedDirections: Object.freeze([...evidence.verifiedDirections]),
       }),
     }),

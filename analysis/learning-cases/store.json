@@ -1,6 +1,42 @@
 {
   "cases": [
     {
+      "learning_case_id": "tooldef-20261007-prerequisite-cache-idle-socket-reset",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "diagnostic_prerequisite_restore_reused_expired_loopback_connection",
+      "evidence": {
+        "failedRuns": [
+          "logs/family-latency-20261007/combined/baseline-effective/failure.json",
+          "logs/family-latency-20261007/combined/baseline-effective-remaining/failure.json"
+        ],
+        "observation": "Both attempts completed the first three measured heads, then failed during untimed repetition-two prerequisite restoration with ECONNRESET, no cache misses and no cache health fault. Failed attempts remain separate, not combined with later successful runs.",
+        "regressionBefore": "logs/family-runtime-acceptance/cache-keepalive-before.log: actual PrerequisiteCache + keep-alive Agent + 6.5s synchronous event-loop stall reproduces ECONNRESET.",
+        "regressionAfter": "logs/family-runtime-acceptance/cache-transport-after.log: all 60 tests passed; same request contents, pinning/hash checks, replay isolation, measured forwarding and bounded cleanup remain.",
+        "independentReview": {
+          "agent": "01a11519-74f4-7780-ad82-4cdac58a7bd0",
+          "verdict": "Narrow benchmark transport fix justified. Actual repeated benchmark still requires separate validation; no live latency claim."
+        },
+        "scope": "Loopback benchmark cache only; production live never imports it."
+      },
+      "tooling_defect": {
+        "tool": "listener/benchmarks/prerequisite-cache.ts",
+        "issue": "Default HTTP keep-alive expiry races with long synchronous Ready restoration in the same event loop, resetting a previously healthy reusable connection before request handling.",
+        "evidence": "Deterministic actual-cache failure before fix and 60/60 regression pass after keepAliveTimeout=0, including closure while the client agent still retains an idle socket.",
+        "codify_target": "listener/benchmarks/prerequisite-cache.ts and prerequisite-cache.test.ts: disable local idle expiry, retain explicit abort/drain/close, test real persistent connection across blocked restoration.",
+        "status": "codified",
+        "codify_commit": "4895fbe5ca68b27417cd62b0bc6bfca600ca80c2"
+      },
+      "created_at": "2026-10-07T07:14:41Z",
+      "updated_at": "2026-10-07T07:40:00Z"
+    },
+    {
       "learning_case_id": "tooldef-20260706-share-token-venue-check",
       "status": "manual_required",
       "strategy_kind": "block-scan",
@@ -613,6 +649,91 @@
       },
       "created_at": "2026-09-16T13:52:28Z",
       "updated_at": "2026-09-16T13:52:28Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261007-blockscan-pass-latency-large-log",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": ["swap"],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "latency_analyzer_join_exceeded_v8_string_limit",
+      "evidence": {
+        "finding": "The Balancer V3 250-block live.log exceeded 1.17 GB; analysis:blockscan-pass-latency failed at Array.join with RangeError: Invalid string length, leaving the full qualification window unanalyzed.",
+        "independent_review": "A non-author reviewer confirmed the CLI accumulated and joined the entire selected window while the core split it again; slicing the qualification window would change its process and continuity judgment.",
+        "regression": "The CLI now streams lines to the shared incremental analyzer; eight targeted tests and TypeScript build pass. The regression covers sliced and empty-window parity plus an aggregate logical input larger than V8's string limit. Non-author short-sequence differential check: 781 cases, zero mismatches."
+      },
+      "tooling_defect": {
+        "tool": "analysis:blockscan-pass-latency",
+        "issue": "The CLI materialized and joined an entire live log, exceeding V8's maximum string length on a valid 250-block window.",
+        "evidence": "Balancer V3 live.log was 1.178 GB and the canonical tool failed with RangeError: Invalid string length; an independently reviewed streaming replacement preserves process/commit anchors and relative line semantics.",
+        "codify_target": "analysis/src/cli/blockscan-pass-latency.ts and analysis/src/blockscan-pass-latency.ts: incremental line feed with unchanged string API and large-window/parity regressions",
+        "codify_commit": "3b22ae81b3edd21e43df91c590e151cd9896a6aa",
+        "status": "codified"
+      },
+      "created_at": "2026-10-07T00:09:42Z",
+      "updated_at": "2026-10-07T00:09:42Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261007-redact-live-run-event-range-stack",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": ["swap"],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "live_summary_expanded_event_blocks_into_function_arguments",
+      "evidence": {
+        "finding": "The 548-source-height snapshot contains 276199 block-bearing events, including 275651 pipeline_dropped rows. The canonical redaction tool failed while rendering Math.min(...blocks), not while the live process wrote its logs.",
+        "independent_review": "Non-author redaction_stack_review reproduced the exact renderer in memory: 548 entries succeed, 276199 entries throw. Both Math.min and Math.max spreads independently exceed the argument limit.",
+        "regression": "The new CLI fixture reproduces the baseline failure and passes after bounded-arity reductions, preserving all 276199 public rows, exact event counts and block range 26138356-26138903. Empty and blockless fixtures also pass. Analysis TypeScript build and both tests pass locally and on the cloud analysis workspace.",
+        "failed_execution_manifest": "/opt/mev-cloud/six-round-20261006/tx80334-audit-1791357543766/analysis-selection.json",
+        "fixed_execution_manifest": "/opt/mev-cloud/six-round-20261006/tx80334-audit-1791357543766/analysis-selection-redaction-fixed.json",
+        "scope": "Offline analysis only; the separate live price-history 2 GiB cap and its incomplete sidecar are not repaired by this summary change. Frozen live source is unchanged."
+      },
+      "tooling_defect": {
+        "tool": "analysis:redact-live-run",
+        "issue": "Summary rendering spreads one block per event as function arguments, exceeding the V8 argument limit on valid large live snapshots.",
+        "evidence": "Canonical 276199-row input fails with Maximum call stack size exceeded; the independently verified CLI regression flips failure to success with unchanged event content.",
+        "codify_target": "analysis/src/cli/redact-live-run.ts: bounded-arity min/max reductions; analysis/src/test/redact-live-run-large.ts: large-event, empty and blockless CLI regressions.",
+        "codify_commit": "3bda3661f6bb1e4ec978aac36d36b034f9371e19",
+        "status": "codified"
+      },
+      "created_at": "2026-10-07T07:45:16Z",
+      "updated_at": "2026-10-07T07:45:16Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261007-redact-live-run-whole-log-string-limit",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "none_tooling_only",
+      "gap_detail": "redaction_materialized_entire_log_and_events",
+      "evidence": {
+        "finding": "The stopped final-2500 live.log is 792870357 bytes, above V8's 536870888-byte string limit; the canonical CLI failed with Invalid string length. Its events file contains 376991 rows.",
+        "independent_review": "A non-author confirmed the whole-file read/split/join defect and reproduced a late wallet-binding leak if the log grows between two streaming passes. Frozen-input identity/size/mtime/ctime checks close that race; append, same-length rewrite, inode replacement and late event append all fail before any report publication.",
+        "regression": "Seven CLI tests pass locally, on cloud and under independent review. A real log above 512 MiB preserves its byte hash with a 128 MiB heap. Late aliases, quoted multiline secrets, UTF-8/CRLF, summary ordering, incomplete-input and source-alias checks are retained.",
+        "canonical_after": "The full stopped 792870357-byte log and 376991 events were processed successfully through analysis:tool-run; no shortened qualification window, live restart or RPC was used.",
+        "execution_manifest": "/opt/mev-cloud/six-round-20261006/log-storage-audit-20261007/analysis-selection-redaction-streaming.json",
+        "execution_manifest_sha256": "e5b13ed417852dbb603b571631a51a869ca05c6e2d12a3663a19a5e61289adf7",
+        "cli_sha256": "3a48a0f7d1a51de5ca92c8c8cdf050649b28124a7e1e8e272c5643410fd90bee",
+        "scope": "Offline redaction and summary only; inputs must remain frozen while processing. This does not repair the historical price/route sidecar gap or certify SetToken chain execution."
+      },
+      "tooling_defect": {
+        "tool": "analysis:redact-live-run",
+        "issue": "Whole-file strings exceed the V8 string limit on legitimate long live logs. A two-pass replacement also needs frozen-source checks to avoid publishing earlier wallet references after a late binding.",
+        "evidence": "Full canonical input fails before the fix and succeeds with streaming; independent mutation regressions reject changing inputs without calling rename.",
+        "codify_target": "analysis/src/cli/redact-live-run.ts and analysis/src/test/redact-live-run-large.ts: bounded record streaming, incremental summaries, late alias scan, private staging and source-stability checks",
+        "codify_commit": "1ae432ef889fce2fb14540cc8ad5fce63aebda35",
+        "status": "codified"
+      },
+      "created_at": "2026-10-07T09:16:09Z",
+      "updated_at": "2026-10-07T09:16:09Z"
     }
   ]
 }

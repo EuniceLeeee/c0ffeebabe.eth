@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-08",
+  "scope": "Fixed-sample original-amount production runtime output equality on verified native transaction prestate. Test-only; not original Exact parity, whole original TX replay, formal merge acceptance, EV or live latency.",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "319a9855c1970a3adb55c8e58f834d0335083af2",
+  "source": {
+    "productionChanges": 0,
+    "productionTreeSha256": "fab02ce6992b7733707dc7c6bd4c0b3f1f3ef1ae23eb1cbdb95ca0ae4425e17c",
+    "soliditySha256": "7b319c28f6988c67720a66b7437c09fe222148ff0073429ae1515dcacf420364",
+    "artifactSha256": "ff8b61348f037390645448c44d923b5cb43fbda34afe0ff5a34dfaf2a3676b0b",
+    "files": [
+      {
+        "path": "listener/src/searcher/test/family-integration/three-family/historical-dual.ts",
+        "sha256": "0a155364dc6916b924e102b3663c50aba47951e1c6639adbccfde65defa55247",
+        "change": "Export existing samples/pins/receipt checks and optional BotVM owner; default existing behavior unchanged"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/three-family/original-runtime.ts",
+        "sha256": "a60a2e5546941b848e9ec5a90ce72abf8ae02b768e487819955dae0f6175a68a",
+        "change": "Fixed-sample offline production runtime compiler, current Ready/admission hashes and complete canonical payload binding"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/three-family/original-runtime.t.sol",
+        "sha256": "7f134fcb01bd6642a62ed5bd1010d6f4348171b3f7424c7d08a587e9d325ee7f",
+        "change": "Native prestate and fresh-actor output/cleanup assertions, missing-payload negative"
+      }
+    ]
+  },
+  "mechanism": {
+    "fork": "Foundry1.8.5 createSelectFork(originalTxHash), Osaka/solc0.8.31; prior canonical account/slot and seven environment checks repeated",
+    "prestateVerifier": "listener/src/searcher/test/family-integration/three-family/original-prestate.t.sol",
+    "readyUse": "Existing N single-block Ready admission and immutable route construction only; no N-end prices used as original state",
+    "actorSetup": "After canonical prestate verification, install production BotVM at unused executor, give fresh owner only root input ETH, legitimate WETH.deposit then transfer. No historical pool/token supply storage rewrites.",
+    "owner": "0x19b779cE12C626100a169D1113C817653539E307",
+    "executor": "0x48771c4440ad2295B66113e990C8C70358328B55",
+    "runtimeConstruction": "Production buildFamilyRuntimeAmountLeg; amount/quote/RPC entrances poisoned, forbiddenReads=0 in every fixture. Aura uses production runtimeAmountFlowAdapter for all three legs in one call.",
+    "checks": [
+      "canonical payload SHA before creating fork",
+      "all captured canonical account balances/nonces/code/slots",
+      "chainId,number,timestamp,basefee,gaslimit,coinbase,prevrandao",
+      "fresh actors: zero code/native balance/nonce/token inventory",
+      "canonical protocol event data/topics and leg order",
+      "independent output Transfer amounts",
+      "terminal input/output/intermediate/native/owner balances",
+      "temporary approvals cleared"
+    ],
+    "prefixScope": "Saved original traces show Morpho funding/transfer/callback (plus Aura approval) before first core leg, without pricing-state mutation in target pools/Sett. Fresh actors differ from original executor and Morpho callback context; this is bounded production path equality, not a full original transaction replay."
+  },
+  "evidenceRoot": "logs/family-original-runtime.gKKMAU",
+  "samples": [
+    {
+      "block": 26138731,
+      "tx": "0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8",
+      "result": "pass",
+      "readySha256": "ab93f7d4eee5dce269b5e380836ef1c6974e3cb54aa470e0c90a3f86eb4ef180",
+      "captureSha256": "5570a7229183e268afc519162ea80eb85a8937b8940f7350322c9f328a4c86c3",
+      "canonicalPayloadSha256": "1fb7d47d3308b89beb35376aacdd9eba745f4c0b2b585045e15129888331dbaf",
+      "fixture": "26138731.fixture-v3.json",
+      "fixtureSha256": "2c0e0caa4d9b224fb18b9fbffd026f9a97c453de7f39e49a3197aab96ca31144",
+      "log": "26138731.run.1791405620350.log",
+      "logSha256": "655a2d79dbb86ce4c8ae05fc68bc9036e78734e5d9a5d777f1624db8b1346024",
+      "receiptSha256": "0984062b680e0b8d85f8441ebfed13b5cd3050a1c7732c3246141e20c37b0853",
+      "setupAndTestMs": 30579,
+      "legs": [
+        {
+          "family": "balancer-v1",
+          "inputRaw": "8444695829171278",
+          "outputToken": "NMR",
+          "originalOutputRaw": "1313743479005274328",
+          "runtimeOutputRaw": "1313743479005274328",
+          "signedDeltaRaw": "0"
+        }
+      ]
+    },
+    {
+      "block": 26138724,
+      "tx": "0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",
+      "result": "pass",
+      "readySha256": "2cc8ca04d10a78793b506173da23fc5cf6ea22143d0f49bf40be90e8376e4f7f",
+      "captureSha256": "4b209eef5e22fd84765f12cf3af5ef407f04a83c793e2c2ce6ea213499123c67",
+      "canonicalPayloadSha256": "2624cc353f237c3fac343055a84002ccbe558e0e0da054e7513778138faeb428",
+      "fixture": "26138724.fixture-v3.json",
+      "fixtureSha256": "156942fd63a8c121a9d71d24a3f20c8a8245ed9bedc518222b2404a864ba8dd2",
+      "log": "26138724.run.1791405650977.log",
+      "logSha256": "76148d9769a202520aead23feca24d01288a327c1a24d0698452b50a72fbabe1",
+      "receiptSha256": "188e4c45da4b36a87e3cf960dc93d318696b3cc5159e545779ebb691a86a2978",
+      "setupAndTestMs": 1150,
+      "legs": [
+        {
+          "family": "balancer-v2",
+          "inputRaw": "6917984563928420",
+          "outputToken": "GTC",
+          "originalOutputRaw": "95034526410411689937",
+          "runtimeOutputRaw": "95034526410411689937",
+          "signedDeltaRaw": "0"
+        }
+      ]
+    },
+    {
+      "block": 26138511,
+      "tx": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+      "result": "pass",
+      "readySha256": "47b0fc06b2dbb12c6d90c37371f8a9fa2eb2549e20cfeb460198b3fda85f80f2",
+      "captureSha256": "0ae568dafd2bc0278a0d931605b732bf524bb8985ebda86770cb7b7008d0d3e6",
+      "canonicalPayloadSha256": "e31e5ab8ebd6d757ca7ed9353fdf72ffe8e841dccd1c6c8914c932e054cddc3e",
+      "fixture": "26138511.fixture-v3.json",
+      "fixtureSha256": "f0dcb1fbd038d9404df920897e95fa5eb596c78a16f0405fbf3216162bf8a836",
+      "log": "26138511.run.1791405652164.log",
+      "logSha256": "d2bf5c173c3b10dac3ccdc004efd15f496d6171eb9e4c1f0189e9f8efed07e8a",
+      "receiptSha256": "a1425f0fad9661baf0a67b963e487b613a41d7929316b83db6d5faeaebb3dbe9",
+      "setupAndTestMs": 3653,
+      "legs": [
+        {
+          "family": "balancer-v2",
+          "inputRaw": "1273805887338394",
+          "outputToken": "graviAURA shares",
+          "originalOutputRaw": "131502308044455713821",
+          "runtimeOutputRaw": "131502308044455713821",
+          "signedDeltaRaw": "0"
+        },
+        {
+          "family": "protocol:badger-sett-withdraw",
+          "inputRaw": "131502308044455713821",
+          "outputToken": "AURA",
+          "originalOutputRaw": "141331862836870691964",
+          "runtimeOutputRaw": "141331862836870691964",
+          "signedDeltaRaw": "0"
+        },
+        {
+          "family": "balancer-v2",
+          "inputRaw": "141331862836870691964",
+          "outputToken": "WETH",
+          "originalOutputRaw": "1326301699728453",
+          "runtimeOutputRaw": "1326301699728453",
+          "signedDeltaRaw": "0"
+        }
+      ]
+    }
+  ],
+  "negative": {
+    "test": "testRejectsIncompleteCanonicalPayload",
+    "expectation": "Same TX and height with missing prestate rejected before fork/RPC",
+    "network": "unshare -n",
+    "result": "pass",
+    "mainLog": "26138731.negative.1791405561176.log",
+    "mainLogSha256": "7c253a4a552930894e36c274e4d9dc78cc692d52cd909594ded65e5167e1237f",
+    "mainReceiptSha256": "a284f8324dc5004905c6f5fddb4e824e516cf94803298742840e024dadc220c5"
+  },
+  "review": {
+    "agent": "Mencius",
+    "agentId": "01a11740-7b48-70e1-8bdc-3e0aa98eb3c7",
+    "verdict": "Post069 final three-file diff: no remaining blocking findings",
+    "closedFindings": [
+      "Canonical prestate byte binding required",
+      "Incorrect legacy N-end label in new consumer"
+    ],
+    "executed": "Independent network-isolated negative: exit0, 1 passed, 0 failed, 0 skipped; diff check and final source/log/receipt hash checks",
+    "log": "26138731.negative.1791405801385.log",
+    "logSha256": "d8a2b81e31e323600f3c2227bd01a53c5ea3fab5be0a5e976f282f756db49c47",
+    "receiptSha256": "da3523ee8c313a041c0c961ddd12e97315c23ae143d4ab986a0842276468f89c",
+    "limitation": "Reviewer did not repeat positive RPC runs"
+  },
+  "retainedAttempts": [
+    "Initial compiler activation flags absent; failed without replacing outputs",
+    "Two invalid Solidity declaration builds, including one before patch upload completed",
+    "Initial actors failed combined unused-code/native-balance gate before execution; exact failing subcondition not established",
+    "V1 fixture-v2 passed before payload-binding strengthening; final v3 evidence separately retained"
+  ],
+  "runner": {
+    "path": "/tmp/run-original-runtime-v3.mjs",
+    "sha256": "1d9c7fd540d8b7fa55052960bce1e2cdf5f1f38f52c332399ef01daf39c2348f",
+    "deadlineMs": 180000,
+    "outputPolicy": "New wx timestamped logs/receipts, credentials only via environment, redact before logging"
+  },
+  "timing": "Setup/native fork correctness-test elapsed only; different warm caches, not a latency benchmark or production-stage timing.",
+  "remaining": [
+    "Five original-state production Exact quote and quoted-fragment execution comparisons remain unverified.",
+    "Whole original transaction replay, complete trie-root proof, full closed-loop EV and formal merge readiness are not claimed."
+  ],
+  "safety": {
+    "productionModified": false,
+    "implModified": false,
+    "newWorktrees": 0,
+    "wholeLive": false,
+    "rebuild14400": false,
+    "signing": false,
+    "broadcast": false,
+    "rawLogsCommitted": false
+  }
+}

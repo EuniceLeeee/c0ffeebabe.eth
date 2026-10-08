@@ -48,3 +48,32 @@ venues/<domain>/<family>/
 
 A new domain only adds a `FamilyDomain` value, a domain validator and its
 capability slot; central pipeline, capture, corpus/parity stay untouched.
+
+## Required acceptance for swap/protocol Families
+
+Keep and test both execution capabilities; one does not replace the other:
+
+- `exact` plus the quoted `execution.buildFragment`: given an input amount,
+  preserve the production effective/explicit quote and validated execution path.
+- `execution.buildRuntimeLeg`: consume the previous leg's actual receipt inside
+  the transaction. Construct sim amount trials without off-chain hop quotes.
+  ABI, amount arithmetic, native wrapping and callback settlement belong to the
+  Family, not central scheduling.
+
+Run `npm run searcher:family-dual-execution` and the Family's quote/execution
+contracts. Cover all supported directions/variants and multiple amounts, including
+the effective input. Through the production sim amount selector, assert zero
+off-chain Exact calls and no quoted fallback for supported runtime legs. Retain
+tests for the quoted path. Test current receipt versus old inventory, temporary
+approval cleanup where required, native balance deltas, callback debt, amount
+bounds and final repayment/conservation. Funding and credit retain their own
+domain contracts; they are not ordinary swap legs.
+
+`npm run searcher:family-runtime-audit -- <checkpoint.json>` can read an existing
+Ready without modifying it and check all stored descriptors/routes construct.
+This is offline construction coverage, not a new admission, a current Ready
+fingerprint, an EVM run or a profitable opportunity. Missing historical samples,
+unsupported variants, runtime declines and quoted fallback must be reported
+separately. Before claiming historical execution parity, use the same state,
+source and caller to compare quote output with independently observed receipts;
+never manufacture admission/evidence or weaken final simulation/inventory gates.

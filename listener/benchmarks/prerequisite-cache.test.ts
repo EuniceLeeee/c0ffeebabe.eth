@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer, request, type ServerResponse } from "node:http";
+import { Agent, createServer, request, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
@@ -41,10 +41,10 @@ async function bounded<T>(work: Promise<T>): Promise<T> {
     timer = setTimeout(() => reject(new Error("loopback operation did not drain within 3 seconds")), 3000);
   })]); } finally { clearTimeout(timer); }
 }
-function post(url: string, body: Body): Promise<Response> {
+function post(url: string, body: Body, agent: Agent | false = false): Promise<Response> {
   assert.equal(new URL(url).hostname, "127.0.0.1");
   return new Promise((done, reject) => {
-    const req = request(url, { method: "POST", agent: false, headers: { "content-type": "application/json" } }, res => {
+    const req = request(url, { method: "POST", agent, headers: { "content-type": "application/json" } }, res => {
       const chunks: Buffer[] = [];
       res.on("data", part => chunks.push(part)); res.on("error", reject);
       res.on("end", () => {
@@ -90,6 +90,38 @@ async function fixture(t: TestContext, respond: Responder = successful) {
   }
   return { directory, bodies, open, close, capture, stopUpstream };
 }
+
+
+test("replay keep-alive survives synchronous prerequisite restoration and closes idle sockets", async t => {
+  const f = await fixture(t);
+  await f.capture();
+  const bytes = readFileSync(join(f.directory, "rpc.json.gz"));
+  await f.stopUpstream();
+  const replay = await f.open("replay");
+  const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+  try {
+    assert.deepEqual(await post(replay.rpcUrl, rpc(2), agent),
+      { status: 200, body: success(rpc(2), "0x1") });
+    await new Promise<void>(done => setImmediate(done));
+    // Ready hydration can block this same event loop beyond the HTTP server's
+    // default five-second idle expiry (plus newer Node's one-second buffer).
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 6500);
+    assert.deepEqual(await post(replay.rpcUrl, rpc(3), agent),
+      { status: 200, body: success(rpc(3), "0x1") });
+    assert.equal(replay.cache.stats().replayed, 2);
+    assert.equal(replay.cache.stats().forwarded, 0);
+    assert.equal(replay.cache.stats().misses, 0);
+    assert.deepEqual(readFileSync(join(f.directory, "rpc.json.gz")), bytes);
+    replay.cache.assertHealthy();
+    await new Promise<void>(done => setImmediate(done));
+    const sockets = [...Object.values(agent.freeSockets), ...Object.values(agent.sockets)].flat();
+    assert(sockets.length > 0, "test must retain a reusable idle connection");
+    const closed = Promise.all(sockets.map(socket => socket.destroyed ? Promise.resolve() :
+      new Promise<void>(done => socket.once("close", () => done()))));
+    await f.close(replay.cache); // Cleanup must not depend on the client agent dying first.
+    await bounded(closed);
+  } finally { agent.destroy(); }
+});
 
 test("record -> compressed write -> replay rewrites IDs and batch order without an upstream", async t => {
   const f = await fixture(t, (body, response) => {

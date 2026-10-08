@@ -224,10 +224,13 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
   const r = instance.routes.find(r => (r as ConversionRoute).direction === "mint") as ConversionRoute;
   const input = { descriptor: d, route: r, source: SOURCE, executor: EXECUTOR, amountIn: amount, runtimeEvidence: [] };
   for (const executor of [TARGET, ASSET]) assert.throws(() => exactProgram.buildRequests({ ...input, executor }), /executor aliases/);
-  assert.throws(() => exactProgram.buildRequests({ ...input, prefix: [{ descriptor: d, route: r, amountIn: 1n, amountOut: 1n }] }), /prefix unsupported/);
   assert.deepEqual(exactProgram.buildRequests({ ...input, amountIn: 0n }), []);
   assert.equal(exactProgram.decode({ programInput: { ...input, amountIn: 0n }, initialResults: [], dependentEvidence: [] }).amountOut, 0n);
   const resultSet = [returned("exact-code", code), returned("exact-asset-code", plainAssetCode), returned("exact-stats", ABI.encodeFunctionResult("getStats", [10n ** 24n, 10n ** 24n]))];
+  // Reads may be shared; prefix safety is checked when the quote consumes state.
+  assert.throws(() => exactProgram.decode({ programInput: { ...input,
+    prefix: [{ descriptor: d, route: r, amountIn: 1n, amountOut: 1n }] },
+    initialResults: resultSet, dependentEvidence: [] }), /prefix requires issued trial state/);
   assert.equal(exactProgram.decode({ programInput: input, initialResults: resultSet, dependentEvidence: [] }).amountOut, amount);
   assert.throws(() => exactProgram.decode({ programInput: input, initialResults: resultSet.map(r => r.id === "exact-asset-code" ? returned(r.id, "0x600100") : r), dependentEvidence: [] }), /closure unproven/);
   assert.throws(() => exactProgram.decode({ programInput: { ...input, source: next }, initialResults: resultSet, dependentEvidence: [] }), /source/);

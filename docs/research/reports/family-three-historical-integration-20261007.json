@@ -1,0 +1,524 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-07",
+  "status": "historical_single_block_dual_single_leg_passed",
+  "sourceHead": "aebf0733dac15e5ee3337bfd8d269dc28296dc43",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "blocks": [
+    {
+      "block": 26138731,
+      "source": {
+        "number": 26138731,
+        "hash": "0x696b86358440cc2b7a0a5e80dc87c2542a2e1535cd21502b99b317fef1d4d266",
+        "generation": 26138731
+      },
+      "readyAccounting": {
+        "total": 43,
+        "verified": 34,
+        "terminalRejected": 6,
+        "retryable": 3,
+        "remainingUnaccounted": 0
+      },
+      "graphHash": "3525ab9a397701e6baf4ddf9acc8111989079376724bc63c28caa4248e30d995",
+      "instances": [
+        {
+          "family": "balancer-v1",
+          "instance": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+          "definitionHash": "2447f5c3f3902e6395eaeab0e6ab1b272709f71d736e47ebd7abafaf57d4dbc4",
+          "memoFingerprint": "291234862b7a21a48396aa28aa1d0844bc1aaf8587c36e4a15ce58c78fd1573f",
+          "discoveryTx": "0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8",
+          "directions": 2
+        }
+      ],
+      "samples": 4,
+      "executions": 8,
+      "allSamplesPassed": true,
+      "runtimeConstruction": {
+        "directions": 2,
+        "exactCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false
+      },
+      "originalAmountAtN": [
+        {
+          "family": "balancer-v1",
+          "instance": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+          "amountIn": "8444695829171278",
+          "originalReceiptOut": "1313743479005274328",
+          "NendQuote": "1312875449799276467",
+          "NendActual": "1312875449799276467",
+          "signedOriginalDelta": "-868029205997861",
+          "originalPrestateRestored": false
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "logs/family-three-history.0rIF4l/26138731/ready.json",
+          "sha256": "ab93f7d4eee5dce269b5e380836ef1c6974e3cb54aa470e0c90a3f86eb4ef180"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138731/prices/prices.json",
+          "sha256": "ceb89b982000f9d428af9694fd00ac923f0dab3435c26f87b9c1015de92957be"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138731/prices/input.json",
+          "sha256": "d18c997b880cc53f79f2e8e23fdede8bc1c7f4ec673575c84a3301eb788aa098"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138731/dual.json",
+          "sha256": "08ba5e08af7c5cbed24b6a599b34bc09edb57099f3a8ae478fa88b17e99eaa25"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138731/ready-receipt.json",
+          "sha256": "27a6505ce772bbabd0161d8e49190c3688554164ab1c6cde07f43f797e6e35f9"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138731/prices-receipt.json",
+          "sha256": "6a7a86494ba182f30c3488f5bd25f9f3e5ad4b803a8d707061b651154bdacd12"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138731/dual-receipt.json",
+          "sha256": "1c0c96f55f7798683fdb8a6cd2c7afdd49f1bcf2e878f1296499d7a9e2bbbda1"
+        }
+      ],
+      "wallTimesMs": {
+        "ready": 6084,
+        "prices": 2797,
+        "dual": 3364
+      },
+      "forkStopped": true,
+      "errors": [],
+      "finalExecution": {
+        "artifact": {
+          "path": "logs/family-three-history.0rIF4l/26138731/dual-indexed-final.json",
+          "sha256": "27cccbe3bee1cb05abebcf19b46924a1da9340f5f1058f5834c8c27b888a60d6"
+        },
+        "result": "pass",
+        "samples": 4,
+        "executionsPassed": 8,
+        "code": {
+          "headAtStart": "aebf0733dac15e5ee3337bfd8d269dc28296dc43",
+          "sourceTreeSha256": "e8402d5dc00f0b59480c2221cb8839eb51db1a8948e851a88052f7408a39de7d",
+          "fileCount": 973,
+          "soliditySha256": "7b319c28f6988c67720a66b7437c09fe222148ff0073429ae1515dcacf420364",
+          "packageSha256": "c9fcf54d71aaa687735108f54d9f1c2a301c67804ce28334fb2c32c0ac42392d",
+          "testSha256": "ab26949d16acf8f2b9411da3bdffc274eb430c3d7f3ee1e9664d9ee4724d2580",
+          "helperSha256": "214d2ab962904994e00bacd7e69c0370f3c638b8c0ce8b01b905c375972b4d07",
+          "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+          "artifactSha256": "ff8b61348f037390645448c44d923b5cb43fbda34afe0ff5a34dfaf2a3676b0b"
+        },
+        "discoveryReceipts": [
+          {
+            "family": "balancer-v1",
+            "instance": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+            "transactionHash": "0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8",
+            "blockNumber": "0x18ed86b",
+            "blockHash": "0x696b86358440cc2b7a0a5e80dc87c2542a2e1535cd21502b99b317fef1d4d266",
+            "status": "0x1",
+            "receiptSha256": "bf89a01ab9dc1201233af3583f5780a3e2fabf861e87dbaceaa7882a15188f58"
+          }
+        ]
+      }
+    },
+    {
+      "block": 26138724,
+      "source": {
+        "number": 26138724,
+        "hash": "0xcad9e81827cbe1f29ff77fc163855dfe1647a17b8b4a44b209e900273ac4f70b",
+        "generation": 26138724
+      },
+      "readyAccounting": {
+        "total": 57,
+        "verified": 45,
+        "terminalRejected": 9,
+        "retryable": 3,
+        "remainingUnaccounted": 0
+      },
+      "graphHash": "73b27b14350002cabb47afe840dde392436041b01fdc02c8b375dd69ead381b7",
+      "instances": [
+        {
+          "family": "balancer-v2",
+          "instance": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",
+          "definitionHash": "20dd28a0d9601d805e4538a74ac2b626fa685f57533c53accf1b3634e1c5fdff",
+          "memoFingerprint": "d2d3375d6d354639da10303cb4b416a2bbf0c0d40e7af4d9f915ecb8a5e94eeb",
+          "discoveryTx": "0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",
+          "directions": 2
+        }
+      ],
+      "samples": 4,
+      "executions": 8,
+      "allSamplesPassed": true,
+      "runtimeConstruction": {
+        "directions": 2,
+        "exactCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false
+      },
+      "originalAmountAtN": [
+        {
+          "family": "balancer-v2",
+          "instance": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+          "amountIn": "6917984563928420",
+          "originalReceiptOut": "95034526410411689937",
+          "NendQuote": "93998237624699782060",
+          "NendActual": "93998237624699782060",
+          "signedOriginalDelta": "-1036288785711907877",
+          "originalPrestateRestored": false
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "logs/family-three-history.0rIF4l/26138724/ready.json",
+          "sha256": "2cc8ca04d10a78793b506173da23fc5cf6ea22143d0f49bf40be90e8376e4f7f"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138724/prices/prices.json",
+          "sha256": "23fd8c5e1e400118ee0b30eb13b1b8eb242423b90b8405b8f80db0191671cccf"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138724/prices/input.json",
+          "sha256": "4af7271962a6aba37787a3dfa994f5a405925f8417a7b23921d0956bd808642c"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138724/dual.json",
+          "sha256": "e40b36dc1c1264506f6a8b8250f27515423efc07875e2ccdd182476b9dc8d29d"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138724/ready-receipt.json",
+          "sha256": "bec40fdb3f95fdf248ef037227da727a9327652408a7eeafae284f836e3ce498"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138724/prices-receipt.json",
+          "sha256": "d41f055d881fee9ca5685c7d77a10c10ca50b9767d7dab26f56fc63ad9cc2244"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138724/dual-receipt.json",
+          "sha256": "8ffdcba3622e50068f9a27aa5ee7230125c7f40f5644042b7eba1131b3a6f317"
+        }
+      ],
+      "wallTimesMs": {
+        "ready": 5579,
+        "prices": 2899,
+        "dual": 3405
+      },
+      "forkStopped": true,
+      "errors": [],
+      "finalExecution": {
+        "artifact": {
+          "path": "logs/family-three-history.0rIF4l/26138724/dual-indexed-final.json",
+          "sha256": "d2e7f035e15e461609089c4720887f1c5b19e8ce7992d1bf046eeab31ebf8d4d"
+        },
+        "result": "pass",
+        "samples": 4,
+        "executionsPassed": 8,
+        "code": {
+          "headAtStart": "aebf0733dac15e5ee3337bfd8d269dc28296dc43",
+          "sourceTreeSha256": "e8402d5dc00f0b59480c2221cb8839eb51db1a8948e851a88052f7408a39de7d",
+          "fileCount": 973,
+          "soliditySha256": "7b319c28f6988c67720a66b7437c09fe222148ff0073429ae1515dcacf420364",
+          "packageSha256": "c9fcf54d71aaa687735108f54d9f1c2a301c67804ce28334fb2c32c0ac42392d",
+          "testSha256": "ab26949d16acf8f2b9411da3bdffc274eb430c3d7f3ee1e9664d9ee4724d2580",
+          "helperSha256": "214d2ab962904994e00bacd7e69c0370f3c638b8c0ce8b01b905c375972b4d07",
+          "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+          "artifactSha256": "ff8b61348f037390645448c44d923b5cb43fbda34afe0ff5a34dfaf2a3676b0b"
+        },
+        "discoveryReceipts": [
+          {
+            "family": "balancer-v2",
+            "instance": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",
+            "transactionHash": "0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",
+            "blockNumber": "0x18ed864",
+            "blockHash": "0xcad9e81827cbe1f29ff77fc163855dfe1647a17b8b4a44b209e900273ac4f70b",
+            "status": "0x1",
+            "receiptSha256": "14ddb007900e30cfcedd4836ff550b543e88e9f12e05b20953afa25f0990737b"
+          }
+        ]
+      }
+    },
+    {
+      "block": 26138511,
+      "source": {
+        "number": 26138511,
+        "hash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771",
+        "generation": 26138511
+      },
+      "readyAccounting": {
+        "total": 50,
+        "verified": 37,
+        "terminalRejected": 12,
+        "retryable": 1,
+        "remainingUnaccounted": 0
+      },
+      "graphHash": "554a0305661d19526f7881cab9717c4e74e0a98d1580941b51458836a6416ba0",
+      "instances": [
+        {
+          "family": "balancer-v2",
+          "instance": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+          "definitionHash": "20dd28a0d9601d805e4538a74ac2b626fa685f57533c53accf1b3634e1c5fdff",
+          "memoFingerprint": "1742a1c7e2db37aabb63902ec3f35c48549426e09bee906349e8b28e8f284ff5",
+          "discoveryTx": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+          "directions": 6
+        },
+        {
+          "family": "protocol:badger-sett-withdraw",
+          "instance": "0xba485b556399123261a5f9c95d413b4f93107407",
+          "definitionHash": "0ebcef08dce8f2fac0b3aa3bb37f5cc56b056846ca51a5112b2f9abcf5410c71",
+          "memoFingerprint": "b8c3ef8d26837e41a3a4bfc38ff420d397fa9c63d14e9efff34d6288671ddb12",
+          "discoveryTx": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+          "directions": 1
+        },
+        {
+          "family": "balancer-v2",
+          "instance": "0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274",
+          "definitionHash": "20dd28a0d9601d805e4538a74ac2b626fa685f57533c53accf1b3634e1c5fdff",
+          "memoFingerprint": "603a8dcd0c76ab28ece5b92c6eb19cd3f06822fedec8c557b97358fbf3d0f7f6",
+          "discoveryTx": "0x951d8c926a820798e705158430aefb3ddc1883806e5b74a5b20e6e743445ec1e",
+          "directions": 2
+        }
+      ],
+      "samples": 18,
+      "executions": 36,
+      "allSamplesPassed": true,
+      "runtimeConstruction": {
+        "directions": 9,
+        "exactCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false
+      },
+      "originalAmountAtN": [
+        {
+          "family": "balancer-v2",
+          "instance": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xba485b556399123261a5f9c95d413b4f93107407",
+          "amountIn": "1273805887338394",
+          "originalReceiptOut": "131502308044455713821",
+          "NendQuote": "121573128485270681875",
+          "NendActual": "121573128485270681875",
+          "signedOriginalDelta": "-9929179559185031946",
+          "originalPrestateRestored": false
+        },
+        {
+          "family": "protocol:badger-sett-withdraw",
+          "instance": "0xba485b556399123261a5f9c95d413b4f93107407",
+          "tokenIn": "0xba485b556399123261a5f9c95d413b4f93107407",
+          "tokenOut": "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+          "amountIn": "131502308044455713821",
+          "originalReceiptOut": "141331862836870691964",
+          "NendQuote": "141331862836870691964",
+          "NendActual": "141331862836870691964",
+          "signedOriginalDelta": "0",
+          "originalPrestateRestored": false
+        },
+        {
+          "family": "balancer-v2",
+          "instance": "0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274",
+          "tokenIn": "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "141331862836870691964",
+          "originalReceiptOut": "1326301699728453",
+          "NendQuote": "1324819398319730",
+          "NendActual": "1324819398319730",
+          "signedOriginalDelta": "-1482301408723",
+          "originalPrestateRestored": false
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "logs/family-three-history.0rIF4l/26138511/ready.json",
+          "sha256": "47b0fc06b2dbb12c6d90c37371f8a9fa2eb2549e20cfeb460198b3fda85f80f2"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138511/prices/prices.json",
+          "sha256": "7bb03f8f3e0e2ba54cfad3a8b880da5e770b61e71263e4aecad61b8a890143b8"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138511/prices/input.json",
+          "sha256": "8b470ceaee4da4f75292438b858471797f4f158c2256105a4620eb9bc3419adf"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138511/dual.json",
+          "sha256": "9dbd71a252432ba0cefaf0d7f58a40976945d5fcde23cefb59c9eee32ec6fa33"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138511/ready-receipt.json",
+          "sha256": "d21bae6cb413b50f070eb65dac7010ca4a28cd1775eaf1c1b43bbf0dfcf36d3d"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138511/prices-receipt.json",
+          "sha256": "99640ef16fe9b0220f1643b03c5c77cba5a9db71feb4b5b7d94850e6d8e97273"
+        },
+        {
+          "path": "logs/family-three-history.0rIF4l/26138511/dual-receipt.json",
+          "sha256": "d44d050c0a6b3317cc4f25d09de816755c1790b307ee5f3457cd3b5cff09caf1"
+        }
+      ],
+      "wallTimesMs": {
+        "ready": 6714,
+        "prices": 3139,
+        "dual": 5330
+      },
+      "forkStopped": true,
+      "errors": [],
+      "finalExecution": {
+        "artifact": {
+          "path": "logs/family-three-history.0rIF4l/26138511/dual-indexed-final.json",
+          "sha256": "4136236467d05b83162bd1f62a27833bcc004656440e193311c8381c760b43af"
+        },
+        "result": "pass",
+        "samples": 18,
+        "executionsPassed": 36,
+        "code": {
+          "headAtStart": "aebf0733dac15e5ee3337bfd8d269dc28296dc43",
+          "sourceTreeSha256": "e8402d5dc00f0b59480c2221cb8839eb51db1a8948e851a88052f7408a39de7d",
+          "fileCount": 973,
+          "soliditySha256": "7b319c28f6988c67720a66b7437c09fe222148ff0073429ae1515dcacf420364",
+          "packageSha256": "c9fcf54d71aaa687735108f54d9f1c2a301c67804ce28334fb2c32c0ac42392d",
+          "testSha256": "ab26949d16acf8f2b9411da3bdffc274eb430c3d7f3ee1e9664d9ee4724d2580",
+          "helperSha256": "214d2ab962904994e00bacd7e69c0370f3c638b8c0ce8b01b905c375972b4d07",
+          "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+          "artifactSha256": "ff8b61348f037390645448c44d923b5cb43fbda34afe0ff5a34dfaf2a3676b0b"
+        },
+        "discoveryReceipts": [
+          {
+            "family": "balancer-v2",
+            "instance": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "transactionHash": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+            "blockNumber": "0x18ed78f",
+            "blockHash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771",
+            "status": "0x1",
+            "receiptSha256": "a0e13dc2fc3b18d90e52796e19f936d9c0df94e8c41f3082c62e0d4505777e4c"
+          },
+          {
+            "family": "protocol:badger-sett-withdraw",
+            "instance": "0xba485b556399123261a5f9c95d413b4f93107407",
+            "transactionHash": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+            "blockNumber": "0x18ed78f",
+            "blockHash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771",
+            "status": "0x1",
+            "receiptSha256": "a0e13dc2fc3b18d90e52796e19f936d9c0df94e8c41f3082c62e0d4505777e4c"
+          },
+          {
+            "family": "balancer-v2",
+            "instance": "0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274",
+            "transactionHash": "0x951d8c926a820798e705158430aefb3ddc1883806e5b74a5b20e6e743445ec1e",
+            "blockNumber": "0x18ed78f",
+            "blockHash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771",
+            "status": "0x1",
+            "receiptSha256": "a8ded503c44b4bfe32dea46805d7651700319188b91bc4ca505175118e57951e"
+          }
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "readyBlocks": 3,
+    "instances": 5,
+    "directions": 13,
+    "samples": 26,
+    "executions": 52
+  },
+  "tests": {
+    "buildLive": "pass",
+    "sharedDualExecution": 67,
+    "fullTypecheck": "16 existing diagnostics identical to prior source; no new driver diagnostics",
+    "fullTypecheckSha256": "5e638905057c7d675363ff2359934630ccea2c6ea070ee9afe312762bc9cf2d6",
+    "sharedDualSha256": "1e7226d9de403f1a3a69d5ad3498007ddfa2d3f0970a3ea8a00bbdda803044be",
+    "buildLiveSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+    "observationRegressions": {
+      "passed": 9,
+      "sha256": "33c55115a7d8c5035dd1eb37d6bb4204f06b39a08a67f72327ddfa12314bc9dd",
+      "path": "logs/family-three-history.0rIF4l/observation-tests.txt"
+    },
+    "fullBuild": "Not repeated; prior full npm build failed because legacy Rust enumerator rustc is unavailable. Production build:live is the passing build claimed here."
+  },
+  "scope": "Three supplied TXs: real production single-block natural discovery/strict/Graph/mid/effective, followed by both production encoders' independent same-state single-leg receipts. Not adapter_fixed/adapter_merge_ready or a full opportunity replay.",
+  "safety": {
+    "defaultActivationUnchanged": true,
+    "threeNewFamiliesDefaultDisabled": true,
+    "protectedImpl": "/opt/mev-cloud/app-run2",
+    "implModified": false,
+    "readyInputsEdited": false,
+    "poolLiquidityOverrides": false,
+    "broadcast": false,
+    "signing": false,
+    "newLive": false,
+    "rebuild14400": false,
+    "newWorkspace": false
+  },
+  "test": "listener/src/searcher/test/family-integration/three-family/historical-dual.ts",
+  "invocation": "npm run searcher:three-family-runtime-dual-historical-fork -- --ready FILE --prices FILE --rpc-file PRIVATE_FILE --out NEW_IGNORED_JSON --port 8593 --block NUMBER",
+  "amountCoverage": "Every admitted target direction at its actual production effective P=0.002 ETH equivalent; another trial uses the original TX input for the same direction, otherwise half the actual production P. No price amount was shrunk or replaced.",
+  "observation": "Real local Anvil fork, pinned N state/hash and EVM NUMBER/TIMESTAMP/BASEFEE/COINBASE/GASLIMIT/PREVRANDAO/CHAINID. Independent prestateTracer balance deltas and getter cross-checks, with seeded actor inventory retained exactly. BotVM source/artifact, Ready, price provenance and current production source hashes checked before/after.",
+  "originalStateCaution": "Original transaction receipt amounts are independently checked. Executed tests use N end-state, NOT original leg-prestate: Balancer output differences are retained, not declared exact original replay; graviAURA equality at this state also does not establish original-prestate restoration.",
+  "routeClarification": "0x6be8...94a8 contains Balancer V1 followed by a Uniswap-V2-style pair, not Balancer V2. The Balancer V2 Family's three target pools are in the other two TXs. The original first TX consumed 62 raw NMR dust in its closing leg; this test does not reproduce that inventory use.",
+  "timingCaution": "One invocation per block; wallTimesMs include CLI/fork startup and are only diagnostics. This is not the required three-runs-per-block stage benchmark or evidence of a latency improvement.",
+  "limits": [
+    "Historical downstream actual-receipt chaining/whole-route repayment and production EV remain separate from these single-leg results.",
+    "No original transaction full-prefix/pre-call replay was performed; source N is explicitly block-end.",
+    "Badger Sett is the liquid TheVault1.5 withdrawal branch; deposit, arbitrary Aura semantics, locker-unlocking/deviation branches are not claimed supported.",
+    "Balancer V2 actual samples are the supplied 2/3-token pools; unobserved stable/managed/composable variants are not promoted from generic ABI or offline contracts.",
+    "Residual Ready retryable entries are retained outside Graph; none is one of the five target instances.",
+    "Formal adapter repair/merge claims still require repository replay/conformance/boundary gates; no impl merge or live was performed.",
+    "Curve Underlying quote correctness and remaining three-family latency work are still pending."
+  ],
+  "priorReports": [
+    "docs/research/reports/family-three-offline-integration-20261007.json",
+    "docs/research/reports/family-three-preflight-20261007.json"
+  ],
+  "toolReconciliation": {
+    "query": [
+      "family",
+      "dual",
+      "historical",
+      "fork"
+    ],
+    "selected": "listener:searcher:three-family-runtime-dual-historical-fork",
+    "manifest": {
+      "path": "logs/family-three-history.0rIF4l/tool-selection-final.json",
+      "sha256": "286aa7495c0a63cda77bf654547ec86ac3a8ebf5f14288b2b4042a38600d43ca"
+    },
+    "executions": 3,
+    "allExitCodes": 0,
+    "note": "Single-block --block anchors enforced inside producer; no unsupported window binding or family-wide admission claimed."
+  },
+  "retainedAttempts": [
+    {
+      "path": "logs/family-three-history.0rIF4l/26138731/indexed.log",
+      "status": "failed_before_test_no_rpc",
+      "reason": "Caller incorrectly passed --window to a tool without interval binding; corrected to this test's --block. Invocation error, not tool defect."
+    },
+    {
+      "paths": "logs/family-three-history.0rIF4l/{26138731,26138724,26138511}/dual.json and dual-indexed-v2.json",
+      "status": "passes_retained_before_observation_assertion_strengthening",
+      "note": "Not the final strengthened-driver evidence; finalExecution artifacts above are authoritative for the present test."
+    }
+  ],
+  "independentReview": {
+    "reviewer": "Mill, non-author",
+    "passes": 2,
+    "firstPassFindings": [
+      "Price rows were not directly bound to Ready edge directions/instances and could duplicate direction coverage.",
+      "Discovery candidate accepted any syntactically valid TX hash without independently confirming a canonical receipt in N."
+    ],
+    "resolution": "Added observation-only assertions, unique and complete route coverage, canonical successful discovery receipt checks and helper hash binding; all historical executions rerun.",
+    "offlineTestsPersonallyExecuted": 9,
+    "secondPass": "Both findings resolved; no remaining blocker in the scoped historical single-leg test. Independently inspected five discovery receipts, 13 directions, 26 samples, 52 executions and104 matching balance observations.",
+    "reviewedDriverSha256": "ab26949d16acf8f2b9411da3bdffc274eb430c3d7f3ee1e9664d9ee4724d2580",
+    "beforeReproductions": "In-memory offline assertion checks retained in this chat tool outputs; no independent before-artifact file. Not presented as a formal Adapter Replay flip.",
+    "newRpcByReviewer": false
+  },
+  "workingTreeQualification": {
+    "sourceTreePinsActualWorkspace": true,
+    "untrackedUnwiredFilesPreserved": [
+      "listener/src/searcher/venues/swaps/curve-underlying-family/base-pool-math.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/test/base-pool-math.ts"
+    ],
+    "note": "These pre-existing pending Curve files were not changed, wired or included in this stage's commit. The full working source hash is bound separately; a commit SHA alone is not the complete working-tree fingerprint."
+  }
+}

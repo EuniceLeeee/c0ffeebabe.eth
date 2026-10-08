@@ -10,6 +10,7 @@ import type { StrictPricingPublication } from
   "../strict-current-runtime-coordinator.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 import type { EffectiveMidRow, EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
+import { EffectiveMidHistoryReplay } from "../blockscan-effective-mid-history.js";
 
 test("writes one baseline followed by compact ordered deltas", async () => {
   await withTempDir(async (directory) => {
@@ -116,7 +117,7 @@ test("writes one baseline followed by compact ordered deltas", async () => {
   });
 });
 
-test("full effective snapshots survive empty raw deltas, raw changes and missing legacy snapshots", async () => {
+test("effective deltas survive empty raw deltas, raw changes and missing legacy snapshots", async () => {
   await withTempDir(async (directory) => {
     const historyPath = join(directory, "mids.jsonl");
     const eventsPath = join(directory, "events.jsonl");
@@ -182,7 +183,14 @@ test("full effective snapshots survive empty raw deltas, raw changes and missing
         comparable_pairs: 1, pairs_above_threshold: 0, threshold_bps: 100 },
     };
     assert.deepEqual(records[0]!.effective_mids, expectedFirst);
-    const second = records[1]!.effective_mids as JsonRecord;
+    const replay = new EffectiveMidHistoryReplay();
+    replay.apply(records[0]!.effective_mids);
+    const persistedSecond = records[1]!.effective_mids as JsonRecord;
+    assert.equal(persistedSecond.encoding, "delta");
+    assert.equal(Object.hasOwn(persistedSecond, "rows"), false);
+    assert.equal((persistedSecond.updates as unknown[]).length, 1);
+    assert.deepEqual(persistedSecond.removals, []);
+    const second = replay.apply(persistedSecond);
     assert.deepEqual(second, { ...expectedFirst,
       source: { number: 301, hash: blockHash(301), generation: 301 },
       reference: "gas", reference_weth_input: "1000000000000000000000000000002",
@@ -194,7 +202,7 @@ test("full effective snapshots survive empty raw deltas, raw changes and missing
       ],
       summary: { ...expectedFirst.summary, pairs_above_threshold: 1 },
     });
-    const third = records[2]!.effective_mids as JsonRecord;
+    const third = replay.apply(records[2]!.effective_mids);
     assert.deepEqual(third, { ...expectedFirst,
       source: { number: 302, hash: blockHash(302), generation: 302 },
       reference: "gas", reference_weth_input: "1000000000000000000000000000003",
@@ -208,6 +216,7 @@ test("full effective snapshots survive empty raw deltas, raw changes and missing
     }, "strict >100bps uses BigInts even when the displayed mid rounds to 1.01");
     assert.equal(Object.hasOwn(records[3]!, "effective_mids"), false,
       "missing effective snapshots must not inherit an earlier publication");
+    assert.equal(replay.apply(records[3]!.effective_mids), null);
     assert.deepEqual(records[4]!.effective_mids, {
       source: { number: 304, hash: blockHash(304), generation: 304 },
       reference: "gas", reference_weth_input: "1000000000000000000000000000005",
@@ -215,6 +224,7 @@ test("full effective snapshots survive empty raw deltas, raw changes and missing
       summary: { directions: 0, quoted: 0, by_status: {},
         comparable_pairs: 0, pairs_above_threshold: 0, threshold_bps: 100 },
     });
+    assert.deepEqual(replay.apply(records[4]!.effective_mids), records[4]!.effective_mids);
 
     // The raw chain remains independently replayable, including empty deltas.
     const reconstructed = new Map(records[0]!.mids as [string, JsonRecord][]);
@@ -324,10 +334,11 @@ test("a full queue records a gap and resumes only with a fresh baseline", async 
       minFreeBytes: 1,
     });
     const initial = mid("v2", 1, 30, 100n, 100n);
-    sink.recordPricing(baseline(200, new Map([["edge-a", initial]])));
+    sink.recordPricing(baseline(200, new Map([["edge-a", initial]]), effectiveSnapshot(200)));
     sink.recordPricing(delta({
       previousBlock: 200,
       block: 201,
+      effectiveMids: effectiveSnapshot(201),
       updates: [],
       removals: [],
       mids: new Map([["edge-a", initial]]),
@@ -352,6 +363,7 @@ test("a full queue records a gap and resumes only with a fresh baseline", async 
     sink.recordPricing(delta({
       previousBlock: 203,
       block: 204,
+      effectiveMids: effectiveSnapshot(204),
       updates: [["edge-a", recovered]],
       removals: [],
       mids: new Map([["edge-a", recovered]]),
@@ -365,6 +377,75 @@ test("a full queue records a gap and resumes only with a fresh baseline", async 
     assert.equal(records[2]!.dropped_publications_before, 2);
     assert.equal(records[2]!.first_dropped_block, 202);
     assert.equal(records[2]!.last_dropped_block, 203);
+    assert.equal(Object.hasOwn(records[2]!.effective_mids as JsonRecord, "rows"), true);
+    assert.equal(Object.hasOwn(records[2]!.effective_mids as JsonRecord, "encoding"), false);
+  });
+});
+
+test("unchanged quotes stay out of deltas while carry, removals and failures restore exactly", async () => {
+  await withTempDir(async directory => {
+    const historyPath = join(directory, "mids.jsonl"), eventsPath = join(directory, "events.jsonl");
+    await writeFile(eventsPath, "");
+    const sink = await initBlockScanEnumerationSolverTelemetry({
+      path: join(directory, "routes.jsonl"), midHistoryPath: historyPath, eventsPath,
+      runId: "effective-small-deltas", minFreeBytes: 1,
+    });
+    const first = effectiveSnapshot(300);
+    const observed = new Map([...first.rows].map(([id, row]) => [id, { ...row, quotedAt: first.source }]));
+    const next = { ...effectiveSnapshot(301), rows: observed };
+    const failed = { ...observed.get("edge-a")!, status: "quote-failed" as const, amountOut: null,
+      effectiveMid: null, quotedAt: effectiveSnapshot(302).source };
+    const last = { ...effectiveSnapshot(302), rows: new Map([["edge-a", failed]]) };
+    try {
+      sink.recordPricing(baseline(300, new Map(), { ...first, rows: observed }));
+      sink.recordPricing(delta({ previousBlock: 300, block: 301, updates: [], removals: [], mids: new Map(), effectiveMids: next }));
+      sink.recordPricing(delta({ previousBlock: 301, block: 302, updates: [], removals: [], mids: new Map(), effectiveMids: last }));
+    } finally { await sink.shutdown(5_000); }
+    assert.equal(sink.telemetry().failed, false);
+    const records = await readJsonl(historyPath), replay = new EffectiveMidHistoryReplay();
+    replay.apply(records[0]!.effective_mids);
+    const emptyDelta = records[1]!.effective_mids as JsonRecord;
+    assert.deepEqual(emptyDelta.updates, []);
+    assert.deepEqual(emptyDelta.removals, []);
+    const carried = replay.apply(emptyDelta)!;
+    for (const [, row] of carried.rows as [string, JsonRecord][]) {
+      assert.equal(row.carried, true);
+      assert.deepEqual(row.quoted_at, first.source);
+      assert.equal(row.amount_in, (EFFECTIVE_UNIT * 100n).toString());
+    }
+    const lastDelta = records[2]!.effective_mids as JsonRecord;
+    assert.deepEqual(lastDelta.removals, ["edge-b"]);
+    assert.equal((lastDelta.updates as unknown[]).length, 1);
+    const restored = replay.apply(lastDelta)!;
+    const row = (restored.rows as [string, JsonRecord][])[0]![1];
+    assert.equal(row.status, "quote-failed");
+    assert.equal(row.amount_out, null);
+    assert.equal(row.carried, undefined);
+    const broken = { ...lastDelta, previous_source: { ...first.source, hash: blockHash(999) } };
+    assert.throws(() => new EffectiveMidHistoryReplay().apply(broken), /matching baseline/);
+    assert.throws(() => replay.apply(broken), /matching baseline/);
+  });
+});
+
+test("price history retains file and disk reserve limits", async () => {
+  await withTempDir(async directory => {
+    const eventsPath = join(directory, "events.jsonl");
+    await writeFile(eventsPath, "");
+    for (const [name, limits, reason] of [
+      ["file", { maxMidFileBytes: 1 }, /file byte cap/],
+      ["disk", { minFreeBytes: Number.MAX_SAFE_INTEGER }, /disk reserve/],
+    ] as const) {
+      const warnings: string[] = [];
+      const sink = await initBlockScanEnumerationSolverTelemetry({
+        path: join(directory, `${name}-routes.jsonl`), midHistoryPath: join(directory, `${name}-mids.jsonl`),
+        eventsPath, runId: `limits-${name}`, minFreeBytes: 1, ...limits, onWarning: warning => warnings.push(warning),
+      });
+      sink.recordPricing(baseline(300, new Map(), effectiveSnapshot(300)));
+      await sink.shutdown(5_000);
+      assert.equal(sink.telemetry().failed, true);
+      assert.match(warnings.join("\n"), reason);
+      assert.equal(await readFile(join(directory, `${name}-mids.jsonl`), "utf8"), "");
+    }
   });
 });
 

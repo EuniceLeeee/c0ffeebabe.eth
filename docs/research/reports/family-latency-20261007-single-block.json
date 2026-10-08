@@ -1,0 +1,335 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-07",
+  "stage": "single-block-family-latency-and-hook-recheck",
+  "status": "hook_single_leg_verified_broader_latency_work_in_progress",
+  "source": {
+    "cloudWorkspace": "/opt/mev-cloud/family-runtime-20261007",
+    "candidate": "4895fbe5ca68b27417cd62b0bc6bfca600ca80c2",
+    "baseline": "a41afdc54b9ecf486bde332ac2277887ebecb294",
+    "branch": "codex/family-runtime-actual-20261007"
+  },
+  "scope": {
+    "singleBlockReady": 26138094,
+    "observedHeads": [
+      26138094,
+      26138095,
+      26138096
+    ],
+    "repetitions": 3,
+    "mode": "actual live head scheduler through prices",
+    "parentPreparationExcluded": true,
+    "measuredRpc": "direct upstream archive reads, no measured result cache",
+    "simulationSizingMeasured": false,
+    "liveStarted": false,
+    "broadcast": false,
+    "signing": false
+  },
+  "ready": {
+    "baselineInstances": 55,
+    "candidateInstances": 55,
+    "baselineEdges": 140,
+    "candidateEdges": 140,
+    "identicalGraphSnapshotSha256": "ec3a17c59e3285d49223208e34b63d7a60e2f35478aada7e826928fd00c8e2a2",
+    "blockHash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+    "discoveryElapsedMs": {
+      "baseline": 29882,
+      "candidate": 30160
+    },
+    "targetFamilies": {
+      "balancer-v3": {
+        "instances": 1,
+        "edges": 2
+      },
+      "curve-plain": {
+        "instances": 6,
+        "edges": 22
+      },
+      "curve-underlying": {
+        "instances": 2,
+        "edges": 24
+      }
+    },
+    "fundingInstances": 0
+  },
+  "evidenceRoot": "logs/family-latency-20261007/single-block-26138094",
+  "effective": {
+    "baseline": {
+      "directory": "baseline/baseline-direct-effective",
+      "completed": 9,
+      "total": 9,
+      "p50Ms": 855.778201000001,
+      "blockMediansMs": [
+        1319.6041939999996,
+        626.3886659999989,
+        855.778201000001
+      ],
+      "preparationMs": [
+        1516.9796749999998,
+        1265.8935329999995,
+        1401.5704580000001
+      ],
+      "summarySha256": "a6ace44dae41880956c4cf41537ce0f90de9be841dd443a199ceec02f517f50c"
+    },
+    "candidate": {
+      "directory": "candidate/candidate-direct-effective",
+      "completed": 9,
+      "total": 9,
+      "p50Ms": 743.410914,
+      "blockMediansMs": [
+        1111.4720730000004,
+        621.4969840000012,
+        743.410914
+      ],
+      "preparationMs": [
+        1419.8766850000002,
+        1274.9591500000006,
+        1256.839202000001
+      ],
+      "summarySha256": "48b7371507decb871f003fcd99cea706549633516aa7936ab0a7a19ce02fd3fc"
+    },
+    "requestedHookRecheck": {
+      "directory": "candidate/hook-recheck-effective",
+      "completed": 9,
+      "total": 9,
+      "block26138094SamplesMs": [
+        1450.8352450000002,
+        1213.5593069999995,
+        1312.9421079999993
+      ],
+      "block26138094MedianMs": 1312.9421079999993,
+      "preparationMs": [
+        1528.3368260000007,
+        1277.009063999999,
+        1144.5274200000003
+      ],
+      "summarySha256": "160b652d5d2a6cb2949c1b2c8b020aab65011b5d66f450349edb3e4b75dcef41"
+    },
+    "all27MeasuredSamplesCompleted": true,
+    "byBlockEffectiveHashIdentical": true,
+    "outputHashes": [
+      "ccb51cf98e54ceab8ed6b63033aeac1a00d93b51d781f984551ba52f87ec87ec",
+      "e4b38d048b551767c632a590e5fe736e18ad5b6da509c541906d3c160c90ef1a",
+      "04938da2ace093148616f60eceeeabc0f3cd886a70573eeb13e7e2146b010815"
+    ],
+    "interpretation": "No speedup claim: this cohort's Balancer is a non-swap self-hook Router pool, not eligible for the static Weighted optimization; serial side ordering and co-located live are additional timing limits."
+  },
+  "hook": {
+    "pool": "0xaa8a8a383fffcc4f370e1840b38766211fddb9e3",
+    "model": null,
+    "enabledFlagIndices": [
+      1,
+      6,
+      8
+    ],
+    "swapCallbacks": false,
+    "pricingMode": "chain Router query",
+    "refreshMode": "each-block",
+    "quotedDirectionsAt26138094": [
+      {
+        "tokenIn": "USDC",
+        "amountInRaw": "5216204",
+        "tokenOut": "WETH",
+        "amountOutRaw": "1999119491040639"
+      },
+      {
+        "tokenIn": "WETH",
+        "amountInRaw": "2000000000000000",
+        "tokenOut": "USDC",
+        "amountOutRaw": "5213034"
+      }
+    ],
+    "correction": "The two global disabled-for-run rows are UniV4 pool d730f6ea649f19da07781030ed9ec42a50dbddad7b1ed5a41ea8c17ae0a49cad, not this Balancer pool. The previous verbal attribution was wrong and has been corrected.",
+    "syntheticCoverage": {
+      "contractTests": 15,
+      "failed": 0,
+      "nonSwapFlags": [
+        1,
+        2,
+        6,
+        7,
+        8,
+        9
+      ],
+      "selfHookCombination": [
+        1,
+        6,
+        8
+      ],
+      "amountsPerDirection": 2,
+      "historicalExecution": false
+    },
+    "swapHookBoundary": "Arbitrary adjusted-amount/dynamic-fee/beforeSwap/afterSwap hooks remain typed retryable until their caller/query/execution semantics are proven; this pool does not exercise them.",
+    "historicalExecution": {
+      "status": "same-N-single-leg-pass",
+      "sourceCodeCommit": "f7f8b713c69f45d59bfcf2334b360df6732c559b",
+      "receipt": "candidate/hook-runtime-dual-attempt5.json",
+      "receiptSha256": "55ac55246bf19dbda14655ee53c96d5067de4affe2746390ba243961c3b2554d",
+      "test": "listener/src/searcher/venues/swaps/balancer-v3-family/test/historical-runtime-dual.ts",
+      "testSha256": "3a9cbf01fa9c62bcfd079fe505b8f37c447005a51fa0b9f39f97ec247e2fa1ae",
+      "productionSourceSha256": "802a8d526c034f4fcdd879da02d464121164364d34bd6857a222d3a9d9eba857",
+      "artifactSha256": "d4539aad04ae998cd51cf8831521874e93b797081351197e9ab000cfb4f13c4c",
+      "runtimeCodeHash": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+      "stateAndExecution": {
+        "block": 26138094,
+        "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+        "timestamp": 1791347015,
+        "baseFeePerGas": "0x6aace1f",
+        "minedBlocks": 0
+      },
+      "environment": {
+        "SEARCHER_FAMILY_BALANCER_V3_ENABLED": "1",
+        "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED": "1",
+        "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED": "1",
+        "SEARCHER_DRY_RUN": "1",
+        "SEARCHER_BLOCKSCAN_SUBMIT": "0"
+      },
+      "args": {
+        "ready": "candidate/checkpoint.json",
+        "prices": "candidate/candidate-direct-effective/prices-1-26138094.json",
+        "pool": "0xaa8a8a383fffcc4f370e1840b38766211fddb9e3",
+        "rpcFile": "/opt/mev-cloud/run2/rpc-private.json",
+        "port": 8591
+      },
+      "trials": [
+        {
+          "tokenIn": "USDC",
+          "tokenOut": "WETH",
+          "amountInRaw": "5216204",
+          "quoteOutRaw": "1999119491040639",
+          "quotedFragmentReceivedRaw": "1999119491040639",
+          "runtimeProgramReceivedRaw": "1999119491040639",
+          "quotedFragmentGas": 239678,
+          "runtimeProgramGas": 273516,
+          "status": "pass"
+        },
+        {
+          "tokenIn": "USDC",
+          "tokenOut": "WETH",
+          "amountInRaw": "52162040",
+          "quoteOutRaw": "19986878410521474",
+          "quotedFragmentReceivedRaw": "19986878410521474",
+          "runtimeProgramReceivedRaw": "19986878410521474",
+          "quotedFragmentGas": 239714,
+          "runtimeProgramGas": 273528,
+          "status": "pass"
+        },
+        {
+          "tokenIn": "WETH",
+          "tokenOut": "USDC",
+          "amountInRaw": "2000000000000000",
+          "quoteOutRaw": "5213034",
+          "quotedFragmentReceivedRaw": "5213034",
+          "runtimeProgramReceivedRaw": "5213034",
+          "quotedFragmentGas": 233705,
+          "runtimeProgramGas": 267543,
+          "status": "pass"
+        },
+        {
+          "tokenIn": "WETH",
+          "tokenOut": "USDC",
+          "amountInRaw": "20000000000000000",
+          "quoteOutRaw": "52119085",
+          "quotedFragmentReceivedRaw": "52119085",
+          "runtimeProgramReceivedRaw": "52119085",
+          "quotedFragmentGas": 233717,
+          "runtimeProgramGas": 267543,
+          "status": "pass"
+        }
+      ],
+      "samples": 4,
+      "executions": 8,
+      "passedExecutions": 8,
+      "runtimeConstructionRpcAttempts": 0,
+      "localRpcCalls": 113,
+      "actorInventorySentinels": {
+        "input": "101",
+        "output": "103",
+        "consumed": "0"
+      },
+      "allowances": {
+        "erc20Spendable": "0",
+        "permit2Spendable": "0",
+        "permit2Expiration": "1791347015",
+        "nonceUnchanged": true
+      },
+      "queryCaller": {
+        "outerFrom": null,
+        "abiSender": "executor",
+        "executionChain": "owner -> executor -> Router"
+      },
+      "forkStopped": true,
+      "readOnlyTraces": true,
+      "independentReview": "Non-author recomputed raw-trace balance deltas, caller path, unchanged N environment and Permit2 cleanup; scoped single-leg claim supported.",
+      "failedAttemptsPreserved": [
+        {
+          "receipt": "candidate/hook-runtime-dual-attempt1.json",
+          "reason": "Balancer Family enable flag omitted; stopped before RPC."
+        },
+        {
+          "receipt": "candidate/hook-runtime-dual-attempt2.json",
+          "reason": "New test incorrectly required outer eth_call.from=executor; production uses explicit Router ABI sender and omits outer from. No swap call was sent."
+        },
+        {
+          "receipt": "candidate/hook-runtime-dual-attempt3.json",
+          "reason": "Same pre-patch test version as attempt2; retained separately, not a protocol/RPC failure."
+        },
+        {
+          "receipt": "candidate/hook-runtime-dual-attempt4.json",
+          "reason": "All eight executions and deltas succeeded, but test incorrectly required Permit2 expiration metadata to become zero. Correct cleanup stores N timestamp while spendable amount is zero."
+        }
+      ],
+      "limits": [
+        "Not a closed-loop runtime-amount flow or production sim/EV acceptance.",
+        "Not original transaction pre-state parity.",
+        "Not evidence for arbitrary swap hooks, other pools or other amounts.",
+        "Execution gas is recorded; this test is not a sim-sizing latency benchmark."
+      ]
+    }
+  },
+  "reconciliation": {
+    "manifest": "logs/family-runtime-acceptance/single-block-latency-tools.json",
+    "manifestSha256": "bf635c4c423f8297b57aa04802866a615ff70213f644c3b9ec80e9a862ed1ba3",
+    "successfulTool": "listener:benchmark:effective-update",
+    "exitCode": 0,
+    "note": "The pass-latency text-log analyzer is not the source of benchmark JSON metrics. Existing live profile reconciliation belongs to the separate phase2 evidence.",
+    "dualContracts": {
+      "capabilities": [
+        "dual",
+        "execution"
+      ],
+      "manifest": "logs/family-runtime-acceptance/hook-dual-tools.json",
+      "manifestSha256": "c88323e6ce854d1887693b76277e6caa64387718f58b01d48e64a1638065fd64",
+      "tool": "listener:searcher:family-dual-execution",
+      "exitCode": 0,
+      "note": "Synthetic contract regression only; historical evidence comes from the separate fork-execution receipt."
+    }
+  },
+  "limitations": [
+    "Known topology at N; not end-to-end discovery or real-time live acceptance.",
+    "Single-block 140-edge topology is not the full 14,400-block graph load.",
+    "No funding in this Ready: zero candidates/no trials must not be reported as fast sim.",
+    "Same-state single-leg quote/fragment/runtime parity verified for aa8a only; not all installed Families historically accepted.",
+    "No independent final sim/EV or profitable-loop verdict.",
+    "Static Weighted positive-control timing remains to be verified.",
+    "All prior failed attempts remain preserved separately; no replacement of failures with successful reruns.",
+    "Curve Plain/Underlying additional hot-price optimization and full-load latency acceptance remain incomplete; this report does not close the broader goal."
+  ],
+  "verification": {
+    "buildLive": "pass",
+    "dualContractTests": {
+      "passed": 54,
+      "failed": 0
+    },
+    "hookLocalAndStrictRegression": {
+      "passed": 208,
+      "failed": 0
+    },
+    "rpcThrottleGuard": "pass",
+    "fullTypeScript": {
+      "status": "fails with 16 pre-existing baseline errors",
+      "newErrors": 0
+    },
+    "independentReview": "passed for declared single-leg evidence only"
+  }
+}

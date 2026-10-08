@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { JsonRpcProvider } from "ethers";
 import { guardRpcThrottle, isRpcQuotaExhaustedError, isRpcThrottleError } from "../rpc-throttle-guard.js";
 
 const throttleFailures = [
@@ -106,6 +107,25 @@ let atBound: unknown = { status: 429 };
 for (let depth = 0; depth < 7; depth++) atBound = new Error("execution reverted", { cause: atBound });
 assert.equal(isRpcThrottleError(atBound), true);
 assert.equal(isRpcThrottleError(new Error("execution reverted", { cause: atBound })), false);
+
+const provider = new JsonRpcProvider("http://127.0.0.1:1", 1, { staticNetwork: true });
+const payload = { id: 1, jsonrpc: "2.0" as const, method: "eth_call",
+  params: [{ to: "0x0000000000000000000000000000000000000001", data: "0x12345678" }, "0x64"] };
+for (const [error, throttle, exhausted] of [
+  [{ code: 429, message: "compute units per second capacity exceeded" }, true, false],
+  [{ code: 429, message: "monthly quota exhausted" }, true, true],
+  [{ code: -32005, message: "rate limit exceeded" }, true, false],
+  [{ code: -32000, message: "request timed out" }, false, false],
+  [{ code: 3, message: "execution reverted: quota exhausted" }, false, false],
+  [{ code: 3, message: "execution reverted: HTTP 429", data: "0x1234" }, false, false],
+  [{ code: -32000, message: "execution reverted: rate limit" }, false, false],
+] as const) {
+  const wrapped = provider.getRpcError(payload, { id: 1, error });
+  assert.equal(isRpcThrottleError(wrapped), throttle);
+  assert.equal(isRpcQuotaExhaustedError(wrapped), exhausted);
+}
+provider.destroy();
+
 console.log("RPC throttle guard: PASS");
 assert.equal(isRpcQuotaExhaustedError({ code: 429, message: "compute units per second capacity exceeded" }), false);
 assert.equal(isRpcQuotaExhaustedError({ code: 429, message: "monthly capacity exceeded" }), true);

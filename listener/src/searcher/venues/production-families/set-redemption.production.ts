@@ -1,0 +1,15 @@
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { defineFamilyActivation } from "./activation.js";
+import { manifest } from "../protocols/set-redemption-family/manifest.js";
+import { discovery } from "../protocols/set-redemption-family/discovery.js";
+import { identity } from "../protocols/set-redemption-family/identity.js";
+import { instance } from "../protocols/set-redemption-family/instance.js";
+import { routes } from "../protocols/set-redemption-family/routes.js";
+import { pricing } from "../protocols/set-redemption-family/pricing.js";
+import { exact } from "../protocols/set-redemption-family/exact.js";
+import { execution } from "../protocols/set-redemption-family/execution.js";
+import { action } from "../protocols/set-redemption-family/action.js";
+import { capture } from "../protocols/set-redemption-family/capture.js";
+import { protocol } from "../protocols/set-redemption-family/protocol.js";
+export const plugin = defineProtocolFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture, actionAdapters: [action] });
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_SET_REDEMPTION_ENABLED" });

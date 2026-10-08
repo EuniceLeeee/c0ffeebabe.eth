@@ -819,6 +819,12 @@ export interface PricingSemantics<
 > {
   /** State-only is the default. Environment-sensitive prices opt into every source block. */
   readonly refreshPolicy?: "on-touch" | "each-block";
+  /** Optional pure override for proven descriptor-specific variants. Uses only
+   * issued descriptor/routes; no I/O, mutable state or source-time decisions. */
+  refreshPolicyForInstance?(input: {
+    readonly descriptor: PricingDescriptor;
+    readonly routes: readonly Route[];
+  }): "on-touch" | "each-block";
   stateKey(route: Route): string;
   staticBindingProjection(input: {
     readonly descriptor: Descriptor;
@@ -3925,6 +3931,7 @@ function validatePricing(pricing: PricingSemantics<any, any, any, any, any, any>
       "staticBindingProjection",
       "staticEvidence",
       "refreshPolicy",
+      "refreshPolicyForInstance",
     ],
     "pricing semantics",
     true,
@@ -3940,6 +3947,9 @@ function validatePricing(pricing: PricingSemantics<any, any, any, any, any, any>
   );
   if (pricing.refreshPolicy !== undefined && pricing.refreshPolicy !== "on-touch" && pricing.refreshPolicy !== "each-block") {
     throw new Error("pricing.refreshPolicy must be on-touch or each-block");
+  }
+  if (pricing.refreshPolicyForInstance !== undefined) {
+    assertSynchronousFunction(pricing.refreshPolicyForInstance, "pricing.refreshPolicyForInstance");
   }
   assertSynchronousFunction(pricing.stateKey, "pricing.stateKey");
   assertSynchronousFunction(

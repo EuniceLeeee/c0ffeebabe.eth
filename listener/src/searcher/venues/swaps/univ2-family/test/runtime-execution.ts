@@ -158,33 +158,36 @@ test("V2 runtime patches the nominal debit but prices the actual pair credit in 
   }
 });
 
-test("V2 non-xyk amount function runs in the transaction on actual credit, in both directions", () => {
-  const descriptor: UniV2Descriptor = { ...v2, quoteModel: { kind: "pool-get-amount-out", probe0: 1n, probe1: 1n },
-    feeRule: { kind: "included-in-pool-quote", feeBps: 0n, evidence: "pool-quote" } };
-  for (const route of univ2Routes.project({ descriptor })) for (const amount of [100n, 123456789n]) {
-    const credit = amount * 9n / 10n, output = credit * 3n + 7n;
-    let step = 0;
-    run(univ2Execution.buildRuntimeLeg({ descriptor, route, executor, runtimeEvidence: [] }), amount, call => {
-      switch (step++) {
-        case 0: case 2:
-          assert.equal(call.target, route.tokenIn); assert(call.static);
-          return abi.encode(["uint256"], [999n + (step === 3 ? credit : 0n)]);
-        case 1:
-          assert.equal(call.target, route.tokenIn); assert(!call.static);
-          assert.deepEqual([...erc20.decodeFunctionData("transfer", call.data)], [pool, amount]); return "0x";
-        case 3:
-          assert.equal(call.target, pool); assert(call.static);
+test("V2 non-xyk preserves pre-transfer quoting and callback settlement, including verified transfer tax", () => {
+  for (const taxed of [false, true]) {
+    const descriptor: UniV2Descriptor = { ...v2, quoteModel: { kind: "pool-get-amount-out", probe0: 1n, probe1: 1n },
+      feeRule: { kind: "included-in-pool-quote", feeBps: 0n, evidence: "pool-quote" },
+      ...(taxed ? { tokenTransfers: [token0, token1].map(token => ({ token,
+        kind: "verified-transfer-tax" as const, codeHash: "0x" + "ab".repeat(32), taxNumerator: 100n, taxDenominator: 10000n })) as any } : {}) };
+    for (const route of univ2Routes.project({ descriptor })) for (const amount of [100n, 123456789n]) {
+      const credit = amount - (taxed ? amount * 100n / 10000n : 0n), output = credit * 3n + 7n;
+      let step = 0, transfers = 0;
+      run(univ2Execution.buildRuntimeLeg({ descriptor, route, executor, runtimeEvidence: [] }), amount, call => {
+        assert.equal(call.target, pool);
+        if (step++ === 0) {
+          assert(call.static); assert.equal(transfers, 0, "non-xyk quote must see pre-transfer state");
           assert.deepEqual([...UNIV2_POOL_QUOTE_INTERFACE.decodeFunctionData("getAmountOut", call.data)], [route.tokenIn, credit]);
           return abi.encode(["uint256"], [output]);
-        case 4:
-          assert.equal(call.target, pool); assert(!call.static);
-          assert.deepEqual([...UNIV2_PAIR_INTERFACE.decodeFunctionData("swap", call.data)],
-            [route.direction === "zero-for-one" ? 0n : output, route.direction === "zero-for-one" ? output : 0n, executor, "0x"]);
-          return "0x";
-        default: assert.fail("unexpected V2 call");
-      }
-    });
-    assert.equal(step, 5);
+        }
+        assert(!call.static); assert.equal(call.incoming, 164); assert.equal(call.outgoing, 164);
+        const args = UNIV2_PAIR_INTERFACE.decodeFunctionData("swap", call.data);
+        assert.deepEqual([...args].slice(0, 3),
+          [route.direction === "zero-for-one" ? 0n : output, route.direction === "zero-for-one" ? output : 0n, executor]);
+        const callback = ethers.getBytes(args[3]);
+        assert.equal(callback[0], 14); assert.equal(BigInt(ethers.hexlify(callback.slice(1, 33))), amount);
+        run({ actionAdapterId: "payment", program: ethers.hexlify(callback.slice(36)) }, amount, payment => {
+          transfers++; assert.equal(payment.target, route.tokenIn);
+          assert.deepEqual([...erc20.decodeFunctionData("transfer", payment.data)], [pool, amount]); return "0x";
+        });
+        return "0x";
+      });
+      assert.equal(step, 2); assert.equal(transfers, 1);
+    }
   }
 });
 

@@ -384,3 +384,39 @@ test("production declaration owns its Router action and declares pure approval i
   assert.equal(bool(word(1n)), true); assert.equal(bool(word(0n)), false);
   assert.equal(SURFACE, "balancer-v3-vault-registered-v1");
 });
+test("non-swap hook variants retain both amount interfaces and conservative block refresh", () => {
+  // Include self-hooks used by initialization/liquidity pools, not only an
+  // external after-add hook. These flags do not alter a swap's caller context.
+  for (const enabled of [[1], [2], [6], [7], [8], [9], [1, 6, 8]]) {
+    const f = fixture();
+    const hookData = VAULT_ABI.encodeFunctionResult("getHooksConfig", [[
+      ...Array.from({ length: 10 }, (_, i) => enabled.includes(i)), POOL,
+    ]]);
+    const s = setup({ ...f, answer: request =>
+      request.id === "hooks" ? success(request.id, hookData) : f.answer(request) });
+    assert.equal(s.descriptor.binding.hooks.address, POOL);
+    for (const route of s.routes) {
+      const current = currentPricing(s, route);
+      assert.equal(plugin.pricing.refreshPolicyForInstance!({
+        descriptor: current.descriptor, routes: [route],
+      }), "each-block", "hooked/unknown pool math must not receive a static-price promise");
+      for (const amountIn of [12345n, 123450n]) {
+        const input = { descriptor: s.descriptor, route, amountIn, source: SOURCE,
+          executor: EXECUTOR, runtimeEvidence: [] };
+        const method = plugin.exact.methods(input)[1];
+        assert.equal(method.kind, "request-program");
+        if (method.kind !== "request-program") throw new Error("missing quoted interface");
+        const quote = method.program.decode({ programInput: input,
+          initialResults: method.program.buildRequests(input).map(s.f.answer), dependentEvidence: [] });
+        assert(quote.amountOut > 0n);
+        const fragment = plugin.execution.buildFragment({ ...input, quotedAmountOut: quote.amountOut,
+          minAmountOut: 1n, exactEvidence: quote.evidence });
+        assert.equal(fragment.nodes[0].amount, amountIn);
+        const runtime = plugin.execution.buildRuntimeLeg!({ descriptor: s.descriptor, route,
+          executor: EXECUTOR, runtimeEvidence: [], source: SOURCE });
+        assert(runtime && runtime.actionAdapterId === "balancer-v3-router-swap");
+        assert(runtime.program.startsWith("0x01"));
+      }
+    }
+  }
+});

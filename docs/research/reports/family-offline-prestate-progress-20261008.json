@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-08",
+  "scope": "Test/evidence-only progress report; production source unchanged from base. Not original-leg parity, whole-route EV, formal merge acceptance or live latency.",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "024093ca465a5f9dcfde1f011f1a734ffcb45312",
+  "changes": [
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/test/contract.ts",
+      "sha256": "d2c3dc9b732f9357527a398c1e877582700f7c29877a137ba51358c5f4258be1",
+      "reason": "Move missing issued-trial prefix negative assertion to production decode boundary with valid read results. Retain refusal."
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/test/xwin-contract.ts",
+      "sha256": "362f917bd60f57ed8df053a062a2ef0bac5100075d2a06b5ad5716dd18da1c9e",
+      "reason": "Assert production effective sizing propagation and layered quote-failed/missing-valuation; retain raw NAV freeze, source freshness, null failed results and recovery."
+    },
+    {
+      "path": "listener/src/searcher/test/family-integration/three-family/original-prestate.t.sol",
+      "sha256": "db07eaa2d09685b13044dca6186d7e064308b04aa2e13cef7b5d4e70a4e08013",
+      "reason": "Native transaction-fork diagnostic compared to independent canonical prestate; no account/state rewrite."
+    }
+  ],
+  "offline": {
+    "inputs": {
+      "root": "logs/offline-quote-gap.wXUQvz/inputs",
+      "files": 8,
+      "sha256": "39aa13b5f2e0b1acf3aea0a724fecdbc799f5f34efe446511b6a80eb266c5ae9",
+      "provenance": "Byte-identical existing coffee corpus and prior BTB acceptance inputs. No new fetching, fabrication or source edit for initial recovery."
+    },
+    "initial": {
+      "tests": 30,
+      "pass": 28,
+      "fail": 2,
+      "skipped": 0,
+      "report": "logs/offline-quote-gap.wXUQvz/summary.json",
+      "reason": "BTB and xWin stale test assertions after genuine missing inputs were recovered."
+    },
+    "intermediate": {
+      "tests": 30,
+      "pass": 29,
+      "fail": 1,
+      "log": "logs/offline-quote-gap.wXUQvz/current-contracts-v1.log",
+      "reason": "Later xWin failed-anchor status assertion newly reached."
+    },
+    "final": {
+      "tests": 30,
+      "pass": 30,
+      "fail": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "report": "logs/offline-quote-gap.wXUQvz/current-contracts-v2.json",
+      "reportSha256": "636a097dab251f52b16ac3c41c977ece47996684cf36c54b5c25cd55cc5f5e8f",
+      "log": "logs/offline-quote-gap.wXUQvz/current-contracts-v2.log",
+      "logSha256": "ee68961018691711b8ce804531f47878f3934c9d5feb8303acdff8d56aedc20b"
+    },
+    "networkIsolation": "unshare -n; env -i; TSX_DISABLE_CACHE=1; dotenv disabled; dry-run; no submit.",
+    "priorStage1Correction": "Original quoted-family suite contained 78 passing tests and 3 initialization failures due to absent inputs. It was not a complete all-pass run. This report closes the three targeted offline input/test gaps, not every Family's historical acceptance.",
+    "migrationUnchangedSha256": "2a735e59862a00b9ca920b1405d5c6d4978dc066daff043e7f13592a43184051"
+  },
+  "regression": {
+    "productionBuild": {
+      "command": "npm run build:live",
+      "exitCode": 0,
+      "evidence": "Main-agent terminal output; no separate raw log claimed"
+    },
+    "dualExecution": {
+      "command": "npm run searcher:family-dual-execution",
+      "tests": 67,
+      "pass": 67,
+      "fail": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "evidence": "Main-agent terminal output; no separate raw log claimed",
+      "scope": "Interface and production-selector synthetic contracts, not all-Family historical chain acceptance"
+    },
+    "wholeRepoTsc": {
+      "status": "not-rerun",
+      "knownPreexistingDiagnostics": 16
+    }
+  },
+  "review": {
+    "agent": "Mencius",
+    "agentId": "01a11740-7b48-70e1-8bdc-3e0aa98eb3c7",
+    "verdict": "No blocking findings in final three-file diff",
+    "ranGate": "Independent offline BTB7/7, xWin11/11, Migration12/12; zero skipped, exit0; git diff --check pass; source/input immutability.",
+    "receipt": "logs/offline-quote-review.aVaNGu/test-results.json",
+    "receiptSha256": "dd2c01c1c3f8539e3c063eea6a3ddda396864fe6f831d8aec5d1ab8b6ca4a156",
+    "integrity": "logs/offline-quote-review.aVaNGu/integrity-result.json",
+    "integritySha256": "0890a7385c3016cb6c20360f3247812a487c5e3cffe7a07d2f2cd1b3ca1506b4",
+    "finding": "Prefix refusal remains at state-consumption boundary; xWin uses actual successful reference outputs and never presents failed stale quotes as refreshed. Final four-env-chunk probe matches executed source and compiled artifact.",
+    "limitations": "Reviewer read historical proof logs/source/compilation bindings without rerunning RPC/Forge; build and 67-test suite are main-agent results."
+  },
+  "nativePrestate": {
+    "root": "logs/family-three-prestate.IIERDy",
+    "mechanism": "Foundry native vm.createSelectFork(MAINNET_RPC_URL, originalTxHash)",
+    "tool": {
+      "version": "1.8.5",
+      "commit": "51a52c59cffd940f76eddd0b4bb1791aa4b5ac7f",
+      "officialReleaseArchiveSha256": "6c66ffcc55fa4249197721baa3098bc208014ea1d8aa04b2ed50ac6bccffb226",
+      "forgeSha256": "06c477aee83d0996e57aa92b0841fdf06382cb172fd69bbb88920bb0054dfd7f",
+      "anvilSha256": "00f97668e1ae0fcca118fd7d2d1b6d25c0496447a523ca6bc2dfd10958c99604",
+      "evmVersion": "osaka",
+      "solc": "0.8.31",
+      "installation": "Isolated under ignored evidence directory; production Foundry1.4.4 binaries unchanged"
+    },
+    "checked": [
+      "chainId",
+      "number",
+      "timestamp",
+      "basefee",
+      "gaslimit",
+      "coinbase",
+      "prevrandao",
+      "all captured account balances/nonces/code",
+      "all captured storage slots"
+    ],
+    "samples": [
+      {
+        "tx": "0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8",
+        "block": 26138731,
+        "captureSha256": "5570a7229183e268afc519162ea80eb85a8937b8940f7350322c9f328a4c86c3",
+        "accounts": 8,
+        "slots": 25,
+        "result": "pass",
+        "testSeconds": 26.18,
+        "log": "forge-anchor-26138731-osaka-foundry185.log",
+        "logSha256": "ce9917be48d86e34bb179dc524e5aaf7bedd3d9f53d5f58750350c3abe4b10e8"
+      },
+      {
+        "tx": "0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",
+        "block": 26138724,
+        "captureSha256": "4b209eef5e22fd84765f12cf3af5ef407f04a83c793e2c2ce6ea213499123c67",
+        "accounts": 9,
+        "slots": 24,
+        "result": "pass",
+        "testSeconds": 65.33,
+        "log": "forge-anchor-26138724-osaka-foundry185.log",
+        "logSha256": "dbde9e7daecc5ec54c5aaed3781f014ee5ca1c077119f99c2240a2fcc35808f6"
+      },
+      {
+        "tx": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+        "block": 26138511,
+        "captureSha256": "0ae568dafd2bc0278a0d931605b732bf524bb8985ebda86770cb7b7008d0d3e6",
+        "accounts": 14,
+        "slots": 31,
+        "result": "pass",
+        "testSeconds": 58.65,
+        "log": "forge-anchor-26138511-osaka-foundry185.log",
+        "logSha256": "c96285329b6cdcc069b4b34e1c76af270b942383d93e914c483f1fd26b9fd38f"
+      }
+    ],
+    "scope": "Captured touched-account/slot prestate and seven execution-environment fields, not full trie-root or every opcode environment, original target execution, production Family original-output comparison, EV or latency.",
+    "retainedFailures": [
+      "Old transaction-hash Anvil no-mining remained parent; canonical balances failed.",
+      "Original prefix mempool queuing failed real intra-block funding dependency; no balance/nonce rewrite used.",
+      "Anvil1.4.4 forced prefix contained137/138; authentic type3 blob transaction omitted.",
+      "Forge1.4.4 Prague rejected blob gas price above max fee.",
+      "Anvil1.8.5 forced prefix contained138 but canonical miner check failed; not accepted.",
+      "Earlier unsupported prevRandao, script-copy/version mismatch, compiler/read permissions and single-env E2BIG attempts retained."
+    ],
+    "timing": "Setup/test elapsed only; not live-stage latency. Failed attempts retained, not replaced with successful timing samples."
+  },
+  "canonicalReconciliation": {
+    "query": "single-transaction,causality,pnl",
+    "inventoryCheck": "369 tools, pass",
+    "manifest": "logs/family-three-prestate.IIERDy/tool-selection.json",
+    "manifestSha256": "41b1031bffe7f8a6a28af00cf5b6143aafd1f15d88e61b6b2c26aab32ffdaed4",
+    "executedTool": "analysis:bundle-postmortem",
+    "exitCode": 0,
+    "output": "logs/family-three-prestate.IIERDy/postmortem-26138731.json",
+    "outputSha256": "11ae525a2026f617677481c9cffddbefacc39966a09ec652a8929b49f9f719ed",
+    "reconciliation": "Original amounts and closing UniV2 leg agree. Explicit any-tx mode, no live events; in_graph null and incomplete NMR valuation do not establish Graph coverage, robust EV or prestate validity."
+  },
+  "cleanup": {
+    "status": "Previously completed and independently rechecked; no further deletions this change",
+    "absent": [
+      "/opt/mev-cloud/live-defaults-20261007",
+      "/opt/mev-cloud/live-defaults-main-20261007",
+      "remote codex/live-defaults-fluid-ekubo-20261007"
+    ],
+    "activeConsumers": 0,
+    "otherWorkflow": "stopped; noAdditionalRounds=true",
+    "historicalReferences": "freeze.mjs/prepare.mjs path text retained as evidence",
+    "recoverableArchive": "/opt/mev-cloud/worktree-archive-20261007.DQR9uH",
+    "protectedImplUntouched": true
+  },
+  "remaining": [
+    "Compare current production Family quotes and both execution encoders at original input amounts with the five original legs under verified call-prestate; current N-end parity does not satisfy this.",
+    "Do not infer all-family historical coverage, full closed-loop EV or formal merge readiness."
+  ],
+  "safety": {
+    "productionChanges": 0,
+    "protectedImplModified": false,
+    "newWorktrees": 0,
+    "wholeLive": false,
+    "full14400Rebuild": false,
+    "signing": false,
+    "broadcast": false,
+    "rawLogsCommitted": false,
+    "credentialsCommitted": false
+  }
+}

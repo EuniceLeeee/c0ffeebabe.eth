@@ -146,6 +146,7 @@ let epoch = 1;
 let epochStartedAtMs = Date.now();
 let fileBytes = 0;
 let midFileBytes = 0;
+let previousEffective: ReturnType<typeof serializeEffectiveMids> | null = null;
 let nextRouteRef = 1;
 let failed = false;
 const catalog = new Map<string, CatalogEntry>();
@@ -448,11 +449,12 @@ async function handleMidBatch(batch: RawMidBatch): Promise<void> {
         updates: batch.updates,
         removals: batch.removals,
       };
+  const effective = batch.effectiveMids === undefined ? null : serializeEffectiveMids(batch.effectiveMids);
   const payload = `${JSON.stringify({
     ...record,
     ...(batch.rawMidSource === undefined ? {} : { raw_mid_source: batch.rawMidSource }),
-    ...(batch.effectiveMids === undefined ? {} : {
-      effective_mids: serializeEffectiveMids(batch.effectiveMids),
+    ...(effective === null ? {} : {
+      effective_mids: effectiveHistoryRecord(batch, effective),
     }),
   })}\n`;
   const payloadBytes = Buffer.byteLength(payload);
@@ -470,6 +472,8 @@ async function handleMidBatch(batch: RawMidBatch): Promise<void> {
   await writeAll(midFile, Buffer.from(payload), midFileBytes);
   await midFile.sync();
   midFileBytes += payloadBytes;
+  // Advance only after durable append. Missing effective data breaks its chain.
+  previousEffective = effective;
   port.postMessage({
     type: "ack",
     sequence: batch.sequence,
@@ -500,7 +504,7 @@ function serializeEffectiveMids(snapshot: EffectiveMidSnapshot) {
       status: row.status,
       ...(row.quotedAt === undefined ? {} : { quoted_at: row.quotedAt }),
       ...(effectiveMidRowCarried(snapshot, row) ? { carried: true } : {}),
-    }]),
+    }] as const),
     summary: {
       directions: summary.directions,
       quoted: summary.quoted,
@@ -510,6 +514,29 @@ function serializeEffectiveMids(snapshot: EffectiveMidSnapshot) {
       threshold_bps: summary.thresholdBps,
     },
   };
+}
+
+function effectiveHistoryRecord(batch: RawMidBatch, current: ReturnType<typeof serializeEffectiveMids>) {
+  const previous = previousEffective;
+  if (batch.kind !== "mid-delta" || previous === null ||
+      previous.source.number !== batch.previousSourceBlock ||
+      previous.source.generation !== batch.previousGeneration ||
+      previous.source.hash.toLowerCase() !== batch.previousSourceBlockHash.toLowerCase()) return current;
+  const { rows, ...metadata } = current;
+  const priorRows = new Map(previous.rows);
+  const updates: typeof rows = [];
+  // Carry is derived from the publication source, not a changed quote.
+  const comparable = (row: typeof rows[number][1]) => {
+    const { carried, ...quote } = row;
+    return JSON.stringify(row.quoted_at === undefined ? row : quote);
+  };
+  for (const entry of rows) {
+    const prior = priorRows.get(entry[0]);
+    if (prior === undefined || comparable(prior) !== comparable(entry[1])) updates.push(entry);
+    priorRows.delete(entry[0]);
+  }
+  return { ...metadata, encoding: "delta", previous_source: previous.source,
+    updates, removals: [...priorRows.keys()] };
 }
 
 async function resetEpoch(now: number): Promise<void> {
@@ -735,6 +762,12 @@ function validateMidBatch(batch: RawMidBatch): void {
     throw new Error("invalid mid history source anchor");
   }
   const rawSource = batch.rawMidSource;
+  const effectiveSource = batch.effectiveMids?.source;
+  if (effectiveSource !== undefined && (effectiveSource.number !== batch.sourceBlock ||
+      effectiveSource.generation !== batch.generation ||
+      effectiveSource.hash.toLowerCase() !== batch.sourceBlockHash.toLowerCase())) {
+    throw new Error("effective history source differs from publication");
+  }
   if (rawSource !== undefined && (
     !Number.isSafeInteger(rawSource.number) || rawSource.number < 0 || rawSource.number > batch.sourceBlock ||
     !Number.isSafeInteger(rawSource.generation) || rawSource.generation < 0 || rawSource.generation > batch.generation ||

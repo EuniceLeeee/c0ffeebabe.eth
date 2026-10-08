@@ -1,0 +1,15 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineSwapFamily } from "../adapter-family-plugin.js";
+import { action } from "../swaps/balancer-v1-family/action.js";
+import { capture } from "../swaps/balancer-v1-family/capture.js";
+import { discovery } from "../swaps/balancer-v1-family/discovery.js";
+import { exact } from "../swaps/balancer-v1-family/exact.js";
+import { execution } from "../swaps/balancer-v1-family/execution.js";
+import { identity } from "../swaps/balancer-v1-family/identity.js";
+import { instance } from "../swaps/balancer-v1-family/instance.js";
+import { manifest } from "../swaps/balancer-v1-family/manifest.js";
+import { pricing } from "../swaps/balancer-v1-family/pricing.js";
+import { routes } from "../swaps/balancer-v1-family/routes.js";
+import { swap } from "../swaps/balancer-v1-family/swap.js";
+export const plugin = defineSwapFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, swap, capture, actionAdapters: [action] });
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_BALANCER_V1_ENABLED" });

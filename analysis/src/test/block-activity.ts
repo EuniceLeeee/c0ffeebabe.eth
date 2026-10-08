@@ -17,6 +17,32 @@ const ROUTE_A = "sha256:route-a";
 const ROUTE_B = "sha256:route-b";
 const ROUTE_C = "sha256:route-c";
 
+test("block-activity restores legacy effective baseline plus effective-only delta into mid-out", async () => {
+  await withFixture(async ({ root, eventsPath, logPath, routeEventsPath }) => {
+    const historyPath = join(root, "effective-history.jsonl"), outPath = join(root, "restored.json");
+    const at = (number: number) => ({ number, hash: blockHash(number), generation: number });
+    const row = { edge_id: "edge-a", instance_key: "pool-a", token_in: WETH, token_out: USDC,
+      amount_in: "2000000000000000", amount_out: "9007199254740993000", effective_mid: 1,
+      status: "quoted", quoted_at: at(98) };
+    const first = JSON.parse(midBaseline(1, 98, [["edge-a", compactMid(1)]]));
+    first.effective_mids = { source: at(98), reference: "default", reference_weth_input: "2000000000000000",
+      complete: true, wall_ms: 3, rows: [["edge-a", row]], summary: { directions: 1 } };
+    const last = JSON.parse(midDelta(2, 98, 99, [], []));
+    last.effective_mids = { source: at(99), reference: "gas", reference_weth_input: "3000000000000000",
+      complete: true, wall_ms: 1, encoding: "delta", previous_source: at(98), removals: [],
+      updates: [["edge-a", { ...row, amount_out: "9007199254740993001", quoted_at: at(99) }]], summary: { directions: 1 } };
+    await writeFile(historyPath, [JSON.stringify(first), JSON.stringify(last)].join("\n") + "\n");
+    await writeFile(routeEventsPath, [routeCatalogWithEdges(1, ROUTE_A, ["edge-a"]), routeLifecycleWithMid(99, 99, [1])].join("\n") + "\n");
+    const stdout = await runBlockActivity(eventsPath, logPath, routeEventsPath, historyPath, outPath);
+    assert.match(stdout, /Mid table: status=complete source_block=99/);
+    const restored = JSON.parse(await readFile(outPath, "utf8"));
+    assert.equal(restored.effective_mids.source.number, 99);
+    assert.equal(restored.effective_mids.rows[0][1].amount_out, "9007199254740993001");
+    assert.equal(restored.effective_mids.rows[0][1].carried, undefined);
+    assert.equal(restored.mid_count, 1);
+  });
+});
+
 test("block-activity preserves the JSONL funnel and joins target N to blockscan source N-1", async () => {
   await withFixture(async ({ eventsPath, logPath }) => {
     const stdout = await runBlockActivity(eventsPath, logPath);

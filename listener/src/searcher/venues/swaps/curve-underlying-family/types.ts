@@ -39,10 +39,26 @@ export interface CurveUnderlyingRegistryBinding {
     "get_registry_handlers_from_pool+get_underlying_coins";
 }
 
+/** Semantics bound by immutable implementation code plus on-chain coin/LP topology.
+ * Not an admission allowlist and not a universal Curve math model. */
+export interface CurveUnderlyingClassicMetaBinding {
+  readonly kind: "classic-meta-base-3pool-v1";
+  readonly poolCodeHash: string;
+  readonly metaRateMultiplier: bigint;
+  readonly implementation: string;
+  readonly implementationCodeHash: string;
+  readonly basePool: string;
+  readonly baseCodeHash: string;
+  readonly baseLPToken: string;
+  readonly baseCoins: readonly string[];
+  readonly basePrecisions: readonly bigint[];
+}
+
 export interface CurveUnderlyingIdentityFacts {
   readonly pool: string;
   readonly coins: readonly string[];
   readonly registryBinding: CurveUnderlyingRegistryBinding;
+  readonly quoteModel?: CurveUnderlyingClassicMetaBinding;
   readonly verifiedDirections: readonly CurveUnderlyingVerifiedDirection[];
 }
 
@@ -59,6 +75,7 @@ export interface CurveUnderlyingDescriptor extends CompiledInstanceDescriptor {
   readonly pool: string;
   readonly coins: readonly string[];
   readonly registryBinding: CurveUnderlyingRegistryBinding;
+  readonly quoteModel?: CurveUnderlyingClassicMetaBinding;
   readonly verifiedDirections: readonly CurveUnderlyingVerifiedDirection[];
   readonly runtimeRequirements: readonly RuntimeRequirement[];
 }
@@ -76,6 +93,7 @@ export interface CurveUnderlyingPricingDescriptor {
   readonly registry: string;
   readonly coins: readonly string[];
   readonly route: CurveUnderlyingRoute;
+  readonly quoteModel?: CurveUnderlyingClassicMetaBinding;
 }
 
 export interface CurveUnderlyingPricingSnapshot {
@@ -87,7 +105,7 @@ export interface CurveUnderlyingPricingSnapshot {
 }
 
 export interface CurveUnderlyingExactEvidence {
-  readonly kind: "curve-underlying-get-dy";
+  readonly kind: "curve-underlying-get-dy" | "curve-underlying-classic-meta";
   readonly source: CanonicalSource;
   readonly pool: string;
   readonly routeKey: CurveUnderlyingRoute["routeKey"];
@@ -106,6 +124,7 @@ export type CurveUnderlyingIdentityEvidence =
       readonly handlers: readonly string[];
       readonly coins: readonly string[];
       readonly poolHasCode: boolean;
+      readonly poolCode: string;
     }
   | {
       readonly phase: "behavior-proof";
@@ -113,4 +132,5 @@ export type CurveUnderlyingIdentityEvidence =
       readonly handlers: readonly string[];
       readonly coins: readonly string[];
       readonly verifiedDirections: readonly CurveUnderlyingVerifiedDirection[];
+      readonly quoteModel?: CurveUnderlyingClassicMetaBinding;
     };

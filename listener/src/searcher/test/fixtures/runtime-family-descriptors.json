@@ -1,0 +1,936 @@
+{
+  "format": "runtime-family-descriptors-v1",
+  "notice": "Static ABI/route fixtures extracted from a saved Ready, with provenance omitted. Not fresh identity, admission, fork-execution or profitability evidence.",
+  "sourceReadySha256": "c2736648d0aa56dbb78705e99460ae832c77b131d10d8cbe7e0be8c9fe018cbb",
+  "descriptors": [
+    {
+      "factoryBinding": {
+        "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        "reversePool": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b"
+      },
+      "familyId": "univ3-standard",
+      "fee": {
+        "$durableType": "bigint",
+        "value": "100"
+      },
+      "instanceKey": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+      "lineageId": "univ3:factory-child",
+      "pool": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+      "provenance": [],
+      "quoterBinding": {
+        "provenance": "factory-bound-infrastructure",
+        "quoter": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+        "router": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"
+      },
+      "runtimeRequirements": [],
+      "swapAccess": {
+        "codeHash": "0x61bb013bc7f8bed8e3c050464e93985787d254f4236d2e3ef846700c07e00aed",
+        "kind": "no-is-swapper-getter"
+      },
+      "tickSpacing": 1,
+      "token0": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "token1": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+    },
+    {
+      "factoryBinding": {
+        "factory": "0x115934131916C8b277DD010Ee02de363c09d037c",
+        "reversePool": "0x7b09e90ea08B0Ff922D9890959057136233D0F4C"
+      },
+      "familyId": "univ2-standard",
+      "feeRule": {
+        "evidence": "standard-v2-default",
+        "feeBps": {
+          "$durableType": "bigint",
+          "value": "30"
+        },
+        "kind": "constant-bps"
+      },
+      "instanceKey": "0x7b09e90ea08b0ff922d9890959057136233d0f4c",
+      "lineageId": "univ2:factory-child",
+      "pool": "0x7b09e90ea08B0Ff922D9890959057136233D0F4C",
+      "provenance": [],
+      "quoteModel": {
+        "kind": "constant-product"
+      },
+      "runtimeRequirements": [],
+      "token0": "0x9Ac59862934ebc36072D4D8ADA37c62373A13856",
+      "token1": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "tokenTransfers": [
+        {
+          "codeHash": "0xa64ca9b4ac7805fbf74d3a5ebf1a7bf1fcb75bd44a2380e84a21a019f1b28411",
+          "kind": "nominal-unverified",
+          "taxDenominator": {
+            "$durableType": "bigint",
+            "value": "10000"
+          },
+          "taxNumerator": {
+            "$durableType": "bigint",
+            "value": "0"
+          },
+          "token": "0x9Ac59862934ebc36072D4D8ADA37c62373A13856"
+        },
+        {
+          "codeHash": "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23",
+          "kind": "nominal-unverified",
+          "taxDenominator": {
+            "$durableType": "bigint",
+            "value": "10000"
+          },
+          "taxNumerator": {
+            "$durableType": "bigint",
+            "value": "0"
+          },
+          "token": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        }
+      ]
+    },
+    {
+      "factoryBinding": {
+        "dexId": {
+          "$durableType": "bigint",
+          "value": "3"
+        },
+        "factory": "0x91716C4EDA1Fb55e84Bf8b4c7085f84285c19085",
+        "reverseDex": "0x3C0441B42195F4aD6aa9a0978E06096ea616CDa7"
+      },
+      "familyId": "fluid-dex",
+      "instanceKey": "0x3c0441b42195f4ad6aa9a0978e06096ea616cda7",
+      "lineageId": "fluid-dex:factory-child",
+      "pool": "0x3C0441B42195F4aD6aa9a0978E06096ea616CDa7",
+      "provenance": [],
+      "quoteBinding": {
+        "completion": "return-or-revert-data",
+        "recipient": "0x000000000000000000000000000000000000dEaD",
+        "successEncoding": "FluidDexSwapResult(uint256)-revert",
+        "target": "0x3C0441B42195F4aD6aa9a0978E06096ea616CDa7"
+      },
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "kind": "quote-completion",
+          "mode": "return-or-revert-data"
+        }
+      ],
+      "token0": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+      "token0Decimals": 8,
+      "token1": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+      "token1Decimals": 8
+    },
+    {
+      "familyId": "univ4",
+      "graphToken0": "0x0d88eD6E74bbFD96B831231638b66C05571e824F",
+      "graphToken1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "hookPolicy": "no-hook",
+      "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xe68b8885ef62794d2db03403bc0ac0a56b3d001266879042a5f77b8e7a66ba3a",
+      "lineageId": "univ4:pool-manager-subinstance",
+      "managerBinding": {
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "managerCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+        "quoter": "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+        "stateView": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227"
+      },
+      "poolId": "0xe68b8885ef62794d2db03403bc0ac0a56b3d001266879042a5f77b8e7a66ba3a",
+      "poolKey": {
+        "currency0": "0x0d88eD6E74bbFD96B831231638b66C05571e824F",
+        "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "fee": 209735,
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "tickSpacing": 1
+      },
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "extensionBinding": "0x0000000000000000000000000000000000000000",
+          "kind": "extension-policy",
+          "mode": "proven-transparent"
+        }
+      ]
+    },
+    {
+      "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "familyId": "protocol:erc4626",
+      "instanceKey": "0x28b3a8fb53b741a8fd78c0fb9a6b2393d896a43d",
+      "lineageId": "erc4626:standalone-standard-behavior",
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "share": "0x28B3a8fb53B741A8Fd78c0fb9A6B2393d896a43d",
+      "vault": "0x28B3a8fb53B741A8Fd78c0fb9A6B2393d896a43d",
+      "verifiedDirections": {
+        "deposit": true,
+        "redeem": false
+      }
+    },
+    {
+      "codeHash": "0xbeb7cad9bf341aadbb651e5fb445d836f745bf645d98e5d7e980e60ea1b9b9b6",
+      "familyId": "mooniswap",
+      "instanceKey": "0x57fbb3704609da720546898fcfbad910fcf49e25",
+      "lineageId": "mooniswap:verified-v2-runtime",
+      "pool": "0x57fbb3704609da720546898fcfbad910fcf49e25",
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "token0": "0x111111111117dc0aa78b770fa6a738034120c302",
+      "token1": "0xed30dd7e50edf3581ad970efc5d9379ce2614adb"
+    },
+    {
+      "baseToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "familyId": "custom-swap:dodo-v2",
+      "instanceKey": "0xf0a020f05afe2392e41870592edc710dbe124f29",
+      "lineageId": "dodo-v2:registry-member",
+      "pool": "0xF0A020F05aFE2392e41870592EDC710dbe124F29",
+      "provenance": [],
+      "quoteActorBinding": {
+        "actor": "0x1000000000000000000000000000000000000001",
+        "feeSemantics": "getUserFeeRate(actor)",
+        "inputSemantics": "balance-reserve-mt-fee-v1",
+        "querySemantics": "querySellBase/querySellQuote(actor,effectiveInput)",
+        "role": "verified-actor"
+      },
+      "quoteToken": "0x9d71CE49ab8A0E6D2a1e7BFB89374C9392FD6804",
+      "registryBinding": {
+        "listedPool": "0xF0A020F05aFE2392e41870592EDC710dbe124F29",
+        "registry": "0x6fdDB76c93299D985f4d3FC7ac468F9A168577A4"
+      },
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "kind": "execution-actor",
+          "role": "verified-actor"
+        },
+        {
+          "kind": "quote-completion",
+          "mode": "return-data"
+        }
+      ]
+    },
+    {
+      "codeHash": "0x4a7ead31f678c7783283ddc2d29401970a5dcd0e16e8896ac914df997f784fb9",
+      "denominator": {
+        "$durableType": "bigint",
+        "value": "1000000000000000000"
+      },
+      "familyId": "protocol:token-migration",
+      "instanceKey": "0x5c30d7494da55e23f62130c642c22af1814ef65d",
+      "lineageId": "token-migration:mantle-solc-0.8.13-v1",
+      "numerator": {
+        "$durableType": "bigint",
+        "value": "43750"
+      },
+      "oneToken": {
+        "$durableType": "bigint",
+        "value": "1000000000000000000"
+      },
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "target": "0x5C30D7494DA55e23f62130C642C22AF1814EF65d",
+      "tokenIn": "0x44108f0223A3C3028F5Fe7AEC7f9bb2E66beF82F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    },
+    {
+      "codeHash": "0x78b0d75d8a9a3fa14a53c13ee5a7b6667980d120f5bec678433cee5abc58dbe4",
+      "decimals": 18,
+      "factory": "0x73a001e72f0fe3ca366d6079dc3427af7865839b",
+      "factoryCodeHash": "0x7e56b424b2c68a3b91749034670f2728eb01bd758b9bc4c5ba49874f4b6ffa36",
+      "familyId": "custom-swap:uniswap-v1",
+      "implementation": "0x575ba30c7b77fa0eebd34cc5416538323c4e5612",
+      "implementationCodeHash": "0x149aa36e02a2583973be13ac2161eb3ada7ce722d148f1dfa04c94a680957b1b",
+      "instanceKey": "0x97386862594f4cacea245e8dbfa6230ca696c37c",
+      "issuer": "0xcc4461636684868aab71037b29a11cc643e64500",
+      "lineageId": "uniswap-v1:anyswap-issuer-fee",
+      "model": "anyswap-v1-issuer-fee-001",
+      "pool": "0x97386862594f4cacea245e8dbfa6230ca696c37c",
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "token": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"
+    },
+    {
+      "familyId": "custom-swap:angstrom-v4",
+      "immutableBinding": {
+        "adapter": "0xb535aEB27335B91e1B5bcCbd64888bA7574eFBF8",
+        "adapterCodeHash": "0x6280f4c65e60bb69e42628c819347aea85d7982710f7eb67b64eaf2cb1a6a6b2",
+        "controller": "0x1746484EA5e11C75e009252c102C8C33e0315fD4",
+        "hook": "0x0000000aa232009084Bd71A5797d089AA4Edfad4",
+        "hookCodeHash": "0x528182e66a441545ea3ba1dede4e6063f23acd4ada4036c24b9fa2f254bc4ed1",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "managerCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+        "quoter": "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+        "stateView": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227"
+      },
+      "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xe500210c7ea6bfd9f69dce044b09ef384ec2b34832f132baec3b418208e3a657",
+      "lineageId": "angstrom-v4:official-hook-poolkey",
+      "poolId": "0xe500210c7ea6bfd9f69dce044b09ef384ec2b34832f132baec3b418208e3a657",
+      "poolKey": {
+        "currency0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "currency1": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "fee": 8388608,
+        "hooks": "0x0000000aa232009084Bd71A5797d089AA4Edfad4",
+        "tickSpacing": 10
+      },
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "extensionBinding": "0x0000000aa232009084Bd71A5797d089AA4Edfad4",
+          "kind": "extension-policy",
+          "mode": "quote-and-final-sim"
+        }
+      ]
+    },
+    {
+      "asset": "0xc43C6bfeDA065fE2c4c11765Bf838789bd0BB5dE",
+      "familyId": "protocol:eigenpie",
+      "instanceKey": "0x24db6717db1c75b9db6ea47164d8730b63875db7:0xc43c6bfeda065fe2c4c11765bf838789bd0bb5de:0xd48067f122afc3a58f0f79611f5f1afae0d7f25b",
+      "lineageId": "eigenpie:observed-active-pair",
+      "provenance": [],
+      "receipt": "0xD48067f122AFC3a58f0F79611f5F1AfAe0d7f25B",
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "sampleAmountIn": {
+        "$durableType": "bigint",
+        "value": "75000000000000000000"
+      },
+      "target": "0x24db6717dB1C75B9Db6eA47164D8730B63875dB7"
+    },
+    {
+      "behaviorBinding": {
+        "activeProof": "registry-bound-effect-delta",
+        "changeFee": {
+          "$durableType": "bigint",
+          "value": "0"
+        },
+        "changesEnabled": true,
+        "inLendingMode": {
+          "$durableType": "bigint",
+          "value": "0"
+        },
+        "interfaceMode": "erc165",
+        "totalPercents": {
+          "$durableType": "bigint",
+          "value": "1000000"
+        }
+      },
+      "familyId": "protocol:astra-multitoken",
+      "instanceKey": "0x35ac7dcba25ba2192c87981bfcf024208070a25f",
+      "lineageId": "astra-multitoken:observed-active-registry",
+      "provenance": [],
+      "registryBinding": {
+        "registryContract": "0x35ac7DCbA25bA2192c87981BFcf024208070A25f",
+        "tokenWeights": [
+          {
+            "codeHash": "0xa97e7b5fafbaaae7f264dcaba4415e7374db347150d7ef446afadcdcc238d4d6",
+            "token": "0xc0829421C1d260BD3cB3E0F06cfE2D52db2cE315",
+            "weight": {
+              "$durableType": "bigint",
+              "value": "20"
+            }
+          },
+          {
+            "codeHash": "0x6971b2b38f6bb64644e856179641d7a3dd81c4eb7de627fbaa58ed0a49c0ba8e",
+            "token": "0xd26114cd6EE289AccF82350c8d8487fedB8A0C07",
+            "weight": {
+              "$durableType": "bigint",
+              "value": "18"
+            }
+          },
+          {
+            "codeHash": "0xd97302ef5ce559294421fffe4ba1757f72f42b3758010cfef7a349dbea86fb44",
+            "token": "0xC5bBaE50781Be1669306b9e001EFF57a2957b09d",
+            "weight": {
+              "$durableType": "bigint",
+              "value": "12"
+            }
+          },
+          {
+            "codeHash": "0x77c633ba07c8cb94cd4864092fd8b31e31cf9d065f6fb6acf617298bc0008785",
+            "token": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+            "weight": {
+              "$durableType": "bigint",
+              "value": "10"
+            }
+          },
+          {
+            "codeHash": "0x2944c46ab1bef3fbd6fe69daaa6d31a008bcdc3b0a76a155307cfa4e5a1e0d72",
+            "token": "0xFA1a856Cfa3409CFa145Fa4e20Eb270dF3EB21ab",
+            "weight": {
+              "$durableType": "bigint",
+              "value": "8"
+            }
+          },
+          {
+            "codeHash": "0x21592ca93ef4091edcb0e9d1da0f15bffe4f2612b6682d9400a045e340db8fb2",
+            "token": "0x05f4a42e251f2d52b8ed15E9FEdAacFcEF1FAD27",
+            "weight": {
+              "$durableType": "bigint",
+              "value": "8"
+            }
+          },
+          {
+            "codeHash": "0xbfab9013764150ad9235f83c5c7580232dcbd15b12f81d5ee81ee878c196cd75",
+            "token": "0x744d70FDBE2Ba4CF95131626614a1763DF805B9E",
+            "weight": {
+              "$durableType": "bigint",
+              "value": "7"
+            }
+          },
+          {
+            "codeHash": "0x80fa01752e4e9587d6da878d0675711fb0cb2f35843b0039dd5e8202e20159d1",
+            "token": "0xB98d4C97425d9908E66E53A6fDf673ACcA0BE986",
+            "weight": {
+              "$durableType": "bigint",
+              "value": "6"
+            }
+          },
+          {
+            "codeHash": "0xb3be8a3e0ee134d6c96aebc007d4e5f0e124ae73c32be39f6ccfff183c66a8b8",
+            "token": "0x69b148395Ce0015C13e36BFfBAd63f49EF874E03",
+            "weight": {
+              "$durableType": "bigint",
+              "value": "6"
+            }
+          },
+          {
+            "codeHash": "0x00bddbdfcef25e536549f3abbd46f147d649fc2c6d2373696cabd2faeca89721",
+            "token": "0xbf2179859fc6D5BEE9Bf9158632Dc51678a4100e",
+            "weight": {
+              "$durableType": "bigint",
+              "value": "5"
+            }
+          }
+        ],
+        "tokens": [
+          "0xc0829421C1d260BD3cB3E0F06cfE2D52db2cE315",
+          "0xd26114cd6EE289AccF82350c8d8487fedB8A0C07",
+          "0xC5bBaE50781Be1669306b9e001EFF57a2957b09d",
+          "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+          "0xFA1a856Cfa3409CFa145Fa4e20Eb270dF3EB21ab",
+          "0x05f4a42e251f2d52b8ed15E9FEdAacFcEF1FAD27",
+          "0x744d70FDBE2Ba4CF95131626614a1763DF805B9E",
+          "0xB98d4C97425d9908E66E53A6fDf673ACcA0BE986",
+          "0x69b148395Ce0015C13e36BFfBAd63f49EF874E03",
+          "0xbf2179859fc6D5BEE9Bf9158632Dc51678a4100e"
+        ]
+      },
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "kind": "execution-actor",
+          "role": "executor"
+        },
+        {
+          "kind": "quote-completion",
+          "mode": "return-data"
+        },
+        {
+          "effects": [
+            "token-delta",
+            "logs"
+          ],
+          "kind": "effect-observation"
+        }
+      ],
+      "target": "0x35ac7DCbA25bA2192c87981BFcf024208070A25f"
+    },
+    {
+      "aggregator": "0x3357974B41466c9Adb453Dc9D8A5a07278887174",
+      "codeHash": "0x8594ea55b8367287ced36b1a73006c77397b7b0940ff3f8da685799b4d301067",
+      "decimals": 18,
+      "factory": "0xd9E373F2B89aE245a981df853b27ED2970F71737",
+      "factoryCodeHash": "0x1b4336dddecfd3e095180b0e518cdbf1944c67e1b77dfbe1340801379e79db8d",
+      "familyId": "ella-exchange",
+      "instanceKey": "0x8717b08c1b9bed4bb650638c7d31e0548c2e161d",
+      "lineageId": "ella-exchange:native-base-v1",
+      "oracle": "0xDC530D9457755926550b59e8ECcdaE7624181557",
+      "pool": "0x8717B08c1b9BED4Bb650638c7D31e0548C2E161d",
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "token": "0x514910771AF9Ca656af840dff83E8264EcF986CA"
+    },
+    {
+      "asset": "0xae78736Cd615f374D3085123A210448E74Fc6393",
+      "familyId": "protocol:rocksolid",
+      "instanceKey": "0x1dc8164e06dbc540438e38074bafc87c022c3e33",
+      "lineageId": "rocksolid:active-sync-deposit",
+      "provenance": [],
+      "receipt": "0x1DC8164E06Dbc540438E38074bAfC87C022c3e33",
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "target": "0x1DC8164E06Dbc540438E38074bAfC87C022c3e33"
+    },
+    {
+      "familyId": "univ4-fee-hook",
+      "graphToken0": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "graphToken1": "0x8f66337a0c2A02202fd91Dd596c411CF977c6060",
+      "hook": "0x2a0A30dd78aF7698E6f40212b8B8324fcE2ee888",
+      "hookModel": "sat1",
+      "hookPolicy": "fee-hook",
+      "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f",
+      "lineageId": "univ4:pool-manager-fee-hook-subinstance",
+      "managerBinding": {
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "managerCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+        "quoter": "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+        "stateView": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227"
+      },
+      "poolId": "0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f",
+      "poolKey": {
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0x8f66337a0c2A02202fd91Dd596c411CF977c6060",
+        "fee": 3000,
+        "hooks": "0x2a0A30dd78aF7698E6f40212b8B8324fcE2ee888",
+        "tickSpacing": 60
+      },
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "extensionBinding": "0x2a0A30dd78aF7698E6f40212b8B8324fcE2ee888",
+          "kind": "extension-policy",
+          "mode": "quote-and-final-sim"
+        }
+      ]
+    },
+    {
+      "collateral": "0x45804880De22913dAFE09f4980848ECE6EcbAf78",
+      "familyId": "protocol:goldx",
+      "instanceKey": "0x355c665e101b9da58704a8fddb5feef210ef20c0",
+      "lineageId": "goldx:active-unit-mint",
+      "provenance": [],
+      "receipt": "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0",
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "target": "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0"
+    },
+    {
+      "familyId": "protocol:ethertoken-native-redeem",
+      "instanceKey": "0x000000000bb1f9944965c64066d10038a84f9af2",
+      "lineageId": "ethertoken-native:active-effect-delta-v1",
+      "nativeAnchor": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "kind": "execution-actor",
+          "role": "executor"
+        },
+        {
+          "effects": [
+            "token-delta",
+            "native-delta",
+            "total-supply-delta",
+            "logs"
+          ],
+          "kind": "effect-observation"
+        }
+      ],
+      "token": "0x000000000bB1f9944965c64066D10038a84F9af2"
+    },
+    {
+      "familyId": "protocol:erc4626-silo-redeem",
+      "instanceKey": "0xc58d044404d8b14e953c115e67823784dea53d8f:0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+      "lineageId": "erc4626-silo:observed-payout-active-proof",
+      "payoutToken": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "kind": "execution-actor",
+          "role": "executor"
+        },
+        {
+          "kind": "quote-completion",
+          "mode": "return-data"
+        },
+        {
+          "effects": [
+            "token-delta",
+            "total-supply-delta",
+            "logs"
+          ],
+          "kind": "effect-observation"
+        }
+      ],
+      "underlyingAsset": "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3",
+      "vault": "0xC58D044404d8B14e953C115E67823784dEA53d8F"
+    },
+    {
+      "familyId": "protocol:wsteth",
+      "instanceKey": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+      "lineageId": "wsteth:steth-active-binding",
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "steth": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+      "target": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+      "wsteth": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+    },
+    {
+      "dai": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "decimalScale": {
+        "$durableType": "bigint",
+        "value": "1000000000000"
+      },
+      "familyId": "protocol:psm",
+      "gem": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "target": "0xf6e72Db5454dd049d0788e411b06CfAF16853042"
+    },
+    {
+      "binding": {
+        "decimals": [
+          6,
+          18,
+          6
+        ],
+        "hooks": {
+          "address": "0x0000000000000000000000000000000000000000",
+          "codeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "flags": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "localModel": "stable-v1",
+        "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+        "permit2CodeHash": "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131",
+        "poolCodeHash": "0x71a3a49210c20135de88cf7bb1240970bd7103a4b21158f84ed0173786a89ad9",
+        "router": "0xAE563E3f8219521950555F5962419C8919758Ea2",
+        "routerCodeHash": "0x76d58a2f13ee78e52e3f414f0181bc77ff0fcc65ae35b0d215a26b6fd2980a18",
+        "tokenInfo": [
+          {
+            "paysYieldFees": true,
+            "rateProvider": "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988",
+            "tokenType": 1
+          },
+          {
+            "paysYieldFees": true,
+            "rateProvider": "0x851b73c4BFd5275D47FFf082F9e8B4997dCCB253",
+            "tokenType": 1
+          },
+          {
+            "paysYieldFees": true,
+            "rateProvider": "0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9",
+            "tokenType": 1
+          }
+        ],
+        "tokens": [
+          "0x7Bc3485026Ac48b6cf9BaF0A377477Fff5703Af8",
+          "0xC71Ea051a5F82c67ADcF634c36FFE6334793D24C",
+          "0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E"
+        ],
+        "vault": "0xbA1333333333a1BA1108E8412f11850A5C319bA9",
+        "vaultCodeHash": "0x4e7ec59a8b52b6afc9969c95d7f28c541aa3f643b5f4fe3577a1559e1c3beb4b"
+      },
+      "familyId": "balancer-v3",
+      "instanceKey": "0x85b2b559bc2d21104c4defdd6efca8a20343361d",
+      "lineageId": "balancer-v3:vault-registered-pool",
+      "pool": "0x85B2b559bC2D21104C4DEFdd6EFcA8A20343361D",
+      "proofSource": {
+        "generation": 26088150,
+        "hash": "0xcd1606be5437c39dae2f04fd1709e6016827cd05323e81674ce8b378f46f86b6",
+        "number": 26088150
+      },
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "kind": "quote-completion",
+          "mode": "return-data"
+        }
+      ]
+    },
+    {
+      "binding": {
+        "balanceAbi": "uint256",
+        "codeHash": "0xdc51cd6936fca2ea7c33eb8da5927d2a0f73531af674144a4e40465089896756",
+        "coinAbi": "uint256",
+        "coins": [
+          "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "0xB58E61C3098d85632Df34EecfB899A1Ed80921cB"
+        ],
+        "decimals": [
+          18,
+          18
+        ],
+        "handlers": [
+          "0x33C5252f240f02123090cfF1D8E3B80FceC31e54"
+        ],
+        "quoteAbi": "uint256",
+        "registry": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC"
+      },
+      "directions": [
+        {
+          "amountIn": {
+            "$durableType": "bigint",
+            "value": "141828759675819603"
+          },
+          "amountOut": {
+            "$durableType": "bigint",
+            "value": "117346504759072982"
+          },
+          "executionMode": "received-uint",
+          "i": 0,
+          "j": 1,
+          "tokenIn": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "tokenOut": "0xB58E61C3098d85632Df34EecfB899A1Ed80921cB"
+        },
+        {
+          "amountIn": {
+            "$durableType": "bigint",
+            "value": "420382612674550252"
+          },
+          "amountOut": {
+            "$durableType": "bigint",
+            "value": "505564236955819669"
+          },
+          "executionMode": "received-uint",
+          "i": 1,
+          "j": 0,
+          "tokenIn": "0xB58E61C3098d85632Df34EecfB899A1Ed80921cB",
+          "tokenOut": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E"
+        }
+      ],
+      "familyId": "curve-plain",
+      "instanceKey": "0x027b40f5917fcd0eac57d7015e120096a5f92ca9",
+      "lineageId": "curve-plain:registry-direct-coin-behavior",
+      "pool": "0x027B40F5917FCd0eac57d7015e120096A5F92ca9",
+      "provenance": [],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "kind": "quote-completion",
+          "mode": "return-data"
+        }
+      ]
+    },
+    {
+      "coins": [
+        "0x5f98805A4E8be255a32880FDeC7F6728C6568bA0",
+        "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+      ],
+      "familyId": "curve-underlying",
+      "instanceKey": "0x497ce58f34605b9944e6b15ecafe6b001206fd25",
+      "lineageId": "curve-underlying:metaregistry-member",
+      "pool": "0x497CE58F34605B9944E6b15EcafE6b001206fd25",
+      "provenance": [],
+      "registryBinding": {
+        "handlers": [
+          "0x127db66E7F0b16470Bec194d0f496F9Fa065d0A9"
+        ],
+        "lookupSemantics": "get_registry_handlers_from_pool+get_underlying_coins",
+        "registry": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC"
+      },
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "kind": "quote-completion",
+          "mode": "return-data"
+        }
+      ],
+      "verifiedDirections": [
+        {
+          "behaviorProbeAmountIn": {
+            "$durableType": "bigint",
+            "value": "1000000"
+          },
+          "behaviorProbeAmountOut": {
+            "$durableType": "bigint",
+            "value": "1012857"
+          },
+          "i": 0,
+          "j": 1,
+          "tokenIn": "0x5f98805A4E8be255a32880FDeC7F6728C6568bA0",
+          "tokenOut": "0x853d955aCEf822Db058eb8505911ED77F175b99e"
+        },
+        {
+          "behaviorProbeAmountIn": {
+            "$durableType": "bigint",
+            "value": "1000000000000000000"
+          },
+          "behaviorProbeAmountOut": {
+            "$durableType": "bigint",
+            "value": "1004699"
+          },
+          "i": 0,
+          "j": 2,
+          "tokenIn": "0x5f98805A4E8be255a32880FDeC7F6728C6568bA0",
+          "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+        },
+        {
+          "behaviorProbeAmountIn": {
+            "$durableType": "bigint",
+            "value": "1000000"
+          },
+          "behaviorProbeAmountOut": {
+            "$durableType": "bigint",
+            "value": "986457"
+          },
+          "i": 1,
+          "j": 0,
+          "tokenIn": "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+          "tokenOut": "0x5f98805A4E8be255a32880FDeC7F6728C6568bA0"
+        },
+        {
+          "behaviorProbeAmountIn": {
+            "$durableType": "bigint",
+            "value": "1000000000000000000"
+          },
+          "behaviorProbeAmountOut": {
+            "$durableType": "bigint",
+            "value": "991961"
+          },
+          "i": 1,
+          "j": 2,
+          "tokenIn": "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+          "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+        },
+        {
+          "behaviorProbeAmountIn": {
+            "$durableType": "bigint",
+            "value": "1"
+          },
+          "behaviorProbeAmountOut": {
+            "$durableType": "bigint",
+            "value": "994350578247"
+          },
+          "i": 2,
+          "j": 0,
+          "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "tokenOut": "0x5f98805A4E8be255a32880FDeC7F6728C6568bA0"
+        },
+        {
+          "behaviorProbeAmountIn": {
+            "$durableType": "bigint",
+            "value": "1"
+          },
+          "behaviorProbeAmountOut": {
+            "$durableType": "bigint",
+            "value": "1007901766367"
+          },
+          "i": 2,
+          "j": 1,
+          "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "tokenOut": "0x853d955aCEf822Db058eb8505911ED77F175b99e"
+        }
+      ]
+    },
+    {
+      "coreCodeHash": "0xc5f90c9d0dbc5037f8f9e248f4bb292e7c1824f584eb6550cb4cad525b38c71a",
+      "decimals": [
+        8,
+        8
+      ],
+      "familyId": "custom-swap:ekubo-router-v1",
+      "instanceKey": "0x1f5ddf72564f731684c5770af5a25d4a3855c13e9c841a2c8b43b25fff19b0ec",
+      "lineageId": "ekubo:vanilla-core-pool-key-v1",
+      "poolId": "0x1f5ddf72564f731684c5770af5a25d4a3855c13e9c841a2c8b43b25fff19b0ec",
+      "poolKey": {
+        "config": "0x000000000000000000000000000000000000000000029f16b11c6d1e80000096",
+        "token0": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "token1": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf"
+      },
+      "provenance": [],
+      "routerCodeHash": "0xaa0ea1ad3d9ee38ce2a892211aa7fc0022cf7707779b92ef59ff2d4023481026",
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        },
+        {
+          "kind": "quote-completion",
+          "mode": "return-data"
+        }
+      ]
+    }
+  ]
+}
