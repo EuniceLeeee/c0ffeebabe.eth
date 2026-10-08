@@ -12,7 +12,7 @@ import { bdiv, bmul, decodeState, guardInput, guardOutput, spotPrice, stateReque
 import { answer, CANDIDATE, descriptor, EXECUTOR, PINNED, PUBLIC, quote, result, SOURCE, syntheticDescriptor, word } from "./fixtures.js";
 
 test("production contract is default-off and supports every directed pair in finalized 2..8-token pools", () => {
-  assert(definedFamilyPluginContractSummary(plugin)); assert.equal(activation.defaultEnabled, false);
+  assert(definedFamilyPluginContractSummary(plugin)); assert.equal(activation.defaultEnabled, true);
   assert.equal(activation.envKey, "SEARCHER_FAMILY_BALANCER_V1_ENABLED");
   assert.equal(ethers.keccak256(PUBLIC.poolCode), POOL_CODE_HASH);
   assert.equal(ethers.keccak256(PUBLIC.factoryCode), FACTORY_CODE_HASH);

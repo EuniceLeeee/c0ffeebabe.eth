@@ -12,4 +12,4 @@ import { protocol } from "../protocols/badger-sett-withdraw-family/protocol.js";
 import { capture } from "../protocols/badger-sett-withdraw-family/capture.js";
 import { action } from "../protocols/badger-sett-withdraw-family/action.js";
 export const plugin = defineProtocolFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture, actionAdapters: [action] });
-export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_BADGER_SETT_WITHDRAW_ENABLED" });
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_BADGER_SETT_WITHDRAW_ENABLED" });

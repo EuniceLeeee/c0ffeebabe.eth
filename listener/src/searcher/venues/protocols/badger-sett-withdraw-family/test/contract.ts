@@ -22,7 +22,7 @@ test("verified ABI covers every declared getter and void share withdrawal, not E
   assert.equal(VAULT.getFunction("withdraw")!.selector, "0x2e1a7d4d");
   assert.equal(VAULT.getFunction("withdraw")!.outputs.length, 0);
   assert.equal(STRATEGY.getFunction("balanceOf")!.selector, "0x722713f7");
-  assert.equal(activation.defaultEnabled, false);
+  assert.equal(activation.defaultEnabled, true);
 });
 test("code and reciprocal proxy/strategy binding, never a vault address allowlist", async () => {
   assert.equal((await attest()).status, "verified");

@@ -12,4 +12,4 @@ import { action } from "../protocols/set-redemption-family/action.js";
 import { capture } from "../protocols/set-redemption-family/capture.js";
 import { protocol } from "../protocols/set-redemption-family/protocol.js";
 export const plugin = defineProtocolFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture, actionAdapters: [action] });
-export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_SET_REDEMPTION_ENABLED" });
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_SET_REDEMPTION_ENABLED" });

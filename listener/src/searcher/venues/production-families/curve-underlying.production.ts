@@ -12,7 +12,7 @@ import { curveUnderlyingPricing } from "../swaps/curve-underlying-family/pricing
 import { curveUnderlyingRoutes } from "../swaps/curve-underlying-family/routes.js";
 import { curveUnderlyingSwap } from "../swaps/curve-underlying-family/swap.js";
 
-export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED" });
+export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED" });
 
 export const plugin = defineSwapFamily({
   manifest: curveUnderlyingFamilyManifest,
