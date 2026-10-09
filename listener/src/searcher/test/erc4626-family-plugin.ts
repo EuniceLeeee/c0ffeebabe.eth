@@ -71,6 +71,27 @@ assert.equal(
   requests.find((request) => request.id === "active-redeem")?.required,
   false,
 );
+for (const id of ["active-deposit", "active-redeem"]) {
+  const request = requests.find((request) => request.id === id);
+  assert(request?.kind === "effect-delta-simulation");
+  const account = { kind: "verified-actor", evidenceId: "erc4626-probe-actor" };
+  assert.deepEqual(request.observeTokenBalances, [
+    { token: ASSET, account },
+    { token: VAULT, account },
+  ], `${id} must explicitly observe both input debit and output receipt`);
+  assert.deepEqual(request.overrideIntent.tokenBalances, [{
+    token: id === "active-deposit" ? ASSET : VAULT,
+    amount: id === "active-deposit" ? BASE.sampleAssets : BASE.sampleShares,
+  }], "observing output must not fund the output token");
+}
+for (const delta of [0n, 999n]) {
+  const effects = redeemEffects();
+  const negative = decodeActive(reverted("active-deposit", "0x"), redeemSuccess({
+    ...effects,
+    tokenDeltas: effects.tokenDeltas!.map(row => row.token === ASSET ? { ...row, delta } : row),
+  }));
+  assert.equal(negative.redeemVerified, false, "return/event alone cannot replace actual full receipt");
+}
 const assetBalanceRequest = requests.find((request) =>
   request.id === "active-asset-balance"
 );

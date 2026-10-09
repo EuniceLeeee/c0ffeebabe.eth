@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "scope": "Narrow ERC4626 active-proof input/output observation correction; not full Family, performance, original-TX or opportunity acceptance",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseHead": "67d9aa095a759450f96cdb4be65f723245dcbe06",
+  "ownedDiffSha256": "39ff195ebfe974f64be200a64871e36d5bc1d99a473e99fc6453308ebf58c909",
+  "files": [
+    "listener/src/searcher/venues/protocols/erc4626-family/identity.ts",
+    "listener/src/searcher/test/erc4626-family-plugin.ts"
+  ],
+  "finding": {
+    "baseline": "Redeem requested token effects but omitted observeTokenBalances. The transport default deduplicated the funded share and target vault, omitting the underlying asset account. Successful returns and Withdraw/Transfer logs could not establish actual asset receipt, so redeemVerified was false.",
+    "change": "Both active directions explicitly observe the underlying and vault/share balances at the existing verified probe actor. Only the input is funded; no output balance is injected. Existing caller, amount, supply, event and return checks remain.",
+    "notChanged": ["sample amounts and selection", "failure handling", "amount tolerance", "central runtime or simulator", "default activation", "quoted/runtime execution"]
+  },
+  "evidenceRoot": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H",
+  "sourceBinding": {
+    "baselineDirtySourceSha256": "90625d82049dc18e2406c1ae220120f62a1980b3c2c4d08b4ab12b00af2f07ca",
+    "candidateDirtySourceSha256": "bdd5d63df6a1bd5d777afdb20abe094913054002b55b3a62e6f867fcd489cef3",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "method": "Authentic matching receipt log through current production catalog/lifecycle/strict runtime and source-pinned local Revm. The diagnostic capture does not supply admitted identities or Graph edges. Source and input hashes checked before/after; simulator drained.",
+    "strictProbeActor": "0x000000000000000000000000000000000000face",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "transactionOrigin": "0x1000000000000000000000000000000000000001"
+  },
+  "historicalSamples": [
+    {
+      "vault": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+      "asset": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "block": 26030897,
+      "blockHash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6",
+      "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+      "sharesInRaw": "1000000",
+      "redeemAssetReceiptRaw": "1081660",
+      "baseline": "Redeem returned successfully but underlying balance unobserved; no verified direction.",
+      "candidate": "Full share debit and underlying receipt observed; redeem-only identity, route and pricing verified.",
+      "deposit": "Still reverts for sample 1000000 raw: 0xdcab82e20000000000000000000000000000000000000000000000000000000000002aff; cause not proved by this patch.",
+      "baselineFile": "9055-1.json",
+      "baselineSha256": "71f5cd76d4a05728e0ec2a6843fe5494aa17cd7d365ffe01fe137a14263f7b96",
+      "candidateFile": "9055-2.json",
+      "candidateSha256": "e0d640ea7802cd52e62b004edeccfaace7b998d391deda7c9bd7f6316f5ddc41"
+    },
+    {
+      "vault": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+      "asset": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+      "block": 26030897,
+      "blockHash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6",
+      "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+      "sharesInRaw": "1000000",
+      "redeemAssetReceiptRaw": "1038467",
+      "baseline": "Redeem returned successfully but underlying balance unobserved; no verified direction.",
+      "candidate": "Full share debit and underlying receipt observed; redeem-only identity, route and pricing verified.",
+      "deposit": "Same true deposit revert as 9055 at sample 1000000 raw; retained.",
+      "baselineFile": "2411-1.json",
+      "baselineSha256": "494e1ff1e086df7cc5d4153b0fe27e71b4f0e34a054eb5a4e0bab515c97a076e",
+      "candidateFile": "2411-2.json",
+      "candidateSha256": "e8f08e976daec9d91b1dac66fffd281b0c4498ce36f738251b7bc3b305900d07"
+    },
+    {
+      "vault": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+      "block": 25944594,
+      "blockHash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+      "tx": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+      "baselineAndCandidate": "Both directions really revert with 0x6801b5aa; rejection preserved. This patch does not establish the revert's semantic cause.",
+      "baselineFile": "dbdc-1.json",
+      "baselineSha256": "e95ac45dda5aea859036b7f37035f9b1a393cba8ca9faf54467d0d1b4a91d89c",
+      "candidateFile": "dbdc-2.json",
+      "candidateSha256": "8a58341a79d4c22649654a381c6d020cc3af5c2b39f8bd3a1eed951d2bf17072"
+    }
+  ],
+  "productionReady": {
+    "path": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/26030897-ready-2/ready.json",
+    "sha256": "57e7c40c94a4a51422aa4003ea64b2f6bc14be3d0daae28d4f953521a145588b",
+    "resultSha256": "57a29e9034d80afd6af23633f518f227d865900489f2162c410542c675dea63e",
+    "entrypoint": "Existing runner-with-scope.mts drives production single-block rebuild and runAtBlock prices, without injected candidates, edges or reference amounts.",
+    "families": ["balancer-v3", "univ3", "protocol:erc4626"],
+    "targetPool": "0x6b31a94029fd7840d780191b6d63fa0d269bd883",
+    "targetVaults": "Both have verified redeem-only memos and published routes in the new Ready.",
+    "totalGraphEdges": 114,
+    "v3TargetStatus": "Both directions remain missing-valuation: redeem-only edges do not create the forward underlying-to-share input valuation path.",
+    "v3RetainedReferenceCoverage": "31/36 cumulative directions remains unchanged, not a fresh all-corpus rerun."
+  },
+  "validation": {
+    "baselineNewRegression": "Expected exit 1 before source patch: explicit output observations missing.",
+    "actualDirtyTree": ["ERC4626 contract PASS", "build:live PASS", "Frax Custodian 32/32 PASS", "dual execution 75/75 PASS", "capability generate/check PASS"],
+    "committableSource": "HEAD plus only the two owned files: capability generation, build:live, ERC4626, Custodian and dual execution 74/74 all PASS; logs/erc4626-commitcheck-20261010.Ce1zc0 is an unregistered verification snapshot, not a branch/worktree.",
+    "committableLogSha256": "e15cdb7b095bd324f653fe91c2b667391c3221952176e81f373fde9d12d8c640",
+    "generatedPolicy": "Commit only generated output from the verified owned-source snapshot. Preserve working-tree generated content and all peer source changes.",
+    "committableArtifactHash": "89ab23d47fa342682612ae61610886b8954292d1c42a1d2016453c160e8564c2",
+    "independentReview": {
+      "agent": "01a122ab-e2cd-7521-afc0-1b845d762a8e",
+      "pass": "1/3",
+      "result": "No blocking defect found in the scoped patch; production transport consumes exact token/account observations and input-only funding is retained.",
+      "executed": ["ERC4626 contract", "Revm strict simulation transport", "10 offline central/transport negative controls"],
+      "evidenceLimit": "Reviewer outputs retained in task transcript only, not independent saved cloud artifacts; no RPC/EVM run or performance acceptance claimed by reviewer."
+    }
+  },
+  "reconciliation": {
+    "capabilityQuery": "universe,rebuild,status",
+    "manifest": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/tool-selection.json",
+    "manifestSha256": "2e5f7a862aa4f7b7619dc300b344d6267a668c7d18c416112b9deee6a140c3b0",
+    "tool": "listener:searcher:universe-rebuild-status",
+    "exitCode": 0,
+    "stdoutSha256": "4d69b595eab288699e07f741d1b397bb7b7cb4dd3d641c008bae50e4525b82a0",
+    "finding": "Canonical Ready status agrees with successful publication; target-specific prices still disclose missing valuation. READY is not treated as every row being quoted."
+  },
+  "limits": [
+    "No formal Adapter Replay/family_local merge-ready verdict or opportunity acceptance in this report.",
+    "No same-state quoted/runtime historical rerun for these wrapper directions; strict's probe is not a substitute.",
+    "Not original-TX pre-call replay. All measurements are at the named block-end source and execution environment.",
+    "Deposit sample selection and remaining vault reverts require separate diagnosis.",
+    "Performance NOT RUN. New redemption balance observations have a cost. All adapted/repaired IMPL protocols remain subject to single-block then representative combined-load latency acceptance, after correctness."
+  ],
+  "safety": {"liveStarted": false, "broadcast": false, "signing": false, "originalReadyModified": false, "newBranchOrWorktree": false, "peerChangesCommitted": false}
+}

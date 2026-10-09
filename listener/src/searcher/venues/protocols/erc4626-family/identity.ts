@@ -147,7 +147,7 @@ export const erc4626Identity: IdentitySemantics<
         };
       }
       if (!proof.depositVerified && !proof.redeemVerified) {
-        // Both declared execution surfaces reverted at the fixed cutoff.
+        // Neither direction proved the required return, effects and event at the cutoff.
         return {
           status: "chain-proven-rejected" as const,
           reasonCode: "erc4626_execution_surfaces_failed",
@@ -395,6 +395,14 @@ function activeRequests(
   evidence: Erc4626BaseEvidence,
 ): readonly AdapterRequest[] {
   if (!evidence.baseValid) return [];
+  const observeTokenBalances = Object.freeze([evidence.asset, evidence.vault].map(token =>
+    Object.freeze({
+      token,
+      account: Object.freeze({
+        kind: "verified-actor" as const,
+        evidenceId: ERC4626_PROBE_ACTOR_EVIDENCE_ID,
+      }),
+    })));
   const requests: AdapterRequest[] = [
     codeRequest("active-asset-code", evidence.asset),
     declaredCallRequest(
@@ -454,6 +462,7 @@ function activeRequests(
           amount: evidence.sampleAssets,
         })]),
       }),
+      observeTokenBalances,
       observe: Object.freeze([
         "return-data" as const,
         "revert-data" as const,
@@ -497,6 +506,7 @@ function activeRequests(
           amount: evidence.sampleShares,
         })]),
       }),
+      observeTokenBalances,
       observe: Object.freeze([
         "return-data" as const,
         "revert-data" as const,
