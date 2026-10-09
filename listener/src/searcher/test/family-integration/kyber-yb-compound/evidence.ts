@@ -5,12 +5,16 @@ import { KYSWAP_POOL_INTERFACE as KYBER } from "../../../venues/swaps/kyberswap-
 import { ALGEBRA_POOL_INTERFACE as ALGEBRA } from "../../../venues/swaps/algebra-integral-family/abi.js";
 import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-family/abi.js";
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
+import { ERC4626_INTERFACE as CUSTODIAN } from "../../../venues/protocols/erc4626-family/abi.js";
 import { successfulRedeemCalls, classifyRedeemLog } from "../../../venues/protocols/compound-ctoken-family/test/history-evidence.js";
 import { assertHistoricalPriceDirection } from "../three-family/historical-input-observations.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 export { json, sha, word, observeBalance } from "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.js";
 
 export const SAMPLES = {
+  frax: { family: "protocol:erc4626", number: 26017168,
+    tx: "0x02bf41c595d08e397b90edaaee8a00f4521d1d7c2b0f538b1d1597e4e1ccacec",
+    instances: ["0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c"] },
   kyber: { family: "kyberswap-elastic", number: 25953136,
     tx: "0x023fd22564532537a14977836049e12e8df706c4872020a9302fdfbb383230d5",
     instances: ["0xf138462c76568cdfd77c6eb831e973d6963f2006"] },
@@ -205,8 +209,8 @@ function successfulCalls(trace: any, target: string, selector: string): any[] {
 export function originalLeg(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any) {
   assert(!trace.error && !trace.revertReason, "original transaction reverted");
   const isSwap = key === "kyber" || SAMPLES[key].family === "swap:algebra-integral";
-  const abi = key === "kyber" ? KYBER : isSwap ? ALGEBRA : key === "yb" ? LT : CT;
-  const event = isSwap ? "Swap" : key === "yb" ? "Withdraw" : "Redeem";
+  const abi = key === "kyber" ? KYBER : isSwap ? ALGEBRA : key === "yb" ? LT : key === "frax" ? CUSTODIAN : CT;
+  const event = isSwap ? "Swap" : key === "yb" || key === "frax" ? "Withdraw" : "Redeem";
   const logs = receipt.logs.filter((l: any) => same(l.address, instance) && same(l.topics?.[0] ?? "", abi.getEvent(event)!.topicHash));
   assert.equal(logs.length, 1, "ambiguous original event count");
   const a = abi.parseLog(logs[0])!.args;
@@ -235,6 +239,17 @@ export function originalLeg(key: SampleKey, instance: string, descriptor: any, r
     assert.equal(data[0], amountIn); assert.equal(LT.decodeFunctionResult("withdraw(uint256,uint256)", c.output)[0], amountOut);
     assert(same(a.sender, caller) && same(a.owner, caller) && same(recipient, caller));
     originalInterface = "withdraw(uint256,uint256)"; comparison = "same interface at N-end; original pre-call state NOT restored";
+  } else if (key === "frax") {
+    const calls = successfulCalls(trace, instance, CUSTODIAN.getFunction("redeem")!.selector);
+    assert.equal(calls.length, 1, "one direct synchronous Custodian redeem required");
+    const c = calls[0], data = CUSTODIAN.decodeFunctionData("redeem", c.input);
+    assert(descriptor.custodian && !same(descriptor.share, instance), "external-share identity required");
+    tokenIn = descriptor.share; tokenOut = descriptor.asset; amountIn = BigInt(a.shares); amountOut = BigInt(a.assets);
+    caller = c.from; recipient = String(data[1]);
+    assert.equal(data[0], amountIn); assert(same(data[2], caller) && same(a.sender, caller) && same(a.owner, caller) && same(a.receiver, recipient));
+    assert.equal(CUSTODIAN.decodeFunctionResult("redeem", c.output)[0], amountOut);
+    originalInterface = "redeem(uint256,address,address)";
+    comparison = "synchronous external-share redemption at N-end; original pre-call state NOT restored";
   } else {
     const calls = successfulRedeemCalls(trace, new Set([instance.toLowerCase()]));
     const kind = classifyRedeemLog({ emitter: instance, redeemer: a.redeemer, redeemTokens: a.redeemTokens, redeemAmount: a.redeemAmount }, calls, logs.length);

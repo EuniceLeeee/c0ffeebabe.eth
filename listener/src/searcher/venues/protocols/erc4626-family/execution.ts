@@ -7,6 +7,9 @@ import {
 } from "../../adapter-family-plugin.js";
 import { MAX_UINT256 } from "../standard-family/common.js";
 import { assertErc4626Invocation } from "./binding.js";
+import { CUSTODIAN_VARIANT } from "./custodian.js";
+import { assertCustodianExecutionSource, custodianProgram } from "./custodian-execution.js";
+import { sameAddress } from "../standard-family/common.js";
 import type {
   Erc4626Descriptor,
   Erc4626ExactEvidence,
@@ -21,6 +24,12 @@ export const erc4626Execution: ExecutionSemantics<
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertErc4626Invocation(d, r); runtimeExecutor(executor, d.vault);
+    if (d.custodian !== undefined) {
+      assertCustodianExecutionSource(input.source);
+      runtimeExecutor(executor, d.custodian.proxyAdmin);
+      if (input.runtimeEvidence.length) throw new Error("Custodian pending runtime evidence unsupported");
+      return runtimeLeg(r.adapterId, custodianProgram(d, executor, r.direction));
+    }
     const p = new RuntimeAmountProgram();
     const abi = new ethers.Interface(["function deposit(uint256,address)", "function redeem(uint256,address,address)"]);
     if (r.direction === "deposit") p.allowance(r.tokenIn, d.vault, 0, MAX_UINT256);
@@ -34,13 +43,24 @@ export const erc4626Execution: ExecutionSemantics<
     const evidence = input.exactEvidence;
     if (
       input.amountIn <= 0n || input.quotedAmountOut <= 0n ||
-      evidence.kind !== "erc4626-preview" ||
+      evidence.kind !== (input.descriptor.custodian === undefined ? "erc4626-preview" : "frax-custodian-preview") ||
       evidence.direction !== input.route.direction ||
       evidence.amountIn !== input.amountIn ||
       evidence.amountOut !== input.quotedAmountOut ||
       evidence.bindingFingerprint !== input.route.bindingRef.fingerprint
     ) {
       throw new Error("ERC4626 execution received incompatible exact evidence");
+    }
+    if (input.descriptor.custodian !== undefined) {
+      assertCustodianExecutionSource(evidence.source);
+      if (!evidence.executor || !sameAddress(evidence.executor, input.executor) ||
+          !sameAddress(evidence.vault, input.descriptor.vault) || input.runtimeEvidence.length)
+        throw new Error("Custodian execution actor/evidence mismatch");
+      runtimeExecutor(input.executor, input.descriptor.custodian.proxyAdmin);
+      custodianProgram(input.descriptor, input.executor, input.route.direction, input.minAmountOut);
+      return { requirements: [], nodes: [{ adapterId: input.route.adapterId, target: input.descriptor.vault,
+        tokenIn: input.route.tokenIn, tokenOut: input.route.tokenOut, amount: input.amountIn,
+        params: { variant: CUSTODIAN_VARIANT, minimumOut: input.minAmountOut }, children: [] }] };
     }
     return Object.freeze({
       requirements: input.route.direction === "deposit"

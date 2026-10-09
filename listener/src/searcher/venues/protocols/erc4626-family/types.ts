@@ -10,6 +10,7 @@ import type {
   LineageId,
 } from "../../adapter-family-identifiers.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
+import type { CustodianBinding } from "./custodian.js";
 
 export interface Erc4626Candidate extends FamilyCandidate {
   readonly candidateKind: "erc4626-vault";
@@ -31,6 +32,9 @@ export interface Erc4626BaseEvidence {
   readonly baseValid: boolean;
   /** Family-declared negative-evidence request ids when baseValid=false. */
   readonly evidenceRequestIds?: readonly string[];
+  readonly custodianCheck?: "slot" | "code";
+  readonly custodianImplementation?: string;
+  readonly custodianCheckSource?: CanonicalSource;
 }
 
 export interface Erc4626ActiveEvidence
@@ -47,6 +51,7 @@ export type Erc4626IdentityEvidence =
   | Erc4626ActiveEvidence;
 
 export interface Erc4626Identity extends VerifiedIdentity {
+  readonly custodian?: CustodianBinding;
   readonly familyId: FamilyId;
   readonly lineageId: LineageId;
   readonly asset: string;
@@ -57,6 +62,7 @@ export interface Erc4626Identity extends VerifiedIdentity {
 }
 
 export interface Erc4626Descriptor extends CompiledInstanceDescriptor {
+  readonly custodian?: CustodianBinding;
   readonly vault: string;
   readonly asset: string;
   readonly share: string;
@@ -70,6 +76,7 @@ export interface Erc4626Route extends FamilyRouteDescriptor {
 }
 
 export interface Erc4626PricingDraft {
+  readonly custodian?: CustodianBinding;
   readonly instanceKey: InstanceKey;
   readonly vault: string;
   readonly routes: readonly Erc4626Route[];
@@ -81,7 +88,8 @@ export interface Erc4626PricingDescriptor extends Erc4626PricingDraft {
 }
 
 export interface Erc4626ExactEvidence {
-  readonly kind: "erc4626-preview";
+  readonly kind: "erc4626-preview" | "frax-custodian-preview";
+  readonly executor?: string;
   readonly source: CanonicalSource;
   readonly vault: string;
   readonly direction: Erc4626Route["direction"];

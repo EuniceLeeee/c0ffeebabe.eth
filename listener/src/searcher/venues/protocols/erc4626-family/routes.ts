@@ -5,7 +5,6 @@ import { lowerAddress } from "../standard-family/common.js";
 import { erc4626StaticProjection } from "./binding.js";
 import {
   ERC4626_FAMILY_ID,
-  ERC4626_LINEAGE_ID,
 } from "./manifest.js";
 import type { Erc4626Descriptor, Erc4626Route } from "./types.js";
 
@@ -48,7 +47,7 @@ function makeRoute(
       `${ERC4626_FAMILY_ID}\u001f${lowerAddress(descriptor.vault)}\u001f${direction}`,
     ),
     familyId: ERC4626_FAMILY_ID,
-    lineageId: ERC4626_LINEAGE_ID,
+    lineageId: descriptor.lineageId,
     instanceKey: descriptor.instanceKey,
     tokenIn: deposit ? descriptor.asset : descriptor.share,
     tokenOut: deposit ? descriptor.share : descriptor.asset,

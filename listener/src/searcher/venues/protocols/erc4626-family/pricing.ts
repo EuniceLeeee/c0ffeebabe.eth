@@ -23,6 +23,7 @@ import type {
   Erc4626PricingDraft,
   Erc4626Route,
 } from "./types.js";
+import { checkCustodianGuard, custodianGuardRequests } from "./custodian.js";
 
 export const erc4626Pricing: PricingSemantics<
   Erc4626Descriptor,
@@ -32,10 +33,14 @@ export const erc4626Pricing: PricingSemantics<
   Erc4626PricingDraft,
   { readonly oneAsset: bigint; readonly oneShare: bigint }
 > = {
+  // Fees have no setter event; proxy and external permissions may change
+  // without a vault trade. Only this variant opts out of on-touch reuse.
+  refreshPolicyForInstance: ({ descriptor }) => descriptor.custodian === undefined ? "on-touch" : "each-block",
   stateKey: (route) => route.instanceKey,
   staticBindingProjection: ({ descriptor }) =>
     erc4626StaticProjection(descriptor),
   snapshotCompatibilityProjection: ({ descriptor, routes }) => ({
+    ...(descriptor.custodian === undefined ? {} : { custodian: { ...descriptor.custodian, proofSource: { ...descriptor.custodian.proofSource } } }),
     vault: lowerAddress(descriptor.vault),
     asset: lowerAddress(descriptor.asset),
     share: lowerAddress(descriptor.share),
@@ -49,6 +54,7 @@ export const erc4626Pricing: PricingSemantics<
     return Object.freeze({
       instanceKey: descriptor.instanceKey,
       vault: descriptor.vault,
+      ...(descriptor.custodian === undefined ? {} : { custodian: descriptor.custodian }),
       routes: Object.freeze([...routes]),
     });
   },
@@ -110,12 +116,17 @@ export const erc4626Pricing: PricingSemantics<
     if (staticEvidence === undefined) {
       throw new Error("ERC4626 pricing lacks decimals evidence");
     }
+    if (draft.custodian !== undefined && (staticEvidence.oneAsset !== 10n ** BigInt(draft.custodian.assetDecimals) ||
+        staticEvidence.oneShare !== 10n ** BigInt(draft.custodian.shareDecimals)))
+      throw new Error("Custodian pricing decimals binding mismatch");
     return Object.freeze({ ...draft, ...staticEvidence });
   },
   current: {
-    requirements: () => ({ transports: ["eth-call"] }),
-    buildRequests: ({ descriptor }) => Object.freeze(
-      descriptor.routes.map((route) => {
+    requirements: ({ descriptor }) => descriptor.custodian === undefined ? { transports: ["eth-call"] } :
+      { transports: ["eth-call", "get-code", "get-storage"], caller: "executor" },
+    buildRequests: ({ descriptor }) => Object.freeze([
+      ...(descriptor.custodian === undefined ? [] : custodianGuardRequests("current-custodian", descriptor.vault, descriptor.custodian)),
+      ...descriptor.routes.map((route) => {
         const amountIn = route.direction === "deposit"
           ? descriptor.oneAsset
           : descriptor.oneShare;
@@ -130,9 +141,11 @@ export const erc4626Pricing: PricingSemantics<
           ),
         );
       }),
-    ),
+    ]),
     decodeSnapshot({ descriptor, initialResults }) {
       const results = initialResults;
+      if (descriptor.custodian !== undefined)
+        checkCustodianGuard(results, "current-custodian", descriptor.vault, descriptor.custodian);
       return quoteResultMap(results, descriptor.routes.map((route) => ({
         routeKey: route.routeKey,
         requestId: `current:${route.direction}`,

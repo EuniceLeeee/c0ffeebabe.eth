@@ -5,9 +5,11 @@ import {
   sameAddress,
 } from "../standard-family/common.js";
 import type { Erc4626Descriptor, Erc4626Route } from "./types.js";
+import { CUSTODIAN_LINEAGE_ID, ERC4626_LINEAGE_ID } from "./manifest.js";
 
 export function erc4626StaticProjection(descriptor: Erc4626Descriptor) {
   return {
+    ...(descriptor.custodian === undefined ? {} : { custodian: { ...descriptor.custodian, proofSource: { ...descriptor.custodian.proofSource } } }),
     vault: lowerAddress(descriptor.vault),
     asset: lowerAddress(descriptor.asset),
     share: lowerAddress(descriptor.share),
@@ -20,6 +22,15 @@ export function assertErc4626Invocation(
   descriptor: Erc4626Descriptor,
   route: Erc4626Route,
 ): void {
+  if (descriptor.custodian !== undefined) {
+    const binding = descriptor.custodian;
+    if (descriptor.lineageId !== CUSTODIAN_LINEAGE_ID || route.lineageId !== CUSTODIAN_LINEAGE_ID ||
+        !sameAddress(binding.share, descriptor.share) || !sameAddress(binding.asset, descriptor.asset) ||
+        sameAddress(descriptor.share, descriptor.vault) || sameAddress(descriptor.asset, descriptor.vault) ||
+        sameAddress(descriptor.share, descriptor.asset)) throw new Error("Custodian conversion binding mismatch");
+  } else if (descriptor.lineageId !== ERC4626_LINEAGE_ID || !sameAddress(descriptor.share, descriptor.vault)) {
+    throw new Error("ERC4626 standard share binding mismatch");
+  }
   assertRouteBound({
     descriptorInstanceKey: descriptor.instanceKey,
     descriptorTarget: descriptor.vault,

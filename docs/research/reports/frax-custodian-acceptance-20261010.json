@@ -1,0 +1,138 @@
+{
+  "schema": "family-historical-dual-acceptance-v1",
+  "date": "2026-10-10",
+  "family": "protocol:erc4626",
+  "variant": "frax-custodian-sync-conversion",
+  "status": "implemented; natural historical strict/Graph/raw mid and same-state dual execution with spliced production reference verified; natural valuation and performance incomplete",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "parentCommit": "b66aef53567a0c07f118c56faeb278c44cd73b00",
+  "scope": [
+    "Extend the existing ERC4626 Family with the source-bound synchronous FrxUSDCustodianUsdc 0.2.8 variant; retain standard ERC4626 behavior and activation defaults.",
+    "Derive the transparent-proxy admin from its normalized complete bytecode template, authenticate EIP1967 implementation/code and external share/asset binding; no target-address admission allowlist.",
+    "External frxUSD shares are distinct from the custodian address. Deposit mints external shares; redeem burns external shares and synchronously pays USDC.",
+    "Only the Custodian variant refreshes each block, because fee setters can change behavior without emitting a vault event.",
+    "Keep specified-amount Exact/quoted execution and independent runtime-actual construction; approve only the actual input, clean allowance, enforce exact debit, actual receipt and external share supply change.",
+    "Operator/RWA shuffle and asynchronous withdrawal operations are not adapted."
+  ],
+  "identityBinding": {
+    "transaction": "0x02bf41c595d08e397b90edaaee8a00f4521d1d7c2b0f538b1d1597e4e1ccacec",
+    "block": 26017168,
+    "blockHash": "0x66d34fc4bd940719cad79467fd98df3e98297d50bfd9bcc39ec1a83505aa3350",
+    "vault": "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c",
+    "implementation": "0x0a2d27a86a2ea07bcc34e457c65aeca7631c0f10",
+    "implementationRuntimeKeccak256": "0x51c008b264124ad667f58a8595b86745a657419baac327c1d1f335bc95b953a7",
+    "normalizedProxyTemplateKeccak256": "0x834029e91a0eb94f478b72d8f8d0924a57de0dc6046e828a543fc421bd6270d7",
+    "proxyNormalization": "1488-byte runtime; normalize only the verified PUSH32 admin operand at byte 16; derive and validate the nonzero address rather than allowlisting it",
+    "share": "0xcacd6fd266af91b8aed52accc382b4e165586e29",
+    "asset": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "strictSupplyObservation": "The existing transport observes totalSupply on the call target. The authenticated implementation forwards vault.totalSupply() to immutable frxUSD.totalSupply(). Identity requires exactly one correctly signed/quantified vault-address supply row plus independent external token deltas; runtime reads frxUSD supply directly."
+  },
+  "sourceBinding": {
+    "historicalProductionSourceTreeSha256": "5fcad885bcccf3e658b422135300d56c39bbfce2250ccb682300859e16be7bac",
+    "generatedManifestGitBlob": "5950d5fe02e5a516fea738932b3a63f19fc3262f",
+    "filesSha256": {
+      "listener/src/searcher/venues/protocols/erc4626-family/custodian.ts": "0d5c0806203c498836853282676a736084bdce0be1a782971389eeefd21730cc",
+      "listener/src/searcher/venues/protocols/erc4626-family/custodian-identity.ts": "2784df27012996ea329ac9736f1782269d2da3f00485da59ec694af5b8064379",
+      "listener/src/searcher/venues/protocols/erc4626-family/custodian-execution.ts": "660640bf7b4f38ce4e73409e8f03960989332e22c3c050acd23c47143b6de51b",
+      "listener/src/searcher/venues/protocols/erc4626-family/test/custodian-contract.ts": "ce8619b4c9d41a8c61a9da726113ed93403e8bff03aabc620862e6a822db18fd"
+    },
+    "historicalScope": "Historical execution ran on the actual dirty cloud source. The harness binds the full production tree before/after, actual Ready/prices/input, executor artifact and independent EVM environment. Later edits only add offline tests excluded from that production tree. Peer Ready/main/UniV1 changes were present but are not part of this commit.",
+    "isolatedScope": "Build/contracts/generated checks additionally ran on an index export of the parent plus the 19 owned files, without peer dirty changes. Its generated manifest is the staged blob. This does not relabel the actual dirty-tree historical run as a clean candidate-SHA replay."
+  },
+  "historicalSingleBlock": {
+    "result": "natural strict and Graph pass; raw mids pass; effective natural valuation unmet",
+    "state": "N-end",
+    "executionEnvironment": "N",
+    "admittedInstances": 1,
+    "targetDirections": ["USDC deposit to frxUSD", "frxUSD redeem to USDC"],
+    "targetEdges": 2,
+    "graphHash": "8d2f930116bb016ec30a95fc398d514163f370295a23774cce851a59cc0ae7f7",
+    "rawMids": 2,
+    "naturalEffectiveQuotedRows": 0,
+    "naturalEffectiveReason": "Both rows are missing-valuation because the Family-only graph has no WETH acquisition path; neither output nor admission was borrowed.",
+    "readyGeneration": 1,
+    "readySha256": "4a4e2cfff091fc387d96ceaf2627c1a821009a7fe27858b4ecd12cab07ba7d45",
+    "pricesSha256": "1cf54e276e46c7638dba9201c1b4c49f5debeba6bbdccf1774b63b6d7f3cbeb1",
+    "priceInputSha256": "2573db2dee9d0c3bf52747f381208d4cdd98cd8749a0e1b762e56e56902458d6"
+  },
+  "dualExecution": {
+    "result": "pass-with-spliced-reference",
+    "sourceNumber": 26017168,
+    "sourceHash": "0x66d34fc4bd940719cad79467fd98df3e98297d50bfd9bcc39ec1a83505aa3350",
+    "executionIssuerGeneration": 26017168,
+    "generationScope": "The historical dual helper rehydrates issued routes at its own generation; quote and both executions share this source/generation. It is not relabeled as Ready generation 1.",
+    "independentReceipts": 16,
+    "recipe": "Two amounts per direction; quoted and runtime encodings, each with actor-input-only and separate preexisting-output-inventory control. Inventory controls also verify no input plus abundant output reverts.",
+    "allQuoteReceiptSignedDeltas": "0",
+    "runtimeConstruction": {"offchainExactCalls": 0, "offchainRpcCalls": 0, "quotedCalls": 0, "quotedFallback": false},
+    "amounts": [
+      {"direction": "redeem", "inputSource": "spliced production amount", "amountInRaw": "5135328596662424906", "amountOutRaw": "5135328", "receipts": 4},
+      {"direction": "redeem", "inputSource": "original transaction amount at N-end", "amountInRaw": "215200560000000000000", "amountOutRaw": "215200560", "receipts": 4},
+      {"direction": "deposit", "inputSource": "spliced production amount", "amountInRaw": "5135191", "amountOutRaw": "5135191000000000000", "receipts": 4},
+      {"direction": "deposit", "inputSource": "twice spliced production amount", "amountInRaw": "10270382", "amountOutRaw": "10270382000000000000", "receipts": 4}
+    ],
+    "originalTxComparison": "The historical-input N-end redeem output numerically equals the original leg's 215200560 raw USDC; the original pre-call state was not restored. This is not full transaction or opportunity replay.",
+    "receiptArtifactSha256": "506ecca33bfdc52b1b4240a9fe45538679eee834d4f49c5ddb848b6bdfad7a52"
+  },
+  "referenceInputSplice": {
+    "userAuthorized": true,
+    "borrowed": "input amounts only; no token output, route, identity, admission, graph or historical state copied",
+    "source": "saved live-same-code historical production-stage benchmark, not a real live success",
+    "referenceWethInputRaw": "2000000000000000",
+    "tableBlock": 26146969,
+    "tableBlockHash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+    "tableGeneration": 2,
+    "bothRowsFreshness": "carried",
+    "bothRowsQuotedAt": {"number": 26146968, "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417", "generation": 1},
+    "donorPriceSha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378",
+    "donorDeclarationSha256": "6536fa18b3c2c18accc342a3941c907825914e4e531887c76a51916b2f968f8f",
+    "fullSourceRowsAndConfiguration": "Recorded and authenticated in same-N-dual-attempt01.json, including full edge IDs, source commit, config, Ready/source declaration and freshness. No natural single-block valuation pass is claimed."
+  },
+  "checks": {
+    "isolatedProductionBuild": {"status": "pass", "log": "scoped-build.log"},
+    "isolatedManifestGenerateAndCheck": {"status": "pass", "log": "scoped-generate.log"},
+    "isolatedFraxContracts": {"status": "pass", "passed": 32, "log": "scoped-frax-contracts.log"},
+    "isolatedExistingStandardErc4626": {"status": "pass", "log": "scoped-standard-contracts.log"},
+    "isolatedSharedDual": {"status": "pass", "passed": 74, "log": "scoped-dual.log"},
+    "isolatedHistoricalHarnessContracts": {"status": "pass", "passed": 34, "log": "scoped-historical-contracts.log"},
+    "isolatedStrictDeclarations": {"status": "pass", "log": "scoped-strict-declarations.log"},
+    "quietUpgradeRegression": "Real production lifecycle/session issuers, coordinator.prepare, buildEffectiveMids and production scanner with synthetic state: unchanged quiet blocks refresh both directions; implementation slot or code change with no touched keys removes both resolved prices and both scanner edges, including the next quiet block. Frozen Ready graph remains unchanged. Healthy edges demonstrably reached the scanner first.",
+    "scope": "Offline synthetic transport is not historical upgrade or latency evidence. Shared dual 75/75 on ambient dirty source included a peer UniV1 test; only the isolated 74/74 belongs to this commit's scope."
+  },
+  "runtimeAuthorityBoundary": {
+    "productionGuard": "Current effective/Exact validates the implementation before a target edge may reach natural enumeration. Each-block policy prevents a quiet block from carrying an old successful Custodian price.",
+    "notClaimed": "Exact-session route reissue alone is not a current implementation proof. Standalone runtime construction does not independently read EIP1967 storage, and its transaction effects do not lock the implementation against a later compatible upgrade. Final simulation remains mandatory; no stronger standalone guarantee or new central capability is claimed."
+  },
+  "independentReview": {
+    "agent": "01a121d6-e3d4-7273-b75e-c7ae211d2a36",
+    "firstPass": "Read-only primary-source/proxy proof and actual production call-chain review: supply alias supported; no proven current effective-to-scanner upgrade bypass. Requested the quiet-upgrade integration regression, now implemented and passed by main.",
+    "secondPass": "No scoped blocker. Independently executed the final cloud contract file: 32/32, exit 0, no skips; test/identity/runtime hashes unchanged before and after. Read-only verified all 16 stored execution receipts and five input hashes. No source edits, build, RPC or new historical/performance execution.",
+    "limitation": "The quiet-upgrade regression uses synthetic transport and a share-token valuation anchor, without a shared Exact cache. It proves the specified production scheduling and withdrawal path, not complete cache, standalone implementation locking, live or merge-ready acceptance."
+  },
+  "evidenceRoot": "logs/frax-custodian-acceptance-20261010.21m3z2",
+  "evidence": {
+    "singleBlock": "single-N26017168-attempt03",
+    "dual": "same-N-dual-attempt01.json",
+    "primarySource": "logs/frax-custodian-diagnosis-20261009.Not1FW/{rpc-evidence,implementation-blockscout}.json",
+    "originalCoffeeCheckpointSha256BeforeAfter": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d"
+  },
+  "reconciliation": [
+    {"query": ["frax", "custodian"], "tool": "listener:searcher:frax-custodian-historical-ready", "manifest": "tool-selection.json", "sha256": "9cf5dc4265db76b623c01403e80c3563d2de96511c8a8dddc489cf21e45eb1a1", "successfulExitCode": 0},
+    {"query": ["kyber", "compound", "dual", "historical"], "tool": "listener:searcher:kyber-yb-compound-dual-historical-fork", "arguments": "--family frax plus bound Ready/prices/reference rows", "manifest": "dual-tool-selection.json", "sha256": "69d5c32833de1013bc37f1aaeac6f43d2f8163c5a91bfe7cf95ec3cb091c1bd8", "exitCode": 0}
+  ],
+  "retainedFailures": [
+    "contracts-initial.log: 30/31; expected error regexp differed from the correct rejected-direction message. Corrected contract run is separate.",
+    "historical-ready-attempt01.log: tool-run rejected an unsupported --window before RPC; no Ready produced.",
+    "single-N26017168-attempt02: genuine target retryable with Custodian external share supply mismatch; Family fixture expected a direct-token row but the transport observes call-target supply. Corrected source-bound forwarding check reran as attempt03, not an overwrite."
+  ],
+  "remaining": [
+    "Natural single-block WETH valuation remains missing; authorized input splicing does not fill that graph coverage claim.",
+    "Formal route-pinned Adapter Replay/adapter_merge_ready, full historical opportunity and production EV were not run.",
+    "Local and representative combined-graph latency NOT RUN. Frax and every other IMPL-table adaptation remain mandatory in the final per-protocol single-Ready then combined-large-graph timing phase; correctness is not performance acceptance.",
+    "Other implementations, fee variants, operator/RWA and asynchronous directions are not inferred supported from this sample."
+  ],
+  "safety": {"originalReadyChanged": false, "peerDirtyChangesCommitted": false, "newMainWorktreeOrBranch": false,
+    "deployed": false, "liveStarted": false, "signing": false, "broadcast": false, "privateKeyRead": false}
+}

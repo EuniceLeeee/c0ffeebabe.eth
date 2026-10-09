@@ -247,7 +247,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assertHistoricalDiscoveryReceipt(await rpc("eth_getTransactionReceipt", [candidate.transactionHash]), candidate, source);
       const original = originalLeg(args.family, entry.instanceKey, entry.instance.descriptor, receipt, trace);
       directions.push({ entry, original, tokenIn: original.tokenIn, tokenOut: original.tokenOut });
-      if (sample.family === "kyberswap-elastic" || sample.family === "swap:algebra-integral") {
+      if (sample.family === "kyberswap-elastic" || sample.family === "swap:algebra-integral" || args.family === "frax") {
         assert.equal(entry.instance.routes.length, 2, "fixed swap instance must project both directions");
         directions.push({ entry, original: null, tokenIn: original.tokenOut, tokenOut: original.tokenIn });
       }
@@ -288,6 +288,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       if (splice) trials.push(["spliced-production-input-at-N", splice.amountIn]);
       if (original) trials.push(["historical-input-at-N", original.amountIn]);
       else if (p.status === "met") trials.push(["twice-production-effective", p.amountIn * 2n]);
+      else if (splice) trials.push(["twice-spliced-production-input-at-N", splice.amountIn * 2n]);
       report.preparationMs ??= performance.now() - started;
       for (const [label, amountIn] of trials) {
         const result: any = { label, amountIn, status: "failed", executions: [] }; row.trials.push(result);

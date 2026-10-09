@@ -9,6 +9,7 @@ import { RequiredAdapterRequestError } from
 import { hashCanonical } from "../../canonical-value.js";
 import {
   assertSameSource,
+  assertSource,
   callRequest,
   canonicalAddress,
   codeRequest,
@@ -16,6 +17,7 @@ import {
   decodeUint,
   effectsProjection,
   requireRuntimeCode,
+  returnedResult,
   sameAddress,
   tokenDeltaAtLeast,
   totalSupplyDeltaAtLeast,
@@ -39,6 +41,8 @@ import type {
   Erc4626Identity,
   Erc4626IdentityEvidence,
 } from "./types.js";
+import { custodianIdentity } from "./custodian-identity.js";
+import { CUSTODIAN_IMPLEMENTATION_HASH, proveCustodianProxy, custodianImplementationWord, custodianSlot } from "./custodian.js";
 
 export const ERC4626_PROBE_ACTOR_EVIDENCE_ID = "erc4626-probe-actor";
 
@@ -46,12 +50,15 @@ export const erc4626Identity: IdentitySemantics<
   Erc4626Candidate,
   Erc4626Identity
 > = {
+  memoReuse: "recheck-identity",
   variants: [{
     id: "standalone-standard-behavior",
     kind: "standalone-contract" as const,
     lineageId: ERC4626_LINEAGE_ID,
     applies: () => true,
     requirements({ evidence }) {
+      const check = (evidence as Erc4626BaseEvidence | undefined)?.custodianCheck;
+      if (check) return { transports: check === "slot" ? ["get-storage" as const] : ["get-code" as const] };
       if (evidence === undefined) {
         return { transports: ["get-code" as const, "eth-call" as const] };
       }
@@ -73,6 +80,9 @@ export const erc4626Identity: IdentitySemantics<
     },
     buildRequests({ candidate, evidence }) {
       if (evidence === undefined) return baseRequests(candidate.vault);
+      const base = evidence as Erc4626BaseEvidence;
+      if (base.custodianCheck === "slot") return [custodianSlot("standard-implementation", candidate.vault)];
+      if (base.custodianCheck === "code") return [codeRequest("standard-implementation-code", base.custodianImplementation!)];
       return activeRequests(evidence as Erc4626BaseEvidence);
     },
     decode({ step, results }) {
@@ -90,13 +100,29 @@ export const erc4626Identity: IdentitySemantics<
           throw new RequiredAdapterRequestError(result);
         }
       }
-      assertSameSource(successful);
-      return step.evidence === undefined
-        ? decodeBaseEvidence(step.candidate.vault, results)
-        : decodeActiveEvidence(
-            step.evidence as Erc4626BaseEvidence,
-            results,
-          );
+      const source = assertSameSource(successful);
+      if (step.evidence === undefined) {
+        const base = decodeBaseEvidence(step.candidate.vault, results);
+        if (base.baseValid) {
+          try {
+            proveCustodianProxy(requireRuntimeCode(results, "base-vault-code"));
+            return { ...base, custodianCheck: "slot", custodianCheckSource: source };
+          } catch { /* Another proxy/standard vault keeps its original path. */ }
+        }
+        return base;
+      }
+      const base = step.evidence as Erc4626BaseEvidence;
+      if (base.custodianCheck !== undefined) {
+        assertSource(source, base.custodianCheckSource!);
+        if (base.custodianCheck === "slot") return { ...base, custodianCheck: "code",
+          custodianImplementation: custodianImplementationWord(returnedResult(results, "standard-implementation").data) };
+        const { custodianCheck, custodianCheckSource, custodianImplementation, ...standard } = base;
+        // Only the reverse-proven implementation is excluded from standard
+        // vault==share semantics. Other vaults sharing proxy code are untouched.
+        return ethers.keccak256(requireRuntimeCode(results, "standard-implementation-code")) === CUSTODIAN_IMPLEMENTATION_HASH
+          ? { ...standard, baseValid: false, evidenceRequestIds: ["standard-implementation-code"] } : standard;
+      }
+      return decodeActiveEvidence(base, results);
     },
     decide: ({ candidate, evidence }) => {
       if (evidence === undefined) return { status: "continue" as const };
@@ -147,7 +173,7 @@ export const erc4626Identity: IdentitySemantics<
         }),
       };
     },
-  }],
+  }, custodianIdentity],
   identityKey: (identity) => identity.subject.toLowerCase(),
 };
 
