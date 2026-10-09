@@ -46,4 +46,8 @@ export const DODO_V2_REGISTRIES = Object.freeze([
   ethers.getAddress("0x72d220cE168C4f361dD4deE5D826a01AD8598f6C"),
   ethers.getAddress("0x5336edE8F971339F6c0e304c66ba16F1296A2Fbe"),
   ethers.getAddress("0x6fdDB76c93299D985f4d3FC7ac468F9A168577A4"),
+  // GSPFactory has its own getDODOPool(base, quote) registry. Its pools are
+  // absent from the older DVM/DSP/DPP registries; still require reverse
+  // membership and the same behavior proof, never a pool-address allowlist.
+  ethers.getAddress("0x710409D2121B7C8EA4aCAdd6803FDE2D85DF6473"),
 ]);

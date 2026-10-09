@@ -32,6 +32,7 @@ import {
   DODO_V2_EVENT_INTERFACE,
   DODO_V2_POOL_INTERFACE,
   DODO_V2_REGISTRY_INTERFACE,
+  DODO_V2_REGISTRIES,
 } from "../venues/swaps/dodo-v2-abi.js";
 import {
   DODO_V2_SWAP_LOG_PATTERN_ID,
@@ -129,6 +130,27 @@ assert.deepEqual(forgedDecision, {
   reasonCode: "registry_reverse_binding_failed",
   evidenceRequestIds: ["registry-get-dodo-pool"],
 });
+
+// Every infrastructure root must still reverse-bind an arbitrary candidate.
+// In particular, recognizing GSP must not admit an unregistered lookalike.
+assert.deepEqual(DODO_V2_REGISTRIES.map((root) => root.toLowerCase()), [
+  "0x72d220ce168c4f361dd4dee5d826a01ad8598f6c",
+  "0x5336ede8f971339f6c0e304c66ba16f1296a2fbe",
+  "0x6fddb76c93299d985f4d3fc7ac468f9a168577a4",
+  "0x710409d2121b7c8ea4acadd6803fde2d85df6473",
+]);
+assert.equal(dodoV2StrictFamilyPlugin.identity.variants.length, 4);
+for (const [index, registry] of DODO_V2_REGISTRIES.entries()) {
+  const variant = dodoV2StrictFamilyPlugin.identity.variants[index]!;
+  assert.equal(variant.id, `registry-member-${index}`);
+  const admitted = await runIdentityDecision(candidate, backend, POOL, variant);
+  assert.equal(admitted.status, "verified");
+  if (admitted.status !== "verified") throw new Error("registry fixture not verified");
+  assert.equal(admitted.identity.facts.registryBinding.registry, registry);
+  assert.equal(admitted.identity.facts.registryBinding.listedPool, POOL);
+  const unlisted = await runIdentityDecision(candidate, backend, FORGED_POOL, variant);
+  assert.deepEqual(unlisted, forgedDecision);
+}
 
 const descriptorDraft = dodoV2StrictFamilyPlugin.instance.compileDraft(identity);
 const descriptor = dodoV2StrictFamilyPlugin.instance.finalizeDescriptor({
@@ -888,16 +910,17 @@ async function runIdentityDecision(
   candidateInput: DodoV2Candidate,
   state: DodoBackend,
   listedPool: string,
+  variant: typeof identityVariant = identityVariant,
 ): Promise<ReturnType<typeof identityVariant.decide>> {
   const initial = { candidate: candidateInput, evidence: undefined, step: 0 };
-  assert.deepEqual(identityVariant.decide(initial), { status: "continue" });
-  assert.deepEqual(identityVariant.requirements(initial), {
+  assert.deepEqual(variant.decide(initial), { status: "continue" });
+  assert.deepEqual(variant.requirements(initial), {
     transports: ["eth-call"],
     caller: "verified-actor",
   });
-  const behaviorRequests = identityVariant.buildRequests(initial);
+  const behaviorRequests = variant.buildRequests(initial);
   assert.equal(behaviorRequests.length, 4);
-  const behaviorEvidence = identityVariant.decode({
+  const behaviorEvidence = variant.decode({
     step: initial,
     results: await adapterResults(behaviorRequests, state),
   }) as DodoV2IdentityEvidence;
@@ -907,23 +930,24 @@ async function runIdentityDecision(
     evidence: behaviorEvidence,
     step: 1,
   };
-  assert.deepEqual(identityVariant.decide(registryStep), { status: "continue" });
-  assert.deepEqual(identityVariant.requirements(registryStep), {
+  assert.deepEqual(variant.decide(registryStep), { status: "continue" });
+  assert.deepEqual(variant.requirements(registryStep), {
     transports: ["eth-call"],
   });
-  const registryRequests = identityVariant.buildRequests(registryStep);
+  const registryRequests = variant.buildRequests(registryStep);
   assert.equal(registryRequests.length, 1);
   assert.equal(registryRequests[0].kind, "eth-call");
   if (registryRequests[0].kind !== "eth-call") {
     throw new Error("DODO registry proof must be an eth-call");
   }
+  assert.equal(registryRequests[0].to, behaviorEvidence.registry);
   const args = DODO_V2_REGISTRY_INTERFACE.decodeFunctionData(
     "getDODOPool",
     registryRequests[0].data,
   );
   assert.equal(ethers.getAddress(String(args[0])), BASE);
   assert.equal(ethers.getAddress(String(args[1])), QUOTE);
-  const registryEvidence = identityVariant.decode({
+  const registryEvidence = variant.decode({
     step: registryStep,
     results: [success(
       registryRequests[0].id,
@@ -932,7 +956,7 @@ async function runIdentityDecision(
       ]]),
     )],
   }) as DodoV2IdentityEvidence;
-  return identityVariant.decide({
+  return variant.decide({
     candidate: candidateInput,
     evidence: registryEvidence,
     step: 2,
