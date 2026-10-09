@@ -1161,6 +1161,7 @@ interface ResolvedFamilyExactQuoteInvocation
 interface ExactCallerContext {
   readonly executor?: string;
   readonly transactionOrigin?: string;
+  readonly executorProgramCodeHash?: string;
   /** Rebind through the original trusted service, never through Family evidence. */
   assertCurrent(): void;
 }
@@ -1192,22 +1193,29 @@ function bindExactCallerContext(
     }
   };
   const captured = snapshot();
+  const executorProgramCodeHash = runtime.executorProgramCodeHash;
+  if (executorProgramCodeHash !== undefined && !/^0x[0-9a-f]{64}$/.test(executorProgramCodeHash)) {
+    throw new ExactCallerContextError("exact trusted executor code hash invalid");
+  }
   if (captured.transactionOrigin !== undefined &&
       captured.executor !== invocation.executor.toLowerCase()) {
     throw new ExactCallerContextError("exact caller context executor differs from invocation executor");
   }
   const assertMatches = (current: CentralCallerAuthority): void => {
     if (current.executor !== captured.executor ||
-        current.transactionOrigin !== captured.transactionOrigin) {
+        current.transactionOrigin !== captured.transactionOrigin ||
+        runtime.executorProgramCodeHash !== executorProgramCodeHash) {
       throw new ExactCallerContextError("exact caller context changed");
     }
   };
   const callerContext: ExactCallerContext = Object.freeze({
     ...(captured.executor === undefined ? {} : { executor: captured.executor }),
     ...(captured.transactionOrigin === undefined ? {} : { transactionOrigin: captured.transactionOrigin }),
+    ...(executorProgramCodeHash === undefined ? {} : { executorProgramCodeHash }),
     assertCurrent() { assertMatches(snapshot()); },
   });
   const guardedRuntime: CentralAdapterRuntime = Object.freeze({
+    ...(executorProgramCodeHash === undefined ? {} : { executorProgramCodeHash }),
     clock: runtime.clock, policy: runtime.policy, budgets: runtime.budgets,
     scheduler: runtime.scheduler,
     ...(runtime.withExactPrefix === undefined ? {} : {
@@ -1348,6 +1356,7 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
     projection: invocation.family.plugin.exact.cacheCompatibilityProjection(programInput),
     executor: programInput.executor,
     transactionOrigin: programInput.transactionOrigin ?? null,
+    executorProgramCodeHash: invocation.callerContext.executorProgramCodeHash ?? null,
     runtimeEvidence: runtimeEvidenceProjection(programInput.runtimeEvidence),
     ...(invocation.prefix === undefined ? {} : { trialStateRequested: true }),
     ...(invocation.evmTrial ? { trialBackend: "evm-prefix" } : {}),

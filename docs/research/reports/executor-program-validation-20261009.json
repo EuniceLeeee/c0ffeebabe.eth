@@ -1,0 +1,49 @@
+{
+  "claim": "Generic strict executor-program capability implemented; Yield Basis deposit helper validated, production direction not yet integrated",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "baseCommit": "20877ffcfed6b10645b256ac23bc7c4c4db537ac",
+  "scope": "Trusted executor self-CALL, origin/source/code binding, Exact cache drift fence; no new VM opcode, deployment, default activation, signing or broadcast",
+  "validation": {
+    "localCloudSourceSnapshot": "/tmp/mev-four-family-commit-check.lA5dCf",
+    "transportAndClientContracts": "282/282 passed",
+    "rustEngineTests": "86/86 passed, including two new self-executor behavior tests",
+    "realDaemonClientSuite": "passed with rebuilt macOS daemon and loopback RPC fixtures",
+    "centralRequestRethSourceRegression": "passed",
+    "exactCacheProductionRegression": "passed: A reuses A, B reexecutes, missing/drifting trusted code fails",
+    "depositHelperContracts": "7/7 passed locally and through canonical cloud tool-run",
+    "botVmSolidityBehavior": "6/6 passed with production emitter/VM",
+    "productionBuild": "local cloud-source snapshot build:live passed; cloud build not run during other active live",
+    "capabilityManifestCheck": "local cloud-source snapshot passed; unrelated cloud generated changes not staged",
+    "universeRebuildRegression": "passed on local cloud-source snapshot"
+  },
+  "historicalDiagnostic": {
+    "environment": "local macOS REVM fork against pinned archive state, not cloud performance",
+    "block": 26003536,
+    "blockHash": "0xf913fc4aaaeca0fd9fcd871c1a2b0159e1ecc3679724fff679a061ca7bedeaad",
+    "tx": "0x022a9ff85219675bcf0a0a2b17c76ac72b98d5e2c4177bc104edff56e706ee77",
+    "policy": "pool-balanced-v1, not optimal debt or original-profit replication",
+    "rawArtifact": "logs/four-family-integration-20261009.CuNyy3/yb-program-history-local-attempt01.json",
+    "rawArtifactSha256": "d612453a0f2ca3aaf0546a1e820c2f9d9d61ab7aa365648026a3d090cffb9b84",
+    "revmSha256": "f4bac15b2bcc64be338c3577a1b7eb1ba1d170e34d6721e5a0ea1370ecd9825a",
+    "trustedRuntimeKeccak256": "0xd5779d0f08878fd99f9aaee637fedb02a9f1899802c181e1c182b0da2d7bbdbb",
+    "trials": [
+      { "amountIn": "2000000000000000", "internalDebt": "5121731349483672412", "amountOut": "1989420484410944", "result": "pass" },
+      { "amountIn": "41885594439574942", "internalDebt": "107263381066464986599", "amountOut": "41664029673314953", "result": "pass" }
+    ],
+    "guards": "Exact approval and cleanup, full asset debit, minted shares equal independent delta and event, stable/native inventory conserved, centrally attested runtime code"
+  },
+  "reconciliation": {
+    "query": "executor-program,contract",
+    "selected": "listener:searcher:yieldbasis-lt-deposit-contract",
+    "manifest": "logs/four-family-integration-20261009.CuNyy3/yb-program-tool-manifest.json",
+    "manifestSha256": "ab9d1801f7c55553fc7063694d208a10a3294e72fa21a4d0221d284aad189d88",
+    "result": "helper contracts agree; historical program run remains local diagnostic, canonical cloud historical execution not run"
+  },
+  "review": "Independent review found trusted executor code missing from Exact cache compatibility; fixed and production cache regression passed. Targeted reviewer found no remaining blocking issue in this capability.",
+  "notVerified": [
+    "New Linux simulator build and cloud historical program execution",
+    "Production Yield Basis deposit identity, natural Ready/Graph/pricing and dual-interface integration",
+    "Representative 3-block x 3-run performance and negative controls for the four Families",
+    "Live performance, original transaction profit parity or complete production opportunity replay"
+  ]
+}

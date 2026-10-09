@@ -1,4 +1,5 @@
 import { keccak256 } from "ethers";
+import { assertSubscriptCalldata } from "../shared/executor/botvm-program-entry.js";
 import { snapshotCentralCallerAuthority, type AdapterWorkControl,
   type CentralCallerAuthority } from "./adapter-work-intent.js";
 import { RevmFatalError, RevmStrictError, type RevmFatalReason,
@@ -95,7 +96,7 @@ export function createRevmStrictSimulationTransport(input: {
       const { wire, observe } = prefix
         ? prefixRequestSnapshot(invocation as Parameters<NonNullable<StrictSimulationTransport["simulatePrefix"]>>[0],
           authority, executionGasLimit, executorRuntimeCode)
-        : requestSnapshot(invocation.request, authority, executionGasLimit);
+        : requestSnapshot(invocation.request, authority, executionGasLimit, executorRuntimeCode);
       const reportEffects = invocation.request.kind === "state-override-simulation" || invocation.request.kind === "effect-delta-simulation";
       open(control);
       const lease = await owned(() => leaseFor(source), control);
@@ -114,6 +115,7 @@ export function createRevmStrictSimulationTransport(input: {
       return { ...checked, reportEffects };
   }
   return Object.freeze({
+    ...(executorRuntimeCode === undefined ? {} : { executorProgramCodeHash: executorRuntimeCode.keccak256 }),
     async simulate(invocation: Parameters<StrictSimulationTransport["simulate"]>[0]) {
       const checked = await execute(invocation, false);
       if (checked.kind === "Revert") {
@@ -147,10 +149,10 @@ function prefixRequestSnapshot(invocation: Parameters<NonNullable<StrictSimulati
   const value = invocation.request;
   if (!object(value)) invalid();
   if (value.kind === "state-override-simulation" || value.kind === "effect-delta-simulation") {
-    const result = requestSnapshot(value, authority, gas);
+    const result = requestSnapshot(value, authority, gas, executorRuntimeCode);
     // The prefix owns the trial's sole initial balance. A current-leg override
     // must never erase the balance changes produced by preceding execution.
-    const { tokenDeals, nativeBalanceWei, ...wire } = result.wire;
+    const { tokenDeals, nativeBalanceWei, executorRuntimeCode: standaloneCode, ...wire } = result.wire;
     if (wire.callerMode !== "impersonated-call-frame" || (tokenDeals?.length ?? 0) > 1 ||
       (nativeBalanceWei !== undefined && nativeBalanceWei !== "0")) invalid();
     return { observe: result.observe, wire: freeze({ ...wire, trialPrefix,
@@ -179,7 +181,8 @@ function prefixRequestSnapshot(invocation: Parameters<NonNullable<StrictSimulati
     observeNativeBalances: [], observeTotalSupply: [], observeLogs: false }) };
 }
 
-function requestSnapshot(value: unknown, authority: CentralCallerAuthority, gas: number): { wire: WireCall; observe: ReadonlySet<string> } {
+function requestSnapshot(value: unknown, authority: CentralCallerAuthority, gas: number,
+  executorRuntimeCode?: ExecutorRuntimeCode): { wire: WireCall; observe: ReadonlySet<string> } {
   const r = record(value, ["id", "required", "kind", "call", "preCalls", "overrideIntent", "observe", "observeTokenBalances"]);
   if (typeof r.id !== "string" || r.id.length === 0 || (r.required !== undefined && typeof r.required !== "boolean") ||
     typeof r.kind !== "string" || !["state-override-simulation", "effect-delta-simulation"].includes(r.kind)) invalid();
@@ -187,8 +190,15 @@ function requestSnapshot(value: unknown, authority: CentralCallerAuthority, gas:
   const caller = callerSnapshot(call.caller, authority);
   const from = caller.address, to = address(call.to), data = bytes(call.data);
   const mode = call.executionMode === undefined ? "top-level" : call.executionMode;
-  if (mode !== "top-level" && mode !== "impersonated-call-frame") invalid();
-  if (mode === "impersonated-call-frame" && authority.transactionOrigin === undefined) invalid();
+  if (mode !== "top-level" && mode !== "impersonated-call-frame" && mode !== "executor-program") invalid();
+  if (mode !== "top-level" && authority.transactionOrigin === undefined) invalid();
+  const program = mode === "executor-program";
+  if (program) {
+    if (caller.kind !== "executor" || from !== to || /^0x0{40}$/.test(from) ||
+      address(authority.transactionOrigin) === from || /^0x0{40}$/.test(address(authority.transactionOrigin)) ||
+      executorRuntimeCode === undefined || (r.preCalls !== undefined && array(r.preCalls).length !== 0)) invalid();
+    try { assertSubscriptCalldata(data); } catch { invalid(); }
+  }
   const override = record(r.overrideIntent, ["caller", "nativeBalanceWei", "tokenBalances"]);
   if (callerSnapshot(override.caller, authority).key !== caller.key) invalid();
   const tokenDeals = array(override.tokenBalances === undefined ? [] : override.tokenBalances).map(value => {
@@ -226,8 +236,10 @@ function requestSnapshot(value: unknown, authority: CentralCallerAuthority, gas:
     // token-delta observation. Explicit [] never falls back to this scope.
     pairs = observe.has("token-delta") ? [...new Set([...tokenDeals.map(d => d.token), to])].map(token => ({ token, account: from })) : [];
   }
-  return { observe, wire: freeze({ from, to, data, callerMode: mode, gasLimit: gas, executionGasLimit: gas,
-    ...(mode === "impersonated-call-frame" ? { transactionOrigin: authority.transactionOrigin! } : {}),
+  return { observe, wire: freeze({ from, to, data, callerMode: mode === "top-level" ? mode : "impersonated-call-frame",
+    gasLimit: gas, executionGasLimit: gas,
+    ...(mode !== "top-level" ? { transactionOrigin: authority.transactionOrigin! } : {}),
+    ...(program ? { executorRuntimeCode } : {}),
     ...(override.nativeBalanceWei === undefined ? {} : { nativeBalanceWei: amount(override.nativeBalanceWei) }),
     tokenDeals, preCalls, observeTokenBalances: pairs,
     observeNativeBalances: observe.has("native-delta") ? [from] : [],
@@ -273,10 +285,10 @@ function responseSnapshot(value: unknown, request: StrictSimulateRequest, source
   // Never retain mutable response objects across the evidence boundary.
   try {
     const s = record(r.strict, ["outcome", "executionGasUsed", "tokenDeltas", "nativeDeltas", "totalSupplyDeltas", "logs", "counterfactualExecutorCode"]);
-    const code = request.trialPrefix?.executorRuntimeCode;
+    const code = request.trialPrefix?.executorRuntimeCode ?? request.executorRuntimeCode;
     if (code !== undefined) {
       const proof = record(s.counterfactualExecutorCode, ["address", "keccak256"]);
-      if (address(proof.address) !== request.trialPrefix!.executor || proof.keccak256 !== code.keccak256) invalid();
+      if (address(proof.address) !== (request.trialPrefix?.executor ?? request.to) || proof.keccak256 !== code.keccak256) invalid();
     } else if (s.counterfactualExecutorCode !== undefined) invalid();
     const o = record(s.outcome, ["kind", "phase", "preCallIndex", "output", "reason"]);
     if (typeof o.kind !== "string" || !["Success", "Revert", "Halt"].includes(o.kind) || r.success !== (o.kind === "Success") ||

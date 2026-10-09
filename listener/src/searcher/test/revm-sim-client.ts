@@ -343,6 +343,27 @@ test("queued executor code detaches caller bytes and requires matching counterfa
   c.stop(); f.close(); await c.closeAndDrain();
 });
 
+test("self code override requires a pinned inner call with a separate nonzero origin and no external setup", async () => {
+  const f = new Fixture(), c = new FixtureClient(f);
+  const base = pinnedRequest();
+  const req: StrictSimulateRequest = { ...base, to: base.from, callerMode: "impersonated-call-frame",
+    transactionOrigin: `0x${"cc".repeat(20)}`, executionGasLimit: 100000,
+    executorRuntimeCode: { code: "0x00", keccak256: keccak256("0x00") } };
+  for (const patch of [{ transactionOrigin: undefined }, { transactionOrigin: req.from },
+    { transactionOrigin: `0x${"00".repeat(20)}` }, { executionGasLimit: undefined }, { sourcePin: undefined },
+    { callerMode: "top-level" }, { preCalls: [{ from: req.from, to: base.to, calldata: "0x" }] }]) {
+    await assert.rejects(c.strictSimulate({ ...req, ...patch } as StrictSimulateRequest), RevmStrictError);
+  }
+  assert.equal(c.starts, 0);
+  const pending = c.strictSimulate(req);
+  f.reply(0, { sourceAttestation: attestation(), strict: {
+    counterfactualExecutorCode: { address: req.to, keccak256: req.executorRuntimeCode!.keccak256 },
+    outcome: { kind: "Success", phase: "main", output: "0x" }, executionGasUsed: "0",
+    tokenDeltas: [], nativeDeltas: [], totalSupplyDeltas: [], logs: [],
+  } });
+  await pending; c.stop(); f.close(); await c.closeAndDrain();
+});
+
 for (const evidence of [undefined, { address: pinnedRequest().from, keccak256: keccak256("0x00") },
   { address: pinnedRequest().to, keccak256: PIN_HASH }]) test("missing/wrong executor code evidence poisons strict response", async () => {
   const f = new Fixture(); const c = new FixtureClient(f);
@@ -1015,6 +1036,18 @@ async function pinnedFixture(run: (f: PinnedRpcFixture, c: PinnedDirectClient, f
 }
 
 if (process.env.REVM_SIM_TEST_BINARY) {
+  test("pinned direct: self executor override keeps independent origin and cannot leak across requests", async () => pinnedFixture(async (f, c) => {
+    const req = f.request(), actor = req.from;
+    const code = "0x33600052326020523060405260606000f3";
+    f.hook = call => call.method === "eth_getCode" && call.params[0] === actor ? { result: "0x60006000fd" } : undefined;
+    const request = { ...req, ...innerContext, to: actor };
+    assert.equal((await c.strictSimulate(request)).strict!.outcome.kind, "Revert");
+    const result = await c.strictSimulate({ ...request, executorRuntimeCode: { code, keccak256: keccak256(code) } });
+    assert.equal(result.success, true);
+    assert.equal(result.output, `0x${[actor, originActor, actor].map(a => word(BigInt(a)).slice(2)).join("")}`);
+    assert.deepEqual(result.strict!.counterfactualExecutorCode, { address: actor, keccak256: keccak256(code) });
+    assert.equal((await c.strictSimulate(request)).strict!.outcome.kind, "Revert");
+  }));
   for (const heldPhase of ["main-read", "postcheck"] as const) {
     test(`pinned direct pair: scalar parity and A streams before held B ${heldPhase}`, async t => {
       type Result = Awaited<ReturnType<RevmSimClient["strictSimulate"]>>;

@@ -215,7 +215,10 @@ function strictRequest(req: StrictSimulateRequest): void {
     || (req.observeLogs !== undefined && typeof req.observeLogs !== "boolean")) bad();
   if (req.executorRuntimeCode !== undefined) {
     const v = req.executorRuntimeCode;
-    if (!req.sourcePin || req.to.toLowerCase() === req.from.toLowerCase()
+    const selfCall = req.to.toLowerCase() === req.from.toLowerCase();
+    if (!req.sourcePin || (selfCall && (req.callerMode !== "impersonated-call-frame" ||
+        req.transactionOrigin === undefined || req.transactionOrigin.toLowerCase() === req.from.toLowerCase() ||
+        /^0x0{40}$/i.test(req.from) || /^0x0{40}$/i.test(req.transactionOrigin) || (req.preCalls?.length ?? 0) !== 0))
       || !record(v, ["code", "keccak256"]) || !bytesHex(v.code) || v.code === "0x"
       || !hash32(v.keccak256) || keccak256(v.code) !== v.keccak256.toLowerCase()) bad();
   }

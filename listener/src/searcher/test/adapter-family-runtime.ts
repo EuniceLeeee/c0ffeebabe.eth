@@ -70,6 +70,7 @@ import { bindFamilyOwnedAction } from "../venues/family-owned-action.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 import type { AmountQuoteReusePolicy } from "../amount-quote-continuity.js";
 import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
+import { buildSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
 
 const SELECTOR = "0x12345678" as const;
 const TOKEN0 = `0x${"31".repeat(20)}`;
@@ -151,6 +152,7 @@ interface FixtureControls {
   stateOnlyReads?: true;
   readonly stateKeyPrefix?: string;
   exactOriginCaller?: boolean;
+  exactExecutorProgram?: boolean;
   reusePolicy?: AmountQuoteReusePolicy;
   onExactDecode?: () => void;
   onExactInput?: (stage: "methods" | "projection" | "local", input: {
@@ -543,9 +545,15 @@ function defineFixture(name: string, controls: FixtureControls) {
           ...(controls.stateOnlyReads ? { stateOnlyReads: true as const } : {}),
           ...(controls.reusePolicy === undefined ? {} : { reusePolicy: controls.reusePolicy }),
           program: Object.freeze({
-            requirements: () => ({ transports: ["eth-call" as const],
+            requirements: () => controls.exactExecutorProgram
+              ? { transports: ["effect-delta-simulation" as const], caller: "executor" as const, effects: ["return-data" as const] }
+              : ({ transports: ["eth-call" as const],
               ...(controls.exactOriginCaller ? { caller: "transaction-origin" as const } : {}) }),
             buildRequests: ({ descriptor }: { readonly descriptor: Descriptor }) => {
+              if (controls.exactExecutorProgram) return [{ id: `exact:${descriptor.pool}`, kind: "effect-delta-simulation" as const,
+                call: { caller: { kind: "executor" as const }, executionMode: "executor-program" as const, to: EXECUTOR,
+                  data: buildSubscriptCalldata(new Uint8Array([0])) },
+                overrideIntent: { caller: { kind: "executor" as const } }, observe: ["return-data" as const] }];
               const primary = call(
                 `exact:${descriptor.pool}`,
                 descriptor.pool,
@@ -1740,6 +1748,40 @@ async function testCachedExactHonorsCallerControl(): Promise<void> {
   assert.equal(healthy.status, "resolved", "cancelled caller does not poison reusable cache");
   assert.equal(healthy.outcome.reasonCode, "exact-cache-reused");
   assert.equal(scheduler.requestIds.length, reads);
+}
+
+async function testExecutorProgramCacheContext(): Promise<void> {
+  const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0, chainAmountQuote: true, exactExecutorProgram: true };
+  const family = defineFixture("executor-program-cache", controls), scheduler = new TestScheduler();
+  const { publications } = await run({ family, pools: [GOOD], scheduler });
+  const cache = createAdapterFamilyExactQuoteCache({ capacity: 8 });
+  const codeA = `0x${"aa".repeat(32)}`, codeB = `0x${"bb".repeat(32)}`;
+  let calls = 0;
+  const simulator: { executorProgramCodeHash?: string; simulate(): Promise<{ data: string }> } = {
+    executorProgramCodeHash: codeA,
+    async simulate() { calls++; return { data: this.executorProgramCodeHash === codeA ? "0x05" : "0x07" }; },
+  };
+  const makeRuntime = () => createStrictCentralAdapterRuntime({ executor: EXECUTOR, transactionOrigin: OTHER,
+    simulator, exactQuoteCache: cache, generationFence: { assertCurrent() {} },
+    provider: { call: async () => assert.fail("no raw quote fallback"), getCode: async () => assert.fail(), getStorage: async () => assert.fail() } });
+  const request = { family, route: issuedRoute(publications[0].instances[0]), amountIn: 17n, executor: EXECUTOR,
+    runtimeEvidence: [], source: SOURCE, generation: SOURCE.generation, runtime: makeRuntime(), requireChainAmountQuote: true };
+  const a = await executeFamilyExactQuote(request); assert.equal(a.status, "resolved"); assert.equal(calls, 1);
+  const same = await executeFamilyExactQuote({ ...request, runtime: makeRuntime() });
+  assert.equal(same.outcome.reasonCode, "exact-cache-reused"); assert.equal(calls, 1);
+  simulator.executorProgramCodeHash = codeB;
+  const b = await executeFamilyExactQuote({ ...request, runtime: makeRuntime() });
+  assert.equal(b.status, "resolved"); assert.notEqual(b.outcome.reasonCode, "exact-cache-reused"); assert.equal(calls, 2);
+  if (a.status !== "resolved" || b.status !== "resolved") throw new Error("quote failed");
+  assert.notEqual(a.cacheCompatibilityFingerprint, b.cacheCompatibilityFingerprint);
+  delete simulator.executorProgramCodeHash;
+  const missing = await executeFamilyExactQuote({ ...request, runtime: makeRuntime() });
+  assert.notEqual(missing.status, "resolved"); assert.equal(calls, 2, "missing code never executes and never hits prior cache");
+  simulator.executorProgramCodeHash = codeA;
+  controls.onExactDecode = () => { simulator.executorProgramCodeHash = codeB; };
+  const drift = await executeFamilyExactQuote({ ...request, runtime: makeRuntime() });
+  assert.notEqual(drift.status, "resolved", "decoder-time authority drift cannot publish a cached quote");
+  assert.equal(calls, 2);
 }
 
 async function testRequestExactAndOwnedExecution(): Promise<void> {
@@ -3417,6 +3459,7 @@ await testRequestExactAndOwnedExecution();
 await testChainAmountUsesExistingExactBoundary();
 await testQuoteReuseDeclarationIsSealedAndCacheBound();
 await testCachedExactHonorsCallerControl();
+await testExecutorProgramCacheContext();
 await testOpaquePublicationAndEvidenceAreSealed();
 await testMissingUnavailableClassifierUsesSealedEmptyMap();
 await testIssuedRouteGraphProjectionBoundary();

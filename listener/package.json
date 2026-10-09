@@ -148,6 +148,8 @@
     "searcher:algebra-quoter-historical": "node --import tsx src/searcher/venues/swaps/algebra-integral-family/test/historical-quoter.ts",
     "searcher:kyber-yb-compound-dual-contract": "node --import tsx --test src/searcher/test/family-integration/kyber-yb-compound/evidence.test.ts src/searcher/test/family-integration/kyber-yb-compound/nomination-address-binding.test.ts src/searcher/test/family-integration/kyber-yb-compound/historical-input-origin.test.ts",
     "searcher:yb-compound-historical-inputs": "node --import tsx src/searcher/test/family-integration/kyber-yb-compound/historical-input-origin.ts",
+    "searcher:yieldbasis-lt-deposit-contract": "node --import tsx --test src/searcher/venues/protocols/yieldbasis-lt-family/test/deposit.test.ts src/searcher/venues/protocols/yieldbasis-lt-family/test/deposit-probe-report.test.ts",
+    "searcher:yieldbasis-lt-deposit-historical": "node --import tsx src/searcher/venues/protocols/yieldbasis-lt-family/test/deposit-historical.ts",
     "searcher:kyber-yb-compound-dual-historical-fork": "node --import tsx src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
     "searcher:algebra-dual-historical-fork": "node --import tsx src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
     "searcher:curve-runtime-dual-historical-fork": "node --import tsx src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts",

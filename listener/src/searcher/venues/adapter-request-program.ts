@@ -100,9 +100,12 @@ export type AdapterRequest =
          * of an inner CALL frame (EIP-3607 disabled for that frame only),
          * matching protocols whose observed actor is an executor/router
          * contract that internally invokes the target.
+         * "executor-program" runs canonical execSubscript(bytes) as the
+         * executor's self-CALL, using centrally trusted code and an independent
+         * transaction origin. The program includes its own setup and guards.
          */
         readonly executionMode?:
-          "top-level" | "impersonated-call-frame";
+          "top-level" | "impersonated-call-frame" | "executor-program";
         readonly to: string;
         readonly data: string;
       };
@@ -147,7 +150,7 @@ export type MaterializedAdapterRequest =
       readonly call: {
         readonly from: string;
         readonly executionMode?:
-          "top-level" | "impersonated-call-frame";
+          "top-level" | "impersonated-call-frame" | "executor-program";
         readonly to: string;
         readonly data: string;
       };
@@ -1348,8 +1351,14 @@ function assertRequestShape(request: AdapterRequest): void {
       assertCallerRef(request.call.caller);
       if (request.call.executionMode !== undefined &&
           request.call.executionMode !== "top-level" &&
-          request.call.executionMode !== "impersonated-call-frame") {
+          request.call.executionMode !== "impersonated-call-frame" &&
+          request.call.executionMode !== "executor-program") {
         throw new Error(`${request.id} unsupported simulation executionMode`);
+      }
+      if (request.call.executionMode === "executor-program" &&
+          (request.call.caller.kind !== "executor" || request.overrideIntent.caller.kind !== "executor" ||
+            (request.preCalls?.length ?? 0) !== 0)) {
+        throw new Error(`${request.id} executor program requires executor authority and owns its setup`);
       }
       assertAddress(request.call.to, `${request.id} simulation target`);
       assertHex(request.call.data, `${request.id} simulation data`);

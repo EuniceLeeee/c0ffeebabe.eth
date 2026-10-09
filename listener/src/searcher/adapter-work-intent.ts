@@ -182,6 +182,8 @@ export interface AdapterWorkClock {
 }
 
 export interface CentralAdapterRuntime {
+  /** Trusted simulator configuration; changing it invalidates Exact evidence. */
+  readonly executorProgramCodeHash?: string;
   readonly policy: CentralAdapterPolicy;
   readonly budgets: CentralAdapterBudgets;
   readonly scheduler: CentralAdapterScheduler;

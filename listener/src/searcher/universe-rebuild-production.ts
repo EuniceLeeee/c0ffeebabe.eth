@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
+import { dryRunBotVmCodeOverrideEnabled, loadBotVmRuntimeCode } from "../shared/executor/botvm-executor.js";
 import { RebuildReadProvider } from "./rebuild-read-provider.js";
 import { readyActivityPayloadBytes, type ReadyActivityArchive } from "./ready-activity-archive.js";
 import { createSourceCodeProviders } from "./source-code-cache.js";
@@ -921,6 +922,12 @@ export function createProbeWiring(
     }
     normalizeTransactionOrigin(transactionOrigin);
   }
+  // Same opt-in trusted artifact and dry-run-only safety gate as main. No
+  // candidate/Family may supply code; unchanged startup defaults inject none.
+  const executorRuntimeCode = canSimulate && dryRunBotVmCodeOverrideEnabled(
+    process.env.SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE,
+    process.env.SEARCHER_DRY_RUN === "1", process.env.SEARCHER_BLOCKSCAN_SUBMIT === "1",
+  ) ? loadBotVmRuntimeCode(transactionOrigin!) : undefined;
   const notifyFatal = input?.onSimulationFatal;
   const probeController = new AbortController();
   let fatal: RevmFatalError | undefined;
@@ -975,6 +982,7 @@ export function createProbeWiring(
       // Preserve the engine's existing DEFAULT_GAS_LIMIT; make it explicit at
       // the transport boundary rather than relying on an unbound wire default.
       executionGasLimit: 0x1000000,
+      ...(executorRuntimeCode === undefined ? {} : { executorRuntimeCode }),
       createClient: ({ onFatal }) => new RevmSimClient({ executablePath: revmBin, timeoutMs, onFatal, diagnosticCandidateKey }),
       onFatal(reason) {
         if (!fatal) logRevmFault("rebuild-candidate", reason, { candidateKey: diagnosticCandidateKey, blockNumber: source.number });

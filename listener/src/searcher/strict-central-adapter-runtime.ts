@@ -53,6 +53,8 @@ interface StrictProvider {
 }
 
 export interface StrictSimulationTransport {
+  /** Construction-bound trusted code, never a Family-supplied declaration. */
+  readonly executorProgramCodeHash?: string;
   simulatePrefix?(input: ExactPrefixReadInput): Promise<ExactPrefixReadResult>;
   simulate(input: {
     readonly request: Extract<
@@ -479,6 +481,7 @@ export function createStrictCentralAdapterRuntime(input: {
     },
   });
   return Object.freeze({
+    get executorProgramCodeHash() { return input.simulator?.executorProgramCodeHash; },
     ...(input.simulator?.simulatePrefix === undefined ? {} : {
       withExactPrefix(prefix: CompiledExactPrefix, source: CanonicalSource) {
         input.generationFence.assertCurrent(source.generation, source);
@@ -657,6 +660,12 @@ async function executeRequest(
 ): Promise<AdapterRequestResult> {
   assertTransportControl(control);
   try {
+    const executorProgram = (request.kind === "effect-delta-simulation" || request.kind === "state-override-simulation") &&
+      request.call.executionMode === "executor-program";
+    const executorProgramCodeHash = executorProgram ? simulator?.executorProgramCodeHash : undefined;
+    if (executorProgram && (executorProgramCodeHash === undefined || !/^0x[0-9a-f]{64}$/.test(executorProgramCodeHash))) {
+      throw new Error("executor program trusted code unavailable");
+    }
     if (prefix !== undefined) {
       if (simulator?.simulatePrefix === undefined) throw new Error("exact prefix transport unavailable");
       const result = await simulator.simulatePrefix({ request, prefix, source, callerAuthority,
@@ -666,6 +675,7 @@ async function executeRequest(
         data: result.data, completion: result.completion,
         provenance: Object.freeze({ kind: "strict-exact-prefix-transport", fingerprint: hashCanonical({
           prefix: { ...prefix }, source: { ...source }, requestFingerprint: physicalAdapterRequestFingerprint(request),
+          ...(executorProgramCodeHash === undefined ? {} : { executorProgramCodeHash }),
           callerAuthority: { ...callerAuthority } as unknown as CanonicalValue, completion: result.completion,
         }) }),
         ...(result.effects === undefined ? {} : { effects: Object.freeze(result.effects) }),
@@ -802,10 +812,11 @@ async function executeRequest(
         fingerprint: hashCanonical({
           id: request.id,
           requestFingerprint,
+          ...(executorProgramCodeHash === undefined ? {} : { executorProgramCodeHash }),
           callerAddresses,
           // Inner ORIGIN is distinct from the symbolic caller. Bind only the
           // sealed authority; never infer it from the executor or another role.
-          ...(request.call.executionMode === "impersonated-call-frame"
+          ...(request.call.executionMode === "impersonated-call-frame" || request.call.executionMode === "executor-program"
             ? { transactionOrigin: callerAuthority.transactionOrigin?.toLowerCase() ?? null }
             : {}),
           completion,

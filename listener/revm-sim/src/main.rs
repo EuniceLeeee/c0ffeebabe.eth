@@ -2981,11 +2981,18 @@ impl StrictPlan {
             Ok(out)
         };
         let actor = address(&req.from)?;
+        let inner = match req.caller_mode.as_deref() { None | Some("top-level") => false,
+            Some("impersonated-call-frame") => true, _ => bail!("invalid caller mode") };
+        let origin = req.transaction_origin.as_deref().map(address).transpose()?;
+        if inner && (origin.is_none() || req.execution_gas_limit.is_none()) { bail!("missing inner context"); }
+        if !inner && origin.is_some_and(|o| o != actor) { bail!("top-level origin differs"); }
         let code_override = req.trial_prefix.as_ref().and_then(|p| p.executor_runtime_code.as_ref()
             .map(|code| (code, p.executor.as_str()))).or_else(|| req.executor_runtime_code.as_ref().map(|code| (code, req.to.as_str())));
         let executor_code = if let Some((v, target)) = code_override {
             let target = address(target)?;
-            if req.source_pin.is_none() || (req.trial_prefix.is_none() && target == actor) { bail!("counterfactual code requires pinned target"); }
+            if req.source_pin.is_none() || (req.trial_prefix.is_none() && target == actor &&
+                (!inner || actor == Address::ZERO || origin.is_none_or(|o| o == actor || o == Address::ZERO) ||
+                    !req.pre_calls.is_empty())) { bail!("counterfactual code requires pinned target and independent origin"); }
             strict_hex(&json!(v.code), None)?;
             strict_hex(&json!(v.keccak256), Some(32))?;
             let bytes = parse_hex_bytes(&v.code)?;
@@ -2995,11 +3002,6 @@ impl StrictPlan {
             Some((target, Bytecode::new_raw_checked(Bytes::from(bytes))
                 .map_err(|_| anyhow!("invalid counterfactual bytecode"))?))
         } else { None };
-        let inner = match req.caller_mode.as_deref() { None | Some("top-level") => false,
-            Some("impersonated-call-frame") => true, _ => bail!("invalid caller mode") };
-        let origin = req.transaction_origin.as_deref().map(address).transpose()?;
-        if inner && (origin.is_none() || req.execution_gas_limit.is_none()) { bail!("missing inner context"); }
-        if !inner && origin.is_some_and(|o| o != actor) { bail!("top-level origin differs"); }
         for gas in [req.gas_limit, req.execution_gas_limit].into_iter().flatten() {
             if gas == 0 || gas > 9_007_199_254_740_991 { bail!("invalid gas limit"); }
         }
@@ -4384,6 +4386,61 @@ mod tests {
         let mut v = valid.clone(); v.as_object_mut().unwrap().remove("sourcePin");
         assert!(StrictPlan::validate(&serde_json::from_value(v).unwrap()).is_err());
         let mut v = valid.clone(); v["to"] = v["from"].clone();
+        assert!(StrictPlan::validate(&serde_json::from_value(v).unwrap()).is_err());
+    }
+
+    #[test]
+    fn self_executor_code_preserves_call_context_account_and_atomic_rollback() {
+        for revert in [false, true] {
+            let (mut db, mut req) = local_strict(true, "0x60006000fd");
+            req.to = req.from.clone();
+            let actor = parse_address(&req.from).unwrap();
+            let origin = parse_address(req.transaction_origin.as_ref().unwrap()).unwrap();
+            let original = db.basic(actor).unwrap().unwrap();
+            let origin_before = db.basic(origin).unwrap().unwrap();
+            db.insert_account_storage(actor, U256::ZERO, U256::from(42)).unwrap();
+            // Return CALLER, ORIGIN, ADDRESS and perform one persistent write.
+            let code = format!("0x336000523260205230604052604260005560606000{}", if revert { "fd" } else { "f3" });
+            req.source_pin = Some(serde_json::from_value(json!({"chainId":1,"blockHash":format!("{:#x}", B256::ZERO)})).unwrap());
+            req.executor_runtime_code = Some(ExecutorRuntimeCode { keccak256: format!("{:#x}", keccak256(parse_hex_bytes(&code).unwrap())), code });
+            let plan = StrictPlan::validate(&req).unwrap();
+            apply_executor_runtime_code(&mut db, &plan).unwrap();
+            assert_eq!(db.basic(actor).unwrap().unwrap().balance, original.balance);
+            assert_eq!(db.basic(actor).unwrap().unwrap().nonce, original.nonce);
+            assert_eq!(db.storage(actor, U256::ZERO).unwrap(), U256::from(42));
+            let (outcome, _, _) = strict_execute(&mut db, &test_source().env, &req, &plan).unwrap();
+            let expected = format!("0x{:064x}{:064x}{:064x}", U256::from_be_slice(actor.as_slice()),
+                U256::from_be_slice(origin.as_slice()), U256::from_be_slice(actor.as_slice()));
+            match outcome {
+                StrictOutcome::Success { output, .. } => { assert!(!revert); assert_eq!(output, expected); }
+                StrictOutcome::Revert { output, .. } => { assert!(revert); assert_eq!(output, expected); }
+                _ => panic!("unexpected self-call outcome"),
+            }
+            assert_eq!(db.storage(actor, U256::ZERO).unwrap(), U256::from(if revert { 42 } else { 66 }));
+            assert_eq!(db.basic(actor).unwrap().unwrap().balance, original.balance);
+            assert_eq!(db.basic(actor).unwrap().unwrap().nonce, original.nonce);
+            assert_eq!(db.basic(origin).unwrap().unwrap(), origin_before);
+            let (mut fresh, _) = local_strict(true, "0x60006000fd");
+            assert_eq!(fresh.basic(actor).unwrap().unwrap(), original, "override cannot leak to another sandbox");
+        }
+    }
+
+    #[test]
+    fn self_executor_code_rejects_unbound_origin_and_external_setup() {
+        let base = json!({"blockNumber":300,"sourcePin":{"chainId":1,"blockHash":format!("{:#x}", B256::ZERO)},
+            "from":format!("{:#x}", Address::repeat_byte(0xaa)),"to":format!("{:#x}", Address::repeat_byte(0xaa)),
+            "transactionOrigin":format!("{:#x}", Address::repeat_byte(0xdd)),"callerMode":"impersonated-call-frame",
+            "executionGasLimit":100000,"data":"0x","executorRuntimeCode":{"code":"0x00","keccak256":format!("{:#x}", keccak256([0u8]))}});
+        assert!(StrictPlan::validate(&serde_json::from_value(base.clone()).unwrap()).is_ok());
+        for key in ["sourcePin", "transactionOrigin", "executionGasLimit", "callerMode"] {
+            let mut v = base.clone(); v.as_object_mut().unwrap().remove(key);
+            assert!(StrictPlan::validate(&serde_json::from_value(v).unwrap()).is_err(), "missing {key}");
+        }
+        for origin in [Address::ZERO, Address::repeat_byte(0xaa)] {
+            let mut v = base.clone(); v["transactionOrigin"] = json!(format!("{origin:#x}"));
+            assert!(StrictPlan::validate(&serde_json::from_value(v).unwrap()).is_err());
+        }
+        let mut v = base.clone(); v["preCalls"] = json!([{"from":v["from"],"to":v["to"],"calldata":"0x"}]);
         assert!(StrictPlan::validate(&serde_json::from_value(v).unwrap()).is_err());
     }
 
