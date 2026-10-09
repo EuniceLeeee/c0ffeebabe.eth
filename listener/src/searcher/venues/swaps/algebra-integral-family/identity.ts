@@ -8,6 +8,7 @@ import type {
   AdapterRequestResult,
 } from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
+import { algebraQuoterBinding, algebraQuoterIdentityRequests, assertAlgebraSource } from "./quoter-model.js";
 import {
   ALGEBRA_FACTORY_INTERFACE,
   ALGEBRA_PLUGIN_DYNAMIC_FEE_FLAG,
@@ -54,7 +55,7 @@ const STATIC_EVIDENCE_IDS = Object.freeze([
   LIQUIDITY_REQUEST_ID,
 ]);
 
-/** Variant-scope refusal codes (chain-proven, raised before any route exists). */
+/** Variant-scope outcomes; unsupported dynamic semantics are retryable. */
 export const ALGEBRA_DYNAMIC_FEE_UNSUPPORTED =
   "algebra_plugin_dynamic_fee_unsupported";
 export const ALGEBRA_STATIC_FEE_BINDING_FAILED =
@@ -64,14 +65,10 @@ export const ALGEBRA_STATIC_BINDING_MISMATCH =
   "candidate_static_binding_mismatch";
 
 /**
- * Admitted variant: an Algebra Integral pool whose executed fee is the pool's
- * own `globalState.lastFee`. Refused variant: a pool whose plugin config sets
- * the `DYNAMIC_FEE` bit, because `AlgebraPool._beforeSwap` then takes the
- * executed fee from `IAlgebraPlugin(plugin).beforeSwap(...)`'s `overrideFee`
- * while the pool's own `fee()` view reports `getCurrentFee()`. Those two were
- * measured to DISAGREE on the observed instances (see the family contract test),
- * so no state readable at quote time determines the executed fee for that
- * variant. Such pools are rejected here — never admitted with a null quote.
+ * Static pools retain the bounded local model. Dynamic Cypher plugins use a
+ * source/code-bound Quoter that runs beforeSwap, not fee() as an execution fee.
+ * Unsupported plugin semantics remain retryable; missing support is not proof
+ * that a reverse-registered pool is absent.
  */
 export const algebraIntegralIdentity = {
   variants: [{
@@ -79,7 +76,9 @@ export const algebraIntegralIdentity = {
     kind: "factory-child",
     lineageId: ALGEBRA_INTEGRAL_FACTORY_LINEAGE_ID,
     applies: () => true,
-    requirements: () => ({ transports: ["eth-call"] }),
+    requirements: ({ evidence }) => ({ transports: identityEvidence(evidence)?.phase === "pool-static" &&
+      (identityEvidence(evidence)!.pluginConfig & ALGEBRA_PLUGIN_DYNAMIC_FEE_FLAG) !== 0
+      ? ["eth-call", "get-code"] : ["eth-call"] }),
     buildRequests(input) {
       const evidence = identityEvidence(input.evidence);
       if (evidence === undefined) return staticRequests(input.candidate);
@@ -93,7 +92,8 @@ export const algebraIntegralIdentity = {
           // A pinned poolByPair revert is a chain-proven failed reverse binding,
           // while a genuine transport error stays an unresolved result.
           completion: "return-or-revert-data" as const,
-        })];
+        }), ...((evidence.pluginConfig & ALGEBRA_PLUGIN_DYNAMIC_FEE_FLAG) !== 0
+          ? algebraQuoterIdentityRequests(evidence.factory, evidence.plugin) : [])];
       }
       return [];
     },
@@ -103,8 +103,12 @@ export const algebraIntegralIdentity = {
       if (prior.phase !== "pool-static") {
         throw new Error("algebra-integral identity proof has already completed");
       }
+      assertAlgebraSource(results, prior.source);
+      const bound = (prior.pluginConfig & ALGEBRA_PLUGIN_DYNAMIC_FEE_FLAG) !== 0
+        ? algebraQuoterBinding({ ...prior, pool: step.candidate.pool }, results) : null;
       return Object.freeze({
         phase: "reverse-binding" as const,
+        source: prior.source,
         factory: prior.factory,
         token0: prior.token0,
         token1: prior.token1,
@@ -117,6 +121,7 @@ export const algebraIntegralIdentity = {
         liquidity: prior.liquidity,
         unlocked: prior.unlocked,
         reversePool: decodeReversePool(results),
+        ...(bound === null ? {} : { quoterBinding: bound }),
       });
     },
     decide(input) {
@@ -191,12 +196,16 @@ function staticRequests(candidate: AlgebraIntegralCandidate): readonly AdapterRe
 function decodeStatic(
   results: readonly AdapterRequestResult[],
 ): AlgebraIntegralIdentityEvidence {
+  const first = results[0];
+  if (!first?.ok) throw new Error("algebra identity source missing");
+  assertAlgebraSource(results, first.source);
   const globalState: AlgebraGlobalState = decodeGlobalStateResult(
     results,
     GLOBAL_STATE_REQUEST_ID,
   );
   return Object.freeze({
     phase: "pool-static" as const,
+    source: first.source,
     factory: decodeAddressResult(results, FACTORY_REQUEST_ID, ALGEBRA_POOL_INTERFACE, "factory"),
     token0: decodeAddressResult(results, TOKEN0_REQUEST_ID, ALGEBRA_POOL_INTERFACE, "token0"),
     token1: decodeAddressResult(results, TOKEN1_REQUEST_ID, ALGEBRA_POOL_INTERFACE, "token1"),
@@ -269,16 +278,9 @@ function decideIdentity(
     };
   }
   if ((evidence.pluginConfig & ALGEBRA_PLUGIN_DYNAMIC_FEE_FLAG) !== 0) {
-    // `_beforeSwap` takes the executed fee from the plugin's `overrideFee`
-    // return; `fee()` only proxies `getCurrentFee()`. Measured on chain those
-    // differ, so the executed fee is not state-determinable for this variant.
-    return {
-      status: "chain-proven-rejected",
-      reasonCode: ALGEBRA_DYNAMIC_FEE_UNSUPPORTED,
-      evidenceRequestIds: [PLUGIN_REQUEST_ID, GLOBAL_STATE_REQUEST_ID, FEE_REQUEST_ID],
-    };
+    if (evidence.quoterBinding === undefined) return { status: "retryable", reasonCode: ALGEBRA_DYNAMIC_FEE_UNSUPPORTED };
   }
-  if (evidence.feeView !== evidence.lastFee) {
+  else if (evidence.feeView !== evidence.lastFee) {
     // Without the DYNAMIC_FEE bit `fee()` must return `globalState.lastFee`
     // verbatim; a disagreement means the read surface is not the modelled one.
     return {
@@ -295,6 +297,7 @@ function decideIdentity(
   const reversePool = canonicalAddress(evidence.reversePool);
   const plugin = canonicalAddress(evidence.plugin);
   const evidenceHash = hashCanonical({
+    source: { ...evidence.source },
     pool,
     factory,
     token0,
@@ -304,6 +307,7 @@ function decideIdentity(
     pluginConfig: evidence.pluginConfig,
     lastFee: evidence.lastFee,
     reversePool,
+    ...(evidence.quoterBinding ? { quoterBinding: { ...evidence.quoterBinding } } : {}),
   });
   return {
     status: "verified",
@@ -323,7 +327,8 @@ function decideIdentity(
         tickSpacing: evidence.tickSpacing,
         factoryBinding: Object.freeze({ factory, reversePool }),
         executedFee: Object.freeze({
-          kind: "global-state-last-fee" as const,
+          ...(evidence.quoterBinding === undefined ? { kind: "global-state-last-fee" as const }
+            : { kind: "cypher-bound-quoter" as const, quoterBinding: evidence.quoterBinding }),
           fee: evidence.lastFee,
           pluginConfig: evidence.pluginConfig,
           plugin,

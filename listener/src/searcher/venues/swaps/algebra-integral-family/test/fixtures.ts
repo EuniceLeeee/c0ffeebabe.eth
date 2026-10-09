@@ -39,9 +39,8 @@ export const FOREIGN_POOL = "0x1000000000000000000000000000000000000009";
 
 /**
  * The six instances named for this family, all measured at block 26018534.
- * Every one of them sets the `DYNAMIC_FEE` plugin-config bit (128) and is
- * therefore refused by the identity variant (see `MEASURED_SWAPS` for the
- * chain proof that `fee()` is not the executed fee).
+ * Every one sets DYNAMIC_FEE. Static-only evidence cannot admit them; the
+ * code-bound Quoter branch has its own identity/amount tests.
  */
 export interface MeasuredInstance {
   readonly pool: string;
@@ -275,6 +274,11 @@ export function answerFor(
   const source = options.source ?? SOURCE;
   const zero = ethers.zeroPadValue("0x", 32);
   const values: Record<string, string> = {
+    // Old fixtures have NO Quoter/code proof. Missing support is retryable,
+    // never manufactured admission of the historical dynamic instances.
+    "quoter-code": "0x", "plugin-code": "0x",
+    "quoter-factory": zero, "quoter-pool-deployer": zero,
+    "factory-pool-deployer": zero,
     "pool-factory": ALGEBRA_POOL_INTERFACE.encodeFunctionResult("factory", [facts.factory]),
     "pool-token0": ALGEBRA_POOL_INTERFACE.encodeFunctionResult("token0", [facts.token0]),
     "pool-token1": ALGEBRA_POOL_INTERFACE.encodeFunctionResult("token1", [facts.token1]),

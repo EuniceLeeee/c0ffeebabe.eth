@@ -22,6 +22,7 @@ import {
   ALGEBRA_TICK_SPACING_TOPIC,
 } from "./abi.js";
 import { sameAddress } from "./codec.js";
+import { algebraQuoterGuardRequests, assertAlgebraQuoterGuards, assertAlgebraSource } from "./quoter-model.js";
 import { staticBindingProjection } from "./instance.js";
 import {
   algebraPriceStateRequests,
@@ -50,6 +51,7 @@ const MUTATION_TOPICS = new Set([
 ]);
 
 export const algebraIntegralPricing = {
+  refreshPolicyForInstance: ({ descriptor }) => descriptor.executedFee.kind === "cypher-bound-quoter" ? "each-block" : "on-touch",
   stateKey: (route) => route.instanceKey,
   staticBindingProjection: ({ descriptor }) => staticBindingProjection(descriptor),
   snapshotCompatibilityProjection: ({ descriptor, routes }) => ({
@@ -58,6 +60,7 @@ export const algebraIntegralPricing = {
     feeBinding: descriptor.executedFee.kind,
     pluginConfig: descriptor.executedFee.pluginConfig,
     plugin: descriptor.executedFee.plugin,
+    ...(descriptor.executedFee.kind === "cypher-bound-quoter" ? { quoterBinding: { ...descriptor.executedFee.quoterBinding } } : {}),
     directions: routes
       .map((route) => [route.tokenIn, route.tokenOut] as const)
       .sort(([leftIn, leftOut], [rightIn, rightOut]) =>
@@ -87,9 +90,12 @@ export const algebraIntegralPricing = {
     executedFee: Object.freeze({ ...draft.executedFee }),
   }),
   current: {
-    requirements: () => ({ transports: ["eth-call"] }),
-    buildRequests: ({ descriptor }) =>
-      algebraPriceStateRequests(descriptor.pool),
+    requirements: ({ descriptor }) => ({ transports: descriptor.executedFee.kind === "cypher-bound-quoter" ? ["eth-call", "get-code"] : ["eth-call"] }),
+    buildRequests: ({ descriptor }) => [
+      ...algebraPriceStateRequests(descriptor.pool),
+      ...(descriptor.executedFee.kind === "cypher-bound-quoter" ? algebraQuoterGuardRequests(
+        descriptor.pool, descriptor.executedFee.plugin, descriptor.executedFee.quoterBinding) : []),
+    ],
     decodeSnapshot: ({ descriptor, initialResults }) =>
       decodeSnapshot(descriptor, initialResults),
     deriveMids({ descriptor, snapshot, routes }) {
@@ -97,7 +103,7 @@ export const algebraIntegralPricing = {
       const mids = new Map<AlgebraIntegralRoute["routeKey"], RouteVenueMid>();
       if (snapshot.inactiveReason !== null) return mids;
       for (const route of routes) {
-        const edge = routeEdge(descriptor, route, snapshot.executedFee);
+        const edge = routeEdge(descriptor, route, snapshot.rawFeeView);
         const directed = q96DirectedReserves({
           sqrtPriceX96: snapshot.sqrtPriceX96,
           liquidity: snapshot.liquidity,
@@ -114,9 +120,10 @@ export const algebraIntegralPricing = {
           mid: directed.mid,
           sqrtPriceX96: directed.sqrtPriceInOutX96,
           liquidity: snapshot.liquidity,
-          // The executed fee unit is hundredths of a bip (1e-6), so one basis
-          // point is 100 units: this is the same conversion UniV3 families use.
-          feeBps: Number(snapshot.executedFee) / 100,
+          // Raw spot/fee hint only. For a dynamic plugin fee() is NOT the
+          // actual execution fee; production effective comes from Exact's
+          // source-bound Quoter and is never extrapolated from this hint.
+          feeBps: Number(snapshot.rawFeeView) / 100,
         }));
       }
       return mids;
@@ -172,22 +179,25 @@ export const algebraIntegralPricing = {
 >;
 
 /**
- * A snapshot is quotable only in the supported variant: the pool's own
- * `globalState.lastFee` must be the fee it will execute, which is exactly the
- * `DYNAMIC_FEE`-clear case. If the bit is set (or the two reads disagree) the
- * pool became plugin-fee controlled after admission; both routes are reported
- * unavailable rather than quoted with an unreadable fee.
+ * The static model fails closed if plugin fee control appears. The bound
+ * dynamic model keeps raw sqrt-price and fee() as hints, never as Exact output;
+ * current plugin/code guards must still hold, and effective executes Quoter.
  */
 function decodeSnapshot(
   descriptor: AlgebraIntegralPricingDescriptor,
   results: Parameters<typeof readAlgebraPriceState>[0],
 ): AlgebraIntegralPricingSnapshot {
   const state = readAlgebraPriceState(results);
+  const dynamic = descriptor.executedFee.kind === "cypher-bound-quoter";
+  if (descriptor.executedFee.kind === "cypher-bound-quoter") {
+    assertAlgebraSource(results, state.source);
+    assertAlgebraQuoterGuards(descriptor.executedFee.plugin, descriptor.executedFee.quoterBinding, results);
+  }
   const unsupported = [];
-  if ((state.globalState.pluginConfig & ALGEBRA_PLUGIN_DYNAMIC_FEE_FLAG) !== 0) {
+  if (!dynamic && (state.globalState.pluginConfig & ALGEBRA_PLUGIN_DYNAMIC_FEE_FLAG) !== 0) {
     unsupported.push("plugin-config dynamic-fee bit is set");
   }
-  if (state.fee !== state.globalState.lastFee) {
+  if (!dynamic && state.fee !== state.globalState.lastFee) {
     unsupported.push(
       `fee() ${state.fee} differs from globalState.lastFee ${state.globalState.lastFee}`,
     );
@@ -206,7 +216,8 @@ function decodeSnapshot(
     sqrtPriceX96: state.globalState.sqrtPriceX96,
     tick: state.globalState.tick,
     lastFee: state.globalState.lastFee,
-    executedFee: state.fee,
+    executedFee: dynamic ? null : state.fee,
+    rawFeeView: state.fee,
     pluginConfig: state.globalState.pluginConfig,
     communityFee: state.globalState.communityFee,
     unlocked: state.globalState.unlocked,

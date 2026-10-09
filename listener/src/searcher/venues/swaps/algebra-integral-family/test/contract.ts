@@ -48,6 +48,11 @@ import {
   WBTC,
 } from "./fixtures.js";
 
+assert(plugin.execution.buildRuntimeLeg, "runtime execution must be implemented");
+const buildRuntimeLeg = plugin.execution.buildRuntimeLeg;
+assert(plugin.pricing.current.classifyUnavailable, "unavailable prices must be classified");
+const classifyUnavailable = plugin.pricing.current.classifyUnavailable;
+
 const routesFor = (d: ReturnType<typeof descriptor>) =>
   plugin.routes.project({ descriptor: d });
 
@@ -195,6 +200,7 @@ test("manifest declares a swap family owning exactly its own action and no live-
   assert.equal(String(plugin.manifest.familyId), String(ALGEBRA_INTEGRAL_FAMILY_ID));
   assert.equal(plugin.manifest.domain, "swap");
   assert.deepEqual([...plugin.manifest.ownedActionAdapterIds], [ALGEBRA_INTEGRAL_ADAPTER_ID]);
+  assert(plugin.manifest.edgeAdapterIds);
   assert.deepEqual([...plugin.manifest.edgeAdapterIds], [ALGEBRA_INTEGRAL_ADAPTER_ID]);
   assert.deepEqual(plugin.manifest.allowedTaxonomy.map((slot) => slot.slotKind), ["swap"]);
   assert.equal((plugin.manifest as { livePoolStateKind?: string }).livePoolStateKind, undefined);
@@ -262,7 +268,7 @@ test("identity rejects a pinned poolByPair revert as chain-proven negative evide
   );
 });
 
-test("identity REFUSES every measured instance: plugin dynamic fee is not state-readable", () => {
+test("identity keeps dynamic instances retryable without the required Quoter/code binding", () => {
   // Measured at block 26018534: all six named instances set pluginConfig bit 128
   // (DYNAMIC_FEE), so `_beforeSwap` takes the executed fee from the plugin's
   // `overrideFee` return while `fee()` only proxies `getCurrentFee()`.
@@ -276,7 +282,7 @@ test("identity REFUSES every measured instance: plugin dynamic fee is not state-
       answerFor({ facts: { ...STATIC_FEE_FACTS, ...instance, unlocked: true } }),
       candidateFor({ ...STATIC_FEE_FACTS, ...instance }),
     );
-    assert.equal(decision.status, "chain-proven-rejected", instance.pool);
+    assert.equal(decision.status, "retryable", instance.pool);
     assert.equal(
       (decision as { reasonCode: string }).reasonCode,
       ALGEBRA_DYNAMIC_FEE_UNSUPPORTED,
@@ -494,6 +500,7 @@ test("TickMath bounds agree with the measured pool state (validates the tick con
 test("exact quote honours the caller's specified amount with the readable executed fee", () => {
   const small = quote(1_000n);
   const large = quote(10_000n);
+  assert(small.quoted.evidence.kind === "algebra-integral-single-range");
   assert.equal(small.quoted.evidence.feeProvenance, "algebra-static-last-fee");
   assert.equal(small.quoted.evidence.executedFee, 500n);
   assert.equal(small.quoted.evidence.amountIn, 1_000n);
@@ -605,7 +612,7 @@ test("pricing derives both venue mids from the source-bound pool state", () => {
     routes,
   } as never);
   assert.equal(mids.size, 2);
-  const unavailable = plugin.pricing.current.classifyUnavailable({
+  const unavailable = classifyUnavailable({
     descriptor: current.descriptor,
     snapshot,
     routes,
@@ -629,7 +636,7 @@ test("pricing reports the unsupported variant as unavailable instead of pricing 
     0,
   );
   assert.equal(
-    plugin.pricing.current.classifyUnavailable({
+    classifyUnavailable({
       descriptor: current.descriptor,
       snapshot,
       routes,
@@ -666,7 +673,7 @@ test("buildRuntimeLeg patches the working amount into amountRequired and never r
       },
     });
   }
-  const leg = plugin.execution.buildRuntimeLeg(input as never);
+  const leg = buildRuntimeLeg(input as never);
   assert.ok(leg, "a supported route must construct a runtime leg");
   assert.equal(leg.actionAdapterId, ALGEBRA_INTEGRAL_ADAPTER_ID);
   const instructions = parseRuntimeProgram(leg.program);
@@ -676,7 +683,10 @@ test("buildRuntimeLeg patches the working amount into amountRequired and never r
   assert.deepEqual(instructions[1], { op: "math", kind: 4, dst: 2, a: 0, b: 1 });
   assert.deepEqual(instructions[2], { op: "constant", reg: 3, value: 0n });
   assert.deepEqual(instructions[3], { op: "equal", a: 2, b: 3 });
-  const call = instructions[4]!;
+  assert.equal(instructions[4]!.target, ethers.getAddress(route.tokenIn));
+  assert.equal(instructions[4]!.isStatic, 1, "capture actual input inventory");
+  assert.deepEqual(instructions[5], { op: "load", reg: 4, offset: 0 });
+  const call = instructions[6]!;
   assert.equal(call.op, "call");
   assert.equal(call.target, ethers.getAddress(d.pool));
   assert.equal(call.isStatic, 0);
@@ -695,37 +705,44 @@ test("buildRuntimeLeg patches the working amount into amountRequired and never r
   assert.equal(BigInt(`0x${calldata.slice(2 + 197 * 2, 2 + 229 * 2)}`), 0n);
   // The callback script is a real bounded program fragment (0x0e flow leg).
   assert.equal(calldata.slice(2 + 196 * 2, 2 + 197 * 2), "0e");
-  assert.deepEqual(instructions[5], { op: "load", reg: 1, offset: 0 });
-  assert.deepEqual(instructions[6], { op: "math", kind: 1, dst: 2, a: 0, b: 1 });
-  assert.equal(instructions.length, 7);
+  assert.deepEqual(instructions[7], { op: "load", reg: 1, offset: 0 });
+  assert.deepEqual(instructions[8], { op: "equal", a: 1, b: 0 }, "returned input must be full");
+  assert.equal(instructions[9]!.target, ethers.getAddress(route.tokenIn));
+  assert.equal(instructions[9]!.isStatic, 1);
+  assert.deepEqual(instructions[10], { op: "load", reg: 1, offset: 0 });
+  assert.deepEqual(instructions[11], { op: "math", kind: 1, dst: 2, a: 4, b: 1 });
+  assert.deepEqual(instructions[12], { op: "equal", a: 2, b: 0 }, "actual debit must be full");
+  assert.equal(instructions.length, 13);
+  assert.equal(instructions.filter(i => i.op === "call" && sameToken(i.target, route.tokenOut)).length, 0,
+    "runtime leaves output measurement to the central actual-receipt flow");
 });
 
 test("buildRuntimeLeg uses the token1 debt word and return word for the reverse direction", () => {
   const d = descriptor();
   const route = routesFor(d)[1]!;
   assert.equal(route.direction, "one-for-zero");
-  const leg = plugin.execution.buildRuntimeLeg(inputFor(d, route, 1_000n) as never);
+  const leg = buildRuntimeLeg(inputFor(d, route, 1_000n) as never);
   assert.ok(leg);
   const instructions = parseRuntimeProgram(leg.program);
   // Both directions patch the same two words: amountRequired (68) and the
   // embedded callback script's own amount word (196 + 1).
-  assert.deepEqual(instructions[4]!.patches, [
+  assert.deepEqual(instructions[6]!.patches, [
     { offset: 68, reg: 0 },
     { offset: 197, reg: 0 },
   ]);
-  assert.deepEqual(instructions[5], { op: "load", reg: 1, offset: 32 });
+  assert.deepEqual(instructions[7], { op: "load", reg: 1, offset: 32 });
   // The debt word the callback reads is amount1Delta at offset 36 (0x24) of
   // algebraSwapCallback's head; the forward direction reads amount0Delta at 4.
   assert.ok(
-    instructions[4]!.data!.includes("0701000024"),
+    instructions[6]!.data!.includes("0701000024"),
     "the callback must read amount1Delta for one-for-zero",
   );
-  const forward = plugin.execution.buildRuntimeLeg(
+  const forward = buildRuntimeLeg(
     inputFor(d, routesFor(d)[0]!, 1_000n) as never,
   );
   assert.ok(forward);
   assert.ok(
-    parseRuntimeProgram(forward.program)[4]!.data!.includes("0701000004"),
+    parseRuntimeProgram(forward.program)[6]!.data!.includes("0701000004"),
     "the callback must read amount0Delta for zero-for-one",
   );
 });
@@ -756,12 +773,19 @@ test("buildFragment attaches the runtime program and refuses incompatible eviden
   assert.equal(node.target, d.pool);
   assert.equal(node.amount, 1_000n);
   assert.equal(typeof node.params.runtimeAmountProgram, "string");
-  // The quoted fragment carries the same runtime program the amount-free leg
-  // builds: nothing about the quoted output is baked into the node.
-  assert.equal(
+  // The shared settlement is retained; only quoted construction adds its
+  // actual-output floor. This must not silently alias the floor-free runtime.
+  assert.notEqual(
     node.params.runtimeAmountProgram,
-    plugin.execution.buildRuntimeLeg(input as never)!.program,
+    buildRuntimeLeg(input as never)!.program,
   );
+  const quotedInstructions = parseRuntimeProgram(String(node.params.runtimeAmountProgram));
+  assert.equal(quotedInstructions.filter(i => i.op === "call" && sameToken(i.target, route.tokenOut)).length, 2);
+  assert.deepEqual(quotedInstructions.slice(-3), [
+    { op: "math", kind: 1, dst: 2, a: 1, b: 5 },
+    { op: "constant", reg: 3, value: quoted.amountOut - 1n },
+    { op: "math", kind: 1, dst: 2, a: 2, b: 3 },
+  ]);
   assert.throws(
     () => plugin.execution.buildFragment({
       ...input,
@@ -771,6 +795,38 @@ test("buildFragment attaches the runtime program and refuses incompatible eviden
     } as never),
     /incompatible exact evidence/,
   );
+});
+
+function sameToken(left: string | undefined, right: string): boolean {
+  return left?.toLowerCase() === right.toLowerCase();
+}
+
+test("quoted execution accepts current static fee/config evidence rather than the old Ready values", () => {
+  const d = descriptor();
+  const input = inputFor(d, routesFor(d)[0]!, 1_000n);
+  const method = plugin.exact.methods(input as never)[1]!;
+  assert.equal(method.kind, "request-program");
+  if (method.kind !== "request-program") return;
+  const reply = answerFor({ facts: { ...STATIC_FEE_FACTS, lastFee: 600n, feeView: 600n,
+    pluginConfig: STATIC_FEE_CONFIG & ~4 } });
+  const quoted = method.program.decode({ programInput: input,
+    initialResults: method.program.buildRequests(input as never).map(reply), dependentEvidence: [] } as never);
+  assert(quoted.evidence.kind === "algebra-integral-single-range");
+  assert.notEqual(quoted.evidence.executedFee, d.executedFee.fee);
+  assert.notEqual(quoted.evidence.pluginConfig, d.executedFee.pluginConfig);
+  assert(quoted.amountOut > 0n);
+  assert.doesNotThrow(() => plugin.execution.buildFragment({ ...input, quotedAmountOut: quoted.amountOut,
+    minAmountOut: quoted.amountOut, exactEvidence: quoted.evidence } as never));
+});
+
+test("quoted construction rejects invalid minima/amounts without weakening quote identity", () => {
+  const q = quote(1_000n);
+  const input = { ...q.input, quotedAmountOut: q.quoted.amountOut, minAmountOut: q.quoted.amountOut,
+    exactEvidence: q.quoted.evidence };
+  for (const change of [{ minAmountOut: -1n }, { minAmountOut: q.quoted.amountOut + 1n },
+    { amountIn: 0n }, { amountIn: 1n << 255n }, { exactEvidence: { ...q.quoted.evidence, tokenOut: FOREIGN_POOL } }]) {
+    assert.throws(() => plugin.execution.buildFragment({ ...input, ...change } as never), /incompatible exact evidence/);
+  }
 });
 
 test("buildFragment refuses declined evidence and a plan never carries a zero quote", () => {
@@ -852,7 +908,8 @@ test("no central file owns an algebra-specific address, ABI or action id", () =>
   assert.equal(decision.status, "verified");
   assert.ok(plugin.discovery.sources.includes("factory-log"));
   assert.equal(typeof plugin.discovery.nominate?.nominate, "function");
-  assert.equal(typeof plugin.discovery.reverseBinding?.reverseBinding, "function");
+  assert(plugin.discovery.reverseBinding?.kind === "implementation");
+  assert.equal(typeof plugin.discovery.reverseBinding.reverseBinding, "function");
 });
 
 test("fixture answer requests are the family's own declaration, not a central table", () => {

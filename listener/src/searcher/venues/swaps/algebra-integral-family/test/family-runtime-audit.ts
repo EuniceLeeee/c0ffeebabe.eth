@@ -81,6 +81,7 @@ for (const instance of MEASURED_INSTANCES) {
           throw new Error(`route ${route.direction} produced no quote`);
         }
         quoted += result.amountOut;
+        assert(plugin.execution.buildRuntimeLeg, "runtime execution must be implemented");
         const leg = plugin.execution.buildRuntimeLeg(input as never);
         if (leg === null || leg.program.length <= 2) {
           throw new Error(`route ${route.direction} produced no runtime leg`);

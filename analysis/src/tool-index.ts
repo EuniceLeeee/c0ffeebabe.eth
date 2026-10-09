@@ -128,6 +128,7 @@ const CURATED: Record<string, Curated> = {
   "listener:searcher:forkreuse": meta("replay", ["block-scan", "pinned-replay", "closed-loop"], "fork", "Fork gate for one explicit closed-loop fixture.", 95),
   "listener:searcher:planner": meta("test", ["planner", "path", "replay"], "zero-cu", "Planner and replay regression suite.", 80),
   "listener:searcher:protocol-legs": meta("test", ["protocol", "adapter", "execution"], "zero-cu", "Protocol-leg regression suite.", 80),
+  "listener:searcher:algebra-quoter-historical": meta("analysis", ["algebra", "historical", "strict", "exact-quote"], "archive-rpc", "Bounded receipt-driven production lifecycle and same-state Algebra Quoter diagnostic; no Ready publication, swap execution or performance verdict.", 80),
   "listener:searcher:taxonomy": meta("test", ["classification", "taxonomy"], "zero-cu", "Strategy/edge taxonomy regression suite.", 80),
   "listener:benchmark:effective-update": meta("analysis", ["benchmark", "stage-timing", "effective-update"], "archive-rpc", "Time isolated per-head production effective updates, excluding predecessor table setup; not live acceptance.", 90),
   "listener:benchmark:sim-amount": meta("analysis", ["benchmark", "stage-timing", "sim-sizing"], "archive-rpc", "Time the actual live planner/sim-sizing stage and drain after natural enumeration; read-only historical RPC, no signing or broadcast.", 90),

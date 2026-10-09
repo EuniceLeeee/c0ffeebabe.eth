@@ -9,6 +9,7 @@ import type { CanonicalSource } from "../../adapter-request-program.js";
 import { ALGEBRA_PLUGIN_DYNAMIC_FEE_FLAG } from "./abi.js";
 import { canonicalAddress, sameAddress } from "./codec.js";
 import { quoteAlgebraExactInput } from "./math.js";
+import { algebraQuoterProgram, algebraQuoterQuote } from "./quoter-exact.js";
 import {
   algebraBoundTick,
   algebraPriceStateRequests,
@@ -20,6 +21,7 @@ import type {
   AlgebraIntegralDescriptor,
   AlgebraIntegralExactEvidence,
   AlgebraIntegralRoute,
+  AlgebraStaticExactEvidence,
 } from "./types.js";
 
 type AlgebraExactInput = ExactQuoteInput<AlgebraIntegralDescriptor, AlgebraIntegralRoute>;
@@ -35,7 +37,7 @@ type AlgebraExactInput = ExactQuoteInput<AlgebraIntegralDescriptor, AlgebraInteg
 const program: ExactRequestProgram<
   AlgebraIntegralDescriptor,
   AlgebraIntegralRoute,
-  AlgebraIntegralExactEvidence
+  AlgebraStaticExactEvidence
 > = {
   requirements: () => ({ transports: ["eth-call"] }),
   buildRequests(input) {
@@ -69,10 +71,14 @@ export const algebraIntegralExact = {
       "algebra-local-zero",
       (zeroInput) => {
         assertRoute(zeroInput.descriptor, zeroInput.route);
+        if (zeroInput.descriptor.executedFee.kind === "cypher-bound-quoter") return algebraQuoterQuote(zeroInput, 0n, 0n);
         return declinedQuote(zeroInput, "zero input");
       },
     ),
-    Object.freeze({
+    ...(input.descriptor.executedFee.kind === "cypher-bound-quoter" ? [Object.freeze({
+      id: "algebra-bound-quoter", kind: "request-program" as const,
+      chainAmountQuote: true as const, program: algebraQuoterProgram,
+    })] : [Object.freeze({
       id: "algebra-single-range-state",
       kind: "request-program" as const,
       stateOnlyReads: true as const,
@@ -85,20 +91,22 @@ export const algebraIntegralExact = {
           "algebra-integral quotes model a single in-range step and publish no shared V3 trial cell",
       },
       program,
-    }),
+    })]),
   ]),
-  cacheCompatibilityProjection: ({ descriptor, route, executor }) => ({
+  cacheCompatibilityProjection: ({ descriptor, route, executor, transactionOrigin }) => ({
     pool: descriptor.pool,
     tokenIn: route.tokenIn,
     tokenOut: route.tokenOut,
     tickSpacing: descriptor.tickSpacing,
     feeBinding: descriptor.executedFee.kind,
     plugin: descriptor.executedFee.plugin,
+    ...(descriptor.executedFee.kind === "cypher-bound-quoter" ? { quoterBinding: { ...descriptor.executedFee.quoterBinding } } : {}),
     factoryBinding: {
       factory: descriptor.factoryBinding.factory,
       reversePool: descriptor.factoryBinding.reversePool,
     },
     caller: canonicalAddress(executor),
+    transactionOrigin: transactionOrigin === undefined ? null : canonicalAddress(transactionOrigin),
   }),
 } satisfies ExactQuoteSemantics<
   AlgebraIntegralDescriptor,
@@ -149,7 +157,7 @@ function declinedQuote(
   state?: AlgebraPriceState,
 ): {
   readonly amountOut: bigint;
-  readonly evidence: AlgebraIntegralExactEvidence;
+  readonly evidence: AlgebraStaticExactEvidence;
 } {
   return Object.freeze({
     amountOut: 0n,
@@ -169,7 +177,7 @@ function evidence(
     readonly sqrtPriceX96After: bigint;
     readonly declinedReason: string | null;
   },
-): AlgebraIntegralExactEvidence {
+): AlgebraStaticExactEvidence {
   const boundTick = state === undefined
     ? 0
     : algebraBoundTick(state, input.route.direction);

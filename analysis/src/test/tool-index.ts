@@ -82,6 +82,14 @@ test("manual production-stage benchmarks declare archive RPC cost, not zero-CU o
   }
 });
 
+test("Algebra historical quote probe declares real RPC cost without claiming Ready or execution acceptance", () => {
+  const selected = selectTools(discoverToolIndex(repoRoot), ["algebra", "historical", "exact-quote"]);
+  assert.equal(selected[0]?.id, "listener:searcher:algebra-quoter-historical");
+  assert.equal(selected[0]?.cost, "archive-rpc");
+  assert.equal(selected[0]?.capabilities.includes("live-window"), false);
+  assert.equal(selected[0]?.capabilities.includes("execution"), false);
+});
+
 test("AppleDouble metadata is ignored without hiding an ordinary orphan CLI", () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "mev-tool-index-"));
   try {

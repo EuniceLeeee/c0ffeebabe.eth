@@ -42,9 +42,21 @@ type RuntimeInput = Pick<
 const AMOUNT_REQUIRED_OFFSET = 68;
 const CALLBACK_FIELD2_OFFSET = 132;
 const OUTGOING_OFFSET = 4 + 5 * 32 + 32; // swap's dynamic bytes content
+const ERC20_BALANCE_INTERFACE = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
+]);
 
 export function buildAlgebraIntegralRuntimeLeg(
   input: RuntimeInput,
+): RuntimeAmountLeg {
+  // Output measurement/next-hop sizing remains owned by the central runtime
+  // flow. This entry must never read an off-chain amount or Exact evidence.
+  return buildAlgebraIntegralLeg(input);
+}
+
+function buildAlgebraIntegralLeg(
+  input: RuntimeInput,
+  minAmountOut?: bigint,
 ): RuntimeAmountLeg {
   const { descriptor: d, route: r } = input;
   const expected = algebraIntegralRoutes.project({ descriptor: d })
@@ -79,11 +91,16 @@ export function buildAlgebraIntegralRuntimeLeg(
 
   const zeroForOne = r.direction === "zero-for-one";
   const payment = runtimeCallbackPayment(r.tokenIn, d.pool, zeroForOne ? 4 : 36);
+  const balance = ERC20_BALANCE_INTERFACE.encodeFunctionData("balanceOf", [executor]);
   const program = new RuntimeAmountProgram()
     // amountRequired is signed. A high bit must never turn exact-input into
     // exact-output: the pool reads a negative amount as an output request.
     .constant(1, 255n).math("shr", 2, 0, 1).constant(3, 0n).equal(2, 3)
-    .call(
+    .call(r.tokenIn, balance, { static: true }).load(4, 0);
+  if (minAmountOut !== undefined) {
+    program.call(r.tokenOut, balance, { static: true }).load(5, 0);
+  }
+  program.call(
       d.pool,
       ALGEBRA_POOL_INTERFACE.encodeFunctionData("swap", [
         executor,
@@ -101,14 +118,21 @@ export function buildAlgebraIntegralRuntimeLeg(
           { offset: AMOUNT_REQUIRED_OFFSET, reg: 0 },
           { offset: OUTGOING_OFFSET + payment.limitOffset, reg: 0 },
         ],
-        callback: { incomingOffset: 132, outgoingOffset: OUTGOING_OFFSET },
+        callback: { incomingOffset: CALLBACK_FIELD2_OFFSET, outgoingOffset: OUTGOING_OFFSET },
       },
     )
-    // The pool returns (amount0, amount1). The signed input delta is the word
-    // the swap direction consumes: partial fills are legal, but the input the
-    // pool took must stay within this leg's amount (an underflow fails closed).
-    .load(1, zeroForOne ? 0 : 32)
-    .math("sub", 2, 0, 1);
+    // A pool may legally stop at its price limit, but this execution contract
+    // requires full exact-input consumption. Check both the returned input
+    // delta and the actual executor debit; a fabricated return is not payment.
+    .load(1, zeroForOne ? 0 : 32).equal(1, 0)
+    .call(r.tokenIn, balance, { static: true }).load(1, 0)
+    .math("sub", 2, 4, 1).equal(2, 0);
+  if (minAmountOut !== undefined) {
+    // Checked subtraction enforces the quoted minimum against NEW receipts.
+    // Neither a nominal returned output nor pre-existing inventory can pay it.
+    program.call(r.tokenOut, balance, { static: true }).load(1, 0)
+      .math("sub", 2, 1, 5).constant(3, minAmountOut).math("sub", 2, 2, 3);
+  }
   return { actionAdapterId: ALGEBRA_INTEGRAL_ADAPTER_ID, program: ethers.hexlify(program.bytes()) };
 }
 
@@ -122,7 +146,7 @@ export const algebraIntegralExecution = {
   }),
   buildFragment(input) {
     assertExecutionEvidence(input);
-    const leg = buildAlgebraIntegralRuntimeLeg(input);
+    const leg = buildAlgebraIntegralLeg(input, input.minAmountOut);
     return Object.freeze({
       requirements: Object.freeze([]),
       nodes: Object.freeze([Object.freeze({
@@ -169,32 +193,59 @@ export const algebraIntegralExecution = {
 >;
 
 /**
- * The quoted fragment and the runtime leg are the same program, so the evidence
- * must describe exactly this pool, direction, amount and executed fee. Any
- * disagreement is a programming error, never a fallback to quoted amounts.
+ * Both paths share full-input settlement; the quoted path additionally carries
+ * its minimum receipt. The central issued-Exact boundary binds source/caller.
+ * Fee and pluginConfig in Ready describe admission-time state, not the current
+ * quote: comparing them here rejects a valid later static-fee update. Current
+ * quote semantics stay in Exact; execution enforces actual debit/receipt in EVM.
  */
 function assertExecutionEvidence(input: {
   readonly descriptor: AlgebraIntegralDescriptor;
   readonly route: AlgebraIntegralRoute;
   readonly amountIn: bigint;
   readonly quotedAmountOut: bigint;
+  readonly minAmountOut: bigint;
   readonly exactEvidence: AlgebraIntegralExactEvidence;
   readonly executor: string;
+  readonly transactionOrigin?: string;
 }): void {
   const evidence = input.exactEvidence;
   if (
-    evidence.kind !== "algebra-integral-single-range" ||
+    input.amountIn <= 0n ||
+    input.amountIn >= (1n << 255n) ||
+    input.minAmountOut < 0n ||
+    input.minAmountOut > input.quotedAmountOut ||
+    input.minAmountOut > ethers.MaxUint256 ||
     evidence.declinedReason !== null ||
     !sameAddress(evidence.pool, input.descriptor.pool) ||
     !sameAddress(evidence.tokenIn, input.route.tokenIn) ||
     !sameAddress(evidence.tokenOut, input.route.tokenOut) ||
     evidence.tickSpacing !== input.descriptor.tickSpacing ||
-    evidence.executedFee !== input.descriptor.executedFee.fee ||
-    evidence.pluginConfig !== input.descriptor.executedFee.pluginConfig ||
     evidence.amountIn !== input.amountIn ||
     evidence.amountOut !== input.quotedAmountOut ||
     evidence.amountOut <= 0n
   ) {
     throw new Error("algebra-integral execution received incompatible exact evidence");
   }
+  const fee = input.descriptor.executedFee;
+  if (evidence.kind === "algebra-integral-single-range" && fee.kind === "global-state-last-fee") {
+    return;
+  }
+  if (
+    evidence.kind === "algebra-integral-bound-quoter" &&
+    fee.kind === "cypher-bound-quoter" &&
+    evidence.binding === input.route.bindingRef.fingerprint &&
+    evidence.routeKey === input.route.routeKey &&
+    sameAddress(evidence.executor, input.executor) &&
+    input.transactionOrigin !== undefined &&
+    sameAddress(evidence.transactionOrigin, input.transactionOrigin) &&
+    sameAddress(evidence.quoter, fee.quoterBinding.quoter) &&
+    sameAddress(evidence.plugin, fee.plugin)
+  ) {
+    // reportedLastFee is a diagnostic globalState value, not the executed
+    // dynamic fee. Callback-revert quoting does not prove payment, full input
+    // consumption or afterSwap success; the shared EVM guards and final sim do.
+    return;
+  }
+  throw new Error("algebra-integral execution received incompatible exact evidence");
 }

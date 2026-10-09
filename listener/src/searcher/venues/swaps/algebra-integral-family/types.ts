@@ -31,19 +31,25 @@ export interface AlgebraFactoryBinding {
   readonly reversePool: string;
 }
 
-/**
- * The executed fee of a SUPPORTED instance is the pool's own
- * `globalState.lastFee`, which is exactly what `fee()` returns while the
- * `DYNAMIC_FEE` plugin-config bit is clear. Instances whose plugin config sets
- * that bit are refused by the identity variant, so a verified instance can
- * never carry a plugin-controlled fee.
- */
-export interface AlgebraExecutedFeeBinding {
-  readonly kind: "global-state-last-fee";
+interface AlgebraFeeBindingBase {
+  /** Historical lastFee, not an immutable price or a plugin override fee. */
   readonly fee: bigint;
   readonly pluginConfig: number;
   readonly plugin: string;
 }
+
+export interface AlgebraQuoterBinding {
+  readonly quoter: string;
+  readonly quoterCodeHash: string;
+  readonly poolDeployer: string;
+  readonly pluginCodeHash: string;
+  readonly pluginFactory: string;
+}
+
+export type AlgebraExecutedFeeBinding = AlgebraFeeBindingBase & (
+  | { readonly kind: "global-state-last-fee" }
+  | { readonly kind: "cypher-bound-quoter"; readonly quoterBinding: AlgebraQuoterBinding }
+);
 
 export interface AlgebraIntegralIdentityFacts {
   readonly pool: string;
@@ -95,7 +101,9 @@ export interface AlgebraIntegralPricingSnapshot {
   readonly sqrtPriceX96: bigint;
   readonly tick: number;
   readonly lastFee: bigint;
-  readonly executedFee: bigint;
+  readonly executedFee: bigint | null;
+  /** fee() is a raw hint only for plugin variants; Exact executes the Quoter. */
+  readonly rawFeeView: bigint;
   readonly pluginConfig: number;
   readonly communityFee: number;
   readonly unlocked: boolean;
@@ -106,7 +114,7 @@ export interface AlgebraIntegralPricingSnapshot {
   readonly inactiveReason: string | null;
 }
 
-export interface AlgebraIntegralExactEvidence {
+export interface AlgebraStaticExactEvidence {
   readonly kind: "algebra-integral-single-range";
   readonly source: CanonicalSource;
   readonly pool: string;
@@ -126,9 +134,32 @@ export interface AlgebraIntegralExactEvidence {
   readonly declinedReason: string | null;
 }
 
+export interface AlgebraQuoterExactEvidence {
+  readonly kind: "algebra-integral-bound-quoter";
+  readonly source: CanonicalSource;
+  readonly pool: string;
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly tickSpacing: number;
+  readonly binding: string;
+  readonly routeKey: string;
+  readonly executor: string;
+  readonly transactionOrigin: string;
+  readonly quoter: string;
+  readonly plugin: string;
+  readonly amountIn: bigint;
+  readonly amountOut: bigint;
+  /** The Quoter returns globalState.lastFee, NOT the beforeSwap override. */
+  readonly reportedLastFee: bigint;
+  readonly declinedReason: string | null;
+}
+
+export type AlgebraIntegralExactEvidence = AlgebraStaticExactEvidence | AlgebraQuoterExactEvidence;
+
 /** Phase 1 — the pool's own static and single-slot surfaces at the cutoff. */
 export interface AlgebraPoolStaticEvidence {
   readonly phase: "pool-static";
+  readonly source: CanonicalSource;
   readonly factory: string;
   readonly token0: string;
   readonly token1: string;
@@ -147,6 +178,8 @@ export interface AlgebraReverseBindingEvidence
   extends Omit<AlgebraPoolStaticEvidence, "phase"> {
   readonly phase: "reverse-binding";
   readonly reversePool: string;
+  readonly quoterBinding?: AlgebraQuoterBinding;
+  readonly unsupportedQuoterReason?: string;
 }
 
 export type AlgebraIntegralIdentityEvidence =

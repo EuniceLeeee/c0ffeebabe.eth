@@ -4,7 +4,7 @@
   "workspace": "/opt/mev-cloud/family-runtime-20261007",
   "branch": "codex/family-runtime-actual-20261007",
   "baseCommit": "bba7e01fda781093a2d176f6305b120451dd41fc",
-  "revisionParent": "b3cc263d2f0b46a6c46eef52833f4c28c3d78497",
+  "revisionParent": "e2fff0bf6ab995bd7123c5e07a705028b797cf47",
   "latestUserOrder": [
     "independently accept the integrated four Families for correctness AND latency",
     "remaining authorized Set/DODO/xWin/Curve/Balancer V3 Hook/Ekubo/Frax variants",
@@ -93,12 +93,12 @@
       "strict-production-family-declarations PASS",
       "git diff --check PASS"
     ],
-    "limits": "synthetic transport and source snapshot checks do not prove historical admission, EVM receipts, or cloud timing"
+    "limits": "synthetic transport and source snapshot checks do not prove historical EVM receipts or cloud timing; the separate Algebra cloud RPC probe below proves only its explicitly limited lifecycle/Exact claim"
   },
   "remaining": {
     "yieldBasisLt": "current-source historical strict/Ready/effective and measured same-state dual receipts, then representative performance; new local regressions do not replace these gates",
     "compoundCToken": "selectively revalidate affected old view-only identity evidence on a Ready copy; current-source historical integration and measured same-state dual receipts, then representative performance",
-    "algebraIntegral": "saved Ready proves target nomination and dynamic-plugin rejection, not a discovery omission; dynamic plugin fee model remains unsupported pending implementation and same-state evidence",
+    "algebraIntegral": "bound Cypher Quoter branch implemented; two receipt-driven production lifecycle/Exact samples now resolve. Current-source Ready/Graph/production effective, real same-N quoted/runtime receipts, other intended instances and representative performance remain incomplete",
     "allFour": "current-source historical strict/Ready/Graph/effective/dual receipts and representative-load effective/sim timing remain incomplete"
   },
   "algebraSourceFinding": {
@@ -107,7 +107,7 @@
     "url": "https://etherscan.io/address/0xe5e0235245E3C05f66447a513c4e4e673805964b#code",
     "downloadSha256": "5b25643dd608e254d36024c41dfeb429398abdd5119a50b5b895ef0b1b47a745",
     "finding": "beforeSwap performs a security check, writes a timepoint, optionally computes dynamic fee, and applies a direction-dependent sliding factor; getCurrentFee alone does not execute that path",
-    "limit": "public verified source inspection is not fresh historical bytecode/state binding or proof of supported execution; no rejection gate was removed"
+    "limit": "initial public-source inspection alone was not authority; the later bound-code implementation and historical lifecycle results are recorded separately below; real swap settlement is still unverified"
   },
   "algebraQuoterLead": {
     "officialDeploymentPage": "https://docs.cyphereth.com/docs/contracts/mainnet",
@@ -116,8 +116,80 @@
     "publicSource": "https://etherscan.io/address/0x02f22D58d161d1C291ABfe88764d84120f20F723#code",
     "downloadSha256": "e7c521e28283b4823786be97897627b0e01867b0960f21d55d0a67f549ad6cf5",
     "finding": "quoteExactInputSingle invokes the pool swap, including plugin fee path, and decodes callback output; returned uint16 fee is globalState fee, not necessarily the plugin override fee",
-    "notYetVerified": "historical deployment bytecode/state; factory/poolDeployer and CREATE2 target binding; caller/security behavior; partial input consumption and tick boundaries; same-state quote versus actual receipt",
-    "claim": "read-only public-source implementation lead, not an admission authority or evidence that dynamic-plugin support is complete; existing rejection remains"
+    "notYetVerified": "real swap payment, full-input settlement and post-swap Hook behavior; same-state quote versus actual receipt; broader instances/security states/tick boundaries; Ready/effective and performance",
+    "claim": "initial lead subsequently implemented with reverse/code/CREATE2 guards; does not by itself establish complete Family acceptance"
+  },
+  "algebraIntegral": {
+    "change": "preserve static single-range model; add a Cypher compiled-plugin/Quoter bound amount-sensitive branch, each-block effective refresh, full-input settlement and actual-output floor guards",
+    "discovery": "central discovery unchanged: old Ready already nominated the targets; original handoff discovery diagnosis was contradicted by saved evidence",
+    "identity": "factory reverse identity, Quoter/factory/poolDeployer binding, CREATE2 target, compiled plugin immutable slots and current plugin/Quoter code; not a pool address allowlist",
+    "quoteSemantics": "Quoter executes the plugin swap path; reportedLastFee is diagnostic, not an overrideFee. Callback-revert output does not prove payment, full input consumption, output receipt or afterSwap success",
+    "requestCost": "dynamic positive Exact: four logical items in one declared round (amount call + pool plugin + plugin code + Quoter code); amount-sensitive, not state-only or cross-block cached. This is not wall-clock performance",
+    "execution": "runtime and quoted reject partial input by both returned delta and actual input debit; quoted checks output delta rather than old inventory. Existing callback authority/debt/signed bounds/rollback retained; no off-chain Exact during runtime construction",
+    "executionCost": "runtime adds two in-transaction balance reads; quoted adds four. Fresh historical gas and stage latency NOT RUN",
+    "localChecks": {
+      "familyContractsDynamicCentralExecutionEvidenceAndRefresh": "58/58 PASS on cloud-matching local snapshot (includes parent and two refresh/caller subtests)",
+      "actualBotVmSyntheticProtocol": "16/16 PASS; not real historical pools",
+      "buildLive": "PASS on cloud-matching local snapshot; cloud build NOT RUN while other owner's live is active",
+      "extendedTestsTypecheck": "Algebra-owned diagnostics corrected; three unchanged shared baseline errors remain in blockscan-at-block-cli.ts and rebuild-read-provider.ts; NOT full typecheck pass"
+    },
+    "refreshRegression": {
+      "producer": "StrictCurrentRuntimeCoordinator + production buildEffectiveMids; synthetic transport, not historical/performance",
+      "passed": ["two dynamic directions refreshed without pool touch", "static Algebra and unrelated UniV2 retained", "failed quotes removed from price/coverage", "disabledEdgeIds preserved for the same run even after backend recovery", "new run recovers", "actual current strict runtime sends both directions from origin, not executor"],
+      "rawMid": "bootstrap references preserved; not recurring raw repricing",
+      "earlierDiagnostic": "old Reth materializeAdapterRequests lacks transaction-origin; retained as non-current-live-path diagnostic, not a failure of current main.ts strict runtime. No central runtime was changed",
+      "history": "earlier fixture/source-pin failures retained in logs/four-family-integration-20261009.CuNyy3/algebra-refresh-proposal-validation.json"
+    },
+    "testLogs": [
+      {"path": "logs/four-family-integration-20261009.CuNyy3/algebra-main-family-final-20261009.log", "sha256": "b707eeabf2b57173858560ea630585c98fb4f7426531cbf06e810e784f8c1024"},
+      {"path": "logs/four-family-integration-20261009.CuNyy3/algebra-main-botvm-final-20261009.log", "sha256": "475980387a281758ce05ab3fad8d5ddfd884298c80a0e5121973a6a44dc7e28e"},
+      {"path": "logs/four-family-integration-20261009.CuNyy3/algebra-build-live-final-20261009.log", "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"}
+    ],
+    "historicalProductionProbe": {
+      "implementation": "listener/src/searcher/venues/swaps/algebra-integral-family/test/historical-quoter.ts",
+      "pipeline": "receipt logs -> runStrictFamilyLifecycle -> createStrictCentralAdapterRuntime -> executeFamilyExactQuote; no hand-injected pool, Ready writes or swap execution",
+      "familySourceSha256": "f9835f1864f503d3e8bf7d5916f92e67178ed615ea3aba66e23f9b177c77de6c",
+      "definitionHash": "a109647fb54f9a605daa7efccbeb86850c9728efeeb58936ffc79e9324874e1b",
+      "memoDefinitionHash": "e1ead04779f57425fbd95273a8719e4de95ae7b8151c9725e2916c0bd0a05634",
+      "executor": "0x1000000000000000000000000000000000000002",
+      "transactionOrigin": "0x1000000000000000000000000000000000000001",
+      "callerCheck": "every physical Quoter call asserts from equals explicit origin, not executor; both are unsigned public test actors",
+      "samples": [
+        {"block": 26018534, "hash": "0xba26a0e4891db23e721b7d434b592622fb7842dc35b2dffc20bc1f7936a65a8a", "tx": "0x02175d2ac2e806bc6e1033cae640cf45509b7ded4a2e64ebcbba9c425afff5b7", "pool": "0x76a278bd71f566ee6ba2fe438f6099c8d8f98f43", "naturallyAdmittedInstances": 1, "resolvedQuotes": 4, "rpcRequests": 43, "evidence": "logs/four-family-integration-20261009.CuNyy3/algebra-origin-probe-N26018534-attempt01.json"},
+        {"block": 26030898, "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e", "tx": "0x006223028f05865619d07584c43cf67cb608705d04ebc732e15bf40869d030b8", "pool": "0x915fd34cadd63907b51eb64dddc2eadd114a0bed", "naturallyAdmittedInstances": 1, "resolvedQuotes": 4, "rpcRequests": 43, "evidence": "logs/four-family-integration-20261009.CuNyy3/algebra-origin-probe-N26030898-attempt01.json"}
+      ],
+      "amounts": "both directions, original token delta and twice that delta; reverse uses original output as new input, not production effective P",
+      "toolReceipt": "logs/four-family-integration-20261009.CuNyy3/algebra-production-probe-selection-v2.json",
+      "artifactSha256": {
+        "N26018534": "f63cf5e7bf15621cc8c2b5594e40f21e7cbf09362095d610d0cef3e3d77f6ac1",
+        "N26030898": "c0ef5972780afd6f2f3ff432cb8a16544cc8d70ff495691bed7269b9f0e635ed",
+        "toolReceipts": "e53e58022a7e0e56af7a609b6cabda75b46872d05369e59a99586b88aff43443"
+      },
+      "limits": "N-end state only. Not original precall, formal Ready/Graph/effective acceptance, real settlement, complete Hook safety, stage performance or adapter_merge_ready"
+    },
+    "claim": "implemented with local safety regressions and two real production lifecycle/Exact probes; full correctness and representative performance INCOMPLETE"
+  },
+  "threeFamilyDualHarness": {
+    "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+    "offlineChecks": "10/10 PASS on cloud-matching local snapshot",
+    "testLog": "logs/four-family-integration-20261009.CuNyy3/three-family-dual-contract-final-20261009.log",
+    "testLogSha256": "e56dbf89d9da886ca8a46885d5c2a196aa78ba5128fd377e110d20c8e184363e",
+    "historicalExecution": "NOT RUN; existing saved Ready and prices need current source/admission binding, including Compound effect-proof revalidation on a copy",
+    "scope": "fixed Kyber/YB/Compound real samples, same N state and environment, production Exact/quoted/runtime construction and real BotVM on owned local fork; actor-input-only funding, independent balance deltas and old-output-inventory negative controls",
+    "missingReference": "missing production effective amount is incomplete, never fabricated P; original redeemUnderlying mapped burned shares is not identical original-interface reproduction",
+    "limits": "thin correctness harness, not an alternative pricing/sizing scheduler; covers fixed original directions, not all supported Kyber directions; diagnostic durations are not performance acceptance"
+  },
+  "workingSnapshotVerification": {
+    "location": "/tmp/mev-bv2-package-check.tHHPn6/listener",
+    "sourceScope": "entire listener/src plus package.json, tsconfig.json and tsconfig.live.json; includes other owners' current uncommitted source without committing it",
+    "files": 1599,
+    "cloudAndLocalAggregateSha256": "d400d113045fabfd0dc0fd30fd76b31d83340707f9fd76df2851dab5b564c531",
+    "checks": ["build:live PASS", "Algebra 58/58 PASS", "three-family observation harness 10/10 PASS", "working-tree shared dual suite 72/72 PASS", "official capability check PASS"],
+    "log": "logs/four-family-integration-20261009.CuNyy3/algebra-working-source-regression-20261009.log",
+    "logSha256": "f53a663b381a908b14462072be4082a262fe5d6181f7dd0c3854bfa946800b85",
+    "cleanCommitSnapshot": "separately passed shared dual 71/71, strict-central runtime 167/167, lifecycle, composition and declaration gates; excludes others' dirty code from commit",
+    "cloudBuild": "NOT RUN: verified another owner's live2500 service active with MainPID 186051; local checks are not cloud performance",
+    "review": "non-author dynamic-model review identified no local blocker but required quiet-block coordinator and distinct-origin historical evidence; both evidence gaps addressed here. Actual historical swap settlement and performance still incomplete"
   },
   "performanceGate": {
     "required": "correctness plus live-source production-stage representative-load acceptance before delivery",

@@ -65,6 +65,7 @@ export function staticBindingProjection(
       kind: descriptor.executedFee.kind,
       plugin: descriptor.executedFee.plugin,
       pluginConfig: descriptor.executedFee.pluginConfig,
+      ...(descriptor.executedFee.kind === "cypher-bound-quoter" ? { quoterBinding: { ...descriptor.executedFee.quoterBinding } } : {}),
     },
   };
 }

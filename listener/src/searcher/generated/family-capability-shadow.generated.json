@@ -11518,7 +11518,7 @@
         "familyId": "swap:algebra-integral",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "e6575bd0a331f2799bc4bfabcc11478598263ddc3b62888d6e9fe7963c777a10",
+        "contentHash": "43b7fb7a6445373a12e92f576369d21fd4880184f582c50452b961b7cef134f4",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -11531,6 +11531,8 @@
           "src/searcher/venues/swaps/algebra-integral-family/codec.ts",
           "src/searcher/venues/swaps/algebra-integral-family/manifest.ts",
           "src/searcher/venues/swaps/algebra-integral-family/math.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/quoter-exact.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/quoter-model.ts",
           "src/searcher/venues/swaps/algebra-integral-family/state.ts"
         ],
         "provenanceCommit": null
@@ -11551,7 +11553,7 @@
         "familyId": "swap:algebra-integral",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "be34358d85f20c13df6106c75680829695c7ae49e5c814b0ff77bd9ed406fbaf",
+        "contentHash": "a0a6d471b686978d9e49da90d76b125a3cc85faf8d136246d078da91fd0c5d88",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -11608,7 +11610,7 @@
         "familyId": "swap:algebra-integral",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "f1a2d0a7970da02b66b8af3ffc5cf89c102b60370498f54e18152e58ccec5b54",
+        "contentHash": "fa2e99997844a424c77caeb53183494df7f5e63ed6c6d4949bec536977c0c37a",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -11617,7 +11619,8 @@
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/swaps/algebra-integral-family/abi.ts",
           "src/searcher/venues/swaps/algebra-integral-family/codec.ts",
-          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/quoter-model.ts"
         ],
         "provenanceCommit": null
       },
@@ -11637,7 +11640,7 @@
         "familyId": "swap:algebra-integral",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "5df32d82ed3b78e0e446a965eee8a0645ca656c876bc813ec2ecbb0a5cddaccc",
+        "contentHash": "3b683944afea43fe28d84ef42152ca8eea6a591a6db3e4fc75b5015fb8d89d42",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
@@ -11664,7 +11667,7 @@
         "familyId": "swap:algebra-integral",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "9b64c06601a2fae7f15f6d2311aff7f2ddb81f92850a479a5e53e9428f56bf55",
+        "contentHash": "caac59640abe88671dca6508bd4e193b58f2d68f0890b775218d52fac5f6ecd3",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -11683,6 +11686,7 @@
           "src/searcher/venues/swaps/algebra-integral-family/instance.ts",
           "src/searcher/venues/swaps/algebra-integral-family/manifest.ts",
           "src/searcher/venues/swaps/algebra-integral-family/math.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/quoter-model.ts",
           "src/searcher/venues/swaps/algebra-integral-family/state.ts",
           "src/searcher/venues/swaps/blockscan-state-shared.ts"
         ],
@@ -11704,7 +11708,7 @@
         "familyId": "swap:algebra-integral",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "6bb2e9c7e77e3440d0237e134a53b69dcd4393859a3d06d6fbf7d4848ffb1842",
+        "contentHash": "3bea25de85485513582378e7db4443ee3472ac85dae97863634f9bffaedbaed2",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
@@ -13239,5 +13243,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "7054726ad39c62318504fa471de2f232cffb2e3d64e52670b39dd55b9cc08059"
+  "artifactHash": "200c42d90eac932bb901e98f2dd220fa7a43cbb384366cb1a501af1111d7e9bb"
 }
