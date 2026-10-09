@@ -24,6 +24,12 @@ const defaultDisabledSources = new Set([
   "balancer-v3.production.ts", "ekubo.production.ts", "fluid-credit.production.ts",
   "set-redemption.production.ts",
   "balancer-v1.production.ts", "balancer-v2.production.ts", "badger-sett-withdraw.production.ts",
+  // DeepSeek four-family branch: registered with enabled:false so the production
+  // default enabled set is unchanged. Acceptance runs opt in per run via the env key.
+  "compound-ctoken.production.ts",
+  "algebra-integral.production.ts",
+  "kyberswap-elastic.production.ts",
+  "yieldbasis-lt.production.ts",
 ]);
 for (const activation of PRODUCTION_FAMILY_ACTIVATIONS) {
   assert.equal(activation.envKey, "SEARCHER_FAMILY_" +

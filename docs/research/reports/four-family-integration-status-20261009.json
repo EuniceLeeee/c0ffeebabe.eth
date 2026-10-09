@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "status": "integration_checkpoint_not_adapter_acceptance",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "host": "mev-impl-c4d-20261002",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "fde9b8e2fd2377756f5dd868725880e964456a92",
+  "import": {
+    "sourceWorkspace": "/opt/mev-cloud/deepseek-four-families-20261008",
+    "sourceTip": "22e5180d93b86f90770dd1387a858ba6fe29a738",
+    "sourceBaseline": "8442bb0",
+    "selection": "Four Family directories, four production entries, minimal additions to two shared tests; no baseline-import dirty files and no old generated artifacts",
+    "sourceFilesMatchSourceTip": true,
+    "generatedArtifacts": "Official generator on the exact intended commit tree; working-tree generated artifacts separately retain pre-existing Uniswap V1 changes",
+    "unrelatedTrackedDiffSha256BeforeAndAfter": "a5441f65520df8ac65e1225ae1ed81c51168e4940c0c2790f0d590b848caf662",
+    "preserved": ["Uniswap V1 changes", "TX-set Ready changes", "Graph/checkpoint synchronization", "original Ready and handoff artifacts", "other running processes"],
+    "activation": "All four new entries remain disabled by default; 28 of 39 installed Families active"
+  },
+  "latestUserOrder": [
+    "Integrate four-family delivery; independently accept Yield Basis LT, KyberSwap Elastic and Compound V2 cToken and resolve Algebra",
+    "Remaining Set Core, DODO GSP, xWin/Curve/Balancer V3 Hook/Ekubo and Frax Custodian coverage",
+    "Balancer V2 rework completion and remaining measurements last; preserve all existing samples and failures"
+  ],
+  "offlineChecks": {
+    "host": "local Mac, isolated non-Git source snapshot; NOT fresh cloud or historical EVM execution",
+    "exactCommitTree": {
+      "productionBuild": "pass",
+      "fourFamilyContracts": {"pass": 115, "fail": 0},
+      "sharedDualExecution": {"pass": 71, "fail": 0},
+      "productionComposition": {"active": 28, "installed": 39, "exactCapabilities": 308},
+      "strictDeclarations": "pass",
+      "officialManifestCheck": "pass"
+    },
+    "cloudWorkingTreeSnapshotIncludingPreExistingDirty": {
+      "productionBuild": "pass",
+      "fourFamilyContracts": {"pass": 115, "fail": 0},
+      "sharedDualExecution": {"pass": 72, "fail": 0},
+      "productionComposition": {"active": 28, "installed": 39, "exactCapabilities": 308},
+      "strictDeclarations": "pass"
+    }
+  },
+  "algebraForensicCorrection": {
+    "conclusion": "The handoff assertion that the representative targets never entered the candidate set is contradicted by its own saved Ready files. No central discovery modification is justified by that assertion.",
+    "evidenceRoot": "/opt/mev-cloud/deepseek-four-families-20261008-handoff/acceptance",
+    "currentDefinitionHash": "1c2edaecab660eaa172ddd56832865b09a9a6ae51996ef6772cfe215f31b8fdb",
+    "currentDiscoveryDefinitionHash": "e0808fa9de8bd44e43464630b628d0c7bbcc517cc72916895c87bc8b739fc8fb",
+    "savedDefinitionHashesMatchCurrent": true,
+    "observations": [
+      {
+        "checkpoint": "alg-N26018534/ready.json",
+        "sha256": "91ca9c1287ce597b8b33458638bd08814f65f1a39f2539d41c0a5ecd26c56421",
+        "block": 26018534,
+        "blockHash": "0xba26a0e4891db23e721b7d434b592622fb7842dc35b2dffc20bc1f7936a65a8a",
+        "candidateCount": 20,
+        "retryableCount": 18,
+        "terminalRejectedCount": 2,
+        "target": "0x76a278bd71f566ee6ba2fe438f6099c8d8f98f43",
+        "tx": "0x02175d2ac2e806bc6e1033cae640cf45509b7ded4a2e64ebcbba9c425afff5b7",
+        "candidateKey": "7f1b1381a5eae8acac2079bfebcf3bcd51d07eadb1027d570217985b51a0fb9b",
+        "sourceKind": "pool-swap-log",
+        "logIndex": 442,
+        "status": "terminal-rejected",
+        "reason": "identity_rejected:identity-proof-rejected:chain-proven:algebra-factory-child-reverse-binding:algebra_plugin_dynamic_fee_unsupported"
+      },
+      {
+        "checkpoint": "alg-alg2/ready.json",
+        "sha256": "9191733dab643c38d98253b187d36998668748eb3d425e4847b4e35e370c9d3d",
+        "block": 26030898,
+        "blockHash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+        "target": "0x915fd34cadd63907b51eb64dddc2eadd114a0bed",
+        "tx": "0x006223028f05865619d07584c43cf67cb608705d04ebc732e15bf40869d030b8",
+        "candidateKey": "286f95f6e6501ecaacd60c83652c073d8133635ea3436f6de317348d74d9baeb",
+        "sourceKind": "pool-swap-log",
+        "logIndex": 704,
+        "status": "terminal-rejected",
+        "reason": "identity_rejected:identity-proof-rejected:chain-proven:algebra-factory-child-reverse-binding:algebra_plugin_dynamic_fee_unsupported"
+      }
+    ],
+    "localProductionDecoderCheck": "Saved receipt Swap log converts to the expected target via current candidatesFromLog; not a new rebuild or EVM run",
+    "canonicalReconciliation": {
+      "query": ["universe", "status"],
+      "toolId": "listener:searcher:universe-rebuild-status",
+      "manifest": "logs/four-family-integration-20261009.CuNyy3/status-tool-selection.json",
+      "executions": "Both saved checkpoints loaded successfully through tool-run; matches direct candidate/outcome joins",
+      "limitation": "Checkpoint records prove which decision was saved, not that all six targets were run or that the recorded plugin restriction is a complete protocol implementation"
+    },
+    "nextRequiredWork": "Actual dynamic-plugin quote/execution semantics and supported-variant evidence; do not admit with fee() alone or disguise Algebra as UniV3"
+  },
+  "pendingAcceptance": {
+    "compoundCToken": ["Independent quote/source/return-code audit", "Actual quoted/runtime same-state receipt evidence", "Target effective prices rather than unrelated graph totals", "Representative production-stage timing"],
+    "yieldBasisLT": ["Independent dependency and execution audit", "Target effective and actual same-state dual execution", "Representative production-stage timing"],
+    "kyberSwapElastic": ["Independent quote and execution audit", "Actual same-state runtime receipt evidence beyond construction", "Representative production-stage timing"],
+    "algebraIntegral": ["Dynamic-plugin support remains absent", "Positive strict/Graph/effective and actual dual-execution acceptance", "Representative production-stage timing"]
+  },
+  "independentReviewBlockers": [
+    "Kyber Exact token1-in dependent request program does not stop after its completed tick read; requires a real central-runtime regression",
+    "Yield Basis mutation subscriptions do not cover the external cryptopool/AMM dependencies used by production pricing",
+    "Compound redemption return code is not explicitly checked in either emitter; outer runtime guards must not be confused with Family-level behavior proof",
+    "Compound identity balanceOfUnderlying query is not actual redemption evidence; historical-dual currently tests construction rather than both actual executions"
+  ],
+  "performanceContract": {
+    "verdict": "NOT RUN; none of the four Families has passed representative performance acceptance",
+    "required": "Current live-stage scheduler only; representative background graph plus real target instances/directions, predeclared effective and sim budgets, three representative changing blocks repeated three times and unrelated/no-change control",
+    "boundaries": "effective: head reception to price publication plus drain; sim: production sizing start plus drain; setup separate",
+    "comparison": "For new Families, same background/config with target disabled versus enabled; preserve failures and workload/output/source/freshness details",
+    "limits": "No live launch, no 14400-block rescan, no concurrency-only or reduced-work pass, no long-term tail guarantee from nine samples",
+    "currentResourceCondition": "Another task owns an active live process on the VM; cloud build and benchmark not run concurrently",
+    "lastKnownRpcCondition": "A prior V2 attempt observed monthly-capacity HTTP429; no fresh four-family historical RPC success is asserted here"
+  },
+  "claims": {
+    "adapterFixed": false,
+    "adapterMergeReady": false,
+    "productionGapFixed": false,
+    "performanceAccepted": false,
+    "deployed": false,
+    "liveStarted": false,
+    "signedOrBroadcast": false
+  }
+}

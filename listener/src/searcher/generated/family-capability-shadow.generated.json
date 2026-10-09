@@ -4634,6 +4634,383 @@
     {
       "precision": "capability-exact",
       "identity": {
+        "familyId": "kyberswap-elastic",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "1a0a58542bba5d98a4d7bcc06e7f09d5508424d84f1c101d19f0455125b0a26d",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/codec.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/discovery.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/nomination.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/swaps/kyberswap-elastic-family/capture.ts",
+        "entryExport": "kyberswapElasticCapture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "kyberswap-elastic",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "kyberswap-elastic",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "dda4c17460c75f8244d7c0ad913463f95e652aaece13b4f7310ed80733a050dd",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/codec.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/nomination.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/swaps/kyberswap-elastic-family/discovery.ts",
+        "entryExport": "kyberswapElasticDiscovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "kyberswap-elastic",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "8b17be10e31abcb53b2a4cfebe3921116c95c53745c076605f691f25586f1a7d",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/solver/v3-math.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/codec.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/math.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/state.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/swaps/kyberswap-elastic-family/exact.ts",
+        "entryExport": "kyberswapElasticExact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "kyberswap-elastic",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "1bda7dd9c0e79f40d555a85be11370ee48ed251826a9a636727e0438fd8f615a",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/solver/v3-math.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/action.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/codec.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/swaps/kyberswap-elastic-family/execution.ts",
+        "entryExport": "kyberswapElasticExecution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/kyberswap-elastic-family/action.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "kyberswap-elastic",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "kyberswap-elastic",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "71641f88318153c285d8114b6de5689c7456ef4eeee5aec7dbc5a34f237a4804",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/solver/v3-math.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/codec.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/swaps/kyberswap-elastic-family/identity.ts",
+        "entryExport": "kyberswapElasticIdentity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "kyberswap-elastic",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "bc509cdfef34a3408e5bde88a8809095ffbf175604fe4ed7868904b50869ad09",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/codec.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/swaps/kyberswap-elastic-family/instance.ts",
+        "entryExport": "kyberswapElasticInstance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "kyberswap-elastic",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "c271890561a36e2febb33bb8c6661e499475cdf1cde140f9a536e4ed28268383",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/blockscan-multicall.ts",
+          "src/searcher/detector/blockscan-sizing-constants.ts",
+          "src/searcher/solver/v3-math.ts",
+          "src/searcher/strategy-taxonomy.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/blockscan-state-capability.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/route-immutable-binding.ts",
+          "src/searcher/venues/route-instance-identity.ts",
+          "src/searcher/venues/swaps/blockscan-state-shared.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/codec.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/math.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/state.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/swaps/kyberswap-elastic-family/pricing.ts",
+        "entryExport": "kyberswapElasticPricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "kyberswap-elastic",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "fae049ba0a8251764bc87578bc3f8b7cc1c8056768bbfe82737f0d2b62fe490f",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/codec.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/swaps/kyberswap-elastic-family/routes.ts",
+        "entryExport": "kyberswapElasticRoutes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "kyberswap-elastic",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "0867fc9899fd9b8ab385b5e98eaa292c00b3a04a3e02df16d791118084a00b01",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "runtime:node:fs@node-es2022-v1",
+          "runtime:node:path@node-es2022-v1",
+          "runtime:node:url@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/solver/v2-constant-product-math.ts",
+          "src/searcher/solver/v2-fee.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/landed-event-registry.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swap-observation.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/codec.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/v2-lineage.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": "src/searcher/venues/swaps/kyberswap-elastic-family/swap.ts",
+        "entryExport": "kyberswapElasticSwap",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
         "familyId": "mooniswap",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
@@ -5607,6 +5984,349 @@
       "precision": "capability-exact",
       "identity": {
         "familyId": "protocol:badger-sett-withdraw",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "abfd24bb4384bfcb32fd9c525b3cf9deb4bcbdea9f31b8e5a08d9dbc72c69718",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:compound-ctoken",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "4a81281bc9b1947279a553cdea01ab4bfbcf675dfaf95280d4bd176a36d0377e",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/strict-edge-collection-policy.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/abi.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/discovery.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/nomination.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/recent-log-lookup.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/protocols/compound-ctoken-family/capture.ts",
+        "entryExport": "compoundCTokenCapture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:compound-ctoken",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:compound-ctoken",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "c6a3f2e7a2156ef5221f7ffce548aa4b48822b253f89bf275909052d26c3c33e",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/strict-edge-collection-policy.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/abi.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/nomination.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/recent-log-lookup.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/protocols/compound-ctoken-family/discovery.ts",
+        "entryExport": "compoundCTokenDiscovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:compound-ctoken",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "1ebf10752abf32c7b1fbb12d6b5c3aaefd2d35ac3136aea32c1a2f95d3bf9141",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/abi.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/protocols/compound-ctoken-family/exact.ts",
+        "entryExport": "compoundCTokenExact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:compound-ctoken",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "5b3093194ba9c6ddbfe6286df2a92822779fb20179e8ddc61333b77e960f8ee2",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/abi.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/action.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/protocols/compound-ctoken-family/execution.ts",
+        "entryExport": "compoundCTokenExecution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/compound-ctoken-family/action.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:compound-ctoken",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:compound-ctoken",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "70ef92223340c068ab24819b78021d0d7a9d92e7df23720907d8cb0ed6160a04",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/abi.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/protocols/compound-ctoken-family/identity.ts",
+        "entryExport": "compoundCTokenIdentity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:compound-ctoken",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "b92e924af084ab0691bf4bc72a5f6abff676a45fc3a193a4102afd856b5efdd9",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/protocols/compound-ctoken-family/instance.ts",
+        "entryExport": "compoundCTokenInstance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:compound-ctoken",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "d9846c7808f395b3939a880d7ff437d87ee74dfce77ebc7f89dcab5d2badc1f8",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/abi.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/protocols/compound-ctoken-family/pricing.ts",
+        "entryExport": "compoundCTokenPricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:compound-ctoken",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "42ef80a9d8491671c094b811f8ebf6a3be64d8ad31c3f6dfa7876cb39bacdafd",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/protocols/compound-ctoken-family/routes.ts",
+        "entryExport": "compoundCTokenRoutes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:compound-ctoken",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
         "contentHash": "abfd24bb4384bfcb32fd9c525b3cf9deb4bcbdea9f31b8e5a08d9dbc72c69718",
@@ -10365,6 +11085,669 @@
     {
       "precision": "capability-exact",
       "identity": {
+        "familyId": "protocol:yieldbasis-lt",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "66f5c8f3d531b2222021202c6ddafcbdac125b463fde2f3bbb8a4a76af7e17c5",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/strict-edge-collection-policy.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/abi.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/codec.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/discovery.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/nomination.ts",
+          "src/searcher/venues/recent-log-lookup.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/protocols/yieldbasis-lt-family/capture.ts",
+        "entryExport": "yieldBasisLtCapture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yieldbasis-lt",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yieldbasis-lt",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "7e881f70850004ddd0ee63e183873e2f5082c854a1a3de36e0869659fbab046b",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/strict-edge-collection-policy.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/abi.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/codec.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/nomination.ts",
+          "src/searcher/venues/recent-log-lookup.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/protocols/yieldbasis-lt-family/discovery.ts",
+        "entryExport": "yieldBasisLtDiscovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yieldbasis-lt",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "2c20723f34746f40235801d5ed1c76cd4719e3d9cca45af0e335ae8b36da0d3d",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/abi.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/codec.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/protocols/yieldbasis-lt-family/exact.ts",
+        "entryExport": "yieldBasisLtExact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yieldbasis-lt",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "7c08474a2ad2d6fec66fb78f1fe3f421901dac5556b982658a5ecb967cdbcef8",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/abi.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/action.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/codec.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts",
+          "src/searcher/venues/runtime-execution.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/protocols/yieldbasis-lt-family/execution.ts",
+        "entryExport": "yieldBasisLtExecution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yieldbasis-lt-family/action.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yieldbasis-lt",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yieldbasis-lt",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "e42add8e1c430ca50289fceff12ea3a4b454ed77a721dee14d53752cf8b9f506",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/abi.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/codec.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/protocols/yieldbasis-lt-family/identity.ts",
+        "entryExport": "yieldBasisLtIdentity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yieldbasis-lt",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "0eb9e6f98dd450caf9e57be52100816ea009f1753ed0c8ba8fa4337c18a0f7cd",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/codec.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/protocols/yieldbasis-lt-family/instance.ts",
+        "entryExport": "yieldBasisLtInstance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yieldbasis-lt",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "c08211f0045859d1693eb7393c2a5972ebeada20320fe8601e17288698cb47f3",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/abi.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/codec.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/protocols/yieldbasis-lt-family/pricing.ts",
+        "entryExport": "yieldBasisLtPricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yieldbasis-lt",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "3d96fedfbc815b485ed131ef30dbfb2dea4bb694ce50ecbb752465f8b02da536",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/codec.ts",
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/protocols/yieldbasis-lt-family/routes.ts",
+        "entryExport": "yieldBasisLtRoutes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yieldbasis-lt",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "abfd24bb4384bfcb32fd9c525b3cf9deb4bcbdea9f31b8e5a08d9dbc72c69718",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "swap:algebra-integral",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "16b07533f85cfddb7b2a5b2e29921f4168857f9add563ee026f62d445a2266bd",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "src/searcher/strict-edge-collection-policy.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/recent-log-lookup.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/abi.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/codec.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/discovery.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/nomination.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/reverse-binding.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/swaps/algebra-integral-family/capture.ts",
+        "entryExport": "algebraIntegralCapture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "swap:algebra-integral",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "swap:algebra-integral",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "78e4df319faf1bc921b867e2b87fdc8c85d0e0fd2ff978d7d6f71cd383df0654",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "src/searcher/strict-edge-collection-policy.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/recent-log-lookup.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/abi.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/codec.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/nomination.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/reverse-binding.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/swaps/algebra-integral-family/discovery.ts",
+        "entryExport": "algebraIntegralDiscovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "swap:algebra-integral",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "e6575bd0a331f2799bc4bfabcc11478598263ddc3b62888d6e9fe7963c777a10",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/abi.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/codec.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/math.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/state.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/swaps/algebra-integral-family/exact.ts",
+        "entryExport": "algebraIntegralExact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "swap:algebra-integral",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "be34358d85f20c13df6106c75680829695c7ae49e5c814b0ff77bd9ed406fbaf",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/abi.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/action.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/codec.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/instance.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/routes.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/swaps/algebra-integral-family/execution.ts",
+        "entryExport": "algebraIntegralExecution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/algebra-integral-family/action.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "swap:algebra-integral",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "swap:algebra-integral",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "f1a2d0a7970da02b66b8af3ffc5cf89c102b60370498f54e18152e58ccec5b54",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/abi.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/codec.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/swaps/algebra-integral-family/identity.ts",
+        "entryExport": "algebraIntegralIdentity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "swap:algebra-integral",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "5df32d82ed3b78e0e446a965eee8a0645ca656c876bc813ec2ecbb0a5cddaccc",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "package:ethers@6.16.0",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/abi.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/codec.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/swaps/algebra-integral-family/instance.ts",
+        "entryExport": "algebraIntegralInstance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "swap:algebra-integral",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "9b64c06601a2fae7f15f6d2311aff7f2ddb81f92850a479a5e53e9428f56bf55",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/blockscan-multicall.ts",
+          "src/searcher/detector/blockscan-sizing-constants.ts",
+          "src/searcher/strategy-taxonomy.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/blockscan-state-capability.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/route-immutable-binding.ts",
+          "src/searcher/venues/route-instance-identity.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/abi.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/codec.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/instance.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/math.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/state.ts",
+          "src/searcher/venues/swaps/blockscan-state-shared.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/swaps/algebra-integral-family/pricing.ts",
+        "entryExport": "algebraIntegralPricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "swap:algebra-integral",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "6bb2e9c7e77e3440d0237e134a53b69dcd4393859a3d06d6fbf7d4848ffb1842",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/abi.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/codec.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/instance.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/swaps/algebra-integral-family/routes.ts",
+        "entryExport": "algebraIntegralRoutes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/algebra-integral-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "swap:algebra-integral",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "abfd24bb4384bfcb32fd9c525b3cf9deb4bcbdea9f31b8e5a08d9dbc72c69718",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
         "familyId": "univ2-standard",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
@@ -11853,5 +13236,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "9b70f7fcf4188de453e342ac2d64cba554ef0d16d7575eeb681e5c5f43700b59"
+  "artifactHash": "07b78ebb4318ca6bfb6d37368a318e27d128e4b155456da75a65a42cbc424fb1"
 }

@@ -23,6 +23,10 @@ import { UNIV4_FEE_HOOK_ADDRESS } from "../venues/swaps/univ4-fee-hook-family/ma
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
 import { descriptor as balancerV1Fixture } from "../venues/swaps/balancer-v1-family/test/fixtures.js";
 import { setup as balancerV2Fixture, fixture as balancerV2Responses } from "../venues/swaps/balancer-v2-family/test/fixtures.js";
+import { descriptor as compoundCTokenFixture } from "../venues/protocols/compound-ctoken-family/test/fixtures.js";
+import { descriptor as algebraIntegralFixture } from "../venues/swaps/algebra-integral-family/test/fixtures.js";
+import { descriptor as kyberswapElasticFixture } from "../venues/swaps/kyberswap-elastic-family/test/fixtures.js";
+import { descriptor as yieldBasisLtFixture } from "../venues/protocols/yieldbasis-lt-family/test/fixtures.js";
 
 
 const executor = ethers.getAddress("0x1000000000000000000000000000000000000002");
@@ -76,6 +80,16 @@ synthetic("protocol:badger-sett-withdraw", { binding: {
   strategyAdmin: "0x1000000000000000000000000000000000000009",
 } });
 
+// Algebra Integral: static-fee (plugin DYNAMIC_FEE clear) exact-input swap.
+// Synthetic descriptor only: no Ready/admission object is issued here.
+fixtures.push(algebraIntegralFixture());
+// Compound V2 cToken: registry-admitted share redemption (deepseek four-family branch).
+// Synthetic descriptor only: no Ready/admission object is issued here.
+fixtures.push(compoundCTokenFixture());
+fixtures.push(kyberswapElasticFixture());
+// Yield Basis LT: LevAMM-bound single-asset crypto redemption (deepseek four-family branch).
+// Synthetic descriptor only: no Ready/admission object is issued here.
+fixtures.push(yieldBasisLtFixture());
 const dFor = (id: string) => { const d = fixtures.find(d => d.familyId === id); assert(d, id); return d; };
 // Additional synthetic direction/variant fixtures are never written back to Ready.
 synthetic("protocol:erc4626", { asset: ADDR.USDC, verifiedDirections: { deposit: true, redeem: true } });
