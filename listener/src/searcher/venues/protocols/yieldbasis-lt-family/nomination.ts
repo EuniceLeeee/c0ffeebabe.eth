@@ -50,6 +50,9 @@ const fromTxSeed = createTxEvidenceNomination({
   opaqueLabels: OPAQUE_LABELS,
   callPatterns: CALL_PATTERNS,
   logPatterns: LOG_PATTERNS,
+  // Bind successful Withdraw evidence to this LT; a transaction may redeem
+  // several LTs, and its first matching call/log is not necessarily this one.
+  traceTransaction: false,
 });
 
 function matchesLabel(opaque: unknown): boolean {
@@ -116,7 +119,16 @@ export async function yieldBasisLtNominate(input: {
         const seeded = await fromTxSeed.nominate({
           nominations: Object.freeze([nomination]),
           source: input.source,
-          provider: input.provider,
+          provider: {
+            ...input.provider,
+            async getTransactionReceipt(hash) {
+              const receipt = await input.provider.getTransactionReceipt(hash);
+              return receipt === null ? null : {
+                ...receipt,
+                logs: receipt.logs.filter(log => lower(log.address) === lower(nomination.address)),
+              };
+            },
+          },
         });
         if (seeded.length > 0) {
           results.push(seeded[0]!);
@@ -133,7 +145,7 @@ export async function yieldBasisLtNominate(input: {
         address: lower(nomination.address),
         topics: [LT_WITHDRAW_TOPIC],
       });
-      if (hit === null) continue;
+      if (hit === null || lower(hit.address) !== lower(nomination.address)) continue;
       results.push(observationFromHit(hit, input.source));
     } catch {
       // One unreadable nomination must not block the next one.

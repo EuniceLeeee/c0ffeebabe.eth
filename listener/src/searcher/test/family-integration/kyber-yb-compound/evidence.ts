@@ -21,6 +21,29 @@ export const SAMPLES = {
 } as const;
 export type SampleKey = keyof typeof SAMPLES;
 export const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** EIP-7702 delegation designators are valid origin-account code, not an
+ * arbitrary contract sender. The harness preserves this code; it never executes
+ * or authorizes a delegation and never signs a transaction. */
+export function assertOriginAccountCode(code: string): void {
+  assert(code === "0x" || /^0xef0100[0-9a-f]{40}$/i.test(code),
+    "owner must have empty code or an exact EIP-7702 delegation designator");
+}
+
+/** A storage-access list can contain a proxy implementation slot. Overriding
+ * that slot may produce empty return data, which disproves the balance-slot
+ * candidate; it is not a successful observation or a transport failure. */
+export function matchesBalanceSlotProbe(data: string, expected: bigint): boolean {
+  return ethers.isHexString(data, 32) && BigInt(data) === expected;
+}
+
+/** Only a declared EVM revert from a local eth_call can disprove an injected
+ * storage-slot hypothesis. Transport, unknown server and upstream errors fail. */
+export function isLocalBalanceProbeRevert(error: unknown): boolean {
+  const e = error as { localCall?: unknown; rpcCode?: unknown; returnData?: unknown } | null;
+  return e instanceof Error && e.localCall === true && e.rpcCode === 3 && ethers.isHexString(e.returnData, true);
+}
+
 export const ERC20 = new ethers.Interface(["function balanceOf(address) view returns(uint256)",
   "function totalSupply() view returns(uint256)", "event Transfer(address indexed from,address indexed to,uint256 value)"]);
 

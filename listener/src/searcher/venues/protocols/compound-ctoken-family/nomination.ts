@@ -49,6 +49,9 @@ const fromTxSeed = createTxEvidenceNomination({
   opaqueLabels: OPAQUE_LABELS,
   callPatterns: CALL_PATTERNS,
   logPatterns: LOG_PATTERNS,
+  // Successful redemptions emit Redeem. A transaction-wide first matching
+  // call may belong to another market (or a reverted subtree), not this seed.
+  traceTransaction: false,
 });
 
 function matchesLabel(opaque: unknown): boolean {
@@ -115,7 +118,16 @@ export async function compoundCTokenNominate(input: {
         const seeded = await fromTxSeed.nominate({
           nominations: Object.freeze([nomination]),
           source: input.source,
-          provider: input.provider,
+          provider: {
+            ...input.provider,
+            async getTransactionReceipt(hash) {
+              const receipt = await input.provider.getTransactionReceipt(hash);
+              return receipt === null ? null : {
+                ...receipt,
+                logs: receipt.logs.filter(log => lower(log.address) === lower(nomination.address)),
+              };
+            },
+          },
         });
         if (seeded.length > 0) {
           results.push(seeded[0]!);
@@ -132,7 +144,7 @@ export async function compoundCTokenNominate(input: {
         address: lower(nomination.address),
         topics: [CTOKEN_REDEEM_TOPIC],
       });
-      if (hit === null) continue;
+      if (hit === null || lower(hit.address) !== lower(nomination.address)) continue;
       results.push(observationFromHit(hit, input.source));
     } catch {
       // One unreadable nomination must not block the next one.

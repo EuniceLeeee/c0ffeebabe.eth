@@ -6006,7 +6006,7 @@
         "familyId": "protocol:compound-ctoken",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "c24c1c4e4e9426eebff44aec966ef5f85d40894d12232bbd6607b974046936ad",
+        "contentHash": "c83d3304a6ba111eb5a7fe1ee35c5ef41aa8f1a7f1e41596c15a5a38a7ff7d1e",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6066,7 +6066,7 @@
         "familyId": "protocol:compound-ctoken",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "b6c5173518294375ede74d3ac00341e4153553f526e5a23db1032203b86e002e",
+        "contentHash": "3fba06132c53cf5bf733ed75e3e8570d5591f18124cf0e6df10f4eedd7ef8027",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -11090,7 +11090,7 @@
         "familyId": "protocol:yieldbasis-lt",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "66f5c8f3d531b2222021202c6ddafcbdac125b463fde2f3bbb8a4a76af7e17c5",
+        "contentHash": "a5301c02bde4fa2070e34f1bb51cabeb12edf6cb2f39a2affcad731d47498e9b",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -11150,7 +11150,7 @@
         "familyId": "protocol:yieldbasis-lt",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "7e881f70850004ddd0ee63e183873e2f5082c854a1a3de36e0869659fbab046b",
+        "contentHash": "e3e921de69a8f321d5d64830a5a87eb4d8457825110b1fd42d3c8b9c79971769",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -13243,5 +13243,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "200c42d90eac932bb901e98f2dd220fa7a43cbb384366cb1a501af1111d7e9bb"
+  "artifactHash": "e94b346a722b81c80a392e472c4eca3f85ead65c217fd5557a07f6a2c702b228"
 }

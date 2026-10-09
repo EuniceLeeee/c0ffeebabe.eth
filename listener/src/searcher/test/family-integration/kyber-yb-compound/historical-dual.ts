@@ -28,7 +28,7 @@ import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from ".
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 import { assertHistoricalDiscoveryReceipt } from "../three-family/historical-input-observations.js";
 import { SAMPLES, ERC20, options, same, json, sha, word, observeBalance, assertDeltas, originalLeg,
-  assertReceipt, assertHeader, assertPriceInput, productionAmount, constructionGuard } from "./evidence.js";
+  assertReceipt, assertHeader, assertPriceInput, productionAmount, constructionGuard, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert } from "./evidence.js";
 
 const ROOT = fileURLToPath(new URL("../../../../../../", import.meta.url));
 type Overrides = Record<string, { code?: string; balance?: string; stateDiff?: Record<string, string> }>;
@@ -76,7 +76,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   // Exclusive creation happens before work, preserving every previous failure.
   const fd = openSync(resolve(args.out), "wx", 0o600), started = performance.now();
   const report: any = { schema: "kyber-yb-compound-same-n-dual/v1", result: "failed", family: sample.family,
-    claim: "fixed real direction(s), N-end/N environment, independent single-leg quote/quoted/runtime receipts only",
+    claim: "fixed real instances, both Kyber directions and original protocol directions, N-end/N environment, independent single-leg quote/quoted/runtime receipts only",
     originalPreCallParity: "NOT RUN", representativePerformance: "NOT RUN", samples: [], errors: [],
     safety: { signing: false, broadcast: false, minedBlocks: 0, protocolOverrides: false,
       mainExecutionFunding: "actor input only; existing input/output inventory preserved",
@@ -141,7 +141,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         body: JSON.stringify({ jsonrpc: "2.0", id, method, params }), signal: AbortSignal.any([abort.signal, AbortSignal.timeout(30_000)]) });
       assert(res.ok, `RPC HTTP ${res.status}`); const body = await res.json() as any;
       assert(body?.jsonrpc === "2.0" && body.id === id, "RPC response identity mismatch");
-      if (body.error) throw new Error(method + ": " + redact(body.error.message));
+      if (body.error) throw Object.assign(new Error(method + ": " + redact(body.error.message)), {
+        localCall: !upstream && method === "eth_call", rpcCode: body.error.code, returnData: body.error.data,
+      });
       assert(Object.hasOwn(body, "result")); return body.result;
     };
     stage = "canonical-original-evidence";
@@ -160,7 +162,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const call = (to: string, data: string, overrides: Overrides = {}) => rpc("eth_call", [{ from: owner, to, data }, pin, overrides]);
     const balance = async (token: string, holder: string, overrides: Overrides = {}) => BigInt(await call(token, ERC20.encodeFunctionData("balanceOf", [holder]), overrides));
     const headerCheck = async () => assertHeader(await rpc("eth_getBlockByNumber", ["latest", false]), header);
-    await headerCheck(); assert.equal(await rpc("eth_getCode", [owner, pin]), "0x", "owner must be EOA");
+    await headerCheck();
+    const ownerCode = await rpc("eth_getCode", [owner, pin]);
+    assertOriginAccountCode(ownerCode);
+    report.originAccount = { code: ownerCode, keccak256: ethers.keccak256(ownerCode), overridden: false };
     const executorCode = await rpc("eth_getCode", [executor, pin]);
     assert(executorCode === "0x" || same(executorCode, runtimeCode.code), "refuse replacing an unrelated actor contract");
     // Probe EVM opcodes, not only the header returned by the fork.
@@ -175,6 +180,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     finalChecks = async () => { checkFiles(); await headerCheck(); assert.deepEqual(await environment(), expectedEnvironment);
       assertHeader(await rpc("eth_getBlockByNumber", [ethers.toQuantity(source.number), false], true), header);
       assert.equal(await rpc("eth_getCode", [executor, pin]), executorCode);
+      assert.equal(await rpc("eth_getCode", [owner, pin]), ownerCode, "origin account code changed");
       for (const [token, initial] of baselines) assert.equal(await balance(token, executor), initial, "simulation persisted actor state"); };
     const cache = createAdapterFamilyExactQuoteCache(); cache.advanceState(source);
     const quoteReads: any[] = [];
@@ -199,8 +205,20 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         let valid = true;
         for (const probe of [717171717171n, 919191919193n]) {
           const o = { [token]: { stateDiff: { [key]: word(probe) } } };
-          // Any RPC/revert failure is retained, not silently treated as a successful probe.
-          if (await balance(token, executor, o) !== probe || await balance(token, protectedAccount, o) !== protectedBalance ||
+          // Fault-injecting a proxy/control slot may return empty data or revert.
+          // Neither is a valid balance slot. Retain that evidence; never absorb
+          // transport/unknown errors or a failure of an uninjected baseline.
+          let returned: string;
+          try { returned = await call(token, ERC20.encodeFunctionData("balanceOf", [executor]), o); }
+          catch (error) {
+            if (!isLocalBalanceProbeRevert(error)) throw error;
+            (report.balanceSlotCandidateChecks ??= []).push({ token, slot: key, probe, matched: false,
+              completion: "reverted", returnData: (error as { returnData: string }).returnData });
+            valid = false; break;
+          }
+          const matched = matchesBalanceSlotProbe(returned, probe);
+          (report.balanceSlotCandidateChecks ??= []).push({ token, slot: key, probe, returned, matched });
+          if (!matched || await balance(token, protectedAccount, o) !== protectedBalance ||
             await call(token, ERC20.encodeFunctionData("totalSupply"), o) !== supply) { valid = false; break; }
         }
         if (valid) matches.push(key);
@@ -211,13 +229,21 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       slots.set(token, matches[0]!); return matches[0]!;
     };
     let unmet = false;
+    const directions: { entry: typeof entries[number]; original: ReturnType<typeof originalLeg> | null; tokenIn: string; tokenOut: string }[] = [];
     for (const entry of entries) {
       const candidate = entry.memo.candidateSnapshot as any;
       assertHistoricalDiscoveryReceipt(await rpc("eth_getTransactionReceipt", [candidate.transactionHash]), candidate, source);
       const original = originalLeg(args.family, entry.instanceKey, entry.instance.descriptor, receipt, trace);
-      const routes = entry.instance.routes.filter(r => same(r.tokenIn, original.tokenIn) && same(r.tokenOut, original.tokenOut)); assert.equal(routes.length, 1);
+      directions.push({ entry, original, tokenIn: original.tokenIn, tokenOut: original.tokenOut });
+      if (args.family === "kyber") {
+        assert.equal(entry.instance.routes.length, 2, "fixed Kyber instance must project both directions");
+        directions.push({ entry, original: null, tokenIn: original.tokenOut, tokenOut: original.tokenIn });
+      }
+    }
+    for (const { entry, original, tokenIn, tokenOut } of directions) {
+      const routes = entry.instance.routes.filter(r => same(r.tokenIn, tokenIn) && same(r.tokenOut, tokenOut)); assert.equal(routes.length, 1);
       const route = entry.instance.routeHandles.filter(r => r.routeKey === routes[0]!.routeKey); assert.equal(route.length, 1);
-      const edges = graph.filter(e => e.instanceKey === entry.instance.instanceKey && same(e.tokenIn, original.tokenIn) && same(e.tokenOut, original.tokenOut)); assert.equal(edges.length, 1);
+      const edges = graph.filter(e => e.instanceKey === entry.instance.instanceKey && same(e.tokenIn, tokenIn) && same(e.tokenOut, tokenOut)); assert.equal(edges.length, 1);
       const edgeId = blockScanEdgeKey(edges[0]!);
       assert(saved.runtime.graph.edges.some((e: any) => blockScanEdgeKey(e) === edgeId), "saved production graph lacks target direction");
       assert(saved.runtime.pricing.effectiveMids?.rows instanceof Map && saved.runtime.pricing.mids instanceof Map);
@@ -225,7 +251,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       if (effective) assert.equal(effective.edgeId, edgeId);
       const p = productionAmount(effective, saved.runtime.pricing.mids.get(edgeId), edges[0], source, saved.runtime.generation);
       if (p.status === "unmet") unmet = true;
-      const row: any = { instance: entry.instanceKey, edgeId, original, productionReferenceGate: p, trials: [] }; report.samples.push(row);
+      const row: any = { instance: entry.instanceKey, edgeId, tokenIn, tokenOut, original,
+        directionEvidence: original ? "original transaction direction" : "opposite production Ready direction; not an original TX leg",
+        productionReferenceGate: p, trials: [] }; report.samples.push(row);
       const beforeBuild = { calls, ...guard.counts };
       const leg = guard.build(() => {
         const input = { family, route: route[0]!, source, executor, runtime: guard.runtime(runtime), runtimeEvidence: [], actionOwnership: catalog };
@@ -237,10 +265,13 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assert(leg, "runtime decline is not a pass; quoted fallback forbidden");
       assert.deepEqual({ calls, ...guard.counts }, beforeBuild);
       row.runtimeConstruction = { exactCalls: 0, quotedCalls: 0, rpcCalls: 0, quotedFallback: false, programHash: ethers.keccak256(leg.program) };
-      const pair = [original.tokenIn, original.tokenOut], keys = await Promise.all(pair.map(t => slotFor(t, entry.instanceKey)));
+      stage = "actor-balance-slot-proof";
+      const pair = [tokenIn, tokenOut], keys = await Promise.all(pair.map(t => slotFor(t, entry.instanceKey)));
       const base = await Promise.all(pair.map(t => balance(t, executor)));
       assert(pair.every(t => ![executor, owner].includes(t)) && ![executor, owner].includes(entry.instanceKey));
-      const trials: [string, bigint][] = p.status === "met" ? [["production-effective", p.amountIn], ["historical-input-at-N", original.amountIn]] : [["historical-input-at-N", original.amountIn]];
+      const trials: [string, bigint][] = p.status === "met" ? [["production-effective", p.amountIn]] : [];
+      if (original) trials.push(["historical-input-at-N", original.amountIn]);
+      else if (p.status === "met") trials.push(["twice-production-effective", p.amountIn * 2n]);
       report.preparationMs ??= performance.now() - started;
       for (const [label, amountIn] of trials) {
         const result: any = { label, amountIn, status: "failed", executions: [] }; row.trials.push(result);
@@ -253,14 +284,14 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           assert.equal(quote.amountIn, amountIn); assert(quote.amountOut > 0n); assert.deepEqual(quote.source, source);
           if (label === "production-effective" && p.status === "met") assert.equal(quote.amountOut, p.amountOut, "current Exact differs from production effective");
           result.quote = { amountOut: quote.amountOut, evidenceRefs: quote.evidenceRefs, reads: quoteReads.slice(readsBefore) };
-          result.originalTxComparison = { originalAmountOut: original.amountOut,
+          result.originalTxComparison = original ? { originalAmountOut: original.amountOut,
             signedDelta: label === "historical-input-at-N" ? quote.amountOut - original.amountOut : null,
-            verdict: original.comparison };
+            verdict: original.comparison } : { verdict: "opposite production direction; no original TX leg comparison" };
           const fragment = guard.quoted(() => buildFamilyExecutionFragment({ family, route: route[0]!, exact: quote,
             minAmountOut: quote.amountOut, executor, runtimeEvidence: [], actionOwnership: catalog }));
           assert.equal(fragment.status, "resolved"); if (fragment.status !== "resolved") throw new Error("quoted fragment unresolved");
           const scripts: [string, Uint8Array][] = [
-            ["quoted", concatBytes(...planFragmentNodes(fragment.fragment, original.tokenIn, amountIn).map(node => compilePlan(node, executor)))],
+            ["quoted", concatBytes(...planFragmentNodes(fragment.fragment, tokenIn, amountIn).map(node => compilePlan(node, executor)))],
             ["runtime", runtimeProgramScript(ethers.getBytes(leg.program), amountIn)],
           ];
           // Main trials inject input ONLY. A separate, fixed inventory control

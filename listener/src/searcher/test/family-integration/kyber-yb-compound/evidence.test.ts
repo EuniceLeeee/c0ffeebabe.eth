@@ -6,7 +6,7 @@ import { KYSWAP_POOL_INTERFACE as KYBER } from "../../../venues/swaps/kyberswap-
 import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-family/abi.js";
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
 import { options, SAMPLES, ERC20, assertHeader, assertPriceInput, productionAmount, originalLeg,
-  assertReceipt, observeBalance, assertDeltas, constructionGuard, word } from "./evidence.js";
+  assertReceipt, observeBalance, assertDeltas, constructionGuard, word, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert } from "./evidence.js";
 
 const actor = "0x1000000000000000000000000000000000000001";
 const asset = "0x1000000000000000000000000000000000000002";
@@ -18,6 +18,35 @@ const source = { number: Number(BigInt(header.number)), hash, generation: 7 };
 const event = (abi: ethers.Interface, name: string, args: unknown[], address: string) =>
   ({ address, ...abi.encodeEventLog(abi.getEvent(name)!, args), logIndex: "0x1" });
 const transfer = (instance: string, value: bigint) => event(ERC20, "Transfer", [instance, actor, value], asset);
+
+test("origin guard accepts EIP-7702 exactly, without accepting arbitrary contract code", () => {
+  assertOriginAccountCode("0x");
+  const delegated = "0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b";
+  assertOriginAccountCode(delegated);
+  assertOriginAccountCode(delegated.toUpperCase());
+  for (const code of ["0x00", "0x60006000f3", "0xef0100", delegated.slice(0, -2),
+    delegated + "00", delegated.replace("ef0100", "ef0101"), delegated.replace(/b$/, "z")]) {
+    assert.throws(() => assertOriginAccountCode(code));
+  }
+});
+
+test("only an exact ABI word with the injected balance proves a candidate storage slot", () => {
+  assert(matchesBalanceSlotProbe(word(717171717171n), 717171717171n));
+  for (const raw of ["0x", "0x00", "0x01", word(1n), "garbage", word(717171717171n) + "00"]) {
+    assert.equal(matchesBalanceSlotProbe(raw, 717171717171n), false);
+  }
+});
+
+test("probe failure classification never swallows transport, unknown, upstream or malformed errors", () => {
+  const revert = (fields = {}) => Object.assign(new Error("execution reverted"),
+    { localCall: true, rpcCode: 3, returnData: "0x", ...fields });
+  assert(isLocalBalanceProbeRevert(revert()));
+  assert(isLocalBalanceProbeRevert(revert({ returnData: "0x1234" })));
+  for (const error of [new Error("HTTP 429"), revert({ rpcCode: -32000 }), revert({ rpcCode: 429 }),
+    revert({ localCall: false }), revert({ returnData: undefined }), revert({ returnData: "not-hex" }),
+    revert({ returnData: "0x1" }), revert({ returnData: "0xabc" }),
+    { localCall: true, rpcCode: 3, returnData: "0x" }, null]) assert.equal(isLocalBalanceProbeRevert(error), false);
+});
 
 test("paired fixed-family CLI rejects arbitrary samples, repeats, missing/unsafe ports", () => {
   const args = ["--family", "yb", "--ready", "ready.json", "--prices", "prices.json", "--port", "18593", "--out", "new.json"];
