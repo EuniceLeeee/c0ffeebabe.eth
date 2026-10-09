@@ -1,0 +1,30 @@
+{
+  "learning_case_id": "tooldef-20261009-dodo-executor-provenance",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": ["swap"],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "Historical test-consumer optional-field mismatch, not a protocol or strategy failure.",
+  "evidence": {
+    "failed_receipt": "logs/dodo-gsp-acceptance-20261009.Nkm2su/dual-attempt01.json",
+    "failure": "source/receipt: Cannot read properties of undefined (reading keccak256); zero execution samples",
+    "producer": "listener/src/searcher/blockscan-at-block-cli.ts omits counterfactualExecutorCode when price construction does not need an executor override",
+    "independent_review": "Poincare reproduced the undefined access, inspected the writer, ran two DODO tests and ten additional malformed-binding negatives; agreed this is a test-tool bug.",
+    "successful_receipt": "logs/dodo-gsp-acceptance-20261009.Nkm2su/dual-current-attempt02.json",
+    "successful_receipt_sha256": "0201f9a6d3a29614062dcdc02780aebf1348b72fae5a325dfb3995b854cda481",
+    "executions": "16/16 same-N quoted/runtime receipts, all observed quote deltas zero",
+    "report": "docs/research/reports/dodo-gsp-acceptance-20261009.json"
+  },
+  "tooling_defect": {
+    "tool": "listener:searcher:dodo-v2-dual-historical",
+    "issue": "Checked optional provenance field against null only, then dereferenced undefined; present provenance did not also bind executor address.",
+    "evidence": "Original failed artifact and producer omission contract agree; non-author reproduced failure. Fixed consumer accepts absence but rejects malformed, wrong-address and wrong-runtime hash. Execution still independently binds trusted runtime code.",
+    "codify_target": "dodo-v2-family/test/historical-dual.ts assertExecutorCodeProvenance and historical-dual.test.ts omission/negative regressions",
+    "codify_commit": "fec8f5c63481c24525625fda02a5ab741f4d845c",
+    "status": "codified"
+  },
+  "created_at": "2026-10-09T13:00:59.000Z",
+  "updated_at": "2026-10-09T13:00:59.000Z"
+}

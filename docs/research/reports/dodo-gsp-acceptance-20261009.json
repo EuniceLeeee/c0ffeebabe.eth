@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-09",
+  "family": "custom-swap:dodo-v2",
+  "scope": "GSP registry reverse-identity coverage plus same-N quote/quoted/runtime checks for two historical pools; no new Family or central production branch",
+  "verdict": "implemented; natural single-block integration and 16 same-state execution receipts verified; opportunity, formal Adapter Replay and representative performance not verified",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "implementationCommit": "fec8f5c63481c24525625fda02a5ab741f4d845c",
+  "productionSourceTreeSha256": "467ae01768cb8ba6644ca7e50d8dbb12ff82b0ad848a8abb8b5419274e5883fe",
+  "sourceCaveat": "Real receipts bind the actual dirty cloud production tree. The intended staged-source export independently passed generate/build/contracts/dual construction/declarations; unrelated peer Ready and Uniswap V1 edits are not included in the scoped implementation commit.",
+  "anchor": {
+    "tx": "0x00085da9420425f8f3de1243d41d71ff160984310edf5474341fbe628375bc3e",
+    "block": 26016874,
+    "blockHash": "0xf2a4a8104b5ed1113df782166fbceeac9b8debdfef3a20a2b3993218215e5f0d",
+    "stateRoot": "0xc08a7d4144055ecf890c0b3261f0b8165db018624858133019aa69139f1142f9",
+    "environment": "N end-state and same-N local REVM execution; not original transaction pre-call state",
+    "pools": ["0x04571c32a4e1c5f39bc3a238cb95b215058c432c", "0xb9a4406982d990648093c71eff9f1f63a040152e"]
+  },
+  "identity": {
+    "gap": "Both GSP pools are absent from the three previously queried DVM/DSP/DPP registries but present in the separate GSPFactory getDODOPool(base,quote) result.",
+    "infrastructureRegistry": "0x710409d2121b7c8ea4acadd6803fde2d85df6473",
+    "registryCodeHashAtN": "0x0c02b3c8f0d6b42485a63a7598cca8edf753d349abc1579c07e2079d3e3ea677",
+    "poolCodeHashAtN": "0x5a20f1c25e0c9a706137a46298153e276f6c16ecfc23a2e5a6a7dd2e48646f5b",
+    "change": "Add an infrastructure identity source, not a pool-address allowlist. Retain reverse membership, token binding and behavioral proof. Contract negative cases reject unregistered lookalikes for every registry variant.",
+    "artifact": "logs/dodo-gsp-acceptance-20261009.Nkm2su/registry-pinned.json",
+    "sha256": "5f75d64741c430ce52cc4a1108479301274bdf2fde28568763f15b44904b0ee7"
+  },
+  "evidenceRoot": "logs/dodo-gsp-acceptance-20261009.Nkm2su",
+  "naturalIntegration": {
+    "ready": "with-valuation-attempt02/ready.json",
+    "readySha256": "4a20793249a9de67106eff8f0747ed5b038a2958eb042768984d130741c56016",
+    "scope": "One whole historical block; DODO plus same-block naturally discovered Uniswap V2/V3 valuation pools; expected target pools are output assertions, not input seeds.",
+    "targetInstances": 2, "targetGraphDirections": 4, "targetRawMidRows": 4, "targetEffectiveQuotedRows": 4,
+    "fullGraphEdges": 26, "fullRawMidRows": 26, "fullEffectiveQuotedRows": 22,
+    "priceSource": "Current production at-block prices; no borrowed input used in this DODO dual run. Actual reference amounts are preserved, not normalized to a new P.",
+    "prices": "prices-current-attempt01/prices.json",
+    "pricesSha256": "081d3a743b8942cac12716d7bdfe4919894567ef8fd223ded448930ce0c64d09",
+    "priceInputSha256": "d172843747caee1502505fe6fde8b753e76d485ceaa05cc0b4383e0a3743ee5c",
+    "readyRebuiltThisSupplement": false
+  },
+  "dualExecution": {
+    "artifact": "dual-current-attempt02.json",
+    "sha256": "0201f9a6d3a29614062dcdc02780aebf1348b72fae5a325dfb3995b854cda481",
+    "samples": 8, "executionsPassed": 16,
+    "allQuoteToObservedReceiptDeltas": "0",
+    "nativeDeltaEachExecution": "0",
+    "oldInputInventoryRetained": "101",
+    "oldOutputInventoryRetained": "quote amountOut plus 103; independent deltas, not absolute balances",
+    "construction": {"directions": 4, "exactCalls": 0, "rpcCalls": 0, "quotedFallback": false},
+    "sampleRows": [
+      {"poolSuffix": "040152e", "direction": "USDT to USDC", "label": "production-effective", "amountIn": "5141854", "amountOut": "3493801"},
+      {"poolSuffix": "040152e", "direction": "USDT to USDC", "label": "original-amount-at-N", "amountIn": "2", "amountOut": "3"},
+      {"poolSuffix": "040152e", "direction": "USDC to USDT", "label": "production-effective", "amountIn": "641", "amountOut": "641"},
+      {"poolSuffix": "040152e", "direction": "USDC to USDT", "label": "additional-10x-reference", "amountIn": "6410", "amountOut": "6411"},
+      {"poolSuffix": "58c432c", "direction": "USDT to USDC", "label": "production-effective", "amountIn": "5141854", "amountOut": "5140587"},
+      {"poolSuffix": "58c432c", "direction": "USDT to USDC", "label": "additional-10x-reference", "amountIn": "51418540", "amountOut": "51405841"},
+      {"poolSuffix": "58c432c", "direction": "USDC to USDT", "label": "production-effective", "amountIn": "641", "amountOut": "644"},
+      {"poolSuffix": "58c432c", "direction": "USDC to USDT", "label": "original-amount-at-N", "amountIn": "1443574", "amountOut": "1443930"}
+    ],
+    "executor": "0x1000000000000000000000000000000000000002",
+    "owner": "0x1000000000000000000000000000000000000001",
+    "executorCodeHash": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "harnessSha256": "2bd0a69cb36e236e47f8cc64905f699db25f925cfbb4b88672b980a3db6f73d3",
+    "directReadCalls": 37,
+    "readCountCaveat": "Excludes REVM's upstream state reads; not total CU or a stage latency result.",
+    "drain": "completed with no drainError"
+  },
+  "checks": {
+    "cloudHistoricalObserverAndReferenceTests": "4/4 passed",
+    "familyPlugin": "passed; includes registry behavior proof and reverse-membership negative tests",
+    "stagedGenerateAndProductionBuild": "passed",
+    "stagedFamilyPluginAndObserverTests": "passed",
+    "stagedProductionDualConstruction": "passed: staged-dual-construction.log",
+    "stagedStrictProductionDeclarations": "passed: staged-declarations.log",
+    "generatedTargetCapabilitiesMatchWorkingSource": 11,
+    "independentToolReview": "Poincare reproduced omitted-field failure, confirmed production writer's contract, passed two DODO tests and 10 extra malformed-binding negatives; no cloud receipt execution by reviewer."
+  },
+  "toolingDefect": {"learningCase": "tooldef-20261009-dodo-executor-provenance", "status": "codified", "codifyCommit": "fec8f5c63481c24525625fda02a5ab741f4d845c"},
+  "reconciliation": [
+    {"query": "block", "tool": "listener:searcher:at-block", "manifest": "prices-current-tool.json", "sha256": "df71e8678a7fc4bd7c7d74c8c58f777a38fd1ffd978ac310c89824efd605a226"},
+    {"query": "dodo,historical,dual,execution", "tool": "listener:searcher:dodo-v2-dual-historical", "manifest": "dual-recovery-tools.json", "sha256": "a30fc91c5739da978655ecbf8050eead7f8d1913dc4ecfe711dba9d2542cce4e"}
+  ],
+  "preservedFailures": ["dual-attempt01.json: optional executor provenance was omitted; old consumer crashed before any execution (samples=0).", "Initial query prices,dodo had no indexed prices capability; no chain requests; corrected to the existing block capability.", "Earlier DODO-only single-block evidence remains separate from the naturally expanded valuation graph."],
+  "notClaimed": ["Original transaction pre-call state/output reproduction", "Full next-hop route, funding repayment, natural opportunity sizing, final sim and EV", "Historical missing-input/atomic-rollback negative execution beyond existing fixture/contract coverage", "Formal adapter_fixed/adapter_merge_ready/production_gap_fixed gates", "Representative or live performance; reserved for the final batch stage", "Support for every DODO variant or pool"],
+  "safety": {"broadcast": false, "signing": false, "deployment": false, "liveStarted": false, "defaultEnablementChanged": false, "originalReadyPreserved": true},
+  "configurationTablePatch": "docs/research/reports/dodo-gsp-impl-table-20261009.patch"
+}
