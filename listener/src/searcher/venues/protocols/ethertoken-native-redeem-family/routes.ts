@@ -23,6 +23,7 @@ export const etherTokenNativeRedeemRoutes = {
       instanceKey: descriptor.instanceKey,
       tokenIn: descriptor.token,
       tokenOut: descriptor.nativeAnchor,
+      executionAssets: Object.freeze({ input: "erc20" as const, output: "native" as const }),
       taxonomy: Object.freeze({
         slotKind: "protocol" as const,
         protocolAction: "redeem" as const,

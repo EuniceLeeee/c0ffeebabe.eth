@@ -45,8 +45,6 @@ export const univ4FeeHookFamilyManifest = {
   ],
   requiredInfraActionAdapterIds: [
     "erc20-transfer",
-    "weth-deposit-value",
-    "weth-withdraw-amount",
   ],
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [UNIV4_FEE_HOOK_LINEAGE_ID],

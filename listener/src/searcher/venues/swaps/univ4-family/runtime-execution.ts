@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { RuntimeAmountProgram, runtimePayment, runtimeProgramScript, type RuntimeAmountLeg } from "../../../../adapters/runtime-amount-program.js";
 import { concatBytes, encodeReturn } from "../../../../encoder.js";
-import { ADDR } from "../../../../shared/constants/addresses.js";
+import { runtimeExecutor } from "../../runtime-execution.js";
 import type { UniV4Descriptor, UniV4Route } from "./types.js";
 import { poolKeyFingerprint, sameAddress } from "./codec.js";
 
@@ -11,7 +11,6 @@ const managerAbi = new ethers.Interface([
   "function take(address currency,address recipient,uint256 amount)",
   "function sync(address currency)", "function settle() payable returns(uint256)",
 ]);
-const tokenAbi = new ethers.Interface(["function withdraw(uint256)", "function deposit() payable"]);
 
 export function buildUniV4RuntimeLeg(input: { descriptor: UniV4Descriptor; route: UniV4Route; executor: string }): RuntimeAmountLeg | null {
   const { descriptor: d, route: r, executor } = input;
@@ -27,11 +26,14 @@ export function buildV4RuntimeProgram(input: { descriptor: UniV4Descriptor; rout
   executor: string; hookData: string; actionAdapterId: string }): RuntimeAmountLeg {
   const { descriptor: d, route: r, executor } = input;
   const zero = r.direction === "zero-for-one", key = d.poolKey, manager = d.managerBinding.manager;
+  runtimeExecutor(executor, manager);
   if ((r.direction !== "zero-for-one" && r.direction !== "one-for-zero") ||
       r.instanceKey !== d.instanceKey || r.poolId !== d.poolId || !sameAddress(r.manager, manager) ||
       poolKeyFingerprint(r.poolKey) !== poolKeyFingerprint(key) ||
       !sameAddress(r.tokenIn, zero ? d.graphToken0 : d.graphToken1) ||
       !sameAddress(r.tokenOut, zero ? d.graphToken1 : d.graphToken0) ||
+      r.executionAssets?.input !== (sameAddress(zero ? key.currency0 : key.currency1, ethers.ZeroAddress) ? "native" : "erc20") ||
+      r.executionAssets?.output !== (sameAddress(zero ? key.currency1 : key.currency0, ethers.ZeroAddress) ? "native" : "erc20") ||
       !sameAddress(r.realTokenIn, zero ? key.currency0 : key.currency1) ||
       !sameAddress(r.realTokenOut, zero ? key.currency1 : key.currency0)) throw new Error("univ4 runtime route mismatch");
   const p = new RuntimeAmountProgram();
@@ -48,12 +50,10 @@ export function buildV4RuntimeProgram(input: { descriptor: UniV4Descriptor; rout
     .math("shr", 9, out, 8).equal(9, 10);
   const payment = runtimePayment(p, 6, 12);
   p.call(manager, managerAbi.encodeFunctionData("take", [r.realTokenOut, executor, 0n]), { patches: [{ offset: 68, reg: out }] });
-  if (sameAddress(r.realTokenOut, ethers.ZeroAddress)) {
-    p.call(ADDR.WETH, tokenAbi.encodeFunctionData("deposit"), { valueReg: out });
-  }
   if (sameAddress(r.realTokenIn, ethers.ZeroAddress)) {
-    p.call(ADDR.WETH, tokenAbi.encodeFunctionData("withdraw", [0n]), { patches: [{ offset: 4, reg: 6 }] })
-      .call(manager, managerAbi.encodeFunctionData("sync", [ethers.ZeroAddress]));
+    // The issuer supplied native input before unlock. Only the actual signed
+    // PoolManager debt is settled here; it rewraps any unspent input afterward.
+    p.call(manager, managerAbi.encodeFunctionData("sync", [ethers.ZeroAddress]));
     payment.callValue(manager, managerAbi.encodeFunctionData("settle"));
   } else {
     p.call(manager, managerAbi.encodeFunctionData("sync", [r.realTokenIn]));

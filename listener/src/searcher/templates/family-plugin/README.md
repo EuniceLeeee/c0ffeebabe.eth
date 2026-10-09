@@ -57,8 +57,19 @@ Keep and test both execution capabilities; one does not replace the other:
   preserve the production effective/explicit quote and validated execution path.
 - `execution.buildRuntimeLeg`: consume the previous leg's actual receipt inside
   the transaction. Construct sim amount trials without off-chain hop quotes.
-  ABI, amount arithmetic, native wrapping and callback settlement belong to the
-  Family, not central scheduling.
+  ABI, amount arithmetic, raw native-currency semantics and callback settlement
+  belong to the Family, not central scheduling.
+
+Native conversion is a shared execution boundary, applied by the production
+issuer to every Family without a protocol-specific switch. Derive each route's
+`executionAssets` from its admitted raw currencies: graph WETH alone does not
+mean native ETH. Emit the raw protocol operation; do not also withdraw/deposit
+WETH inside it. The shared boundary converts the requested input, wraps actual
+receipts/refunds and protects old token/native inventory. Callback debt, fee,
+full-fill and receiver checks remain Family-owned. Executor-program strict
+probes that settle graph assets use the same `executionAssetBoundary` contract;
+raw identity behavior probes retain their true token/native/total-supply
+observations rather than relabeling the observed asset as WETH.
 
 Run `npm run searcher:family-dual-execution` and the Family's quote/execution
 contracts. Cover all supported directions/variants and multiple amounts, including

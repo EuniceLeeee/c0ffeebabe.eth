@@ -1,9 +1,7 @@
 import { runtimeExecutor, assertProjectedRuntimeRoute } from "../../runtime-execution.js";
 import { buildV4RuntimeProgram } from "../univ4-family/runtime-execution.js";
 import { univ4FeeHookRoutes } from "./routes.js";
-import { ADDR } from "../../../../shared/constants/addresses.js";
 import { hookDataFor, sat1Permissions } from "./sat1.js";
-import type { ResolvedPlanNode } from "../../../../shared/types/plan.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
@@ -21,16 +19,11 @@ import type {
   FeeHookRoute,
 } from "./types.js";
 
-const MIN_SQRT_PRICE = 4295128740n;
-const MAX_SQRT_PRICE =
-  1461446703485210103287273052203988822378723970341n;
-
 /**
- * Same execution fragment as the standard univ4 Family (unlock wraps
- * swap/take/settle under the same manager), bound to the fee-hook owned
- * adapter ids and the audited hook. The hook itself is executed by the
- * manager during the final simulation on the fork; no adapter-side hook
- * logic exists.
+ * Quote evidence stays mandatory. Both execution interfaces use the same
+ * framed callback and actual-debt program, with Family-owned hookData. The
+ * issuer owns native conversion and its measured minimum; final-sim and
+ * complete-flow input/output guards remain unchanged.
  */
 export const univ4FeeHookExecution = {
   buildRuntimeLeg(input) {
@@ -46,115 +39,10 @@ export const univ4FeeHookExecution = {
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertExecutionEvidence(input);
-    const key = input.descriptor.poolKey;
-    const zeroForOne = input.route.direction === "zero-for-one";
-    const inputIsNative = sameAddress(input.route.realTokenIn, "0x0000000000000000000000000000000000000000");
-    const outputIsNative = sameAddress(input.route.realTokenOut, "0x0000000000000000000000000000000000000000");
-    const children: ResolvedPlanNode[] = [
-      {
-        adapterId: "univ4-fee-hook-swap",
-        target: input.descriptor.managerBinding.manager,
-        tokenIn: input.route.tokenIn,
-        tokenOut: input.route.tokenOut,
-        amount: input.amountIn,
-        params: {
-          currency0: key.currency0,
-          currency1: key.currency1,
-          fee: BigInt(key.fee),
-          tickSpacing: BigInt(key.tickSpacing),
-          hooks: key.hooks,
-          hookData: input.exactEvidence.hookData,
-          zeroForOne,
-          amountSpecified: -input.amountIn,
-          sqrtPriceLimit: zeroForOne ? MIN_SQRT_PRICE : MAX_SQRT_PRICE,
-        },
-        children: [],
-      },
-      {
-        adapterId: "univ4-fee-hook-take",
-        target: input.descriptor.managerBinding.manager,
-        tokenIn: input.route.tokenIn,
-        tokenOut: input.route.tokenOut,
-        amount: input.quotedAmountOut,
-        params: { currency: input.route.realTokenOut },
-        children: [],
-      },
-    ];
-    if (outputIsNative) {
-      children.push({
-        adapterId: "weth-deposit-value",
-        target: ADDR.WETH,
-        tokenIn: input.route.realTokenOut,
-        tokenOut: ADDR.WETH,
-        amount: input.quotedAmountOut,
-        params: {},
-        children: [],
-      });
-    }
-    if (inputIsNative) {
-      children.push(
-        {
-          adapterId: "weth-withdraw-amount",
-          target: ADDR.WETH,
-          tokenIn: ADDR.WETH,
-          tokenOut: input.route.realTokenIn,
-          amount: input.amountIn,
-          params: {},
-          children: [],
-        },
-        {
-          adapterId: "univ4-fee-hook-sync",
-          target: input.descriptor.managerBinding.manager,
-          tokenIn: input.route.realTokenIn,
-          tokenOut: input.route.tokenOut,
-          amount: 0n,
-          params: { currency: "0x0000000000000000000000000000000000000000" },
-          children: [],
-        },
-        {
-          adapterId: "univ4-fee-hook-settle-value",
-          target: input.descriptor.managerBinding.manager,
-          tokenIn: input.route.tokenIn,
-          tokenOut: input.route.tokenOut,
-          amount: input.amountIn,
-          params: {},
-          children: [],
-        },
-      );
-    } else {
-      children.push(
-        {
-          adapterId: "univ4-fee-hook-sync",
-          target: input.descriptor.managerBinding.manager,
-          tokenIn: input.route.realTokenIn,
-          tokenOut: input.route.tokenOut,
-          amount: 0n,
-          params: { currency: input.route.realTokenIn },
-          children: [],
-        },
-        {
-          adapterId: "erc20-transfer",
-          target: input.route.realTokenIn,
-          tokenIn: input.route.realTokenIn,
-          tokenOut: input.route.realTokenIn,
-          amount: input.amountIn,
-          params: {
-            to: input.descriptor.managerBinding.manager,
-            amount: input.amountIn,
-          },
-          children: [],
-        },
-        {
-          adapterId: "univ4-fee-hook-settle",
-          target: input.descriptor.managerBinding.manager,
-          tokenIn: input.route.tokenIn,
-          tokenOut: input.route.tokenOut,
-          amount: 0n,
-          params: {},
-          children: [],
-        },
-      );
-    }
+    assertProjectedRuntimeRoute(input.route, univ4FeeHookRoutes.project({ descriptor: input.descriptor }));
+    runtimeExecutor(input.executor, input.descriptor.managerBinding.manager);
+    const leg = buildV4RuntimeProgram({ descriptor: input.descriptor, route: input.route,
+      executor: input.executor, actionAdapterId: "univ4-fee-hook-unlock", hookData: input.exactEvidence.hookData });
     return Object.freeze({
       requirements: Object.freeze([]),
       nodes: Object.freeze([Object.freeze({
@@ -162,9 +50,9 @@ export const univ4FeeHookExecution = {
         target: input.descriptor.managerBinding.manager,
         tokenIn: input.route.tokenIn,
         tokenOut: input.route.tokenOut,
-        amount: 0n,
-        params: {},
-        children,
+        amount: input.amountIn,
+        params: { runtimeAmountProgram: leg.program },
+        children: [],
       })]),
     });
   },
@@ -200,6 +88,8 @@ function assertExecutionEvidence(input: {
 }): void {
   const evidence = input.exactEvidence;
   if (
+    input.amountIn <= 0n || input.amountIn >= (1n << 127n) || input.quotedAmountOut <= 0n ||
+    (input.minAmountOut !== undefined && (input.minAmountOut < 0n || input.minAmountOut > input.quotedAmountOut)) ||
     !(evidence.kind === "univ4-fee-hook-quoter" ||
       (evidence.kind === "sat1-local-exact-in" && input.descriptor.hookModel === "sat1")) ||
     evidence.poolId !== input.descriptor.poolId ||

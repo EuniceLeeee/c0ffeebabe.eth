@@ -1,6 +1,5 @@
 import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
-import { runtimeLeg, runtimeExecutor, runtimeWrapReceipt, RUNTIME_WRAP } from "../../runtime-execution.js";
-import { ADDR } from "../../../../shared/constants/addresses.js";
+import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
 import { ekuboRouterIface } from "../ekubo/abi.js";
 import { ethers } from "ethers";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
@@ -16,20 +15,17 @@ export const ekuboExecution = {
     const { descriptor: d, route: r, executor } = input;
     assertRoute(d, r); runtimeExecutor(executor, EKUBO_ROUTER);
     const nativeInput = d.poolKey.token0 === ethers.ZeroAddress && !r.isToken1;
-    const nativeOutput = d.poolKey.token0 === ethers.ZeroAddress && r.isToken1;
     const p = new RuntimeAmountProgram().constant(1, 127n).math("shr", 2, 0, 1).constant(3, 0n).equal(2, 3);
-    if (nativeInput) p.call(ADDR.WETH, RUNTIME_WRAP.encodeFunctionData("withdraw", [0n]), { patches: [{ offset: 4, reg: 0 }] });
-    else p.allowance(r.tokenIn, EKUBO_ROUTER, 0, MAX_UINT);
-    if (nativeOutput) p.nativeBalance(13);
+    if (!nativeInput) p.allowance(r.tokenIn, EKUBO_ROUTER, 0, MAX_UINT);
     p.call(EKUBO_ROUTER, ekuboRouterIface.encodeFunctionData("swap", [d.poolKey, r.isToken1, 0n, 0n, 0n, 1n, executor]),
       { patches: [{ offset: 132, reg: 0 }], ...(nativeInput ? { valueReg: 0 } : {}) });
-    if (nativeOutput) runtimeWrapReceipt(p, ADDR.WETH);
     return runtimeLeg(EKUBO_ACTION_ID, p);
   },
   runtimeProjection: () => ({ allowanceSpender: EKUBO_ROUTER, prewarmQuoteCalls: [] }),
   buildFragment(input) {
     const { descriptor, route, exactEvidence: evidence } = input;
     assertRoute(descriptor, route);
+    runtimeExecutor(input.executor, EKUBO_ROUTER);
     const nativeInput = descriptor.poolKey.token0 === ethers.ZeroAddress && !route.isToken1;
     if (nativeInput && input.amountIn >= (1n << 96n)) throw new Error("ekubo native input exceeds CALL_VALUE uint96");
     assertSource(evidence.source, evidence.source);

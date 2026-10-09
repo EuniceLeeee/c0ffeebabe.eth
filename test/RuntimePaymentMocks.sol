@@ -27,6 +27,8 @@ contract RuntimePaymentManager {
     uint256 public paid;
     uint256 public requested;
     uint256 public taken;
+    address public lastHook;
+    bytes32 public hookDataHash;
     address private locker;
     address private currencyIn;
     address private currencyOut;
@@ -41,8 +43,9 @@ contract RuntimePaymentManager {
         require(paid == configuredDebt && taken == configuredOutput, "unsettled delta");
         locker = address(0); return abi.decode(result, (bytes));
     }
-    function swap(PoolKey calldata key, SwapParams calldata params, bytes calldata) external returns (int256) {
+    function swap(PoolKey calldata key, SwapParams calldata params, bytes calldata hookData) external returns (int256) {
         require(msg.sender == locker && params.amountSpecified < 0, "swap context");
+        lastHook = key.hooks; hookDataHash = keccak256(hookData);
         requested = uint256(-params.amountSpecified);
         currencyIn = params.zeroForOne ? key.currency0 : key.currency1;
         currencyOut = params.zeroForOne ? key.currency1 : key.currency0;

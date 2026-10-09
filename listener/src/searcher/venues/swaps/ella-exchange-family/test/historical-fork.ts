@@ -170,23 +170,31 @@ try {
       catch (error) { nativeGuardReverted = /min profit/.test(JSON.stringify((error as any).rpc)); }
       assert(nativeGuardReverted, "valid fragment must leave exactly zero native wei");
       if (index === 1) {
-        // Deliberately misencode ONLY the wrap amount, not the pool call.
-        // Token-only equality would falsely certify this underquote; the
-        // independent native check must expose the one-wei residual.
-        const underquoted = q.amountOut - 1n;
-        assert(underquoted > 0n);
-        const altered = fragment.nodes.map(node => node.adapterId === "weth-deposit-value"
-          ? { ...node, amount: underquoted } : node);
-        const badScript = concatBytes(...[...approvals, ...altered].map(compile));
-        await rpc("eth_call", [transaction(underquoted, badScript, true), at, overrides]);
+        // Lowering the minimum must not fix the wrap quantity: the central
+        // boundary still returns the full actual receipt and restores native.
+        assert.equal(fragment.nodes.length, 1);
+        assert.equal(fragment.nodes[0].adapterId, "execution-asset-boundary");
+        const withMinimum = (minimum: bigint) => concatBytes(...[...approvals,
+          { ...fragment.nodes[0], params: { ...fragment.nodes[0].params, minAmountOut: minimum } }].map(compile));
+        const lowerMinimum = q.amountOut - 1n;
+        assert(lowerMinimum > 0n);
+        const lowerScript = withMinimum(lowerMinimum);
+        await rpc("eth_call", [transaction(q.amountOut, lowerScript), at, overrides]);
         let upperBoundReverted = false;
-        try { await rpc("eth_call", [transaction(q.amountOut, badScript), at, overrides]); }
+        try { await rpc("eth_call", [transaction(q.amountOut + 1n, lowerScript), at, overrides]); }
         catch (error) { upperBoundReverted = /min profit/.test(JSON.stringify((error as any).rpc)); }
-        assert(upperBoundReverted, "underquote control has exact quoted-minus-one WETH and residual native wei");
+        assert(upperBoundReverted, "lower minimum must still return exactly the actual quote");
+        let residualReverted = false;
+        try { await rpc("eth_call", [transaction(q.amountOut, lowerScript, true), at, overrides]); }
+        catch (error) { residualReverted = /min profit/.test(JSON.stringify((error as any).rpc)); }
+        assert(residualReverted, "lower minimum must not leave residual native wei");
+        await assert.rejects(() => rpc("eth_call", [transaction(0n, withMinimum(q.amountOut + 1n)), at, overrides]),
+          (error: any) => !!error.rpc && /revert/i.test(JSON.stringify(error.rpc)),
+          "the boundary itself must reject a minimum above the actual receipt");
       }
       quotes.push({ purpose, direction: index === 0 ? "WETH->token" : "token->WETH", amountIn: String(amountIn), amountOut: String(q.amountOut),
         execution: "same-block-local-fork-pass", balanceEquality: "GTE quote succeeds; GTE quote+1 reverts; native balance is zero",
-        ...(index === 1 ? { underquoteControl: "wrap quote-1 leaves one native wei; token-only equality is insufficient" } : {}),
+        ...(index === 1 ? { minimumControl: "lower minimum preserves full WETH receipt and zero native; receipt+1 minimum reverts" } : {}),
         scriptHash: ethers.keccak256(script) });
       if (block === N - 1 && purpose === "original-tx-amount") assert.equal(q.amountOut, BigInt(sample.netAmountOut));
     }

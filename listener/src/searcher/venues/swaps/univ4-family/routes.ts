@@ -2,6 +2,7 @@ import type { RouteProjectionSemantics } from "../../adapter-family-plugin.js";
 import { routeKey } from "../../adapter-family-identifiers.js";
 import { hashCanonical } from "../../canonical-value.js";
 import { uniV4StaticBindingProjection } from "./binding.js";
+import { ethers } from "ethers";
 import type { UniV4Descriptor, UniV4Route } from "./types.js";
 
 export const univ4Routes = {
@@ -55,6 +56,10 @@ function route(
     instanceKey: descriptor.instanceKey,
     tokenIn,
     tokenOut,
+    executionAssets: Object.freeze({
+      input: realTokenIn.toLowerCase() === ethers.ZeroAddress ? "native" as const : "erc20" as const,
+      output: realTokenOut.toLowerCase() === ethers.ZeroAddress ? "native" as const : "erc20" as const,
+    }),
     taxonomy: Object.freeze({ slotKind: "swap" as const }),
     bindingRef: Object.freeze({
       bindingKey: descriptor.poolId,

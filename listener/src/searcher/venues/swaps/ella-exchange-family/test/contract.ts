@@ -11,6 +11,9 @@ import { staticBinding } from "../instance.js";
 import type { EllaCandidate } from "../types.js";
 import { ADDR } from "../../../../../shared/constants/addresses.js";
 import { DEFAULT_EFFECTIVE_WETH_INPUT } from "../../../../blockscan-effective-mid.js";
+import { RuntimeAmountProgram } from "../../../../../adapters/runtime-amount-program.js";
+import { encodeCall, encodeCallValue } from "../../../../../encoder.js";
+import { applyQuotedAssetBoundary, applyRuntimeAssetBoundary } from "../../../../execution-asset-boundary.js";
 
 const pool = "0x33c577296b0cdece6186ea48cd8fe98bd1a6e3a4";
 const executor = "0x1000000000000000000000000000000000000002";
@@ -140,18 +143,86 @@ test("source, oracle/aggregator and duplicate state results fail closed", () => 
   assert.throws(() => decodeState(s.descriptor, results.map((r, i) => i ? r : { ...r, source: { ...source, number: source.number - 1 } })), /mixed source/);
   assert.throws(() => plugin.routes.projectGraph({ descriptor: s.descriptor, route: { ...s.routes[0], tokenOut: ADDR.WETH } }), /route/);
 });
-test("raw derives locally; exact uses the requested amount; native wrap and value encoding", () => {
+test("raw derives locally; exact uses the requested amount; raw native value encoding", () => {
   const x = exact(BigInt(sample.amountIn)), d = x.descriptor, r = x.routes[0];
   const mids = plugin.pricing.current.deriveMids({ descriptor: { instance: d }, routes: x.routes, snapshot: x.state });
   assert.equal(mids.size, 2); assert.equal(mids.get(r.routeKey)!.kind, "external-swap");
   assert.equal(JSON.stringify(staticBinding(d)), JSON.stringify(plugin.instance.staticBindingProjection(d)));
   const fragment = plugin.execution.buildFragment({ ...x.input, quotedAmountOut: x.q.amountOut, minAmountOut: x.q.amountOut, exactEvidence: x.q.evidence });
   assert.equal(fragment.requirements.length, 0);
-  assert.deepEqual(fragment.nodes.map(n => n.adapterId), ["weth-withdraw-amount", "ella-buy-token"]);
-  const bytes = plugin.actionAdapters[0].encode(fragment.nodes[1], executor, new Uint8Array());
+  assert.deepEqual(fragment.nodes.map(n => n.adapterId), ["ella-buy-token"]);
+  const bytes = plugin.actionAdapters[0].encode(fragment.nodes[0], executor, new Uint8Array());
   assert(ethers.hexlify(bytes).endsWith(POOL.getFunction("swapBase1")!.selector.slice(2)));
   assert.throws(() => plugin.execution.buildFragment({ ...x.input, quotedAmountOut: x.q.amountOut, minAmountOut: x.q.amountOut,
     exactEvidence: { ...x.q.evidence, executor: pool } }), /incompatible/);
+});
+
+test("both native directions emit raw protocol calls; only the common boundary wraps", () => {
+  const s = setup();
+  for (const direction of [0, 1]) {
+    const original = direction === 0 ? BigInt(sample.amountIn) : s.state.nativeBalance * UNIT / s.state.price / 100n;
+    for (const amount of [original / 10n, original]) {
+      const x = exact(amount, direction), route = x.input.route, buy = direction === 0;
+      assert(x.q.amountOut > 0n && !x.q.evidence.unavailableReason);
+      assert.deepEqual(route.executionAssets, { input: buy ? "native" : "erc20", output: buy ? "erc20" : "native" });
+      const fragment = plugin.execution.buildFragment({ ...x.input, quotedAmountOut: x.q.amountOut,
+        minAmountOut: x.q.amountOut, exactEvidence: x.q.evidence });
+      assert.equal(fragment.nodes.length, 1);
+      const node = fragment.nodes[0];
+      assert.equal(node.tokenIn, route.tokenIn); assert.equal(node.tokenOut, route.tokenOut);
+      const action = plugin.actionAdapters.find(a => a.id === node.adapterId)!;
+      const data = ethers.getBytes(POOL.encodeFunctionData(buy ? "swapBase1" : "swap1", buy ? [] : [amount]));
+      assert.deepEqual(action.encode(node, executor, new Uint8Array()), buy
+        ? encodeCallValue(x.descriptor.pool, amount, data) : encodeCall(x.descriptor.pool, data));
+      const quoted = applyQuotedAssetBoundary({ route, executor, amountIn: amount, minimum: x.q.amountOut, fragment });
+      assert.deepEqual(quoted.requirements, []);
+      assert.equal(quoted.nodes[0].adapterId, "execution-asset-boundary");
+      assert.equal(quoted.nodes[0].params.minAmountOut, x.q.amountOut);
+      assert.deepEqual(quoted.nodes[0].children.map(n => n.adapterId), buy
+        ? ["ella-buy-token"] : ["erc20-approve", "ella-sell-token"]);
+      assert.deepEqual(quoted.nodes[0].children.at(-1), node);
+
+      // The runtime emitter receives no usable quote or fixed-amount input.
+      const raw = plugin.execution.buildRuntimeLeg!({ descriptor: x.descriptor, route, executor, runtimeEvidence: [],
+        get amountIn() { throw new Error("runtime must use r0"); },
+        get exactEvidence() { throw new Error("runtime must not quote"); },
+      } as Parameters<NonNullable<typeof plugin.execution.buildRuntimeLeg>>[0]);
+      assert(raw);
+      const expected = new RuntimeAmountProgram();
+      if (buy) expected.call(x.descriptor.pool, POOL.encodeFunctionData("swapBase1"), { valueReg: 0 });
+      else expected.allowance(route.tokenIn, x.descriptor.pool, 0, MAX_UINT)
+        .call(x.descriptor.pool, POOL.encodeFunctionData("swap1", [0n]), { patches: [{ offset: 4, reg: 0 }] });
+      assert.equal(raw.program, ethers.hexlify(expected.bytes()), "no Family WETH or fixed output operation");
+      const wrapped = applyRuntimeAssetBoundary({ route, executor, leg: raw });
+      assert.notEqual(wrapped.program, raw.program); assert.equal(wrapped.actionAdapterId, raw.actionAdapterId);
+    }
+  }
+});
+
+test("native execution rejects removed/forged declarations, wrong route, minimum and evidence", () => {
+  for (const direction of [0, 1]) {
+    const s = setup(), amount = direction === 0 ? BigInt(sample.amountIn) : s.state.nativeBalance * UNIT / s.state.price / 100n;
+    const x = exact(amount, direction);
+    const input = { ...x.input, quotedAmountOut: x.q.amountOut, minAmountOut: x.q.amountOut, exactEvidence: x.q.evidence };
+    for (const invalidRoute of [
+      { ...x.input.route, executionAssets: undefined },
+      { ...x.input.route, executionAssets: { input: "erc20" as const, output: "erc20" as const } },
+      { ...x.input.route, executionAssets: { input: "native" as const, output: "native" as const } },
+      { ...x.input.route, tokenIn: x.input.route.tokenOut },
+    ]) {
+      // Deliberately cross the typed projection boundary to test rejection.
+      const route = invalidRoute as unknown as typeof x.input.route;
+      assert.throws(() => plugin.execution.buildFragment({ ...input, route }), /route/);
+      assert.throws(() => plugin.execution.buildRuntimeLeg!({ ...x.input, route }), /route/);
+      assert.throws(() => plugin.routes.projectGraph({ descriptor: x.descriptor, route }), /route/);
+    }
+    for (const minAmountOut of [-1n, x.q.amountOut + 1n])
+      assert.throws(() => plugin.execution.buildFragment({ ...input, minAmountOut }), /incompatible/);
+    for (const amountIn of [0n, MAX_UINT + 1n])
+      assert.throws(() => plugin.execution.buildFragment({ ...input, amountIn }), /incompatible/);
+    assert.throws(() => plugin.execution.buildFragment({ ...input, exactEvidence: { ...x.q.evidence, amountOut: x.q.amountOut + 1n } }), /incompatible/);
+    assert.throws(() => plugin.execution.buildRuntimeLeg!({ ...x.input, executor: x.descriptor.pool }), /executor/);
+  }
 });
 
 test("oracle-only updates use the same refreshed state in raw and amount quotes", () => {

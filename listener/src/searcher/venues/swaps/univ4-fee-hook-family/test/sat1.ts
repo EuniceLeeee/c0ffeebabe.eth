@@ -11,6 +11,26 @@ import { UNIV4_POOL_MANAGER_INTERFACE, UNIV4_QUOTER_INTERFACE } from "../../univ
 import { UNIV4_FEE_HOOK_PATTERN_IDS } from "../manifest.js";
 import { v4PoolId } from "../../univ4-common.js";
 import type { AdapterRequestResult } from "../../../adapter-request-program.js";
+import type { ResolvedPlanNode } from "../../../../../types.js";
+import { inspectRuntime } from "../../../../test/runtime-program-testkit.js";
+
+const settlementAbi = new ethers.Interface(["function unlock(bytes) returns(bytes)", "function take(address,address,uint256)"]);
+function quotedCalls(node: ResolvedPlanNode, amount: bigint, output: bigint, zero: boolean) {
+  assert.equal(node.amount, amount);
+  assert.equal(node.children.length, 0);
+  assert.equal(typeof node.params.runtimeAmountProgram, "string");
+  const unlock = inspectRuntime(String(node.params.runtimeAmountProgram), amount).calls[0];
+  assert.equal(unlock.incoming, 68); assert.equal(unlock.outgoing, 68);
+  const script = ethers.getBytes(settlementAbi.decodeFunctionData("unlock", unlock.data)[0]);
+  assert.equal(script[0], 0x0e); assert.equal(BigInt(ethers.hexlify(script.slice(1, 33))), amount);
+  const size = Number(BigInt(ethers.hexlify(script.slice(33, 36))));
+  return inspectRuntime(ethers.hexlify(script.slice(36, 36 + size)), amount, { call(call) {
+    if (call.data.startsWith(UNIV4_POOL_MANAGER_INTERFACE.getFunction("swap")!.selector)) {
+      return ethers.concat((zero ? [-amount, output] : [output, -amount]).map(n => ethers.toBeHex(BigInt.asUintN(128, n), 16)));
+    }
+    return ethers.toBeHex(amount, 32);
+  } }).calls;
+}
 
 // Source-shaped synthetic checks, not historical strict receipts.
 const hook = "0x2a0a30dd78af7698e6f40212b8b8324fce2ee888", token = "0x8f66337a0c2a02202fd91dd596c411cf977c6060";
@@ -84,10 +104,18 @@ for (const route of routes) {
     UNIV4_QUOTER_INTERFACE.encodeFunctionResult("quoteExactInputSingle", [123n, 99000n]))] });
   const execution = { ...input, quotedAmountOut: quote.amountOut, exactEvidence: quote.evidence, minAmountOut: quote.amountOut };
   const fragment = plugin.execution.buildFragment(execution);
-  const swap = fragment.nodes[0].children[0];
+  const calls = quotedCalls(fragment.nodes[0], input.amountIn, quote.amountOut, zeroForOne);
+  const emittedSwap = calls.find(c => c.data.startsWith(UNIV4_POOL_MANAGER_INTERFACE.getFunction("swap")!.selector))!;
+  const call = UNIV4_POOL_MANAGER_INTERFACE.decodeFunctionData("swap", emittedSwap.data);
+  const swap: ResolvedPlanNode = { adapterId: "univ4-fee-hook-swap", target: descriptor.managerBinding.manager,
+    tokenIn: route.tokenIn, tokenOut: route.tokenOut, amount: input.amountIn, children: [], params: {
+      currency0: call[0].currency0, currency1: call[0].currency1, fee: BigInt(call[0].fee), tickSpacing: BigInt(call[0].tickSpacing),
+      hooks: call[0].hooks, zeroForOne, amountSpecified: call[1].amountSpecified, sqrtPriceLimit: call[1].sqrtPriceLimitX96,
+      hookData: call[2],
+    } };
   const action = plugin.actionAdapters.find(a => a.id === swap.adapterId)!;
   const encoded = action.encode(swap, executor, new Uint8Array());
-  const call = UNIV4_POOL_MANAGER_INTERFACE.decodeFunctionData("swap", ethers.hexlify(encoded.slice(24)));
+  assert.equal(ethers.hexlify(encoded.slice(24)), emittedSwap.data, "legacy leaf retains the same validated hookData");
   assert.equal(call[2], hookDataFor(descriptor, executor, zeroForOne));
   assert.equal(quote.evidence.hookData, call[2]);
   const cacheProjection = exact.cacheCompatibilityProjection(input) as { hookData: string };
@@ -99,6 +127,8 @@ for (const route of routes) {
   assert.throws(() => action.encode({ ...swap, params: { ...swap.params, zeroForOne: "false" } }, executor, new Uint8Array()), /actor/);
   assert.throws(() => action.encode(swap, other, new Uint8Array()), /actor/);
   assert.throws(() => plugin.execution.buildFragment({ ...execution, executor: other }), /incompatible/);
+  for (const minAmountOut of [-1n, quote.amountOut + 1n])
+    assert.throws(() => plugin.execution.buildFragment({ ...execution, minAmountOut }), /incompatible/);
   assert.notDeepEqual(exact.cacheCompatibilityProjection(input), exact.cacheCompatibilityProjection({ ...input, executor: other }));
   if (route.direction === "zero-for-one") assert.throws(() => method.program.buildRequests({ ...input, amountIn: 6n * 10n ** 18n }), /MAX_BUY/);
 }
@@ -134,8 +164,13 @@ for (const address of [hook, token, other]) {
   assert.equal(quote.amountOut, 1010n);
   const fragment = plugin.execution.buildFragment({ ...input, quotedAmountOut: quote.amountOut,
     exactEvidence: quote.evidence, minAmountOut: quote.amountOut });
-  assert.equal(fragment.nodes[0]!.children[1]!.amount, 1010n, "take consumes sequential quote");
-  assert.equal(fragment.nodes[0]!.children[2]!.amount, 1010n, "native wrap consumes same sequential quote");
+  const calls = quotedCalls(fragment.nodes[0], input.amountIn, 1017n, false);
+  const take = calls.find(c => c.data.startsWith(settlementAbi.getFunction("take")!.selector))!;
+  assert.equal(settlementAbi.decodeFunctionData("take", take.data)[2], 1017n,
+    "take consumes actual PoolManager output, not the sequential quote's 1010");
+  assert(!calls.some(c => c.target.toLowerCase() === ADDR.WETH.toLowerCase()),
+    "native conversion belongs to the common issuer, never a quoted wrap quantity");
+  assert.deepEqual(sell.executionAssets, { input: "erc20", output: "native" });
   assert.throws(() => method.program.buildRequests({ ...input, amountIn: 2001n }), /mismatch/);
   const unsupportedDescriptor = { ...descriptor, hookModel: undefined };
   const unsupportedInput = { ...input, prefix: [{ ...prefix[0]!, descriptor: unsupportedDescriptor }] };

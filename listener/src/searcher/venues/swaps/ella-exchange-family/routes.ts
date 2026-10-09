@@ -7,11 +7,15 @@ import { staticBinding } from "./instance.js";
 import type { EllaDescriptor, EllaDirection, EllaRoute } from "./types.js";
 export const actionId = (d: EllaDirection) => d === "buy-token" ? "ella-buy-token" : "ella-sell-token";
 const directions = ["buy-token", "sell-token"] as const;
+const executionAssets = (direction: EllaDirection) => Object.freeze(direction === "buy-token"
+  ? { input: "native" as const, output: "erc20" as const }
+  : { input: "erc20" as const, output: "native" as const });
 export const ellaRoutes = {
   project({ descriptor: d }) {
     return directions.map(direction => ({ familyId: d.familyId, lineageId: d.lineageId, instanceKey: d.instanceKey,
       routeKey: routeKey(`${d.familyId}:${lower(d.pool)}:${direction}`),
       tokenIn: direction === "buy-token" ? ADDR.WETH : d.token, tokenOut: direction === "buy-token" ? d.token : ADDR.WETH,
+      executionAssets: executionAssets(direction),
       taxonomy: { slotKind: "swap" as const }, bindingRef: { bindingKey: lower(d.pool), fingerprint: hashCanonical(staticBinding(d)) },
       runtimeRequirements: d.runtimeRequirements, pool: d.pool, direction }));
   },
@@ -25,6 +29,7 @@ export function assertRoute(d: EllaDescriptor, r: EllaRoute): void {
   if (!directions.includes(r.direction) || !same(d.pool, r.pool) || r.familyId !== d.familyId || r.lineageId !== d.lineageId ||
       r.instanceKey !== d.instanceKey || r.routeKey !== `${d.familyId}:${lower(d.pool)}:${r.direction}` ||
       r.bindingRef.fingerprint !== hashCanonical(staticBinding(d)) || r.bindingRef.bindingKey !== lower(d.pool) ||
+      hashCanonical(r.executionAssets ?? null) !== hashCanonical(executionAssets(r.direction)) ||
       !same(r.tokenIn, r.direction === "buy-token" ? ADDR.WETH : d.token) || !same(r.tokenOut, r.direction === "buy-token" ? d.token : ADDR.WETH)) {
     throw new Error("ella route does not match admitted instance");
   }

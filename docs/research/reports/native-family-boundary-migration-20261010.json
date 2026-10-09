@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "status": "implemented-and-local-contracts-verified; historical-and-performance-acceptance-incomplete",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "22bc2b5ec0e923780453d6e3f602a46dbdc809aa",
+  "centralBoundaryCommit": "2f1f3da75e1aaa1ea19262af4f1b58ba38f28bd2",
+  "families": [
+    "ella-exchange",
+    "protocol:ethertoken-native-redeem",
+    "protocol:self-burn-native",
+    "univ4",
+    "univ4-fee-hook",
+    "custom-swap:ekubo-router-v1"
+  ],
+  "scope": {
+    "execution": "Family-owned raw protocol calls and native-side declarations; production issuer supplies the existing protocol-neutral ETH/WETH boundary to quoted and runtime execution. No per-Family central switch or named protocol branch.",
+    "v4": "Signed PoolManager output/debt decoding, input cap, callback framing, hook data and actual settlement-credit checks remain. Native input is unwrapped before unlock, only actual debt is paid inside it, and unspent input or actual native output is wrapped afterward.",
+    "ekubo": "Native Router value, receiver, exact input, minimum output, int128 amount range and native CALL_VALUE capacity remain. Raw Router action no longer double-wraps inside the common boundary.",
+    "identity": "No instance is newly admitted by these changes. Raw identity behavior probes retain actual token/native/totalSupply observations. Existing topology, code and factory/extension checks are not bypassed.",
+    "sim": "Production selector construction contract retains zero off-chain Exact calls and no quoted fallback. This is construction coverage, not a historical winning-route claim.",
+    "configuration": "No activation/default-set change; no deployment, live start, signing, key access or broadcast. No 14400-block scan. No performance experiment."
+  },
+  "verification": {
+    "evidenceRoot": "logs/native-three-central-20261010.chtx58",
+    "initialThreeFamilyContracts": {
+      "passed": 19,
+      "log": "family-contracts.log",
+      "sha256": "c34dfd7a52f4b473fdfddab637af58fd452beed338033c8a6c393c5f47d07683"
+    },
+    "callbackFamilyContracts": {
+      "v4AndEkuboTests": 48,
+      "sat1LocalTests": 5,
+      "sat1Contract": "PASS",
+      "productionSelectorAndDualTests": 75,
+      "log": "callback-contracts-p1.log",
+      "sha256": "1efb9b912d0711dfa9fdf8a7db8a67d4df06481eb20d710ee8778b30081cbbc1"
+    },
+    "productionRegression": {
+      "manifestGenerateAndCheck": "PASS",
+      "buildLive": "PASS",
+      "v4AndFeeHookOriginalContracts": "PASS",
+      "selfBurnOriginalContract": "PASS; two independent synthetic instances",
+      "adapterFamilyRuntime": "PASS",
+      "strictCentralRuntimeTests": 167,
+      "strictExecutionProjection": "PASS",
+      "log": "current-production-regression.log",
+      "sha256": "e74a54d8ec29a6744ae6eb288f1b1b2867e0cab15081930edd2ba8e75d98f8b8"
+    },
+    "localEvm": {
+      "artifact": "logs/unified-payment-evm-rnorBM/summary.json",
+      "sha256": "d798de0f46ff1c4bc4f402e60768b72424f86bcd091ce352a576a44842b3fc2a",
+      "assertedOutcomes": 48,
+      "scope": "Real BotVM on an isolated local Anvil with stateful mock V4 manager/tokens; includes expected revert cases, NOT 48 successful swaps or historical pool receipts.",
+      "checks": [
+        "ERC20/native in both directions; dynamic take and actual debt settlement",
+        "Standalone generic non-live fragment partial refunds and zero fill; excess debt and settlement skew revert",
+        "Closed runtime flow full debit and at most one raw-unit short debit; larger short debit and zero debit reject",
+        "Old ERC20 inventory, final native restoration, actual next-hop input and atomic rollback"
+      ]
+    },
+    "preReviewStagedSource": {
+      "export": "/tmp/mev-native-family-stage-20261010.Gdj1x5",
+      "manifestGenerateAndCheck": "PASS",
+      "buildLive": "PASS",
+      "dualTestsPassed": 74,
+      "log": "logs/native-three-central-20261010.chtx58/staged-build-dual.log",
+      "sha256": "cc4dee42aaf243af3f05cfbc6bb0e94053b1d96144d7cd31aac5dd44d58f486a",
+      "generatedManifestBlob": "1b70d519eeed780d5324b78430c9c2bcd393cd10",
+      "scope": "Pre-review snapshot only: predates the fee-hook quoted repair below. Git index export excludes peer-owned uncommitted UniV1, Ready/main and xWin changes. Manifest generated in this export, not copied from the dirty working artifact. Working dual suite has one additional peer-owned fixture (75 versus 74)."
+    },
+    "feeHookQuotedRegression": {
+      "finding": "P1 independent review: native quoted execution still used the legacy unframed unlock callback inside the common runtime asset envelope. The manager callback lacks its authenticated runtime frame and is rejected. Runtime execution already used the framed program. The original 48 no-hook EVM cases did not cover fee-hook quoted execution.",
+      "before": {
+        "exitCode": 1,
+        "log": "logs/native-three-central-20261010.chtx58/fee-hook-quoted-before.log",
+        "sha256": "ddd32e44413717ed4fa62514a2dc45e011c6c063f57cbe6dd5224e4f8ceaf7a7",
+        "failureArtifact": "logs/unified-payment-evm-kwGwWs/failure.json",
+        "failureSha256": "21459bae08f8e6ef0b0ec70a263b3987b894e2cb972db72588a1ae464edd1128",
+        "observed": "Real local EVM full-input fee-hook/native/forward quoted call reverts. Outer envelope reports runtime external call; the deeper callback-sender cause is the independently reviewed source chain, not a claimed captured nested trace."
+      },
+      "repair": "Quoted fee-hook now uses the existing Family-owned buildV4RuntimeProgram with a fixed validated amountIn. Quote and actor-bound hookData, route and native-side validation remain. The legacy child-script branch is removed; no central or VM authorization is relaxed.",
+      "after": {
+        "exitCode": 0,
+        "log": "logs/native-three-central-20261010.chtx58/fee-hook-quoted-after.log",
+        "sha256": "88d418c7032fde9d65c71c28b679aaeccd3a8b6558b5e0e553ae33f2eed64410",
+        "artifact": "logs/unified-payment-evm-vdpKZX/summary.json",
+        "artifactSha256": "e81e9acdcda7946e8653ceb1e295c40ac2dc4baf15e8987023a34abe50baeb94",
+        "assertedOutcomes": 132,
+        "successfulExecutions": 56,
+        "expectedReverts": 76,
+        "scope": "Production action catalog recursively compiles no-hook/fee-hook ERC20 and native both ways, plus Sat1 native both ways. Real BotVM/local stateful mocks exercise quoted and runtime flow, authentic hookData delivery, actual native minimum, partial refund, 0/1-unit debit bounds, excess debt and settlement skew, old inventory and atomic rollback. This does NOT execute actual hook logic, historical liquidity, natural Ready or full opportunities."
+      },
+      "productionContracts": {
+        "manifestGenerateAndCheck": "PASS",
+        "buildLive": "PASS",
+        "feeHookOriginalContract": "PASS",
+        "sat1Contract": "PASS",
+        "sat1LocalTests": 5,
+        "workingDualTestsPassed": 75,
+        "strictExecutionProjection": "PASS",
+        "log": "logs/native-three-central-20261010.chtx58/fee-hook-production-after.log",
+        "sha256": "e3d24ed5d2af817f903359b22a6799deee5f1d76dcb80178041a4486517b4d78"
+      }
+    },
+    "isolatedStagedSource": {
+      "export": "/tmp/mev-native-family-stage-final-20261010.FYReKx",
+      "manifestGenerateAndCheck": "PASS",
+      "buildLive": "PASS",
+      "feeHookOriginalAndSat1Contracts": "PASS",
+      "sat1LocalTestsPassed": 5,
+      "dualTestsPassed": 74,
+      "log": "logs/native-three-central-20261010.chtx58/staged-final-build-dual.log",
+      "sha256": "67f32ea735eadf2b9c4a4ce41b2e9af1e419c42795baa4553be61c9e970b4de3",
+      "generatedManifestBlob": "13cef5115544726515baf0aaaab73ed31e935efb",
+      "localEvmOutcomes": 132,
+      "localEvmArtifact": "logs/native-three-central-20261010.chtx58/isolated-stage-evm/summary.json",
+      "localEvmArtifactSha256": "e81e9acdcda7946e8653ceb1e295c40ac2dc4baf15e8987023a34abe50baeb94",
+      "localEvmLog": "logs/native-three-central-20261010.chtx58/staged-final-evm.log",
+      "localEvmLogSha256": "50f5634f8a24cc6d95809d2b43f1634a295cb5e3c7dbcf31a0a6e95ff2cafb6c",
+      "scope": "Final exact index export after the fee-hook repair. Excludes peer-owned UniV1, Ready/main and xWin changes. Build, Family contracts, 74 dual tests and 132 local-EVM outcomes all rerun here. Production-generated manifest comes from this export; no working-peer fingerprints are staged."
+    },
+    "nonAuthorReview": {
+      "reviewer": "Codex Cicero, 01a1219a-1ed4-74d2-8534-7b9156aa2f39",
+      "initial": "One P1: fee-hook native quoted unlock callback lacked the runtime authorization frame; no other migration blocker found within the declared six-Family diff and common test scope.",
+      "targetedFollowUp": "P1 closed for implemented/local-only scope; no new blocker found. Reviewer read the repair, runtime/compiler tests, mock changes and retained before/after EVM evidence. Central issuer, native boundary, VM authorization and shared V4 runtime program were not relaxed.",
+      "limits": "Read-only review; reviewer did not rerun tests/RPC. Fresh historical dual execution, actual deployed hook behavior, natural integration and all performance remain separate pending gates. Final isolated source tests are main-agent evidence below, not reviewer-executed tests."
+    }
+  },
+  "sourceBinding": {
+    "baseCommit": "22bc2b5ec0e923780453d6e3f602a46dbdc809aa",
+    "stagedBinaryPatchSha256ExcludingThisReport": "e6a86efa29e59df45f6e61f55d24a166fea98762c38d2e421b47ce1fa3242501",
+    "patchCommand": "git diff --cached --binary -- . ':!docs/research/reports/native-family-boundary-migration-20261010.json'",
+    "scope": "31 intended staged code/test/template/generated paths only; no claim that the dirty production worktree as a whole equals this scoped source."
+  },
+  "retainedFailure": {
+    "log": "logs/native-three-central-20261010.chtx58/production-contracts.log",
+    "sha256": "83b824684635e240da0ce89bc02964912550dbc28a7b1914d5da9a70f11d622a",
+    "result": "Initial dual suite failed one assertion still expecting wrapping inside the raw Family program. Test now follows the real common boundary, checking actual wrapped delta, requested debit and old native/token balances. The original failed run is retained; successful follow-up uses a new file.",
+    "subsequentLog": "logs/native-three-central-20261010.chtx58/production-dual-p2.log",
+    "subsequentSha256": "15a62eb5fc9c085613aa418b0967abaacc797d22a977a798c5398f6ff6378f6b"
+  },
+  "remaining": [
+    "Fresh same-state historical quoted/runtime and single-block strict/Ready/Graph/effective acceptance for these six migrated Families and supported variants is NOT RUN in this change. Prior historical evidence is not relabeled as a fresh migrated-path success.",
+    "UniV1 has separate uncommitted peer-owned changes and still has Family-local native wrapping; it is preserved, not included or silently declared migrated.",
+    "Review remaining shared native metadata usage, including Curve identity; the central capability exists but full installed-Family migration is not yet claimed.",
+    "All IMPL-adapted protocols, DeepSeek and own protocol work require timing: correctness first; then each protocol's single-block Ready production-stage checks; then representative combined large-graph acceptance. Balancer V2/V3 and Curve plain/underlying remain in that final phase.",
+    "No claim of faster execution, representative latency, original transaction reproduction, full profitable route, adapter_merge_ready or completed goal. Real protocol caller/callback/hook behavior still needs historical evidence beyond synthetic contracts."
+  ],
+  "preserved": [
+    "Original coffee Ready/checkpoint and historical snapshots",
+    "Peer UniV1, Ready/main and unrelated dirty changes",
+    "Earlier Curve/Fluid same-state receipts and their exact source bindings in native-asset-rounding-acceptance-20261010.json"
+  ]
+}

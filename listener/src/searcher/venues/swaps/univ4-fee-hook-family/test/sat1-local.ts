@@ -90,7 +90,10 @@ test("Sat1 defaults to bounded local reads and retains explicit Quoter mode", ()
   assert.equal(q.stateChanges, undefined, "single-leg consumers do not create trial state");
   assert(createUniv4FeeHookExact("quoter").methods(f.input).some(m => m.id === "univ4-fee-hook-quoter"));
   const fragment = plugin.execution.buildFragment({ ...f.input, quotedAmountOut: q.amountOut, exactEvidence: q.evidence, minAmountOut: q.amountOut });
-  assert.equal(fragment.nodes[0]!.children[1]!.amount, q.amountOut);
+  assert.equal(fragment.nodes[0]!.amount, f.input.amountIn, "quoted execution fixes the validated input, not the output");
+  assert.equal(fragment.nodes[0]!.children.length, 0);
+  assert.equal(fragment.nodes[0]!.params.runtimeAmountProgram, plugin.execution.buildRuntimeLeg(f.input)!.program,
+    "quoted execution shares the framed callback and actual-debt program");
   const zero = { ...f.input, amountIn: 0n };
   assert.deepEqual(f.method.program.buildRequests(zero), []);
   assert.equal(f.method.program.decode({ programInput: zero, initialResults: [], dependentEvidence: [] }).amountOut, 0n);

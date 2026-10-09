@@ -19,8 +19,6 @@ export const univ4FamilyManifest = {
   ],
   requiredInfraActionAdapterIds: [
     "erc20-transfer",
-    "weth-deposit-value",
-    "weth-withdraw-amount",
   ],
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [UNIV4_MANAGER_LINEAGE_ID],

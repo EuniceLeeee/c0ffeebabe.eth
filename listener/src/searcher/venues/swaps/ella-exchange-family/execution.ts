@@ -1,7 +1,6 @@
 import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
-import { runtimeLeg, runtimeExecutor, runtimeWrapReceipt, RUNTIME_WRAP } from "../../runtime-execution.js";
+import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
 import { POOL } from "./codec.js";
-import { ADDR } from "../../../../shared/constants/addresses.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import type { ResolvedPlanNode } from "../../../../types.js";
 import { MAX_UINT, same } from "./codec.js";
@@ -14,18 +13,17 @@ export const ellaExecution = {
     assertRoute(d, r); runtimeExecutor(executor, d.pool);
     const p = new RuntimeAmountProgram(), buy = r.direction === "buy-token";
     if (buy) {
-      p.call(ADDR.WETH, RUNTIME_WRAP.encodeFunctionData("withdraw", [0n]), { patches: [{ offset: 4, reg: 0 }] })
-        .call(d.pool, POOL.encodeFunctionData("swapBase1"), { valueReg: 0 });
+      p.call(d.pool, POOL.encodeFunctionData("swapBase1"), { valueReg: 0 });
     } else {
-      p.allowance(r.tokenIn, d.pool, 0, MAX_UINT).nativeBalance(13)
+      p.allowance(r.tokenIn, d.pool, 0, MAX_UINT)
         .call(d.pool, POOL.encodeFunctionData("swap1", [0n]), { patches: [{ offset: 4, reg: 0 }] });
-      runtimeWrapReceipt(p, ADDR.WETH);
     }
     return runtimeLeg(actionId(r.direction), p);
   },
   runtimeProjection: ({ hop }) => ({ allowanceSpender: hop.adapterId === "ella-sell-token" ? hop.target : null, prewarmQuoteCalls: [] }),
   buildFragment(i) {
     assertRoute(i.descriptor, i.route);
+    runtimeExecutor(i.executor, i.descriptor.pool);
     const e = i.exactEvidence;
     if (i.amountIn <= 0n || i.amountIn > MAX_UINT || i.quotedAmountOut <= 0n || i.minAmountOut < 0n || i.minAmountOut > i.quotedAmountOut ||
         e.kind !== "ella-source-math" || e.unavailableReason || e.binding !== i.route.bindingRef.fingerprint ||
@@ -34,15 +32,12 @@ export const ellaExecution = {
     }
     const buy = i.route.direction === "buy-token";
     const swap: ResolvedPlanNode = { adapterId: actionId(i.route.direction), target: i.descriptor.pool,
-      tokenIn: buy ? ADDR.ZERO : i.descriptor.token, tokenOut: buy ? i.descriptor.token : ADDR.ZERO,
+      tokenIn: i.route.tokenIn, tokenOut: i.route.tokenOut,
       amount: i.amountIn, params: {}, children: [] };
-    const wrap: ResolvedPlanNode = { adapterId: buy ? "weth-withdraw-amount" : "weth-deposit-value", target: ADDR.WETH,
-      tokenIn: buy ? ADDR.WETH : ADDR.ZERO, tokenOut: buy ? ADDR.ZERO : ADDR.WETH,
-      amount: buy ? i.amountIn : i.quotedAmountOut, params: {}, children: [] };
-    // No native minOut function exists. The common executor amount propagation
-    // and mandatory terminal balance/repayment guard remain authoritative.
+    // The issuer owns native conversion and the measured minimum. The raw
+    // protocol ABI has no minOut argument and must not wrap a quoted amount.
     return { requirements: buy ? [] : [{ kind: "approve" as const, token: i.descriptor.token, spender: i.descriptor.pool, amount: MAX_UINT }],
-      nodes: buy ? [wrap, swap] : [swap, wrap] };
+      nodes: [swap] };
   },
   expectedEffects: ({ route }) => [
     { kind: "token-delta", token: route.tokenIn, account: "executor", direction: "decrease" },

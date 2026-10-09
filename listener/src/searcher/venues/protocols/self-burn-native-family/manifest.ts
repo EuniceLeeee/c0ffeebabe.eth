@@ -12,7 +12,7 @@ export const selfBurnNativeFamilyManifest = {
   familyId: SELF_BURN_NATIVE_FAMILY_ID,
   domain: "protocol",
   ownedActionAdapterIds: ["self-burn-native-redeem"],
-  requiredInfraActionAdapterIds: ["weth-deposit-value"],
+  requiredInfraActionAdapterIds: [],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "redeem" }],
   supportedLineages: [SELF_BURN_NATIVE_LINEAGE_ID],
   poolAdapterIds: ["self-burn-native-token"],

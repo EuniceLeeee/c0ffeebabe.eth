@@ -7,6 +7,7 @@ import { univ4Execution } from "../execution.js";
 import { UNIV4_FAMILY_ID, UNIV4_MANAGER_LINEAGE_ID } from "../manifest.js";
 import { univ4Routes } from "../routes.js";
 import { buildUniV4RuntimeLeg } from "../runtime-execution.js";
+import { applyRuntimeAssetBoundary } from "../../../../execution-asset-boundary.js";
 import type { UniV4Descriptor, UniV4Route } from "../types.js";
 
 // Independent ABI declarations and synthetic replies: these checks exercise the
@@ -178,11 +179,7 @@ function exercise(input: Input, amount: bigint, output: bigint, overrides: Reply
       [zero, -amount, zero ? 4295128740n : 1461446703485210103287273052203988822378723970341n], "0x"],
     [{ offset: 196, reg: 7 }], overrides.delta ?? packedDelta(input, -debt, output));
   add("take", managerAbi, manager, [route.realTokenOut, executor, output], [{ offset: 68, reg: outputReg }]);
-  if (route.realTokenOut === ethers.ZeroAddress) {
-    add("deposit", tokenAbi, ADDR.WETH, [], [], "0x", outputReg, output);
-  }
   if (route.realTokenIn === ethers.ZeroAddress) {
-    add("withdraw", tokenAbi, ADDR.WETH, [debt], [{ offset: 4, reg: 6 }]);
     add("sync", managerAbi, manager, [ethers.ZeroAddress]);
     add("settle", managerAbi, manager, [], [], overrides.settled ?? abi.encode(["uint256"], [debt]), 6, debt);
   } else {
@@ -221,8 +218,7 @@ for (const { name, input } of cases) {
   test(`V4 ${name}: callback packet, signed swap, actual output and exact settlement`, () => {
     for (const [amount, output] of [[1n, 7n], [123456789n, 987654321n], [MAX_I128, MAX_I128]]) {
       const seen = exercise(input, amount, output);
-      assert.deepEqual(seen, name === "native input" ? ["swap", "take", "withdraw", "sync", "settle"]
-        : name === "native output" ? ["swap", "take", "deposit", "sync", "transfer", "settle"]
+      assert.deepEqual(seen, name === "native input" ? ["swap", "take", "sync", "settle"]
         : ["swap", "take", "sync", "transfer", "settle"]);
     }
   });
@@ -282,7 +278,25 @@ test("V4 binds pool, manager, key, direction and graph/real currencies before en
       { ...r, direction: r.direction === "zero-for-one" ? "one-for-zero" : "zero-for-one" },
       { ...r, tokenIn: r.tokenOut }, { ...r, tokenOut: r.tokenIn },
       { ...r, realTokenIn: other }, { ...r, realTokenOut: other },
+      { ...r, executionAssets: undefined },
+      { ...r, executionAssets: { input: "native", output: "native" } },
     ];
-    for (const route of badRoutes) assert.throws(() => buildUniV4RuntimeLeg({ ...input, route }), /route mismatch/);
+    for (const route of badRoutes) assert.throws(() => buildUniV4RuntimeLeg({ ...input, route }), /route/);
+  }
+});
+
+test("V4 declares raw native sides; the issuer adds one boundary outside unlock", () => {
+  for (const { input } of cases) {
+    const { route } = input;
+    assert.deepEqual(route.executionAssets, {
+      input: route.realTokenIn === ethers.ZeroAddress ? "native" : "erc20",
+      output: route.realTokenOut === ethers.ZeroAddress ? "native" : "erc20",
+    });
+    const leg = buildUniV4RuntimeLeg(input); assert(leg);
+    const issued = applyRuntimeAssetBoundary({ route, executor, leg });
+    if (route.realTokenIn === ethers.ZeroAddress || route.realTokenOut === ethers.ZeroAddress)
+      assert.notEqual(issued.program, leg.program);
+    else assert.equal(issued, leg);
+    assert.throws(() => buildUniV4RuntimeLeg({ ...input, executor: manager }), /executor/);
   }
 });

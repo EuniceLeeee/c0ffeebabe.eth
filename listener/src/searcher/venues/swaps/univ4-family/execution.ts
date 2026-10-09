@@ -1,6 +1,5 @@
 import { ethers } from "ethers";
 import { buildUniV4RuntimeLeg } from "./runtime-execution.js";
-import { ADDR } from "../../../../shared/constants/addresses.js";
 import type { ResolvedPlanNode } from "../../../../shared/types/plan.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
@@ -37,7 +36,6 @@ export const univ4Execution = {
     const key = input.descriptor.poolKey;
     const zeroForOne = input.route.direction === "zero-for-one";
     const inputIsNative = sameAddress(input.route.realTokenIn, ethers.ZeroAddress);
-    const outputIsNative = sameAddress(input.route.realTokenOut, ethers.ZeroAddress);
     const children: ResolvedPlanNode[] = [
       {
         adapterId: "univ4-swap",
@@ -71,29 +69,8 @@ export const univ4Execution = {
       },
     ];
 
-    if (outputIsNative) {
-      children.push({
-        adapterId: "weth-deposit-value",
-        target: ADDR.WETH,
-        tokenIn: input.route.realTokenOut,
-        tokenOut: ADDR.WETH,
-        amount: input.quotedAmountOut,
-        params: {},
-        children: [],
-      });
-    }
-
     if (inputIsNative) {
       children.push(
-        {
-          adapterId: "weth-withdraw-amount",
-          target: ADDR.WETH,
-          tokenIn: ADDR.WETH,
-          tokenOut: input.route.realTokenIn,
-          amount: input.amountIn,
-          params: {},
-          children: [],
-        },
         {
           adapterId: "univ4-sync",
           target: input.descriptor.managerBinding.manager,
