@@ -1,0 +1,1280 @@
+{
+  "schema": 1,
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "codeCommit": "ad1afa1729b1d6c98527a03eaed465b9f4ebfc18",
+  "claim": "Three additional named Balancer V3 pools now have natural production reference inputs and same-state dual execution parity. Correctness evidence only; not general Family, original-precall, opportunity, merge or latency acceptance.",
+  "productionChanges": "None. Existing discovery/strict/graph/pricing and unchanged reviewed historical dual harness. New ignored thin callers only; production activation defaults unchanged.",
+  "evidenceRoot": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe",
+  "source": {
+    "sourceTreeSha256": "90625d82049dc18e2406c1ae220120f62a1980b3c2c4d08b4ab12b00af2f07ca",
+    "harnessSha256": "7ce74396becca8db9a89081847fe79992804bbe99c9d5bac5756f2916d2e556c",
+    "evidenceSha256": "fb75268144141a565c1e9152a52cd4ba0342ab76a35f5800fe8d314b402ae942",
+    "observationHelpers": [
+      {
+        "path": "../three-family/historical-input-observations.ts",
+        "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+      },
+      {
+        "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+        "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+      },
+      {
+        "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+        "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+      },
+      {
+        "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+        "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+      },
+      {
+        "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+      }
+    ]
+  },
+  "priorEvidence": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/balancer-v3-stable-surge-acceptance-20261010.json",
+      "sha256": "4b5bae5d33e77234ee4e0ec54aa46bfcca0d9d7db4d463fd71fc4b8dbcfb4e20"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/balancer-v3-four-token-natural-reference-20261010.json",
+      "sha256": "b6a82a184dd0d12fca8dc07d4b78d89bee24fd537dcd26692322e10ce7d84392"
+    }
+  ],
+  "observations": [
+    {
+      "name": "26030897-1",
+      "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+      "N": 26030897,
+      "blockHash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6",
+      "pool": "0x6b31a94029fd7840d780191b6d63fa0d269bd883",
+      "familyIds": [
+        "balancer-v3",
+        "univ3-standard"
+      ],
+      "naturalInstances": 54,
+      "graphEdges": 108,
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x2411802d8bea09be0af8fd8d08314a63e706b29c>0x90551c1795392094fe6d29b758eccd233cfaa260\u001f1bd9f7296d1c4923fbc78bd81beabfa7b9457362d018d4188fdc0d49f2c87a4e",
+          "tokenIn": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+          "tokenOut": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        },
+        {
+          "edgeId": "balancer-v3\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x90551c1795392094fe6d29b758eccd233cfaa260>0x2411802d8bea09be0af8fd8d08314a63e706b29c\u001f90f6dfdc88fb5e0308511e13d7e69e01603c4797aea63abd27d4a329cd912b65",
+          "tokenIn": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+          "tokenOut": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+          "candidates": [],
+          "note": "ERC4626 outside this run scope"
+        },
+        {
+          "token": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+          "candidates": [],
+          "note": "ERC4626 outside this run scope"
+        }
+      ],
+      "preservedOriginal": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/ready.json",
+        "sha256": "eee7ec8c1de2b42a8a6612a2d142069c18f92a03f8486c1242532c16b9a661d6"
+      },
+      "artifacts": {
+        "input-provenance.json": "6bd6517d0046e646f32c730334f2df2be472d51c33f12394363c83772ca5bb4f",
+        "source-before.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "source-after.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "ready.json": "2759bb5fb82184c4aa26dc3b87ccefc9e597ab0adf06c9ef0dc61016301b8469",
+        "ready-summary.json": "b9c790a55b26a74eae4aaf7af34455df9b5884135b2240e9dc0c1a2db5976d83",
+        "receipt.json": "b5403cff691a47c36e101b8be779c5290d839ee899f71f543b9c295253d59ae1",
+        "header.json": "c905b66dbf229369e6fd8c47aa70de3e043fd827cdd6b58aea6431efba699914",
+        "result.json": "57a29e9034d80afd6af23633f518f227d865900489f2162c410542c675dea63e",
+        "prices/prices.json": "a014f05f6cf687dc7ade37515e6f34f4df1ad77a49a11999b86631c3a1427c68",
+        "prices/input.json": "0813f9c423065f43f5b5a640089fa99f0bde8f7af88fca0ab6995852ddced598"
+      },
+      "canonicalStatus": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/26030897-1-canonical-status.log",
+        "sha256": "913fb964db915478f6a4c89c904b0ec6309a3f759983e44abfa0e650974fd71f"
+      }
+    },
+    {
+      "name": "25936827-1",
+      "tx": "0x1b474eb9c6da5bd400c4a20c0d029a039cb6d509df756140b3e09e42374845e3",
+      "N": 25936827,
+      "blockHash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+      "pool": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+      "familyIds": [
+        "balancer-v3",
+        "univ3-standard"
+      ],
+      "naturalInstances": 12,
+      "graphEdges": 24,
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0x8399c8fc273bd165c346af74a02e65f10e4fd78f>0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94\u001f8729bd1f9d33e9f1d32ac2c1c04a1a3b45ad74d5dd4f497b6dd2657e82d8a9d9",
+          "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+          "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        },
+        {
+          "edgeId": "balancer-v3\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94>0x8399c8fc273bd165c346af74a02e65f10e4fd78f\u001f3a2738f16eb5c790ddcc2dd20d651dd93d114b9c9df347c6d1c22ce4533c8822",
+          "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+          "candidates": [],
+          "note": "ERC4626 outside this run scope"
+        },
+        {
+          "token": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "candidates": [],
+          "note": "ERC4626 outside this run scope"
+        }
+      ],
+      "preservedOriginal": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/ready.json",
+        "sha256": "0df73b8b1cb1c19139540b17bdff7c4caf237d02c04e4c1e30deaca38918e1ec"
+      },
+      "artifacts": {
+        "input-provenance.json": "e1bf499fc1f52b6ffd79a73c9675d6ba857afc359ab4adf80d3a5db36db1f36f",
+        "source-before.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "source-after.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "ready.json": "26c006c38eb05dc49feff68ba062c8b1ca07a9bec26da1aadb20c1882666a7b1",
+        "ready-summary.json": "fe8f32b9ecca1dc379115ac653b45a3fa327cafb4405476cec96bdebfd35b31a",
+        "receipt.json": "cb76e32d93298cdadb4db1b0cc5d7df982f611c86e39aaa11bf037996f2b6dd0",
+        "header.json": "25230adf15ed525585030e942600cf8df7f4d8ea63fe0c5653df667f941c01d8",
+        "result.json": "3d9cfc57a4895dc31a19586392f1049141e2a43fc84100d0e6b6611fb8a32c2a",
+        "prices/prices.json": "4d6c11c062095aa898c21cc8d5fdde614d415a2628659fda6fb0e6ab111fbb37",
+        "prices/input.json": "05321f192b235630c806dd546e6cd7ecf5e979c823366a4f063de292b119125e"
+      },
+      "canonicalStatus": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25936827-1-canonical-status.log",
+        "sha256": "4871a6bb1b5e7936b184bc40c2f351a345809cf032468ee3620abb12fb8f609a"
+      }
+    },
+    {
+      "name": "25985457-1",
+      "tx": "0xf244dd0b413f99bb171d698d9b0c4392bdaad674329f70d26d11bf0183ccabd2",
+      "N": 25985457,
+      "blockHash": "0x2198a9b437e37b1f0e855be03b2989e7f725d2a67c232480f92a8e960975a80b",
+      "pool": "0xe00e947decfe01692070e113002705bdf77ddbd3",
+      "familyIds": [
+        "balancer-v3",
+        "univ3-standard"
+      ],
+      "naturalInstances": 26,
+      "graphEdges": 52,
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0xe00e947decfe01692070e113002705bdf77ddbd3\u001f0xe00e947decfe01692070e113002705bdf77ddbd3\u001f0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf>0xe108fbc04852b5df72f9e44d7c29f47e7a993add\u001fc280ac95e8c7cd05d0d8501f09884ca437ad4c6e5ac06dfe604fba8b31a61311",
+          "tokenIn": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "tokenOut": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        },
+        {
+          "edgeId": "balancer-v3\u001f0xe00e947decfe01692070e113002705bdf77ddbd3\u001f0xe00e947decfe01692070e113002705bdf77ddbd3\u001f0xe108fbc04852b5df72f9e44d7c29f47e7a993add>0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf\u001ffba57aa8fd007ece710b7d29f12d293974a64bb240726ea7bdb83b1ef6b2e84a",
+          "tokenIn": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "tokenOut": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "candidates": [],
+          "note": "ERC4626 outside this run scope"
+        },
+        {
+          "token": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "candidates": [],
+          "note": "ERC4626 outside this run scope"
+        }
+      ],
+      "preservedOriginal": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/ready.json",
+        "sha256": "6a1f80cbdf33700a6d0c0e060061efde251469c5629f3572d648ed8d4ac28761"
+      },
+      "artifacts": {
+        "input-provenance.json": "5de6a1019b7af6060b8ec9c8c76b6498e2511240443f32e791b7fb2d1c7e3552",
+        "source-before.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "source-after.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "ready.json": "154979c39e9aed1923d5f2440abb8acb77b1910fcdfe483aca6b41e5a9fadae7",
+        "ready-summary.json": "235cba6588d63369344d4f6c300b366d3ba434eb583ad34be83275a248216c14",
+        "receipt.json": "ef6568b8da4bbf2aa61b71004fc829c4e43b8f8a8dd3cd7dc801ceee0a1a3ce9",
+        "header.json": "03662aef28449c9463c22b02ec2e882bde70f766eee02873d1477395579e3e5c",
+        "result.json": "5d547abc497868fcd7b26f162f1101d56a7a2e3cdacfad580956d49a39e24998",
+        "prices/prices.json": "3cb20e310aeb3b8977717ce7841d04d8426ba02e651842b4e31bc758f1a7e6e3",
+        "prices/input.json": "7bf60b2e95e1093953f2e565eabc47e637e1a0d67cb15f56f678b790d1b04ac9"
+      },
+      "canonicalStatus": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25985457-1-canonical-status.log",
+        "sha256": "44381d2fa0c6d20dca22ec5d88152466d3f16fb4c9b190519dca5508ea9a08c0"
+      }
+    },
+    {
+      "name": "26030897-erc4626-1",
+      "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+      "N": 26030897,
+      "blockHash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6",
+      "pool": "0x6b31a94029fd7840d780191b6d63fa0d269bd883",
+      "familyIds": [
+        "balancer-v3",
+        "univ3-standard",
+        "protocol:erc4626"
+      ],
+      "naturalInstances": 56,
+      "graphEdges": 111,
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x2411802d8bea09be0af8fd8d08314a63e706b29c>0x90551c1795392094fe6d29b758eccd233cfaa260\u001f1bd9f7296d1c4923fbc78bd81beabfa7b9457362d018d4188fdc0d49f2c87a4e",
+          "tokenIn": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+          "tokenOut": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        },
+        {
+          "edgeId": "balancer-v3\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x90551c1795392094fe6d29b758eccd233cfaa260>0x2411802d8bea09be0af8fd8d08314a63e706b29c\u001f90f6dfdc88fb5e0308511e13d7e69e01603c4797aea63abd27d4a329cd912b65",
+          "tokenIn": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+          "tokenOut": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+          "candidates": [
+            {
+              "key": "f99594bed8b7b5dee2ea7f2269a1ca255ab02e21d585bdbde927ccfc5ad91fc6",
+              "transactionHash": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+              "outcome": {
+                "status": "terminal-rejected",
+                "familyCandidateKey": "f99594bed8b7b5dee2ea7f2269a1ca255ab02e21d585bdbde927ccfc5ad91fc6",
+                "reasonCode": "identity_rejected:identity-proof-rejected:chain-proven:frax-custodian-sync-conversion:custodian_proxy_not_matched|chain-proven:standalone-standard-behavior:erc4626_execution_surfaces_failed",
+                "familyDefinitionHash": "3d9839fdc8520e8e2f3b8b9a94f5eebe0a0513f1d3dbcafbf2f9740325dfb898",
+                "requestFingerprint": "",
+                "trustedResultsFingerprint": "",
+                "authorityFingerprint": "b49f1796a5d174e161d1886545ce0207b59e1df2b5ea4ae22c1644ad00e0fe95",
+                "candidateFingerprint": "3a1f63d77342649f6391295bb528fe9e77db195946661c572ac3ca527be78c87",
+                "cutoff": {
+                  "number": 26030897,
+                  "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+                }
+              }
+            }
+          ],
+          "note": "Observed current production outcomes; underlying active-probe cause not diagnosed here"
+        },
+        {
+          "token": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+          "candidates": [
+            {
+              "key": "db2b68b99abd73ddcd2765bb994b346640261177ba40632ba1a8895dffe6c6d0",
+              "transactionHash": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+              "outcome": {
+                "status": "terminal-rejected",
+                "familyCandidateKey": "db2b68b99abd73ddcd2765bb994b346640261177ba40632ba1a8895dffe6c6d0",
+                "reasonCode": "identity_rejected:identity-proof-rejected:chain-proven:frax-custodian-sync-conversion:custodian_proxy_not_matched|chain-proven:standalone-standard-behavior:erc4626_execution_surfaces_failed",
+                "familyDefinitionHash": "3d9839fdc8520e8e2f3b8b9a94f5eebe0a0513f1d3dbcafbf2f9740325dfb898",
+                "requestFingerprint": "",
+                "trustedResultsFingerprint": "",
+                "authorityFingerprint": "40e3c794705a9a3455a171e851680f7a4224e3a99573ef6c820984a243754ec7",
+                "candidateFingerprint": "139cc1d491a7242e0f51b36f89506a1dcaf0f26e11717468599ac1a44fb5bbbe",
+                "cutoff": {
+                  "number": 26030897,
+                  "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+                }
+              }
+            }
+          ],
+          "note": "Observed current production outcomes; underlying active-probe cause not diagnosed here"
+        }
+      ],
+      "preservedOriginal": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/ready.json",
+        "sha256": "eee7ec8c1de2b42a8a6612a2d142069c18f92a03f8486c1242532c16b9a661d6"
+      },
+      "artifacts": {
+        "input-provenance.json": "df4d3b67b806e0eddc29851e1b283f0e38e6d396e2a77bea0b1403d89a31217d",
+        "source-before.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "source-after.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "ready.json": "035b44f98329e046bdf81a2e2694ff4f23a9c66d931a81a5b26252387604d91b",
+        "ready-summary.json": "295e4012862b5e697b759cf15a125233f635ecbe34eb16a5428c01faf66d5404",
+        "receipt.json": "b5403cff691a47c36e101b8be779c5290d839ee899f71f543b9c295253d59ae1",
+        "header.json": "c905b66dbf229369e6fd8c47aa70de3e043fd827cdd6b58aea6431efba699914",
+        "result.json": "57a29e9034d80afd6af23633f518f227d865900489f2162c410542c675dea63e",
+        "prices/prices.json": "4557b1a28c2cbf2c693b02003efa5f1a18a60600787ec413dea3c22194a59453",
+        "prices/input.json": "6624d92fdec6a64d98853542e05f09704b15b8d8d17124893b8d29f5c4b3dcf1"
+      },
+      "canonicalStatus": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/26030897-erc4626-1-canonical-status.log",
+        "sha256": "cf483670ee18ca6e6dc290a46f3fe485c5f023e63860f81ecdde94a33ab81282"
+      }
+    },
+    {
+      "name": "25936827-erc4626-1",
+      "tx": "0x1b474eb9c6da5bd400c4a20c0d029a039cb6d509df756140b3e09e42374845e3",
+      "N": 25936827,
+      "blockHash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+      "pool": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+      "familyIds": [
+        "balancer-v3",
+        "univ3-standard",
+        "protocol:erc4626"
+      ],
+      "naturalInstances": 12,
+      "graphEdges": 24,
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0x8399c8fc273bd165c346af74a02e65f10e4fd78f>0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94\u001f8729bd1f9d33e9f1d32ac2c1c04a1a3b45ad74d5dd4f497b6dd2657e82d8a9d9",
+          "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+          "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        },
+        {
+          "edgeId": "balancer-v3\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94>0x8399c8fc273bd165c346af74a02e65f10e4fd78f\u001f3a2738f16eb5c790ddcc2dd20d651dd93d114b9c9df347c6d1c22ce4533c8822",
+          "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+          "candidates": [],
+          "note": "No candidate for this token in this declared single-block scope; not a protocol rejection"
+        },
+        {
+          "token": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "candidates": [],
+          "note": "No candidate for this token in this declared single-block scope; not a protocol rejection"
+        }
+      ],
+      "preservedOriginal": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/ready.json",
+        "sha256": "0df73b8b1cb1c19139540b17bdff7c4caf237d02c04e4c1e30deaca38918e1ec"
+      },
+      "artifacts": {
+        "input-provenance.json": "2e44f60caef422f4bccc86326b08679f91e0d78180451032e99585e3084f46be",
+        "source-before.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "source-after.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "ready.json": "f02d5135a9acd25d6ff2260d21cf09f80fdc52cfa44f1eb48dd4fd3474bc63db",
+        "ready-summary.json": "fe8f32b9ecca1dc379115ac653b45a3fa327cafb4405476cec96bdebfd35b31a",
+        "receipt.json": "cb76e32d93298cdadb4db1b0cc5d7df982f611c86e39aaa11bf037996f2b6dd0",
+        "header.json": "25230adf15ed525585030e942600cf8df7f4d8ea63fe0c5653df667f941c01d8",
+        "result.json": "3d9cfc57a4895dc31a19586392f1049141e2a43fc84100d0e6b6611fb8a32c2a",
+        "prices/prices.json": "9eaba005f160be66a87ed1016d6bc3c3dc6329809ce87cb16608cdb69ba21f11",
+        "prices/input.json": "deedf15df583180e48b9c438193e5f85790afd58b0a342d0c1e02d4fccbb470a"
+      },
+      "canonicalStatus": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25936827-erc4626-1-canonical-status.log",
+        "sha256": "5c8717ffb075009976c37dd4da0b11bda92daf16efd1a6ad62c7daae70070cad"
+      }
+    },
+    {
+      "name": "25985457-erc4626-1",
+      "tx": "0xf244dd0b413f99bb171d698d9b0c4392bdaad674329f70d26d11bf0183ccabd2",
+      "N": 25985457,
+      "blockHash": "0x2198a9b437e37b1f0e855be03b2989e7f725d2a67c232480f92a8e960975a80b",
+      "pool": "0xe00e947decfe01692070e113002705bdf77ddbd3",
+      "familyIds": [
+        "balancer-v3",
+        "univ3-standard",
+        "protocol:erc4626"
+      ],
+      "naturalInstances": 28,
+      "graphEdges": 54,
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0xe00e947decfe01692070e113002705bdf77ddbd3\u001f0xe00e947decfe01692070e113002705bdf77ddbd3\u001f0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf>0xe108fbc04852b5df72f9e44d7c29f47e7a993add\u001fc280ac95e8c7cd05d0d8501f09884ca437ad4c6e5ac06dfe604fba8b31a61311",
+          "tokenIn": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "tokenOut": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "status": "quoted",
+          "amountIn": "10486696816103685146",
+          "amountOut": "4571127281852123619",
+          "quotedAt": {
+            "number": 25985457,
+            "hash": "0x2198a9b437e37b1f0e855be03b2989e7f725d2a67c232480f92a8e960975a80b",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "balancer-v3\u001f0xe00e947decfe01692070e113002705bdf77ddbd3\u001f0xe00e947decfe01692070e113002705bdf77ddbd3\u001f0xe108fbc04852b5df72f9e44d7c29f47e7a993add>0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf\u001ffba57aa8fd007ece710b7d29f12d293974a64bb240726ea7bdb83b1ef6b2e84a",
+          "tokenIn": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "tokenOut": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "status": "quoted",
+          "amountIn": "4668450972722609612",
+          "amountOut": "10486696816103685146",
+          "quotedAt": {
+            "number": 25985457,
+            "hash": "0x2198a9b437e37b1f0e855be03b2989e7f725d2a67c232480f92a8e960975a80b",
+            "generation": 1
+          }
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "candidates": [],
+          "note": "No candidate for this token in this declared single-block scope; not a protocol rejection"
+        },
+        {
+          "token": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "candidates": [
+            {
+              "key": "c4b38915c69874ac2478485f908e023fe76d9c80bc06f06769d582de4f06d140",
+              "transactionHash": "0xf244dd0b413f99bb171d698d9b0c4392bdaad674329f70d26d11bf0183ccabd2",
+              "outcome": {
+                "status": "verified",
+                "familyCandidateKey": "c4b38915c69874ac2478485f908e023fe76d9c80bc06f06769d582de4f06d140",
+                "familyInstanceKey": "fbfb4f8fab74a149b144981f6dd303ca499b6b243d4290d886d709cf1637a007",
+                "memoFingerprint": "3db8a80099376af5931fdfbe4faf528bfb960fc6231010bf4bc452c71bef48b7"
+              }
+            }
+          ],
+          "note": "Observed current production outcomes; underlying active-probe cause not diagnosed here"
+        }
+      ],
+      "preservedOriginal": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/ready.json",
+        "sha256": "6a1f80cbdf33700a6d0c0e060061efde251469c5629f3572d648ed8d4ac28761"
+      },
+      "artifacts": {
+        "input-provenance.json": "897b6f66b80646713ad46b5fa50fab553215f6a9db252a53e2c21905119126b3",
+        "source-before.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "source-after.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "ready.json": "715ef10eefe90bea24747acf4e76d9f1af5d4f1234697a384f070d48c7e3a387",
+        "ready-summary.json": "4561c58285a7df8e9004a7fe3fdae786c91092d230b418c403ebda9ca5b0c1bd",
+        "receipt.json": "ef6568b8da4bbf2aa61b71004fc829c4e43b8f8a8dd3cd7dc801ceee0a1a3ce9",
+        "header.json": "03662aef28449c9463c22b02ec2e882bde70f766eee02873d1477395579e3e5c",
+        "result.json": "7b449c260e50b9f33ee49bfafd1b808ed6765814435e801d4208cffe4894e64b",
+        "prices/prices.json": "ebf35a1833c9b68d2ee89cdba7596d08eaf9043d9bb13c740b95f68009929bcf",
+        "prices/input.json": "3022a5d19bad60ab3fdf4de5263fa0dd2f15145a7db59116d5e436fda0a192dd"
+      },
+      "canonicalStatus": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25985457-erc4626-1-canonical-status.log",
+        "sha256": "68bc575c06d1083f5bea6fb63faf27e59d498c94dc871de92724ba754874d5eb"
+      }
+    },
+    {
+      "name": "25944594-erc4626-1",
+      "tx": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+      "N": 25944594,
+      "blockHash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+      "pool": "0x071828acc755314e687448703775f22194f56867",
+      "familyIds": [
+        "balancer-v3",
+        "univ3-standard",
+        "protocol:erc4626"
+      ],
+      "naturalInstances": 7,
+      "graphEdges": 12,
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0x071828acc755314e687448703775f22194f56867\u001f0x071828acc755314e687448703775f22194f56867\u001f0x9d39a5de30e57443bff2a8307a4256c8797a3497>0xdbdc1ef57537e34680b898e1febd3d68c7389bcb\u001f095d73c2a56a4d65c1e59a2e5d6264939f6e51da1e7e02f5e7a1a88e1cc74284",
+          "tokenIn": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+          "tokenOut": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        },
+        {
+          "edgeId": "balancer-v3\u001f0x071828acc755314e687448703775f22194f56867\u001f0x071828acc755314e687448703775f22194f56867\u001f0xdbdc1ef57537e34680b898e1febd3d68c7389bcb>0x9d39a5de30e57443bff2a8307a4256c8797a3497\u001f63a1aa5333eb21c87670fd53d336ee2b12a371ba452e170a4e1c049563cb8f6e",
+          "tokenIn": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+          "tokenOut": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+          "candidates": [],
+          "note": "No candidate for this token in this declared single-block scope; not a protocol rejection"
+        },
+        {
+          "token": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+          "candidates": [
+            {
+              "key": "2da580eea43d62983f2cb6e2fd424f056502dd3cff132f130474bea4cce485dd",
+              "transactionHash": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+              "outcome": {
+                "status": "terminal-rejected",
+                "familyCandidateKey": "2da580eea43d62983f2cb6e2fd424f056502dd3cff132f130474bea4cce485dd",
+                "reasonCode": "identity_rejected:identity-proof-rejected:chain-proven:frax-custodian-sync-conversion:custodian_proxy_not_matched|chain-proven:standalone-standard-behavior:erc4626_execution_surfaces_failed",
+                "familyDefinitionHash": "3d9839fdc8520e8e2f3b8b9a94f5eebe0a0513f1d3dbcafbf2f9740325dfb898",
+                "requestFingerprint": "",
+                "trustedResultsFingerprint": "",
+                "authorityFingerprint": "4aa216e75dba89d1bfbf522c8701fdc87a22f3e7de6d54477822156941837c64",
+                "candidateFingerprint": "af40999fce86d035d309688bb7f4f88418c4a799cf29f1a24509091c064d3f2e",
+                "cutoff": {
+                  "number": 25944594,
+                  "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e"
+                }
+              }
+            }
+          ],
+          "note": "Observed current production outcomes; underlying active-probe cause not diagnosed here"
+        }
+      ],
+      "preservedOriginal": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/ready.json",
+        "sha256": "cd8c69adb1c25cd007b3b45e6fa7e5d11ecac45b6d57e721fa2c720f65aa3a5a"
+      },
+      "artifacts": {
+        "input-provenance.json": "2fc65007be18c4939b538dc511999cd9b1ae832969082e0bd3f6455785a9c79a",
+        "source-before.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "source-after.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "ready.json": "3d3466fa4739dc6c922d01e9f55677f7ed17b804efc7b56609f595a76431029c",
+        "ready-summary.json": "d510d0012bb1762166be0c83b946c2e2650eacf38609044f153c8c9424233be8",
+        "receipt.json": "c5c1995946639f37ef2716af64033a30359e7ec4f1fb5e75d8c55f56c9d0fdc6",
+        "header.json": "08eef866eb48fe888a33480e6d87d8c71472f31d84daedf375ead7334fa65ed5",
+        "result.json": "a2275e45043314bc07c95ce6868e819b558772da047aa1f3519f63eba6d889e8",
+        "prices/prices.json": "10ff2586d0cd04c83b650b648798a4840646b337f240536c23ce8a8bd4784d4e",
+        "prices/input.json": "3af09b3819b3344b5b99c99a340a85356c11d060d1554384cd14d47608536855"
+      },
+      "canonicalStatus": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25944594-erc4626-1-canonical-status.log",
+        "sha256": "7766d8659285741e7b820a28da82a31e5be8c7ed8c58672fbb94579a79248f3a"
+      }
+    },
+    {
+      "name": "25978385-erc4626-1",
+      "tx": "0x663e4452f85b0b91c729cc81122e565b61a76a85319fda2a0742ccdb7b1a0de0",
+      "N": 25978385,
+      "blockHash": "0x3f539aa4f4cc2ac1752d883e7af0862e17371bd1e3d916893e74f1228cacd50f",
+      "pool": "0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566",
+      "familyIds": [
+        "balancer-v3",
+        "univ3-standard",
+        "protocol:erc4626"
+      ],
+      "naturalInstances": 17,
+      "graphEdges": 34,
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566\u001f0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566\u001f0x6440f144b7e50d6a8439336510312d2f54beb01d>0x99999999999999cc837c997b882957dafdcb1af9\u001f7b645f64b6029b6eaf0bdeb705d6fa3b74f685e66db135191ef49d7ed121f82d",
+          "tokenIn": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+          "tokenOut": "0x99999999999999cc837c997b882957dafdcb1af9",
+          "status": "quoted",
+          "amountIn": "5122505915792253971",
+          "amountOut": "4126149393313534385",
+          "quotedAt": {
+            "number": 25978385,
+            "hash": "0x3f539aa4f4cc2ac1752d883e7af0862e17371bd1e3d916893e74f1228cacd50f",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "balancer-v3\u001f0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566\u001f0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566\u001f0x99999999999999cc837c997b882957dafdcb1af9>0x6440f144b7e50d6a8439336510312d2f54beb01d\u001fa3f286c0083cd4a24101b277c77df1a0113370d60981866e5a8aa365142f2119",
+          "tokenIn": "0x99999999999999cc837c997b882957dafdcb1af9",
+          "tokenOut": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+          "status": "quoted",
+          "amountIn": "4126149393313534385",
+          "amountOut": "5121400037403083289",
+          "quotedAt": {
+            "number": 25978385,
+            "hash": "0x3f539aa4f4cc2ac1752d883e7af0862e17371bd1e3d916893e74f1228cacd50f",
+            "generation": 1
+          }
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+          "candidates": [],
+          "note": "No candidate for this token in this declared single-block scope; not a protocol rejection"
+        },
+        {
+          "token": "0x99999999999999cc837c997b882957dafdcb1af9",
+          "candidates": [],
+          "note": "No candidate for this token in this declared single-block scope; not a protocol rejection"
+        }
+      ],
+      "preservedOriginal": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/ready.json",
+        "sha256": "febf5aa22d0055ecda17b1b400c53bd92bd59f0d050e38fd1a05891df12fc668"
+      },
+      "artifacts": {
+        "input-provenance.json": "3775dce1c213777bad61b4851c213dede3125811dcc53cb04cf22223ac47119e",
+        "source-before.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "source-after.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "ready.json": "ee96ed62f794a92102dd1160be2a20031bb4090ba59aac62906b226cfce99549",
+        "ready-summary.json": "c5d05c3f93779122358a8e838448f3b9b1e93eb7ee20eef200ce6dc492ee70c1",
+        "receipt.json": "84605d3e96d48dff6030663419a53b19febdf26f524985f7e529409dda6a1581",
+        "header.json": "dc2cb64622e78b6a5fc8703414a6e4d32ae9ec1d32df9eea7853f2fb9cdcf167",
+        "result.json": "e742536e77273567c83a56968ec7aef86fc36201890e161256d4610d4644e719",
+        "prices/prices.json": "2685091a7b46e1a5eeb8c726b7f7dfca73625f82852858a41ea589935c645a73",
+        "prices/input.json": "892d6cb6eeb685e90a453cfce89a99d33b04cd70baa194c5ef45365c9104cd72"
+      },
+      "canonicalStatus": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25978385-erc4626-1-canonical-status.log",
+        "sha256": "b69274d2b99f0f60fcf93b8b2f005c377ca0645cc92b54fef0e1ea3659dc43e3"
+      }
+    },
+    {
+      "name": "26073941-erc4626-1",
+      "tx": "0x7a068e5feffb98831e18cc0853c33072133ee233d0a215595002f0da71000640",
+      "N": 26073941,
+      "blockHash": "0x2058fcbae74c7dead9d719d83a27404a1ef33804ca4fe76c30a89b2e77b551d4",
+      "pool": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
+      "familyIds": [
+        "balancer-v3",
+        "univ3-standard",
+        "protocol:erc4626"
+      ],
+      "naturalInstances": 22,
+      "graphEdges": 43,
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc\u001f0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc\u001f0x936facdf10c8c36294e7b9d28345255539d81bc7>0xae78736cd615f374d3085123a210448e74fc6393\u001fd482f25828c72df023adb5c7dd4b0e28d4e8c36e834aa93c3bcbba904f0c61f6",
+          "tokenIn": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+          "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+          "status": "quoted",
+          "amountIn": "1673444814951089",
+          "amountOut": "1709455901949814",
+          "quotedAt": {
+            "number": 26073941,
+            "hash": "0x2058fcbae74c7dead9d719d83a27404a1ef33804ca4fe76c30a89b2e77b551d4",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "balancer-v3\u001f0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc\u001f0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc\u001f0xae78736cd615f374d3085123a210448e74fc6393>0x936facdf10c8c36294e7b9d28345255539d81bc7\u001f5dcd23d13f68a9af3cef7176e7551d2a5808bf60e3be7a9032e7c571794aab1e",
+          "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+          "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+          "status": "quoted",
+          "amountIn": "1709800148839399",
+          "amountOut": "1673444814951089",
+          "quotedAt": {
+            "number": 26073941,
+            "hash": "0x2058fcbae74c7dead9d719d83a27404a1ef33804ca4fe76c30a89b2e77b551d4",
+            "generation": 1
+          }
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+          "candidates": [],
+          "note": "No candidate for this token in this declared single-block scope; not a protocol rejection"
+        },
+        {
+          "token": "0xae78736cd615f374d3085123a210448e74fc6393",
+          "candidates": [],
+          "note": "No candidate for this token in this declared single-block scope; not a protocol rejection"
+        }
+      ],
+      "preservedOriginal": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/ready.json",
+        "sha256": "60a84887922af3f2fbd35ac3021ca4ab82aff1abe465bcf44f70b680e51de4c1"
+      },
+      "artifacts": {
+        "input-provenance.json": "accebe025406da67fd5b7299e887062d22dea006aa7669f6fab7f9b0edf09f8c",
+        "source-before.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "source-after.json": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "ready.json": "38a7d79472d77633350003ae35455720bd50dbdbf08bac9b96e469bc77cdfbfb",
+        "ready-summary.json": "5db5b024fd0b3fa8a253d76d3ff6837c7fcdccb4d61c81f3ce9a0b665592d353",
+        "receipt.json": "f090f42e4211591daa21279336d44578e404db7da9e3a3d4c2e8e2ebf551015e",
+        "header.json": "605ba9b8f09b26575fac5103a84d14788fd0af207b2f53ad2d6a35e87a2733c0",
+        "result.json": "857239a6331a93c8a99f83dbf6256f1536a1435defe114ff5fd3a0b9232771e0",
+        "prices/prices.json": "ae6c2cad25b528fb9ec8713e802ede8562b43f248b7d5f01d5fddfff80f0d42e",
+        "prices/input.json": "75e02ac9df280ce92eb33b981e1f7ee732adf622ac13d82c407d89bc77d0782c"
+      },
+      "canonicalStatus": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/26073941-erc4626-1-canonical-status.log",
+        "sha256": "8d937fc593a422085785f554fbc5869f27675b89a65dbd18bbb60912eaca1f98"
+      }
+    }
+  ],
+  "executions": [
+    {
+      "pool": "0xe00e947decfe01692070e113002705bdf77ddbd3",
+      "N": 25985457,
+      "source": {
+        "number": 25985457,
+        "hash": "0x2198a9b437e37b1f0e855be03b2989e7f725d2a67c232480f92a8e960975a80b",
+        "generation": 25985457
+      },
+      "code": {
+        "headAtStart": "ad1afa1729b1d6c98527a03eaed465b9f4ebfc18",
+        "sourceSha256": "b7a005cf0a090a1a4f5e3199e00992b07866cd268156a7cd5b3d68107bf107ec",
+        "sourceTreeSha256": "90625d82049dc18e2406c1ae220120f62a1980b3c2c4d08b4ab12b00af2f07ca",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "actor": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountTrials": 8,
+      "successfulExecutions": 16,
+      "productionReferenceComplete": true,
+      "priorReferenceDirections": 1,
+      "referenceDirections": 2,
+      "amounts": [
+        {
+          "tokenIn": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "tokenOut": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "amountKind": "target-production-reference",
+          "amountIn": "10486696816103685146",
+          "quoteAmountOut": "4571127281852123619",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "tokenOut": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "5243348408051842573",
+          "quoteAmountOut": "2287550408453222859",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "tokenOut": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "71020708320963607005",
+          "quoteAmountOut": "30647711870842664650",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "tokenOut": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "amountKind": "original-leg-half",
+          "amountIn": "35510354160481803502",
+          "quoteAmountOut": "15414725926463126920",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "tokenOut": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "amountKind": "target-production-reference",
+          "amountIn": "4668450972722609612",
+          "quoteAmountOut": "10486696816103685146",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "tokenOut": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2334225486361304806",
+          "quoteAmountOut": "5247948879232701079",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "tokenOut": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "31375174201309683957",
+          "quoteAmountOut": "69784213352450840027",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "tokenOut": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+          "amountKind": "original-leg-half",
+          "amountIn": "15687587100654841978",
+          "quoteAmountOut": "35094259499653387054",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        }
+      ],
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25985457-dual-1.json",
+        "sha256": "8877442b3c42a171c54b953e1ea7ea458fd83a08e4b3bc130e1ee2f7f4a4cc41"
+      },
+      "forkStopped": true
+    },
+    {
+      "pool": "0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566",
+      "N": 25978385,
+      "source": {
+        "number": 25978385,
+        "hash": "0x3f539aa4f4cc2ac1752d883e7af0862e17371bd1e3d916893e74f1228cacd50f",
+        "generation": 25978385
+      },
+      "code": {
+        "headAtStart": "ad1afa1729b1d6c98527a03eaed465b9f4ebfc18",
+        "sourceSha256": "b7a005cf0a090a1a4f5e3199e00992b07866cd268156a7cd5b3d68107bf107ec",
+        "sourceTreeSha256": "90625d82049dc18e2406c1ae220120f62a1980b3c2c4d08b4ab12b00af2f07ca",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "actor": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountTrials": 8,
+      "successfulExecutions": 16,
+      "productionReferenceComplete": true,
+      "priorReferenceDirections": 1,
+      "referenceDirections": 2,
+      "amounts": [
+        {
+          "tokenIn": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+          "tokenOut": "0x99999999999999cc837c997b882957dafdcb1af9",
+          "amountKind": "target-production-reference",
+          "amountIn": "5122505915792253971",
+          "quoteAmountOut": "4126149393313534385",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+          "tokenOut": "0x99999999999999cc837c997b882957dafdcb1af9",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2561252957896126985",
+          "quoteAmountOut": "2063082925146754044",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+          "tokenOut": "0x99999999999999cc837c997b882957dafdcb1af9",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "805075241858952581651",
+          "quoteAmountOut": "616145564663736422665",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+          "tokenOut": "0x99999999999999cc837c997b882957dafdcb1af9",
+          "amountKind": "original-leg-half",
+          "amountIn": "402537620929476290825",
+          "quoteAmountOut": "317610666111943159481",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0x99999999999999cc837c997b882957dafdcb1af9",
+          "tokenOut": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+          "amountKind": "target-production-reference",
+          "amountIn": "4126149393313534385",
+          "quoteAmountOut": "5121400037403083289",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0x99999999999999cc837c997b882957dafdcb1af9",
+          "tokenOut": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2063074696656767192",
+          "quoteAmountOut": "2560710162616881522",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0x99999999999999cc837c997b882957dafdcb1af9",
+          "tokenOut": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "649239160219360122690",
+          "quoteAmountOut": "796028108083829733523",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0x99999999999999cc837c997b882957dafdcb1af9",
+          "tokenOut": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+          "amountKind": "original-leg-half",
+          "amountIn": "324619580109680061345",
+          "quoteAmountOut": "402696835670300371329",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        }
+      ],
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25978385-dual-1.json",
+        "sha256": "e991b27f56883fb9767234351b8a642f40353f6f3b67c2795a667c4007fae666"
+      },
+      "forkStopped": true
+    },
+    {
+      "pool": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
+      "N": 26073941,
+      "source": {
+        "number": 26073941,
+        "hash": "0x2058fcbae74c7dead9d719d83a27404a1ef33804ca4fe76c30a89b2e77b551d4",
+        "generation": 26073941
+      },
+      "code": {
+        "headAtStart": "ad1afa1729b1d6c98527a03eaed465b9f4ebfc18",
+        "sourceSha256": "b7a005cf0a090a1a4f5e3199e00992b07866cd268156a7cd5b3d68107bf107ec",
+        "sourceTreeSha256": "90625d82049dc18e2406c1ae220120f62a1980b3c2c4d08b4ab12b00af2f07ca",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "actor": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountTrials": 8,
+      "successfulExecutions": 16,
+      "productionReferenceComplete": true,
+      "priorReferenceDirections": 1,
+      "referenceDirections": 2,
+      "amounts": [
+        {
+          "tokenIn": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+          "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+          "amountKind": "target-production-reference",
+          "amountIn": "1673444814951089",
+          "quoteAmountOut": "1709455901949814",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+          "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "836722407475544",
+          "quoteAmountOut": "854728238896865",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+          "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "791789990820519310",
+          "quoteAmountOut": "808581903312232127",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+          "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+          "amountKind": "original-leg-half",
+          "amountIn": "395894995410259655",
+          "quoteAmountOut": "404351798617063004",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+          "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+          "amountKind": "target-production-reference",
+          "amountIn": "1709800148839399",
+          "quoteAmountOut": "1673444814951089",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+          "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "854900074419699",
+          "quoteAmountOut": "836722689474330",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+          "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "809110644844043019",
+          "quoteAmountOut": "791631697233719400",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        },
+        {
+          "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+          "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+          "amountKind": "original-leg-half",
+          "amountIn": "404555322422021509",
+          "quoteAmountOut": "395888022968987170",
+          "executions": 2,
+          "rawQuoteDelta": "0"
+        }
+      ],
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/26073941-dual-1.json",
+        "sha256": "6a63d41286cddec9aa21f24cafe64b923b920422cef4ce3dacb7761c8b552b8d"
+      },
+      "forkStopped": true
+    }
+  ],
+  "summary": {
+    "readyAttempts": 9,
+    "naturalReferencePoolsThisRun": 3,
+    "naturalReferenceDirectionsThisRun": 6,
+    "newReferenceDirectionsOverRetainedCorpus": 3,
+    "amountTrials": 24,
+    "successfulExecutions": 48,
+    "rawQuoteDelta": "0",
+    "cumulative": {
+      "pools": 8,
+      "measuredDirections": 36,
+      "referenceDirections": 31,
+      "remainingReferenceDirections": 5,
+      "note": "Cumulative compatible named historical evidence, not fresh all-eight-pool execution."
+    }
+  },
+  "remaining": [
+    {
+      "N": 26030897,
+      "pool": "0x6b31a94029fd7840d780191b6d63fa0d269bd883",
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x2411802d8bea09be0af8fd8d08314a63e706b29c>0x90551c1795392094fe6d29b758eccd233cfaa260\u001f1bd9f7296d1c4923fbc78bd81beabfa7b9457362d018d4188fdc0d49f2c87a4e",
+          "tokenIn": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+          "tokenOut": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        },
+        {
+          "edgeId": "balancer-v3\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x6b31a94029fd7840d780191b6d63fa0d269bd883\u001f0x90551c1795392094fe6d29b758eccd233cfaa260>0x2411802d8bea09be0af8fd8d08314a63e706b29c\u001f90f6dfdc88fb5e0308511e13d7e69e01603c4797aea63abd27d4a329cd912b65",
+          "tokenIn": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+          "tokenOut": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+          "candidates": [
+            {
+              "key": "f99594bed8b7b5dee2ea7f2269a1ca255ab02e21d585bdbde927ccfc5ad91fc6",
+              "transactionHash": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+              "outcome": {
+                "status": "terminal-rejected",
+                "familyCandidateKey": "f99594bed8b7b5dee2ea7f2269a1ca255ab02e21d585bdbde927ccfc5ad91fc6",
+                "reasonCode": "identity_rejected:identity-proof-rejected:chain-proven:frax-custodian-sync-conversion:custodian_proxy_not_matched|chain-proven:standalone-standard-behavior:erc4626_execution_surfaces_failed",
+                "familyDefinitionHash": "3d9839fdc8520e8e2f3b8b9a94f5eebe0a0513f1d3dbcafbf2f9740325dfb898",
+                "requestFingerprint": "",
+                "trustedResultsFingerprint": "",
+                "authorityFingerprint": "b49f1796a5d174e161d1886545ce0207b59e1df2b5ea4ae22c1644ad00e0fe95",
+                "candidateFingerprint": "3a1f63d77342649f6391295bb528fe9e77db195946661c572ac3ca527be78c87",
+                "cutoff": {
+                  "number": 26030897,
+                  "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+                }
+              }
+            }
+          ],
+          "note": "Observed current production outcomes; underlying active-probe cause not diagnosed here"
+        },
+        {
+          "token": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+          "candidates": [
+            {
+              "key": "db2b68b99abd73ddcd2765bb994b346640261177ba40632ba1a8895dffe6c6d0",
+              "transactionHash": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+              "outcome": {
+                "status": "terminal-rejected",
+                "familyCandidateKey": "db2b68b99abd73ddcd2765bb994b346640261177ba40632ba1a8895dffe6c6d0",
+                "reasonCode": "identity_rejected:identity-proof-rejected:chain-proven:frax-custodian-sync-conversion:custodian_proxy_not_matched|chain-proven:standalone-standard-behavior:erc4626_execution_surfaces_failed",
+                "familyDefinitionHash": "3d9839fdc8520e8e2f3b8b9a94f5eebe0a0513f1d3dbcafbf2f9740325dfb898",
+                "requestFingerprint": "",
+                "trustedResultsFingerprint": "",
+                "authorityFingerprint": "40e3c794705a9a3455a171e851680f7a4224e3a99573ef6c820984a243754ec7",
+                "candidateFingerprint": "139cc1d491a7242e0f51b36f89506a1dcaf0f26e11717468599ac1a44fb5bbbe",
+                "cutoff": {
+                  "number": 26030897,
+                  "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+                }
+              }
+            }
+          ],
+          "note": "Observed current production outcomes; underlying active-probe cause not diagnosed here"
+        }
+      ],
+      "note": "No reference gap waived. Active-probe rejection reason is retained, not proof that the underlying contract is defective."
+    },
+    {
+      "N": 25936827,
+      "pool": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0x8399c8fc273bd165c346af74a02e65f10e4fd78f>0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94\u001f8729bd1f9d33e9f1d32ac2c1c04a1a3b45ad74d5dd4f497b6dd2657e82d8a9d9",
+          "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+          "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        },
+        {
+          "edgeId": "balancer-v3\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0xae255db04ba78519f33871c557d8fd6bafdb83bd\u001f0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94>0x8399c8fc273bd165c346af74a02e65f10e4fd78f\u001f3a2738f16eb5c790ddcc2dd20d651dd93d114b9c9df347c6d1c22ce4533c8822",
+          "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+          "candidates": [],
+          "note": "No candidate for this token in this declared single-block scope; not a protocol rejection"
+        },
+        {
+          "token": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "candidates": [],
+          "note": "No candidate for this token in this declared single-block scope; not a protocol rejection"
+        }
+      ],
+      "note": "No reference gap waived. Active-probe rejection reason is retained, not proof that the underlying contract is defective."
+    },
+    {
+      "N": 25944594,
+      "pool": "0x071828acc755314e687448703775f22194f56867",
+      "targetRows": [
+        {
+          "edgeId": "balancer-v3\u001f0x071828acc755314e687448703775f22194f56867\u001f0x071828acc755314e687448703775f22194f56867\u001f0x9d39a5de30e57443bff2a8307a4256c8797a3497>0xdbdc1ef57537e34680b898e1febd3d68c7389bcb\u001f095d73c2a56a4d65c1e59a2e5d6264939f6e51da1e7e02f5e7a1a88e1cc74284",
+          "tokenIn": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+          "tokenOut": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        },
+        {
+          "edgeId": "balancer-v3\u001f0x071828acc755314e687448703775f22194f56867\u001f0x071828acc755314e687448703775f22194f56867\u001f0xdbdc1ef57537e34680b898e1febd3d68c7389bcb>0x9d39a5de30e57443bff2a8307a4256c8797a3497\u001f63a1aa5333eb21c87670fd53d336ee2b12a371ba452e170a4e1c049563cb8f6e",
+          "tokenIn": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+          "tokenOut": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null,
+          "quotedAt": null
+        }
+      ],
+      "conversionObservations": [
+        {
+          "token": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+          "candidates": [],
+          "note": "No candidate for this token in this declared single-block scope; not a protocol rejection"
+        },
+        {
+          "token": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+          "candidates": [
+            {
+              "key": "2da580eea43d62983f2cb6e2fd424f056502dd3cff132f130474bea4cce485dd",
+              "transactionHash": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+              "outcome": {
+                "status": "terminal-rejected",
+                "familyCandidateKey": "2da580eea43d62983f2cb6e2fd424f056502dd3cff132f130474bea4cce485dd",
+                "reasonCode": "identity_rejected:identity-proof-rejected:chain-proven:frax-custodian-sync-conversion:custodian_proxy_not_matched|chain-proven:standalone-standard-behavior:erc4626_execution_surfaces_failed",
+                "familyDefinitionHash": "3d9839fdc8520e8e2f3b8b9a94f5eebe0a0513f1d3dbcafbf2f9740325dfb898",
+                "requestFingerprint": "",
+                "trustedResultsFingerprint": "",
+                "authorityFingerprint": "4aa216e75dba89d1bfbf522c8701fdc87a22f3e7de6d54477822156941837c64",
+                "candidateFingerprint": "af40999fce86d035d309688bb7f4f88418c4a799cf29f1a24509091c064d3f2e",
+                "cutoff": {
+                  "number": 25944594,
+                  "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e"
+                }
+              }
+            }
+          ],
+          "note": "Observed current production outcomes; underlying active-probe cause not diagnosed here"
+        }
+      ],
+      "note": "No reference gap waived. Active-probe rejection reason is retained, not proof that the underlying contract is defective."
+    }
+  ],
+  "verification": {
+    "rawStateDiffs": "All 48 raw pre/post actor storage deltas recomputed with independently proven balance mapping; input debit exact, output equals quote, old input101/output103 preserved.",
+    "allowance": "Stored execution evidence checks cleared ERC20 and Permit2 amount allowance; raw allowance slots not independently re-decoded by this supplementary assembler.",
+    "runtime": "Existing harness poisons off-chain Exact and quoted construction; raw receipts show runtimeConstructionRpcAttempts=0.",
+    "independentReview": "No additional review requested for unchanged-production/unchanged-harness execution-only evidence; not a formal fix/merge approval."
+  },
+  "reconciliation": {
+    "query": [
+      "universe",
+      "rebuild",
+      "status"
+    ],
+    "selectedTool": "listener:searcher:universe-rebuild-status",
+    "successfulExecutions": 9,
+    "manifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/tool-selection.json",
+      "sha256": "8bcffb976c3ca055a85343c080d7414a42e2ff02fd9f035c202687aadb7f80ce"
+    }
+  },
+  "preserved": [
+    "Original six single-block Ready files hash-checked before/after; originals unchanged.",
+    "No overwrite of prior missing-valuation runs or prior failures.",
+    "Peer dirty source and original coffee checkpoint untouched; no production source edits."
+  ],
+  "safety": {
+    "broadcast": false,
+    "signing": false,
+    "live": false,
+    "deployment": false,
+    "privateKeyRead": false,
+    "forksStopped": true
+  },
+  "limitations": [
+    "Five production-reference directions in three named pools remain unvalidated; no full-family acceptance.",
+    "All reference and execution states are canonical N end state/N environment, not original transaction pre-call state.",
+    "No original profit equivalence, natural route selection, independent final EV or Adapter Replay/boundary verdict.",
+    "Per-protocol single-Ready and representative combined-graph performance remain NOT RUN, including every IMPL adaptation and Balancer V2/V3/Curve plain/underlying. Diagnostic wall times do not satisfy performance acceptance.",
+    "Actual source includes preserved peer dirty modifications; this is not a clean-export production acceptance."
+  ]
+}
