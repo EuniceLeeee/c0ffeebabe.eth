@@ -1,0 +1,862 @@
+{
+  "schema": "balancer-v3-four-token-natural-reference/v1",
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "codeCommit": "b5472f94ec649d15c1a65724fd2260ffa59d10c0",
+  "claim": "Named StableSurge four-token pool at N-end now has all 12 natural effective directions and same-state quoted/runtime receipts. Not whole-Family, opportunity or latency acceptance.",
+  "updates": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/balancer-v3-stable-surge-acceptance-20261010.json",
+    "sha256": "4b5bae5d33e77234ee4e0ec54aa46bfcca0d9d7db4d463fd71fc4b8dbcfb4e20"
+  },
+  "anchor": {
+    "tx": "0x1969dedd475168204d782dc62d65efa62d650e60d000ba040fea5cbe979dbd20",
+    "N": 26105714,
+    "blockHash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+    "pool": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+    "environment": "N end state / N execution environment"
+  },
+  "implementationChange": "None. Existing production discovery, strict memo reuse, Graph and effective-forward pipeline on a verbatim copied single-block checkpoint; add univ3-standard background from the same actual block, never hand-inject candidates/edges/valuation.",
+  "activation": "Balancer V3 enabled only for these test processes before module loading; production default remains disabled.",
+  "source": {
+    "headAtStart": "b5472f94ec649d15c1a65724fd2260ffa59d10c0",
+    "sourceSha256": "b7a005cf0a090a1a4f5e3199e00992b07866cd268156a7cd5b3d68107bf107ec",
+    "sourceTreeSha256": "90625d82049dc18e2406c1ae220120f62a1980b3c2c4d08b4ab12b00af2f07ca",
+    "fileCount": 1075,
+    "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+    "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+    "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+    "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+  },
+  "sourceBefore": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready-2/source-before.json",
+    "sha256": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a"
+  },
+  "sourceAfter": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready-2/source-after.json",
+    "sha256": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a"
+  },
+  "naturalIntegration": {
+    "instances": 15,
+    "graphDirections": 40,
+    "targetDirections": 12,
+    "targetRawRows": 12,
+    "targetQuotedRows": 12,
+    "reference": "default",
+    "referenceWethInput": "2000000000000000",
+    "freshRows": [
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xa3931d71877c0e7a3148cb7eb4463524fec27fbd\u001fd80b4930de81c935f8d58bf04eb37d3f697f86e2c93a8a39042d4207f42a2a40",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountIn": "5403584",
+        "status": "quoted",
+        "amountOut": "4858032567779944518",
+        "effectiveMid": 899038965209.0066,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f4e4b751a4fe2f107784a1f0175065adfc07c13144c1fe5f7001485ce229212ac",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountIn": "5403584",
+        "status": "quoted",
+        "amountOut": "5402261",
+        "effectiveMid": 0.9997551624995559,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xe1753f2e00940cc31213dd92013cf019dfe4ca1d\u001f3b3aeac26dab8e8f0313956b2e3b5b9bbad182060e1fc45cb9b318cbf99915af",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountIn": "5403584",
+        "status": "quoted",
+        "amountOut": "5319367263476035691",
+        "effectiveMid": 984414652104.2396,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xa3931d71877c0e7a3148cb7eb4463524fec27fbd>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fef27d45f1cce1b047f914b174857f61fa31f28a0219091b20aa9239982e98134",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "4858032567779944518",
+        "status": "quoted",
+        "amountOut": "5395149",
+        "effectiveMid": 1.1105625424955747e-12,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xa3931d71877c0e7a3148cb7eb4463524fec27fbd>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f1fcae62034f8da270b89e6a7f16219a7d0d1fadbd6a743e30fd5f372edf1e652",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountIn": "4858032567779944518",
+        "status": "quoted",
+        "amountOut": "5398061",
+        "effectiveMid": 1.1111619621082205e-12,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xa3931d71877c0e7a3148cb7eb4463524fec27fbd>0xe1753f2e00940cc31213dd92013cf019dfe4ca1d\u001f3d9bc7c16fd2de26343e376630a36b173d0e9f1d21572746505f0e4c293bf06e",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountIn": "4858032567779944518",
+        "status": "quoted",
+        "amountOut": "5315234207251599318",
+        "effectiveMid": 1.0941125101762317,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f6ede775280f132cd83d8e2551a9097a1ef601cdc3c169d7794b564c1518b73f7",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "5402991",
+        "status": "quoted",
+        "amountOut": "5396287",
+        "effectiveMid": 0.99875920578065,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xa3931d71877c0e7a3148cb7eb4463524fec27fbd\u001f7660d81924f10c22c943e8d2dad857edf76c6252b76b5581c98e9e8008c7c507",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountIn": "5402991",
+        "status": "quoted",
+        "amountOut": "4855279606848555006",
+        "effectiveMid": 898628112993.0728,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xe1753f2e00940cc31213dd92013cf019dfe4ca1d\u001f9342082cb95bce03c352f47ea4d540012d0181c1ca19897477758961e234fa7b",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountIn": "5402991",
+        "status": "quoted",
+        "amountOut": "5316430892815954272",
+        "effectiveMid": 983979224251.1516,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f0f400c2372bcadf820591a7b4490bcb01cb99ceeb346bb59817ce7a8d89faf71",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "5319367263476035691",
+        "status": "quoted",
+        "amountOut": "5396042",
+        "effectiveMid": 1.0144142588255619e-12,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xa3931d71877c0e7a3148cb7eb4463524fec27fbd\u001f5a8de2367323e62074c1e1e0ba170cec7f57b24a43750c790f2d17d329a4fa88",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountIn": "5319367263476035691",
+        "status": "quoted",
+        "amountOut": "4855061757335513511",
+        "effectiveMid": 0.9127141475399625,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f1011d54980636631adf329fd1afe3ce7fe275d61504933c70f60fa0ec49e133d",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountIn": "5319367263476035691",
+        "status": "quoted",
+        "amountOut": "5399037",
+        "effectiveMid": 1.0149772957154123e-12,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      }
+    ],
+    "previouslyUnmeasuredDirectionsNowVerified": [
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f0f400c2372bcadf820591a7b4490bcb01cb99ceeb346bb59817ce7a8d89faf71",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "5319367263476035691",
+        "status": "quoted",
+        "amountOut": "5396042",
+        "effectiveMid": 1.0144142588255619e-12,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xa3931d71877c0e7a3148cb7eb4463524fec27fbd\u001f5a8de2367323e62074c1e1e0ba170cec7f57b24a43750c790f2d17d329a4fa88",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountIn": "5319367263476035691",
+        "status": "quoted",
+        "amountOut": "4855061757335513511",
+        "effectiveMid": 0.9127141475399625,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f1011d54980636631adf329fd1afe3ce7fe275d61504933c70f60fa0ec49e133d",
+        "instanceKey": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountIn": "5319367263476035691",
+        "status": "quoted",
+        "amountOut": "5399037",
+        "effectiveMid": 1.0149772957154123e-12,
+        "quotedAt": {
+          "number": 26105714,
+          "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+          "generation": 1
+        }
+      }
+    ]
+  },
+  "execution": {
+    "samples": [
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountKind": "target-production-reference",
+        "amountIn": "5403584",
+        "quoteAmountOut": "4858032567779944518",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2701792",
+        "quoteAmountOut": "2429481184003967264",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountKind": "original-leg-amount-at-N-not-original-prestate",
+        "amountIn": "1980684",
+        "quoteAmountOut": "1781143055020510820",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountKind": "original-leg-half",
+        "amountIn": "990342",
+        "quoteAmountOut": "890633284321043825",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountKind": "target-production-reference",
+        "amountIn": "5403584",
+        "quoteAmountOut": "5402261",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2701792",
+        "quoteAmountOut": "2701581",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountKind": "original-leg-amount-at-N-not-original-prestate",
+        "amountIn": "1980684",
+        "quoteAmountOut": "1980618",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountKind": "original-leg-half",
+        "amountIn": "990342",
+        "quoteAmountOut": "990370",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountKind": "target-production-reference",
+        "amountIn": "5403584",
+        "quoteAmountOut": "5319367263476035691",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2701792",
+        "quoteAmountOut": "2660048288438519822",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountKind": "original-leg-amount-at-N-not-original-prestate",
+        "amountIn": "1980684",
+        "quoteAmountOut": "1950155220767729195",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountKind": "original-leg-half",
+        "amountIn": "990342",
+        "quoteAmountOut": "975128950853875287",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountKind": "target-production-reference",
+        "amountIn": "4858032567779944518",
+        "quoteAmountOut": "5395149",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2429016283889972259",
+        "quoteAmountOut": "2698092",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountKind": "target-production-reference",
+        "amountIn": "4858032567779944518",
+        "quoteAmountOut": "5398061",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2429016283889972259",
+        "quoteAmountOut": "2699477",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountKind": "target-production-reference",
+        "amountIn": "4858032567779944518",
+        "quoteAmountOut": "5315234207251599318",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2429016283889972259",
+        "quoteAmountOut": "2657977292831229628",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountKind": "target-production-reference",
+        "amountIn": "5402991",
+        "quoteAmountOut": "5396287",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2701495",
+        "quoteAmountOut": "2698624",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountKind": "original-leg-amount-at-N-not-original-prestate",
+        "amountIn": "1981113",
+        "quoteAmountOut": "1979099",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountKind": "original-leg-half",
+        "amountIn": "990556",
+        "quoteAmountOut": "989611",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountKind": "target-production-reference",
+        "amountIn": "5402991",
+        "quoteAmountOut": "4855279606848555006",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2701495",
+        "quoteAmountOut": "2428067139521774913",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountKind": "original-leg-amount-at-N-not-original-prestate",
+        "amountIn": "1981113",
+        "quoteAmountOut": "1780679395518976460",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountKind": "original-leg-half",
+        "amountIn": "990556",
+        "quoteAmountOut": "890395017851654234",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountKind": "target-production-reference",
+        "amountIn": "5402991",
+        "quoteAmountOut": "5316430892815954272",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2701495",
+        "quoteAmountOut": "2658519565799644519",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountKind": "original-leg-amount-at-N-not-original-prestate",
+        "amountIn": "1981113",
+        "quoteAmountOut": "1949658098623622491",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "amountKind": "original-leg-half",
+        "amountIn": "990556",
+        "quoteAmountOut": "974870719767758537",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountKind": "target-production-reference",
+        "amountIn": "5319367263476035691",
+        "quoteAmountOut": "5396042",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2659683631738017845",
+        "quoteAmountOut": "2698460",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountKind": "target-production-reference",
+        "amountIn": "5319367263476035691",
+        "quoteAmountOut": "4855061757335513511",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2659683631738017845",
+        "quoteAmountOut": "2427920572861710574",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountKind": "target-production-reference",
+        "amountIn": "5319367263476035691",
+        "quoteAmountOut": "5399037",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      },
+      {
+        "tokenIn": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "2659683631738017845",
+        "quoteAmountOut": "2699865",
+        "executions": 2,
+        "quoteVsActualDelta": "0",
+        "oldInventoryConsumed": "0",
+        "remainingApproval": "0"
+      }
+    ],
+    "amountTrials": 36,
+    "successfulReceipts": 72,
+    "quoteVsActualDelta": "0",
+    "runtimeConstructionRpcAttempts": 0,
+    "quotedFallback": false,
+    "actors": {
+      "executor": "0x1000000000000000000000000000000000000002",
+      "owner": "0x1000000000000000000000000000000000000001"
+    },
+    "inputs": {
+      "ready": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready-2/ready.json",
+      "prices": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready-2/prices/prices.json",
+      "readySha256": "cc5c747128684d5f7ae8c91c68c20fc87db7b71fe323a61dcadbafd9521f71ad",
+      "pricesSha256": "78c56191261866a6ca06be44402cb1d80f2e57a1a553c8116c80aa8b4b203857",
+      "source": {
+        "number": 26105714,
+        "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+        "generation": 26105714
+      },
+      "priceGeneration": 1,
+      "timestamp": 1790957063,
+      "memoFingerprint": "e97a6524544977ed759a8f7082fb58a274424f64a8795888cf871ec595b5ffa4",
+      "familyDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38",
+      "hooks": {
+        "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+        "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+        "flags": [
+          false,
+          false,
+          false,
+          true,
+          false,
+          false,
+          false,
+          true,
+          false,
+          true
+        ],
+        "stableSurgeModel": "stable-surge-v2"
+      },
+      "hasSwapHooks": true,
+      "localModel": null,
+      "stableSurgePoolModel": "stable-surge-pool-v3",
+      "runtimeCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123"
+    },
+    "oldInputInventory": "101 raw units preserved",
+    "oldOutputInventory": "103 raw units preserved",
+    "permissionCleanup": "ERC20-to-Permit2 and Permit2-to-Router amount allowances zero after each execution; expiry/nonce semantics retained",
+    "forkStopped": true
+  },
+  "cumulativeRetainedCoverage": {
+    "pools": 8,
+    "graphDirections": 36,
+    "measuredDirections": 36,
+    "referenceDirections": 28,
+    "note": "Cumulative named pinned historical evidence, NOT a fresh all-pool current-source rerun. Existing original report remains authoritative for the other seven pools.",
+    "remainingReferenceDirections": 8,
+    "remainingReferenceTokens": [
+      "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+      "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+      "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+      "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+      "0x99999999999999cc837c997b882957dafdcb1af9",
+      "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+      "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+      "0x90551c1795392094fe6d29b758eccd233cfaa260"
+    ]
+  },
+  "checks": {
+    "productionAndHarness": "No production/harness edits in this continuation. Family fingerprints and BotVM artifact match the retained target evidence; new EVM receipts bind the current checked-in harness.",
+    "harnessVersion": {
+      "priorTargetReceipt": "b7b9aa47019ce637ba86b58b78fac5bed1a40c6d377c2f26f4cc3f28b2b105b7",
+      "current": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+      "note": "Earlier target receipt predates the final harness version. Do not claim byte-identical harnesses across those runs; current fresh execution is authoritative for the new result."
+    },
+    "reportAssertions": "36 successful samples, 72 independently stored execution results, full input debit, output delta, preserved inventory and cleared allowance fields checked",
+    "newIndependentReview": "Not requested for this additional unchanged-harness execution-only run; no new code approval or formal fix verdict claimed."
+  },
+  "reconciliation": {
+    "selection": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/tool-selection.json",
+      "sha256": "5ea4a11749b6f77c6ac7843639a7120edf6741ca3cdc7a60eb5c714d7903bef8"
+    },
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-09T21:21:08.487Z",
+        "finished_at": "2026-10-09T21:21:08.692Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "65945ef716ed3f75e6e25044b67a64318599734fe54cc70494ccefe6212c5192",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "../logs/v3-four-token-natural-20261010.hNv3LA/ready-2/ready.json",
+          "--json"
+        ],
+        "stdout_sha256": "dde7ce6948bb652d714921752226a08fb59babd5dcbfe8fc682c6d022c3ff803",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 848815,
+        "stderr_bytes": 0
+      }
+    ],
+    "output": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/canonical-status.log",
+      "sha256": "066cde03938991e5347b5111345ff6a0875f228451b57d4331065bd588cc8286"
+    }
+  },
+  "retainedFailure": {
+    "artifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready/failure.json",
+      "sha256": "4bcd6082e8b5ce5cd23cc3a07ef12e0a8a9bcca9b2e141811f70c2e1e2f82f6f"
+    },
+    "classification": "Test activation ordering before production discovery/admission; enabled variable was set after static module loading. Failed invocation retained; second process set the same test flag before startup. Not pool execution failure or timing baseline."
+  },
+  "reportPreparationFailure": {
+    "artifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/report-check.log",
+      "sha256": "c946b3eb0877d2dd4b4ae7c5af03b03b7480dc7d7cdb42c2378a53366d1e06df"
+    },
+    "classification": "First report assembler incorrectly required current harness hash to equal the earlier target receipt. Actual Family and BotVM fingerprints match; current fresh receipts bind current harness. Failed report assertion retained, no earlier report artifact written."
+  },
+  "preservedCheckpoint": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/ready.json",
+    "sha256": "31f1253dc323c6b3f074c687aab0a69da49ec1adba8a5271a4ff2a93b8472d05"
+  },
+  "safety": {
+    "broadcast": false,
+    "signing": false,
+    "remoteSubmission": false,
+    "minedBlocks": 0,
+    "executionOverrides": "test actor code/native gas and actor ERC20 balances only; no pool/Vault/hook overrides"
+  },
+  "limitations": [
+    "Other eight production-reference directions in the retained eight-pool corpus remain incomplete; this run closes only the four-token pool gap.",
+    "No original-call-prestate or original-profit equivalence; receipt quantities tested at N-end do not imply original output parity.",
+    "No natural route sizing/final EV, Adapter Replay/boundary verdict, deployment or live acceptance.",
+    "All per-family single-Ready and combined representative-graph timing acceptance remains NOT RUN, including all IMPL additions and V2/V3/Curve plain/underlying. Diagnostic wall time is not performance acceptance.",
+    "Actual source includes preserved peer dirty changes; no independent clean-export EVM claim."
+  ],
+  "artifacts": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/runner.mts",
+      "sha256": "94b01a925c55a2f34e9dfca2979d030ccd270487f006a31f2e7343d5dbbc4652"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready.log",
+      "sha256": "823d36622e7f6bc5fdae30f164550a799d867ec0e20e64ca6199abf5dd5a3edd"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready-2.log",
+      "sha256": "3eef43b0a7f47f38d3a8208a7968f5273bc911bd7d78656f23a0ad471b03cc0f"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready-2/input-provenance.json",
+      "sha256": "73daa5c50ad60507b2f70f26bb5df0e2169fb955662121471ceecb48781bf0d7"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready-2/ready.json",
+      "sha256": "cc5c747128684d5f7ae8c91c68c20fc87db7b71fe323a61dcadbafd9521f71ad"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready-2/ready-summary.json",
+      "sha256": "01ff208eb33c2f5a397fb481bbc012ac0fddf2fa8224a7d73c6b6ca465e4108d"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready-2/prices/prices.json",
+      "sha256": "78c56191261866a6ca06be44402cb1d80f2e57a1a553c8116c80aa8b4b203857"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready-2/prices/input.json",
+      "sha256": "27e85b4a8f18f255abc9a4506366ed896b9773cf6f9c470f895f0e9da459780a"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/dual-1.json",
+      "sha256": "e3b8448e42e803ba56eafc894c0b97ec9ccdd184dcbada4a30bf60a4688485ee"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/dual-1.log",
+      "sha256": "d56c373eb41d1b82bc3acf92f8663b51d3abded0bbcc5154241e83f77ea1a5fc"
+    }
+  ]
+}
