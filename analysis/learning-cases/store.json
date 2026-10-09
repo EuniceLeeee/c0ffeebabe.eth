@@ -922,6 +922,48 @@
       },
       "created_at": "2026-10-09T16:38:00.000Z",
       "updated_at": "2026-10-09T16:38:00.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261010-balancer-v3-historical-dual",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+      "target_block": 26030897,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "historical_v3_dual_receipt_header_and_namespaced_balance_observer_defects",
+      "evidence": {
+        "scope": "Family historical evidence-tool correction only. Incomplete reference inputs, natural valuation, full routes and performance remain open.",
+        "before": [
+          "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-dual-1.json",
+          "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-dual-2.json",
+          "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-dual-3.json",
+          "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-dual-1.json"
+        ],
+        "after": [
+          "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-dual-5.json",
+          "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-dual-2.json",
+          "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-dual-1.json"
+        ],
+        "finding": "Legacy harness treated a 32-byte block hash as an address, read the old saved.header shape instead of authenticated input.sourceHeader, and could not observe namespaced actor balances. These failures occurred before protocol execution. Fixed receipt/header binding and actual SLOAD plus two-sentinel actor-only slot proof; transport failures propagate and Vault balances/totalSupply remain unchanged. Proven local no-Hook quote follows production mode instead of forcing Router-only.",
+        "regression": "32-byte hash/mismatched source tests and namespace/wrong-slot/transport-error/protected-balance tests pass; current production build, 56 Family tests and 75 working-tree dual tests pass. Fresh eight-pool evidence has 196 successful execution receipts, with incomplete amount/coverage gates explicitly retained.",
+        "independent_review": "Beauvoir third/final read-only pass: 56 offline tests pass, independently recomputed 76 saved execution trajectories; confirmed harness causes and no new production safety blocker within inspected scope. No new RPC/EVM by reviewer, and no full-family/performance/merge verdict.",
+        "report": "docs/research/reports/balancer-v3-stable-surge-acceptance-20261010.json"
+      },
+      "tooling_defect": {
+        "tool": "balancer-v3-family/test/historical-runtime-dual.ts",
+        "issue": "Stale receipt/header and token storage assumptions rejected valid same-state inputs before execution; chain-only assertion also contradicted proven production local quote mode.",
+        "evidence": "Preserved failed artifacts, source/actor/header pins, negative observation regressions, independent review, and fresh same-N quoted/runtime outputs in the report.",
+        "codify_target": "balancer-v3-family/test/historical-runtime-dual.ts, stable-surge-receipt.ts, balance-slot-proof.ts and balance-slot-proof.test.ts",
+        "codify_commit": "24bf641caf480e5ca0a22af94dfce41d39bb7519",
+        "status": "codified"
+      },
+      "created_at": "2026-10-09T19:35:00.000Z",
+      "updated_at": "2026-10-09T19:35:00.000Z"
     }
   ]
 }
