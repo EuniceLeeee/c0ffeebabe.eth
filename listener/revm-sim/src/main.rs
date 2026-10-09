@@ -1365,6 +1365,34 @@ impl DatabaseRef for RemoteRevmDb {
 #[derive(Debug, Clone)]
 struct SharedRemote(Rc<RemoteRevmDb>);
 
+/// Read-only, network-free view of this pinned session's canonical cache. A
+/// missing key is an error, never an invented zero. Request-local writes stay
+/// in the enclosing CacheDB and neither warm EVM access nor source state leaks.
+#[derive(Debug, Clone, Copy)]
+struct CachedSource<'a>(&'a RemoteRevmDb);
+
+impl DatabaseRef for CachedSource<'_> {
+    type Error = RpcError;
+    fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, RpcError> {
+        self.0.inner.borrow().accounts.get(&address).cloned().ok_or_else(|| RpcError("cache-only account miss".into()))
+    }
+    fn code_by_hash_ref(&self, hash: B256) -> Result<Bytecode, RpcError> {
+        self.0.inner.borrow().codes_by_hash.get(&hash).cloned()
+            .or_else(|| self.0.persist.borrow().codes_by_hash.get(&hash).cloned())
+            .ok_or_else(|| RpcError("cache-only code miss".into()))
+    }
+    fn storage_ref(&self, address: Address, slot: U256) -> Result<U256, RpcError> {
+        self.0.inner.borrow().storage.get(&(address, slot)).copied().ok_or_else(|| RpcError("cache-only storage miss".into()))
+    }
+    fn block_hash_ref(&self, number: u64) -> Result<B256, RpcError> {
+        let source = self.0.source.as_ref().ok_or_else(|| RpcError("cache-only source missing".into()))?;
+        let current = source.attestation.block_number;
+        if number >= current || current - number > 256 { return Ok(B256::ZERO); }
+        self.0.inner.borrow().ancestors.get(&number).map(|(hash, _)| *hash)
+            .ok_or_else(|| RpcError("cache-only ancestor miss".into()))
+    }
+}
+
 // Carry the verified profile through every nested balance/probe/preCall/main
 // execution without a global setting or changing legacy unpinned semantics.
 trait ExecutionProfile: DatabaseRef<Error = RpcError> {
@@ -1376,6 +1404,10 @@ impl ExecutionProfile for RemoteRevmDb {
 }
 
 impl ExecutionProfile for SharedRemote {
+    fn execution_profile(&self) -> Option<MainnetProfile> { self.0.execution_profile() }
+}
+
+impl ExecutionProfile for CachedSource<'_> {
     fn execution_profile(&self) -> Option<MainnetProfile> { self.0.execution_profile() }
 }
 
@@ -2896,25 +2928,48 @@ impl Daemon {
 
         // Trace hints must see the completed local deal/override state. Trace
         // values never enter pinned state; missed hints retain lazy source reads.
-        if warmed {
-            // The legacy warm-hint overlay has no code field. Do not trace old
-            // chain code for a counterfactual request; normal lazy reads suffice.
-            if plan.executor_code.is_none() {
-                let _phase = diagnostic::phase(Phase::TraceHints);
-                let refs: Vec<_> = plan.calls.iter().collect();
-                let _ = trace_prefetch(&remote, &db, &refs);
+        // This extension is only the isolated executor self-program. A prefix
+        // or top-level override has a different entry context; retain its prior
+        // lazy path rather than pretending separate trace calls replay it.
+        let executor_self_program = req.trial_prefix.is_none()
+            && plan.executor_code.as_ref().is_some_and(|(target, _)| *target == plan.actor);
+        if executor_self_program {
+            // Execute the same production interpreter/effect checks directly
+            // from known state. Only missing state needs a remote hint. This
+            // is not a cached result: different amounts/branches execute anew.
+            let mut cached = CacheDB { cache: db.cache.clone(), db: CachedSource(&remote) };
+            if let Ok(mut response) = Self::strict_simulate_ready(&mut cached, &env, req, plan, started) {
+                remote.rpc.check_fatal()?;
+                response.missing_state_keys = remote.missing_state_keys();
+                return Ok(response); // caller still performs canonical postcheck
             }
+        }
+        if warmed && (plan.executor_code.is_none() || executor_self_program) {
+            let _phase = diagnostic::phase(Phase::TraceHints);
+            let refs: Vec<_> = plan.calls.iter().collect();
+            // Include only the already validated, request-local executor code.
+            // The pinned hint consumer below imports keys, never trace values
+            // or counterfactual bytecode, into the shared source cache.
+            let _ = trace_prefetch_with_code(&remote, &db, &refs, plan.executor_code.as_ref());
         }
         remote.rpc.check_fatal()?;
 
+        let mut response = Self::strict_simulate_ready(&mut db, &env, req, plan, started)?;
+        response.missing_state_keys = remote.missing_state_keys();
+        Ok(response)
+    }
+
+    fn strict_simulate_ready<D: ExecutionProfile>(
+        db: &mut CacheDB<D>, env: &BlockEnv, req: &StrictRequest, plan: &StrictPlan, started: Instant,
+    ) -> Result<DaemonResponse> {
         // A quote's effects begin after the earlier route hops, but before its
         // own setup/main. Prefix execution captures this baseline without
         // ending the transaction or changing its warm/transient state.
         let mut before = if req.trial_prefix.is_none() {
             let _phase = diagnostic::phase(Phase::EffectsObservations);
-            Some(strict_observation_baseline(&db, &env, plan)?)
+            Some(strict_observation_baseline(db, env, plan)?)
         } else { None };
-        let (outcome, gas_used, logs) = strict_execute_observed(&mut db, &env, req, plan, &mut before)?;
+        let (outcome, gas_used, logs) = strict_execute_observed(db, env, req, plan, &mut before)?;
         let _phase = diagnostic::phase(Phase::EffectsObservations);
         let success = matches!(outcome, StrictOutcome::Success { .. });
         let output = match &outcome {
@@ -2937,19 +2992,19 @@ impl Daemon {
                     before: before.native[i].to_string(), after: after.to_string(), delta: signed_delta(after, before.native[i]) });
             }
             for (i, (token, account)) in plan.pairs.iter().enumerate() {
-                let after = strict_balance_of(&db, &env, *token, *account)?;
+                let after = strict_balance_of(db, env, *token, *account)?;
                 effects.token_deltas.push(SimTokenDelta { token: format!("{token:#x}"), account: format!("{account:#x}"),
                     delta: signed_delta(after, before.tokens[i]) });
             }
             for (i, token) in plan.supply.iter().enumerate() {
-                let after = strict_probe(&db, &env, *token, Bytes::from_static(&TOTAL_SUPPLY_SELECTOR))?;
+                let after = strict_probe(db, env, *token, Bytes::from_static(&TOTAL_SUPPLY_SELECTOR))?;
                 effects.total_supply_deltas.push(SimTotalSupplyDelta { token: format!("{token:#x}"),
                     delta: signed_delta(after, before.supply[i]) });
             }
         }
         Ok(DaemonResponse { ok: true, error: None, success: Some(success), output, profit: None,
             gas_used: Some(gas_used.to_string()), revert_reason, latency_ms: started.elapsed().as_millis(),
-            missing_state_keys: db.db.missing_state_keys(), cache_stats: None, seed_stats: None, strict: Some(effects) })
+            missing_state_keys: Vec::new(), cache_stats: None, seed_stats: None, strict: Some(effects) })
     }
 }
 
@@ -3322,8 +3377,26 @@ fn trace_prefetch(
     db: &CacheDB<SharedRemote>,
     calls: &[&ParsedPreCall],
 ) -> Result<SeedStats> {
+    trace_prefetch_with_code(remote, db, calls, None)
+}
+
+fn trace_prefetch_with_code(
+    remote: &RemoteRevmDb,
+    db: &CacheDB<SharedRemote>,
+    calls: &[&ParsedPreCall],
+    executor_code: Option<&(Address, Bytecode)>,
+) -> Result<SeedStats> {
     let started = Instant::now();
-    let overrides = build_trace_overrides(db);
+    let mut overrides = build_trace_overrides(db);
+    if let Some((target, code)) = executor_code {
+        // The legacy unpinned path imports pre-values; it must never receive a
+        // code override. StrictPlan already enforces this, retain the boundary.
+        if remote.source.is_none() { bail!("counterfactual trace requires pinned source"); }
+        let entry = overrides.as_object_mut().expect("overlay object")
+            .entry(format!("{target:#x}")).or_insert_with(|| json!({}));
+        entry.as_object_mut().expect("overlay account object").insert("code".into(),
+            json!(format!("0x{}", hex::encode(code.original_byte_slice()))));
+    }
     let trace_params: Vec<(&str, Value)> = calls
         .iter()
         .map(|call| {
@@ -4387,6 +4460,170 @@ mod tests {
         assert!(StrictPlan::validate(&serde_json::from_value(v).unwrap()).is_err());
         let mut v = valid.clone(); v["to"] = v["from"].clone();
         assert!(StrictPlan::validate(&serde_json::from_value(v).unwrap()).is_err());
+    }
+
+    #[test]
+    fn executor_trace_prefetch_sends_bound_code_but_only_imports_pinned_keys() {
+        let target = Address::repeat_byte(0xbb);
+        let code = Bytecode::new_raw(Bytes::from(parse_hex_bytes("0x60015460005260206000f3").unwrap()));
+        let poisoned = json!({format!("{target:#x}"):{"balance":"0xffff", "nonce":999, "code":"0xfe",
+            "storage":{format!("{:#066x}", U256::ZERO):"0xdead", format!("{:#066x}", U256::from(1)):"0xbeef"}}});
+        let (rpc, thread) = rpc_fixture_steps(vec![
+            (200, json!([{"jsonrpc":"2.0","id":0,"result":poisoned}])),
+            (200, json!([{"jsonrpc":"2.0","id":0,"result":format!("0x{:064x}", 5)}, {"jsonrpc":"2.0","id":1,"result":format!("0x{:064x}", 6)}])),
+        ]);
+        let source = test_source();
+        let mut remote = RemoteRevmDb::new(rpc.url.clone(), 300, HashSet::new(), Rc::new(RefCell::new(PersistentCache::default())),
+            rpc.client.clone(), Rc::clone(&rpc.fatal)).unwrap();
+        remote.rpc.pinned = true;
+        remote.block_tag = json!({"blockHash":source.attestation.block_hash,"requireCanonical":true});
+        remote.source = Some(source);
+        remote.seed_account(target, U256::ZERO, 0, None);
+        let remote = Rc::new(remote);
+        let mut db = CacheDB::new(SharedRemote(Rc::clone(&remote)));
+        db.insert_account_info(target, AccountInfo::default().with_code(code.clone()));
+        db.insert_account_storage(target, U256::from(1), U256::from(77)).unwrap();
+        mark_account_touched(&mut db, target);
+        let before = format!("{:?}", db.cache);
+        let call = ParsedPreCall { from: target, to: target, calldata: vec![], gas_limit: 100000, allowance_slot: None };
+        let stats = trace_prefetch_with_code(&remote, &db, &[&call], Some(&(target, code.clone()))).unwrap();
+        assert_eq!(stats.seeded_slots, 2);
+        assert_eq!(format!("{:?}", db.cache), before, "prefetch never mutates trial state");
+        assert!(remote.basic_ref(target).unwrap().is_none(), "synthetic code/account never enters shared source");
+        assert!(remote.persist.borrow().codes_by_addr.is_empty());
+        assert_eq!(remote.storage_ref(target, U256::ZERO).unwrap(), U256::from(5));
+        assert_eq!(remote.storage_ref(target, U256::from(1)).unwrap(), U256::from(6));
+        assert_eq!(db.storage(target, U256::from(1)).unwrap(), U256::from(77));
+        let requests = thread.join().unwrap();
+        assert_eq!(requests.len(), 2, "one hint batch plus one pinned hydration batch");
+        let params = &requests[0][0]["params"];
+        assert_eq!(params[1], remote.block_tag);
+        assert_eq!(params[2]["stateOverrides"][format!("{target:#x}")]["code"],
+            format!("0x{}", hex::encode(code.original_byte_slice())));
+        assert_eq!(params[2]["stateOverrides"][format!("{target:#x}")]["stateDiff"][format!("{:#066x}", U256::from(1))], format!("{:#066x}", U256::from(77)));
+        for item in requests[1].as_array().unwrap() {
+            assert_eq!(item["method"], "eth_getStorageAt"); assert_eq!(item["params"][2], remote.block_tag);
+        }
+    }
+
+    #[test]
+    fn executor_trace_override_cannot_enter_legacy_unpinned_cache() {
+        let remote = Rc::new(deal_guard(FatalLatch::default()));
+        let db = CacheDB::new(SharedRemote(Rc::clone(&remote)));
+        let code = Bytecode::new_raw(Bytes::from_static(&[0]));
+        assert!(trace_prefetch_with_code(&remote, &db, &[], Some(&(Address::repeat_byte(0xbb), code))).is_err());
+        assert_eq!(remote.rpc.round_trips(), 0); assert!(remote.inner.borrow().accounts.is_empty());
+    }
+
+    #[test]
+    fn cache_only_source_never_invents_missing_values_or_fetches() {
+        let mut remote = deal_guard(FatalLatch::default());
+        let source = test_source();
+        remote.source = Some(source.clone());
+        let actor = Address::repeat_byte(0xbb);
+        let cached = CachedSource(&remote);
+        assert!(cached.basic_ref(actor).is_err());
+        assert!(cached.storage_ref(actor, U256::ZERO).is_err());
+        assert!(cached.code_by_hash_ref(B256::ZERO).is_err());
+        assert!(cached.block_hash_ref(299).is_err());
+        assert_eq!(cached.block_hash_ref(300).unwrap(), B256::ZERO);
+        assert_eq!(cached.block_hash_ref(43).unwrap(), B256::ZERO);
+        remote.seed_account(actor, U256::ZERO, 0, None);
+        remote.seed_storage(actor, U256::ZERO, U256::from(7));
+        remote.inner.borrow_mut().ancestors.insert(299, (source.attestation.parent_hash, B256::ZERO));
+        assert!(cached.basic_ref(actor).unwrap().is_none());
+        assert_eq!(cached.storage_ref(actor, U256::ZERO).unwrap(), U256::from(7));
+        assert_eq!(cached.block_hash_ref(299).unwrap(), source.attestation.parent_hash);
+        assert_eq!(remote.rpc.round_trips(), 0);
+        assert_eq!(remote.rpc.fatal.get(), None);
+    }
+
+    #[test]
+    fn warm_executor_program_reexecutes_without_hints_and_keeps_isolation() {
+        let actor = Address::repeat_byte(0xbb);
+        let origin = Address::repeat_byte(0xdd);
+        let source = test_source();
+        let mut remote = deal_guard(FatalLatch::default());
+        remote.source = Some(source.clone());
+        for address in [Address::ZERO, actor, origin, source.env.beneficiary] {
+            remote.seed_account(address, U256::ZERO, 0, None);
+        }
+        remote.seed_storage(actor, U256::ZERO, U256::from(7));
+        let remote = Rc::new(remote);
+        for ending in ["f3", "fd", "fe"] {
+            for amount in [10, 20] {
+                let code = format!("0x60003560005560005460005260206000{ending}");
+                let req: StrictRequest = serde_json::from_value(json!({"blockNumber":300,
+                    "sourcePin":{"chainId":1,"blockHash":source.attestation.block_hash},"from":actor,"to":actor,
+                    "data":format!("0x{amount:064x}"),"observeNativeBalances":[actor],
+                    "callerMode":"impersonated-call-frame","transactionOrigin":origin,"executionGasLimit":100000,
+                    "executorRuntimeCode":{"code":code,"keccak256":format!("{:#x}", keccak256(parse_hex_bytes(&code).unwrap()))}})).unwrap();
+                let plan = StrictPlan::validate(&req).unwrap();
+                let source_values = || { let inner = remote.inner.borrow();
+                    format!("{:?}", (&inner.accounts, &inner.storage, &inner.codes_by_hash, &inner.ancestors, &remote.persist.borrow())) };
+                let before = source_values();
+                let result = Daemon::strict_simulate_at(Rc::clone(&remote), source.env.clone(), &mut HashMap::new(),
+                    &mut HashMap::new(), &req, &plan, Instant::now()).unwrap();
+                // Compare the complete effects/gas with the existing read-through
+                // execution using a fresh request overlay, not a second encoder.
+                let mut reference = CacheDB::new(SharedRemote(Rc::clone(&remote)));
+                apply_executor_runtime_code(&mut reference, &plan).unwrap();
+                let expected = Daemon::strict_simulate_ready(&mut reference, &source.env, &req, &plan, Instant::now()).unwrap();
+                assert_eq!(serde_json::to_value(&result.strict).unwrap(), serde_json::to_value(&expected.strict).unwrap());
+                assert_eq!(result.success, Some(ending == "f3"));
+                if ending != "fe" { assert_eq!(parse_u256(result.output.as_deref().unwrap()).unwrap(), U256::from(amount)); }
+                assert_eq!(remote.storage_ref(actor, U256::ZERO).unwrap(), U256::from(7));
+                assert!(remote.basic_ref(actor).unwrap().is_none());
+                assert_eq!(remote.rpc.round_trips(), 0, "warm programs must not request hints");
+                // Cache counters may change in the reference, source values do not.
+                assert_eq!(before, source_values());
+                assert!(remote.persist.borrow().codes_by_addr.is_empty());
+            }
+        }
+        assert_eq!(remote.rpc.fatal.get(), None);
+    }
+
+    #[test]
+    fn strict_executor_self_program_prefetch_keeps_fallback_and_fatal_boundary() {
+        for case in 0..4 {
+            let reply = match case {
+                0 => json!({"result":{}}),
+                1 => json!({"error":{"code":-32601,"message":"method not found"}}),
+                2 => json!({"result":"malformed optional hint"}),
+                _ => json!({"error":{"code":-32000,"message":"header not found"}}),
+            };
+            let mut item = json!({"jsonrpc":"2.0","id":0});
+            item.as_object_mut().unwrap().extend(reply.as_object().unwrap().clone());
+            let mut steps = vec![(200, json!([item]))];
+            if case != 3 { steps.push((200, json!({"jsonrpc":"2.0","id":1,"result":format!("0x{:064x}", 1)}))); }
+            let (rpc, thread) = rpc_fixture_steps(steps);
+            let source = test_source();
+            let actor = Address::repeat_byte(0xbb);
+            let origin = Address::repeat_byte(0xdd);
+            let mut remote = RemoteRevmDb::new(rpc.url.clone(), 300, HashSet::new(), Rc::new(RefCell::new(PersistentCache::default())),
+                rpc.client.clone(), Rc::clone(&rpc.fatal)).unwrap();
+            remote.rpc.pinned = true;
+            remote.block_tag = json!({"blockHash":source.attestation.block_hash,"requireCanonical":true});
+            remote.source = Some(source.clone());
+            for address in [Address::ZERO, actor, origin, source.env.beneficiary] { remote.seed_account(address, U256::ZERO, 0, None); }
+            let remote = Rc::new(remote);
+            let code = "0x60005460005260206000f3";
+            let req: StrictRequest = serde_json::from_value(json!({"blockNumber":300,
+                "sourcePin":{"chainId":1,"blockHash":source.attestation.block_hash},"from":actor,"to":actor,"data":"0x",
+                "callerMode":"impersonated-call-frame","transactionOrigin":origin,"executionGasLimit":100000,
+                "executorRuntimeCode":{"code":code,"keccak256":format!("{:#x}", keccak256(parse_hex_bytes(code).unwrap()))}})).unwrap();
+            let plan = StrictPlan::validate(&req).unwrap();
+            let result = Daemon::strict_simulate_at(Rc::clone(&remote), source.env, &mut HashMap::new(), &mut HashMap::new(), &req, &plan, Instant::now());
+            if case == 3 { assert!(result.is_err()); assert_eq!(rpc.fatal.get(), Some(FatalReason::SourceFault)); }
+            else {
+                let result = result.unwrap(); assert_eq!(result.success, Some(true));
+                assert_eq!(parse_u256(result.output.as_deref().unwrap()).unwrap(), U256::from(1));
+                assert_eq!(rpc.fatal.get(), None); assert!(remote.basic_ref(actor).unwrap().is_none());
+            }
+            let requests = thread.join().unwrap(); assert_eq!(requests.len(), if case == 3 { 1 } else { 2 });
+            assert_eq!(requests[0][0]["method"], "debug_traceCall");
+            assert_eq!(requests[0][0]["params"][2]["stateOverrides"][format!("{actor:#x}")]["code"], code);
+        }
     }
 
     #[test]
