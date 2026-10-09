@@ -4,7 +4,7 @@
   "workspace": "/opt/mev-cloud/family-runtime-20261007",
   "branch": "codex/family-runtime-actual-20261007",
   "baseCommit": "bba7e01fda781093a2d176f6305b120451dd41fc",
-  "revisionParent": "8ff7f80f0dd2e5ebd2b5208ebc8ca7ce0927a310",
+  "revisionParent": "4bdb11fac47567609cdca4e70d590738216d915c",
   "latestUserOrder": [
     "independently accept the integrated four Families for correctness AND latency",
     "remaining authorized Set/DODO/xWin/Curve/Balancer V3 Hook/Ekubo/Frax variants",
@@ -99,7 +99,7 @@
     "kyber": "representative instance/amount/tick coverage and production-stage performance; the historical two-direction sample below is not full-family acceptance",
     "yieldBasisLt": "production-reference amount through genuine background valuation connectivity, additional amount/variant coverage, then representative performance; original-amount same-state dual receipts already pass",
     "compoundCToken": "production-reference amount through genuine background valuation connectivity, additional amount/variant coverage, then representative performance; both corrected candidate-emitter identities and original-share-amount dual receipts already pass",
-    "algebraIntegral": "two current-source single-block Ready/Graph/effective and real dual execution samples now pass, recorded under algebraHistoricalIntegration; broader instance/variant coverage plus representative performance remain pending",
+    "algebraIntegral": "all six named handoff instances have current-source single-block Ready/Graph/effective and real dual execution receipts; untested plugin/security/tick states and representative performance remain pending. See algebraHistoricalIntegration and algebraSixSampleCoverage",
     "allFour": "full coverage and representative-load effective/sim timing remain incomplete; no live or adapter_merge_ready verdict"
   },
   "algebraSourceFinding": {
@@ -108,7 +108,7 @@
     "url": "https://etherscan.io/address/0xe5e0235245E3C05f66447a513c4e4e673805964b#code",
     "downloadSha256": "5b25643dd608e254d36024c41dfeb429398abdd5119a50b5b895ef0b1b47a745",
     "finding": "beforeSwap performs a security check, writes a timepoint, optionally computes dynamic fee, and applies a direction-dependent sliding factor; getCurrentFee alone does not execute that path",
-    "limit": "initial public-source inspection alone was not authority; the later bound-code implementation and historical lifecycle results are recorded separately below; real swap settlement is still unverified"
+    "limit": "initial public-source inspection alone was not authority; later bound-code implementation, lifecycle results and six same-N historical dual samples are recorded separately below. They do not prove untested plugin states or representative performance"
   },
   "algebraQuoterLead": {
     "officialDeploymentPage": "https://docs.cyphereth.com/docs/contracts/mainnet",
@@ -168,7 +168,7 @@
       },
       "limits": "N-end state only. Not original precall, formal Ready/Graph/effective acceptance, real settlement, complete Hook safety, stage performance or adapter_merge_ready"
     },
-    "claim": "implemented with local safety regressions, two real lifecycle/Exact probes and the separately recorded current-source same-N integration/dual receipts below; full coverage and representative performance INCOMPLETE"
+    "claim": "implemented with local safety regressions and six named handoff-instance lifecycle/Exact and same-N integration/dual receipts below; full variant/state coverage and representative performance INCOMPLETE"
   },
   "threeFamilyDualHarness": {
     "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
@@ -268,6 +268,77 @@
     "generatedArtifactIsolation": "official generator pure result and cloud working result each contain 429 exact entries; all nine differences belong to pre-existing other-owner UniswapV1 changes. Commit only pure generated artifact; keep working artifact intact",
     "safety": "original handoff Ready/checkpoint files unchanged; no activation/default change, live start, deployment, signature or broadcast"
   },
+  "algebraSixSampleCoverage": {
+    "scope": "four additional named handoff samples through existing production single-block discovery/strict/Ready/prices and existing local-Anvil/BotVM dual harness. Only three test files expanded; no production model, scheduler or activation-default change",
+    "environment": "canonical N-end state plus N environment, not original precall parity, route/EV reproduction or latency experiment",
+    "productionSourceTreeSha256": "3ce6c391ad6c957b3da137ea1d444411ddb7f1d7b5a491d257c1bf1ed7499512",
+    "harnessSha256": "268052265a3a8291f6de1372985690d1eae6536364de66feb05910f28c5e620c",
+    "evidenceHelpersSha256": "6014029f1ffff5ddeb594a76d8fbba73efabe2bc6eddb93e456c4cc596049312",
+    "newSamples": [
+      {
+        "sampleKey": "algebra3", "block": 26013785,
+        "blockHash": "0x673de33446bcd9fdee4371c29d237c46402e2360186a3fb3fc3a2a3a37a33403",
+        "tx": "0x1f0e69a9d9be232986b81216ce341e5d3dea9d6241074f2331cf8bb4d7ecaacc",
+        "target": "0xc0cf00079741ab9db6aceb5f7fe2f69c243c1aae",
+        "ready": { "instances": 1, "edges": 2, "raw": 2, "effectiveQuoted": 2, "candidates": 27, "retryableExcluded": 26, "terminalRejected": 0 },
+        "graphHash": "14305ccf962aab01739f4d471ec17ad48907ffe32a9e956d04448128c6094be2",
+        "dualExecutionsPassed": 16,
+        "evidence": "logs/four-family-integration-20261009.CuNyy3/algebra-current-N26013785-attempt01/dual-attempt01.json",
+        "sha256": "6ce4040a2b59d857b39a67f3ac6eab7a5bc237d802a36d92f31f31b7aada959a"
+      },
+      {
+        "sampleKey": "algebra4", "block": 25946003,
+        "blockHash": "0x5536c70b740995bfa6bcc158673726dc7372a87ddfc534203ef4f4ba02cd97ff",
+        "tx": "0x246160cdd6c0048a58076fc96a49d9ee18f4438a42e8bcb0727c6b42e06b86b8",
+        "target": "0x65937a5421603612c243300b250f64e58afcdbc4",
+        "ready": { "instances": 3, "edges": 6, "raw": 6, "effectiveQuoted": 6, "candidates": 18, "retryableExcluded": 14, "terminalRejected": 1 },
+        "graphHash": "72586796488febf5ba9155c1b34d1290c3a9349fbed0a1aa37905b745d417c0d",
+        "dualExecutionsPassed": 16,
+        "evidence": "logs/four-family-integration-20261009.CuNyy3/algebra-current-N25946003-attempt01/dual-attempt01.json",
+        "sha256": "ecac151181ef752dc182d30e1c58fe4bbcde4e3ecd78f343bf82a3eca6552757"
+      },
+      {
+        "sampleKey": "algebra5", "block": 25930616,
+        "blockHash": "0x74738d6652e7cf663495912cc71099623b8ee9636aad5e1a8d0f58827f8651d5",
+        "tx": "0x4a12dbe50e89057b07ccfc471d0db0c406be65e9d82d6e29a55284844e30cd85",
+        "target": "0x177f07c0843776b2a6342ed6c488af64e6f2fd65",
+        "ready": { "instances": 1, "edges": 2, "raw": 2, "effectiveQuoted": 2, "candidates": 37, "retryableExcluded": 36, "terminalRejected": 0 },
+        "graphHash": "4f97bf1c98a7f5e9c489b6ddd76327847f66cfe0f77ae1b16690aa407cc266bf",
+        "dualExecutionsPassed": 16,
+        "evidence": "logs/four-family-integration-20261009.CuNyy3/algebra-current-N25930616-attempt01/dual-attempt01.json",
+        "sha256": "95df818d23f23c797713c49f8e257584db1de9967dc5b988648fd73e2b49305e"
+      },
+      {
+        "sampleKey": "algebra6", "block": 25975130,
+        "blockHash": "0x58ac4d102bb4c31b585f078b50b3dbea9b0ffab35149c8659b0227aaec8ea466",
+        "tx": "0xacc347b03f7b6fd9efe0f50035f2c63720ac2e2954229ac8fe7465dcc6f23ef0",
+        "target": "0xf53dcd757f208fb4f3631d16d8c17ddb21a9d98d",
+        "ready": { "instances": 1, "edges": 2, "raw": 2, "effectiveQuoted": 2, "candidates": 20, "retryableExcluded": 19, "terminalRejected": 0 },
+        "graphHash": "30ff35c14d9861bf6f5dafe71c5b0647d1bca1690e4d282018f3b579aa934e5b",
+        "dualExecutionsPassed": 16,
+        "evidence": "logs/four-family-integration-20261009.CuNyy3/algebra-current-N25975130-attempt01/dual-attempt01.json",
+        "sha256": "c1e80e5ff51ff9d6d6299d4fcc5ca9a7942e57d9a862a10d91b5682974cc5067"
+      }
+    ],
+    "dualVerdict": "64/64 new real executions PASS, signed output delta=0. Including prior two same-source samples gives 96/96 across six named handoff instances. Each covers both directions, two amounts, quoted/runtime and output-inventory controls; missing-input negatives enforced",
+    "amounts": "actual production effective amount in both directions plus original TX input in its direction and twice production amount in reverse; exact integers and independent receipts in hash-bound evidence",
+    "runtimeConstruction": "every target direction Exact=0, quoted=0, RPC=0, quotedFallback=false",
+    "readBudget": "each new preliminary probe used 43 direct reads under 80-read/120s limit; each dual run used 126 direct calls under 1800-call/480s limit. Fork-internal/Ready calls excluded from these counters, no measured CU claim",
+    "reconciliation": [
+      { "query": ["algebra", "historical", "exact-quote"], "tool": "listener:searcher:algebra-quoter-historical", "executions": "four exit=0", "manifest": "logs/four-family-integration-20261009.CuNyy3/algebra-remaining-probe-selection.json", "sha256": "fcf654cf68ba82df302c8b23ce045be71bd1ac704e2c753858714b9ea3cd75f1" },
+      { "query": ["algebra", "dual", "historical"], "tool": "listener:searcher:algebra-dual-historical-fork", "executions": "four exit=0", "manifest": "logs/four-family-integration-20261009.CuNyy3/algebra-six-samples-dual-selection.json", "sha256": "47cf95ca258667b711b7995c7fea7ae3f32f0c26ec4956fc09737f2f83a04cfa" },
+      { "query": ["universe", "rebuild", "status"], "tool": "listener:searcher:universe-rebuild-status", "executions": "four exit=0", "manifest": "logs/four-family-integration-20261009.CuNyy3/algebra-six-samples-ready-status-selection.json", "sha256": "3468803be1c69bab3531a6df736c5432cb9e8dae5f4c631a0483fdf4bbc2116b" }
+    ],
+    "checks": {
+      "cloudOffline": "evidence plus nomination-address-binding 27/27 PASS; logs/four-family-integration-20261009.CuNyy3/algebra-six-samples-offline-20261009.log, sha256 2999424535bae716890cc91eaa835b12d24392c4900d9e2c43d3b84dae9261de",
+      "independentReview": "non-author 01a11aba-3bcc-7620-8433-2b9d1b94022f verified three file hashes and independently ran evidence.test.ts with caches disabled: 19/19 PASS, no scoped blocker; not an independent historical/performance run",
+      "buildLive": "PASS on existing pure source snapshot with cloud-synced test changes; cloud build NOT RUN during another owner's live",
+      "extendedTypecheck": "NOT PASS: this narrower three-file harness check reports existing blockscan-at-block-cli.ts:383/452 diagnostics, no changed-file diagnostics. Prior broader failure retained. Log: logs/four-family-integration-20261009.CuNyy3/algebra-six-samples-extended-typecheck-20261009.log, sha256 d2fdaad09c88a5370a4825ae0a29e552546f15690bef5d374691a1d0842429d0"
+    },
+    "performance": "NOT RUN. Other owner's mev-rpc-observation-live2500-20261009-attempt02.service remained active/running, MainPID 186051 before/after. No benchmark/cloud build overlapped; small-graph correctness runs are not latency acceptance",
+    "limits": "six historical states do not prove every plugin/security/tick state, instance, production route or adapter_merge_ready. Extra background pools at N25946003 have price evidence, not their own dual-execution acceptance",
+    "safety": "original Ready/checkpoint and frozen handoff untouched; four new isolated single-block outputs; owned Anvil cleaned, port 18621 empty afterward; no default activation, deployment, live start, signing or broadcast"
+  },
   "algebraHistoricalIntegration": {
     "scope": "reuse isolated copies of old family-only single-block Ready through existing production family-scoped revalidation; actual current strict/Graph/prices, then existing local-Anvil/BotVM quote/quoted/runtime harness. No central pipeline or model change in this step",
     "environment": "N-end state plus N execution environment, public clean test actors as in historicalIntegration; original TX precall and opportunity/EV reproduction NOT RUN",
@@ -313,7 +384,7 @@
     "reconciliation": "new generated tool-index selection algebra,dual,historical chose listener:searcher:algebra-dual-historical-fork; both actual runs exit=0 recorded in algebra-dual-selection.json (sha256 96c08f11c1d45ddf709a05372b53575427311f497ab1dbd2262fd2fe56c5af7b). Current official Ready status executed for both copies. Original failed tool-index ownership attempt retained",
     "localTestLog": {"path": "logs/four-family-integration-20261009.CuNyy3/algebra-dual-observation-contract-20261009.log", "sha256": "abfe9b7953f908118efb5fee04b03909dfab6043f2bc15599d14af335e66fd2d"},
     "performance": "NOT RUN. Small-graph diagnostic timings and historical single-leg traces are not representative effective/sim stage performance",
-    "limits": "two discovered instances do not imply all six handoff instances, variants, dynamic security states or tick ranges accepted; no adapter_merge_ready or production_gap_fixed claim",
+    "limits": "this initial two-sample record alone does not imply the remaining handoff instances; their later evidence is under algebraSixSampleCoverage. Untested variants, dynamic security states and tick ranges remain outside the claim; no adapter_merge_ready or production_gap_fixed claim",
     "safety": "original Ready and frozen handoff unchanged; no defaults/activation change, production deployment, live start, signature or broadcast; only child-process existing Family switch enabled"
   },
   "performanceGate": {

@@ -118,7 +118,7 @@ test("Kyber observed signed amounts select only the real full exact-input direct
   assert.throws(() => originalLeg("kyber", instance, descriptor, receipt, { error: "reverted", calls: [trace] }));
 });
 
-for (const key of ["algebra", "algebra2"] as const) {
+for (const key of ["algebra", "algebra2", "algebra3", "algebra4", "algebra5", "algebra6"] as const) {
   test(`${key}: observed swap binds its own ABI, direction, full input and settled output`, () => {
     const instance = SAMPLES[key].instances[0], descriptor = { token0, token1: asset };
     const args = ["--family", key, "--ready", "ready.json", "--prices", "prices.json", "--port", "18593", "--out", "new.json"];

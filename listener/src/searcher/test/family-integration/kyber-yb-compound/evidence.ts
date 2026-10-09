@@ -25,6 +25,18 @@ export const SAMPLES = {
   algebra2: { family: "swap:algebra-integral", number: 26030898,
     tx: "0x006223028f05865619d07584c43cf67cb608705d04ebc732e15bf40869d030b8",
     instances: ["0x915fd34cadd63907b51eb64dddc2eadd114a0bed"] },
+  algebra3: { family: "swap:algebra-integral", number: 26013785,
+    tx: "0x1f0e69a9d9be232986b81216ce341e5d3dea9d6241074f2331cf8bb4d7ecaacc",
+    instances: ["0xc0cf00079741ab9db6aceb5f7fe2f69c243c1aae"] },
+  algebra4: { family: "swap:algebra-integral", number: 25946003,
+    tx: "0x246160cdd6c0048a58076fc96a49d9ee18f4438a42e8bcb0727c6b42e06b86b8",
+    instances: ["0x65937a5421603612c243300b250f64e58afcdbc4"] },
+  algebra5: { family: "swap:algebra-integral", number: 25930616,
+    tx: "0x4a12dbe50e89057b07ccfc471d0db0c406be65e9d82d6e29a55284844e30cd85",
+    instances: ["0x177f07c0843776b2a6342ed6c488af64e6f2fd65"] },
+  algebra6: { family: "swap:algebra-integral", number: 25975130,
+    tx: "0xacc347b03f7b6fd9efe0f50035f2c63720ac2e2954229ac8fe7465dcc6f23ef0",
+    instances: ["0xf53dcd757f208fb4f3631d16d8c17ddb21a9d98d"] },
 } as const;
 export type SampleKey = keyof typeof SAMPLES;
 export const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -121,7 +133,7 @@ function successfulCalls(trace: any, target: string, selector: string): any[] {
 /** Extract only one unambiguous real successful call + event per instance. */
 export function originalLeg(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any) {
   assert(!trace.error && !trace.revertReason, "original transaction reverted");
-  const isSwap = key === "kyber" || key === "algebra" || key === "algebra2";
+  const isSwap = key === "kyber" || SAMPLES[key].family === "swap:algebra-integral";
   const abi = key === "kyber" ? KYBER : isSwap ? ALGEBRA : key === "yb" ? LT : CT;
   const event = isSwap ? "Swap" : key === "yb" ? "Withdraw" : "Redeem";
   const logs = receipt.logs.filter((l: any) => same(l.address, instance) && same(l.topics?.[0] ?? "", abi.getEvent(event)!.topicHash));

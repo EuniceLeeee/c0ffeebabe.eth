@@ -1,6 +1,6 @@
 // Opt-in, fixed-sample Family acceptance. Never imported as an automatic test.
 // MAINNET_RPC_URL is injected by the operator; no env/key files are opened.
-// --family kyber|yb|compound|algebra|algebra2 --ready FILE --prices FILE --port FREE_PORT --out NEW_FILE
+// --family SAMPLE_KEY (see SAMPLES) --ready FILE --prices FILE --port FREE_PORT --out NEW_FILE
 // Requires the Family's existing activation env flag; never changes defaults.
 // N-end + N environment single-leg evidence, NOT original-precall/EV/performance.
 import assert from "node:assert/strict";
@@ -235,7 +235,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assertHistoricalDiscoveryReceipt(await rpc("eth_getTransactionReceipt", [candidate.transactionHash]), candidate, source);
       const original = originalLeg(args.family, entry.instanceKey, entry.instance.descriptor, receipt, trace);
       directions.push({ entry, original, tokenIn: original.tokenIn, tokenOut: original.tokenOut });
-      if (["kyber", "algebra", "algebra2"].includes(args.family)) {
+      if (sample.family === "kyberswap-elastic" || sample.family === "swap:algebra-integral") {
         assert.equal(entry.instance.routes.length, 2, "fixed swap instance must project both directions");
         directions.push({ entry, original: null, tokenIn: original.tokenOut, tokenOut: original.tokenIn });
       }
