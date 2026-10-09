@@ -27,6 +27,18 @@ function probeInputs(descriptor: EkuboPricingDescriptor, results: readonly Adapt
   const amountIn = depthIn / 10_000n > 0n ? depthIn / 10_000n : 1n;
   return { depthIn, amountIn };
 }
+function retryInputs(descriptor: EkuboPricingDescriptor, results: readonly AdapterRequestResult[]) {
+  const original = probeInputs(descriptor, results);
+  const observed = decodeSizingProbe(returned(results, "current-depth").data, descriptor.route.isToken1, original.depthIn);
+  if (observed.filledAmountIn === original.depthIn) return null;
+  // Reverse output is not forward capacity. A partial depth response is only
+  // a sizing hint: use its actual forward fill to request fresh smaller full
+  // quotes, never publish the partial result. One bounded dependent retry.
+  const depthIn = observed.filledAmountIn / 4n > 0n ? observed.filledAmountIn / 4n : 1n;
+  const ceiling = depthIn / 2n > 0n ? depthIn / 2n : 1n;
+  const amountIn = original.amountIn < ceiling ? original.amountIn : ceiling;
+  return { depthIn, amountIn };
+}
 export const ekuboPricing = {
   // Existing policy is Family-wide: vanilla AND TWAMM refresh every block.
   // TWAMM beforeSwap executes virtual orders using block.timestamp even when
@@ -51,23 +63,36 @@ export const ekuboPricing = {
         encodeEkuboQuote(instance.poolKey, reverse ? !route.isToken1 : route.isToken1,
           10n ** BigInt(instance.decimals[Number(reverse ? !route.isToken1 : route.isToken1)]))));
     },
-    buildDependentProgram({ current, completedRound, initialResults }) {
-      if (completedRound !== 0) return null;
+    buildDependentProgram({ current, completedRound, initialResults, priorEvidence }) {
+      if (completedRound > 1) return null;
       validateResults(initialResults, ["current-unit-in", "current-unit-out"], current.source);
-      const { amountIn, depthIn } = probeInputs(current.descriptor, initialResults);
+      let sizes = probeInputs(current.descriptor, initialResults);
+      if (completedRound === 1) {
+        const results = collectRequestProgramResults(initialResults, priorEvidence);
+        validateResults(results, ["current-unit-in", "current-unit-out", "current-small", "current-depth"], current.source);
+        const retry = retryInputs(current.descriptor, results);
+        if (!retry) return null;
+        sizes = retry;
+      }
+      const { amountIn, depthIn } = sizes;
+      const suffix = completedRound === 1 ? "-retry" : "";
       const { instance, route } = current.descriptor;
       return bindRequestResultRound({ transports: ["eth-call"] }, [
-        call("current-small", encodeEkuboQuote(instance.poolKey, route.isToken1, amountIn)),
-        call("current-depth", encodeEkuboQuote(instance.poolKey, route.isToken1, depthIn)),
+        call(`current-small${suffix}`, encodeEkuboQuote(instance.poolKey, route.isToken1, amountIn)),
+        call(`current-depth${suffix}`, encodeEkuboQuote(instance.poolKey, route.isToken1, depthIn)),
       ]);
     },
     decodeSnapshot({ descriptor, initialResults, dependentEvidence }) {
       assertRoute(descriptor.instance, descriptor.route);
       const results = collectRequestProgramResults(initialResults, dependentEvidence);
-      const source = validateResults(results, ["current-unit-in", "current-unit-out", "current-small", "current-depth"]);
-      const { amountIn, depthIn } = probeInputs(descriptor, results);
-      const small = decodeQuote(returned(results, "current-small").data, descriptor.route.isToken1, amountIn);
-      const depth = decodeQuote(returned(results, "current-depth").data, descriptor.route.isToken1, depthIn);
+      const retry = dependentEvidence.length === 2;
+      const ids = ["current-unit-in", "current-unit-out", "current-small", "current-depth"];
+      const source = validateResults(results, retry ? [...ids, "current-small-retry", "current-depth-retry"] : ids);
+      const sizes = retry ? retryInputs(descriptor, results) : probeInputs(descriptor, results);
+      if (!sizes) throw new Error("ekubo unexpected sizing retry without partial depth");
+      const { amountIn, depthIn } = sizes, suffix = retry ? "-retry" : "";
+      const small = decodeQuote(returned(results, `current-small${suffix}`).data, descriptor.route.isToken1, amountIn);
+      const depth = decodeQuote(returned(results, `current-depth${suffix}`).data, descriptor.route.isToken1, depthIn);
       if (depth.amountOut < small.amountOut) throw new Error("ekubo inconsistent current quote depth");
       return Object.freeze({ source, amountIn, amountOut: small.amountOut, depthIn, depthOut: depth.amountOut, stateAfter: small.stateAfter });
     },

@@ -1,0 +1,1042 @@
+{
+  "schema": "ekubo-coffee-acceptance/v1",
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "811db93a30d198db9b45e70a5eaa707d8370197e",
+  "claim": "Family-local bounded pricing probe retry; two natural N/N sample integrations and independently observed dual-execution receipts. Not full Family/route/opportunity/performance acceptance.",
+  "implementation": {
+    "changed": "Pricing retries a partially filled depth probe once, at one quarter of its actual forward fill, with fresh smaller full-input small/depth quotes.",
+    "unchanged": [
+      "central protocol-independent pipeline",
+      "production effective reference policy/P",
+      "amount-sensitive Exact output",
+      "quoted/runtime execution semantics",
+      "identity full-fill gates",
+      "Family activation default",
+      "each-block refresh including TWAMM"
+    ],
+    "noPartialResultPublished": true,
+    "noExtraRoundForExistingFullFillDepth": true
+  },
+  "diagnosis": {
+    "originalCutoff": 26144845,
+    "cutoffHash": "0x8a86d4c8892bc77b24dbb43ce6894c7ed330d8f0ba12aa86620175fdaf82dc05",
+    "cutoffFinding": "Source-pinned identity diagnostic, not a newly issued strict memo: native pool reverse probes zero-fill; ERC20 pool both directions zero-fill. Original coffee retryables are not overridden.",
+    "originalBlockFinding": "Both original N identity diagnostics pass; natural native Ready initially loses USDT-to-ETH during current pricing, not identity.",
+    "failedDepthInputRaw": "211986698",
+    "observedForwardFillRaw": "29115356",
+    "newDepthInputRaw": "7278839",
+    "retainedSmallProbeRaw": "21198",
+    "cause": "Reverse-direction output was treated as a forward sizing hint larger than available forward fill; mandatory full-fill validation correctly rejected it, excluding the direction.",
+    "semantics": "A partial response may inform a new probe amount, never become an Exact quote or published capacity."
+  },
+  "samples": [
+    {
+      "key": "native",
+      "tx": "0xed014b884a511a4abd1c0e5f218be8dbcd1209cd7bb645d440334fdfecf928f0",
+      "block": 26088150,
+      "blockHash": "0xcd1606be5437c39dae2f04fd1709e6016827cd05323e81674ce8b378f46f86b6",
+      "graphHash": "ca5cd6a7ad3db0716d3877b3118df06c274b581b1ed85b574f1a87b861d2de9e",
+      "naturalTargetGraphDirections": 2,
+      "sourcePins": {
+        "sourceTreeSha256": "c188008011e838903362df67cbfac942501ac6252da39ada508655d102052ae9",
+        "harnessSha256": "83108783a52bdee46a462ddaa63a75d1e6de0065e57cd54522cb79db350a3d4a",
+        "evidenceSha256": "07333eaa779a1bc6fdcccae86a387f49e3c89ec75c4de27f94aa5e87d7a3748a",
+        "observationHelpers": [
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "694f9f84100b9ef8b1479f5e7859cea53526e7beaefcd4d87949b776751f8269"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "executor": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "environmentOpcodeProof": [
+        "26088150",
+        "1790745455",
+        "69441342",
+        "412311598482915581890913355723629879470649597847",
+        "60000000",
+        "83258336842032700245579861059079828623085516822505843229350905926286951683016",
+        "1"
+      ],
+      "sameStateDualResult": "pass",
+      "naturalEffective": "2/2 quoted",
+      "rows": [
+        {
+          "instance": "0x77e86b8f5da17873d7bdd70efc68a06dd3edc1d6e36b5bd65ff45eece33a31e4",
+          "edgeId": "custom-swap:ekubo-router-v1\u001f0x77e86b8f5da17873d7bdd70efc68a06dd3edc1d6e36b5bd65ff45eece33a31e4\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f63bce1c55f7a733d8318560ee6fea874c1c9e3f480dfb8b67cc1d37d96ea6f84",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "productionReference": {
+            "status": "met",
+            "amountIn": "2000000000000000",
+            "amountOut": "5286195"
+          },
+          "borrowedInput": null,
+          "original": {
+            "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "amountIn": "101325289534252",
+            "amountOut": "270928",
+            "caller": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+            "recipient": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+            "logIndex": "0x215",
+            "originalInterface": "swap((address,address,bytes32),bool,int128,uint96,uint256,int256,address)",
+            "comparison": "receipt plus successful Router return; graph WETH maps raw native ETH; N-end is NOT original pre-call state"
+          },
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0xa186e4ba2b7163f75beece7d25d71b58657b53c919891e84e2eb24a2ccdac3f7"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2000000000000000",
+              "quoteOut": "5286195",
+              "originalComparison": {
+                "originalAmountOut": "270928",
+                "signedDelta": null,
+                "verdict": "receipt plus successful Router return; graph WETH maps raw native ETH; N-end is NOT original pre-call state"
+              },
+              "executions": [
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": false,
+                  "inputDelta": "-2000000000000000",
+                  "outputDelta": "5286195",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": false,
+                  "inputDelta": "-2000000000000000",
+                  "outputDelta": "5286195",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": true,
+                  "inputDelta": "-2000000000000000",
+                  "outputDelta": "5286195",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": true,
+                  "inputDelta": "-2000000000000000",
+                  "outputDelta": "5286195",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                }
+              ]
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "101325289534252",
+              "quoteOut": "270624",
+              "originalComparison": {
+                "originalAmountOut": "270928",
+                "signedDelta": "-304",
+                "verdict": "receipt plus successful Router return; graph WETH maps raw native ETH; N-end is NOT original pre-call state"
+              },
+              "executions": [
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": false,
+                  "inputDelta": "-101325289534252",
+                  "outputDelta": "270624",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": false,
+                  "inputDelta": "-101325289534252",
+                  "outputDelta": "270624",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": true,
+                  "inputDelta": "-101325289534252",
+                  "outputDelta": "270624",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": true,
+                  "inputDelta": "-101325289534252",
+                  "outputDelta": "270624",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "instance": "0x77e86b8f5da17873d7bdd70efc68a06dd3edc1d6e36b5bd65ff45eece33a31e4",
+          "edgeId": "custom-swap:ekubo-router-v1\u001f0x77e86b8f5da17873d7bdd70efc68a06dd3edc1d6e36b5bd65ff45eece33a31e4\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f6a0a82c36cd022256148e51303a794fc19b1c3a539c9e317207e390cf04ef302",
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "productionReference": {
+            "status": "met",
+            "amountIn": "5286195",
+            "amountOut": "1954743851303043"
+          },
+          "borrowedInput": null,
+          "original": null,
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0x4e851dc4e826981a31ea09338c46e138c939c9eb6d5c8509a97bad4115e11b6f"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "5286195",
+              "quoteOut": "1954743851303043",
+              "originalComparison": {
+                "verdict": "opposite production direction; no original TX leg comparison"
+              },
+              "executions": [
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": false,
+                  "inputDelta": "-5286195",
+                  "outputDelta": "1954743851303043",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": false,
+                  "inputDelta": "-5286195",
+                  "outputDelta": "1954743851303043",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": true,
+                  "inputDelta": "-5286195",
+                  "outputDelta": "1954743851303043",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": true,
+                  "inputDelta": "-5286195",
+                  "outputDelta": "1954743851303043",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                }
+              ]
+            },
+            {
+              "label": "twice-production-effective",
+              "amountIn": "10572390",
+              "quoteOut": "3867631937363785",
+              "originalComparison": {
+                "verdict": "opposite production direction; no original TX leg comparison"
+              },
+              "executions": [
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": false,
+                  "inputDelta": "-10572390",
+                  "outputDelta": "3867631937363785",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": false,
+                  "inputDelta": "-10572390",
+                  "outputDelta": "3867631937363785",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": true,
+                  "inputDelta": "-10572390",
+                  "outputDelta": "3867631937363785",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": true,
+                  "inputDelta": "-10572390",
+                  "outputDelta": "3867631937363785",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "ready": "logs/ekubo-coffee-20261010.wauxqp/native-ready-final-2/ready.json",
+      "prices": "logs/ekubo-coffee-20261010.wauxqp/native-ready-final-2/prices/prices.json",
+      "dual": "logs/ekubo-coffee-20261010.wauxqp/native-dual-2.json"
+    },
+    {
+      "key": "erc20",
+      "tx": "0x868b69ff429fea8ec1e483c8be1d9e236aabe00065e355ff5a60af0596a75847",
+      "block": 25943731,
+      "blockHash": "0x265fd1d8bfa75ca4aa8ae34c486750b62c494be0695dc2893c5e74836aa63e41",
+      "graphHash": "6b9ab8ae0e183647caf0109675928dc33ac11fb65e682db7b25b577435072ccb",
+      "naturalTargetGraphDirections": 2,
+      "sourcePins": {
+        "sourceTreeSha256": "c188008011e838903362df67cbfac942501ac6252da39ada508655d102052ae9",
+        "harnessSha256": "83108783a52bdee46a462ddaa63a75d1e6de0065e57cd54522cb79db350a3d4a",
+        "evidenceSha256": "07333eaa779a1bc6fdcccae86a387f49e3c89ec75c4de27f94aa5e87d7a3748a",
+        "observationHelpers": [
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "694f9f84100b9ef8b1479f5e7859cea53526e7beaefcd4d87949b776751f8269"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "executor": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "environmentOpcodeProof": [
+        "25943731",
+        "1789004051",
+        "63706032",
+        "412311598482915581890913355723629879470649597847",
+        "60000000",
+        "82901138457219887288398724617686206715823288978530370045206171942693231764059",
+        "1"
+      ],
+      "sameStateDualResult": "pass-with-spliced-reference",
+      "naturalEffective": "2/2 missing-valuation",
+      "rows": [
+        {
+          "instance": "0x4cbcf9747988eb06d17794c224d3e4a70101c3b70d6c5819069af651cff06b7b",
+          "edgeId": "custom-swap:ekubo-router-v1\u001f0x4cbcf9747988eb06d17794c224d3e4a70101c3b70d6c5819069af651cff06b7b\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0xd9fcd98c322942075a5c3860693e9f4f03aae07b>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc8036f3469317e9aa46f03dfb3aebd003214273fc71d730c72ab36bf80bbb23d",
+          "tokenIn": "0xd9fcd98c322942075a5c3860693e9f4f03aae07b",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "productionReference": {
+            "status": "unmet",
+            "reason": "missing-valuation"
+          },
+          "borrowedInput": {
+            "kind": "spliced-recorded-input",
+            "amountIn": "3522741232389004055",
+            "donorRow": {
+              "edgeId": "univ3-standard\u001f0xb003df4b243f938132e8cadbeb237abc5a889fb4\u001f0xb003df4b243f938132e8cadbeb237abc5a889fb4\u001f0xd9fcd98c322942075a5c3860693e9f4f03aae07b>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fd4d37df2e7773d6be1ea0902c1e40bb0d8469b1b3c6dc1f955bf7597aa84005a",
+              "instanceKey": "0xb003df4b243f938132e8cadbeb237abc5a889fb4",
+              "tokenIn": "0xd9fcd98c322942075a5c3860693e9f4f03aae07b",
+              "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "amountIn": "3522741232389004055",
+              "status": "quoted",
+              "amountOut": "1957311188203427",
+              "effectiveMid": 0.0005556216193819166,
+              "quotedAt": {
+                "number": 26146968,
+                "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+                "generation": 1
+              }
+            },
+            "tableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "naturalTargetValuation": "unmet; not supplied by this input splice"
+          },
+          "original": {
+            "tokenIn": "0xd9fcd98c322942075a5c3860693e9f4f03aae07b",
+            "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "amountIn": "122255691783727626286",
+            "amountOut": "150465276",
+            "caller": "0x111116053f09d34a7eae8102887004445176ca11",
+            "recipient": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+            "logIndex": "0x269",
+            "originalInterface": "swap((address,address,bytes32),bool,int128,uint96,uint256,int256,address)",
+            "comparison": "receipt plus successful Router return; graph WETH maps raw native ETH; N-end is NOT original pre-call state"
+          },
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0x8f937285f0a9b84f63cf942e8c9a6aa1f0bfe0026a9260848992b2f7c2607703"
+          },
+          "trials": [
+            {
+              "label": "spliced-production-input-at-N",
+              "amountIn": "3522741232389004055",
+              "quoteOut": "4323986",
+              "originalComparison": {
+                "originalAmountOut": "150465276",
+                "signedDelta": null,
+                "verdict": "receipt plus successful Router return; graph WETH maps raw native ETH; N-end is NOT original pre-call state"
+              },
+              "executions": [
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": false,
+                  "inputDelta": "-3522741232389004055",
+                  "outputDelta": "4323986",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": false,
+                  "inputDelta": "-3522741232389004055",
+                  "outputDelta": "4323986",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": true,
+                  "inputDelta": "-3522741232389004055",
+                  "outputDelta": "4323986",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": true,
+                  "inputDelta": "-3522741232389004055",
+                  "outputDelta": "4323986",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                }
+              ]
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "122255691783727626286",
+              "quoteOut": "149684577",
+              "originalComparison": {
+                "originalAmountOut": "150465276",
+                "signedDelta": "-780699",
+                "verdict": "receipt plus successful Router return; graph WETH maps raw native ETH; N-end is NOT original pre-call state"
+              },
+              "executions": [
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": false,
+                  "inputDelta": "-122255691783727626286",
+                  "outputDelta": "149684577",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": false,
+                  "inputDelta": "-122255691783727626286",
+                  "outputDelta": "149684577",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": true,
+                  "inputDelta": "-122255691783727626286",
+                  "outputDelta": "149684577",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": true,
+                  "inputDelta": "-122255691783727626286",
+                  "outputDelta": "149684577",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "instance": "0x4cbcf9747988eb06d17794c224d3e4a70101c3b70d6c5819069af651cff06b7b",
+          "edgeId": "custom-swap:ekubo-router-v1\u001f0x4cbcf9747988eb06d17794c224d3e4a70101c3b70d6c5819069af651cff06b7b\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xd9fcd98c322942075a5c3860693e9f4f03aae07b\u001f1a6316f74e99fe4e1eb4200abb7db6ad8902a40fb222e33aeec437801b2d0ad2",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xd9fcd98c322942075a5c3860693e9f4f03aae07b",
+          "productionReference": {
+            "status": "unmet",
+            "reason": "missing-valuation"
+          },
+          "borrowedInput": {
+            "kind": "spliced-recorded-input",
+            "amountIn": "5135191",
+            "donorRow": {
+              "edgeId": "univ3-standard\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x0ec78ed49c2d27b315d462d43b5bab94d2c79bf8\u001fdc3bc1478cf7a1a57d902343a55f923b87dbee50919851d75fe6794b799a7b04",
+              "instanceKey": "0x0004cd8474e882278e32e584699090be496f410e",
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0x0ec78ed49c2d27b315d462d43b5bab94d2c79bf8",
+              "amountIn": "5135191",
+              "status": "quoted",
+              "amountOut": "18150473245343058509408",
+              "effectiveMid": 3534527390576720.5,
+              "quotedAt": {
+                "number": 26146968,
+                "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+                "generation": 1
+              }
+            },
+            "tableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "naturalTargetValuation": "unmet; not supplied by this input splice"
+          },
+          "original": null,
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0xaa52a8f1000eed604218e44f8a003109f140e7f5b2bb482bf0b295e42a85605f"
+          },
+          "trials": [
+            {
+              "label": "spliced-production-input-at-N",
+              "amountIn": "5135191",
+              "quoteOut": "4141218625718870892",
+              "originalComparison": {
+                "verdict": "opposite production direction; no original TX leg comparison"
+              },
+              "executions": [
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": false,
+                  "inputDelta": "-5135191",
+                  "outputDelta": "4141218625718870892",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": false,
+                  "inputDelta": "-5135191",
+                  "outputDelta": "4141218625718870892",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": true,
+                  "inputDelta": "-5135191",
+                  "outputDelta": "4141218625718870892",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": true,
+                  "inputDelta": "-5135191",
+                  "outputDelta": "4141218625718870892",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                }
+              ]
+            },
+            {
+              "label": "twice-spliced-production-input-at-N",
+              "amountIn": "10270382",
+              "quoteOut": "8281704184966020032",
+              "originalComparison": {
+                "verdict": "opposite production direction; no original TX leg comparison"
+              },
+              "executions": [
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": false,
+                  "inputDelta": "-10270382",
+                  "outputDelta": "8281704184966020032",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": false,
+                  "inputDelta": "-10270382",
+                  "outputDelta": "8281704184966020032",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": null
+                },
+                {
+                  "encoding": "quoted",
+                  "inventoryControl": true,
+                  "inputDelta": "-10270382",
+                  "outputDelta": "8281704184966020032",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                },
+                {
+                  "encoding": "runtime",
+                  "inventoryControl": true,
+                  "inputDelta": "-10270382",
+                  "outputDelta": "8281704184966020032",
+                  "signedOutputDifference": "0",
+                  "nativeInventory": {
+                    "before": "17",
+                    "after": "17",
+                    "delta": "0"
+                  },
+                  "noInputReverted": true
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "ready": "logs/ekubo-coffee-20261010.wauxqp/erc20-ready/ready.json",
+      "prices": "logs/ekubo-coffee-20261010.wauxqp/erc20-ready/prices/prices.json",
+      "dual": "logs/ekubo-coffee-20261010.wauxqp/erc20-dual-1.json"
+    }
+  ],
+  "tests": {
+    "currentCloud": {
+      "buildLive": "PASS",
+      "manifestCheck": "PASS",
+      "strictDeclarations": "PASS",
+      "familyContracts": 41,
+      "sharedDualContracts": 75,
+      "observationContractsBeforeHardening": 23,
+      "observationContractsAfterHardening": 25
+    },
+    "stagedExport": {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/staged.UiDA6O",
+      "claim": "Exported staged source excludes peer dirty Ready/UniV1 changes. Offline build/manifest/tests only, not a new EVM execution of the clean committed tree.",
+      "buildLive": "PASS",
+      "manifestGenerateAndCheck": "PASS",
+      "familyAndObservationContracts": 63,
+      "sharedDualContracts": 74,
+      "log": "logs/ekubo-coffee-20261010.wauxqp/staged-checks.log"
+    },
+    "stagedFinalExport": {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/staged-final.OkhUti",
+      "buildLive": "PASS",
+      "manifestCheck": "PASS",
+      "familyAndObservationContracts": 65,
+      "generatedManifestSha256": "db0568feba60d6d1bceb1be7e2412be9ddc0e5c5509d7207f79fae3633d5c905",
+      "claim": "Final staged source after test-only output-observation hardening. No production semantic changes since the historical runs; not a fresh EVM run of the final clean source.",
+      "log": "logs/ekubo-coffee-20261010.wauxqp/staged-final-checks.log"
+    },
+    "hardenedOriginalAuthentication": {
+      "status": "PASS for both saved original receipts and successful Router call subtrees",
+      "helperSha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3",
+      "log": "logs/ekubo-coffee-20261010.wauxqp/hardened-cached-originals-1.log",
+      "claim": "Current parser re-authenticates the saved originals offline; all original EVM/source/helper pins above remain historical and unchanged. No new EVM execution or original pre-call parity is claimed."
+    }
+  },
+  "review": {
+    "pass1": {
+      "reviewer": "Bohr",
+      "scope": "primary pricing retry",
+      "verdict": "no blocking findings reported",
+      "checks": "18 Family tests and 607 independent in-memory assertions; initial hard cap rejected",
+      "limitation": "does not approve historical harness by itself"
+    },
+    "pass2": {
+      "reviewer": "Bohr",
+      "scope": "historical Ready and dual-execution observation harness",
+      "finding": "Confirmed output-parser weakness: ERC20 receipt sender was unbound and native transfer could come from an unrelated successful subtree. Offline counterexamples demonstrated false acceptance; the two saved originals themselves passed a stricter check.",
+      "checks": "23/23 observation contracts; authenticated 32 saved executions, zero output deltas, 16 no-input reverts and native 17-to-17 inventory from diffs",
+      "resolution": "Bound ERC20 payment to the selected successful Router subtree and matched receipt sender; native payment is confined to that subtree. Added wrong-sender, unrelated-sibling and reverted-subtree negatives; 25/25 pass and both saved originals authenticate offline.",
+      "limitation": "No new EVM, pre-call replay, formal fixed/merge-ready or performance verdict"
+    },
+    "pass3": {
+      "reviewer": "Bohr",
+      "scope": "sender and selected-subtree observation correction only; third and final pass",
+      "verdict": "no blocking findings; pass2 weakness addressed",
+      "checks": "Independently ran 25/25 tests, authenticated both saved originals with the current helper, and rejected 10 additional negative mutations including foreign senders, sibling/reverted/duplicate payments; source hashes and old report pins unchanged",
+      "helperSha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3",
+      "limitations": "Both original samples output ERC20; native-output subtree rejection is fixture coverage. Offline saved-evidence authentication, not new EVM execution or a formal fixed/merge-ready/performance verdict."
+    }
+  },
+  "preservedFailures": [
+    {
+      "artifact": "logs/ekubo-coffee-20261010.wauxqp/native-ready/failure.json",
+      "kind": "baseline behavior",
+      "reason": "natural N Ready exposed only one of two target directions"
+    },
+    {
+      "artifact": "logs/ekubo-coffee-20261010.wauxqp/depth-contract-1.log",
+      "kind": "discarded implementation",
+      "reason": "first hard cap made an existing low-precision fixture small quote round to zero; patch reverted and saved as failed-hard-cap.patch"
+    },
+    {
+      "artifact": "logs/ekubo-coffee-20261010.wauxqp/native-dual-1.json",
+      "kind": "preparation",
+      "reason": "stale source fingerprint rejected before any RPC/EVM"
+    },
+    {
+      "artifact": "logs/ekubo-coffee-20261010.wauxqp/native-prices-final.log",
+      "kind": "preparation",
+      "reason": "matching catalog required Ready selective revalidation; no fingerprint override"
+    },
+    {
+      "artifact": "logs/ekubo-coffee-20261010.wauxqp/native-ready-final.log",
+      "kind": "command preparation",
+      "reason": "--reuse-ready invoked before its patch applied; rejected before producing Ready"
+    },
+    {
+      "artifact": "logs/ekubo-coffee-20261010.wauxqp/family-tests-final.log",
+      "kind": "command preparation",
+      "reason": "two opt-in cached CLI programs were incorrectly invoked without required arguments; 41 actual contracts passed, both usage errors retained"
+    }
+  ],
+  "reconciliation": {
+    "capabilities": [
+      "universe",
+      "rebuild",
+      "status"
+    ],
+    "selection": "logs/ekubo-coffee-20261010.wauxqp/tool-selection.json",
+    "selectionSha256": "4238297bbb12e0141e9b324099346ec556a80ae4666d726c03997e56160dd463",
+    "executedTool": "listener:searcher:universe-rebuild-status",
+    "logs": [
+      "logs/ekubo-coffee-20261010.wauxqp/native-canonical-status.log",
+      "logs/ekubo-coffee-20261010.wauxqp/erc20-canonical-status.log"
+    ],
+    "conclusion": "Indexed read-only status agrees that isolated single-block Ready generations are complete; not a substitute for row/execution verification."
+  },
+  "safety": {
+    "broadcast": false,
+    "signing": false,
+    "liveStarted": false,
+    "originalCoffeeReady": "logs/coffee-tx-ready-20261008/checkpoint.json",
+    "originalCoffeeSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "forks": "owned forks stopped by each successful runner; no other process stopped",
+    "peerChanges": "Existing uncommitted Ready/transaction-input/UniV1 and shared dual-test changes remain outside this scoped commit."
+  },
+  "outstanding": [
+    "representative performance NOT RUN; single-Ready then combined large-graph acceptance is deferred to goal phase4 for EVERY applicable IMPL addition and Balancer V2/V3, Curve plain/underlying",
+    "ERC20 sample natural small-graph effective valuation missing; borrowed input is not natural N valuation",
+    "no original transaction pre-call state replay, full route sizing/final sim/EV, Adapter Replay fixed or merge-ready claim",
+    "two pools do not cover every Ekubo extension, pool or direction variant"
+  ],
+  "bindings": [
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/observations-hardened-1.log",
+      "sha256": "d76f794c22ec4cb884bb31c7a17f1ddb30277334b82c379c9a9e9e83000cd76b"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/hardened-cached-originals-1.log",
+      "sha256": "f92e56b7478615889c0cc7d05df034f51ea9c5428a2ea5d960241ac26533eabd"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/staged-final-checks.log",
+      "sha256": "a64a1ce138649252b3bb68dab00068b18bcda7fb0aa6d2ea20afa7f296824b6a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/ekubo-family/test/history-evidence.ts",
+      "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/native-ready-final-2/ready.json",
+      "sha256": "aa763d92921ba7e13ffdf657035432bff33340d0932545154fa1032ed091fbb5"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/native-ready-final-2/prices/prices.json",
+      "sha256": "47c2a413de2e7c5777322d0128c351511b7cb4fb6a10ffd27ee4025f10943f81"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/native-dual-2.json",
+      "sha256": "df56a33e4cd25018e1f141dc47979631b2dc4265563378b9c486d1bd9c9a26b0"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/native-ready-final-2/prices/input.json",
+      "sha256": "52943dc779afa605633604c82896d999137de8bae436f0fdbb27d7efdc346277"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/erc20-ready/ready.json",
+      "sha256": "3c12dae2bf36ce6c2c1f80ab14d6d12c662a615f8225d64f12b7e10df3e78897"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/erc20-ready/prices/prices.json",
+      "sha256": "1e7248922e9479b1bc3f58c963edae68262f0eeb6b74c2ba12551d2f90fee027"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/erc20-dual-1.json",
+      "sha256": "c6bc59ac02dd9f7f9a636de3649aa4e80d6709b045c25d76c215fc1d0389cb26"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/erc20-ready/prices/input.json",
+      "sha256": "254c2659a1fa84f7e34ac6ba9dc5c66396bcee7b39c6f2c3b1de87fc132ed5ad"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/identity-diagnostic-1.json",
+      "sha256": "f9f05feb5060fbee09793825da4f3db22a5cf46de77d074fe8fa3641d76b7df9"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/pricing-diagnostic-1.json",
+      "sha256": "aab8b6837e1294f9b1ceb48eb02d5a048ed450e7e3bbbb94050c8fe77c845187"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/native-ready/failure.json",
+      "sha256": "aa0f74f65df240f849e1e5c100f899a60f544483418c9bd1527c5c1cf6861ec0"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/depth-contract-1.log",
+      "sha256": "0524eff3bd829c4a7746a401736b33c4a0bc5aac34946e0e48f3e1f7453b7d93"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/native-dual-1.json",
+      "sha256": "61fa63fe45dfe1f5aa409cf496795dafe6fc6d6cfbeb4de423544c4897435709"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/native-prices-final.log",
+      "sha256": "95d8463820d47e1c811d1e8112502c9bbf807af3ad4067631705cf8918bba666"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/native-ready-final.log",
+      "sha256": "80550bac0202b2b95c052f0c982d1746a9f3127ad3e6615aa595132cc45e6648"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/family-tests-final.log",
+      "sha256": "ed0c360193fc2520e9c23862fe7cccd1dada80adcaf9c01dbf98d9841265a851"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/family-contracts-final-2.log",
+      "sha256": "973d7d87e11394c0a8d3918a8f82e2b27b13e1b41508dccd09e6c6057c2beba9"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/shared-dual-final.log",
+      "sha256": "10d0defcea8071aba723a55460676b55df57f58a1d25431b0233d7f8bc3e5400"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/observations-1.log",
+      "sha256": "ea0eadca14a4182c15bec233243669ae090009cd79f7fdc57baa27d94a658a28"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/strict-declarations-final.log",
+      "sha256": "116c154208b1ee31e557be02138d0c4ac2fb7e5987d8b83ea522880daaca846c"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/build-live-1.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/manifest-check-1.log",
+      "sha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/staged-checks.log",
+      "sha256": "04a4125edc1583c39ef7b2638b0a501281f31ef58a86e07811ad91bdf7950dd4"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/native-canonical-status.log",
+      "sha256": "f7c17d6f30064a83f68e145e493d173d3a9f9c4f18e1f9c7000cce5e3a616a12"
+    },
+    {
+      "path": "logs/ekubo-coffee-20261010.wauxqp/erc20-canonical-status.log",
+      "sha256": "2bd0698e90a3e280d15f4fb8f0877433645c9bf7974b80ed47f959e4ed7648af"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/ekubo-family/pricing.ts",
+      "sha256": "3d23cd69b3bdac1236805a8dcea155871cee5e5701b0126dcb97297313705d18"
+    }
+  ]
+}

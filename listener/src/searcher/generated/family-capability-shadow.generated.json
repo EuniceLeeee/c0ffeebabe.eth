@@ -3070,7 +3070,7 @@
         "familyId": "custom-swap:ekubo-router-v1",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "2dc854282a474526d672f8df51d45a4d7069fe9a3acc80741feeed63557e1624",
+        "contentHash": "5af544b75c3b1e4a7ab55829337ba8c062c74133ebf48c5e2e43e88863223e6f",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -13370,5 +13370,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "701e64f0a62e43e8e7bb63093f462c73838ec15ae3324e7bde515e3577689c9e"
+  "artifactHash": "f68fe2d720035c31c025ba1d7122528c3c8b162109b8cb4aa97ed089a804ac2d"
 }

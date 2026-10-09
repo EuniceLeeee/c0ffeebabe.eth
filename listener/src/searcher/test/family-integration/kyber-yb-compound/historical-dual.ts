@@ -27,9 +27,10 @@ import { assertIssuedPreparedFamilyInstance, executeFamilyExactQuote, buildFamil
 import { asPricedFamily } from "../../../venues/family-capability-catalog.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../venues/production-family-composition.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
+import { EKUBO_CORE } from "../../../venues/swaps/ekubo/abi.js";
 import { assertHistoricalDiscoveryReceipt } from "../three-family/historical-input-observations.js";
 import { SAMPLES, ERC20, options, same, json, sha, word, observeBalance, assertDeltas, originalLeg,
-  assertReceipt, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, constructionGuard, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert } from "./evidence.js";
+  assertReceipt, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, constructionGuard, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory } from "./evidence.js";
 
 const ROOT = fileURLToPath(new URL("../../../../../../", import.meta.url));
 type Overrides = Record<string, { code?: string; balance?: string; stateDiff?: Record<string, string> }>;
@@ -51,6 +52,7 @@ export function sourcePin() {
     harnessSha256: sha(readFileSync(fileURLToPath(import.meta.url))),
     evidenceSha256: sha(readFileSync(new URL("./evidence.ts", import.meta.url))),
     observationHelpers: ["../three-family/historical-input-observations.ts",
+      "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
       "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
       "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts"]
       .map(path => ({ path, sha256: sha(readFileSync(new URL(path, import.meta.url))) })) };
@@ -247,7 +249,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assertHistoricalDiscoveryReceipt(await rpc("eth_getTransactionReceipt", [candidate.transactionHash]), candidate, source);
       const original = originalLeg(args.family, entry.instanceKey, entry.instance.descriptor, receipt, trace);
       directions.push({ entry, original, tokenIn: original.tokenIn, tokenOut: original.tokenOut });
-      if (sample.family === "kyberswap-elastic" || sample.family === "swap:algebra-integral" || args.family === "frax") {
+      if (sample.family === "kyberswap-elastic" || sample.family === "swap:algebra-integral" || sample.family === "custom-swap:ekubo-router-v1" || args.family === "frax") {
         assert.equal(entry.instance.routes.length, 2, "fixed swap instance must project both directions");
         directions.push({ entry, original: null, tokenIn: original.tokenOut, tokenOut: original.tokenIn });
       }
@@ -281,7 +283,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assert.deepEqual({ calls, ...guard.counts }, beforeBuild);
       row.runtimeConstruction = { exactCalls: 0, quotedCalls: 0, rpcCalls: 0, quotedFallback: false, programHash: ethers.keccak256(leg.program) };
       stage = "actor-balance-slot-proof";
-      const pair = [tokenIn, tokenOut], keys = await Promise.all(pair.map(t => slotFor(t, entry.instanceKey)));
+      // Singleton protocols hold assets at the Core, not at their bytes32 key.
+      // This is test-only observation, not production identity or dispatch.
+      const protectedAccount = sample.family === "custom-swap:ekubo-router-v1" ? EKUBO_CORE : entry.instanceKey;
+      const pair = [tokenIn, tokenOut], keys = await Promise.all(pair.map(t => slotFor(t, protectedAccount)));
       const base = await Promise.all(pair.map(t => balance(t, executor)));
       assert(pair.every(t => ![executor, owner].includes(t)) && ![executor, owner].includes(entry.instanceKey));
       const trials: [string, bigint][] = p.status === "met" ? [["production-effective", p.amountIn]] : [];
@@ -316,7 +321,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           for (const inventoryControl of [false, true]) {
             const initial = [base[0]! + amountIn, base[1]! + (inventoryControl ? 10n ** 24n : 0n)];
             assert(initial.every(v => v <= ethers.MaxUint256));
-            const overrides: Overrides = { [owner]: { balance: ethers.toQuantity(100n * 10n ** 18n) }, [executor]: { code: runtimeCode.code },
+            const nativeBefore = 17n;
+            const overrides: Overrides = { [owner]: { balance: ethers.toQuantity(100n * 10n ** 18n) }, [executor]: { code: runtimeCode.code, balance: ethers.toQuantity(nativeBefore) },
               [pair[0]!]: { stateDiff: { [keys[0]!]: word(initial[0]!) } } };
             if (inventoryControl) overrides[pair[1]!] = { stateDiff: { [keys[1]!]: word(initial[1]!) } };
             for (const [encoding, script] of scripts) {
@@ -335,6 +341,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               const measured = pair.map((t, i) => observeBalance(executed.diff, t, keys[i]!, initial[i]!));
               executed.balances = measured; executed.signedDelta = measured[1]!.delta - quote.amountOut;
               assertDeltas(measured[0]!, measured[1]!, amountIn, quote.amountOut);
+              executed.nativeInventory = assertNativeInventory(executed.diff, executor, nativeBefore);
               // Identical program with NO input and abundant output must revert:
               // a pre-existing output balance cannot turn a failed leg into PASS.
               if (inventoryControl) {

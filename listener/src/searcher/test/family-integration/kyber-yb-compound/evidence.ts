@@ -8,10 +8,17 @@ import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoke
 import { ERC4626_INTERFACE as CUSTODIAN } from "../../../venues/protocols/erc4626-family/abi.js";
 import { successfulRedeemCalls, classifyRedeemLog } from "../../../venues/protocols/compound-ctoken-family/test/history-evidence.js";
 import { assertHistoricalPriceDirection } from "../three-family/historical-input-observations.js";
+import { originalEkuboLeg } from "../../../venues/swaps/ekubo-family/test/history-evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 export { json, sha, word, observeBalance } from "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.js";
 
 export const SAMPLES = {
+  "ekubo-native": { family: "custom-swap:ekubo-router-v1", number: 26088150,
+    tx: "0xed014b884a511a4abd1c0e5f218be8dbcd1209cd7bb645d440334fdfecf928f0",
+    instances: ["0x77e86b8f5da17873d7bdd70efc68a06dd3edc1d6e36b5bd65ff45eece33a31e4"] },
+  "ekubo-erc20": { family: "custom-swap:ekubo-router-v1", number: 25943731,
+    tx: "0x868b69ff429fea8ec1e483c8be1d9e236aabe00065e355ff5a60af0596a75847",
+    instances: ["0x4cbcf9747988eb06d17794c224d3e4a70101c3b70d6c5819069af651cff06b7b"] },
   frax: { family: "protocol:erc4626", number: 26017168,
     tx: "0x02bf41c595d08e397b90edaaee8a00f4521d1d7c2b0f538b1d1597e4e1ccacec",
     instances: ["0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c"] },
@@ -208,6 +215,7 @@ function successfulCalls(trace: any, target: string, selector: string): any[] {
 /** Extract only one unambiguous real successful call + event per instance. */
 export function originalLeg(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any) {
   assert(!trace.error && !trace.revertReason, "original transaction reverted");
+  if (SAMPLES[key].family === "custom-swap:ekubo-router-v1") return originalEkuboLeg(instance, descriptor, receipt, trace);
   const isSwap = key === "kyber" || SAMPLES[key].family === "swap:algebra-integral";
   const abi = key === "kyber" ? KYBER : isSwap ? ALGEBRA : key === "yb" ? LT : key === "frax" ? CUSTODIAN : CT;
   const event = isSwap ? "Swap" : key === "yb" || key === "frax" ? "Withdraw" : "Redeem";
@@ -284,6 +292,18 @@ export function assertDeltas(input: { before: bigint; after: bigint; delta: bigi
   assert.equal(input.after, input.before - amountIn, "old input inventory consumed");
   assert.equal(output.delta, quoteOut, "actual credited output differs from quote (inventory cannot top up)");
   assert.equal(output.after, output.before + quoteOut, "old output inventory consumed");
+}
+
+/** An execution-boundary conversion must restore all pre-existing native ETH.
+ * Observe the state diff independently of prescribed WETH deposit amounts. */
+export function assertNativeInventory(diff: any, actor: string, before: bigint) {
+  const account = actor.toLowerCase(), pre = diff.pre?.[account], post = diff.post?.[account];
+  if (pre?.balance !== undefined) assert.equal(BigInt(pre.balance), before, "native prestate differs from injected baseline");
+  const after = post?.balance === undefined ? before : BigInt(post.balance);
+  // A deleted actor cannot be interpreted as unchanged native inventory.
+  assert(!(pre && !post), "actor removed from poststate");
+  assert.equal(after, before, "native inventory spent or new native output left unwrapped");
+  return { before, after, delta: after - before };
 }
 
 /** The same guard wraps the real production Exact/quoted calls in the runner. */

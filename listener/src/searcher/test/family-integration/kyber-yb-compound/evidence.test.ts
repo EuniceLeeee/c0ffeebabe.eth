@@ -7,7 +7,7 @@ import { ALGEBRA_POOL_INTERFACE as ALGEBRA } from "../../../venues/swaps/algebra
 import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-family/abi.js";
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
 import { options, SAMPLES, ERC20, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, originalLeg,
-  assertReceipt, observeBalance, assertDeltas, constructionGuard, word, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert } from "./evidence.js";
+  assertReceipt, observeBalance, assertDeltas, constructionGuard, word, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory } from "./evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 
 const actor = "0x1000000000000000000000000000000000000001";
@@ -20,6 +20,15 @@ const source = { number: Number(BigInt(header.number)), hash, generation: 7 };
 const event = (abi: ethers.Interface, name: string, args: unknown[], address: string) =>
   ({ address, ...abi.encodeEventLog(abi.getEvent(name)!, args), logIndex: "0x1" });
 const transfer = (instance: string, value: bigint) => event(ERC20, "Transfer", [instance, actor, value], asset);
+
+test("native observation detects one-unit residual, old-inventory debit and deleted actor", () => {
+  const state = (n: bigint) => ({ pre: { [actor]: { balance: "0x11" } }, post: { [actor]: { balance: ethers.toQuantity(n) } } });
+  assert.deepEqual(assertNativeInventory(state(17n), actor, 17n), { before: 17n, after: 17n, delta: 0n });
+  assertNativeInventory({ pre: {}, post: {} }, actor, 17n);
+  for (const n of [0n, 16n, 18n, 10n ** 18n]) assert.throws(() => assertNativeInventory(state(n), actor, 17n));
+  assert.throws(() => assertNativeInventory({ pre: { [actor]: { balance: "0x11" } }, post: {} }, actor, 17n));
+  assert.throws(() => assertNativeInventory(state(17n), actor, 16n));
+});
 
 test("origin guard accepts EIP-7702 exactly, without accepting arbitrary contract code", () => {
   assertOriginAccountCode("0x");
