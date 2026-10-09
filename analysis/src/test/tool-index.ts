@@ -90,6 +90,15 @@ test("Algebra historical quote probe declares real RPC cost without claiming Rea
   assert.equal(selected[0]?.capabilities.includes("execution"), false);
 });
 
+test("Yield Basis dual execution is archive-RPC acceptance, not zero-CU or representative latency", () => {
+  const selected = selectTools(discoverToolIndex(repoRoot), ["yieldbasis", "dual", "historical"]);
+  assert.equal(selected[0]?.id, "listener:searcher:yieldbasis-lt-dual-historical");
+  assert.equal(selected[0]?.cost, "archive-rpc");
+  assert.equal(selected[0]?.capabilities.includes("execution"), true);
+  for (const unsupported of ["live-window", "stage-timing", "benchmark"])
+    assert.equal(selected[0]?.capabilities.includes(unsupported), false);
+});
+
 test("AppleDouble metadata is ignored without hiding an ordinary orphan CLI", () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "mev-tool-index-"));
   try {

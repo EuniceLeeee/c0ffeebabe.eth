@@ -87,6 +87,9 @@ export function result(
 }
 
 export interface AnswerOptions {
+  /** Synthetic deposit fixtures are opt-in; old withdrawal tests keep their scope. */
+  readonly deposit?: boolean;
+  readonly programReverts?: boolean;
   readonly ammLtContract?: string;
   readonly ammCollateral?: string;
   readonly ammStablecoin?: string;
@@ -115,6 +118,19 @@ export function answerFor(
   const preview = options.previewAmountFor ??
     ((amountIn: bigint) => (amountIn * PREVIEW_PER_SHARE) / 10n ** 18n);
   return (request: AdapterRequest): AdapterRequestResult => {
+    if (request.id === "active-deposit" || request.id === "active-deposit-program" || request.id === "deposit-receipt") {
+      assert(request.kind === "effect-delta-simulation");
+      if (!options.deposit || (request.call.executionMode === "executor-program" && options.programReverts))
+        return { ...result(request.id, "0x"), completion: "reverted-as-declared",
+          effects: { tokenDeltas: [], nativeDeltas: [], logs: [] } };
+      const assets = request.overrideIntent.tokenBalances![0]!.amount, shares = assets * 2n;
+      const event = LT_INTERFACE.encodeEventLog(LT_INTERFACE.getEvent("Deposit")!, [EXECUTOR, EXECUTOR, assets, shares]);
+      return { ...result(request.id, request.call.executionMode === "executor-program" ? "0x"
+        : LT_INTERFACE.encodeFunctionResult("deposit(uint256,uint256,uint256)", [shares])),
+        effects: { tokenDeltas: [{ token: ASSET, account: EXECUTOR, delta: -assets },
+          { token: LT, account: EXECUTOR, delta: shares }, { token: STABLECOIN, account: EXECUTOR, delta: 0n }],
+          nativeDeltas: [{ account: EXECUTOR, before: 0n, after: 0n, delta: 0n }], logs: [{ address: LT, ...event }] } };
+    }
     if (request.id === "active-preview-withdraw" && !probe) {
       return { id: request.id, ok: false, failure: "rpc", source: SOURCE } as
         unknown as AdapterRequestResult;
@@ -162,6 +178,8 @@ export function answerFor(
       "active-is-killed": word(killed ? 1n : 0n),
       "active-amm-is-killed": word(killed ? 1n : 0n),
       "active-preview-withdraw": word(preview(PROBE_SHARES)),
+      "binding-deposit-balance-0": word(poolAssetBalance * 3000n),
+      "binding-deposit-balance-1": word(poolAssetBalance),
       "quote-is-killed": word(killed ? 1n : 0n),
       "quote-staker": word(options.currentStaker ?? STAKER),
       "quote-live-supply": LT_INTERFACE.encodeFunctionResult(
@@ -176,6 +194,8 @@ export function answerFor(
       ]),
       "quote-pool-asset-balance": word(poolAssetBalance),
       "static-share-decimals": word(SHARE_DECIMALS_VALUE),
+      "static-asset-decimals": word(options.assetDecimals ?? ASSET_DECIMALS_VALUE),
+      "current:deposit": word(PREVIEW_PER_SHARE),
     };
     if (request.id === "current:withdraw") {
       return result(request.id, word(preview(PROBE_SHARES)));

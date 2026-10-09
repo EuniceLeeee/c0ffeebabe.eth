@@ -14,6 +14,7 @@ export interface YieldBasisLtCandidate extends FamilyCandidate {
 /** Phase 1 — the LT's own surfaces at the pinned block. */
 export interface YieldBasisLtBaseEvidence {
   readonly phase: "base";
+  readonly source: CanonicalSource;
   readonly lt: string;
   readonly ltCodeHash: string;
   readonly asset: string;
@@ -58,6 +59,8 @@ export interface YieldBasisLtBindingEvidence
   readonly ammBindingsValid: boolean;
   readonly poolCoinBindingsValid: boolean;
   readonly bindingValid: boolean;
+  readonly depositAssets: bigint;
+  readonly depositDebt: bigint;
 }
 
 /**
@@ -75,10 +78,25 @@ export interface YieldBasisLtActiveEvidence
   readonly behaviorProofHash: string;
 }
 
+export interface YieldBasisLtDepositEvidence extends Omit<YieldBasisLtActiveEvidence, "phase"> {
+  readonly phase: "deposit";
+  readonly depositPathLive: boolean;
+  readonly depositShares: bigint;
+  readonly depositExecutor?: string;
+}
+
+export interface YieldBasisLtProgramEvidence extends Omit<YieldBasisLtDepositEvidence, "phase"> {
+  readonly phase: "deposit-program";
+  readonly depositProgramVerified: boolean;
+  readonly depositProgramProof: string;
+}
+
 export type YieldBasisLtIdentityEvidence =
   | YieldBasisLtBaseEvidence
   | YieldBasisLtBindingEvidence
-  | YieldBasisLtActiveEvidence;
+  | YieldBasisLtActiveEvidence
+  | YieldBasisLtDepositEvidence
+  | YieldBasisLtProgramEvidence;
 
 export interface YieldBasisLtIdentity extends VerifiedIdentity {
   readonly asset: string;
@@ -92,6 +110,7 @@ export interface YieldBasisLtIdentity extends VerifiedIdentity {
   readonly assetDecimals: number;
   readonly assetCoinIndex: number;
   readonly redemptionPathVerified: boolean;
+  readonly depositPathVerified?: boolean;
 }
 
 export interface YieldBasisLtDescriptor extends CompiledInstanceDescriptor {
@@ -108,12 +127,13 @@ export interface YieldBasisLtDescriptor extends CompiledInstanceDescriptor {
   readonly assetDecimals: number;
   readonly assetCoinIndex: number;
   readonly redemptionPathVerified: boolean;
+  readonly depositPathVerified?: boolean;
 }
 
 export interface YieldBasisLtRoute extends FamilyRouteDescriptor {
   readonly target: string;
-  readonly direction: "withdraw";
-  readonly adapterId: "yieldbasis-lt-withdraw";
+  readonly direction: "withdraw" | "deposit";
+  readonly adapterId: "yieldbasis-lt-withdraw" | "yieldbasis-lt-deposit";
 }
 
 export interface YieldBasisLtPricingDraft {
@@ -129,6 +149,7 @@ export interface YieldBasisLtPricingDraft {
 export interface YieldBasisLtPricingDescriptor
   extends YieldBasisLtPricingDraft {
   readonly oneShare: bigint;
+  readonly oneAsset: bigint;
 }
 
 export interface YieldBasisLtState {
@@ -139,7 +160,7 @@ export interface YieldBasisLtState {
   readonly cryptoReceived: bigint;
 }
 
-export interface YieldBasisLtExactEvidence {
+export interface YieldBasisLtWithdrawExactEvidence {
   readonly kind: "yieldbasis-lt-withdraw-preview";
   readonly source: CanonicalSource;
   readonly lt: string;
@@ -156,3 +177,17 @@ export interface YieldBasisLtExactEvidence {
   readonly assetCoinIndex: number;
   readonly bindingFingerprint: string;
 }
+
+export interface YieldBasisLtDepositExactEvidence {
+  readonly kind: "yieldbasis-lt-deposit-receipt";
+  readonly direction: "deposit";
+  readonly source: CanonicalSource;
+  readonly executor: string;
+  readonly lt: string;
+  readonly asset: string;
+  readonly amountIn: bigint;
+  readonly amountOut: bigint;
+  readonly debtPolicy: "pool-balanced-v1";
+  readonly bindingFingerprint: string;
+}
+export type YieldBasisLtExactEvidence = YieldBasisLtWithdrawExactEvidence | YieldBasisLtDepositExactEvidence;

@@ -6,6 +6,7 @@ import {
 import type { AdapterRequestResult } from
   "../../adapter-request-program.js";
 import { runtimeExecutor } from "../../runtime-execution.js";
+import { depositExactMethods } from "./deposit-exact.js";
 import {
   assertSource,
   callRequest,
@@ -210,7 +211,7 @@ const program: ExactRequestProgram<
 };
 
 export const yieldBasisLtExact = {
-  methods: () => Object.freeze([
+  methods: (input) => input.route.direction === "deposit" ? depositExactMethods() : Object.freeze([
     localZeroExactMethod<
       YieldBasisLtDescriptor,
       YieldBasisLtRoute,

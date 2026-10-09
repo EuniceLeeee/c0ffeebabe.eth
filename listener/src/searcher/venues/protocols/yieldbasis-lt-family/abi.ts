@@ -5,18 +5,19 @@ import { canonicalAddress } from "../standard-family/common.js";
  * Yield Basis `LT.vy` (Vyper 0.4.3) surfaces used by the single-asset
  * crypto-redemption capability.
  *
- * SUPPORTED entry point (the only one this family routes):
+ * SUPPORTED entry points:
  *   withdraw(uint256 shares, uint256 min_assets) -> uint256 crypto_received
  * `withdraw(uint256,uint256,address)` is the same call with an explicit
  * receiver; it is declared here as OBSERVED evidence only (see discovery.ts)
  * so the negative contracts can prove it is never routed.
  *
- * DECLARED-ONLY, NOT IMPLEMENTED AS A ROUTE:
+ * Guarded single-caller-asset deposit:
  *   deposit(uint256 assets, uint256 debt, uint256 min_shares[, address receiver])
  *     The caller pays crypto; the stablecoin is pulled from the LT's AMM,
  *     not from the caller. `debt` is an internal AMM parameter, not evidence
- *     of a second caller-funded input. Supporting this direction still needs
- *     a validated amount/debt policy, quote and dual execution implementation.
+ *     of a second caller-funded input. The supported debt policy follows the
+ *     bound pool's reserve ratio; Exact executes the guarded program, not a
+ *     preview that can diverge when add_liquidity changes price_scale.
  * EXCLUDED DIFFERENT SEMANTICS (chain evidence in the family report):
  *   emergency_withdraw(uint256 shares[, address receiver[, address owner]])
  *     -> (uint256 assets, int256 stables) : two outputs, the second SIGNED.
@@ -104,6 +105,8 @@ export const LT_WITHDRAW_RECEIVER_SELECTOR = LT_INTERFACE
   .getFunction("withdraw(uint256,uint256,address)")!.selector as `0x${string}`;
 export const LT_DEPOSIT_SELECTOR = LT_INTERFACE
   .getFunction("deposit(uint256,uint256,uint256)")!.selector as `0x${string}`;
+export const LT_DEPOSIT_RECEIVER_SELECTOR = LT_INTERFACE
+  .getFunction("deposit(uint256,uint256,uint256,address)")!.selector as `0x${string}`;
 export const LT_EMERGENCY_WITHDRAW_SELECTOR = LT_INTERFACE
   .getFunction("emergency_withdraw(uint256)")!.selector as `0x${string}`;
 export const LT_WITHDRAW_TOPIC = LT_INTERFACE.getEvent("Withdraw")!
@@ -115,6 +118,9 @@ export const LT_WITHDRAW_CALL_PATTERN_ID = "yieldbasis-lt-withdraw-call";
 export const LT_WITHDRAW_RECEIVER_CALL_PATTERN_ID =
   "yieldbasis-lt-withdraw-receiver-call";
 export const LT_WITHDRAW_LOG_PATTERN_ID = "yieldbasis-lt-withdraw-log";
+export const LT_DEPOSIT_CALL_PATTERN_ID = "yieldbasis-lt-deposit-call";
+export const LT_DEPOSIT_RECEIVER_CALL_PATTERN_ID = "yieldbasis-lt-deposit-receiver-call";
+export const LT_DEPOSIT_LOG_PATTERN_ID = "yieldbasis-lt-deposit-log";
 export const LT_SURFACE_PATTERN_ID = "yieldbasis-lt-levamm-surface";
 
 /**

@@ -6,6 +6,7 @@ import type { AdapterRequestResult } from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
 import {
   assertSameSource,
+  assertSource,
   callRequest,
   canonicalAddress,
   codeRequest,
@@ -23,12 +24,16 @@ import {
   LT_PROBE_SHARES,
 } from "./abi.js";
 import { candidateLt, isZeroAddress, lower } from "./codec.js";
+import { balancedDepositDebt, decodeDepositReceipt, depositBalanceRequests,
+  depositSimulation, depositProgramSimulation, decodeDepositProgramReceipt, DEPOSIT_REQUIREMENTS, DEPOSIT_DEBT_POLICY } from "./deposit.js";
 import {
   YIELDBASIS_FAMILY_ID,
   YIELDBASIS_LINEAGE_ID,
 } from "./manifest.js";
 import type {
   YieldBasisLtActiveEvidence,
+  YieldBasisLtDepositEvidence,
+  YieldBasisLtProgramEvidence,
   YieldBasisLtBaseEvidence,
   YieldBasisLtBindingEvidence,
   YieldBasisLtCandidate,
@@ -122,9 +127,12 @@ export const yieldBasisLtIdentity: IdentitySemantics<
       }
       if (proof.phase === "binding") {
         return proof.bindingValid
-          ? { transports: ["eth-call" as const] }
+          ? proof.depositAssets > 0n
+            ? { ...DEPOSIT_REQUIREMENTS, transports: ["eth-call" as const, "effect-delta-simulation" as const] }
+            : { transports: ["eth-call" as const] }
           : { transports: [] as const };
       }
+      if (proof.phase === "deposit" && proof.depositPathLive) return DEPOSIT_REQUIREMENTS;
       return { transports: [] as const };
     },
     buildRequests({ candidate, evidence }) {
@@ -160,18 +168,20 @@ export const yieldBasisLtIdentity: IdentitySemantics<
               LT_PROBE_SHARES,
             ]),
           ),
+          ...(proof.depositAssets > 0n ? [depositSimulation("active-deposit", proof, proof.depositAssets, proof.depositDebt)] : []),
         ]);
+      }
+      if (proof.phase === "deposit" && proof.depositPathLive) {
+        if (!proof.depositExecutor) throw new Error("Yield Basis deposit actor proof missing");
+        return [depositProgramSimulation("active-deposit-program", proof, proof.depositExecutor, proof.depositAssets)];
       }
       return Object.freeze([]);
     },
     decode({ step, results }) {
-      const optionalIds = step.evidence === undefined
-        ? new Set<string>()
-        : new Set<string>([...BINDING_IDS, ...ACTIVE_IDS]);
       for (const result of results) {
-        if (!result.ok && !optionalIds.has(result.id)) {
-          throw new RequiredAdapterRequestError(result);
-        }
+        // RPC/deadline/resource failures are unresolved, never killed/inactive.
+        if (!result.ok) throw new RequiredAdapterRequestError(result);
+        if (step.evidence) assertSource(result.source, (step.evidence as YieldBasisLtIdentityEvidence).source);
       }
       const successful = results.filter(
         (result): result is Extract<AdapterRequestResult, { readonly ok: true }> =>
@@ -184,7 +194,30 @@ export const yieldBasisLtIdentity: IdentitySemantics<
       if (step.evidence === undefined) return decodeBase(lt, results);
       const prior = step.evidence as YieldBasisLtIdentityEvidence;
       if (prior.phase === "base") return decodeBinding(prior, results);
-      if (prior.phase === "binding") return decodeActive(prior, results);
+      if (prior.phase === "binding") {
+        const active = decodeActive(prior, results);
+        if (prior.depositAssets === 0n) return active;
+        const result = results.find(r => r.id === "active-deposit");
+        if (!result || !result.ok) throw new Error("Yield Basis deposit behavior evidence missing");
+        const depositShares = result.completion === "returned"
+          ? decodeDepositReceipt(results, "active-deposit", prior, prior.source, undefined, prior.depositAssets) : 0n;
+        // This account is sealed by the central symbolic-caller transport,
+        // never taken from candidate calldata or a per-instance list.
+        const depositExecutor = depositShares > 0n
+          ? result.effects!.tokenDeltas!.find(row => sameAddress(row.token, prior.asset))!.account : undefined;
+        return { ...active, phase: "deposit", depositShares, depositPathLive: depositShares > 0n,
+          ...(depositExecutor === undefined ? {} : { depositExecutor }) } satisfies YieldBasisLtDepositEvidence;
+      }
+      if (prior.phase === "deposit") {
+        const result = results.find(r => r.id === "active-deposit-program");
+        if (!result || !result.ok || !prior.depositExecutor) throw new Error("Yield Basis guarded deposit evidence missing");
+        const shares = result.completion === "returned"
+          ? decodeDepositProgramReceipt(results, result.id, prior, prior.source, prior.depositExecutor, prior.depositAssets) : 0n;
+        if (shares > 0n && shares !== prior.depositShares) throw new Error("Yield Basis raw/program mint mismatch");
+        return { ...prior, phase: "deposit-program", depositProgramVerified: shares > 0n,
+          depositProgramProof: hashCanonical({ source: { ...result.source }, provenance: { ...result.provenance },
+            completion: result.completion, shares, executor: prior.depositExecutor }) } satisfies YieldBasisLtProgramEvidence;
+      }
       throw new Error("yield basis LT identity is already complete");
     },
     decide({ candidate, evidence }) {
@@ -228,7 +261,7 @@ export const yieldBasisLtIdentity: IdentitySemantics<
           evidenceRequestIds: ["binding-asset-decimals", "binding-pool-decimals"],
         };
       }
-      const active: YieldBasisLtActiveEvidence = proof;
+      const active = proof;
       if (active.ammKilled || active.killed) {
         return {
           status: "chain-proven-rejected" as const,
@@ -243,6 +276,8 @@ export const yieldBasisLtIdentity: IdentitySemantics<
           evidenceRequestIds: ["active-preview-withdraw"],
         };
       }
+      if (active.phase === "deposit" && active.depositPathLive) return { status: "continue" as const };
+      const depositPathVerified = active.phase === "deposit-program" && active.depositProgramVerified;
       return {
         status: "verified" as const,
         identity: {
@@ -260,6 +295,7 @@ export const yieldBasisLtIdentity: IdentitySemantics<
           assetDecimals: active.assetDecimals,
           assetCoinIndex: active.assetCoinIndex,
           redemptionPathVerified: true,
+          depositPathVerified,
           facts: {
             lt: active.lt,
             asset: active.asset,
@@ -278,6 +314,12 @@ export const yieldBasisLtIdentity: IdentitySemantics<
             probeShares: active.probeShares,
             probeCryptoReceived: active.probeCryptoReceived,
             killed: active.killed,
+            depositPathVerified,
+            depositDebtPolicy: DEPOSIT_DEBT_POLICY,
+            depositProbeAssets: active.depositAssets,
+            depositProbeDebt: active.depositDebt,
+            depositProbeShares: active.phase !== "active" ? active.depositShares : 0n,
+            depositProgramProof: active.phase === "deposit-program" ? active.depositProgramProof : null,
           },
           provenance: [{
             kind: "levamm-mutual-reference-and-live-withdraw-preview",
@@ -295,6 +337,12 @@ export const yieldBasisLtIdentity: IdentitySemantics<
               probeShares: active.probeShares.toString(),
               probeCryptoReceived: active.probeCryptoReceived.toString(),
               behaviorProof: active.behaviorProofHash,
+              depositPathVerified,
+              depositDebtPolicy: DEPOSIT_DEBT_POLICY,
+              depositProbeAssets: active.depositAssets.toString(),
+              depositProbeDebt: active.depositDebt.toString(),
+              depositProbeShares: active.phase !== "active" ? active.depositShares.toString() : "0",
+              depositProgramProof: active.phase === "deposit-program" ? active.depositProgramProof : null,
             }),
           }],
         },
@@ -325,6 +373,7 @@ function baseRequests(lt: string) {
 
 function bindingRequests(proof: YieldBasisLtBaseEvidence) {
   return [
+    ...depositBalanceRequests(proof, "binding-deposit-balance"),
     callRequest(
       "binding-amm-lt",
       proof.amm,
@@ -426,6 +475,7 @@ function decodeBase(
   }
   return {
     phase: "base",
+    source: assertSameSource(results.filter((r): r is Extract<AdapterRequestResult, { ok: true }> => r.ok)),
     lt,
     ltCodeHash: ethers.keccak256(code),
     asset: canonicalAddress(asset),
@@ -518,6 +568,18 @@ function decodeBinding(
   const assetDecimalsValid = Number.isSafeInteger(assetDecimals) &&
     assetDecimals > 0 &&
     assetDecimals <= 36;
+  const balances = [0, 1].map(i => decodeUint(CRYPTOPOOL_INTERFACE, "balances", results, `binding-deposit-balance-${i}`));
+  // Bounded strict behavior sample, not a substitute for the production P.
+  const unitSample = assetDecimalsValid ? ((10n ** BigInt(assetDecimals)) / 1000n || 1n) : 0n;
+  const poolSample = balances[1]! / 1_000_000n;
+  let depositAssets = unitSample < poolSample ? unitSample : poolSample, depositDebt = 0n;
+  if (depositAssets > 0n && balances[0]! > 0n) {
+    const cap = ethers.MaxUint256 / balances[0]!;
+    if (depositAssets > cap) depositAssets = cap;
+    if (depositAssets > 0n && depositAssets * balances[0]! / balances[1]! > 0n)
+      depositDebt = balancedDepositDebt(depositAssets, { stable: balances[0]!, asset: balances[1]! });
+  }
+  if (depositDebt === 0n) depositAssets = 0n;
   return {
     ...prior,
     phase: "binding",
@@ -534,6 +596,7 @@ function decodeBinding(
     poolCoinBindingsValid,
     bindingValid: prior.baseValid && ammBindingsValid &&
       poolCoinBindingsValid && assetCoinIndex >= 0 && assetDecimalsValid,
+    depositAssets, depositDebt,
   };
 }
 

@@ -13,6 +13,12 @@ import {
   LT_WITHDRAW_RECEIVER_SELECTOR,
   LT_WITHDRAW_SELECTOR,
   LT_WITHDRAW_TOPIC,
+  LT_DEPOSIT_SELECTOR,
+  LT_DEPOSIT_RECEIVER_SELECTOR,
+  LT_DEPOSIT_CALL_PATTERN_ID,
+  LT_DEPOSIT_RECEIVER_CALL_PATTERN_ID,
+  LT_DEPOSIT_LOG_PATTERN_ID,
+  LT_DEPOSIT_TOPIC,
 } from "./abi.js";
 import { lower } from "./codec.js";
 
@@ -23,6 +29,10 @@ const OPAQUE_LABELS = Object.freeze([
 ]);
 
 const CALL_PATTERNS = Object.freeze([
+  Object.freeze({ id: LT_DEPOSIT_CALL_PATTERN_ID, selector: LT_DEPOSIT_SELECTOR,
+    signature: "deposit(uint256,uint256,uint256)", candidateAddress: Object.freeze({ from: "call-target" as const }) }),
+  Object.freeze({ id: LT_DEPOSIT_RECEIVER_CALL_PATTERN_ID, selector: LT_DEPOSIT_RECEIVER_SELECTOR,
+    signature: "deposit(uint256,uint256,uint256,address)", candidateAddress: Object.freeze({ from: "call-target" as const }) }),
   Object.freeze({
     id: LT_WITHDRAW_CALL_PATTERN_ID,
     selector: LT_WITHDRAW_SELECTOR as `0x${string}`,
@@ -38,6 +48,8 @@ const CALL_PATTERNS = Object.freeze([
 ]);
 
 const LOG_PATTERNS = Object.freeze([
+  Object.freeze({ id: LT_DEPOSIT_LOG_PATTERN_ID, topic: LT_DEPOSIT_TOPIC as `0x${string}`,
+    signature: "Deposit(address,address,uint256,uint256)" }),
   Object.freeze({
     id: LT_WITHDRAW_LOG_PATTERN_ID,
     topic: LT_WITHDRAW_TOPIC as `0x${string}`,
@@ -139,14 +151,12 @@ export async function yieldBasisLtNominate(input: {
       // Fall through to the retained-log lookup below.
     }
     try {
-      const hit = await findRecentLogHit({
-        provider: input.provider,
-        source: input.source,
-        address: lower(nomination.address),
-        topics: [LT_WITHDRAW_TOPIC],
-      });
-      if (hit === null || lower(hit.address) !== lower(nomination.address)) continue;
-      results.push(observationFromHit(hit, input.source));
+      for (const topic of [LT_WITHDRAW_TOPIC, LT_DEPOSIT_TOPIC]) {
+        const hit = await findRecentLogHit({ provider: input.provider, source: input.source,
+          address: lower(nomination.address), topics: [topic] });
+        if (hit === null || lower(hit.address) !== lower(nomination.address)) continue;
+        results.push(observationFromHit(hit, input.source)); break;
+      }
     } catch {
       // One unreadable nomination must not block the next one.
     }

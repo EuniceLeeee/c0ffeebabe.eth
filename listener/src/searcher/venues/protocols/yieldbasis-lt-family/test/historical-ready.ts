@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ethers } from "ethers";
+import { loadBotVmRuntimeCode } from "../../../../../shared/executor/botvm-executor.js";
 import { UniverseRebuildCheckpointStore } from
   "../../../../universe-rebuild-checkpoint.js";
 import { createRebuildWiring } from
@@ -17,21 +18,27 @@ import { YIELDBASIS_FAMILY_ID } from "../manifest.js";
 
 async function main() {
   const args = new Map<string, string>();
-  const names = ["--tx", "--rpc-file", "--out", "--executor", "--owner", "--revm-bin"];
+  const names = ["--tx", "--rpc-file", "--rpc-env", "--out", "--executor", "--owner", "--revm-bin", "--executor-program"];
   for (let i = 2; i < process.argv.length; i += 2) {
     const key = process.argv[i]!, value = process.argv[i + 1];
     assert(names.includes(key) && !args.has(key) && value && !value.startsWith("--"));
     args.set(key, value);
   }
-  assert.equal(args.size, names.length);
+  for (const name of ["--tx", "--out", "--executor", "--owner", "--revm-bin"]) assert(args.has(name));
+  assert(args.has("--rpc-file") !== args.has("--rpc-env"));
+  if (args.has("--rpc-env")) assert.equal(args.get("--rpc-env"), "MAINNET_RPC_URL");
+  const executorProgram = args.get("--executor-program") === "1";
+  if (args.has("--executor-program")) assert(["0", "1"].includes(args.get("--executor-program")!));
   const tx = args.get("--tx")!, out = resolve(args.get("--out")!);
   assert(ethers.isHexString(tx, 32));
   assert(!existsSync(out));
   const executor = ethers.getAddress(args.get("--executor")!).toLowerCase();
   const owner = ethers.getAddress(args.get("--owner")!).toLowerCase();
-  const rpcUrl = JSON.parse(readFileSync(args.get("--rpc-file")!, "utf8")).MAINNET_RPC_URL;
+  const rpcUrl = args.has("--rpc-file") ? JSON.parse(readFileSync(args.get("--rpc-file")!, "utf8")).MAINNET_RPC_URL : process.env.MAINNET_RPC_URL;
   assert(typeof rpcUrl === "string" && /^https?:\/\//.test(rpcUrl));
   process.env.SEARCHER_DRY_RUN = "1";
+  process.env.SEARCHER_BLOCKSCAN_SUBMIT = "0";
+  process.env.SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE = executorProgram ? "1" : "0";
   process.env.MAINNET_RPC_URL = rpcUrl;
   process.env.SEARCHER_REVM_SIM_BIN = args.get("--revm-bin")!;
   process.env.BOTVM_ADDRESS = executor;
@@ -57,6 +64,7 @@ async function main() {
   );
   let stage = "receipt";
   try {
+    if (executorProgram) save("executor-runtime-code.json", loadBotVmRuntimeCode(owner));
     const receipt = await provider.send("eth_getTransactionReceipt", [tx]);
     assert(
       receipt && receipt.transactionHash.toLowerCase() === tx.toLowerCase() &&
@@ -101,6 +109,7 @@ async function main() {
       "--executor", executor,
       "--owner", owner,
       "--revm-bin", args.get("--revm-bin")!,
+      ...(executorProgram ? ["--executor-runtime-code", resolve(out, "executor-runtime-code.json")] : []),
     ]);
   } catch (error) {
     const message = String(error instanceof Error ? error.message : error)

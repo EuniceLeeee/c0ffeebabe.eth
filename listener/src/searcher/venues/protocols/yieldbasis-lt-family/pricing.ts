@@ -11,6 +11,7 @@ import {
 } from "../standard-family/common.js";
 import {
   LT_INTERFACE,
+  ERC20_INTERFACE,
   LT_SAMPLE_SHARES,
 } from "./abi.js";
 import {
@@ -35,7 +36,7 @@ export const yieldBasisLtPricing: PricingSemantics<
   YieldBasisLtPricingDescriptor,
   ProtocolPricingSnapshot,
   YieldBasisLtPricingDraft,
-  { readonly oneShare: bigint }
+  { readonly oneShare: bigint; readonly oneAsset: bigint }
 > = {
   // AMM accrual, oracle EMA and cryptopool ramps can change the withdrawal
   // preview without an LT log. Requote through the existing per-block path.
@@ -92,6 +93,7 @@ export const yieldBasisLtPricing: PricingSemantics<
         draft.lt,
         LT_INTERFACE.encodeFunctionData("decimals"),
       ),
+      callRequest("static-asset-decimals", draft.asset, ERC20_INTERFACE.encodeFunctionData("decimals")),
     ]),
     decode: ({ results }: { readonly results: readonly AdapterRequestResult[] }) =>
       Object.freeze({
@@ -104,6 +106,7 @@ export const yieldBasisLtPricing: PricingSemantics<
           results,
           "static-share-decimals",
         ),
+        oneAsset: decodeDecimals(ERC20_INTERFACE, results, "static-asset-decimals"),
       }),
   },
   finalizePricingDescriptor({ draft, staticEvidence }) {
@@ -118,20 +121,25 @@ export const yieldBasisLtPricing: PricingSemantics<
       descriptor.routes.map((route) => callRequest(
         `current:${route.direction}`,
         descriptor.lt,
-        LT_INTERFACE.encodeFunctionData("preview_withdraw", [
-          LT_SAMPLE_SHARES[0],
-        ]),
+        route.direction === "deposit"
+          ? LT_INTERFACE.encodeFunctionData("pricePerShare")
+          : LT_INTERFACE.encodeFunctionData("preview_withdraw", [LT_SAMPLE_SHARES[0]]),
       )),
     ),
     decodeSnapshot({ descriptor, initialResults }) {
       return quoteResultMap(initialResults, descriptor.routes.map((route) => ({
         routeKey: route.routeKey,
         requestId: `current:${route.direction}`,
-        amountIn: LT_SAMPLE_SHARES[0],
-        decodeAmountOut: (data) => BigInt(LT_INTERFACE.decodeFunctionResult(
-          "preview_withdraw",
-          data,
-        )[0]),
+        amountIn: route.direction === "deposit" ? descriptor.oneAsset : LT_SAMPLE_SHARES[0],
+        decodeAmountOut: (data) => {
+          if (route.direction === "withdraw") return BigInt(LT_INTERFACE.decodeFunctionResult("preview_withdraw", data)[0]);
+          // LT's fair NAV is normalized crypto per 18-decimal share. This is
+          // raw-mid valuation only, not a slippage/debt-sensitive deposit quote.
+          // Requested amounts are always priced by the full program in Exact.
+          const fair = BigInt(LT_INTERFACE.decodeFunctionResult("pricePerShare", data)[0]);
+          if (fair <= 0n) throw new Error("Yield Basis LT invalid deposit NAV");
+          return descriptor.oneShare * 10n ** 18n / fair;
+        },
       })));
     },
     deriveMids({ descriptor, snapshot, routes }) {

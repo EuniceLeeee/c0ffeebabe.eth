@@ -1,6 +1,6 @@
 import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
-import { yieldBasisLtWithdrawAction } from
+import { yieldBasisLtWithdrawAction, yieldBasisLtDepositAction } from
   "../protocols/yieldbasis-lt-family/action.js";
 import { yieldBasisLtCapture } from
   "../protocols/yieldbasis-lt-family/capture.js";
@@ -45,5 +45,5 @@ export const plugin = defineProtocolFamily({
   exact: yieldBasisLtExact,
   execution: yieldBasisLtExecution,
   protocol: yieldBasisLtProtocol,
-  actionAdapters: [yieldBasisLtWithdrawAction],
+  actionAdapters: [yieldBasisLtWithdrawAction, yieldBasisLtDepositAction],
 });

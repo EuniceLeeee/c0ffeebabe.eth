@@ -11,7 +11,8 @@ import {
   assertYieldBasisLtInvocation,
   lower,
 } from "./codec.js";
-import { YIELDBASIS_WITHDRAW_ACTION } from "./manifest.js";
+import { YIELDBASIS_WITHDRAW_ACTION, YIELDBASIS_DEPOSIT_ACTION } from "./manifest.js";
+import { depositProgram, DEPOSIT_DEBT_POLICY } from "./deposit.js";
 import type {
   YieldBasisLtDescriptor,
   YieldBasisLtExactEvidence,
@@ -40,6 +41,7 @@ export const yieldBasisLtExecution: ExecutionSemantics<
     const { descriptor: d, route: r, executor } = input;
     assertYieldBasisLtInvocation(d, r);
     runtimeExecutor(executor, d.lt, d.asset);
+    if (r.direction === "deposit") return runtimeLeg(YIELDBASIS_DEPOSIT_ACTION, depositProgram(d, executor));
     const program = new RuntimeAmountProgram();
     program.call(
       d.lt,
@@ -57,6 +59,20 @@ export const yieldBasisLtExecution: ExecutionSemantics<
   buildFragment(input) {
     assertYieldBasisLtInvocation(input.descriptor, input.route);
     const e = input.exactEvidence;
+    if (input.route.direction === "deposit") {
+      const d = input.descriptor;
+      if (input.amountIn <= 0n || input.quotedAmountOut <= 0n || input.minAmountOut <= 0n ||
+        input.minAmountOut > input.quotedAmountOut || e.kind !== "yieldbasis-lt-deposit-receipt" ||
+        e.direction !== "deposit" || e.amountIn !== input.amountIn || e.amountOut !== input.quotedAmountOut ||
+        e.bindingFingerprint !== input.route.bindingRef.fingerprint || lower(e.lt) !== lower(d.lt) ||
+        lower(e.asset) !== lower(d.asset) || lower(e.executor) !== lower(input.executor) || e.debtPolicy !== DEPOSIT_DEBT_POLICY)
+        throw new Error("Yield Basis LT deposit incompatible exact evidence");
+      // Approval and cleanup are performed and checked inside the atomic
+      // program. The planner must not install an independent standing approval.
+      return { requirements: [], nodes: [{ adapterId: YIELDBASIS_DEPOSIT_ACTION, target: d.lt,
+        tokenIn: input.route.tokenIn, tokenOut: input.route.tokenOut, amount: input.amountIn,
+        params: { stablecoin: d.stablecoin, cryptopool: d.cryptopool, amm: d.amm, minSharesOut: input.minAmountOut }, children: [] }] };
+    }
     if (
       input.amountIn <= 0n ||
       input.quotedAmountOut <= 0n ||
@@ -107,10 +123,10 @@ export const yieldBasisLtExecution: ExecutionSemantics<
       account: "executor" as const,
       direction: "increase" as const,
     }),
-    Object.freeze({
+    ...route.direction === "deposit" ? [] : [Object.freeze({
       kind: "total-supply-delta" as const,
       token: route.tokenIn,
       direction: "decrease" as const,
-    }),
+    })],
   ]),
 };

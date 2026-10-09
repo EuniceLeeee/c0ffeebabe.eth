@@ -15,6 +15,7 @@ import {
 import {
   YIELDBASIS_FAMILY_ID,
   YIELDBASIS_WITHDRAW_ACTION,
+  YIELDBASIS_DEPOSIT_ACTION,
 } from "../manifest.js";
 import {
   answerFor,
@@ -85,15 +86,15 @@ test("manifest declares the reverse-proven single-asset redemption family", () =
   assert.equal(plugin.manifest.domain, "protocol");
   assert.deepEqual(
     [...plugin.manifest.ownedActionAdapterIds],
-    [YIELDBASIS_WITHDRAW_ACTION],
+    [YIELDBASIS_WITHDRAW_ACTION, YIELDBASIS_DEPOSIT_ACTION],
   );
   assert.deepEqual(
     plugin.manifest.allowedTaxonomy.map((slot) => slot.protocolAction),
-    ["redeem"],
+    ["wrap", "redeem"],
   );
   assert.equal(plugin.protocol.activeBehaviorProof, "required");
   const actionIds = plugin.actionAdapters.map((entry) => entry.id);
-  assert.deepEqual(actionIds, [YIELDBASIS_WITHDRAW_ACTION]);
+  assert.deepEqual(actionIds, [YIELDBASIS_WITHDRAW_ACTION, YIELDBASIS_DEPOSIT_ACTION]);
 });
 
 test("identity verifies through the LevAMM mutual reference plus a live withdraw preview", () => {
@@ -148,13 +149,8 @@ test("identity rejects a killed LT", () => {
   );
 });
 
-test("identity rejects a dead redemption surface", () => {
-  const decision = decisionWith(answerFor({ probeReplies: false }));
-  assert.equal(decision.status, "chain-proven-rejected");
-  assert.equal(
-    (decision as { reasonCode: string }).reasonCode,
-    "yieldbasis_lt_redemption_path_inactive",
-  );
+test("identity does not turn an unreadable redemption probe into chain rejection", () => {
+  assert.throws(() => decisionWith(answerFor({ probeReplies: false })));
 });
 
 test("identity is not satisfied by a hardcoded instance list", () => {
@@ -184,11 +180,12 @@ test("routes project exactly one share-to-crypto withdraw direction", () => {
   assert.equal(graph.executionTarget, d.lt);
 });
 
-test("deposit and emergency_withdraw are excluded before route projection", () => {
+test("deposit is observed; emergency_withdraw is excluded; withdrawal action stays narrow", () => {
   const patternSelectors = plugin.discovery.callPatterns
     .map((pattern) => String(pattern.selector).toLowerCase());
   const action = plugin.actionAdapters[0]!;
-  for (const excluded of [LT_DEPOSIT_SELECTOR, LT_EMERGENCY_WITHDRAW_SELECTOR]) {
+  assert(patternSelectors.includes(LT_DEPOSIT_SELECTOR.toLowerCase()));
+  for (const excluded of [LT_EMERGENCY_WITHDRAW_SELECTOR]) {
     assert.ok(
       !patternSelectors.includes(excluded.toLowerCase()),
       `${excluded} must not be a discovery pattern`,
@@ -204,8 +201,7 @@ test("deposit and emergency_withdraw are excluded before route projection", () =
       "no owned action may derive from an unsupported entry point",
     );
   }
-  // deposit(uint256,uint256,uint256,address) and
-  // emergency_withdraw(uint256,address[,address]) are equally unsupported.
+  // Explicit-receiver deposit is discovery evidence, never the withdraw action.
   assert.equal(
     action.matchTrace(
       LT,
@@ -227,7 +223,7 @@ test("deposit and emergency_withdraw are excluded before route projection", () =
   assert.equal(action.matchTrace(LT, LT_WITHDRAW_RECEIVER_SELECTOR), false);
   const routes = routesFor(descriptor());
   assert.equal(routes.length, 1);
-  assert.equal(plugin.discovery.callPatterns.length, 2);
+  assert.equal(plugin.discovery.callPatterns.length, 4);
 });
 
 test("exact quote honours the caller's specified share amount", () => {

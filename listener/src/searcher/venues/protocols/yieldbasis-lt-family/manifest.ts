@@ -2,14 +2,13 @@ import type { FamilyManifest } from "../../adapter-family-plugin.js";
 import { familyId, lineageId } from "../../adapter-family-identifiers.js";
 
 /**
- * Yield Basis LT single-asset crypto redemption. This family owns exactly one
- * routed action: burn LT shares for the LT's own ASSET_TOKEN (WETH / cbBTC /
- * WBTC), the direction implemented by `withdraw(uint256 shares, uint256
- * min_assets)`.
+ * Yield Basis LT single-asset conversion: burn LT shares for ASSET_TOKEN or
+ * mint LT using the caller's ASSET_TOKEN and protocol-supplied stablecoin.
  *
- * `deposit(uint256,uint256,uint256[,address])` is deliberately NOT routed: it
- * takes TWO inputs (the crypto asset plus the borrowed stablecoin), so it is a
- * leveraged position mint, not a single-leg conversion.
+ * Ordinary deposit takes the caller's crypto and the AMM's stablecoin, not
+ * two caller inputs. It is projected only after a same-state actual-mint
+ * behavior proof. The Family's explicit debt policy is balanced pool reserves;
+ * this is not an optimal-debt or original-profit replication claim.
  *
  * `emergency_withdraw(uint256[,address[,address]])` is deliberately NOT routed:
  * it returns a tuple `(uint256 assets, int256 stables)` whose second member is
@@ -30,13 +29,15 @@ export const YIELDBASIS_LINEAGE_ID = lineageId(
   "yieldbasis:levamm-bound-single-asset-withdraw",
 );
 export const YIELDBASIS_WITHDRAW_ACTION = "yieldbasis-lt-withdraw";
+export const YIELDBASIS_DEPOSIT_ACTION = "yieldbasis-lt-deposit";
 
 export const yieldBasisLtManifest: FamilyManifest<"protocol"> = Object.freeze({
   familyId: YIELDBASIS_FAMILY_ID,
   domain: "protocol",
-  ownedActionAdapterIds: Object.freeze([YIELDBASIS_WITHDRAW_ACTION]),
+  ownedActionAdapterIds: Object.freeze([YIELDBASIS_WITHDRAW_ACTION, YIELDBASIS_DEPOSIT_ACTION]),
   requiredInfraActionAdapterIds: Object.freeze(["erc20-approve"]),
   allowedTaxonomy: Object.freeze([
+    Object.freeze({ slotKind: "protocol" as const, protocolAction: "wrap" as const }),
     Object.freeze({
       slotKind: "protocol" as const,
       protocolAction: "redeem" as const,
@@ -44,6 +45,6 @@ export const yieldBasisLtManifest: FamilyManifest<"protocol"> = Object.freeze({
   ]),
   supportedLineages: Object.freeze([YIELDBASIS_LINEAGE_ID]),
   poolAdapterIds: Object.freeze(["yieldbasis-lt"]),
-  edgeAdapterIds: Object.freeze([YIELDBASIS_WITHDRAW_ACTION]),
+  edgeAdapterIds: Object.freeze([YIELDBASIS_WITHDRAW_ACTION, YIELDBASIS_DEPOSIT_ACTION]),
   requiresProtocolEdgesFlag: true,
 });

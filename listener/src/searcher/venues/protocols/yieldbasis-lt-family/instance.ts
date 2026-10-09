@@ -38,6 +38,7 @@ export const yieldBasisLtInstance: InstanceSemantics<
     assetDecimals: identity.assetDecimals,
     assetCoinIndex: identity.assetCoinIndex,
     redemptionPathVerified: identity.redemptionPathVerified,
+    depositPathVerified: identity.depositPathVerified === true,
   }),
   finalizeDescriptor: ({ draft }) => draft,
   staticBindingProjection: yieldBasisLtStaticProjection,

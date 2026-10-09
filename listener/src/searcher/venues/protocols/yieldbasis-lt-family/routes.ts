@@ -9,6 +9,7 @@ import {
   YIELDBASIS_FAMILY_ID,
   YIELDBASIS_LINEAGE_ID,
   YIELDBASIS_WITHDRAW_ACTION,
+  YIELDBASIS_DEPOSIT_ACTION,
 } from "./manifest.js";
 import type {
   YieldBasisLtDescriptor,
@@ -16,14 +17,10 @@ import type {
 } from "./types.js";
 
 /**
- * Exactly one routed direction: LT shares in, `ASSET_TOKEN()` out, executed by
- * `withdraw(uint256 shares, uint256 min_assets)`.
- *
- * `deposit` is not implemented yet. Its crypto input comes from the caller,
- * while its stablecoin input comes from the protocol AMM; the latter is not
- * a reason to classify deposit as requiring two caller-funded assets.
+ * Withdrawal is retained. Ordinary deposit is projected only with its own
+ * actual-mint proof; its stablecoin comes from the protocol AMM, not caller.
  * `emergency_withdraw` has two outputs with a signed stablecoin leg and is a
- * different, unsupported semantic. Neither unimplemented direction is projected.
+ * different, unsupported semantic and is never projected.
  */
 export const yieldBasisLtRoutes: RouteProjectionSemantics<
   YieldBasisLtDescriptor,
@@ -53,7 +50,14 @@ export const yieldBasisLtRoutes: RouteProjectionSemantics<
       direction: "withdraw" as const,
       adapterId: YIELDBASIS_WITHDRAW_ACTION,
     }) satisfies YieldBasisLtRoute;
-    return Object.freeze([route]);
+    if (descriptor.depositPathVerified !== true) return Object.freeze([route]);
+    const deposit = Object.freeze({ ...route,
+      routeKey: routeKey(`${YIELDBASIS_FAMILY_ID}\u001f${lower(descriptor.lt)}\u001fdeposit`),
+      tokenIn: descriptor.asset, tokenOut: descriptor.share,
+      taxonomy: Object.freeze({ slotKind: "protocol" as const, protocolAction: "wrap" as const }),
+      direction: "deposit" as const, adapterId: YIELDBASIS_DEPOSIT_ACTION,
+    }) satisfies YieldBasisLtRoute;
+    return Object.freeze([route, deposit]);
   },
   projectGraph({ descriptor, route }) {
     return Object.freeze({

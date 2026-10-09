@@ -26,7 +26,7 @@ import { setup as balancerV2Fixture, fixture as balancerV2Responses } from "../v
 import { descriptor as compoundCTokenFixture } from "../venues/protocols/compound-ctoken-family/test/fixtures.js";
 import { descriptor as algebraIntegralFixture } from "../venues/swaps/algebra-integral-family/test/fixtures.js";
 import { descriptor as kyberswapElasticFixture } from "../venues/swaps/kyberswap-elastic-family/test/fixtures.js";
-import { descriptor as yieldBasisLtFixture } from "../venues/protocols/yieldbasis-lt-family/test/fixtures.js";
+import { descriptor as yieldBasisLtFixture, answerFor as yieldBasisAnswers } from "../venues/protocols/yieldbasis-lt-family/test/fixtures.js";
 
 
 const executor = ethers.getAddress("0x1000000000000000000000000000000000000002");
@@ -89,7 +89,7 @@ fixtures.push(compoundCTokenFixture());
 fixtures.push(kyberswapElasticFixture());
 // Yield Basis LT: LevAMM-bound single-asset crypto redemption (deepseek four-family branch).
 // Synthetic descriptor only: no Ready/admission object is issued here.
-fixtures.push(yieldBasisLtFixture());
+fixtures.push(yieldBasisLtFixture(), yieldBasisLtFixture(yieldBasisAnswers({ deposit: true })));
 const dFor = (id: string) => { const d = fixtures.find(d => d.familyId === id); assert(d, id); return d; };
 // Additional synthetic direction/variant fixtures are never written back to Ready.
 synthetic("protocol:erc4626", { asset: ADDR.USDC, verifiedDirections: { deposit: true, redeem: true } });

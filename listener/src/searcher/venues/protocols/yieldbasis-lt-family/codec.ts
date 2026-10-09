@@ -5,7 +5,7 @@ import {
   lowerAddress,
   sameAddress,
 } from "../standard-family/common.js";
-import { YIELDBASIS_WITHDRAW_ACTION } from "./manifest.js";
+import { YIELDBASIS_WITHDRAW_ACTION, YIELDBASIS_DEPOSIT_ACTION } from "./manifest.js";
 import type {
   YieldBasisLtCandidate,
   YieldBasisLtDescriptor,
@@ -47,6 +47,7 @@ export function yieldBasisLtStaticProjection(descriptor: YieldBasisLtDescriptor)
     assetCoinIndex: descriptor.assetCoinIndex,
     assetDecimals: descriptor.assetDecimals,
     redemptionPath: "levamm-bound-single-asset-withdraw" as const,
+    depositPath: descriptor.depositPathVerified === true ? "pool-balanced-v1" : null,
   });
 }
 
@@ -68,10 +69,10 @@ export function assertYieldBasisLtInvocation(
   });
   if (
     descriptor.redemptionPathVerified !== true ||
-    route.direction !== "withdraw" ||
-    route.adapterId !== YIELDBASIS_WITHDRAW_ACTION ||
-    !same(route.tokenIn, descriptor.share) ||
-    !same(route.tokenOut, descriptor.asset) ||
+    !(route.direction === "withdraw"
+      ? route.adapterId === YIELDBASIS_WITHDRAW_ACTION && same(route.tokenIn, descriptor.share) && same(route.tokenOut, descriptor.asset)
+      : route.direction === "deposit" && descriptor.depositPathVerified === true &&
+        route.adapterId === YIELDBASIS_DEPOSIT_ACTION && same(route.tokenIn, descriptor.asset) && same(route.tokenOut, descriptor.share)) ||
     same(descriptor.asset, ethers.ZeroAddress) ||
     same(descriptor.share, descriptor.asset) ||
     !same(descriptor.share, descriptor.lt) ||
@@ -80,7 +81,7 @@ export function assertYieldBasisLtInvocation(
     descriptor.assetCoinIndex > 1
   ) {
     throw new Error(
-      "Yield Basis LT route was not reverse-binding-proven for withdraw(shares,min_assets)",
+      "Yield Basis LT route was not reverse-binding and direction proven",
     );
   }
 }

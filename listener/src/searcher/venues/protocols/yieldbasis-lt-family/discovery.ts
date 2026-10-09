@@ -9,6 +9,11 @@ import { yieldBasisLtNomination } from "./nomination.js";
 import { canonicalAddress, lowerAddress } from "../standard-family/common.js";
 import {
   LT_DEPOSIT_SELECTOR,
+  LT_DEPOSIT_RECEIVER_SELECTOR,
+  LT_DEPOSIT_CALL_PATTERN_ID,
+  LT_DEPOSIT_RECEIVER_CALL_PATTERN_ID,
+  LT_DEPOSIT_LOG_PATTERN_ID,
+  LT_DEPOSIT_TOPIC,
   LT_EMERGENCY_WITHDRAW_SELECTOR,
   LT_INTERFACE,
   LT_SURFACE_PATTERN_ID,
@@ -30,13 +35,15 @@ import type { YieldBasisLtCandidate } from "./types.js";
  *     still materializes this LT. Routes are projected from the descriptor, not
  *     from an observation, so it can never become a second routed leg.
  *
- * `deposit(uint256,uint256,uint256)` and `emergency_withdraw(uint256)` are NOT
- * patterns at all: they are never nominated, never routed, and never encoded
- * (see manifest.ts for the chain evidence behind that decision). The contracts
- * below assert their selectors stay absent from this family's patterns and
- * actions.
+ * Ordinary deposits also nominate the LT, but only a successful guarded
+ * identity program may enable the deposit route. Emergency withdrawal remains
+ * unsupported. Observation alone never grants a direction.
  */
 const CALL_PATTERNS: readonly CallPattern[] = Object.freeze([
+  Object.freeze({ id: LT_DEPOSIT_CALL_PATTERN_ID, selector: LT_DEPOSIT_SELECTOR,
+    signature: "deposit(uint256,uint256,uint256)", candidateAddress: Object.freeze({ from: "call-target" as const }) }),
+  Object.freeze({ id: LT_DEPOSIT_RECEIVER_CALL_PATTERN_ID, selector: LT_DEPOSIT_RECEIVER_SELECTOR,
+    signature: "deposit(uint256,uint256,uint256,address)", candidateAddress: Object.freeze({ from: "call-target" as const }) }),
   Object.freeze({
     id: LT_WITHDRAW_CALL_PATTERN_ID,
     selector: LT_WITHDRAW_SELECTOR,
@@ -59,6 +66,8 @@ const CALL_PATTERNS: readonly CallPattern[] = Object.freeze([
  * evidence and never an admission.
  */
 const LOG_PATTERNS: readonly LogPattern[] = Object.freeze([
+  Object.freeze({ id: LT_DEPOSIT_LOG_PATTERN_ID, topic: LT_DEPOSIT_TOPIC as `0x${string}`,
+    signature: "Deposit(address,address,uint256,uint256)" }),
   Object.freeze({
     id: LT_WITHDRAW_LOG_PATTERN_ID,
     topic: LT_WITHDRAW_TOPIC as `0x${string}`,
@@ -68,7 +77,6 @@ const LOG_PATTERNS: readonly LogPattern[] = Object.freeze([
 
 /** Selectors that must never appear in this family's patterns or actions. */
 export const YIELDBASIS_EXCLUDED_SELECTORS: readonly string[] = Object.freeze([
-  LT_DEPOSIT_SELECTOR.toLowerCase(),
   LT_EMERGENCY_WITHDRAW_SELECTOR.toLowerCase(),
 ]);
 
@@ -98,11 +106,14 @@ export const yieldBasisLtDiscovery: DiscoverySemantics<
       if (
         observation.kind === "call" &&
         (matchedPatternId === LT_WITHDRAW_CALL_PATTERN_ID ||
-          matchedPatternId === LT_WITHDRAW_RECEIVER_CALL_PATTERN_ID)
+          matchedPatternId === LT_WITHDRAW_RECEIVER_CALL_PATTERN_ID ||
+          matchedPatternId === LT_DEPOSIT_CALL_PATTERN_ID || matchedPatternId === LT_DEPOSIT_RECEIVER_CALL_PATTERN_ID)
       ) {
         const name = matchedPatternId === LT_WITHDRAW_CALL_PATTERN_ID
           ? "withdraw(uint256,uint256)"
-          : "withdraw(uint256,uint256,address)";
+          : matchedPatternId === LT_WITHDRAW_RECEIVER_CALL_PATTERN_ID ? "withdraw(uint256,uint256,address)"
+          : matchedPatternId === LT_DEPOSIT_CALL_PATTERN_ID ? "deposit(uint256,uint256,uint256)"
+          : "deposit(uint256,uint256,uint256,address)";
         // Decode to prove the payload really is a supported redemption call.
         LT_INTERFACE.decodeFunctionData(name, observation.data);
         return Object.freeze({
@@ -112,11 +123,11 @@ export const yieldBasisLtDiscovery: DiscoverySemantics<
       }
       if (
         observation.kind === "log" &&
-        matchedPatternId === LT_WITHDRAW_LOG_PATTERN_ID &&
-        observation.topics[0]?.toLowerCase() === LT_WITHDRAW_TOPIC
+        ((matchedPatternId === LT_WITHDRAW_LOG_PATTERN_ID && observation.topics[0]?.toLowerCase() === LT_WITHDRAW_TOPIC) ||
+          (matchedPatternId === LT_DEPOSIT_LOG_PATTERN_ID && observation.topics[0]?.toLowerCase() === LT_DEPOSIT_TOPIC))
       ) {
         LT_INTERFACE.decodeEventLog(
-          "Withdraw",
+          matchedPatternId === LT_WITHDRAW_LOG_PATTERN_ID ? "Withdraw" : "Deposit",
           observation.data,
           [...observation.topics],
         );
