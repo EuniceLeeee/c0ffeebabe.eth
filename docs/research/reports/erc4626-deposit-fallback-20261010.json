@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "scope": "Bounded ERC4626 deposit-sample fallback and Balancer V3 natural-reference supplement. Correctness only; not full Family, formal Adapter Replay/merge, opportunity or performance acceptance.",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseHead": "62af2802c8c612f4bfe343ea2b58afe7e8bac771",
+  "ownedFiles": [
+    "listener/src/searcher/venues/protocols/erc4626-family/identity.ts",
+    "listener/src/searcher/venues/protocols/erc4626-family/types.ts",
+    "listener/src/searcher/venues/adapter-family-runtime.ts",
+    "listener/src/searcher/test/erc4626-family-plugin.ts",
+    "listener/src/searcher/test/erc4626-deposit-lifecycle.ts"
+  ],
+  "trackedOwnedDiffSha256": "076727ea736e74eff83641c5b217be5d11902533e34c524bb9745b1fb0a649c9",
+  "newLifecycleTestSha256": "3dd4d1cf75c53b9cea86d663f00dbd5e2721d870cd7d5828a241ce34c1edbe5f",
+  "finding": {
+    "baseline": "Base read already previewed 1000000 and 1000000000000000000 raw, but active proof tried only the first viable preview. Both named vaults preview the tiny amount positively yet reject its actual deposit. A view result is not a proof that this amount is executable.",
+    "evidence": "At the identical historical source, actor and request shape, both vaults reject 1000000 raw with 0xdcab82e2...00002aff and accept 1000000000000000000 raw with matching actual debit, share receipt, supply and Deposit event. 9055 also rejects 2000000 raw while 2411 accepts it, so there is no universal 2000000 threshold.",
+    "change": "Keep the first sample. Only a completed deterministic deposit revert permits one additional already-previewed sample. No unbounded search, protocol address exception, P change or output funding. Successful initial deposits do not retry. Source, required results, debit/output, event, supply and roundtrip checks stay enforced.",
+    "failureIsolation": "A transport failure is not a deterministic revert. When no direction has been proved, unresolved evidence remains retryable. An optional fallback failure or malformed ABI does not revoke an already-proven redeem; only ABI decoding is isolated, not source/completeness/effect checks.",
+    "genericBudget": "The existing proxy path can need base -> implementation slot -> implementation code -> active -> fallback. The default generic identity-step ceiling changes 4 to 5, without a protocol branch. Explicit caller limit 4 still applies and a sixth step is stopped before its requests. Dependent-read-round limit stays 4.",
+    "cost": "One bounded behavior retry and a higher cumulative per-variant work ceiling are real added work. Per-batch limits and concurrency are unchanged. No performance improvement or acceptability is inferred.",
+    "unchanged": [
+      "identity reverse-proof requirements",
+      "funded token is input only",
+      "effective reference amount policy",
+      "quoted and runtime execution encoders",
+      "activation defaults",
+      "original Ready/checkpoints",
+      "peer source changes"
+    ]
+  },
+  "evidenceRoot": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H",
+  "sourceBinding": {
+    "dirtySourceTreeSha256": "614fb81dd45cf7f2d36cd79d8e6a810125bba689f32ce000ed2c683a9847ea7e",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "block": 26030897,
+    "blockHash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6",
+    "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+    "environment": "S=N block end, E=N; not original leg pre-call state",
+    "actor": "0x000000000000000000000000000000000000face",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "origin": "0x1000000000000000000000000000000000000001",
+    "sourceBeforeAfterEqual": true
+  },
+  "historicalIdentity": [
+    {
+      "vault": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+      "asset": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "depositInputRaw": "1000000000000000000",
+      "depositSharesRaw": "924504919141094476",
+      "redeemSharesRaw": "1000000",
+      "redeemAssetsRaw": "1081660",
+      "result": "verified deposit and redeem through actual production lifecycle",
+      "file": "9055-3.json",
+      "sha256": "f16685f4ee01e533566b98d129adeff5e0023bffc5531fc6e8a97a0640897515",
+      "drained": true
+    },
+    {
+      "vault": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+      "asset": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+      "depositInputRaw": "1000000000000000000",
+      "depositSharesRaw": "962957247466532573",
+      "redeemSharesRaw": "1000000",
+      "redeemAssetsRaw": "1038467",
+      "result": "verified deposit and redeem through actual production lifecycle",
+      "file": "2411-3.json",
+      "sha256": "13b64a9dffe53631532d35a116dc1557850a837ac63783d605821a15e3106bae",
+      "drained": true
+    }
+  ],
+  "negativeControl": {
+    "vault": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+    "block": 25944594,
+    "blockHash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+    "tx": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+    "result": "Initial deposit, redeem and alternate deposit all really revert 0x6801b5aa. Rejection preserved; no route published. Semantic root cause remains unproved.",
+    "file": "dbdc-3.json",
+    "sha256": "fe612b5b04eea614c839f95e7dbe450614813d936d56374d8f3ae3d8d918fd2e",
+    "drained": true
+  },
+  "productionIntegration": {
+    "entrypoint": "Unchanged runner-with-scope.mts drives production rebuildUniverse and runAtBlock prices. Uses a copy of report-bound original single-block Ready; all-block natural observations, no target seed/admitted/Graph/input-amount injection.",
+    "families": [
+      "balancer-v3",
+      "univ3-standard",
+      "protocol:erc4626"
+    ],
+    "directory": "26030897-ready-3",
+    "instances": 58,
+    "graphEdges": 116,
+    "readySha256": "abe1be329ca1a0ccb3aed9b17340d4be45f54a9fdb04c4e5922df3fb2de37f78",
+    "pricesSha256": "1cc8d5a51fc902bf42fd2a3de21a93960bd247b058cfaa89a22d40cf9a57fe6f",
+    "resultSha256": "f0424bae29802dc00b917dd102f8f2070eb50f66cacbcb292c6b19e25685b885",
+    "pool": "0x6b31a94029fd7840d780191b6d63fa0d269bd883",
+    "targetChange": "Both target directions change from missing-valuation to quoted at natural production reference inputs.",
+    "rows": [
+      {
+        "tokenIn": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+        "amountInRaw": "1546926641909882",
+        "amountOutRaw": "1848902745296282",
+        "status": "quoted"
+      },
+      {
+        "tokenIn": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+        "amountInRaw": "1849009838282188",
+        "amountOutRaw": "1546926641909882",
+        "status": "quoted"
+      }
+    ]
+  },
+  "v3SameStateDual": {
+    "harness": "listener/src/searcher/venues/swaps/balancer-v3-family/test/historical-runtime-dual.ts",
+    "file": "26030897-dual-3.json",
+    "sha256": "e9d7e946ec4bdbd7695506d3850a6e019379e8f1e8b820b8a77b81152313ebaa",
+    "result": "pass",
+    "directions": 2,
+    "amountTrials": 8,
+    "executionsPassed": 16,
+    "amounts": "Natural production P and P/2, original-leg input and its half, independently in each direction; all executed at N, not original pre-call.",
+    "assertions": [
+      "production Exact equals saved effective at P",
+      "quoted fragment and runtime actual debit/receipt equal quote",
+      "old inventory untouched",
+      "ERC20/Permit2 allowance cleanup",
+      "runtime construction RPC attempts 0",
+      "same source and N environment before/after",
+      "owned fork stopped"
+    ],
+    "cumulativeReferenceCoverage": {
+      "previous": 31,
+      "current": 33,
+      "totalDirections": 36,
+      "remaining": 3,
+      "note": "Union of compatible named historical evidence, not a fresh all-pool/all-direction rerun. Remaining ae255 two directions and 071828 one direction."
+    }
+  },
+  "validation": {
+    "actualDirtyTree": {
+      "log": "deposit-fallback-reviewed-gates-5.log",
+      "sha256": "1e75c03049d4e9e00855211c0d368601a4a1b06a15df0b01bee5aaa36b9dcade",
+      "exitCode": 0
+    },
+    "ownedSourceSnapshot": {
+      "path": "logs/erc4626-deposit-commitcheck-20261010.Kqie73",
+      "method": "Unregistered verification snapshot from base HEAD plus only five owned source/test files; not a new Git branch/worktree. Regenerated manifest rather than copying peer-dirty generated output.",
+      "log": "deposit-fallback-owned-gates-1.log",
+      "sha256": "ecac0fa8f5a2fc1633040d6cac5494d7f57279fd582a35dafb154bd9849494c6",
+      "exitCode": 0,
+      "generatedSha256": "b750059e4a2d2187ff124ced3c83ec9de7e565d638ab43b78839d995ff4bb1cc",
+      "generatedArtifactHash": "39281c26862dc293a9b404c178a836920bdbf46eb4d44f87cfc5d90bddf7492a"
+    },
+    "passed": [
+      "build:live",
+      "ERC4626 Family contract including default-5/sixth-blocked/explicit-4 production lifecycle fixtures",
+      "Frax Custodian 32 tests",
+      "dual execution: dirty tree 75 / owned snapshot 74",
+      "strict-family-lifecycle-runner",
+      "strict-central-adapter-runtime 167 tests",
+      "strict-execution-projection",
+      "capability generate; owned snapshot capability check"
+    ],
+    "independentReview": {
+      "agent": "01a122bc-25cb-7a51-82dd-43f9ee42bf8d",
+      "passes": 2,
+      "maxPasses": 3,
+      "findings": "Pass 1 identified optional malformed-ABI direction isolation and proxy step-budget defects. Both corrected. Pass 2 found no remaining defect in these fixes; its test-evidence caveat was subsequently resolved by reviewed-gates-5 exit 0.",
+      "limit": "Reviewer read-only/source review, no independent fresh RPC or performance execution. Review transcripts retained in task."
+    },
+    "retainedAttempts": [
+      "deposit-fallback-baseline-regression.log: new regression fails on baseline as expected",
+      "deposit-fallback-gates-1/2/4.log: requirements, type and canonical serialization compile failures; corrected",
+      "deposit-fallback-gates-3.log: mistakenly started before patch application; cancelled, empty output, not a PASS",
+      "deposit-fallback-gates-5.log: earlier pre-review PASS, does not replace reviewed run",
+      "deposit-fallback-review-regression-1/2/3.log: test-fixture revert classification and taxonomy assertion failures",
+      "deposit-fallback-reviewed-gates-1/2/3/4.log: fixture freezing/branding failures; corrected without relaxing production guards",
+      "deposit-fallback-reviewed-gates-5.log: all listed final dirty-source gates executed successfully",
+      "All earlier failed/reverted historical samples remain intact"
+    ]
+  },
+  "reconciliation": {
+    "capabilityQuery": "universe,rebuild,status",
+    "manifest": "fallback-tool-selection.json",
+    "sha256": "0a7c8168b2082c6012327a250e81c6f252ac397e0eab526f6207c826ea9bc175",
+    "selectedTool": "listener:searcher:universe-rebuild-status",
+    "exitCode": 0,
+    "stdoutSha256": "5136693b96dd45d724c7beef33a7520494d116d034d69b45410ba43c662b9096",
+    "finding": "Canonical status confirms actual Ready publication; target row conclusions are independently checked from production prices and dual execution, not inferred from READY."
+  },
+  "limits": [
+    "Not full ERC4626 acceptance. The two wrapper deposit/redeem directions have strict execution proof; wrapper quoted/runtime at production reference amounts were not independently re-run by this supplement.",
+    "Not original TX pre-call replay or profitable route/EV acceptance.",
+    "No formal Adapter Replay baseline-to-candidate/family_local merge-ready verdict is claimed; central budget change is explicitly generic, not concealed as Family-local.",
+    "Performance NOT RUN. Single-block correctness-stage timings are not latency acceptance.",
+    "Every applicable adapted/repaired protocol requested in IMPL, including these dependencies and Balancer V2/V3 plus Curve plain/underlying, remains subject to per-protocol single-block then representative combined large-graph performance acceptance, after remaining correctness.",
+    "No long-run live latency assurance from these tests."
+  ],
+  "safety": {
+    "originalReadyModified": false,
+    "peerSourceOverwritten": false,
+    "peerSourceCommitted": false,
+    "activationChanged": false,
+    "newBranchOrWorktree": false,
+    "liveStarted": false,
+    "broadcast": false,
+    "signing": false
+  }
+}

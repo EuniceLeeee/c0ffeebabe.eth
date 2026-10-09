@@ -6944,7 +6944,7 @@
         "familyId": "protocol:erc4626",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "c358e760f0a0e211088014738b6aaa9be55c5e73e0a4b26822eeac67b7b7d796",
+        "contentHash": "b7f5cd631476c8eae49e5863dbd00907b224490b3188ef292795fc4908ef44ea",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -13370,5 +13370,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "89ab23d47fa342682612ae61610886b8954292d1c42a1d2016453c160e8564c2"
+  "artifactHash": "39281c26862dc293a9b404c178a836920bdbf46eb4d44f87cfc5d90bddf7492a"
 }

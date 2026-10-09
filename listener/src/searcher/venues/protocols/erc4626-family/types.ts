@@ -29,6 +29,8 @@ export interface Erc4626BaseEvidence {
   readonly sampleShares: bigint;
   readonly previewDeposit: bigint;
   readonly previewRedeem: bigint;
+  /** One further already-previewed sample; tried only after a completed deposit revert. */
+  readonly alternateDepositSample?: { readonly amount: bigint; readonly preview: bigint };
   readonly baseValid: boolean;
   /** Family-declared negative-evidence request ids when baseValid=false. */
   readonly evidenceRequestIds?: readonly string[];
@@ -44,6 +46,8 @@ export interface Erc4626ActiveEvidence
   readonly depositVerified: boolean;
   readonly redeemVerified: boolean;
   readonly behaviorProofHash: string;
+  readonly depositRetry?: { readonly amount: bigint; readonly preview: bigint; readonly source: CanonicalSource };
+  readonly depositRetryCompleted?: boolean;
 }
 
 export type Erc4626IdentityEvidence =

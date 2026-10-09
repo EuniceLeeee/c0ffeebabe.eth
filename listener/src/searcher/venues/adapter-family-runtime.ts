@@ -366,7 +366,9 @@ const issuedSealedFamilyExactQuoteHandles = new WeakMap<
 >();
 
 const DEFAULT_LIMITS: AdapterFamilyLifecycleLimits = Object.freeze({
-  maxIdentityStepsPerVariant: 4,
+  // Bound reverse-identity, implementation checks and a behavior retry. This
+  // raises the per-variant work ceiling; per-request batch limits are unchanged.
+  maxIdentityStepsPerVariant: 5,
   maxDependentReadRounds: 4,
 });
 

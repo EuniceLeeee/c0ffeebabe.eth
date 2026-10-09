@@ -229,6 +229,77 @@ assert.throws(
   "shared active evidence remains required",
 );
 
+// Base already queries more than one amount. Preserve the next viable preview
+// instead of treating the first preview as proof of execution at that amount.
+const baseStep = { candidate: CANDIDATE, evidence: undefined, step: 0 };
+const decodedBase = variant.decode({ step: baseStep, results: variant.buildRequests(baseStep).map(request => {
+  if (request.kind === "get-code") return success(request.id, "0x6001");
+  assert(request.kind === "eth-call");
+  const call = ERC4626_INTERFACE.parseTransaction({ data: request.data })!;
+  const value = call.name === "asset" ? ASSET
+    : call.name === "totalAssets" || call.name === "totalSupply" ? 10n ** 22n
+    : call.name === "convertToShares" || call.name === "previewDeposit" ? BigInt(call.args[0]) / 2n
+    : BigInt(call.args[0]) * 2n;
+  return success(request.id, ERC4626_INTERFACE.encodeFunctionResult(call.name, [value]));
+}) }) as Erc4626BaseEvidence;
+assert.equal(decodedBase.sampleAssets, 10n ** 6n);
+assert.deepEqual(decodedBase.alternateDepositSample, { amount: 10n ** 18n, preview: 5n * 10n ** 17n });
+
+const retryBase = { ...BASE, alternateDepositSample: { amount: 2_000n, preview: 1_000n } };
+const retryInitial = (deposit: AdapterRequestResult, redeem = redeemSuccess()) => variant.decode({
+  step: { candidate: CANDIDATE, evidence: retryBase, step: 1 },
+  results: [...commonActiveResults(), deposit, redeem],
+}) as Erc4626ActiveEvidence;
+const needsRetry = retryInitial(reverted("active-deposit", "0x12345678"));
+assert.deepEqual(variant.decide({ candidate: CANDIDATE, evidence: needsRetry, step: 2 }), { status: "continue" });
+assert.deepEqual(needsRetry.depositRetry, { amount: 2_000n, preview: 1_000n, source: SOURCE });
+const retryStep = { candidate: CANDIDATE, evidence: needsRetry, step: 2 };
+const retryRequests = variant.buildRequests(retryStep);
+assert.deepEqual(retryRequests.map(r => r.id), ["fallback-roundtrip", "fallback-deposit"]);
+assert(retryRequests.every(r => !requests.some(old => old.id === r.id)), "retry must not repeat a request id");
+const retryDeposit = retryRequests.find(r => r.id === "fallback-deposit")!;
+assert(retryDeposit.kind === "effect-delta-simulation");
+assert.equal(ERC4626_INTERFACE.decodeFunctionData("deposit", retryDeposit.call.data)[0], 2_000n);
+assert.equal(ERC4626_ERC20_INTERFACE.decodeFunctionData("approve", retryDeposit.preCalls![0]!.data)[1], 2_000n);
+assert.deepEqual(retryDeposit.overrideIntent.tokenBalances, [{ token: ASSET, amount: 2_000n }]);
+assert.equal(retryDeposit.observeTokenBalances?.length, 2);
+const fallbackRoundTrip = success("fallback-roundtrip", ERC4626_INTERFACE.encodeFunctionResult("previewRedeem", [2_000n]));
+const fallbackSuccess = success("fallback-deposit", ERC4626_INTERFACE.encodeFunctionResult("deposit", [1_000n]), depositEffects(2_000n, 1_000n));
+const fallbackDecode = (deposit: AdapterRequestResult, roundTrip = fallbackRoundTrip, previous = needsRetry) => variant.decode({
+  step: { candidate: CANDIDATE, evidence: previous, step: 2 }, results: [roundTrip, deposit],
+}) as Erc4626ActiveEvidence;
+const retryPassed = fallbackDecode(fallbackSuccess);
+assert.deepEqual(verifiedDirections(retryPassed), { deposit: true, redeem: true });
+assert.equal(retryPassed.depositRetry, undefined);
+assert.equal(retryPassed.alternateDepositSample, undefined);
+assert.equal(retryPassed.depositRetryCompleted, true);
+assert.notEqual(retryPassed.behaviorProofHash, needsRetry.behaviorProofHash, "prior failure and retry must be bound");
+for (const deposit of [depositSuccess(), depositSuccess({}), failure("active-deposit", "rpc")]) {
+  assert.equal(retryInitial(deposit).depositRetry, undefined, "success, bad effects and transport failure do not trigger amount retry");
+}
+assert.throws(() => retryInitial(reverted("active-deposit", "0x"), failure("active-redeem", "deadline")),
+  (error: unknown) => error instanceof RequiredAdapterRequestError && error.failureCode === "deadline",
+  "fallback must not hide an unresolved sibling when neither direction is proven");
+for (const failed of [reverted("fallback-deposit", "0x"), failure("fallback-deposit", "rpc"),
+  success("fallback-deposit", ERC4626_INTERFACE.encodeFunctionResult("deposit", [1_000n]), {})]) {
+  assert.deepEqual(verifiedDirections(fallbackDecode(failed)), { deposit: false, redeem: true });
+}
+for (const badEffects of [
+  { ...depositEffects(2_000n, 1_000n), tokenDeltas: depositEffects(2_000n, 1_000n).tokenDeltas!.map(row => row.token === ASSET ? { ...row, delta: 0n } : row) },
+  { ...depositEffects(2_000n, 1_000n), tokenDeltas: depositEffects(2_000n, 1_000n).tokenDeltas!.map(row => row.token === VAULT ? { ...row, delta: 999n } : row) },
+  { ...depositEffects(2_000n, 1_000n), totalSupplyDeltas: [] },
+  { ...depositEffects(2_000n, 1_000n), logs: [] },
+]) {
+  assert.equal(fallbackDecode(success("fallback-deposit", ERC4626_INTERFACE.encodeFunctionResult("deposit", [1_000n]), badEffects)).depositVerified, false);
+}
+assert.equal(fallbackDecode(fallbackSuccess, success("fallback-roundtrip", ERC4626_INTERFACE.encodeFunctionResult("previewRedeem", [3_000n]))).depositVerified, false);
+assert.throws(() => fallbackDecode({ ...fallbackSuccess, source: { ...SOURCE, hash: `0x${"cd".repeat(32)}` } }), /source/i);
+const neitherBeforeRetry = retryInitial(reverted("active-deposit", "0x"), reverted("active-redeem", "0x"));
+assert.throws(() => fallbackDecode(failure("fallback-deposit", "rpc"), fallbackRoundTrip, neitherBeforeRetry),
+  (error: unknown) => error instanceof RequiredAdapterRequestError && error.failureCode === "rpc");
+const neitherAfterRetry = fallbackDecode(reverted("fallback-deposit", "0x"), fallbackRoundTrip, neitherBeforeRetry);
+assert.equal(variant.decide({ candidate: CANDIDATE, evidence: neitherAfterRetry, step: 3 }).status, "chain-proven-rejected");
+
 const fullyVerified = variant.decide({
   candidate: CANDIDATE, evidence: decodeActive(depositSuccess(), redeemSuccess()), step: 2,
 });
@@ -261,6 +332,32 @@ const { plugin: erc4626FamilyPlugin } = await import(
 );
 const registeredVariant = erc4626FamilyPlugin.identity.variants[0]!;
 let registeredDecodeCalls = 0;
+
+for (const malformed of [null, "deposit", "roundtrip"] as const) {
+const registeredRetry = await runRequestProgram({
+  familyId: erc4626FamilyPlugin.manifest.familyId,
+  source: SOURCE, programInput: retryStep,
+  program: {
+    requirements: step => registeredVariant.requirements(step),
+    buildRequests: step => registeredVariant.buildRequests(step),
+    decode: ({ programInput, results }) => registeredVariant.decode({ step: programInput, results }) as Erc4626ActiveEvidence,
+  },
+  executor: createBoundedRequestExecutor({
+    assertSupported(requirements) { assert(requirements.transports.includes("effect-delta-simulation")); },
+    assertCallerBinding({ callerRef }) { assert.deepEqual(callerRef, { kind: "verified-actor", evidenceId: "erc4626-probe-actor" }); },
+    assertWithinBudget(_familyId, actualRequests) { assert.deepEqual(actualRequests, retryRequests); },
+    async execute() { return [
+      malformed === "roundtrip" ? success("fallback-roundtrip", "0x") : fallbackRoundTrip,
+      malformed === "deposit" ? success("fallback-deposit", "0x", depositEffects(2_000n, 1_000n)) : fallbackSuccess,
+    ]; },
+    sealStaticEvidenceReuseProof() { throw new Error("retry remains an active proof"); },
+  }),
+});
+assert.deepEqual(verifiedDirections(registeredRetry.evidence), { deposit: malformed === null, redeem: true });
+assert.equal(registeredRetry.trustedResults.length, 2);
+}
+assert.throws(() => fallbackDecode(success("fallback-deposit", "0x"), fallbackRoundTrip, neitherBeforeRetry));
+assert.throws(() => fallbackDecode(fallbackSuccess, success("fallback-roundtrip", "0x"), neitherBeforeRetry));
 
 const registeredDepositOnly = await runRegisteredActiveProgram([
   ...commonActiveResults(),
@@ -348,6 +445,7 @@ for (const malformed of malformedResultSets) {
     "optional failures must not weaken central result-set validation");
 }
 
+await import("./erc4626-deposit-lifecycle.js");
 console.log("erc4626-family-plugin PASS (raw + registered direction-isolated proof, required failures, exact amount)");
 
 async function runRegisteredActiveProgram(
@@ -464,18 +562,18 @@ function redeemSuccess(
   );
 }
 
-function depositEffects(): ObservedEffects {
+function depositEffects(assets = 1_000n, shares = 500n): ObservedEffects {
   const event = ERC4626_INTERFACE.encodeEventLog(
     ERC4626_INTERFACE.getEvent("Deposit")!,
-    [ERC4626_PROBE_ACTOR, ERC4626_PROBE_ACTOR, 1_000n, 500n],
+    [ERC4626_PROBE_ACTOR, ERC4626_PROBE_ACTOR, assets, shares],
   );
   return Object.freeze({
     tokenDeltas: Object.freeze([
-      Object.freeze({ token: ASSET, account: ERC4626_PROBE_ACTOR, delta: -1_000n }),
-      Object.freeze({ token: VAULT, account: ERC4626_PROBE_ACTOR, delta: 500n }),
+      Object.freeze({ token: ASSET, account: ERC4626_PROBE_ACTOR, delta: -assets }),
+      Object.freeze({ token: VAULT, account: ERC4626_PROBE_ACTOR, delta: shares }),
     ]),
     totalSupplyDeltas: Object.freeze([
-      Object.freeze({ token: VAULT, delta: 500n }),
+      Object.freeze({ token: VAULT, delta: shares }),
     ]),
     logs: Object.freeze([
       Object.freeze({ address: VAULT, topics: event.topics, data: event.data }),
