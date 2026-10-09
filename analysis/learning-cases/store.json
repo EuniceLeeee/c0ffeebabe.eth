@@ -1,6 +1,64 @@
 {
   "cases": [
     {
+      "learning_case_id": "tooldef-20261009-historical-dual-eip7702-origin",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": ["swap", "protocol"],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "historical_dual_guard_misclassified_eip7702_origin_as_arbitrary_contract",
+      "evidence": {
+        "observation": "The former historical owner 0xb8578b6de173c8554ff0390db5a7effa567dda3c had exact EIP-7702 delegation code; an empty-code-only origin assertion stopped before executing the Family. A separate incompatible executor code check correctly stopped and was not relaxed.",
+        "scope": "Opt-in historical dual test harness only. Accept empty code or exact 23-byte ef0100 delegation designator, record and recheck code, never override owner code or an unrelated executor contract.",
+        "regression": "Positive empty/delegated origin and malformed/arbitrary-contract negatives; final evidence+nomination suite 21/21 PASS on cloud and source snapshot.",
+        "independentReview": {"agent": "01a11aba-3bcc-7620-8433-2b9d1b94022f", "verdict": "Origin correction legitimate; executor protection retained. Final scoped offline checks independently 21/21 PASS; no historical/performance assertion."},
+        "artifacts": ["logs/four-family-integration-20261009.CuNyy3/kyber-current-N25953136-attempt01/", "logs/four-family-integration-20261009.CuNyy3/nomination-probe-final-20261009.log"],
+        "limitation": "Successful historical reruns use clean public test actors; do not claim end-to-end delegated-owner execution from this offline guard regression. No production opportunity closure."
+      },
+      "tooling_defect": {
+        "tool": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts and evidence.ts",
+        "issue": "An empty-code-only guard incorrectly rejected a valid delegated transaction origin before the test reached protocol execution.",
+        "evidence": "Saved historical guard stop plus independent positive/negative exact-byte origin tests; no owner code rewriting.",
+        "codify_target": "assertOriginAccountCode and evidence.test.ts; record origin code/hash and recheck at finalization",
+        "status": "codified",
+        "codify_commit": "15c1b1fe15180f287c57d2a883eeee2084b19438"
+      },
+      "created_at": "2026-10-09T06:08:49Z",
+      "updated_at": "2026-10-09T06:08:49Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261009-historical-dual-balance-probe-response",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": ["protocol"],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "balance_slot_fault_injection_misclassified_local_proxy_slot_hypothesis_failure",
+      "evidence": {
+        "observation": "Access lists may include proxy implementation/control slots. Overriding a wrong slot during actor-balance discovery can return empty data or declared local EVM revert; neither proves a balance slot and neither alone is a transport failure.",
+        "scope": "Catch only declared local eth_call EVM revert for the injected-slot hypothesis; exact 32-byte ABI match, two probes, unique match and protected balances/supply remain mandatory. HTTP/429/unknown/upstream/baseline/protected-read failures propagate.",
+        "reviewFinding": "Reviewer reproduced odd-length 0x1/0xabc accepted by ethers.isHexString(data); corrected to isHexString(data,true), both negatives added, 0x/0x1234 positives retained.",
+        "independentReview": {"agent": "01a11aba-3bcc-7620-8433-2b9d1b94022f", "verdict": "P2 closed; final 21/21 offline tests PASS with compilation caches disabled; no blocker within local contract."},
+        "historicalRerun": "Compound final helper attempt05: all 8 same-N quoted/runtime executions pass with signed delta 0; overall exit 2 accurately retains missing production valuation. Earlier actor/probe failures and omitted-activation attempt04 remain preserved.",
+        "artifact": "logs/four-family-integration-20261009.CuNyy3/compound-current-N25944463-attempt02/dual-attempt05-byte-guard-enabled.json",
+        "artifactSha256": "c263bda18a1208273e1fbbf30819bab42e875da3290e8744cf0bc62365424e30",
+        "limitation": "Test-tool defect closure only; not full Family, original-precall, performance, or opportunity acceptance."
+      },
+      "tooling_defect": {
+        "tool": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts and evidence.ts",
+        "issue": "Wrong-slot local fault-injection results were treated as fatal balance decoding; initial repair also accepted malformed odd-length revert data.",
+        "evidence": "Saved historical proxy-slot attempts plus independent malformed-data reproduction, then 21/21 regression and final Compound historical execution.",
+        "codify_target": "matchesBalanceSlotProbe/isLocalBalanceProbeRevert, candidate probe records and tightly scoped local overridden-call handling",
+        "status": "codified",
+        "codify_commit": "15c1b1fe15180f287c57d2a883eeee2084b19438"
+      },
+      "created_at": "2026-10-09T06:08:49Z",
+      "updated_at": "2026-10-09T06:08:49Z"
+    },
+    {
       "learning_case_id": "tooldef-20261007-prerequisite-cache-idle-socket-reset",
       "status": "manual_required",
       "strategy_kind": "block-scan",

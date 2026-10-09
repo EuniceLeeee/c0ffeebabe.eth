@@ -4,7 +4,7 @@
   "workspace": "/opt/mev-cloud/family-runtime-20261007",
   "branch": "codex/family-runtime-actual-20261007",
   "baseCommit": "bba7e01fda781093a2d176f6305b120451dd41fc",
-  "revisionParent": "e2fff0bf6ab995bd7123c5e07a705028b797cf47",
+  "revisionParent": "06ab4d7c3c2a63840c2d60ae805d43da1df9f6ee",
   "latestUserOrder": [
     "independently accept the integrated four Families for correctness AND latency",
     "remaining authorized Set/DODO/xWin/Curve/Balancer V3 Hook/Ekubo/Frax variants",
@@ -54,14 +54,14 @@
     "testLog": "logs/four-family-integration-20261009.CuNyy3/yb-contract-refresh-production-disable-20261009.log",
     "testLogSha256": "cd372f5efbee029168825877b3fbb5570f0588112d536bbb5fd42b55d8300da0",
     "independentReview": "original fixture omission corrected and rechecked; no remaining local blocker identified",
-    "claim": "implemented/local regression only; historical dual receipts and representative performance NOT RUN"
+    "claim": "local regressions and current-source single-block admission/Graph plus original-amount same-N dual receipts now pass; production effective reference is missing-valuation, representative performance NOT RUN; see historicalIntegration below"
   },
   "compoundCToken": {
     "change": "positive redeem effect proof instead of balance view; current accrued rate fails closed without stored fallback; quoted/runtime error-code, exact share debit and actual-receipt floor; each-block effective refresh",
     "identity": "only executor cToken input is funded; no underlying pool cash or supply injection; source-bound zero return code, share/supply burns, equal underlying debit/credit and matching Redeem event",
     "transportFailure": "unresolved; no liquidity/unproven behavior retryable, never transport-derived permanent identity rejection",
     "requestCost": "positive Exact: 3 to 2 calls in one round; identity remains 3 dependency rounds but now includes real effect simulation, whose storage discovery/CU cost is not measured",
-    "executionCost": "four balance reads inside each emitted leg plus error-code/delta guards; runtime construction adds no chain-off Exact request; historical execution gas and latency NOT RUN",
+    "executionCost": "four balance reads inside each emitted leg plus error-code/delta guards; runtime construction adds no chain-off Exact request; historical same-N execution now recorded below, representative stage latency NOT RUN",
     "prefix": "local accrued-rate model explicitly declines an unmodeled prefix",
     "sameStateReuse": "same-source same-amount central quote reuse tested; different amount reads current and cash again; no stateOnlyReads/cross-source accrual carry guarantee",
     "checks": {"family": "58/58 PASS", "sharedRuntimeTransportCacheAndDual": "397/397 PASS", "actualBotVmSyntheticProtocol": "5/5 PASS"},
@@ -78,7 +78,7 @@
     "historicalDiagnostic": "encoding-only, not actual receipts; source hashes and traced ABI arguments corrected; excludes reverted subtrees and ambiguous interface assignment; N-end never labelled original pre-call parity",
     "typecheckLimit": "build:live PASS; separate extended historical-harness check has three unchanged shared baseline errors, retained in proposal validation logs",
     "independentReview": "non-author read-only review of 21-file proposal and evidence found no high-confidence local blocker; primary independently reran 58/397/5",
-    "claim": "implemented and offline validated, NOT historical strict/Ready/dual receipt, representative performance, or adapter_merge_ready"
+    "claim": "current-source effect-proof revalidation/Graph and same-N dual receipts now pass for both markets after candidate-emitter correction; production effective reference missing-valuation, representative performance and adapter_merge_ready unproven; see historicalIntegration below"
   },
   "verificationEnvironment": {
     "sourceChangesAppliedFirst": "cloud workspace",
@@ -96,10 +96,11 @@
     "limits": "synthetic transport and source snapshot checks do not prove historical EVM receipts or cloud timing; the separate Algebra cloud RPC probe below proves only its explicitly limited lifecycle/Exact claim"
   },
   "remaining": {
-    "yieldBasisLt": "current-source historical strict/Ready/effective and measured same-state dual receipts, then representative performance; new local regressions do not replace these gates",
-    "compoundCToken": "selectively revalidate affected old view-only identity evidence on a Ready copy; current-source historical integration and measured same-state dual receipts, then representative performance",
+    "kyber": "representative instance/amount/tick coverage and production-stage performance; the historical two-direction sample below is not full-family acceptance",
+    "yieldBasisLt": "production-reference amount through genuine background valuation connectivity, additional amount/variant coverage, then representative performance; original-amount same-state dual receipts already pass",
+    "compoundCToken": "production-reference amount through genuine background valuation connectivity, additional amount/variant coverage, then representative performance; both corrected candidate-emitter identities and original-share-amount dual receipts already pass",
     "algebraIntegral": "bound Cypher Quoter branch implemented; two receipt-driven production lifecycle/Exact samples now resolve. Current-source Ready/Graph/production effective, real same-N quoted/runtime receipts, other intended instances and representative performance remain incomplete",
-    "allFour": "current-source historical strict/Ready/Graph/effective/dual receipts and representative-load effective/sim timing remain incomplete"
+    "allFour": "full coverage and representative-load effective/sim timing remain incomplete; no live or adapter_merge_ready verdict"
   },
   "algebraSourceFinding": {
     "address": "0xe5e0235245E3C05f66447a513c4e4e673805964b",
@@ -171,15 +172,16 @@
   },
   "threeFamilyDualHarness": {
     "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
-    "offlineChecks": "10/10 PASS on cloud-matching local snapshot",
+    "offlineChecks": "initial 10/10 retained below; current evidence plus candidate-emitter regressions 21/21 PASS on cloud and clean source snapshot, independently rerun with compile caches disabled",
     "testLog": "logs/four-family-integration-20261009.CuNyy3/three-family-dual-contract-final-20261009.log",
     "testLogSha256": "e56dbf89d9da886ca8a46885d5c2a196aa78ba5128fd377e110d20c8e184363e",
-    "historicalExecution": "NOT RUN; existing saved Ready and prices need current source/admission binding, including Compound effect-proof revalidation on a copy",
+    "historicalExecution": "same-N real BotVM dual receipts now recorded for all three samples under historicalIntegration; YB/Compound remain incomplete-production-reference, not full acceptance",
     "scope": "fixed Kyber/YB/Compound real samples, same N state and environment, production Exact/quoted/runtime construction and real BotVM on owned local fork; actor-input-only funding, independent balance deltas and old-output-inventory negative controls",
     "missingReference": "missing production effective amount is incomplete, never fabricated P; original redeemUnderlying mapped burned shares is not identical original-interface reproduction",
-    "limits": "thin correctness harness, not an alternative pricing/sizing scheduler; covers fixed original directions, not all supported Kyber directions; diagnostic durations are not performance acceptance"
+    "limits": "thin correctness harness, not an alternative pricing/sizing scheduler; now covers both Kyber directions but only the fixed historical pools/amounts. Diagnostic durations are not performance acceptance"
   },
-  "workingSnapshotVerification": {
+  "priorWorkingSnapshotVerification": {
+    "scopeAtTime": "retained evidence from before candidate-emitter and observation-guard changes; this aggregate is NOT the current whole-tree fingerprint",
     "location": "/tmp/mev-bv2-package-check.tHHPn6/listener",
     "sourceScope": "entire listener/src plus package.json, tsconfig.json and tsconfig.live.json; includes other owners' current uncommitted source without committing it",
     "files": 1599,
@@ -190,6 +192,81 @@
     "cleanCommitSnapshot": "separately passed shared dual 71/71, strict-central runtime 167/167, lifecycle, composition and declaration gates; excludes others' dirty code from commit",
     "cloudBuild": "NOT RUN: verified another owner's live2500 service active with MainPID 186051; local checks are not cloud performance",
     "review": "non-author dynamic-model review identified no local blocker but required quiet-block coordinator and distinct-origin historical evidence; both evidence gaps addressed here. Actual historical swap settlement and performance still incomplete"
+  },
+  "historicalIntegration": {
+    "environment": "same canonical N-end state plus N execution environment, owned local Anvil, real BotVM and production Family Exact/quoted/runtime code; NOT original transaction precall state or opportunity/EV reproduction",
+    "actors": {"owner": "0x1000000000000000000000000000000000000001", "executor": "0x1000000000000000000000000000000000000002"},
+    "productionSourceTreeSha256": "3ce6c391ad6c957b3da137ea1d444411ddb7f1d7b5a491d257c1bf1ed7499512",
+    "runtimeConstruction": "all recorded directions: Exact=0, quoted=0, RPC=0, quotedFallback=false; separate quoted path remains executed",
+    "kyber": {
+      "block": 25953136,
+      "tx": "0x023fd22564532537a14977836049e12e8df706c4872020a9302fdfbb383230d5",
+      "instance": "0xf138462c76568cdfd77c6eb831e973d6963f2006",
+      "strictGraphPrices": "valid current-source memo, 2 directions, raw=2/effective=2; production amount present in both directions",
+      "dualExecutions": "16/16 PASS: both directions, two amounts each, quoted/runtime with and without existing output inventory; every signed output delta=0; missing-input negatives retained",
+      "amounts": [
+        {"direction": "USDT->WETH", "amountIn": "4883193", "amountOut": "1949010236670892", "reference": "production effective"},
+        {"direction": "USDT->WETH", "amountIn": "1838763", "amountOut": "738408124938195", "reference": "original TX amount, N-end state"},
+        {"direction": "WETH->USDT", "amountIn": "2000000000000000", "amountOut": "4883193", "reference": "production effective"},
+        {"direction": "WETH->USDT", "amountIn": "4000000000000000", "amountOut": "9670431", "reference": "twice production amount"}
+      ],
+      "evidence": "logs/four-family-integration-20261009.CuNyy3/kyber-current-N25953136-attempt01/dual-attempt05-final-source.json",
+      "sha256": "bd57d394369ce569bcc65955834531b80f08af4fe7750cc3505b4fd9656cde71",
+      "limit": "sample correctness only; not all pools/ticks, representative performance or original precall parity"
+    },
+    "yieldBasisLt": {
+      "block": 26003536,
+      "tx": "0x022a9ff85219675bcf0a0a2b17c76ac72b98d5e2c4177bc104edff56e706ee77",
+      "instance": "0x2b9c9f3bdceb5d8e36a4704f08a78fca53343cea",
+      "strictGraphPrices": "production scoped revalidation on a copy: 1 admitted instance/1 edge/raw=1; effective missing-valuation because the single-family graph lacks a WETH-to-LT entry",
+      "dualExecutions": "4/4 PASS at original TX share amount in N-end state, quoted/runtime with/without old output inventory, signed delta=0",
+      "amountIn": "41886001261762273",
+      "amountOut": "42106999995685045",
+      "result": "incomplete-production-reference; exit 2, errors=[]; production P not invented",
+      "evidence": "logs/four-family-integration-20261009.CuNyy3/yb-current-N26003536-attempt02/dual-attempt01.json",
+      "sha256": "424e1aeed40d8c3db032647bdd3de3e472ea9da2c9e09c259854e3417d0c023a"
+    },
+    "compoundCToken": {
+      "block": 25944463,
+      "tx": "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df",
+      "strictGraphPrices": "production scoped revalidation on a copy after nomination correction: 2 admitted instances/2 edges/raw=2; both effective rows missing-valuation",
+      "candidateBinding": "both selected candidates now have candidate.address==instanceKey; pre-fix attempt01 incorrectly bound cUSDC candidate to cDAI and deduplicated the actual cDAI candidate; failure retained",
+      "dualExecutions": "8/8 PASS: each market at observed burned-share input, quoted/runtime with/without old output inventory, signed delta=0",
+      "amounts": [
+        {"instance": "0x39aa39c021dfbae8fac545936693ac917d5e7563", "amountIn": "16895162987", "amountOut": "4278414"},
+        {"instance": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643", "amountIn": "17733672807", "amountOut": "4445699958193387588"}
+      ],
+      "result": "incomplete-production-reference; exit 2, errors=[]; redeemUnderlying observed burned shares test redeem, not original-interface/precall reproduction",
+      "evidence": "logs/four-family-integration-20261009.CuNyy3/compound-current-N25944463-attempt02/dual-attempt03.json",
+      "sha256": "8a059a12a87e6ca2b3199b22fc9f9d65b4c8210664eb8ee3b04e440e0014bc5e",
+      "finalClassifierRerun": {
+        "evidence": "logs/four-family-integration-20261009.CuNyy3/compound-current-N25944463-attempt02/dual-attempt05-byte-guard-enabled.json",
+        "sha256": "c263bda18a1208273e1fbbf30819bab42e875da3290e8744cf0bc62365424e30",
+        "result": "8/8 same-state executions PASS, signed deltas=0, errors=[]; exit 2 still means production-reference incomplete",
+        "precedingFailure": "attempt04 preserved: stopped during input validation because caller omitted existing opt-in Family flag; no protocol execution. attempt05 enables that flag only for its child process, not production defaults"
+      }
+    },
+    "nominationCorrection": {
+      "scope": "Compound and Yield Basis Family-local nomination only; no central behavior change",
+      "cause": "shared transaction helper selected the first matching event, not necessarily emitted by the nominated market; trace fallback could also select another call",
+      "change": "filter receipt logs by nomination.address before event decoding; successful event evidence does not require transaction trace; reject out-of-scope recent-log fallback",
+      "regressionBefore": "new six-test suite on old source: 2 PASS/4 FAIL",
+      "regressionAfter": "eight address-binding tests PASS; combined evidence/nomination 21/21 PASS on cloud and clean local source snapshot",
+      "testLog": "logs/four-family-integration-20261009.CuNyy3/nomination-probe-final-20261009.log",
+      "testLogSha256": "c2a03b3ebebd5b0da176468dc47f2e55cf24971187516190c84cfc5814ad94f2",
+      "independentReview": "agent 01a11aba-3bcc-7620-8433-2b9d1b94022f independently reran 21/21 with caches disabled; no local-contract blocker; not an independent historical or performance verdict"
+    },
+    "observationGuardCorrections": {
+      "changes": ["accept empty or exact EIP-7702 delegation owner code, never arbitrary contract origin", "balance-slot probe requires exact ABI word and injected value; local declared EVM revert may disprove that injected-slot hypothesis", "reject odd-length malformed revert bytes; HTTP/429/unknown/upstream/baseline/protected-read failures still propagate"],
+      "safety": "two probes, unique slot, protected balances/totalSupply, executor-code guard and atomic rollback remain; no production owner/executor code overwritten",
+      "failedAttempts": "preserved incompatible old owner/executor and balance-probe attempts in original per-family attempt paths; no failed run replaced with a success",
+      "historicalReceiptVersion": "original three artifacts predate final odd-length-data negative and retain their helper hashes; additional Compound attempt05 runs final helper 1b52adef4b0f137435ae20bca31119682ce72a68f09cb8bbe21ed254b69b34de; independent offline regression also passes"
+    },
+    "codifyCommit": "15c1b1fe15180f287c57d2a883eeee2084b19438",
+    "officialReconciliation": "current-ready-status-selection.json includes successful status executions for YB and Compound attempt02; kyber-current-prices-selection.json and kyber-dual-selection.json bind actual production prices/dual calls",
+    "build": "build:live PASS on pure committed baseline plus scoped changes; cloud build still NOT RUN during other owner's active live2500",
+    "generatedArtifactIsolation": "official generator pure result and cloud working result each contain 429 exact entries; all nine differences belong to pre-existing other-owner UniswapV1 changes. Commit only pure generated artifact; keep working artifact intact",
+    "safety": "original handoff Ready/checkpoint files unchanged; no activation/default change, live start, deployment, signature or broadcast"
   },
   "performanceGate": {
     "required": "correctness plus live-source production-stage representative-load acceptance before delivery",
