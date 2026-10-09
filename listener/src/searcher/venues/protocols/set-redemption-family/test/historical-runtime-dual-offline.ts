@@ -10,6 +10,7 @@ import { MODULE } from "../codec.js";
 import { SAMPLE, ERC20, word, observeBalance, assertBasket, historicalReceipt } from "./historical-runtime-observations.js";
 import { CORE } from "../legacy.js";
 import { LEGACY_SAMPLES, legacyHistoricalReceipt, assertExecutionRevert, assertLegacyInvalidAmountEvidence } from "./historical-legacy-observations.js";
+import { options } from "./historical-runtime-dual.js";
 
 const components = [11, 12, 13, 14].map(n => ethers.toBeHex(n, 20));
 const recipient = ethers.toBeHex(91, 20), next = ethers.toBeHex(92, 20);
@@ -133,6 +134,20 @@ test("invalid amount controls reject unrelated Exact errors, OOG and wrong burn 
       assert.throws(() => assertLegacyInvalidAmountEvidence(wrongBurn), /authenticated Set burn/);
     }
   }
+});
+
+test("reference inputs require explicit paired selection and a legacy unary issuance direction", () => {
+  const root = fileURLToPath(new URL("../../../../../../../", import.meta.url));
+  const out = resolve(mkdtempSync(resolve(root, "logs/set-reference-options.")), "result.json");
+  const base = ["--ready", "unused", "--prices", "unused", "--rpc-file", "unused", "--out", out, "--port", "8593"];
+  const issue = [...base, "--sample", "legacy-base", "--direction", "issue"];
+  const donor = ["--reference-prices", "donor.json", "--reference-edges", '["recorded-edge"]'];
+  assert.deepEqual(options([...issue, ...donor]).referenceEdges, ["recorded-edge"]);
+  assert.equal(options(issue).referencePrices, undefined);
+  assert.throws(() => options([...issue, ...donor.slice(0, 2)]), /requires prices/);
+  assert.throws(() => options([...issue, ...donor.slice(2)]), /requires prices/);
+  assert.throws(() => options([...base, ...donor]), /unary issuance/);
+  assert.throws(() => options([...issue, ...donor.slice(0, 2), "--reference-edges", '["a","b"]']), /unary issuance/);
 });
 
 test("offline input failure retains a private receipt; an existing receipt is never overwritten", () => {

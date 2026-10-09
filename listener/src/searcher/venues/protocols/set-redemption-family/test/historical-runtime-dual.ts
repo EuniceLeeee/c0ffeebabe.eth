@@ -12,7 +12,7 @@ import { concatBytes } from "../../../../../encoder.js";
 import type { ResolvedPlanNode } from "../../../../../types.js";
 import { AnvilStateBackend } from "../../../../../shared/state/state-backend.js";
 import { buildExecuteCalldata, loadBotVmRuntimeCode } from "../../../../../shared/executor/botvm-executor.js";
-import { parseAtBlockJson } from "../../../../blockscan-at-block-cli.js";
+import { atBlockJson, parseAtBlockJson } from "../../../../blockscan-at-block-cli.js";
 import { createAdapterFamilyExactQuoteCache } from "../../../../adapter-family-exact-quote-cache.js";
 import { createStrictCentralAdapterRuntime } from "../../../../strict-central-adapter-runtime.js";
 import { resolveStrictReadyRuntime } from "../../../../strict-ready-runtime.js";
@@ -34,6 +34,7 @@ import { CORE, CORE_LIBRARIES, LEGACY_SET } from "../legacy.js";
 import type { Descriptor } from "../types.js";
 import { SAMPLE as BASIC_SAMPLE, ERC20, lower, same, json, sha, word, observeBalance, assertBasket, historicalReceipt } from "./historical-runtime-observations.js";
 import { LEGACY_SAMPLES, legacyHistoricalReceipt, assertExecutionRevert, assertLegacyInvalidAmountEvidence } from "./historical-legacy-observations.js";
+import { splicedProductionAmount } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 
 const ROOT = fileURLToPath(new URL("../../../../../../../", import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
@@ -65,14 +66,16 @@ function sourcePin() {
     packageSha256: sha(json(packages.map(p => [p, sha(readFileSync(resolve(ROOT, p)))]))),
     testSha256: sha(readFileSync(SELF)), helperSha256: sha(readFileSync(new URL("./historical-runtime-observations.ts", import.meta.url))),
     legacyHelperSha256: sha(readFileSync(new URL("./historical-legacy-observations.ts", import.meta.url))),
+    referenceHelperSha256: ["kyber-yb-compound/evidence.ts", "three-family/historical-input-observations.ts"].map(p =>
+      [p, sha(readFileSync(new URL("../../../../test/family-integration/" + p, import.meta.url)))]),
     artifactSha256: sha(readFileSync(resolve(ROOT, "out/BotVM.sol/BotVM.json"))),
     familyDefinitionHash: familyDefinitionHash(FAMILY), familyMemoDefinitionHash: familyMemoDefinitionHash(FAMILY) };
 }
 
-function options(argv: string[]) {
+export function options(argv: string[]) {
   const names = ["--ready", "--prices", "--rpc-file", "--out", "--port"], values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
-    assert([...names, "--sample", "--direction"].includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
+    assert([...names, "--sample", "--direction", "--reference-prices", "--reference-edges"].includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
     assert(argv[i + 1] && !argv[i + 1].startsWith("--"), "missing option value");
     values.set(argv[i], argv[i + 1]);
   }
@@ -81,13 +84,19 @@ function options(argv: string[]) {
   assert(sample === "basic" || Object.hasOwn(LEGACY_SAMPLES, sample), "unknown sample");
   const direction = values.get("--direction") ?? "redeem";
   assert(direction === "redeem" || (direction === "issue" && sample !== "basic"), "unsupported direction");
+  assert.equal(values.has("--reference-prices"), values.has("--reference-edges"), "reference requires prices and explicit edge selection");
+  const referenceEdges: string[] = JSON.parse(values.get("--reference-edges") ?? "[]");
+  assert(Array.isArray(referenceEdges) && referenceEdges.every(e => typeof e === "string" && e.length > 0));
+  if (values.has("--reference-prices")) assert(direction === "issue" && referenceEdges.length === 1,
+    "this reference increment covers one legacy unary issuance input only");
   assert.equal(values.get("--port"), "8593", "this narrow test owns only loopback port 8593");
   const out = resolve(values.get("--out")!), parent = realpathSync(dirname(out)), logs = realpathSync(resolve(ROOT, "logs"));
   assert(parent === logs || parent.startsWith(logs + sep), "output parent must exist under this repo's logs/");
   assert.equal(git("check-ignore", "--", out).trim(), out, "output must be gitignored");
   // Reserve output before resolving/reading inputs, so input failures persist.
   return { ready: resolve(values.get("--ready")!), prices: resolve(values.get("--prices")!),
-    rpcFile: resolve(values.get("--rpc-file")!), out, sample, issue: direction === "issue" };
+    rpcFile: resolve(values.get("--rpc-file")!), out, sample, issue: direction === "issue",
+    referencePrices: values.has("--reference-prices") ? resolve(values.get("--reference-prices")!) : undefined, referenceEdges };
 }
 
 function currentBotVm() {
@@ -129,7 +138,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const startPin = sourcePin(); report.code = { headAtStart: git("rev-parse", "HEAD").trim(), ...startPin };
     const readyPath = realpathSync(args.ready), pricePath = realpathSync(args.prices);
     const provenancePath = realpathSync(resolve(dirname(pricePath), "input.json"));
-    const inputs = [readyPath, pricePath, provenancePath].map(path => ({ path, bytes: readFileSync(path) }));
+    const referencePath = args.referencePrices ? realpathSync(args.referencePrices) : undefined;
+    const referenceDeclarationPath = referencePath ? realpathSync(resolve(dirname(referencePath), "declaration.json")) : undefined;
+    const inputs = [readyPath, pricePath, provenancePath, ...(referencePath ? [referencePath, referenceDeclarationPath!] : [])]
+      .map(path => ({ path, bytes: readFileSync(path) }));
     const [readyInput, priceInput, provenanceInput] = inputs;
     report.inputHashes = inputs.map(i => ({ path: i.path, sha256: sha(i.bytes) }));
     checkPins = () => {
@@ -183,6 +195,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     else assert.equal(d.legacy, undefined);
     if (args.issue) assert(d.legacy?.issuance && d.components.length === 1, "unary issuance must be admitted");
     const inputToken = args.issue ? d.components[0] : d.set;
+    const donor = referencePath ? { prices: parseAtBlockJson(inputs[3].bytes.toString()),
+      declaration: parseAtBlockJson(inputs[4].bytes.toString()) } : undefined;
+    const reference = donor ? splicedProductionAmount(donor.prices, donor.declaration, args.referenceEdges, inputToken) : undefined;
+    if (reference) report.referenceInputSource = { ...reference, prices: referencePath, declaration: referenceDeclarationPath,
+      sourceCommit: donor!.declaration.head, cfg: JSON.parse(atBlockJson(donor!.prices.cfg)), graphEdges: donor!.prices.runtime.graph.edges.length,
+      inputOnly: true, actualLiveEvidence: false };
     const outputTokens = args.issue ? [d.set] : [...d.components];
     const tokens = [inputToken, ...outputTokens].map(lower);
     const dependencies = [...new Set([...tokens, d.module, d.controller,
@@ -379,9 +397,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       // distinct trial. Never shrink or replace the actual production P.
       const second = row?.amountIn === SAMPLE.amountIn ? SAMPLE.amountIn / 2n : SAMPLE.amountIn;
       const unit = args.issue ? BigInt(LEGACY_SET.decodeFunctionResult("getUnits", await call(d.set, LEGACY_SET.encodeFunctionData("getUnits")))[0][0]) : 0n;
-      const amounts: readonly (readonly [string, bigint])[] = legacy
+      const amounts: (readonly [string, bigint])[] = legacy
         ? [["legal-unit-N-not-production-P", args.issue ? unit : legacy.amounts[0]], ["legal-multi-unit-N-not-production-P", args.issue ? unit * 1000n : legacy.amounts[1]]]
         : [["production-P", row!.amountIn], ["historical-amount-at-N", second]];
+      if (reference && reference.amountIn % unit === 0n) {
+        amounts.push(["spliced-production-reference", reference.amountIn]); report.expectedSamples++;
+      }
       for (const [label, amountIn] of amounts) {
         const sample: Record<string, any> = { routeKey: route.routeKey, edgeId, label, amountIn,
           productionP: row?.amountIn ?? null, selectedComponent: tokenOut, status: "failed", executions: [] };
@@ -457,6 +478,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           assert(sample.executions.every((e: any) => e.status === "pass"), "one or both encoders failed; evidence retained");
           assert.deepEqual(sample.executions[0].balances, sample.executions[1].balances, "old/runtime basket differs");
           sample.status = "pass";
+          if (label === "spliced-production-reference") report.productionReferenceAcceptance = {
+            status: "pass-with-spliced-input", amountIn, naturalTargetValuation: "unmet" };
         } catch (e) { sample.error = failure(e); }
         abort.signal.throwIfAborted();
       }
@@ -493,21 +516,32 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       stage = "legacy-issuance-quantization-control";
       const unit = BigInt(LEGACY_SET.decodeFunctionResult("getUnits", await call(d.set, LEGACY_SET.encodeFunctionData("getUnits")))[0][0]);
       assert(unit > 1n, "sample must have a nontrivial component unit");
-      const amountIn = unit + 1n, quote = await exact(rows[0].route, amountIn);
-      report.invalidAmountControls = [{ label: "non-component-multiple", amountIn, unit, quote, status: "failed" }];
-      assert.equal(quote.status, "failed");
-      if (quote.status !== "failed") throw Error("non-component multiple unexpectedly quoted");
-      assert.equal(quote.outcome.reasonCode, "exact-decode:set-legacy input must be an exact component-unit multiple");
-      const overrides: Overrides = { [OWNER]: { balance: ethers.toQuantity(100n * 10n ** 18n) }, [EXECUTOR]: { code: botvm.code },
-        [inputToken]: { stateDiff: { [slots.get(inputToken)!]: word(amountIn) } } };
-      const trace = await rpc("debug_traceCall", [{ from: OWNER, to: EXECUTOR,
-        data: buildExecuteCalldata(runtimeProgramScript(ethers.getBytes(legs[0].program), amountIn)), gas: "0x800000",
-        gasPrice: ethers.toQuantity(header.baseFeePerGas) }, pin, { tracer: "callTracer", timeout: "30s", stateOverrides: overrides }]);
-      report.invalidAmountControls[0].trace = trace;
-      assertExecutionRevert(trace);
-      assert.equal(trace.output.slice(0, 10), "0x08c379a0");
-      assert.equal(ethers.AbiCoder.defaultAbiCoder().decode(["string"], "0x" + trace.output.slice(10))[0], "runtime amount mismatch");
-      report.invalidAmountControls[0].status = "pass";
+      const invalid: (readonly [string, bigint])[] = [["non-component-multiple", unit + 1n]];
+      if (reference && reference.amountIn % unit !== 0n) invalid.push(["spliced-production-reference", reference.amountIn]);
+      report.invalidAmountControls = [];
+      for (const [label, amountIn] of invalid) {
+        const quote = await exact(rows[0].route, amountIn);
+        const control: Record<string, any> = { label, amountIn, unit, quote, status: "failed" };
+        report.invalidAmountControls.push(control);
+        assert.equal(quote.status, "failed");
+        if (quote.status !== "failed") throw Error("non-component multiple unexpectedly quoted");
+        assert.equal(quote.outcome.reasonCode, "exact-decode:set-legacy input must be an exact component-unit multiple");
+        const overrides: Overrides = { [OWNER]: { balance: ethers.toQuantity(100n * 10n ** 18n) }, [EXECUTOR]: { code: botvm.code },
+          [inputToken]: { stateDiff: { [slots.get(inputToken)!]: word(amountIn) } } };
+        const trace = await rpc("debug_traceCall", [{ from: OWNER, to: EXECUTOR,
+          data: buildExecuteCalldata(runtimeProgramScript(ethers.getBytes(legs[0].program), amountIn)), gas: "0x800000",
+          gasPrice: ethers.toQuantity(header.baseFeePerGas) }, pin, { tracer: "callTracer", timeout: "30s", stateOverrides: overrides }]);
+        control.trace = trace;
+        assertExecutionRevert(trace);
+        assert.equal(trace.output.slice(0, 10), "0x08c379a0");
+        assert.equal(ethers.AbiCoder.defaultAbiCoder().decode(["string"], "0x" + trace.output.slice(10))[0], "runtime amount mismatch");
+        control.status = "pass";
+        if (label === "spliced-production-reference") report.productionReferenceAcceptance = {
+          status: "correct-rejection-not-executable", amountIn, unit, remainder: amountIn % unit,
+          exact: "failed: non-component-multiple", runtime: "reverted: runtime amount mismatch",
+          protocolSemantics: "Core.issue takes output quantity, not component amountIn; no exact-full-spend output multiple exists for this input",
+          amountChanged: false, naturalTargetValuation: "unmet" };
+      }
     }
     report.exactCache = cache.snapshot();
     assert(report.samples.length === report.expectedSamples && report.samples.every((s: any) => s.status === "pass"),
@@ -534,6 +568,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE (with sibling input.json) --rpc-file FILE --out NEW_IGNORED_JSON --port 8593 [--sample basic|legacy-base|legacy-rebalancing] [--direction redeem|issue]; legacy trials do not claim production P acceptance");
+  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE (with sibling input.json) --rpc-file FILE --out NEW_IGNORED_JSON --port 8593 [--sample basic|legacy-base|legacy-rebalancing] [--direction redeem|issue] [--reference-prices FILE --reference-edges JSON_ARRAY]; reference input is borrowed only for unary issuance, rejection is not executable production P");
   else main().catch(() => { console.error("Set historical test: input/output reservation failed; existing receipts were not overwritten"); process.exitCode = 1; });
 }
