@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import { KYSWAP_POOL_INTERFACE as KYBER } from "../../../venues/swaps/kyberswap-elastic-family/abi.js";
+import { ALGEBRA_POOL_INTERFACE as ALGEBRA } from "../../../venues/swaps/algebra-integral-family/abi.js";
 import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-family/abi.js";
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
 import { successfulRedeemCalls, classifyRedeemLog } from "../../../venues/protocols/compound-ctoken-family/test/history-evidence.js";
@@ -18,6 +19,12 @@ export const SAMPLES = {
   compound: { family: "protocol:compound-ctoken", number: 25944463,
     tx: "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df",
     instances: ["0x39aa39c021dfbae8fac545936693ac917d5e7563", "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643"] },
+  algebra: { family: "swap:algebra-integral", number: 26018534,
+    tx: "0x02175d2ac2e806bc6e1033cae640cf45509b7ded4a2e64ebcbba9c425afff5b7",
+    instances: ["0x76a278bd71f566ee6ba2fe438f6099c8d8f98f43"] },
+  algebra2: { family: "swap:algebra-integral", number: 26030898,
+    tx: "0x006223028f05865619d07584c43cf67cb608705d04ebc732e15bf40869d030b8",
+    instances: ["0x915fd34cadd63907b51eb64dddc2eadd114a0bed"] },
 } as const;
 export type SampleKey = keyof typeof SAMPLES;
 export const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -56,7 +63,7 @@ export function options(argv: string[]) {
   }
   assert.equal(v.size, names.length, "all five arguments required");
   const family = v.get("--family")!;
-  assert(Object.hasOwn(SAMPLES, family), "only the three fixed Family samples are supported");
+  assert(Object.hasOwn(SAMPLES, family), "only the registered fixed Family samples are supported");
   const portText = v.get("--port")!; assert(/^[1-9][0-9]*$/.test(portText));
   const port = Number(portText); assert(port >= 1024 && port <= 65535 && Number.isSafeInteger(port));
   return { family: family as SampleKey, port, ready: v.get("--ready")!, prices: v.get("--prices")!, out: v.get("--out")! };
@@ -114,22 +121,25 @@ function successfulCalls(trace: any, target: string, selector: string): any[] {
 /** Extract only one unambiguous real successful call + event per instance. */
 export function originalLeg(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any) {
   assert(!trace.error && !trace.revertReason, "original transaction reverted");
-  const abi = key === "kyber" ? KYBER : key === "yb" ? LT : CT;
-  const event = key === "kyber" ? "Swap" : key === "yb" ? "Withdraw" : "Redeem";
+  const isSwap = key === "kyber" || key === "algebra" || key === "algebra2";
+  const abi = key === "kyber" ? KYBER : isSwap ? ALGEBRA : key === "yb" ? LT : CT;
+  const event = isSwap ? "Swap" : key === "yb" ? "Withdraw" : "Redeem";
   const logs = receipt.logs.filter((l: any) => same(l.address, instance) && same(l.topics?.[0] ?? "", abi.getEvent(event)!.topicHash));
   assert.equal(logs.length, 1, "ambiguous original event count");
   const a = abi.parseLog(logs[0])!.args;
   let tokenIn: string, tokenOut: string, amountIn: bigint, amountOut: bigint, caller: string, recipient: string;
   let originalInterface: string, comparison: string;
-  if (key === "kyber") {
-    const calls = successfulCalls(trace, instance, KYBER.getFunction("swap")!.selector); assert.equal(calls.length, 1);
-    const c = calls[0], data = KYBER.decodeFunctionData("swap", c.input), out = KYBER.decodeFunctionResult("swap", c.output);
+  if (isSwap) {
+    const calls = successfulCalls(trace, instance, abi.getFunction("swap")!.selector); assert.equal(calls.length, 1);
+    const c = calls[0], data = abi.decodeFunctionData("swap", c.input), out = abi.decodeFunctionResult("swap", c.output);
     assert.equal(out[0], a.amount0); assert.equal(out[1], a.amount1);
     const zeroIn = a.amount0 > 0n && a.amount1 < 0n;
     assert(zeroIn || (a.amount1 > 0n && a.amount0 < 0n), "not a settled one-input swap");
     tokenIn = zeroIn ? descriptor.token0 : descriptor.token1; tokenOut = zeroIn ? descriptor.token1 : descriptor.token0;
     amountIn = BigInt(zeroIn ? a.amount0 : a.amount1); amountOut = -BigInt(zeroIn ? a.amount1 : a.amount0);
-    assert(data.swapQty > 0n && data.swapQty === amountIn && data.isToken0 === zeroIn, "sample is not full exact-input swap");
+    const required = key === "kyber" ? data.swapQty : data.amountRequired;
+    const direction = key === "kyber" ? data.isToken0 : data.zeroToOne;
+    assert(required > 0n && required === amountIn && direction === zeroIn, "sample is not full exact-input swap");
     caller = c.from; recipient = data.recipient;
     assert(same(a.sender, caller) && same(a.recipient, recipient)); originalInterface = "swap/exact-input";
     comparison = "same interface at N-end; original pre-call state NOT restored";

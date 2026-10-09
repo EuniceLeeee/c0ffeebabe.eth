@@ -1,6 +1,6 @@
 // Opt-in, fixed-sample Family acceptance. Never imported as an automatic test.
 // MAINNET_RPC_URL is injected by the operator; no env/key files are opened.
-// --family kyber|yb|compound --ready FILE --prices FILE --port FREE_PORT --out NEW_FILE
+// --family kyber|yb|compound|algebra|algebra2 --ready FILE --prices FILE --port FREE_PORT --out NEW_FILE
 // Requires the Family's existing activation env flag; never changes defaults.
 // N-end + N environment single-leg evidence, NOT original-precall/EV/performance.
 import assert from "node:assert/strict";
@@ -75,8 +75,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   const args = options(argv), sample = SAMPLES[args.family];
   // Exclusive creation happens before work, preserving every previous failure.
   const fd = openSync(resolve(args.out), "wx", 0o600), started = performance.now();
-  const report: any = { schema: "kyber-yb-compound-same-n-dual/v1", result: "failed", family: sample.family,
-    claim: "fixed real instances, both Kyber directions and original protocol directions, N-end/N environment, independent single-leg quote/quoted/runtime receipts only",
+  const report: any = { schema: "four-family-same-n-dual/v1", result: "failed", family: sample.family,
+    claim: "fixed real instances, both swap directions and original protocol directions, N-end/N environment, independent single-leg quote/quoted/runtime receipts only",
     originalPreCallParity: "NOT RUN", representativePerformance: "NOT RUN", samples: [], errors: [],
     safety: { signing: false, broadcast: false, minedBlocks: 0, protocolOverrides: false,
       mainExecutionFunding: "actor input only; existing input/output inventory preserved",
@@ -235,8 +235,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assertHistoricalDiscoveryReceipt(await rpc("eth_getTransactionReceipt", [candidate.transactionHash]), candidate, source);
       const original = originalLeg(args.family, entry.instanceKey, entry.instance.descriptor, receipt, trace);
       directions.push({ entry, original, tokenIn: original.tokenIn, tokenOut: original.tokenOut });
-      if (args.family === "kyber") {
-        assert.equal(entry.instance.routes.length, 2, "fixed Kyber instance must project both directions");
+      if (["kyber", "algebra", "algebra2"].includes(args.family)) {
+        assert.equal(entry.instance.routes.length, 2, "fixed swap instance must project both directions");
         directions.push({ entry, original: null, tokenIn: original.tokenOut, tokenOut: original.tokenIn });
       }
     }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ethers } from "ethers";
 import { KYSWAP_POOL_INTERFACE as KYBER } from "../../../venues/swaps/kyberswap-elastic-family/abi.js";
+import { ALGEBRA_POOL_INTERFACE as ALGEBRA } from "../../../venues/swaps/algebra-integral-family/abi.js";
 import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-family/abi.js";
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
 import { options, SAMPLES, ERC20, assertHeader, assertPriceInput, productionAmount, originalLeg,
@@ -116,6 +117,35 @@ test("Kyber observed signed amounts select only the real full exact-input direct
   assert.throws(() => originalLeg("kyber", instance, descriptor, receipt, { ...trace, input: KYBER.encodeFunctionData("swap", [actor, -19n, false, 1n, "0x"]) }));
   assert.throws(() => originalLeg("kyber", instance, descriptor, receipt, { error: "reverted", calls: [trace] }));
 });
+
+for (const key of ["algebra", "algebra2"] as const) {
+  test(`${key}: observed swap binds its own ABI, direction, full input and settled output`, () => {
+    const instance = SAMPLES[key].instances[0], descriptor = { token0, token1: asset };
+    const args = ["--family", key, "--ready", "ready.json", "--prices", "prices.json", "--port", "18593", "--out", "new.json"];
+    assert.equal(options(args).family, key);
+    for (const zeroToOne of [true, false]) {
+      const amount0 = zeroToOne ? 17n : -19n, amount1 = zeroToOne ? -19n : 17n;
+      const outputToken = zeroToOne ? asset : token0;
+      const log = event(ALGEBRA, "Swap", [actor, actor, amount0, amount1, 2n ** 96n, 100n, 0, 37, 5], instance);
+      const receipt = { logs: [log, event(ERC20, "Transfer", [instance, actor, 19n], outputToken)] };
+      const trace = { type: "CALL", from: actor, to: instance,
+        input: ALGEBRA.encodeFunctionData("swap", [actor, zeroToOne, 17n, 1n, "0x"]),
+        output: ALGEBRA.encodeFunctionResult("swap", [amount0, amount1]) };
+      const original = originalLeg(key, instance, descriptor, receipt, trace);
+      assert.equal(original.amountIn, 17n); assert.equal(original.amountOut, 19n);
+      assert.equal(original.tokenIn, zeroToOne ? token0 : asset); assert.equal(original.tokenOut, outputToken);
+      for (const input of [
+        ALGEBRA.encodeFunctionData("swap", [actor, zeroToOne, -19n, 1n, "0x"]),
+        ALGEBRA.encodeFunctionData("swap", [actor, zeroToOne, 18n, 1n, "0x"]),
+        ALGEBRA.encodeFunctionData("swap", [actor, !zeroToOne, 17n, 1n, "0x"]),
+      ]) assert.throws(() => originalLeg(key, instance, descriptor, receipt, { ...trace, input }));
+      assert.throws(() => originalLeg(key, instance, descriptor, receipt, { calls: [{ error: "reverted", calls: [trace] }] }));
+      const univ3Log = { ...log, topics: [ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)"), ...log.topics.slice(1)] };
+      assert.throws(() => originalLeg(key, instance, descriptor, { logs: [univ3Log, receipt.logs[1]] }, trace));
+      assert.throws(() => originalLeg(key, instance, descriptor, { logs: [log] }, trace));
+    }
+  });
+}
 
 test("YB accepts ordinary withdraw; same Withdraw event with emergency call is insufficient", () => {
   const instance = SAMPLES.yb.instances[0], descriptor = { share: instance, asset };

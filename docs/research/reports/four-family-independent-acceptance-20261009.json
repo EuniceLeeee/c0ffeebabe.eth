@@ -4,7 +4,7 @@
   "workspace": "/opt/mev-cloud/family-runtime-20261007",
   "branch": "codex/family-runtime-actual-20261007",
   "baseCommit": "bba7e01fda781093a2d176f6305b120451dd41fc",
-  "revisionParent": "06ab4d7c3c2a63840c2d60ae805d43da1df9f6ee",
+  "revisionParent": "8ff7f80f0dd2e5ebd2b5208ebc8ca7ce0927a310",
   "latestUserOrder": [
     "independently accept the integrated four Families for correctness AND latency",
     "remaining authorized Set/DODO/xWin/Curve/Balancer V3 Hook/Ekubo/Frax variants",
@@ -37,7 +37,7 @@
     "testLog": "logs/four-family-integration-20261009.CuNyy3/kyber-central-and-contract.after.log",
     "testLogSha256": "e159635bd13422e17c4b64a4bf428b34beb5959ffe9a324a5c8fa40784aa5afb",
     "review": "independent non-author rerun: 3/3 central and 33/33 contracts; no local blocking finding",
-    "claim": "implemented with deterministic synthetic production-issuer failure-to-pass; NOT historical EVM, adapter_merge_ready, or representative performance"
+    "claim": "initial producer regression is synthetic; later historicalIntegration.kyber separately proves the fixed same-N dual sample. Neither establishes adapter_merge_ready or representative performance"
   },
   "yieldBasisLt": {
     "change": "existing each-block effective refresh for time/oracle/ramp changes; same-source current staker/executor eligibility in the amount quote",
@@ -99,7 +99,7 @@
     "kyber": "representative instance/amount/tick coverage and production-stage performance; the historical two-direction sample below is not full-family acceptance",
     "yieldBasisLt": "production-reference amount through genuine background valuation connectivity, additional amount/variant coverage, then representative performance; original-amount same-state dual receipts already pass",
     "compoundCToken": "production-reference amount through genuine background valuation connectivity, additional amount/variant coverage, then representative performance; both corrected candidate-emitter identities and original-share-amount dual receipts already pass",
-    "algebraIntegral": "bound Cypher Quoter branch implemented; two receipt-driven production lifecycle/Exact samples now resolve. Current-source Ready/Graph/production effective, real same-N quoted/runtime receipts, other intended instances and representative performance remain incomplete",
+    "algebraIntegral": "two current-source single-block Ready/Graph/effective and real dual execution samples now pass, recorded under algebraHistoricalIntegration; broader instance/variant coverage plus representative performance remain pending",
     "allFour": "full coverage and representative-load effective/sim timing remain incomplete; no live or adapter_merge_ready verdict"
   },
   "algebraSourceFinding": {
@@ -117,7 +117,7 @@
     "publicSource": "https://etherscan.io/address/0x02f22D58d161d1C291ABfe88764d84120f20F723#code",
     "downloadSha256": "e7c521e28283b4823786be97897627b0e01867b0960f21d55d0a67f549ad6cf5",
     "finding": "quoteExactInputSingle invokes the pool swap, including plugin fee path, and decodes callback output; returned uint16 fee is globalState fee, not necessarily the plugin override fee",
-    "notYetVerified": "real swap payment, full-input settlement and post-swap Hook behavior; same-state quote versus actual receipt; broader instances/security states/tick boundaries; Ready/effective and performance",
+    "notYetVerified": "broader instances/security states/tick boundaries and representative performance; actual swap payment/settlement and N-end output parity are now separately demonstrated for two bound historical samples, not all possible Hook states",
     "claim": "initial lead subsequently implemented with reverse/code/CREATE2 guards; does not by itself establish complete Family acceptance"
   },
   "algebraIntegral": {
@@ -127,7 +127,7 @@
     "quoteSemantics": "Quoter executes the plugin swap path; reportedLastFee is diagnostic, not an overrideFee. Callback-revert output does not prove payment, full input consumption, output receipt or afterSwap success",
     "requestCost": "dynamic positive Exact: four logical items in one declared round (amount call + pool plugin + plugin code + Quoter code); amount-sensitive, not state-only or cross-block cached. This is not wall-clock performance",
     "execution": "runtime and quoted reject partial input by both returned delta and actual input debit; quoted checks output delta rather than old inventory. Existing callback authority/debt/signed bounds/rollback retained; no off-chain Exact during runtime construction",
-    "executionCost": "runtime adds two in-transaction balance reads; quoted adds four. Fresh historical gas and stage latency NOT RUN",
+    "executionCost": "runtime adds two in-transaction balance reads; quoted adds four. Historical traces now recorded separately; production-stage representative latency NOT RUN",
     "localChecks": {
       "familyContractsDynamicCentralExecutionEvidenceAndRefresh": "58/58 PASS on cloud-matching local snapshot (includes parent and two refresh/caller subtests)",
       "actualBotVmSyntheticProtocol": "16/16 PASS; not real historical pools",
@@ -168,7 +168,7 @@
       },
       "limits": "N-end state only. Not original precall, formal Ready/Graph/effective acceptance, real settlement, complete Hook safety, stage performance or adapter_merge_ready"
     },
-    "claim": "implemented with local safety regressions and two real production lifecycle/Exact probes; full correctness and representative performance INCOMPLETE"
+    "claim": "implemented with local safety regressions, two real lifecycle/Exact probes and the separately recorded current-source same-N integration/dual receipts below; full coverage and representative performance INCOMPLETE"
   },
   "threeFamilyDualHarness": {
     "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
@@ -267,6 +267,54 @@
     "build": "build:live PASS on pure committed baseline plus scoped changes; cloud build still NOT RUN during other owner's active live2500",
     "generatedArtifactIsolation": "official generator pure result and cloud working result each contain 429 exact entries; all nine differences belong to pre-existing other-owner UniswapV1 changes. Commit only pure generated artifact; keep working artifact intact",
     "safety": "original handoff Ready/checkpoint files unchanged; no activation/default change, live start, deployment, signature or broadcast"
+  },
+  "algebraHistoricalIntegration": {
+    "scope": "reuse isolated copies of old family-only single-block Ready through existing production family-scoped revalidation; actual current strict/Graph/prices, then existing local-Anvil/BotVM quote/quoted/runtime harness. No central pipeline or model change in this step",
+    "environment": "N-end state plus N execution environment, public clean test actors as in historicalIntegration; original TX precall and opportunity/EV reproduction NOT RUN",
+    "firstSample": {
+      "block": 26018534,
+      "tx": "0x02175d2ac2e806bc6e1033cae640cf45509b7ded4a2e64ebcbba9c425afff5b7",
+      "target": "0x76a278bd71f566ee6ba2fe438f6099c8d8f98f43",
+      "ready": "2 actual current-definition admitted pools, 4 production directions, raw=4 and effective quoted=4; the additional naturally observed WETH/USDT pool supplies valuation connectivity",
+      "readySha256": "e28129c60d00881c0a59c37dedb51138078ae2895c4c8a5b8a4dca4881440ec7",
+      "graphHash": "14b6bdb1b68d990f345b3f5c058c8b75f449f93443233160779af4fa9806e8c5",
+      "result": "target pool both directions, two amounts each: 16/16 real quoted/runtime executions PASS with and without old output inventory, all signed deltas=0; missing-input negative controls pass",
+      "amounts": [
+        {"direction": "USDT->WBTC", "amountIn": "5152811", "amountOut": "6401", "reference": "production effective"},
+        {"direction": "USDT->WBTC", "amountIn": "73487699", "amountOut": "91274", "reference": "original TX input at N-end"},
+        {"direction": "WBTC->USDT", "amountIn": "6401", "amountOut": "5151357", "reference": "production effective"},
+        {"direction": "WBTC->USDT", "amountIn": "12802", "amountOut": "10303398", "reference": "twice production effective"}
+      ],
+      "runtimeConstruction": "both directions Exact=0, quoted=0, RPC=0, quotedFallback=false; no injected amount hints",
+      "evidence": "logs/four-family-integration-20261009.CuNyy3/algebra-current-N26018534-attempt01/dual-attempt01.json",
+      "sha256": "45d78fb5ce3deb4d118d18bcd6b1c15834334a166b1d9ce4c3b08a661d59bda3"
+    },
+    "secondSample": {
+      "block": 26030898,
+      "tx": "0x006223028f05865619d07584c43cf67cb608705d04ebc732e15bf40869d030b8",
+      "target": "0x915fd34cadd63907b51eb64dddc2eadd114a0bed",
+      "ready": "1 actual current-definition admitted pool, 2 production directions, raw=2 and effective quoted=2",
+      "readySha256": "0d61db3cb5f7e611271db8a8ce965ca50d0f7e982e577e70ad06d0e2522c8957",
+      "graphHash": "92e8c828c37fb5081d828319dd2483169c9b97f9641715cbc9132828c31580f7",
+      "result": "both directions, two amounts each: 16/16 real quoted/runtime executions PASS with and without old output inventory, all signed deltas=0; missing-input negative controls pass",
+      "amounts": [
+        {"direction": "USDT->WETH", "amountIn": "5437453", "amountOut": "1999351466142250", "reference": "production effective"},
+        {"direction": "USDT->WETH", "amountIn": "215018005", "amountOut": "79025326889331117", "reference": "original TX input at N-end"},
+        {"direction": "WETH->USDT", "amountIn": "2000000000000000", "amountOut": "5437453", "reference": "production effective"},
+        {"direction": "WETH->USDT", "amountIn": "4000000000000000", "amountOut": "10874774", "reference": "twice production effective"}
+      ],
+      "runtimeConstruction": "both directions Exact=0, quoted=0, RPC=0, quotedFallback=false; no injected amount hints",
+      "evidence": "logs/four-family-integration-20261009.CuNyy3/algebra-current-N26030898-attempt01/dual-attempt01.json",
+      "sha256": "a82260191b26b91ddbbb01bc6f77faab95480835278b12b8b45ef7e267a35c27"
+    },
+    "localChecks": "cloud and pure source snapshot evidence+nomination contracts 23/23 PASS; build:live PASS on source snapshot, cloud build NOT RUN",
+    "extendedTypecheck": "NOT PASS: same three pre-existing shared diagnostics at blockscan-at-block-cli.ts:383/452 and rebuild-read-provider.ts:192; no new four-family harness diagnostics. Log: logs/four-family-integration-20261009.CuNyy3/algebra-dual-extended-typecheck-20261009.log",
+    "independentReview": "non-author 01a11aba-3bcc-7620-8433-2b9d1b94022f: three-file extension source hashes match, evidence.test.ts 15/15 PASS with caches disabled; no new scoped blocker. Review did not independently run historical execution or performance",
+    "reconciliation": "new generated tool-index selection algebra,dual,historical chose listener:searcher:algebra-dual-historical-fork; both actual runs exit=0 recorded in algebra-dual-selection.json (sha256 96c08f11c1d45ddf709a05372b53575427311f497ab1dbd2262fd2fe56c5af7b). Current official Ready status executed for both copies. Original failed tool-index ownership attempt retained",
+    "localTestLog": {"path": "logs/four-family-integration-20261009.CuNyy3/algebra-dual-observation-contract-20261009.log", "sha256": "abfe9b7953f908118efb5fee04b03909dfab6043f2bc15599d14af335e66fd2d"},
+    "performance": "NOT RUN. Small-graph diagnostic timings and historical single-leg traces are not representative effective/sim stage performance",
+    "limits": "two discovered instances do not imply all six handoff instances, variants, dynamic security states or tick ranges accepted; no adapter_merge_ready or production_gap_fixed claim",
+    "safety": "original Ready and frozen handoff unchanged; no defaults/activation change, production deployment, live start, signature or broadcast; only child-process existing Family switch enabled"
   },
   "performanceGate": {
     "required": "correctness plus live-source production-stage representative-load acceptance before delivery",
