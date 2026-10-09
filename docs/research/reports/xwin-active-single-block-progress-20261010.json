@@ -1,0 +1,299 @@
+{
+  "schema": "xwin-active-single-block-progress/v1",
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "sourceCommit": "b2efc329a64a83a8af1f0caf6f0d7deeeffc4579",
+  "actualSourcePins": {
+    "sourceTreeSha256": "c188008011e838903362df67cbfac942501ac6252da39ada508655d102052ae9",
+    "harnessSha256": "83108783a52bdee46a462ddaa63a75d1e6de0065e57cd54522cb79db350a3d4a",
+    "evidenceSha256": "07333eaa779a1bc6fdcccae86a387f49e3c89ec75c4de27f94aa5e87d7a3748a",
+    "observationHelpers": [
+      {
+        "path": "../three-family/historical-input-observations.ts",
+        "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+      },
+      {
+        "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+        "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+      },
+      {
+        "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+        "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+      },
+      {
+        "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+      }
+    ]
+  },
+  "claim": "Active-history strict, natural Graph and raw-mid follow-up; not complete Family, dual-execution, opportunity or performance acceptance",
+  "source": {
+    "number": 26075823,
+    "hash": "0x4256c70c1fba6d441343680f94d07e2a1034dddb5628bb11858b9157490b501c",
+    "state": "N-end",
+    "environment": "N"
+  },
+  "tx": "0x10b7f1d5ac14281c916b4f94bd8c781c2795bfdd7d1a527885e83f4f22ec9ae3",
+  "target": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+  "actors": {
+    "executor": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+    "owner": "0xb8578b6de173c8554ff0390db5a7effa567dda3c",
+    "policy": "public configured execution identity; no private key read or signing"
+  },
+  "diagnosis": {
+    "originalTransactionBlocks": [
+      {
+        "tx": "0x10b7f1d5ac14281c916b4f94bd8c781c2795bfdd7d1a527885e83f4f22ec9ae3",
+        "number": 26075823,
+        "hash": "0x4256c70c1fba6d441343680f94d07e2a1034dddb5628bb11858b9157490b501c",
+        "paused": false,
+        "implementationHash": "0xa2ee2404f7434f475888a0770162d1cbcb52d0c1925a0cbc334d3691e61e4387"
+      },
+      {
+        "tx": "0xacb3f261665bb1516ff03be65b890b3edf9413edc5ea32a78ff4b5a667b3ea8b",
+        "number": 26029585,
+        "hash": "0x7d657e10588fe0327698837441079dc5568813e20a53057ae806a28ab210dead",
+        "paused": false,
+        "implementationHash": "0xa2ee2404f7434f475888a0770162d1cbcb52d0c1925a0cbc334d3691e61e4387"
+      }
+    ],
+    "unchangedCutoffResult": "Original coffee cutoff26144845 was correctly refused as paused; that state finding is not contradicted by the earlier active N blocks.",
+    "testSetupFailure": {
+      "executor": {
+        "address": "0x1000000000000000000000000000000000000002",
+        "bytes": 0,
+        "codeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+      },
+      "reason": "identity_unverified:unresolved:identity-work-unresolved:xwin-proxy-implementation-and-executor-effects:family-decode:family decode failed: protocol candidate has no runtime code",
+      "admitted": false
+    },
+    "correction": {
+      "executor": {
+        "address": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+        "bytes": 2903,
+        "codeHash": "0x4579167be8491f6d51fed9b46aaf357ed20450093aae72bf1e9991385d3d0335"
+      },
+      "reason": "Use the existing configured public executor/owner rather than an undeployed placeholder. No Family or central admission guard changed; no private key was read.",
+      "dependencyChecks": "All current Family state/dependency decoders passed at the same N."
+    }
+  },
+  "acceptance": {
+    "strict": {
+      "instances": 1,
+      "candidateKey": "3654cebec08392e4c2d2f4b4c6c6f7babd0ea6a4b698669b367fa25454d58343",
+      "familyDefinitionHash": "942d8466f97d0153c16e88bbbc35b8c5a3ed89003dae51441c78a497408820a8"
+    },
+    "naturalGraph": {
+      "graphHash": "73941cde2374627d17197583cb16390fcb07e6aa03d2a3c3591698d22fce48eb",
+      "directions": [
+        {
+          "instanceKey": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "executionVariantKey": "8a86483017790ad14a7245dfc4fcc2642bf539fbc4d4f81c7a2049b9d178b417",
+          "adapterId": "token-conversion-mint",
+          "target": "0x49eDcC5aAb2e349C1f71c27C98Fe9C65B01745b1",
+          "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "tokenOut": "0x49eDcC5aAb2e349C1f71c27C98Fe9C65B01745b1",
+          "slotKind": "protocol",
+          "protocolAction": "wrap",
+          "edgeKind": "protocol",
+          "leavesStandingPosition": false,
+          "score": 0,
+          "canonicalEdgeId": "protocol:token-conversion\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f8a86483017790ad14a7245dfc4fcc2642bf539fbc4d4f81c7a2049b9d178b417"
+        },
+        {
+          "instanceKey": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "executionVariantKey": "265182316c1e8df53493ff74fa7c9c6980f827eac1b85ecba278131a9dbca17d",
+          "adapterId": "token-conversion-redeem",
+          "target": "0x49eDcC5aAb2e349C1f71c27C98Fe9C65B01745b1",
+          "tokenIn": "0x49eDcC5aAb2e349C1f71c27C98Fe9C65B01745b1",
+          "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "slotKind": "protocol",
+          "protocolAction": "redeem",
+          "edgeKind": "protocol",
+          "leavesStandingPosition": false,
+          "score": 0,
+          "canonicalEdgeId": "protocol:token-conversion\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f265182316c1e8df53493ff74fa7c9c6980f827eac1b85ecba278131a9dbca17d"
+        }
+      ]
+    },
+    "rawMidRows": 2,
+    "effectiveRows": [
+      {
+        "edgeId": "protocol:token-conversion\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f8a86483017790ad14a7245dfc4fcc2642bf539fbc4d4f81c7a2049b9d178b417",
+        "instanceKey": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+        "amountIn": null,
+        "status": "missing-valuation",
+        "amountOut": null,
+        "effectiveMid": null
+      },
+      {
+        "edgeId": "protocol:token-conversion\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1\u001f0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f265182316c1e8df53493ff74fa7c9c6980f827eac1b85ecba278131a9dbca17d",
+        "instanceKey": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+        "tokenIn": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": null,
+        "status": "missing-valuation",
+        "amountOut": null,
+        "effectiveMid": null
+      }
+    ],
+    "naturalValuation": "NOT MET",
+    "dualExecution": "NOT RUN for this active sample with current production reference inputs",
+    "performance": "NOT RUN; prices output timing is not a representative stage performance experiment"
+  },
+  "originalCallsDiagnostic": {
+    "calls": [
+      {
+        "path": [
+          1
+        ],
+        "from": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+        "action": "deposit",
+        "amountIn": "1",
+        "slippage": "0",
+        "returnedAmountOut": "1484700796983592223"
+      },
+      {
+        "path": [
+          2
+        ],
+        "from": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+        "action": "withdraw",
+        "amountIn": "1484700796983592223",
+        "slippage": "100",
+        "returnedAmountOut": "1467027"
+      }
+    ],
+    "shareTransfers": [
+      {
+        "from": "0x0000000000000000000000000000000000000000",
+        "to": "0xE08D97e151473A848C3d9CA3f323Cb720472D015",
+        "amount": "1484700796983592223",
+        "logIndex": "0x2b"
+      },
+      {
+        "from": "0xE08D97e151473A848C3d9CA3f323Cb720472D015",
+        "to": "0x0000000000000000000000000000000000000000",
+        "amount": "1484700796983592223",
+        "logIndex": "0x3b"
+      }
+    ],
+    "limitation": "Successful original call returns and share mint/burn logs only. Independent USDC output and current quote/quoted/runtime comparison are still pending; not original pre-call parity."
+  },
+  "referenceInputSearch": {
+    "donor": "logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+    "finding": "USDC production amountIn5135191 exists; no row with xWin shares as tokenIn in this donor. Input has not yet been used for active-sample dual execution; do not invent a share-reference amount."
+  },
+  "retainedFailures": [
+    {
+      "log": "logs/xwin-active-20261010.GKBY3K/ready-1.log",
+      "cause": "Temporary .ts entry outside module package was interpreted as CommonJS; top-level-await import failed before Ready work. Retained; next attempt used .mts."
+    },
+    {
+      "log": "logs/xwin-active-20261010.GKBY3K/ready-2.log",
+      "cause": "Undeployed placeholder executor had zero historical code; strict correctly stayed retryable. Not a production protocol failure and not a performance sample."
+    }
+  ],
+  "reconciliation": {
+    "query": [
+      "universe",
+      "rebuild",
+      "status"
+    ],
+    "tool": "listener:searcher:universe-rebuild-status",
+    "manifest": "logs/xwin-active-20261010.GKBY3K/tool-selection.json",
+    "manifestSha256": "9056892ae9385506019c7e0aa15074cdf9c61c74c83d41fc0bc5479da982ea1a",
+    "log": "logs/xwin-active-20261010.GKBY3K/canonical-status-3.log",
+    "exitCode": 0,
+    "conclusion": "Canonical current production status agrees with natural Ready1instance/2directions. It does not prove effective valuation or execution parity."
+  },
+  "remaining": [
+    "Production-reference amount quote and independent quoted/runtime receipts in both supported directions; source/actor binding and zero-Exact runtime construction.",
+    "Share-reference sample missing in the inspected donor; natural small-graph valuation not met.",
+    "Per-Family single-Ready performance followed by combined representative large-graph testing, including all applicable IMPL additions and Balancer V2/V3, Curve plain/underlying, remains final goal phase."
+  ],
+  "safety": {
+    "originalCoffeeReady": "logs/coffee-tx-ready-20261008/checkpoint.json",
+    "originalCoffeeSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "productionSourceChanged": false,
+    "peerChangesPreserved": true,
+    "liveStarted": false,
+    "performanceExperiment": false,
+    "broadcast": false,
+    "signing": false,
+    "privateKeyRead": false
+  },
+  "bindings": [
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/original-block-state-1.json",
+      "sha256": "2aafe6c4c27df434c0359ffa36c9506ebb344c046971a55423f7e4303478d128"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/identity-diagnostic-1.json",
+      "sha256": "875a10aafc41f8752bc7e3d44ca8f0ae230298ff2ed93b948a6957c32bf9a2ed"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/original-calls-1.json",
+      "sha256": "e1028d6771416484cefea3c0af36c2aecfba1317335587fb5a3de5e495623330"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/ready-1.log",
+      "sha256": "c53a78074eb350e5c10e05a4b94b8399e7ba8e930988aa2dc4319bd01d17a5ee"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/ready-2.log",
+      "sha256": "a90233bf80193bf85a86d168373fb8462dd7be9997b0d4ed8d336fa293c5e78e"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/ready-2/ready.json",
+      "sha256": "bb6180e517b336a44939855bc0a55f097591acea45210d12cdc56e28f7e1a169"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/ready-3.log",
+      "sha256": "b2438ce5f3b8ffd159d26e15177abe4d19dd140041b410d0a99ebef44a97f792"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/ready-3/ready.json",
+      "sha256": "f1fca12b4a68aa333d4ba7367890529e20432c61bcee5efbf16d9bc3ada2340a"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/ready-3/ready-summary.json",
+      "sha256": "c8ffbcfdc7e6e93cc9c246e89d90862e09ff6fbd3f4842a9174204826cad2ea1"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/ready-3/prices/prices.json",
+      "sha256": "61e1d4e3102d4ee753416cbd835e1b0a4dce6ac2677f55558e5465b13a5c9d2d"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/ready-3/prices/input.json",
+      "sha256": "6d806db44c78e3ce286ca7efb009c3b02063037a330c85ba349d07bfd0f410cb"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/ready-3/source-before.json",
+      "sha256": "bcade2bc2bdd11d7d061816d9fbb26750b925029609ce8719e0ba4576f512cfa"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/ready-3/source-after.json",
+      "sha256": "bcade2bc2bdd11d7d061816d9fbb26750b925029609ce8719e0ba4576f512cfa"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/ready-3/execution-identity.json",
+      "sha256": "b1ce191ef43ae215c9da5044615a745ee2fb39eb3013126e5b8b4c94fa4929cd"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/single-ready-configured.mts",
+      "sha256": "e77b6c6e254d10e7587473125ca0e91ec6d83d77e376b3c41c72197c441b42db"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/tool-selection.json",
+      "sha256": "9056892ae9385506019c7e0aa15074cdf9c61c74c83d41fc0bc5479da982ea1a"
+    },
+    {
+      "path": "logs/xwin-active-20261010.GKBY3K/canonical-status-3.log",
+      "sha256": "bd875173425415e0a80f4a2afe7b3de39317e53ad0346a8a4fe24c409c2798e3"
+    }
+  ]
+}
