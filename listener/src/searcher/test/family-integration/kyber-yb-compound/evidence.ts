@@ -9,10 +9,17 @@ import { ERC4626_INTERFACE as CUSTODIAN } from "../../../venues/protocols/erc462
 import { successfulRedeemCalls, classifyRedeemLog } from "../../../venues/protocols/compound-ctoken-family/test/history-evidence.js";
 import { assertHistoricalPriceDirection } from "../three-family/historical-input-observations.js";
 import { originalEkuboLeg } from "../../../venues/swaps/ekubo-family/test/history-evidence.js";
+import { originalXwinLeg } from "../../../venues/protocols/token-conversion-family/test/history-evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 export { json, sha, word, observeBalance } from "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.js";
 
 export const SAMPLES = {
+  "xwin-mint": { family: "protocol:token-conversion", number: 26075823,
+    tx: "0x10b7f1d5ac14281c916b4f94bd8c781c2795bfdd7d1a527885e83f4f22ec9ae3",
+    instances: ["0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1"] },
+  "xwin-redeem": { family: "protocol:token-conversion", number: 26075823,
+    tx: "0x10b7f1d5ac14281c916b4f94bd8c781c2795bfdd7d1a527885e83f4f22ec9ae3",
+    instances: ["0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1"] },
   "ekubo-native": { family: "custom-swap:ekubo-router-v1", number: 26088150,
     tx: "0xed014b884a511a4abd1c0e5f218be8dbcd1209cd7bb645d440334fdfecf928f0",
     instances: ["0x77e86b8f5da17873d7bdd70efc68a06dd3edc1d6e36b5bd65ff45eece33a31e4"] },
@@ -61,6 +68,22 @@ export function assertOriginAccountCode(code: string): void {
     "owner must have empty code or an exact EIP-7702 delegation designator");
 }
 
+/** Test-only executor upgrade, never a chain-state/admission override. The
+ * replacement comes exclusively from the source-verified current BotVM artifact.
+ * Require explicit binding to the old actor code; default refusal stays intact. */
+export function assertExecutorCode(code: string, trustedRuntime: string, expectedHistoricalHash?: string) {
+  assert(ethers.isHexString(code, true) && ethers.isHexString(trustedRuntime, true) && trustedRuntime !== "0x");
+  const historicalHash = ethers.keccak256(code), runtimeHash = ethers.keccak256(trustedRuntime);
+  const replacement = code !== "0x" && !same(code, trustedRuntime);
+  if (expectedHistoricalHash !== undefined) {
+    assert(ethers.isHexString(expectedHistoricalHash, 32), "expected executor code hash must be bytes32");
+    assert(same(historicalHash, expectedHistoricalHash), "historical executor code hash differs");
+    assert(replacement, "explicit executor upgrade must identify an existing different runtime");
+  } else assert(!replacement, "refuse replacing an unrelated actor contract without a pinned explicit test upgrade");
+  return { historicalHash, runtimeHash, replacement, historicalRuntimeExecuted: same(code, trustedRuntime),
+    scope: "local eth_call/debug_traceCall code overlay only; same executor/origin; no protocol or permission override" };
+}
+
 /** A storage-access list can contain a proxy implementation slot. Overriding
  * that slot may produce empty return data, which disproves the balance-slot
  * candidate; it is not a successful observation or a transport failure. */
@@ -81,7 +104,7 @@ export const ERC20 = new ethers.Interface(["function balanceOf(address) view ret
 export function options(argv: string[]) {
   const v = new Map<string, string>();
   const required = ["--family", "--ready", "--prices", "--port", "--out"];
-  const names = [...required, "--reference-prices", "--reference-edges"];
+  const names = [...required, "--reference-prices", "--reference-edges", "--expected-executor-code-hash"];
   for (let i = 0; i < argv.length; i += 2) {
     assert(names.includes(argv[i]!) && !v.has(argv[i]!), "unknown/duplicate argument");
     const value = argv[i + 1]; assert(value && !value.startsWith("--"), "missing argument"); v.set(argv[i]!, value);
@@ -96,8 +119,10 @@ export function options(argv: string[]) {
   assert(Object.hasOwn(SAMPLES, family), "only the registered fixed Family samples are supported");
   const portText = v.get("--port")!; assert(/^[1-9][0-9]*$/.test(portText));
   const port = Number(portText); assert(port >= 1024 && port <= 65535 && Number.isSafeInteger(port));
+  const expectedExecutorCodeHash = v.get("--expected-executor-code-hash");
+  if (expectedExecutorCodeHash !== undefined) assert(ethers.isHexString(expectedExecutorCodeHash, 32));
   return { family: family as SampleKey, port, ready: v.get("--ready")!, prices: v.get("--prices")!, out: v.get("--out")!,
-    referencePrices: v.get("--reference-prices"), referenceEdges: referenceEdges as string[] };
+    referencePrices: v.get("--reference-prices"), referenceEdges: referenceEdges as string[], expectedExecutorCodeHash };
 }
 
 export function assertHeader(actual: any, expected: any): void {
@@ -215,6 +240,8 @@ function successfulCalls(trace: any, target: string, selector: string): any[] {
 /** Extract only one unambiguous real successful call + event per instance. */
 export function originalLeg(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any) {
   assert(!trace.error && !trace.revertReason, "original transaction reverted");
+  if (key === "xwin-mint" || key === "xwin-redeem")
+    return originalXwinLeg(instance, descriptor, receipt, trace, key === "xwin-mint" ? "mint" : "redeem");
   if (SAMPLES[key].family === "custom-swap:ekubo-router-v1") return originalEkuboLeg(instance, descriptor, receipt, trace);
   const isSwap = key === "kyber" || SAMPLES[key].family === "swap:algebra-integral";
   const abi = key === "kyber" ? KYBER : isSwap ? ALGEBRA : key === "yb" ? LT : key === "frax" ? CUSTODIAN : CT;

@@ -83,10 +83,27 @@ export function assertXwinChainlinkFeedRuntime(code: string): string {
 }
 
 /** aggregator() is mutable and must be read again at the quote source. A
- * matching feed proxy alone must not approve a different aggregator runtime. */
+ * matching feed proxy alone must not approve a different aggregator runtime.
+ * This OCR2 template embeds maxAnswer at three solc immutable offsets. The
+ * coffee N26075823 USDC feed changed that bound, not the executable template.
+ * Offsets/semantics are backed by the exact-match published compiler output
+ * (solc 0.8.19, OCR2Aggregator.maxAnswer id630). Normalize ONLY that positive
+ * int192 constant, requiring all copies to agree and every other byte to match.
+ * The on-chain priceMaster.getPrice still applies the actual min/max bounds;
+ * normalization never replaces a returned answer or bypasses its range check. */
 export function assertXwinChainlinkAggregatorRuntime(code: string): string {
   const hash = runtimeHash(code);
-  if (hash !== CHAINLINK_AGGREGATOR_RUNTIME) throw new Error("unsupported xWin Chainlink aggregator runtime");
+  if (hash === CHAINLINK_AGGREGATOR_RUNTIME) return hash;
+  if (code.length !== 2 + 22337 * 2) throw new Error("unsupported xWin Chainlink aggregator runtime");
+  const offsets = [1303, 9901, 15567] as const;
+  const words = offsets.map(offset => code.slice(2 + offset * 2, 2 + (offset + 32) * 2).toLowerCase());
+  const maxAnswer = BigInt(`0x${words[0]}`);
+  if (maxAnswer < 1n || maxAnswer >= 1n << 191n || words.some(word => word !== words[0]))
+    throw new Error("unsupported xWin Chainlink maxAnswer immutable");
+  const legacyMax = "0".repeat(20) + "f".repeat(44);
+  let normalized = code.toLowerCase();
+  for (const offset of offsets) normalized = normalized.slice(0, 2 + offset * 2) + legacyMax + normalized.slice(2 + (offset + 32) * 2);
+  if (keccak256(normalized) !== CHAINLINK_AGGREGATOR_RUNTIME) throw new Error("unsupported xWin Chainlink aggregator runtime");
   return hash;
 }
 

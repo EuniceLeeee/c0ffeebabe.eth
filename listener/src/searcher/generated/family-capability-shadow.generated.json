@@ -10259,7 +10259,7 @@
         "familyId": "protocol:token-conversion",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "5666ca00d37c3d1e4e9345a832833cc86936d178c5b1c7df122e96a9cdc54dd4",
+        "contentHash": "8b844cfe788d2ca78e691759cac58405998919da57c2220b7fc12d07473deb6d",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -13370,5 +13370,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "f68fe2d720035c31c025ba1d7122528c3c8b162109b8cb4aa97ed089a804ac2d"
+  "artifactHash": "4d74ddde038b94a9439835b8c4deb3a55f3bac9f19c5be5d5ee873806a189bfe"
 }

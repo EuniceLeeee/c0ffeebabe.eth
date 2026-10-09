@@ -7,7 +7,7 @@ import { ALGEBRA_POOL_INTERFACE as ALGEBRA } from "../../../venues/swaps/algebra
 import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-family/abi.js";
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
 import { options, SAMPLES, ERC20, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, originalLeg,
-  assertReceipt, observeBalance, assertDeltas, constructionGuard, word, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory } from "./evidence.js";
+  assertReceipt, observeBalance, assertDeltas, constructionGuard, word, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory, assertExecutorCode } from "./evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 
 const actor = "0x1000000000000000000000000000000000000001";
@@ -17,6 +17,20 @@ const hash = "0x" + "11".repeat(32), other = "0x" + "22".repeat(32);
 const header = { number: "0x18be02f", hash, parentHash: other, stateRoot: hash, timestamp: "0x1234",
   baseFeePerGas: "0x1", gasLimit: "0x2000000", miner: actor, mixHash: other };
 const source = { number: Number(BigInt(header.number)), hash, generation: 7 };
+
+test("executor upgrade is explicit, old-code-pinned, source-trusted and not the default", () => {
+  const old = "0x6000", current = "0x6001", h = ethers.keccak256(old);
+  assertExecutorCode("0x", current); assertExecutorCode(current, current);
+  assert.throws(() => assertExecutorCode(old, current));
+  assert.throws(() => assertExecutorCode(old, current, other));
+  assert.throws(() => assertExecutorCode(old, current, "0x"));
+  assert.throws(() => assertExecutorCode("0x", current, ethers.keccak256("0x")));
+  assert.throws(() => assertExecutorCode(current, current, ethers.keccak256(current)));
+  assert.throws(() => assertExecutorCode(old, "0x", h));
+  const result = assertExecutorCode(old, current, h);
+  assert.equal(result.historicalHash, h); assert.equal(result.runtimeHash, ethers.keccak256(current));
+  assert.equal(result.replacement, true); assert.equal(result.historicalRuntimeExecuted, false);
+});
 const event = (abi: ethers.Interface, name: string, args: unknown[], address: string) =>
   ({ address, ...abi.encodeEventLog(abi.getEvent(name)!, args), logIndex: "0x1" });
 const transfer = (instance: string, value: bigint) => event(ERC20, "Transfer", [instance, actor, value], asset);

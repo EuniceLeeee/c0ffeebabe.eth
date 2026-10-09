@@ -2,6 +2,8 @@
 // MAINNET_RPC_URL is injected by the operator; no env/key files are opened.
 // --family SAMPLE_KEY (see SAMPLES) --ready FILE --prices FILE --port FREE_PORT --out NEW_FILE
 // Optional --reference-prices FILE --reference-edges JSON_ARRAY borrows input only.
+// Optional --expected-executor-code-hash BYTES32 explicitly tests current source-verified
+// BotVM at the configured historical actor, using local per-call code overlays only.
 // Requires the Family's existing activation env flag; never changes defaults.
 // N-end + N environment single-leg evidence, NOT original-precall/EV/performance.
 import assert from "node:assert/strict";
@@ -30,7 +32,7 @@ import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js"
 import { EKUBO_CORE } from "../../../venues/swaps/ekubo/abi.js";
 import { assertHistoricalDiscoveryReceipt } from "../three-family/historical-input-observations.js";
 import { SAMPLES, ERC20, options, same, json, sha, word, observeBalance, assertDeltas, originalLeg,
-  assertReceipt, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, constructionGuard, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory } from "./evidence.js";
+  assertReceipt, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, constructionGuard, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory, assertExecutorCode } from "./evidence.js";
 
 const ROOT = fileURLToPath(new URL("../../../../../../", import.meta.url));
 type Overrides = Record<string, { code?: string; balance?: string; stateDiff?: Record<string, string> }>;
@@ -53,6 +55,7 @@ export function sourcePin() {
     evidenceSha256: sha(readFileSync(new URL("./evidence.ts", import.meta.url))),
     observationHelpers: ["../three-family/historical-input-observations.ts",
       "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+      "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
       "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
       "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts"]
       .map(path => ({ path, sha256: sha(readFileSync(new URL(path, import.meta.url))) })) };
@@ -121,6 +124,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const executor = ethers.getAddress(provenance.executor).toLowerCase(), owner = ethers.getAddress(provenance.owner).toLowerCase();
     assert(executor !== owner && executor !== ethers.ZeroAddress && owner !== ethers.ZeroAddress);
     const runtimeCode = botvm(owner); report.runtimeCode = { keccak256: runtimeCode.keccak256, artifactSha256: runtimeCode.artifactSha256 };
+    assert(!graph.some(e => [e.target, e.tokenIn, e.tokenOut].some(a => same(a, executor))), "executor aliases graph protocol/token");
     report.source = source; report.environment = header; report.actors = { executor, owner }; report.graphHash = ready.graphHash;
     const loopback = `http://127.0.0.1:${args.port}`;
     const wiring = createRebuildWiring({ rpcUrl: loopback, familyIds: [sample.family], executionIdentity: { executor, transactionOrigin: owner } });
@@ -164,7 +168,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const receipt = await rpc("eth_getTransactionReceipt", [sample.tx], true); assertReceipt(receipt, sample.tx, header);
     const tx = await rpc("eth_getTransactionByHash", [sample.tx], true);
     assert(same(tx.hash, sample.tx) && same(tx.blockHash, source.hash)); assert.equal(BigInt(tx.blockNumber), BigInt(source.number));
-    const trace = await rpc("debug_traceTransaction", [sample.tx, { tracer: "callTracer", timeout: "30s" }], true);
+    const trace = await rpc("debug_traceTransaction", [sample.tx, { tracer: "callTracer", timeout: "30s",
+      ...((args.family === "xwin-mint" || args.family === "xwin-redeem") ? { tracerConfig: { withLog: true } } : {}) }], true);
     assert(trace.type === "CALL" && same(trace.from, tx.from) && same(trace.to, tx.to) && same(trace.input, tx.input));
     report.original = { receipt, transaction: tx, trace, receiptSha256: sha(json(receipt)), traceSha256: sha(json(trace)) };
     stage = "owned-local-fork";
@@ -172,7 +177,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     await backend.forkAt(source.number, { signal: abort.signal, deadlineAtMs: deadline });
     assert(/anvil/i.test(await rpc("web3_clientVersion", []))); assert.equal(BigInt(await rpc("eth_chainId", [])), 1n);
     const pin = { blockHash: source.hash, requireCanonical: true };
-    const call = (to: string, data: string, overrides: Overrides = {}) => rpc("eth_call", [{ from: owner, to, data }, pin, overrides]);
+    const quoteOverlay: Overrides = args.expectedExecutorCodeHash ? { [executor]: { code: runtimeCode.code } } : {};
+    const call = (to: string, data: string, overrides: Overrides = {}) => rpc("eth_call", [{ from: owner, to, data }, pin, { ...quoteOverlay, ...overrides }]);
     const balance = async (token: string, holder: string, overrides: Overrides = {}) => BigInt(await call(token, ERC20.encodeFunctionData("balanceOf", [holder]), overrides));
     const headerCheck = async () => assertHeader(await rpc("eth_getBlockByNumber", ["latest", false]), header);
     await headerCheck();
@@ -180,7 +186,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     assertOriginAccountCode(ownerCode);
     report.originAccount = { code: ownerCode, keccak256: ethers.keccak256(ownerCode), overridden: false };
     const executorCode = await rpc("eth_getCode", [executor, pin]);
-    assert(executorCode === "0x" || same(executorCode, runtimeCode.code), "refuse replacing an unrelated actor contract");
+    report.executorProvisioning = assertExecutorCode(executorCode, runtimeCode.code, args.expectedExecutorCodeHash);
+    report.executorProvisioning.admission = "existing historical Ready retained; code overlay is execution-test provisioning, not new identity evidence";
     // Probe EVM opcodes, not only the header returned by the fork.
     const environment = async () => [...ethers.AbiCoder.defaultAbiCoder().decode(Array(7).fill("uint256"), await call(executor, "0x",
       { [executor]: { code: "0x43600052426020524860405241606052456080524460a0524660c05260e06000f3" } }))] as bigint[];
@@ -199,8 +206,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const quoteReads: any[] = [];
     const runtime = createStrictCentralAdapterRuntime({ executor, transactionOrigin: owner, exactQuoteCache: cache,
       generationFence: { assertCurrent(g, s) { assert.equal(g, source.generation); assert.deepEqual(s, source); } }, provider: {
-        async call(t, b) { assert.equal(b, source.number); quoteReads.push({ kind: "call", to: t.to, selector: t.data.slice(0, 10) }); return rpc("eth_call", [t, pin]); },
-        async getCode(a, b) { assert.equal(b, source.number); quoteReads.push({ kind: "code", to: a }); return rpc("eth_getCode", [a, pin]); },
+        async call(t, b) { assert.equal(b, source.number); quoteReads.push({ kind: "call", to: t.to, selector: t.data.slice(0, 10) }); return rpc("eth_call", [t, pin, quoteOverlay]); },
+        async getCode(a, b) { assert.equal(b, source.number); quoteReads.push({ kind: "code", to: a });
+          return args.expectedExecutorCodeHash && same(a, executor) ? runtimeCode.code : rpc("eth_getCode", [a, pin]); },
         async getStorage(a, k, b) { assert.equal(b, source.number); quoteReads.push({ kind: "storage", to: a, slot: k }); return rpc("eth_getStorageAt", [a, k, pin]); },
       } });
     const slots = new Map<string, string>();
@@ -294,6 +302,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       if (original) trials.push(["historical-input-at-N", original.amountIn]);
       else if (p.status === "met") trials.push(["twice-production-effective", p.amountIn * 2n]);
       else if (splice) trials.push(["twice-spliced-production-input-at-N", splice.amountIn * 2n]);
+      if (original && p.status === "unmet" && !splice && (args.family === "xwin-mint" || args.family === "xwin-redeem"))
+        trials.push(["twice-historical-input-at-N-not-production-reference", original.amountIn * 2n]);
       report.preparationMs ??= performance.now() - started;
       for (const [label, amountIn] of trials) {
         const result: any = { label, amountIn, status: "failed", executions: [] }; row.trials.push(result);
@@ -302,6 +312,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           const quote = await guard.exact(() => executeFamilyExactQuote({ family, route: route[0]!, amountIn, source, generation: source.generation,
             executor, runtimeEvidence: [], runtime, control: { signal: abort.signal, deadlineAtMs: deadline } }));
           result.quoteMs = performance.now() - quoteStart;
+          if (quote.status !== "resolved") result.unresolvedQuote = quote;
           assert.equal(quote.status, "resolved", "real amount cannot be quoted"); if (quote.status !== "resolved") throw new Error("unresolved quote");
           assert.equal(quote.amountIn, amountIn); assert(quote.amountOut > 0n); assert.deepEqual(quote.source, source);
           if (label === "production-effective" && p.status === "met") assert.equal(quote.amountOut, p.amountOut, "current Exact differs from production effective");
