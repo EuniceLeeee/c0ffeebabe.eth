@@ -1,0 +1,88 @@
+{
+  "schema": "family-independent-acceptance-progress-v1",
+  "date": "2026-10-09",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "bba7e01fda781093a2d176f6305b120451dd41fc",
+  "latestUserOrder": [
+    "independently accept the integrated four Families for correctness AND latency",
+    "remaining authorized Set/DODO/xWin/Curve/Balancer V3 Hook/Ekubo/Frax variants",
+    "Balancer V2 last; preserve all existing measurements and failures"
+  ],
+  "overallVerdict": "INCOMPLETE: disabled integration and local regressions are not full acceptance",
+  "kyber": {
+    "change": "terminate the single initialized-tick dependent round after completion",
+    "baseline": {
+      "source": "bba7e01 plus new production-issuer regression",
+      "passed": 1,
+      "failed": 2,
+      "token0In": "resolved",
+      "token1In": "exact-dependent-program:exact request rounds duplicate id kyswap-initialized-ticks",
+      "completedRound": "erroneously attempted another pool-state decode"
+    },
+    "after": {
+      "centralIssuerRegression": "3/3 PASS",
+      "existingFamilyContracts": "33/33 PASS",
+      "firstAmountReadRounds": { "token0In": [3], "token1In": [3, 1] },
+      "secondAmountSameSourceAdditionalReads": 0,
+      "secondAmountRecalculated": true,
+      "stageLatencyVerdict": "NOT RUN; request counts are not wall-clock performance"
+    },
+    "sourceSha256": {
+      "exact.ts": "2f1c5114c2897abf48f57fcb506fa273af9130c5dbf7eaa0d92c905479ccec8a",
+      "test/contract.ts": "9686793baec59b596075efea49ada6867ab008f99194619f9a31cf28463f9c55",
+      "test/central-exact.ts": "bdbfbb5909306e3b32655789aa994235f6e5832849046fba25b22af6c33ba855"
+    },
+    "testLog": "logs/four-family-integration-20261009.CuNyy3/kyber-central-and-contract.after.log",
+    "testLogSha256": "e159635bd13422e17c4b64a4bf428b34beb5959ffe9a324a5c8fa40784aa5afb",
+    "review": "independent non-author rerun: 3/3 central and 33/33 contracts; no local blocking finding",
+    "claim": "implemented with deterministic synthetic production-issuer failure-to-pass; NOT historical EVM, adapter_merge_ready, or representative performance"
+  },
+  "verificationEnvironment": {
+    "sourceChangesAppliedFirst": "cloud workspace",
+    "testLocation": "local non-Git source snapshot /tmp/mev-four-family-commit-check.lA5dCf/listener",
+    "cloudSourceHashesCompared": true,
+    "cloudBuildThisStep": "NOT RUN: another owner's live2500 service is active",
+    "checks": [
+      "official capability generator and check PASS",
+      "build:live PASS on source snapshot",
+      "family-dual-execution 71/71 PASS on clean commit baseline plus Kyber change",
+      "production-family-composition PASS: 28/39 active, 308 capabilities",
+      "strict-production-family-declarations PASS",
+      "git diff --check PASS"
+    ],
+    "limits": "synthetic transport and source snapshot checks do not prove historical admission, EVM receipts, or cloud timing"
+  },
+  "remaining": {
+    "yieldBasisLt": "time-dependent AMM interest/oracle EMA/ramp and transitive pricing dependencies require per-block effective refresh; caller/staker eligibility and historical dual execution need verification",
+    "compoundCToken": "replace balanceOfUnderlying-as-redemption-proof with actual positive-amount effect proof; check redeem error code and quoted minimum; fix accrued-rate failure/source handling and time refresh; historical harness currently reports encoding, not actual dual receipts",
+    "algebraIntegral": "saved Ready proves target nomination and dynamic-plugin rejection, not a discovery omission; dynamic plugin fee model remains unsupported pending implementation and same-state evidence",
+    "allFour": "current-source historical strict/Ready/Graph/effective/dual receipts and representative-load effective/sim timing remain incomplete"
+  },
+  "algebraSourceFinding": {
+    "address": "0xe5e0235245E3C05f66447a513c4e4e673805964b",
+    "publicContractName": "CypherBasePlugin",
+    "url": "https://etherscan.io/address/0xe5e0235245E3C05f66447a513c4e4e673805964b#code",
+    "downloadSha256": "5b25643dd608e254d36024c41dfeb429398abdd5119a50b5b895ef0b1b47a745",
+    "finding": "beforeSwap performs a security check, writes a timepoint, optionally computes dynamic fee, and applies a direction-dependent sliding factor; getCurrentFee alone does not execute that path",
+    "limit": "public verified source inspection is not fresh historical bytecode/state binding or proof of supported execution; no rejection gate was removed"
+  },
+  "performanceGate": {
+    "required": "correctness plus live-source production-stage representative-load acceptance before delivery",
+    "design": "3 representative changed blocks x 3 repetitions per block, medians, plus quiet/unrelated controls; setup separate; publication and drain retained",
+    "precondition": "freeze current source/config/Ready/backend/workload and stage budget/incremental overhead limit BEFORE measuring",
+    "status": "NOT RUN for the four newly integrated Families",
+    "failurePolicy": "retain failures/timeouts; never replace with successful reruns; no long-run P95 claim from nine samples",
+    "handoffRunner": "not executed: hardcodes former workspace and enables three Families together; current workspace/config and representative input must be explicitly pinned for independent acceptance"
+  },
+  "safety": {
+    "defaultFamilyActivationChanged": false,
+    "centralPipelineChanged": false,
+    "originalReadyOrCheckpointChanged": false,
+    "frozenHandoffChanged": false,
+    "unrelatedDirtyChangesIncluded": false,
+    "liveStarted": false,
+    "deployed": false,
+    "signedOrBroadcast": false
+  }
+}

@@ -64,6 +64,9 @@ const program: ExactRequestProgram<
     return poolStateRequests(input.descriptor.pool);
   },
   buildDependentProgram(input) {
+    // Central invokes this again after decoding every dependent round. This
+    // model has exactly one neighbour read, not an unbounded tick walk.
+    if (input.completedRound > 0) return null;
     if (input.programInput.amountIn <= 0n) return null;
     // Down-tick swaps take their step target from `nearestCurrentTick`, which
     // the first round already returned; up-tick swaps need that tick's `next`.

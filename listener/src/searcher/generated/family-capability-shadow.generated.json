@@ -4731,7 +4731,7 @@
         "familyId": "kyberswap-elastic",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "8b17be10e31abcb53b2a4cfebe3921116c95c53745c076605f691f25586f1a7d",
+        "contentHash": "f7139adc5bd9824fb91e539e365e40be641da5250e185bbcd5c8ec67a8e8bb08",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -13236,5 +13236,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "07b78ebb4318ca6bfb6d37368a318e27d128e4b155456da75a65a42cbc424fb1"
+  "artifactHash": "8dee9f2d1b4f8bc4eb69d3d8f66fcffd0538a86378f2e8475a1f9b62eb6d7e35"
 }

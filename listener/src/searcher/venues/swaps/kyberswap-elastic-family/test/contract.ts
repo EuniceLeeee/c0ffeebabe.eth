@@ -95,13 +95,17 @@ function quote(
     const round = program.buildDependentProgram({
       programInput: input as never,
       initialResults,
-      completedRound: 1,
-      dependentEvidence: [],
+      completedRound: 0,
+      priorEvidence: [],
     } as never);
     if (round !== null && round !== undefined) {
       dependentEvidence = [
         round.decode(round.requests.map(answerFor(options))),
       ];
+      assert.equal(program.buildDependentProgram({
+        programInput: input as never, initialResults,
+        completedRound: 1, priorEvidence: dependentEvidence,
+      } as never), null, "the completed neighbour read must terminate");
     }
   }
   const quoted = program.decode({
