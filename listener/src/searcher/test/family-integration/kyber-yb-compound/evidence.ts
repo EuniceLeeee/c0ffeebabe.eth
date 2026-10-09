@@ -7,6 +7,7 @@ import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-fami
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
 import { successfulRedeemCalls, classifyRedeemLog } from "../../../venues/protocols/compound-ctoken-family/test/history-evidence.js";
 import { assertHistoricalPriceDirection } from "../three-family/historical-input-observations.js";
+import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 export { json, sha, word, observeBalance } from "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.js";
 
 export const SAMPLES = {
@@ -68,17 +69,24 @@ export const ERC20 = new ethers.Interface(["function balanceOf(address) view ret
 
 export function options(argv: string[]) {
   const v = new Map<string, string>();
-  const names = ["--family", "--ready", "--prices", "--port", "--out"];
+  const required = ["--family", "--ready", "--prices", "--port", "--out"];
+  const names = [...required, "--reference-prices", "--reference-edges"];
   for (let i = 0; i < argv.length; i += 2) {
     assert(names.includes(argv[i]!) && !v.has(argv[i]!), "unknown/duplicate argument");
     const value = argv[i + 1]; assert(value && !value.startsWith("--"), "missing argument"); v.set(argv[i]!, value);
   }
-  assert.equal(v.size, names.length, "all five arguments required");
+  assert(required.every(k => v.has(k)), "all five arguments required");
+  assert.equal(v.has("--reference-prices"), v.has("--reference-edges"), "reference prices and edges must be paired");
+  const referenceEdges: unknown = v.has("--reference-edges") ? JSON.parse(v.get("--reference-edges")!) : [];
+  assert(Array.isArray(referenceEdges) && referenceEdges.every(k => typeof k === "string" && k.length > 0));
+  assert.equal(new Set(referenceEdges).size, referenceEdges.length, "duplicate reference edge");
+  if (v.has("--reference-prices")) assert(referenceEdges.length > 0, "select reference edges explicitly");
   const family = v.get("--family")!;
   assert(Object.hasOwn(SAMPLES, family), "only the registered fixed Family samples are supported");
   const portText = v.get("--port")!; assert(/^[1-9][0-9]*$/.test(portText));
   const port = Number(portText); assert(port >= 1024 && port <= 65535 && Number.isSafeInteger(port));
-  return { family: family as SampleKey, port, ready: v.get("--ready")!, prices: v.get("--prices")!, out: v.get("--out")! };
+  return { family: family as SampleKey, port, ready: v.get("--ready")!, prices: v.get("--prices")!, out: v.get("--out")!,
+    referencePrices: v.get("--reference-prices"), referenceEdges: referenceEdges as string[] };
 }
 
 export function assertHeader(actual: any, expected: any): void {
@@ -118,6 +126,69 @@ export function productionAmount(row: any, raw: any, edge: any, source: { number
   assert.equal(row.quotedAt?.number, source.number); assert(same(row.quotedAt.hash, source.hash));
   assert.equal(row.quotedAt.generation, generation, "carried/stale row is not a fresh N measurement");
   return { status: "met" as const, amountIn: row.amountIn as bigint, amountOut: row.amountOut as bigint };
+}
+
+/** Explicitly borrow only amountIn from a saved production-stage graph. The
+ * donor can be carried and from another block; its output/identity/valuation
+ * never substitutes for the target's same-N quote, Ready or execution. */
+export function splicedProductionAmount(saved: any, declaration: any, edgeKeys: readonly string[], tokenIn: string) {
+  const runtime = saved.runtime, table = runtime?.pricing?.effectiveMids;
+  assert(table?.rows instanceof Map && Array.isArray(runtime.graph?.edges));
+  assert(declaration?.benchmark === "effective-update" && declaration.liveStarted === false &&
+    declaration.broadcast === false && declaration.signing === false, "expected saved production-stage benchmark");
+  assert(/^[0-9a-f]{40}$/i.test(declaration.head), "missing donor source commit");
+  assert(Array.isArray(declaration.bindings), "missing donor source/Ready bindings");
+  const bound = (path: string) => {
+    const matches = declaration.bindings.filter((b: any) => b.path === path);
+    assert(matches.length === 1 && /^[0-9a-f]{64}$/i.test(matches[0].sha256), "missing/ambiguous donor binding: " + path);
+    return matches[0];
+  };
+  assert(typeof saved.readyPath === "string" && /^[0-9a-f]{64}$/i.test(saved.readySha256));
+  assert.equal(bound(saved.readyPath).sha256, saved.readySha256, "donor Ready contradicts declaration");
+  for (const suffix of ["/listener/benchmarks/effective-update.ts", "/listener/src/searcher/blockscan-runtime-loop.ts", "/listener/src/searcher/main.ts"]) {
+    const matches = declaration.bindings.filter((b: any) => typeof b.path === "string" && b.path.endsWith(suffix));
+    assert.equal(matches.length, 1, "missing/ambiguous production source binding"); bound(matches[0].path);
+  }
+  assert.equal(declaration.graphEdges, runtime.graph.edges.length);
+  assert.deepEqual(saved.cfg, declaration.cfg, "donor configuration mismatch");
+  const source = { number: runtime.sourceBlock, hash: runtime.sourceBlockHash, generation: runtime.generation };
+  assert(Number.isSafeInteger(source.number) && source.number >= 0 && ethers.isHexString(source.hash, 32));
+  assert(Number.isSafeInteger(source.generation) && source.generation >= 0);
+  assert.equal(saved.header?.number, source.number); assert.equal(saved.header?.hash, source.hash);
+  assert.equal(table.source?.number, source.number); assert.equal(table.source?.hash, source.hash);
+  assert.equal(table.source?.generation, source.generation);
+  assert.equal(runtime.pricing.generation, source.generation);
+  assert.equal(runtime.pricing.sourceBlock, source.number); assert.equal(runtime.pricing.sourceBlockHash, source.hash);
+  assert(declaration.notifications?.some((n: any) => n.number === source.number && n.hash === source.hash));
+  assert(edgeKeys.length > 0 && new Set(edgeKeys).size === edgeKeys.length);
+  const selected = edgeKeys.map(key => {
+    const row = table.rows.get(key);
+    assert(row?.edgeId === key && row.status === "quoted", "reference must be a recorded quoted row");
+    const edges = runtime.graph.edges.filter((e: any) => blockScanEdgeKey(e) === key);
+    assert.equal(edges.length, 1, "reference row absent/ambiguous in donor graph");
+    assertHistoricalPriceDirection(edges[0], row, edges[0].instanceKey);
+    assert(ethers.isAddress(row.tokenIn) && ethers.isAddress(row.tokenOut));
+    for (const amount of [row.amountIn, row.amountOut]) assert(typeof amount === "bigint" && amount > 0n && amount <= ethers.MaxUint256);
+    const q = row.quotedAt;
+    assert(Number.isSafeInteger(q?.number) && q.number >= 0 && q.number <= source.number && ethers.isHexString(q.hash, 32));
+    assert(Number.isSafeInteger(q.generation) && q.generation >= 0 && q.generation <= source.generation);
+    if (q.number === source.number) assert(q.hash === source.hash && q.generation === source.generation, "inconsistent fresh donor");
+    else assert(q.generation < source.generation, "inconsistent carried donor");
+    if (q.number === source.number - 1) {
+      assert(ethers.isHexString(saved.header.parentHash, 32));
+      assert.equal(q.hash, saved.header.parentHash, "carried row contradicts donor parent");
+    }
+    for (const n of declaration.notifications.filter((n: any) => n.number === q.number)) {
+      assert.equal(q.hash, n.hash, "row contradicts recorded notification");
+    }
+    return row;
+  });
+  const matches = selected.filter(row => same(row.tokenIn, tokenIn));
+  assert.equal(matches.length, 1, "select exactly one reference row per target input token");
+  const donorRow = matches[0];
+  return { kind: "spliced-recorded-input" as const, amountIn: donorRow.amountIn as bigint, donorRow,
+    tableSource: source, freshness: donorRow.quotedAt.number === source.number ? "fresh" : "carried",
+    naturalTargetValuation: "unmet; not supplied by this input splice" };
 }
 
 function successfulCalls(trace: any, target: string, selector: string): any[] {

@@ -1,0 +1,4 @@
+--- IMPL配置列表.md
++++ IMPL配置列表.md
+@@ -32,0 +33 @@
++| Compound V2 cToken（赎回，Protocol）<br>**两实例同状态双执行＋大图参考金额补验通过；非整笔机会复现。**<br>原TX：`0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df`；N=25944463，N末状态＋N环境。 | 未跑自然枚举；本轮只验 cUSDC→USDC、cDAI→DAI 的兑换能力。 | 复用自然单块 Ready：2实例／2图边／2 raw mid；单族图 effective 仍为 missing-valuation。按用户授权，仅借用28,040边生产阶段大表的 amountIn：cUSDC `20453524572`、cDAI `20576236020`；表块26146969，两行均 carried 自26146968。不是手填目标图边，不把借用金额写成自然估值通过。 | **2026-10-09云端补验：4组金额、16次quoted／runtime执行全部通过，报价与独立到账差值均0。** 大图输入输出分别为 `5179510` raw USDC、`5158309426899040893` raw DAI；原交易烧毁份额输入另验。实收构造 Exact／quoted／RPC=0，无fallback；旧输出库存与缺输入负例通过。原TX为外层份额赎回后调用cToken，不能据此宣称外层路线已覆盖。代表性时效性／自然选额／final sim／EV未验；按既定顺序最后统一测速。[云端证据摘要](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/compound-reference-acceptance-20261009.json)。 |

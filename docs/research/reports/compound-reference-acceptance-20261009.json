@@ -1,0 +1,120 @@
+{
+  "schema": "compound-recorded-reference-acceptance/v1",
+  "date": "2026-10-09",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "parentCommit": "8c57ba6716e3dd7a0742908ce1271e04e33a63de",
+  "productionSourceTreeSha256": "0490bfea6189fc523062841eb0119a8d2bfabc8b0c2b84b1f2cad3f23dce28d6",
+  "sourceCaveat": "Cloud source includes previously present owned DODO and peer uncommitted changes. This patch changes only acceptance tests/reporting, not Compound or central production behavior; those other changes are not absorbed into this commit.",
+  "family": "protocol:compound-ctoken",
+  "transaction": "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df",
+  "stateAndEnvironment": {
+    "chainId": 1,
+    "number": 25944463,
+    "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "origin": "0x1000000000000000000000000000000000000001"
+  },
+  "result": "pass-with-spliced-reference",
+  "claim": "The two admitted cToken redemption directions pass same-N production Exact versus independent quoted/runtime receipts at saved production-graph input amounts, plus the original burned-share amounts. This is not natural target effective valuation or original wrapper opportunity replay.",
+  "naturalTargetIntegration": {
+    "ready": "logs/four-family-integration-20261009.CuNyy3/compound-current-N25944463-attempt02/ready.json",
+    "readySha256": "714ab27733892a3f9030b557932955293145427eacbea07e434a3174aff2008b",
+    "familyDefinitionHash": "42bcea101816e0dbd338b1b3e2348dba43579ca1f5bd9e4937d976dc259f1150",
+    "instances": 2,
+    "graphDirections": 2,
+    "rawMids": 2,
+    "effectiveQuoted": 0,
+    "effectiveUnmetReason": "missing-valuation in family-only graph; borrowing amountIn does not add valuation edges or mark those rows quoted",
+    "prices": "logs/four-family-integration-20261009.CuNyy3/compound-reference-20261009-attempt01/prices/prices.json",
+    "pricesSha256": "aeb0ddd811e6e014335032e766c9159c74d7a9082204425991e323039621ad6b",
+    "inputSha256": "cdb2d434d069d2a03142cfa77d0c10e19b7161e581219708eb8292a31e01486c"
+  },
+  "donor": {
+    "kind": "saved historical production-stage benchmark graph, not a newly run benchmark or websocket live",
+    "prices": "logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+    "pricesSha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378",
+    "declarationSha256": "6536fa18b3c2c18accc342a3941c907825914e4e531887c76a51916b2f968f8f",
+    "sourceCommit": "2a2243bdf009ac1951644794ed38cb9e98d138e4",
+    "graphEdges": 28040,
+    "tableNumber": 26146969,
+    "tableHash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+    "quotedAtNumber": 26146968,
+    "quotedAtHash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+    "freshness": "carried",
+    "referenceWethInput": "2000000000000000",
+    "configuration": "Full cfg (including tagged pricedTokens Map), selected edge IDs and original rows preserved in dual-reviewed.json; donor file/declaration hashes checked before and after execution.",
+    "bindingChecks": "Declaration binds producer/runtime/main source and exact donor Ready SHA; table/runtime/pricing generation/source agree; carried row hash equals donor parentHash and any matching recorded notification. Archived source bindings do not assert current source equality.",
+    "borrowedFields": ["amountIn"],
+    "notBorrowed": ["amountOut", "identity", "admission", "valuation", "state", "caller", "executor"]
+  },
+  "samples": [
+    {
+      "instance": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "donorPool": "0x477fa5406598f8eb1945291867e1654c4d931659",
+      "productionReferenceInput": "20453524572",
+      "sameStateQuoteAndActualOutput": "5179510",
+      "originalBurnedShareInput": "16895162987",
+      "sameStateOriginalInputOutput": "4278414",
+      "executions": 8,
+      "allSignedOutputDeltas": "0"
+    },
+    {
+      "instance": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "donorPool": "0x9896bd979f9da57857322cc15e154222c4658a5a",
+      "productionReferenceInput": "20576236020",
+      "sameStateQuoteAndActualOutput": "5158309426899040893",
+      "originalBurnedShareInput": "17733672807",
+      "sameStateOriginalInputOutput": "4445699958193387588",
+      "executions": 8,
+      "allSignedOutputDeltas": "0"
+    }
+  ],
+  "safetyChecks": {
+    "runtimeConstruction": { "ExactCalls": 0, "quotedCalls": 0, "rpcCalls": 0, "quotedFallback": false },
+    "sameNEnvironmentOpcodes": "pass",
+    "fullInputDebitAndIndependentOutputCredit": "16/16 pass",
+    "existingOutputInventoryControls": "8/8 pass",
+    "missingInputWithAbundantOutputMustRevert": "8/8 pass",
+    "finalSourceFilesAndInputHashes": "unchanged",
+    "ownedForkCleanup": "pass",
+    "signed": false,
+    "broadcast": false,
+    "liveStarted": false,
+    "originalReadyChanged": false
+  },
+  "evidence": {
+    "final": "logs/four-family-integration-20261009.CuNyy3/compound-reference-20261009-attempt01/dual-reviewed.json",
+    "finalSha256": "2f8ace3e27c378fdde8b6c1dd4b8c312285352f0067417ec123e469f2bcd71d8",
+    "harnessSha256": "a051e7ec0ee720395f4ad9c7fb05737fcb6b5792e3067fb0b6eeb0e24991ee8b",
+    "evidenceHelperSha256": "e863af2be1ad120b8ee3457ac5b7520c5e6e06d9a23949f2a3ffb3c6d76a6b19",
+    "priorSuccessfulAttemptPreserved": "logs/four-family-integration-20261009.CuNyy3/compound-reference-20261009-attempt01/dual.json",
+    "priorAttemptSha256": "c4bc5cc4e4398722a3447331b91a030101dafd5b1ec8939c71475fb4ce078026",
+    "intermediateAttemptPreserved": "logs/four-family-integration-20261009.CuNyy3/compound-reference-20261009-attempt01/dual-final-report.json",
+    "intermediateSha256": "0726f07fcbea7b01dee1163fd25397a74fdff008e6f2394614383d531a5a032a",
+    "rerunReason": "Canonical tagged serialization preserves donor pricedTokens Map; independent review then added donor source/Ready/ancestry consistency guards. All prior 16/16 successful receipts preserved, not counted as extra sample coverage or a performance repetition.",
+    "toolQuery": "compound,dual,block",
+    "manifest": "logs/four-family-integration-20261009.CuNyy3/compound-reference-tools-20261009.json",
+    "manifestSha256": "7db4a95c2573d5f2e9237468eab5eb501b82c5a1ae32c3a6dcd26a5b32ef7b97",
+    "executedTools": ["listener:searcher:at-block", "listener:searcher:kyber-yb-compound-dual-historical-fork"],
+    "toolExitCodes": [0, 0, 0, 0]
+  },
+  "regressions": {
+    "cloudDualContract": "34/34 pass",
+    "localExportDualContract": "34/34 pass; first two new fixture tests failed before fixture edge identity was corrected",
+    "localExportProductionBuild": "pass; offline same-parent export, not a replacement for cloud integration"
+  },
+  "independentReview": "Read-only non-author review identified two donor-binding gaps; both fixed, negative regressions added, 34 offline tests rerun by reviewer. Review verified closure of those two findings, not an independent RPC rerun or full-family audit.",
+  "configurationTable": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "configurationTableChange": "docs/research/reports/compound-reference-impl-table-20261009.patch; exact additive edit of original non-Git vault table, not a second configuration table",
+  "notClaimed": [
+    "Natural family-only effective valuation",
+    "Original pre-call state or redeemUnderlying calldata parity",
+    "Original outer wrapper/LP route or profitable closed-loop reproduction",
+    "Full universe/pool/version coverage",
+    "Adapter Replay baseline-to-candidate flip or formal adapter_merge_ready",
+    "Representative performance acceptance or live tail-latency guarantee"
+  ],
+  "next": "Continue remaining correctness work in user order; unified representative effective/sim performance, including Balancer V2, remains deferred until those tasks are handled and the peer live is stopped."
+}

@@ -6,8 +6,9 @@ import { KYSWAP_POOL_INTERFACE as KYBER } from "../../../venues/swaps/kyberswap-
 import { ALGEBRA_POOL_INTERFACE as ALGEBRA } from "../../../venues/swaps/algebra-integral-family/abi.js";
 import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-family/abi.js";
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
-import { options, SAMPLES, ERC20, assertHeader, assertPriceInput, productionAmount, originalLeg,
+import { options, SAMPLES, ERC20, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, originalLeg,
   assertReceipt, observeBalance, assertDeltas, constructionGuard, word, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert } from "./evidence.js";
+import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 
 const actor = "0x1000000000000000000000000000000000000001";
 const asset = "0x1000000000000000000000000000000000000002";
@@ -56,6 +57,13 @@ test("paired fixed-family CLI rejects arbitrary samples, repeats, missing/unsafe
   assert.throws(() => options(args.slice(0, -1)));
   assert.throws(() => options(args.map(v => v === "yb" ? "arbitrary" : v)));
   for (const p of ["0", "1", "65536", "18593junk", "NaN"]) assert.throws(() => options(args.map(v => v === "18593" ? p : v)));
+  const optional = ["--reference-prices", "donor.json", "--reference-edges", '["edge"]'];
+  assert.deepEqual(options([...args, ...optional]).referenceEdges, ["edge"]);
+  assert.throws(() => options([...args, ...optional.slice(0, 2)]));
+  assert.throws(() => options([...args, ...optional.slice(2)]));
+  for (const v of ['[]', '["edge","edge"]', '[1]', '{}', 'invalid']) {
+    assert.throws(() => options([...args, ...optional.slice(0, 3), v]));
+  }
 });
 
 test("N header checks timestamp/hash/stateRoot and refuses missing fields", () => {
@@ -95,6 +103,65 @@ test("missing valuation never creates a production reference amount; stale/wrong
   assert.throws(() => productionAmount(row, { mid: 0 }, edge, source, 7));
   assert.throws(() => productionAmount(row, { mid: 1 }, edge, source, 8));
   assert.throws(() => productionAmount({ ...row, quotedAt: { ...source, hash: other } }, { mid: 1 }, edge, source, 7));
+});
+
+function donorFixture() {
+  const edge = { canonicalEdgeId: "fixture-edge", adapterId: "univ2-standard", target: actor, instanceKey: actor,
+    tokenIn: token0, tokenOut: asset, slotKind: "swap" };
+  const edgeId = blockScanEdgeKey(edge as any);
+  const row = { ...edge, edgeId, amountIn: 17n, amountOut: 900n, status: "quoted",
+    quotedAt: { number: source.number - 1, hash: other, generation: source.generation - 1 } };
+  const cfg = { minCapitalFraction: 0.001 };
+  const readyPath = "/fixture/ready.json", readySha256 = "33".repeat(32);
+  const saved = { cfg, readyPath, readySha256, header: { ...source, parentHash: other }, runtime: { sourceBlock: source.number, sourceBlockHash: source.hash,
+    generation: source.generation, graph: { edges: [edge] }, pricing: { generation: source.generation, sourceBlock: source.number,
+      sourceBlockHash: source.hash, effectiveMids: { source: { ...source }, rows: new Map([[edgeId, row]]) } } } };
+  const declaration = { benchmark: "effective-update", liveStarted: false, broadcast: false, signing: false,
+    head: "44".repeat(20), bindings: ["/fixture/listener/benchmarks/effective-update.ts", "/fixture/listener/src/searcher/blockscan-runtime-loop.ts",
+      "/fixture/listener/src/searcher/main.ts", readyPath].map(path => ({ path, sha256: readySha256 })),
+    graphEdges: 1, cfg, notifications: [source] };
+  return { saved, declaration, edgeId, row };
+}
+
+test("explicit donor takes only recorded input; carried provenance cannot become target valuation/output", () => {
+  const d = donorFixture();
+  const result = splicedProductionAmount(d.saved, d.declaration, [d.edgeId], token0);
+  assert.equal(result.amountIn, 17n); assert.equal(result.freshness, "carried");
+  assert.equal(result.donorRow.amountOut, 900n); // provenance only, not a target expected output
+  assert(!Object.hasOwn(result, "amountOut")); assert.match(result.naturalTargetValuation, /unmet/);
+  assert.equal(productionAmount({ status: "missing-valuation" }, undefined, {}, source, 7).status, "unmet");
+  d.row.quotedAt = { ...source };
+  assert.equal(splicedProductionAmount(d.saved, d.declaration, [d.edgeId], token0).freshness, "fresh");
+});
+
+test("donor bridge rejects mismatched tokens, source/graph/config, future rows and invalid amounts", () => {
+  const d = donorFixture();
+  assert.throws(() => splicedProductionAmount(d.saved, d.declaration, [d.edgeId], actor));
+  assert.throws(() => splicedProductionAmount(d.saved, d.declaration, [d.edgeId, d.edgeId], token0));
+  assert.throws(() => splicedProductionAmount(d.saved, d.declaration, ["absent"], token0));
+  for (const mutate of [
+    (d: ReturnType<typeof donorFixture>) => { d.row.tokenIn = actor; },
+    (d: ReturnType<typeof donorFixture>) => { d.row.status = "failed"; },
+    (d: ReturnType<typeof donorFixture>) => { d.row.amountIn = 0n; },
+    (d: ReturnType<typeof donorFixture>) => { d.row.amountIn = ethers.MaxUint256 + 1n; },
+    (d: ReturnType<typeof donorFixture>) => { d.row.quotedAt.number = source.number + 1; },
+    (d: ReturnType<typeof donorFixture>) => { d.row.quotedAt.hash = "malformed"; },
+    (d: ReturnType<typeof donorFixture>) => { d.row.quotedAt = { ...source, hash: other }; },
+    (d: ReturnType<typeof donorFixture>) => { d.saved.runtime.graph.edges = []; },
+    (d: ReturnType<typeof donorFixture>) => { d.saved.cfg = { minCapitalFraction: 0.1 }; },
+    (d: ReturnType<typeof donorFixture>) => { d.declaration.notifications = []; },
+    (d: ReturnType<typeof donorFixture>) => { d.declaration.liveStarted = true; },
+    (d: ReturnType<typeof donorFixture>) => { d.saved.readySha256 = "55".repeat(32); },
+    (d: ReturnType<typeof donorFixture>) => { d.declaration.bindings = []; },
+    (d: ReturnType<typeof donorFixture>) => { d.declaration.bindings = d.declaration.bindings.slice(1); },
+    (d: ReturnType<typeof donorFixture>) => { d.declaration.head = "missing"; },
+    (d: ReturnType<typeof donorFixture>) => { d.saved.header.parentHash = hash; },
+    (d: ReturnType<typeof donorFixture>) => { d.declaration.notifications.push({ ...d.row.quotedAt, hash }); },
+    (d: ReturnType<typeof donorFixture>) => { d.saved.runtime.pricing.effectiveMids.source.generation++; },
+    (d: ReturnType<typeof donorFixture>) => { d.saved.runtime.pricing.generation++; },
+    (d: ReturnType<typeof donorFixture>) => { d.saved.runtime.pricing.sourceBlockHash = other; },
+  ]) { const broken = donorFixture(); mutate(broken);
+    assert.throws(() => splicedProductionAmount(broken.saved, broken.declaration, [broken.edgeId], token0)); }
 });
 
 test("receipt anchors reject another transaction, block, failed receipt or removed log", () => {

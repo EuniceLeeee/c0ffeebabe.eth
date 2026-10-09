@@ -1,5 +1,6 @@
 {
   "schema": "family-independent-acceptance-progress-v1",
+  "latestCompoundReferenceAcceptance": "docs/research/reports/compound-reference-acceptance-20261009.json",
   "date": "2026-10-09",
   "workspace": "/opt/mev-cloud/family-runtime-20261007",
   "branch": "codex/family-runtime-actual-20261007",
@@ -98,7 +99,7 @@
   "remaining": {
     "kyber": "representative instance/amount/tick coverage and production-stage performance; the historical two-direction sample below is not full-family acceptance",
     "yieldBasisLt": "implement and validate the missing deposit direction: observed stablecoin debt is paid by the protocol AMM, not a second user input; the previous two-input exclusion was incorrect. Do not fabricate a valuation edge. Then production-reference amounts, additional coverage and representative performance; prior original-amount withdraw receipts remain valid for their pinned source",
-    "compoundCToken": "the selected TX redeems wrapper shares and invokes cTokens internally, with no searcher cToken transfer. Identify the outer protocol route separately; this sample does not establish a missing DEX-to-cToken ingress. Keep direct cToken production-reference/variant coverage and representative performance open; prior cToken same-state dual receipts do not prove the outer opportunity",
+    "compoundCToken": "Direct cUSDC/cDAI production-reference amounts now pass via user-authorized input-only splice from the saved 28,040-edge production graph; see latestCompoundReferenceAcceptance. Natural family-only valuation remains missing. The selected TX redeems outer wrapper shares and invokes cTokens internally: direct cToken receipt parity does not prove that outer route. Broader variant coverage and representative performance remain unverified.",
     "algebraIntegral": "all six named handoff instances have current-source single-block Ready/Graph/effective and real dual execution receipts; untested plugin/security/tick states and representative performance remain pending. See algebraHistoricalIntegration and algebraSixSampleCoverage",
     "allFour": "full coverage and representative-load effective/sim timing remain incomplete; no live or adapter_merge_ready verdict"
   },

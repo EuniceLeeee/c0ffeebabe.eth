@@ -1,6 +1,7 @@
 // Opt-in, fixed-sample Family acceptance. Never imported as an automatic test.
 // MAINNET_RPC_URL is injected by the operator; no env/key files are opened.
 // --family SAMPLE_KEY (see SAMPLES) --ready FILE --prices FILE --port FREE_PORT --out NEW_FILE
+// Optional --reference-prices FILE --reference-edges JSON_ARRAY borrows input only.
 // Requires the Family's existing activation env flag; never changes defaults.
 // N-end + N environment single-leg evidence, NOT original-precall/EV/performance.
 import assert from "node:assert/strict";
@@ -14,7 +15,7 @@ import { AnvilStateBackend } from "../../../../shared/state/state-backend.js";
 import { buildExecuteCalldata, loadBotVmRuntimeCode } from "../../../../shared/executor/botvm-executor.js";
 import { runtimeProgramScript } from "../../../../adapters/runtime-amount-program.js";
 import { concatBytes } from "../../../../encoder.js";
-import { parseAtBlockJson } from "../../../blockscan-at-block-cli.js";
+import { atBlockJson, parseAtBlockJson } from "../../../blockscan-at-block-cli.js";
 import { createAdapterFamilyExactQuoteCache } from "../../../adapter-family-exact-quote-cache.js";
 import { createStrictCentralAdapterRuntime } from "../../../strict-central-adapter-runtime.js";
 import { resolveStrictReadyRuntime } from "../../../strict-ready-runtime.js";
@@ -28,7 +29,7 @@ import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from ".
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 import { assertHistoricalDiscoveryReceipt } from "../three-family/historical-input-observations.js";
 import { SAMPLES, ERC20, options, same, json, sha, word, observeBalance, assertDeltas, originalLeg,
-  assertReceipt, assertHeader, assertPriceInput, productionAmount, constructionGuard, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert } from "./evidence.js";
+  assertReceipt, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, constructionGuard, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert } from "./evidence.js";
 
 const ROOT = fileURLToPath(new URL("../../../../../../", import.meta.url));
 type Overrides = Record<string, { code?: string; balance?: string; stateDiff?: Record<string, string> }>;
@@ -95,8 +96,18 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const codePin = sourcePin(); report.code = codePin;
     const readyPath = realpathSync(args.ready), pricesPath = realpathSync(args.prices);
     const inputPath = realpathSync(resolve(dirname(pricesPath), "input.json"));
-    const inputHashes = () => [readyPath, pricesPath, inputPath].map(path => ({ path, sha256: sha(readFileSync(path)) }));
+    const referencePath = args.referencePrices ? realpathSync(args.referencePrices) : undefined;
+    const declarationPath = referencePath ? realpathSync(resolve(dirname(referencePath), "declaration.json")) : undefined;
+    const inputHashes = () => [readyPath, pricesPath, inputPath, ...(referencePath ? [referencePath, declarationPath!] : [])]
+      .map(path => ({ path, sha256: sha(readFileSync(path)) }));
     report.inputHashes = inputHashes();
+    const reference = referencePath ? { saved: parseAtBlockJson(readFileSync(referencePath, "utf8")),
+      declaration: parseAtBlockJson(readFileSync(declarationPath!, "utf8")) } : undefined;
+    if (reference) report.referenceInputSource = { prices: referencePath, declaration: declarationPath,
+      sourceCommit: reference.declaration.head, cfg: JSON.parse(atBlockJson(reference.saved.cfg)), readySha256: reference.saved.readySha256,
+      graphEdges: reference.saved.runtime.graph.edges.length, inputOnly: true, actualLiveEvidence: false,
+      reference: reference.saved.runtime.pricing.effectiveMids.reference,
+      referenceWethInput: reference.saved.runtime.pricing.effectiveMids.referenceWethInput };
     const saved = parseAtBlockJson(readFileSync(pricesPath, "utf8")), provenance = parseAtBlockJson(readFileSync(inputPath, "utf8"));
     assert.equal(realpathSync(provenance.readyPath), readyPath); assert.equal(realpathSync(saved.readyPath), readyPath);
     const envelope = await new UniverseRebuildCheckpointStore({ path: readyPath }).load(); assert(envelope);
@@ -228,7 +239,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         protectedAccount, protectedBalance, totalSupply: BigInt(supply), probes: [717171717171n, 919191919193n] });
       slots.set(token, matches[0]!); return matches[0]!;
     };
-    let unmet = false;
+    let unmet = false, naturalUnmet = false;
+    const usedReferenceEdges = new Set<string>();
     const directions: { entry: typeof entries[number]; original: ReturnType<typeof originalLeg> | null; tokenIn: string; tokenOut: string }[] = [];
     for (const entry of entries) {
       const candidate = entry.memo.candidateSnapshot as any;
@@ -250,10 +262,13 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const effective = saved.runtime.pricing.effectiveMids.rows.get(edgeId);
       if (effective) assert.equal(effective.edgeId, edgeId);
       const p = productionAmount(effective, saved.runtime.pricing.mids.get(edgeId), edges[0], source, saved.runtime.generation);
-      if (p.status === "unmet") unmet = true;
+      const splice = p.status === "unmet" && reference
+        ? splicedProductionAmount(reference.saved, reference.declaration, args.referenceEdges, tokenIn) : null;
+      if (p.status === "unmet") { naturalUnmet = true; if (!splice) unmet = true; }
+      if (splice) usedReferenceEdges.add(splice.donorRow.edgeId);
       const row: any = { instance: entry.instanceKey, edgeId, tokenIn, tokenOut, original,
         directionEvidence: original ? "original transaction direction" : "opposite production Ready direction; not an original TX leg",
-        productionReferenceGate: p, trials: [] }; report.samples.push(row);
+        productionReferenceGate: p, splicedReferenceInput: splice, trials: [] }; report.samples.push(row);
       const beforeBuild = { calls, ...guard.counts };
       const leg = guard.build(() => {
         const input = { family, route: route[0]!, source, executor, runtime: guard.runtime(runtime), runtimeEvidence: [], actionOwnership: catalog };
@@ -270,6 +285,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const base = await Promise.all(pair.map(t => balance(t, executor)));
       assert(pair.every(t => ![executor, owner].includes(t)) && ![executor, owner].includes(entry.instanceKey));
       const trials: [string, bigint][] = p.status === "met" ? [["production-effective", p.amountIn]] : [];
+      if (splice) trials.push(["spliced-production-input-at-N", splice.amountIn]);
       if (original) trials.push(["historical-input-at-N", original.amountIn]);
       else if (p.status === "met") trials.push(["twice-production-effective", p.amountIn * 2n]);
       report.preparationMs ??= performance.now() - started;
@@ -337,7 +353,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     report.cache = cache.snapshot();
     const trials = report.samples.flatMap((s: any) => s.trials);
     assert(trials.length > 0 && trials.every((t: any) => t.status === "pass"), "at least one real quote/execution failed");
-    report.result = unmet ? "incomplete-production-reference" : "pass";
+    assert.deepEqual([...usedReferenceEdges].sort(), [...args.referenceEdges].sort(), "unused reference selection");
+    report.naturalProductionReferenceGate = naturalUnmet ? "unmet" : "met";
+    report.result = unmet ? "incomplete-production-reference" : usedReferenceEdges.size ? "pass-with-spliced-reference" : "pass";
   } catch (e) { report.errors.push(failure(e)); }
   finally {
     stage = "final-pins";
@@ -350,7 +368,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     try { writeFileSync(fd, redact(json(report)) + "\n"); fsyncSync(fd); } finally { closeSync(fd); }
   }
   console.log(json({ result: report.result, family: sample.family, out: resolve(args.out), errors: report.errors }));
-  if (report.result !== "pass") process.exitCode = report.result === "incomplete-production-reference" ? 2 : 1;
+  if (!["pass", "pass-with-spliced-reference"].includes(report.result)) process.exitCode = report.result === "incomplete-production-reference" ? 2 : 1;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main().catch(() => {
   console.error("invalid arguments/output; existing files untouched; historical execution NOT established"); process.exitCode = 1;
