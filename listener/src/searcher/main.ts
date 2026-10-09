@@ -32,7 +32,7 @@ import {
 import { readBlockTouchedStateKeys, type BlockTouchedProvider } from "./blockscan-touched-state.js";
 import { BlockScanActivityPrefetch } from "./blockscan-activity-prefetch.js";
 import { startBlockScanHeadFeed } from "./blockscan-head-feed.js";
-import { isRpcThrottleError } from "./rpc-throttle-guard.js";
+import { isRpcQuotaExhaustedError, isRpcThrottleError, LiveRpcThrottleObservation } from "./rpc-throttle-guard.js";
 import {
   initBlockScanEnumerationSolverTelemetry,
 } from "./blockscan-enumeration-solver-telemetry.js";
@@ -1026,7 +1026,7 @@ export function createLiveSourceSimulationFactory(input: {
   if (!Number.isSafeInteger(chainId) || chainId <= 0 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("invalid strict simulation chain or timeout");
   }
-  return ({ source, control }) => {
+  return ({ source, control, onRpcThrottle }) => {
     if (runtimeAbort.signal.aborted) throw runtimeAbort.signal.reason;
     return createRevmStrictSourceSimulation({
       identity: { source, chainId, rpcUrl },
@@ -1037,6 +1037,12 @@ export function createLiveSourceSimulationFactory(input: {
       executionGasLimit: 0x1000000,
       createClient: createClient ?? (({ onFatal }) => new RevmSimClient({ executablePath, timeoutMs, onFatal })),
       onFatal(reason) {
+        if (reason.kind === "rpc-throttle" && onRpcThrottle !== undefined) {
+          // The strict source slot is already fenced and owns its drain.
+          // Ordinary live may retire only this pass while observing successors.
+          onRpcThrottle(reason);
+          return;
+        }
         // Task-wide admission closes synchronously, before domain conversion.
         if (!runtimeAbort.signal.aborted) runtimeAbort.abort(new RevmFatalError(reason));
         onFatal(reason);
@@ -1516,6 +1522,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     requestRuntimeStop.fatal(reason);
   };
+  const rpcThrottleObservation = new LiveRpcThrottleObservation(onSimulationFatal);
   const blockScanStageSettings = resolveBlockScanLiveStageSettings(process.env, blockScanCfg?.maxCandidates ?? 0);
   const {
     passBudgetMs: blockScanPassBudgetMs,
@@ -2512,13 +2519,14 @@ async function main(): Promise<void> {
       }, control);
     },
   });
-  // The existing activity reader owns both pricing modes. Observe either
-  // physical sibling's throttle before their joined range can be cancelled,
-  // and keep one provider identity for its completed-block memoization.
+  // Keep one activity provider identity for completed-block memoization.
+  // A spent allocation is terminal immediately; temporary throttles are
+  // observed once per failed pass by the runtime, after joining its reads.
   const activityReadFailed = (error: unknown): never => {
-    if (isRpcThrottleError(error)) {
-      console.error("[searcher/blockscan-activity] RPC throttle; stopping live");
-      onSimulationFatal({ kind: "rpc-throttle", category: "rpc-rate-limit" });
+    const exhausted = isRpcQuotaExhaustedError(error);
+    if (exhausted || blindProductionAudit && isRpcThrottleError(error)) {
+      console.error("[searcher/blockscan-activity] terminal RPC throttle; stopping runtime");
+      onSimulationFatal({ kind: "rpc-throttle", category: exhausted ? "rpc-quota" : "rpc-rate-limit" });
     }
     throw error;
   };
@@ -2579,6 +2587,7 @@ async function main(): Promise<void> {
     rpcUrl: config.rpcUrl,
     strictSession: strictSessionFor,
     sourceSimulationFactory,
+    rpcThrottleObservation: blindProductionAudit ? undefined : rpcThrottleObservation,
     rethTransportScheduler: blockScanRethTransportScheduler,
     runtimeAbort: blockScanRuntimeAbort,
     sharedPlanner: planner,

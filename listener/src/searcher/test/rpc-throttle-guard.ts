@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { JsonRpcProvider } from "ethers";
-import { guardRpcThrottle, isRpcQuotaExhaustedError, isRpcThrottleError } from "../rpc-throttle-guard.js";
+import { guardRpcThrottle, isRpcQuotaExhaustedError, isRpcThrottleError,
+  LiveRpcThrottleObservation, type LiveRpcThrottleRecord } from "../rpc-throttle-guard.js";
+import type { RevmFatalReason } from "../revm-sim-client.js";
 
 const throttleFailures = [
   new Error("HTTP 429 Too Many Requests"),
@@ -134,3 +136,42 @@ assert.equal(isRpcQuotaExhaustedError({ code: 3, message: "execution reverted: q
 assert.equal(isRpcQuotaExhaustedError(new Error("execution reverted: quota exhausted", {
   cause: { code: 429, message: "compute units per second capacity exceeded" },
 })), false);
+
+const fatal = { kind: "rpc-throttle", category: "http429", httpStatus: 429 } as const;
+const observed: LiveRpcThrottleRecord[] = [], stops: RevmFatalReason[] = [];
+const observation = new LiveRpcThrottleObservation(reason => stops.push(reason), event => observed.push(event));
+observation.observeError(100, new Error("ordinary failure"));
+for (let block = 100; block <= 103; block++) {
+  observation.observeError(block, { status: 429 });
+  for (let sibling = 0; sibling < 20; sibling++) observation.observeFatal(block, fatal);
+  observation.observeRecovery(block); // One successful sibling is not a healthy successor.
+}
+assert.deepEqual(observed.map(event => event.failedBlocks), [1, 2, 3, 4]);
+assert.deepEqual(stops, []);
+observation.observeRecovery(104);
+observation.observeFatal(103, fatal); // A retired source's late failure cannot start a new streak.
+assert.deepEqual(observed.at(-1), { sourceBlock: 104, failedBlocks: 0, limit: 5, action: "recovered" });
+for (let block = 105; block <= 109; block++) observation.observeFatal(block, fatal);
+assert.equal(stops.length, 1);
+assert.equal(observed.at(-1)!.action, "stop");
+assert.equal(observed.at(-1)!.failedBlocks, 5);
+observation.observeRecovery(110); observation.observeFatal(111, fatal);
+assert.equal(stops.length, 1, "terminal stop cannot reopen");
+
+for (const failure of [
+  { status: 429, message: "monthly quota exhausted" },
+  new Error("wrapper", { cause: { code: -32000, message: "compute units depleted" } }),
+]) {
+  const stops: RevmFatalReason[] = [];
+  const observation = new LiveRpcThrottleObservation(reason => stops.push(reason), () => { throw new Error("reporter"); });
+  observation.observeRecovery(200);
+  observation.observeError(199, failure);
+  assert.deepEqual(stops, [{ kind: "rpc-throttle", category: "rpc-quota" }], "spent quota stops even from a late source");
+}
+const ambiguousStops: RevmFatalReason[] = [];
+const ambiguousQuota = new LiveRpcThrottleObservation(reason => ambiguousStops.push(reason), () => {});
+for (let block = 201; block <= 204; block++) ambiguousQuota.observeFatal(block, { kind: "rpc-throttle", category: "rpc-quota" });
+assert.deepEqual(ambiguousStops, [], "engine rpc-quota alone also means short throughput throttling");
+ambiguousQuota.observeFatal(205, { kind: "rpc-throttle", category: "rpc-quota" });
+assert.equal(ambiguousStops.length, 1);
+console.log("Live RPC throttle observation: PASS");

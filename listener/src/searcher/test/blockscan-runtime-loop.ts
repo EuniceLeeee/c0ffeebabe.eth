@@ -18,7 +18,7 @@ import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import { RevmFatalError, RevmStrictError, type RevmFatalReason, type StrictSimulateRequest } from "../revm-sim-client.js";
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
 import { BlockActivityRangeInvalidatedError } from "../blockscan-touched-state.js";
-import { isRpcThrottleError } from "../rpc-throttle-guard.js";
+import { isRpcQuotaExhaustedError, LiveRpcThrottleObservation, type LiveRpcThrottleRecord } from "../rpc-throttle-guard.js";
 import { BlockScanActivityPrefetch } from "../blockscan-activity-prefetch.js";
 import { PinnedRethQuoteBackend } from "../pinned-reth-quote-backend.js";
 import { blockScanEdgeKey, createVerifiedGraphView, exactSetHash, type VerifiedGraphView } from "../venues/blockscan-state-capability.js";
@@ -39,8 +39,8 @@ const invocation = (s = source()) => ({ source: s, request: {
   overrideIntent: { caller: { kind: "executor" as const } }, observe: ["return-data" as const],
 }, callerAuthority: { executor: actor, transactionOrigin: origin } });
 const turn = () => new Promise<void>(resolve => setImmediate(resolve));
-async function until(predicate: () => boolean) {
-  const deadline = Date.now() + 2000;
+async function until(predicate: () => boolean, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
   while (!predicate()) { assert(Date.now() < deadline, "fixture boundary not reached"); await turn(); }
 }
 function deferred() { let resolve!: () => void; const promise = new Promise<void>(r => { resolve = r; }); return { promise, resolve }; }
@@ -117,7 +117,7 @@ test("private recording failure joins the ordinary drain but exits nonzero witho
   assert.match(main, /private solver execution input recording failed"\);\s+requestRuntimeStop\.fail\(failure\);/);
 });
 
-test("actual shared activity provider latches throttle before joined reads settle and bars successor I/O", async () => {
+test("actual shared activity provider latches spent quota before joined reads settle and bars successor I/O", async () => {
   // Extract only the real thin main wiring, not a parallel copy of its behavior.
   const text = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
   const ast = ts.createSourceFile("main.ts", text, ts.ScriptTarget.Latest, true);
@@ -137,7 +137,7 @@ test("actual shared activity provider latches throttle before joined reads settl
     const slow = deferred(); const exits: number[] = []; let calls = 0;
     const stop = createLiveRuntimeStop({ runtimeAbort, emitFatal() {}, exit: code => { exits.push(code); } });
     stop.installDrain(() => slow.promise);
-    const throttle = Object.assign(new Error("fixture HTTP 429"), { statusCode: 429 });
+    const throttle = Object.assign(new Error("fixture HTTP 429 monthly quota exhausted"), { statusCode: 429 });
     const provider = {
       async getLogs(_filter: unknown) { calls++; if (method === "logs") throw throttle; await slow.promise; return []; },
       async send(_method: string, _params: unknown[]) { calls++; if (method === "trace") throw throttle; await slow.promise; return []; },
@@ -145,7 +145,7 @@ test("actual shared activity provider latches throttle before joined reads settl
     const guarded = runInNewContext(js, {
       provider, blockScanRuntimeAbort: runtimeAbort, console: { error() {} },
       process: { env: {} },
-      isRpcThrottleError,
+      isRpcQuotaExhaustedError,
       onSimulationFatal: stop.fatal,
     }, { timeout: 1000 }) as typeof provider;
     const a = guarded.getLogs({ fromBlock: 1, toBlock: 1 }), b = guarded.send("debug_traceBlockByNumber", ["0x1"]);
@@ -161,7 +161,7 @@ test("actual shared activity provider latches throttle before joined reads settl
   }
 });
 
-test("actual full-header throttle latches before speculative trace drain, then exits after drain", async () => {
+test("actual full-header spent quota latches before speculative trace drain, then exits after drain", async () => {
   const text = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
   const ast = ts.createSourceFile("main.ts", text, ts.ScriptTarget.Latest, true);
   const names = new Set(["frozenProducerTopology", "activityReadFailed", "timedActivityRead",
@@ -179,7 +179,7 @@ test("actual full-header throttle latches before speculative trace drain, then e
   for (const controlled of [true, false]) {
     const runtimeAbort = new AbortController(), slow = deferred(), exits: number[] = [];
     let fatalities = 0, done = false, traces = 0;
-    const throttle = Object.assign(new Error("fixture header HTTP 429"), { statusCode: 429 });
+    const throttle = Object.assign(new Error("fixture header HTTP 429 monthly quota exhausted"), { statusCode: 429 });
     const stop = createLiveRuntimeStop({ runtimeAbort, emitFatal() { fatalities++; }, exit: code => { exits.push(code); } });
     const wired = runInNewContext(js, {
       readyUniverse: { generation: 4, graphHash: hash(4) }, config: { rpcUrl: "http://fixture.invalid" },
@@ -190,7 +190,7 @@ test("actual full-header throttle latches before speculative trace drain, then e
       } },
       readBlockScanObservedHeader: async () => { throw throttle; },
       parseBlockScanObservedHeader: () => { throw new Error("unexpected successful header"); },
-      process: { env: {} }, console: { error() {}, log() {} }, isRpcThrottleError,
+      process: { env: {} }, console: { error() {}, log() {} }, isRpcQuotaExhaustedError,
       onSimulationFatal: stop.fatal,
     }, { timeout: 1000 }) as { frozenProducerTopology: { observeHeader: (n: number, c?: unknown) => Promise<unknown> };
       blockScanActivityProvider: BlockScanActivityPrefetch };
@@ -228,7 +228,7 @@ test("actual idle child exits nonzero after fatal drain instead of remaining in 
     child.once("error", reject); child.once("close", (code, signal) => resolve({ code, signal }));
   });
   try {
-    await until(() => stdout.includes("drain-start") || child.exitCode !== null || child.signalCode !== null);
+    await until(() => stdout.includes("drain-start") || child.exitCode !== null || child.signalCode !== null, 8000);
     assert(stdout.includes("drain-start"), stderr); assert.equal(child.exitCode, null); assert.equal(child.signalCode, null);
     assert.equal(stdout.split("strict_simulation_fatal").length - 1, 1);
     assert(stdout.includes('"kind":"rpc-throttle"'));
@@ -240,13 +240,13 @@ test("actual idle child exits nonzero after fatal drain instead of remaining in 
   }
 });
 
-function clients() {
+function clients(onFatal?: (reason: RevmFatalReason) => void) {
   const made: { requests: StrictSimulateRequest[]; controls: any[]; closes: number;
     onFatal: (reason: RevmFatalReason) => void; release: () => void; hold: boolean }[] = [];
   const runtimeAbort = new AbortController(); const reports: RevmFatalReason[] = [];
   const factory = createLiveSourceSimulationFactory({ rpcUrl: "http://127.0.0.1:1", chainId: 1,
     executablePath: process.execPath, timeoutMs: 1000, runtimeAbort,
-    onFatal: r => { assert(runtimeAbort.signal.aborted); reports.push(r); },
+    onFatal: r => { assert(runtimeAbort.signal.aborted); reports.push(r); onFatal?.(r); },
     createClient({ onFatal }) {
       const gate = deferred(); const row = { requests: [] as StrictSimulateRequest[], controls: [] as any[],
         closes: 0, onFatal, release: gate.resolve, hold: false };
@@ -378,6 +378,123 @@ function loopFixture(factory: SourceSimulationFactory, startupWarmEnabled = fals
   };
   return { loop: new BlockScanRuntimeLoop(deps), deps, inputs, coordinator, runtimeAbort };
 }
+
+for (const where of ["header", "activity"] as const) test(`live observes five different ${where} throttled heads without publishing missing state`, async context => {
+  context.mock.method(console, "log", () => {});
+  let simulations = 0;
+  const f = loopFixture(() => ({ transport: { async simulate() { simulations++; throw new Error("failed activity must not simulate"); } },
+    async closeAndDrain() {} }));
+  const exits: number[] = [], records: LiveRpcThrottleRecord[] = [];
+  const stop = createLiveRuntimeStop({ runtimeAbort: f.runtimeAbort, emitFatal() {}, exit: code => exits.push(code) });
+  const observation = new LiveRpcThrottleObservation(stop.fatal, event => records.push(event));
+  const throttle = Object.assign(new Error("fixture temporary HTTP 429"), { status: 429 });
+  let reads = 0;
+  Object.assign(f.deps, { rpcThrottleObservation: observation,
+    ...(where === "header" ? { frozenTopology: { topologyKey: "fixture", async observeHeader() { reads++; throw throttle; } } }
+      : { readBlockSwapTouched: async () => { reads++; throw throttle; } }),
+  });
+  stop.installDrain(() => f.loop.shutdown());
+  try {
+    for (let block = 101; block <= 105; block++) {
+      await assert.rejects(f.loop.runHead(block, {
+        sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now(),
+      }), error => error === throttle || block === 105 && error instanceof RevmFatalError);
+      assert.equal(f.runtimeAbort.signal.aborted, block === 105);
+      assert.equal(records.length, block - 100, "header/activity/catch siblings count one source");
+      assert.equal(f.inputs.filter(input => input.kind === "runtime").length, 0, "incomplete activity never enters pricing");
+      assert.equal(simulations, 0);
+    }
+    await turn(); assert.deepEqual(exits, [1]);
+    await f.loop.runHead(106, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+    assert.equal(reads, 5, "terminal runtime cannot admit the sixth head");
+  } finally { await f.loop.shutdown(); }
+});
+
+test("live temporary source fatal fences/drains its client and resumes new sources until the fifth head", async context => {
+  context.mock.method(console, "log", () => {});
+  const c = clients(), f = loopFixture(c.factory);
+  const exits: number[] = [], records: LiveRpcThrottleRecord[] = [];
+  const stop = createLiveRuntimeStop({ runtimeAbort: c.runtimeAbort, emitFatal() {}, exit: code => exits.push(code) });
+  Object.assign(f.deps, { runtimeAbort: c.runtimeAbort,
+    rpcThrottleObservation: new LiveRpcThrottleObservation(stop.fatal, event => records.push(event)) });
+  const controls: AbortSignal[] = [];
+  f.coordinator.prepare = async (input: any) => {
+    const s = source(input.graph.generation, input.graph.sourceBlock);
+    await input.simulationTransport.simulate(invocation(s));
+    const client = c.made.at(-1)!; client.hold = true;
+    controls.push(input.signal);
+    client.onFatal(input.graph.sourceBlock === 102
+      ? { kind: "rpc-throttle", category: "rpc-quota" }
+      : { kind: "rpc-throttle", category: "http429", httpStatus: 429 });
+    await assert.rejects(input.simulationTransport.simulate(invocation(s)), RevmFatalError);
+    input.signal.throwIfAborted();
+    throw new Error("cannot publish a failed source");
+  };
+  stop.installDrain(() => f.loop.shutdown());
+  try {
+    for (let index = 0; index < 5; index++) {
+      if (index !== 1) f.loop.schedule(101 + index); // Head 102 was queued during the first drain.
+      await until(() => c.made[index]?.closes === 1);
+      assert.equal(c.made.length, index + 1);
+      assert(controls[index]!.aborted, "the current pass, not just its client, is retired");
+      assert.equal(c.runtimeAbort.signal.aborted, index === 4);
+      assert.deepEqual(exits, [], "even a terminal fifth-head stop must join physical drain");
+      if (index === 0) {
+        f.loop.schedule(102); await turn(); assert.equal(c.made.length, 1, "successor waits for source drain");
+      }
+      c.made[index]!.release();
+      if (index === 0) await until(() => c.made[1]?.closes === 1);
+      else await f.loop.waitForIdle();
+    }
+    await turn(); assert.deepEqual(exits, [1]);
+    assert.deepEqual(records.map(event => event.failedBlocks), [1, 2, 3, 4, 5]);
+    assert.deepEqual(c.reports, [], "temporary source failures do not use the legacy immediate fatal");
+    f.loop.schedule(106); await turn(); assert.equal(c.made.length, 5);
+    assert(c.made.every(client => client.requests.length === 1 && client.closes === 1));
+  } finally {
+    for (const client of c.made) client.release();
+    await f.loop.shutdown();
+  }
+});
+
+test("only a later healthy drained source resets the live throttle streak and catch-up keeps the old publication", async context => {
+  context.mock.method(console, "log", () => {});
+  const sourceDrain = deferred(), records: LiveRpcThrottleRecord[] = [], starts: number[] = [];
+  let latest: any = { sourceBlock: 100, sourceBlockHash: hash(100) };
+  const f = loopFixture(input => {
+    starts.push(input.source.number);
+    return { transport: { async simulate() { return { data: "0x" }; } },
+      async closeAndDrain() { if (input.source.number === 102) await sourceDrain.promise; } };
+  });
+  const ranges: Array<[number, number | undefined]> = [];
+  const observation = new LiveRpcThrottleObservation(() => { throw new Error("a healthy successor should reset"); }, event => records.push(event));
+  Object.assign(f.deps, { rpcThrottleObservation: observation,
+    readBlockSwapTouched: async (number: number, _header: unknown, range: any) => {
+      ranges.push([number, range?.previousSource.number]);
+      if (number === 101 || number === 103) throw Object.assign(new Error("fixture HTTP 429"), { status: 429 });
+      return new Set();
+    },
+  });
+  f.coordinator.latestPricingSnapshot = () => latest;
+  f.coordinator.prepare = async (input: any) => {
+    const result = completeRuntimeFixture(input.graph); latest = result.snapshot.pricing; return result;
+  };
+  const diagnostic = { through: "prices" as const, onSnapshot() {}, onEnumeration() {}, onComplete() {} };
+  try {
+    await assert.rejects(f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }, diagnostic), /HTTP 429/);
+    assert.equal(latest.sourceBlock, 100);
+    const pending = f.loop.runHead(102, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }, diagnostic);
+    await until(() => starts.includes(102)); await turn();
+    assert.deepEqual(records.map(event => event.action), ["observe"], "publication alone cannot reset before source drain");
+    sourceDrain.resolve(); await pending;
+    assert.deepEqual(records.map(event => event.action), ["observe", "recovered"]);
+    observation.observeError(101, { status: 429 });
+    await assert.rejects(f.loop.runHead(103, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }, diagnostic), /HTTP 429/);
+    assert.equal(records.at(-1)!.failedBlocks, 1);
+    assert.equal(latest.sourceBlock, 102);
+    assert.deepEqual(ranges, [[101, 100], [102, 100], [103, 102]], "recovery reads every missing transition, never just the latest failed head");
+  } finally { sourceDrain.resolve(); await f.loop.shutdown(); }
+});
 
 test("runtime rejects disabled Exact refinement with evidence-promoting modes", () => {
   const makeDeps = (): BlockScanRuntimeLoopDependencies => {

@@ -1,4 +1,5 @@
 import type { StateBackend } from "../shared/state/state-backend.js";
+import type { RevmFatalReason } from "./revm-sim-client.js";
 
 type RpcErrorShape = { code?: unknown; data?: unknown; message?: unknown };
 
@@ -52,6 +53,69 @@ export function isRpcQuotaExhaustedError(error: unknown): boolean {
     cause = item.cause;
   }
   return false;
+}
+
+type RpcThrottleReason = Extract<RevmFatalReason, { kind: "rpc-throttle" }>;
+export interface LiveRpcThrottleRecord {
+  readonly sourceBlock: number;
+  readonly failedBlocks: number;
+  readonly limit: 5;
+  readonly action: "observe" | "recovered" | "stop";
+  readonly category?: RpcThrottleReason["category"];
+}
+
+/** Observe failed source passes, not individual requests. The failed source
+ * must still close/drain; only a later healthy, drained source resets the streak.
+ * This policy never retries RPC or changes the ordinary head scheduler. */
+export class LiveRpcThrottleObservation {
+  private readonly failedBlocks = new Set<number>();
+  private recoveredThrough = -1;
+  private stopped = false;
+  constructor(
+    private readonly stop: (reason: RpcThrottleReason) => void,
+    private readonly record: (event: LiveRpcThrottleRecord) => void = event => {
+      console.warn(`[searcher/rpc-throttle-observation] ${JSON.stringify(event)}`);
+    },
+  ) {}
+
+  observeError(sourceBlock: number, error: unknown): void {
+    if (!isRpcThrottleError(error)) return;
+    const exhausted = isRpcQuotaExhaustedError(error);
+    this.observe(sourceBlock, { kind: "rpc-throttle",
+      category: exhausted ? "rpc-quota" : "rpc-rate-limit" }, exhausted);
+  }
+
+  observeFatal(sourceBlock: number, reason: RpcThrottleReason): void {
+    // The engine's rpc-quota category also covers throughput/capacity limits.
+    // Without the original provider evidence it is not proof of a spent quota.
+    this.observe(sourceBlock, reason, false);
+  }
+
+  private observe(sourceBlock: number, reason: RpcThrottleReason, exhausted: boolean): void {
+    if (this.stopped) return;
+    // Retirement-time failures from an older source cannot poison a healthy
+    // successor. An explicitly spent allocation remains terminal regardless.
+    if (!exhausted && (sourceBlock <= this.recoveredThrough || this.failedBlocks.has(sourceBlock))) return;
+    this.failedBlocks.add(sourceBlock);
+    const stop = exhausted || this.failedBlocks.size >= 5;
+    this.stopped = stop;
+    try {
+      this.record({ sourceBlock, failedBlocks: this.failedBlocks.size, limit: 5,
+        action: stop ? "stop" : "observe", category: reason.category });
+    } catch { /* Diagnostics cannot change admission or shutdown. */ }
+    if (stop) this.stop(reason);
+  }
+
+  observeRecovery(sourceBlock: number): void {
+    if (this.stopped || sourceBlock <= this.recoveredThrough ||
+        [...this.failedBlocks].some(block => block >= sourceBlock)) return;
+    this.recoveredThrough = sourceBlock;
+    if (this.failedBlocks.size === 0) return;
+    this.failedBlocks.clear();
+    try {
+      this.record({ sourceBlock, failedBlocks: 0, limit: 5, action: "recovered" });
+    } catch { /* Diagnostics cannot change the recovery boundary. */ }
+  }
 }
 
 /** Observe transport failures before a Family turns them into unresolved quotes.
