@@ -882,6 +882,46 @@
       },
       "created_at": "2026-10-09T13:00:59.000Z",
       "updated_at": "2026-10-09T13:00:59.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261010-curve-native-historical-caller",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x6fc18a5c63f708f6b03b1ccec5e14fcec03c4e7aaf01816814777fab97d6af91",
+      "target_block": 26139768,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "historical_curve_native_dual_harness_asserted_caller_not_declared_by_production",
+      "evidence": {
+        "scope": "Test-harness caller validation only; causal lane, original transaction prestate, full route and performance remain unverified.",
+        "before": "logs/rounding-central-20261009.V3Y8qS/curve-dual-attempt01.json",
+        "beforeSha256": "fdf7a2867b0a9883abc5d8c203d6f1baa9c3ec292c13e4351a1d640895c607c4",
+        "after": "logs/rounding-central-20261009.V3Y8qS/curve-dual-attempt02.json",
+        "afterSha256": "72c7408e4e0b7bac6affe4141133445fd9875655a838021d97ca4224d9570c57",
+        "finding": "Curve public get_dy requests omit caller; central issuer preserves this. The initial harness asserted executor from and failed before RPC, reporting only unresolved. New observer preserves the real request and separately checks executor-call return equality at the same canonical hash.",
+        "regression": "Three offline cases pass: default/executor equality; retained explicit executor; mismatch, alien caller and wrong source rejection. Fresh same-N 4 amount/direction samples produce 8 successful quoted/runtime EVM receipts. Signed stETH rounding deltas retained.",
+        "independentReview": {
+          "reviewer": "Darwin / 01a1217a-3a33-7a50-8965-0050d91e9964",
+          "result": "Narrow harness defect closed; no production caller-protocol change required.",
+          "verified": "Read actual production codec/runtime, repaired harness and 4 quote-control pairs / 8 EVM receipts; verified source/hash/caller/origin bindings.",
+          "limits": "Reviewer did not rerun tests/RPC or capture old source before update. Initial artifact did not retain its inner exception. Executor control is not full owner context; actual EVM evidence remains necessary. N end state is not original leg prestate."
+        },
+        "report": "docs/research/reports/native-asset-rounding-acceptance-20261010.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-plain-historical-native-dual",
+        "issue": "Harness required an executor from field absent in valid production caller-free reads, hiding the cause behind a generic unresolved assertion.",
+        "evidence": "Preserved attempt01 (zero RPC / zero EVM), actual production request declaration, three control regressions and attempt02 8/8 same-state receipts.",
+        "codify_target": "curve-plain-family/test/historical-native-dual.ts and historical-native-dual-contract.ts",
+        "codify_commit": "2f1f3da75e1aaa1ea19262af4f1b58ba38f28bd2",
+        "status": "codified"
+      },
+      "created_at": "2026-10-09T16:38:00.000Z",
+      "updated_at": "2026-10-09T16:38:00.000Z"
     }
   ]
 }
