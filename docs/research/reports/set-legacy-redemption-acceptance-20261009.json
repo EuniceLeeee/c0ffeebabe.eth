@@ -1,0 +1,147 @@
+{
+  "schema": "set-legacy-redemption-acceptance/v1",
+  "date": "2026-10-09",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "parentCommit": "fface4199d757097d561a935df60f8fc7d2dc347",
+  "implementationCommit": "67dddb763fc64c3d2ff226e0df91e45de9afe2ab",
+  "family": "protocol:set-redemption",
+  "action": "set-legacy-core-redeem",
+  "lineage": "set-redemption:legacy-core-0.5.7",
+  "defaultEnabled": false,
+  "result": "partial-correctness-acceptance",
+  "claim": "Two naturally admitted legacy Set redemption variants pass same-N production quote versus independent quoted/runtime receipts at legal unit and multi-unit inputs. Production reference amount, natural effective valuation, issuance and the original opportunity are NOT accepted by this report.",
+  "codeBinding": {
+    "historicalProductionSourceTreeSha256": "95bfcdaaa93d4393d35dddfc8d0b207cb85db7d83e6d50fedb360ef032e7754a",
+    "familyDefinitionHash": "79389ab43c8026893b0fa93ae6601cfa905e1a1b55868bdf835404800396e15a",
+    "familyMemoDefinitionHash": "57e340825bbe715763f98e4f8a3e90170aa52e74018cf27cb8167afb8498e8ea",
+    "historicalHarnessSha256": "bc34a91968ff7a01bb2085b0c54901e6409ff3abb1ef6d3201293c722f288c32",
+    "legacyObserverSha256": "242200ee9f56d53428c0f48939c3da05ef2886d034e88944f6849c640f9bd588",
+    "botvmRuntimeKeccak256": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+    "caveat": "Historical runs bind the actual working source, including previously present owned DODO and peer dirty files. Those unrelated changes are not absorbed into this scoped Set commit. A staged-source export separately checks the committed source; it is not another Git worktree or a new historical EVM run.",
+    "throughoutEachHistoricalRun": "production source, packages, Solidity, harness/helpers, executor artifact, Ready and prices unchanged"
+  },
+  "transaction": "0x00f865180dc1ffacd181f69a99db506d08766a5086a4f57a886f9611669f4375",
+  "stateAndEnvironment": {
+    "number": 26132613,
+    "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+    "chainId": 1,
+    "transactionIndex": 8,
+    "timestamp": 1791281015,
+    "executor": "0x1000000000000000000000000000000000000002",
+    "origin": "0x1000000000000000000000000000000000000001",
+    "environment": "N end-state and N environment; header and EVM NUMBER/TIMESTAMP/BASEFEE/COINBASE/GASLIMIT/PREVRANDAO/CHAINID checked; no mining or prefix replay"
+  },
+  "implementation": {
+    "entrypoint": "Core.redeemAndWithdrawTo(set, executor, amount, 0)",
+    "scope": "Existing Family gains authenticated direct SetToken and RebalancingSetTokenV3 redemption; BasicIssuance remains supported. No central production protocol branch or new scheduler.",
+    "identity": "Core registers the Set; Set factory points back to Core; direct Core/Set/Vault and linked library runtime identities are verified. Factory creation enable is not a redemption eligibility gate.",
+    "capacity": "Quote checks total supply, exact naturalUnit divisibility, Vault owner credit and available component balance. Nonmultiples are rejected, not silently rounded down.",
+    "runtime": "Every basket component's actual receipt and full input burn are guarded; existing nested subprogram capacity is reused. Runtime construction calls no chain Exact or quoted fallback.",
+    "sourceLimitation": "SetTokenLibrary runtime bytes/hash are bound at N and its definition inspected in the flattened Core source; no independent recompilation of that library is claimed."
+  },
+  "naturalIntegration": {
+    "ready": "logs/set-legacy-acceptance-20261009.QmKyAh/single-N26132613-attempt03/ready.json",
+    "readySha256": "28eb896928cc1427a618ee48e301545c79672769e6b6b009f983c34f93f934b3",
+    "prices": "logs/set-legacy-acceptance-20261009.QmKyAh/single-N26132613-attempt03/prices/prices.json",
+    "pricesSha256": "6138d54c8a5d694594c5b199b65a3cbc9040412077a140f18fd4f4a2fc9a6bbf",
+    "inputSha256": "e3583d69182d586aa81136c033e028d62ca429eb22e3be7be452be5d7c29ccc1",
+    "graphHash": "16332e37dd2a0d5cd6b4f25428b36a9a83742b06b08ce6d7a1604d32e45973e4",
+    "candidates": 2,
+    "verifiedInstances": 2,
+    "rejected": 0,
+    "retryable": 0,
+    "graphEdges": 2,
+    "rawMids": 2,
+    "effectiveQuoted": 0,
+    "effectiveLimitation": "Family-only graph lacks valuation paths; legal-amount trials do not resolve this.",
+    "naturalMemoProvenance": "Both selected memos originate from same-N transaction 0x6f5ae48d4d90c51f5b0652e29aba6c348462fbffc7599a6ce9e2341938667062, at logIndex 9 and 15. The asserted sample TX is not injected into discovery or used to replace valid earlier same-block provenance.",
+    "referenceSearch": "The saved 28,040-edge table used for Compound (prices-1-26146969.json, SHA256 7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378) contains no amountIn row for either Set token. This is a search of that artifact, not a claim about all possible live tables."
+  },
+  "samples": [
+    {
+      "set": "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+      "kind": "set-token",
+      "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "naturalUnit": "1000000000000",
+      "NEndSupply": "275022000000000000",
+      "amountInputs": ["1000000000000", "1000000000000000"],
+      "sameStateQuoteAndActualOutputs": ["400", "400000"],
+      "executions": 4,
+      "allSignedOutputDeltas": "0",
+      "originalInput": "1461022291000000000000",
+      "originalOutput": "584408916400",
+      "evidence": "logs/set-legacy-acceptance-20261009.QmKyAh/dual-legacy-base-reviewed.json",
+      "evidenceSha256": "08283c8f7cbecc3a1d9c7675f83bd77c1a7a1bc7afa9c3b2653494da7afc4a6a"
+    },
+    {
+      "set": "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e",
+      "kind": "rebalancing-v3",
+      "tokenOut": "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+      "naturalUnit": "100000000",
+      "NEndSupply": "117638534804342909111",
+      "amountInputs": ["100000000", "1000000000000000000"],
+      "sameStateQuoteAndActualOutputs": ["238105", "2381050000000000"],
+      "executions": 4,
+      "allSignedOutputDeltas": "0",
+      "originalInput": "525045205447785400000000",
+      "originalOutput": "1250158886431449426670",
+      "evidence": "logs/set-legacy-acceptance-20261009.QmKyAh/dual-legacy-rebalancing-reviewed.json",
+      "evidenceSha256": "d3cb7cf060f7a660a159fe927dceb231718666c5e90475a11b8c7c45c0ba61fc"
+    }
+  ],
+  "safetyChecks": {
+    "productionSimConstructionFixture": "Both legacy variants exercised through production sim selector with throwing Exact/quoted/RPC stubs; mocked simulation proves construction only.",
+    "actualRuntimeConstruction": { "ExactAttempts": 0, "rpcAttempts": 0, "amountOrQuoteAccessAttempts": 0, "quotedFallback": false },
+    "sameStateIndependentBalances": "8/8 quoted/runtime executions, full input debit and component output delta0; large old output inventory retained",
+    "missingInputControls": "8/8 semantic reverts with nonexhausted gas; old output inventory cannot substitute for input",
+    "invalidAmounts": "Both non-natural-multiple and original-input-above-N-supply are rejected by production Exact and native Core/runtime execution for each Set. Exact reason, revert payload or authenticated burn call, source-bound naturalUnit/supply, and remaining gas are checked; RPC/OOG/other errors do not pass.",
+    "overrides": "Temporary test actor code, native gas and proven actor ERC20 balance slots only; no protocol supply, liquidity, units, permissions or registry modifications",
+    "ownedForkStopped": true,
+    "signing": false,
+    "broadcast": false,
+    "liveStarted": false,
+    "originalCoffeeReadyChanged": false
+  },
+  "regressions": {
+    "cloudBuildLive": "pass",
+    "cloudFamilyAndRefreshSuite": "22/22 pass before final test-only rejection hardening (BasicIssuance 8, legacy 7, observer 6, refresh file 1)",
+    "hardenedObserver": "7/7 pass locally and on cloud",
+    "generatedManifestCheck": "pass on actual working source",
+    "strictProductionFamilyDeclarations": "pass",
+    "stagedSourceBuildAndTests": "pass: actual generator run on staged-source export, build:live and 16/16 BasicIssuance/legacy/production-refresh checks; no unrelated dirty code included"
+  },
+  "retainedAttempts": [
+    { "path": "single-N26132613-attempt01", "result": "failed", "reason": "identity round transport declaration mismatch; fixed Family-local and all rounds covered by declaration tests" },
+    { "path": "single-N26132613-attempt02", "result": "failed", "reason": "shared-Core receipt nomination mixed Set candidates; fixed to respect nominated basket, including missing legacy hint" },
+    { "path": "dual-legacy-base-attempt01.json", "result": "failed", "sha256": "f1b05a3e3d27052680df1b65988a54a726381820f41b670dec05c89a25ee2ac4", "reason": "4 successful receipts, then raw-Core negative test lacked caller native gas; entire failed attempt retained" },
+    { "path": "dual-legacy-base-attempt02.json", "result": "pass-under-earlier-weaker-negative-gates", "sha256": "385203f6cfd94ffe49008f006513243e01245b5ab9ee3473c11c029e0b465f99" },
+    { "path": "dual-legacy-rebalancing-attempt01.json", "result": "pass-under-earlier-weaker-negative-gates", "sha256": "d61779258ef67f8a3b506fd96b796a47b00297ee91c17b9381680857db09ead9" }
+  ],
+  "toolReconciliation": {
+    "queries": ["set-legacy,flow", "set-dual"],
+    "tools": ["listener:searcher:set-legacy-historical-ready", "analysis:tx-flow", "listener:searcher:set-dual-historical"],
+    "manifest": "logs/set-legacy-acceptance-20261009.QmKyAh/tools.json",
+    "manifestSha256": "0b9565136db7ba516d2b79d9d79f6ed62a9081e7f3a3e60fcfc2b662473edca4",
+    "dualManifest": "logs/set-legacy-acceptance-20261009.QmKyAh/tools-dual.json",
+    "dualManifestSha256": "3ce83f18e25cf8bfe7c6409863125b56dffe5df19e194f6001ce53bfcfd9c26a",
+    "readyExitCodes": [1, 1, 0],
+    "flowExitCode": 0,
+    "dualExitCodes": [1, 0, 0, 0, 0],
+    "reconciliation": "Canonical token-flow agrees with manual original issuance/donation/fee-update/redemption sequence. Natural Ready and dual tools establish only the scoped redemption claims above.",
+    "preExecutionDispatchFailure": "Initial tool invocation used unsupported window binding and did not execute; retained separately, not a protocol failure."
+  },
+  "review": {
+    "production": "Independent non-author review found and closed new action nomination, large naturalUnit raw-price sampling and retired-factory eligibility mistakes; final 7/7 offline checks, no remaining blockers reported.",
+    "test": "Independent non-author proved earlier negative gates accepted unrelated OOG. Exact rejection reasons and actual failure-site/gas checks added; final review independently passed 7/7 tests and accepted 4 expected fixtures while rejecting 64 corruptions across both samples. No remaining scoped blockers. Reviewer did not run RPC/EVM; cloud v3 executions above were performed by the main agent.",
+    "sanctionedCliLimitation": "Configured CLI model unsupported; failure log retained; application-native Codex reviewer used without changing global configuration."
+  },
+  "toolingDefect": { "learningCase": "tooldef-20261009-set-legacy-rejection-controls", "codifyCommit": "67dddb763fc64c3d2ff226e0df91e45de9afe2ab", "status": "codified" },
+  "configurationTable": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "configurationTablePatch": "docs/research/reports/set-legacy-impl-table-20261009.patch",
+  "remaining": [
+    "Production reference amount and naturally quoted effective for these two token inputs",
+    "Legacy issuance, donation/internalTransfer and actualizeFee sequence; original pre-call state and opportunity replay",
+    "Representative production-stage performance (deferred by user until correctness work and peer live completion)",
+    "Adapter Replay baseline-to-candidate flip, formal adapter_merge_ready, final sim/EV and live acceptance"
+  ]
+}

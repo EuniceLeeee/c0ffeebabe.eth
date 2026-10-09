@@ -1,6 +1,37 @@
 {
   "cases": [
     {
+      "learning_case_id": "tooldef-20261009-set-legacy-rejection-controls",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": ["protocol"],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x00f865180dc1ffacd181f69a99db506d08766a5086a4f57a886f9611669f4375",
+      "target_block": 26132613,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "historical_set_dual_negative_control_accepted_unrelated_failures",
+      "evidence": {
+        "scope": "Test-harness rejection classifier only; no production opportunity or causal lane classification claimed.",
+        "reviewReproduction": "Independent non-author supplied failed Exact plus out-of-gas traces; both formerly loose legacy negative controls recorded pass.",
+        "fix": "Require exact amount-rejection reason, independently read same-N naturalUnit/supply, semantic revert with remaining gas, and authenticated Core/burn failure sites. Preserve failed control quote/traces before assertions.",
+        "regression": "7/7 observer tests locally/cloud; reviewer accepted four fixtures and rejected64 corruptions. Cloud stronger-gate reruns independently pass8 quoted/runtime receipts with delta0 and all four invalid-amount cases.",
+        "report": "docs/research/reports/set-legacy-redemption-acceptance-20261009.json",
+        "artifacts": ["logs/set-legacy-acceptance-20261009.QmKyAh/dual-legacy-base-reviewed.json", "logs/set-legacy-acceptance-20261009.QmKyAh/dual-legacy-rebalancing-reviewed.json"],
+        "limitations": "Production reference amount, natural effective valuation, original issue/donation/fee-update opportunity and representative performance remain unverified; the LearningCase opportunity status is not promoted."
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:set-dual-historical",
+        "issue": "Any non-resolved quote and any trace error were treated as intended semantic refusal, allowing RPC/OOG failures to falsely pass negative controls.",
+        "evidence": "Independent stub reproduction plus new adverse reason/gas/burn tests; original actual EVM artifacts retained without relabelling them as stronger-gate evidence.",
+        "codify_target": "Set historical-legacy-observations.ts rejection predicates, historical-runtime-dual.ts call sites and historical-runtime-dual-offline.ts adversarial regressions",
+        "codify_commit": "67dddb763fc64c3d2ff226e0df91e45de9afe2ab",
+        "status": "codified"
+      },
+      "created_at": "2026-10-09T12:02:39Z",
+      "updated_at": "2026-10-09T12:02:39Z"
+    },
+    {
       "learning_case_id": "tooldef-20261009-historical-dual-eip7702-origin",
       "status": "manual_required",
       "strategy_kind": "block-scan",
