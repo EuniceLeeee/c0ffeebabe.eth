@@ -19,6 +19,9 @@ contract RuntimeTestSwap {
     function swapWithOtherTokenChange(RuntimeTestToken a, RuntimeTestToken b, uint256 amount, uint256 output, RuntimeTestToken other) external {
         a.burn(msg.sender, amount); b.mint(msg.sender, output); other.burn(msg.sender, 1);
     }
+    function swapWithDust(RuntimeTestToken a, RuntimeTestToken b, uint256 amount, uint256 output, uint256 dust) external {
+        received = amount; a.burn(msg.sender, amount - dust); b.mint(msg.sender, output);
+    }
 }
 contract RuntimeTestCallback {
     bool public omit;
@@ -96,7 +99,7 @@ contract BotVMRuntimeAmountTest is Test {
         assertEq(b.balanceOf(address(bot)), 777);
     }
     function testInventoryCannotSubsidizeInputShortfall() public {
-        vm.expectRevert("runtime route inventory"); bot.execute(flow(200, 1, 1));
+        vm.expectRevert("runtime input rounding"); bot.execute(flow(200, 1, 1));
         assertEq(a.balanceOf(address(bot)), 1100); assertEq(b.balanceOf(address(bot)), 777);
     }
     function testEarlierRouteTokenInventoryIsPreserved() public {
@@ -135,8 +138,8 @@ contract BotVMRuntimeAmountTest is Test {
         assertEq(c.balanceOf(address(bot)), 999);
     }
     function testOneReceiptReadPerHopAndOneInventoryBoundary() public {
-        vm.expectCall(address(a), abi.encodeWithSignature("balanceOf(address)", address(bot)), 2);
-        vm.expectCall(address(b), abi.encodeWithSignature("balanceOf(address)", address(bot)), 3);
+        vm.expectCall(address(a), abi.encodeWithSignature("balanceOf(address)", address(bot)), 3);
+        vm.expectCall(address(b), abi.encodeWithSignature("balanceOf(address)", address(bot)), 4);
         bot.execute(flow(200, 0, 1));
     }
     function testPatchAndReturnBounds() public {
@@ -178,6 +181,91 @@ contract BotVMRuntimeAmountTest is Test {
         vm.expectRevert("runtime program version"); bot.execute(script(hex"02", 1));
         vm.expectRevert("runtime flow config");
         bot.execute(abi.encodePacked(uint8(12), uint24(33), uint256(100), uint8(7)));
+    }
+    function dustProgram(RuntimeTestToken input, RuntimeTestToken output, uint256 result, uint256 dust) internal view returns(bytes memory) {
+        return abi.encodePacked(uint8(1), callOp(address(pool),
+            abi.encodeCall(RuntimeTestSwap.swapWithDust, (input, output, 0, result, dust)),
+            abi.encodePacked(uint24(68), uint8(0)), 0, 0));
+    }
+    function dustFlow(uint8 flag, uint256 firstDust, uint256 secondDust, uint256 finalOut) internal view returns(bytes memory) {
+        bytes memory data = abi.encodePacked(uint256(100), flag,
+            leg(a, b, 1, dustProgram(a, b, 200, firstDust)),
+            leg(b, a, 101, dustProgram(b, a, finalOut, secondDust)));
+        return abi.encodePacked(uint8(12), uint24(data.length), data);
+    }
+    function testRoundingOffRejectsFundingAndIntermediateDust() public {
+        vm.expectRevert("runtime input rounding"); bot.execute(dustFlow(2, 1, 0, 120));
+        vm.expectRevert("runtime input rounding"); bot.execute(dustFlow(2, 0, 1, 120));
+        assertEq(a.balanceOf(address(bot)), 1100); assertEq(b.balanceOf(address(bot)), 777);
+    }
+    function testRoundingOnRetainsOneUnitNeverChangesNextInput() public {
+        bot.execute(dustFlow(0x82, 1, 1, 120));
+        assertEq(pool.received(), 200); assertEq(a.balanceOf(address(bot)), 1121);
+        assertEq(b.balanceOf(address(bot)), 778);
+    }
+    function testRoundingOnRejectsTwoUnitsAndStillRequiresFinalProfit() public {
+        vm.expectRevert("runtime input rounding"); bot.execute(dustFlow(0x82, 2, 0, 120));
+        vm.expectRevert("runtime input rounding"); bot.execute(dustFlow(0x82, 0, 2, 120));
+        vm.expectRevert("runtime minimum output"); bot.execute(dustFlow(0x82, 0, 1, 100));
+        assertEq(a.balanceOf(address(bot)), 1100); assertEq(b.balanceOf(address(bot)), 777);
+    }
+    function testRoundingOnCannotSpendOneUnitOfInventory() public {
+        bytes memory data = abi.encodePacked(uint256(100), uint8(0x82),
+            leg(a, b, 1, swapProgram(a, b, 200, 0)), leg(b, a, 101, swapProgram(b, a, 120, 1)));
+        vm.expectRevert("runtime input rounding");
+        bot.execute(abi.encodePacked(uint8(12), uint24(data.length), data));
+    }
+    function testRoundingOneCannotMakeOneUnitInputFree() public {
+        bytes memory data = abi.encodePacked(uint256(1), uint8(0x82),
+            leg(a, b, 1, dustProgram(a, b, 200, 1)), leg(b, a, 2, swapProgram(b, a, 3, 0)));
+        vm.expectRevert("runtime input debit");
+        bot.execute(abi.encodePacked(uint8(12), uint24(data.length), data));
+    }
+    function testRoundingOffRepeatedTokenCannotHideDust() public {
+        RuntimeTestToken c = new RuntimeTestToken();
+        bytes memory data = abi.encodePacked(uint256(100), uint8(4),
+            leg(a, b, 1, swapProgram(a, b, 200, 0)),
+            leg(b, a, 1, dustProgram(b, a, 150, 1)),
+            leg(a, c, 1, swapProgram(a, c, 300, 0)),
+            leg(c, a, 101, swapProgram(c, a, 120, 0)));
+        vm.expectRevert("runtime input rounding");
+        bot.execute(abi.encodePacked(uint8(12), uint24(data.length), data));
+    }
+    function repeatedDustFlow(uint8 flag, uint256 dust) internal returns(bytes memory) {
+        RuntimeTestToken c = new RuntimeTestToken();
+        bytes memory data = abi.encodePacked(uint256(100), flag,
+            leg(a, b, 1, swapProgram(a, b, 200, 0)),
+            leg(b, c, 1, dustProgram(b, c, 300, dust)),
+            leg(c, b, 1, swapProgram(c, b, 400, 0)),
+            leg(b, a, 101, swapProgram(b, a, 120, 0)));
+        return abi.encodePacked(uint8(12), uint24(data.length), data);
+    }
+    function testRepeatedDustTokenUsesOnlyThisFlowsAccumulatedReceipt() public {
+        bytes memory exact = repeatedDustFlow(4, 1);
+        vm.expectRevert("runtime input rounding"); bot.execute(exact);
+        bytes memory two = repeatedDustFlow(0x84, 2);
+        vm.expectRevert("runtime input rounding"); bot.execute(two);
+        bot.execute(repeatedDustFlow(0x84, 1));
+        // Both 400 newly received units and the earlier 1-unit residue belong
+        // to this flow; the pre-existing 777 units cannot enter the next input.
+        assertEq(pool.received(), 401); assertEq(b.balanceOf(address(bot)), 777);
+    }
+    function testRoundingCannotHideNativeInventoryChange() public {
+        RuntimeTestNative sender = new RuntimeTestNative(); vm.deal(address(sender), 1 ether);
+        vm.deal(address(bot), 777);
+        bytes memory first = swapProgram(a, b, 200, 0);
+        first = bytes.concat(first, callOp(address(sender), abi.encodeCall(RuntimeTestNative.pay, (1)), "", 0, 0));
+        bytes memory data = abi.encodePacked(uint256(100), uint8(0x82),
+            leg(a, b, 1, first), leg(b, a, 101, swapProgram(b, a, 120, 0)));
+        vm.expectRevert("runtime native inventory");
+        bot.execute(abi.encodePacked(uint8(12), uint24(data.length), data));
+        assertEq(address(bot).balance, 777);
+    }
+    function testUnknownRoundingFlagsFailClosed() public {
+        for (uint256 flag; flag <= 255; ++flag) {
+            if (flag == 2 || flag == 0x82) continue;
+            vm.expectRevert(); bot.execute(dustFlow(uint8(flag), 0, 0, 120));
+        }
     }
     function valueCall(address target, bytes memory payload, uint8 valueReg) internal pure returns(bytes memory) {
         return abi.encodePacked(uint8(1), target, uint8(0), valueReg, uint24(0), uint24(0), uint8(0), uint24(payload.length), payload);

@@ -11,6 +11,7 @@ import type {
   LineageId,
 } from "../../adapter-family-identifiers.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
+import type { IdentityAssetMetadata } from "../../../identity-asset-metadata.js";
 
 export interface FluidDexCandidate extends FamilyCandidate {
   readonly candidateKind: "fluid-dex";
@@ -33,6 +34,10 @@ export interface FluidDexQuoteBinding {
 
 export interface FluidDexIdentityFacts {
   readonly pool: string;
+  /** Unmodified identifiers from constantsView, including Fluid's native sentinel. */
+  readonly rawToken0: string;
+  readonly rawToken1: string;
+  /** Graph denominations supplied by central identity asset metadata. */
   readonly token0: string;
   readonly token1: string;
   readonly token0Decimals: number;
@@ -52,6 +57,8 @@ export interface FluidDexDescriptor extends CompiledInstanceDescriptor {
   readonly lineageId: LineageId;
   readonly instanceKey: InstanceKey;
   readonly pool: string;
+  readonly rawToken0: string;
+  readonly rawToken1: string;
   readonly token0: string;
   readonly token1: string;
   readonly token0Decimals: number;
@@ -113,12 +120,9 @@ export type FluidDexIdentityEvidence =
       readonly factory: string;
       readonly token0: string;
       readonly token1: string;
-      readonly token0Decimals: number;
-      readonly token1Decimals: number;
+      readonly assets: readonly [IdentityAssetMetadata, IdentityAssetMetadata];
       readonly reverseDex: string;
       readonly poolHasCode: boolean;
-      readonly token0HasCode: boolean;
-      readonly token1HasCode: boolean;
     }
   | {
       readonly phase: "active-behavior";

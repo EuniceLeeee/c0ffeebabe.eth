@@ -1425,6 +1425,7 @@ export class StrictProductionRuntimeSession {
     readonly edge: TokenEdge;
     readonly exact: StrictProductionExactHandle;
     readonly minAmountOut: bigint;
+    readonly quoteToleranceRawUnits?: bigint;
     readonly executor: string;
     readonly priorQuotes?: readonly StrictProductionExactHandle[];
   }): StrictProductionExecutionOutcome {
@@ -1470,6 +1471,7 @@ export class StrictProductionRuntimeSession {
       actionOwnership: this.#catalog,
       exact: exactBinding.exact,
       minAmountOut: input.minAmountOut,
+      quoteToleranceRawUnits: input.quoteToleranceRawUnits,
       executor: input.executor,
       runtimeEvidence: exactBinding.runtimeEvidence,
     });

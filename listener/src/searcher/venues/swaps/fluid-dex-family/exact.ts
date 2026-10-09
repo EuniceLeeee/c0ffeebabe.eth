@@ -89,6 +89,8 @@ export const fluidDexExact = {
   ]),
   cacheCompatibilityProjection: ({ descriptor, route }) => ({
     pool: descriptor.pool,
+    rawToken0: descriptor.rawToken0,
+    rawToken1: descriptor.rawToken1,
     token0: descriptor.token0,
     token1: descriptor.token1,
     factoryBinding: {

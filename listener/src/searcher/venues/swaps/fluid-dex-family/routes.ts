@@ -1,12 +1,18 @@
 import type { RouteProjectionSemantics } from "../../adapter-family-plugin.js";
 import { routeKey } from "../../adapter-family-identifiers.js";
 import { hashCanonical } from "../../canonical-value.js";
-import { lowerAddress } from "./codec.js";
+import { isFluidDexNative, lowerAddress, sameAddress } from "./codec.js";
 import { fluidDexStaticBindingProjection } from "./instance.js";
 import type { FluidDexDescriptor, FluidDexRoute } from "./types.js";
 
 export const fluidDexRoutes = {
   project({ descriptor }) {
+    if (sameAddress(descriptor.token0, descriptor.token1) ||
+        sameAddress(descriptor.rawToken0, descriptor.rawToken1) ||
+        (!isFluidDexNative(descriptor.rawToken0) && !sameAddress(descriptor.rawToken0, descriptor.token0)) ||
+        (!isFluidDexNative(descriptor.rawToken1) && !sameAddress(descriptor.rawToken1, descriptor.token1))) {
+      throw new Error("fluid-dex asset graph mapping conflict");
+    }
     const bindingFingerprint = hashCanonical(
       fluidDexStaticBindingProjection(descriptor),
     );
@@ -48,6 +54,10 @@ function route(
     instanceKey: descriptor.instanceKey,
     tokenIn,
     tokenOut,
+    executionAssets: Object.freeze({
+      input: isFluidDexNative(swap0To1 ? descriptor.rawToken0 : descriptor.rawToken1) ? "native" as const : "erc20" as const,
+      output: isFluidDexNative(swap0To1 ? descriptor.rawToken1 : descriptor.rawToken0) ? "native" as const : "erc20" as const,
+    }),
     taxonomy: Object.freeze({ slotKind: "swap" as const }),
     bindingRef: Object.freeze({
       bindingKey: lowerAddress(descriptor.pool),

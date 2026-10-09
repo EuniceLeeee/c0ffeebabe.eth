@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { addressToBytes, concatBytes, uint24ToBytes, uint256ToBytes } from "../encoder.js";
 import type { ActionAdapter, ResolvedPlanNode } from "../types.js";
+import { assertExecutionRounding } from "../shared/executor/amount-rounding.js";
 
 /** Bounded protocol-neutral register program. r0 is the current leg's input.
  * Family modules own calldata, arithmetic and callback layout. No quote results
@@ -118,6 +119,9 @@ export const runtimeAmountFlowAdapter: ActionAdapter = {
   matchTrace: () => false,
   encode(node) {
     if (typeof node.params.legs !== "string" || node.children.length || node.amount <= 0n) throw new Error("runtime flow shape");
+    const tolerance = node.params.quoteToleranceRawUnits ?? 0n;
+    if (typeof tolerance !== "bigint") throw new Error("runtime flow tolerance type");
+    assertExecutionRounding(tolerance);
     const legs = JSON.parse(node.params.legs) as { tokenIn: string; tokenOut: string; program: string }[];
     if (!Array.isArray(legs) || !legs.length || legs.length > 6) throw new Error("runtime flow length");
     let token = node.tokenIn.toLowerCase();
@@ -134,7 +138,9 @@ export const runtimeAmountFlowAdapter: ActionAdapter = {
         uint256ToBytes(index === legs.length - 1 ? minimumReturn : 1n), uint24ToBytes(bytes.length), bytes);
     });
     if (token !== node.tokenIn.toLowerCase() || token !== node.tokenOut.toLowerCase()) throw new Error("runtime flow not closed");
-    const data = concatBytes(uint256ToBytes(node.amount), new Uint8Array([legs.length]), ...records);
+    // High bit opts into at most one unit of retained input dust. The legacy
+    // zero-tolerance encoding is unchanged; older executors reject the flag.
+    const data = concatBytes(uint256ToBytes(node.amount), new Uint8Array([legs.length | (Number(tolerance) << 7)]), ...records);
     return concatBytes(new Uint8Array([0x0c]), uint24ToBytes(data.length), data);
   },
 };

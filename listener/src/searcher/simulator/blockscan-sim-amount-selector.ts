@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { assertExecutionRounding } from "../../shared/executor/amount-rounding.js";
 import { blockScanRouteId } from "../blockscan-route-identity.js";
 import { isStateCallAbortedError, withStateCallControl } from "../../shared/state/state-backend.js";
 import { propagateAmountsWithRawOutputs } from "../solver/amount-propagation.js";
@@ -36,6 +37,7 @@ export function createBlockScanSimAmountSelector(input: {
           throw new Error("sim amount selector execution/source mismatch");
         }
         const tolerance = opts.quoteToleranceRawUnits ?? 0n;
+        assertExecutionRounding(tolerance);
         const controlledState = withStateCallControl(state, control);
         const identity = { routeId: blockScanRouteId(plan.tokenPath.edges), sourceBlockHash: input.source.hash,
           flashToken: plan.opportunity.flashToken.toLowerCase(), amount: amount.toString() };
@@ -66,7 +68,8 @@ export function createBlockScanSimAmountSelector(input: {
               asset: plan.opportunity.flashToken, amount, minProfit: plan.opportunity.targetNetProfit ?? 1n,
               children: [{ adapterId: "runtime-amount-flow", target: input.executor,
                 tokenIn: plan.opportunity.flashToken, tokenOut: plan.opportunity.flashToken, amount,
-                params: { legs: JSON.stringify(runtimeLegs), minimumReturn: amount + (plan.opportunity.targetNetProfit ?? 1n) }, children: [] }],
+                params: { legs: JSON.stringify(runtimeLegs), quoteToleranceRawUnits: tolerance,
+                  minimumReturn: amount + (plan.opportunity.targetNetProfit ?? 1n) }, children: [] }],
             }) : await buildResolvedPlanFromPath(plan.tokenPath, plan.opportunity.flashToken, amount,
               propagated!.amounts, input.executor, controlledState, plan.opportunity.targetNetProfit ?? 1n,
               action, propagated!.rawOutputs, session, propagated!.exactHandles, tolerance);

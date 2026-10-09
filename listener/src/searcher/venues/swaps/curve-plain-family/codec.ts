@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { ADDR } from "../../../../shared/constants/addresses.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
 import type { CurveIndexAbi, CurvePlainMode } from "./types.js";
 
@@ -45,11 +46,18 @@ export const EXECUTION = Object.freeze({
   exchange: new ethers.Interface(["function exchange(int128,int128,uint256,uint256) returns (uint256)"]),
   "received-uint": new ethers.Interface(["function exchange_received(uint256,uint256,uint256,uint256,address) returns (uint256)"]),
   "exchange-uint": new ethers.Interface(["function exchange(uint256,uint256,uint256,uint256) returns (uint256)"]),
+  "native-exchange": new ethers.Interface(["function exchange(int128,int128,uint256,uint256) payable"]),
+  "native-exchange-uint": new ethers.Interface(["function exchange(uint256,uint256,uint256,uint256) payable"]),
 });
 export const INT_MODES = Object.freeze(["received", "received-no-receiver", "exchange"] as const);
 export const UINT_MODES = Object.freeze(["received-uint", "exchange-uint"] as const);
+// Native and ERC20 exchanges share selectors. Discovery declares each ABI
+// once; the source-bound coin identity selects native execution afterwards.
 export const MODES: readonly CurvePlainMode[] = Object.freeze([...INT_MODES, ...UINT_MODES]);
-export const pullsInput = (mode: CurvePlainMode): boolean => mode === "exchange" || mode === "exchange-uint";
+export const isNativeMode = (mode: CurvePlainMode): boolean => mode === "native-exchange" || mode === "native-exchange-uint";
+export const isNativeCoin = (coin: string): boolean => lower(coin) === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+export const routeToken = (coin: string): string => isNativeCoin(coin) ? ADDR.WETH : coin;
+export const pullsInput = (mode: CurvePlainMode): boolean => mode === "exchange" || mode === "exchange-uint" || isNativeMode(mode);
 export const executionFunction = (mode: CurvePlainMode): "exchange" | "exchange_received" =>
   pullsInput(mode) ? "exchange" : "exchange_received";
 export const hasReceiver = (mode: CurvePlainMode): boolean => mode === "received" || mode === "received-uint";

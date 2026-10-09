@@ -4,6 +4,7 @@ import { ethers } from "ethers";
 import { plugin } from "../../../production-families/curve-plain.production.js";
 import { definedFamilyPluginContractSummary } from "../../../adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../../adapter-request-program.js";
+import { declareRequestProgram } from "../../../adapter-request-program.js";
 import { CURVE_METAREGISTRY, ERC20, EXECUTION, MAX_UINT, META, MODES, POOL, SIGNED_GETTERS, address, addressArray,
   executionData, executionFunction, pullsInput, getterPool, hasReceiver, lower, probeAmount, quotePool, selector, uint, UINT_POOL } from "../codec.js";
 import { LOG_ID, SURFACE, SURFACE_ID, SWAP_TOPIC, UINT_LOG_ID, UINT_SWAP_TOPIC, UINT_NG_LOG_ID, UINT_NG_SWAP_TOPIC, decodeSwapLog } from "../discovery.js";
@@ -110,7 +111,11 @@ function identity(anchor: Anchor, answer = fixture(anchor).answer, abi: CurveInd
     if (decision.status === "verified") return decision.identity;
     assert.equal(decision.status, "continue", JSON.stringify(decision));
     assert(step < 4, "identity fits the existing four-step budget");
-    const requests = variant.buildRequests(input);
+    const { requests } = declareRequestProgram({
+      requirements: () => variant.requirements(input),
+      buildRequests: () => variant.buildRequests(input),
+      decode: results => results,
+    }, undefined);
     assert(requests.length > 0);
     evidence = variant.decode({ step: input, results: requests.map(answer) });
   }
@@ -387,7 +392,7 @@ check("received transfer requirement and encoded selector/receiver/minDy are exa
 check("manifest owns only declared plain actions and no credit or underlying action", () => {
   const summary = definedFamilyPluginContractSummary(plugin);
   assert.equal(summary.domain, "swap");
-  assert.deepEqual([...summary.suppliedActionAdapterIds].sort(), ["curve-exchange", "curve-exchange-nr", "curve-exchange-plain", "curve-exchange-received-uint", "curve-exchange-uint"]);
+  assert.deepEqual([...summary.suppliedActionAdapterIds].sort(), ["curve-exchange", "curve-exchange-nr", "curve-exchange-plain", "curve-exchange-received-uint", "curve-exchange-uint", "curve-native-exchange", "curve-native-exchange-uint"]);
   assert.deepEqual([...plugin.manifest.requiredInfraActionAdapterIds].sort(), ["erc20-approve", "erc20-transfer"]);
 });
 

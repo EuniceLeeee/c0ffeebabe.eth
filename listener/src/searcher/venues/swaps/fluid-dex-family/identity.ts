@@ -8,15 +8,15 @@ import type {
   AdapterRequestResult,
 } from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
+import { identityAssetRequestId, type IdentityAssetMetadata } from "../../../identity-asset-metadata.js";
 import {
   canonicalAddress,
   decodeAddressResult,
   decodeDeclaredFluidDexQuote,
-  decodeDecimals,
   decodeFluidDexConstants,
+  fluidDexAsset,
   FLUID_DEX_ADDRESS_DEAD,
   FLUID_DEX_CONSTANTS_INTERFACE,
-  FLUID_DEX_ERC20_INTERFACE,
   FLUID_DEX_FACTORY_INTERFACE,
   FLUID_DEX_INTERFACE,
   lowerAddress,
@@ -36,10 +36,6 @@ import type {
 const CONSTANTS_ID = "pool-constants";
 const POOL_CODE_ID = "pool-code";
 const FACTORY_REVERSE_ID = "factory-reverse-dex";
-const TOKEN0_CODE_ID = "token0-code";
-const TOKEN1_CODE_ID = "token1-code";
-const TOKEN0_DECIMALS_ID = "token0-decimals";
-const TOKEN1_DECIMALS_ID = "token1-decimals";
 const ZERO_TO_ONE_PROBE_ID = "active-quote-zero-to-one";
 const ONE_TO_ZERO_PROBE_ID = "active-quote-one-to-zero";
 
@@ -49,6 +45,11 @@ export const fluidDexIdentity = {
     kind: "factory-child" as const,
     lineageId: FLUID_DEX_FACTORY_LINEAGE_ID,
     applies: () => true,
+    assets(input: IdentityStepInput<FluidDexCandidate, unknown>) {
+      const evidence = identityEvidence(input.evidence);
+      return evidence?.phase === "constants"
+        ? [fluidDexAsset("token0", evidence.token0), fluidDexAsset("token1", evidence.token1)] : [];
+    },
     requirements(input: IdentityStepInput<FluidDexCandidate, unknown>) {
       const evidence = identityEvidence(input.evidence);
       return evidence?.phase === "reverse-binding"
@@ -67,13 +68,14 @@ export const fluidDexIdentity = {
     decode(input: {
       readonly step: IdentityStepInput<FluidDexCandidate, unknown>;
       readonly results: readonly AdapterRequestResult[];
+      readonly assets?: readonly IdentityAssetMetadata[];
     }) {
       const prior = identityEvidence(input.step.evidence);
       if (prior === undefined) {
         return decodeConstants(input.step.candidate, input.results);
       }
       if (prior.phase === "constants") {
-        return decodeReverseBinding(prior, input.results);
+        return decodeReverseBinding(prior, input.results, input.assets);
       }
       return decodeActiveBehavior(prior, input.results);
     },
@@ -116,30 +118,6 @@ function reverseBindingRequests(
       ),
       completion: "return-data" as const,
     }),
-    Object.freeze({
-      id: TOKEN0_CODE_ID,
-      kind: "get-code" as const,
-      address: evidence.token0,
-    }),
-    Object.freeze({
-      id: TOKEN1_CODE_ID,
-      kind: "get-code" as const,
-      address: evidence.token1,
-    }),
-    Object.freeze({
-      id: TOKEN0_DECIMALS_ID,
-      kind: "eth-call" as const,
-      to: evidence.token0,
-      data: FLUID_DEX_ERC20_INTERFACE.encodeFunctionData("decimals"),
-      completion: "return-data" as const,
-    }),
-    Object.freeze({
-      id: TOKEN1_DECIMALS_ID,
-      kind: "eth-call" as const,
-      to: evidence.token1,
-      data: FLUID_DEX_ERC20_INTERFACE.encodeFunctionData("decimals"),
-      completion: "return-data" as const,
-    }),
   ]);
 }
 
@@ -151,13 +129,13 @@ function activeQuoteRequests(
       ZERO_TO_ONE_PROBE_ID,
       evidence.pool,
       true,
-      10n ** BigInt(evidence.token0Decimals),
+      10n ** BigInt(assetDecimals(evidence.assets[0])),
     ),
     quoteRequest(
       ONE_TO_ZERO_PROBE_ID,
       evidence.pool,
       false,
-      10n ** BigInt(evidence.token1Decimals),
+      10n ** BigInt(assetDecimals(evidence.assets[1])),
     ),
   ]);
 }
@@ -168,6 +146,9 @@ function quoteRequest(
   swap0To1: boolean,
   amountIn: bigint,
 ): AdapterRequest {
+  // The direct eth-call contract has no value field. Keep ADDRESS_DEAD's
+  // declared-revert proof mandatory in BOTH directions; native zero-value
+  // quote support requires historical evidence, not an execution fallback.
   return Object.freeze({
     id,
     kind: "eth-call" as const,
@@ -205,29 +186,46 @@ function decodeConstants(
 function decodeReverseBinding(
   prior: Extract<FluidDexIdentityEvidence, { readonly phase: "constants" }>,
   results: readonly AdapterRequestResult[],
+  metadata: readonly IdentityAssetMetadata[] | undefined,
 ): FluidDexIdentityEvidence {
   const reverse = requireSuccessfulResult(results, FACTORY_REVERSE_ID);
-  const token0Code = requireSuccessfulResult(results, TOKEN0_CODE_ID);
-  const token1Code = requireSuccessfulResult(results, TOKEN1_CODE_ID);
-  const token0Decimals = requireSuccessfulResult(results, TOKEN0_DECIMALS_ID);
-  const token1Decimals = requireSuccessfulResult(results, TOKEN1_DECIMALS_ID);
-  if (
-    reverse.completion !== "returned" ||
-    token0Decimals.completion !== "returned" ||
-    token1Decimals.completion !== "returned"
-  ) {
+  if (reverse.completion !== "returned") {
     throw new Error("fluid-dex reverse identity unexpectedly reverted");
+  }
+  if (!metadata || metadata.length !== 2) throw new Error("fluid-dex asset metadata missing or ambiguous");
+  const assets = ["token0", "token1"].map((key, index) => {
+    const raw = index === 0 ? prior.token0 : prior.token1;
+    const declaration = fluidDexAsset(key, raw);
+    const matches = metadata.filter(asset => asset.key === key);
+    const asset = matches[0];
+    if (matches.length !== 1 || asset.kind !== declaration.kind ||
+        (asset.kind === "erc20" && !sameAddress(asset.token, raw))) {
+      throw new Error("fluid-dex asset metadata binding mismatch");
+    }
+    // No HasCode fiction for native. Empty ERC20 code is retained as actual
+    // negative code evidence; central supplied null decimals are not invented.
+    if (asset.kind === "native" || asset.code !== "0x") assetDecimals(asset);
+    return Object.freeze({ ...asset });
+  }) as [IdentityAssetMetadata, IdentityAssetMetadata];
+  if (sameAddress(assets[0].token, assets[1].token)) {
+    throw new Error("fluid-dex asset graph mapping conflict");
   }
   return Object.freeze({
     ...prior,
     phase: "reverse-binding" as const,
-    token0Decimals: decodeDecimals(token0Decimals.data),
-    token1Decimals: decodeDecimals(token1Decimals.data),
+    assets: Object.freeze(assets),
     reverseDex: decodeAddressResult(reverse.data, "getDexAddress"),
     poolHasCode: true,
-    token0HasCode: token0Code.data !== "0x",
-    token1HasCode: token1Code.data !== "0x",
   });
+}
+
+function assetDecimals(asset: IdentityAssetMetadata): number {
+  const decimals = asset.decimals;
+  if (decimals === null || !Number.isSafeInteger(decimals) || decimals < 0 || decimals > 36 ||
+      (asset.kind === "native" && decimals !== 18)) {
+    throw new Error("fluid-dex token returned invalid decimals metadata");
+  }
+  return decimals;
 }
 
 function decodeActiveBehavior(
@@ -263,13 +261,13 @@ function decideIdentity(
     }
     if (
       !evidence.poolHasCode ||
-      !evidence.token0HasCode ||
-      !evidence.token1HasCode
+      evidence.assets.some(asset => asset.kind === "erc20" && asset.code === "0x")
     ) {
       return {
         status: "chain-proven-rejected",
         reasonCode: "fluid_dex_code_binding_failed",
-        evidenceRequestIds: [POOL_CODE_ID, TOKEN0_CODE_ID, TOKEN1_CODE_ID],
+        evidenceRequestIds: [POOL_CODE_ID, ...evidence.assets.filter(asset => asset.kind === "erc20")
+          .map(asset => identityAssetRequestId(asset.key, "code"))],
       };
     }
     return { status: "continue" };
@@ -278,7 +276,7 @@ function decideIdentity(
     evidence.zeroToOneAmountOut === null ||
     evidence.oneToZeroAmountOut === null
   ) {
-    // Both declared active quote directions reverted at the fixed cutoff.
+    // Each direction must supply its declared quote proof at the fixed cutoff.
     return {
       status: "chain-proven-rejected",
       reasonCode: "bidirectional_active_quote_failed",
@@ -299,10 +297,12 @@ function decideIdentity(
   });
   const evidenceHash = hashCanonical({
     pool: binding.pool,
-    token0: binding.token0,
-    token1: binding.token1,
-    token0Decimals: binding.token0Decimals,
-    token1Decimals: binding.token1Decimals,
+    rawToken0: binding.token0,
+    rawToken1: binding.token1,
+    token0: binding.assets[0].token,
+    token1: binding.assets[1].token,
+    token0Decimals: assetDecimals(binding.assets[0]),
+    token1Decimals: assetDecimals(binding.assets[1]),
     factoryBinding,
     quoteBinding,
     activeQuotes: {
@@ -323,10 +323,12 @@ function decideIdentity(
       })]),
       facts: Object.freeze({
         pool: binding.pool,
-        token0: binding.token0,
-        token1: binding.token1,
-        token0Decimals: binding.token0Decimals,
-        token1Decimals: binding.token1Decimals,
+        rawToken0: binding.token0,
+        rawToken1: binding.token1,
+        token0: binding.assets[0].token,
+        token1: binding.assets[1].token,
+        token0Decimals: assetDecimals(binding.assets[0]),
+        token1Decimals: assetDecimals(binding.assets[1]),
         factoryBinding,
         quoteBinding,
       }),

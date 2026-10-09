@@ -1,4 +1,5 @@
 import type { JsonRpcPayload } from "ethers";
+import { applyStrictAssetBoundary } from "./execution-asset-boundary.js";
 import {
   postJsonRpc,
   type JsonRpcHttpResponse,
@@ -1413,6 +1414,13 @@ export function materializeAdapterRequests(
         if (from !== overrideCaller) {
           throw new Error("materialized simulation override caller mismatch");
         }
+        if (request.executionAssetBoundary !== undefined &&
+            (request.call.executionMode !== "executor-program" || request.call.caller.kind !== "executor" ||
+             request.call.to.toLowerCase() !== from || (request.preCalls?.length ?? 0) !== 0)) {
+          throw new Error("materialized native boundary requires executor self-call");
+        }
+        const callData = request.executionAssetBoundary === undefined ? request.call.data :
+          applyStrictAssetBoundary({ boundary: request.executionAssetBoundary, executor: from, data: request.call.data });
         const preCalls = request.preCalls?.map((call) => {
           const preCallFrom = resolveCallerRef(call.caller, authority);
           if (preCallFrom !== from) {
@@ -1431,7 +1439,7 @@ export function materializeAdapterRequests(
               ? {}
               : { executionMode: request.call.executionMode }),
             to: request.call.to,
-            data: request.call.data,
+            data: callData,
           }),
           ...(request.observeTokenBalances === undefined
             ? {}

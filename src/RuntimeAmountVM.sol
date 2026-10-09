@@ -24,7 +24,10 @@ abstract contract RuntimeAmountVM {
     function _runRuntimeAmountFlow(bytes memory data) internal {
         require(data.length >= 33, "runtime flow header");
         uint256 amount = _word(data, 0);
-        uint256 count = uint8(data[32]);
+        // High bit opts into one raw unit of positive input dust. Existing
+        // count-only programs retain exact conservation. No deficit is allowed.
+        uint256 tolerance = uint8(data[32]) >> 7;
+        uint256 count = uint8(data[32]) & 0x7f;
         require(amount > 0 && count > 0 && count <= 6, "runtime flow config");
         // Separate existing inventory from the working amount once. Subsequent
         // legs consume only this flow's receipts, not the executor's inventory.
@@ -54,6 +57,7 @@ abstract contract RuntimeAmountVM {
         require(scan == data.length, "runtime flow bounds");
         require(previous == routeTokens[0], "runtime flow closure");
         require(routeBalances[0] >= amount, "runtime input balance");
+        uint256 beforeInput = routeBalances[0];
         routeBalances[0] -= amount;
         uint256 beforeNative = address(this).balance;
         uint256 ip = 33;
@@ -62,6 +66,14 @@ abstract contract RuntimeAmountVM {
             uint256 floor = _word(data, ip + 40);
             uint256 size = _u24(data, ip + 72);
             _runRuntimeProgram(_slice(data, ip + 75, size), amount);
+            // beforeInput is the previous hop's already-measured receipt
+            // balance (or the initial balance). One additional on-chain read
+            // checks this hop's spend, including the funding/repeated token;
+            // no extra before read or off-chain quote/RPC is needed.
+            uint256 afterInput = IERC20(_address(data, ip)).balanceOf(address(this));
+            require(afterInput < beforeInput, "runtime input debit");
+            uint256 spent = beforeInput - afterInput;
+            require(spent <= amount && amount - spent <= tolerance, "runtime input rounding");
             uint256 baseline;
             for (uint256 j; j < tokenCount; ++j) {
                 if (routeTokens[j] == tokenOut) { baseline = routeBalances[j]; break; }
@@ -71,13 +83,15 @@ abstract contract RuntimeAmountVM {
             uint256 afterOut = IERC20(tokenOut).balanceOf(address(this));
             require(afterOut >= baseline, "runtime output inventory");
             amount = afterOut - baseline;
+            beforeInput = afterOut;
             require(amount > 0 && amount >= floor, "runtime minimum output");
             ip += 75 + size;
         }
         // The last receipt read already measured the closing token. Check the
         // other distinct route tokens once, after all calls have completed.
         for (uint256 i = 1; i < tokenCount; ++i) {
-            require(IERC20(routeTokens[i]).balanceOf(address(this)) == routeBalances[i], "runtime route inventory");
+            uint256 remaining = IERC20(routeTokens[i]).balanceOf(address(this));
+            require(remaining >= routeBalances[i] && remaining - routeBalances[i] <= tolerance, "runtime route inventory");
         }
         require(address(this).balance == beforeNative, "runtime native inventory");
     }

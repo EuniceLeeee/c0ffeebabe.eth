@@ -44,6 +44,12 @@ const family = (id: string): any => { const found = priced.find(x => x.familyId 
 const raw = JSON.parse(readFileSync(new URL("./fixtures/runtime-family-descriptors.json", import.meta.url), "utf8"),
   (_key, value) => value?.$durableType === "bigint" ? BigInt(value.value) : value);
 const fixtures: any[] = raw.descriptors;
+// These saved Fluid fixtures are ERC20-only. Upgrade their test shape, not
+// production Ready: real stale descriptors must still be re-attested.
+for (const d of fixtures.filter(d => d.familyId === "fluid-dex")) {
+  d.rawToken0 = d.token0;
+  d.rawToken1 = d.token1;
+}
 // These four missing Ready families are synthetic ABI fixtures, not minted
 // identity/admission records. Normal strict/Ready verification is NOT bypassed.
 function synthetic(id: string, fields: Record<string, unknown>, lineage = 0) {
@@ -91,6 +97,13 @@ fixtures.push(kyberswapElasticFixture());
 // Synthetic descriptor only: no Ready/admission object is issued here.
 fixtures.push(yieldBasisLtFixture(), yieldBasisLtFixture(yieldBasisAnswers({ deposit: true })));
 const dFor = (id: string) => { const d = fixtures.find(d => d.familyId === id); assert(d, id); return d; };
+// Both Fluid native-token positions also go through the real sim selector's
+// no-Exact/no-quoted-fallback construction contract. Synthetic, never Ready.
+const fluidBase = dFor("fluid-dex"), fluidNative = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+fixtures.push({ ...fluidBase, rawToken0: fluidNative, token0: ADDR.WETH, rawToken1: foreign, token1: foreign,
+  token0Decimals: 18, token1Decimals: 18 },
+{ ...fluidBase, rawToken0: foreign, token0: foreign, rawToken1: fluidNative, token1: ADDR.WETH,
+  token0Decimals: 18, token1Decimals: 18 });
 // Additional synthetic direction/variant fixtures are never written back to Ready.
 synthetic("protocol:erc4626", { asset: ADDR.USDC, verifiedDirections: { deposit: true, redeem: true } });
 const sat1Fixture = dFor("univ4-fee-hook");

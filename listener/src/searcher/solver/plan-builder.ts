@@ -26,6 +26,7 @@ import type {
 } from "../venues/route-leg-adapter.js";
 import { planFragmentNodes } from "./plan-fragment-requirements.js";
 import { AmountNotExecutableError } from "./amount-rejection.js";
+import { minimumExecutionOutput } from "../../shared/executor/amount-rounding.js";
 
 /**
  * Build a complete ResolvedPlanNode wrapped in the flash adapter.
@@ -90,6 +91,7 @@ export async function buildResolvedPlanFromPath(
         edge,
         exact,
         minAmountOut,
+        quoteToleranceRawUnits,
         executor,
         priorQuotes: exactHandles!.slice(0, i),
       });
@@ -117,17 +119,18 @@ export async function buildResolvedPlanFromPath(
     return fragment;
   }
 
-  // Tolerance only relaxes a Family's existing minimum-output argument.
+  // Tolerance relaxes minimum output and the central asset boundary's input
+  // rounding check. Requested amounts and nominal quotes remain unchanged.
   // Do not wrap legs in ACTUAL_AMOUNT_FLOW, query balances, re-quote +/-1
   // branches, or pre-subtract from the nominal input/output amount chain.
   // A middle-leg shortfall can still fail downstream; final simulation and
   // conservation/repayment remain mandatory, never subsidized from inventory.
   for (let i = 0; i < path.edges.length; i++) {
     const nominalOut = amounts[i + 1]!;
-    if (nominalOut <= quoteToleranceRawUnits) {
+    if (nominalOut <= 0n) {
       throw new AmountNotExecutableError("execution tolerance has no positive minimum output");
     }
-    const fragment = buildFragment(i, exactHandles[i]!, nominalOut - quoteToleranceRawUnits);
+    const fragment = buildFragment(i, exactHandles[i]!, minimumExecutionOutput(nominalOut, quoteToleranceRawUnits));
     inner.push(...planFragmentNodes(fragment, path.edges[i]!.tokenIn, amounts[i]!));
   }
 

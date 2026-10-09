@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
+import { createIdentityAssetMetadataPlan } from "../identity-asset-metadata.js";
 import {
   definedFamilyPluginContractSummary,
   type UnifiedObservation,
@@ -17,6 +19,7 @@ import {
   FLUID_DEX_FACTORY_INTERFACE,
   FLUID_DEX_INTERFACE,
   FLUID_DEX_SWAP_SELECTOR,
+  FLUID_DEX_NATIVE_TOKEN,
   describeFluidDexQuoteFailure,
 } from "../venues/swaps/fluid-dex-family/codec.js";
 import { FLUID_DEX_SWAP_CALL_PATTERN_ID } from
@@ -65,6 +68,8 @@ const identity = runIdentity(candidate, POOL);
 assert.equal(identity.facts.factoryBinding.reverseDex, POOL);
 assert.equal(identity.facts.token0Decimals, 6);
 assert.equal(identity.facts.token1Decimals, 6);
+assert.equal(identity.facts.rawToken0, TOKEN0);
+assert.equal(identity.facts.rawToken1, TOKEN1);
 assert.equal(
   identity.facts.quoteBinding.successEncoding,
   "FluidDexSwapResult(uint256)-revert",
@@ -245,7 +250,9 @@ const fragment = fluidDexStrictFamilyPlugin.execution.buildFragment({
 });
 assert.equal(fragment.nodes[0]?.adapterId, "fluid-dex-swap");
 assert.equal(fragment.nodes[0]?.params.swap0to1, true);
-assert.equal(fragment.requirements[0]?.kind, "approve");
+assert.deepEqual(fragment.requirements, [], "temporary approvals are inside the raw action");
+assert.equal(fragment.nodes[0]?.params.nativeInput, false);
+assert.equal(fragment.nodes[0]?.params.nativeOutput, false);
 assert.throws(
   () => fluidDexStrictFamilyPlugin.execution.buildFragment({
     descriptor,
@@ -263,14 +270,66 @@ assert.throws(
 const summary = definedFamilyPluginContractSummary(fluidDexStrictFamilyPlugin);
 assert.equal(summary.domain, "swap");
 assert.deepEqual(summary.suppliedActionAdapterIds, ["fluid-dex-swap"]);
+
+// Central metadata fixtures prove the declaration contract, NOT historical
+// ADDRESS_DEAD native quote success. Both real active probes remain mandatory.
+for (const tokens of [[FLUID_DEX_NATIVE_TOKEN, TOKEN1], [TOKEN0, FLUID_DEX_NATIVE_TOKEN],
+  [ADDR.WETH, TOKEN1]] as const) {
+  const nativeIdentity = runIdentity(candidate, POOL, tokens);
+  const d = fluidDexStrictFamilyPlugin.instance.finalizeDescriptor({ identity: nativeIdentity,
+    draft: fluidDexStrictFamilyPlugin.instance.compileDraft(nativeIdentity), sharedBindings: [] });
+  assert.equal(d.rawToken0, ethers.getAddress(tokens[0]));
+  assert.equal(d.rawToken1, ethers.getAddress(tokens[1]));
+  const projected = fluidDexStrictFamilyPlugin.routes.project({ descriptor: d });
+  for (const r of projected) {
+    const rawIn = r.swap0To1 ? tokens[0] : tokens[1], rawOut = r.swap0To1 ? tokens[1] : tokens[0];
+    const nativeIn = rawIn === FLUID_DEX_NATIVE_TOKEN, nativeOut = rawOut === FLUID_DEX_NATIVE_TOKEN;
+    assert.deepEqual(r.executionAssets, { input: nativeIn ? "native" : "erc20", output: nativeOut ? "native" : "erc20" });
+    assert.equal(r.tokenIn, ethers.getAddress(nativeIn ? ADDR.WETH : rawIn));
+    assert.equal(r.tokenOut, ethers.getAddress(nativeOut ? ADDR.WETH : rawOut));
+  }
+  const reverse = runThroughReverse(candidate, POOL, tokens);
+  assert(reverse.phase === "reverse-binding");
+  const probes = fluidDexStrictFamilyPlugin.identity.variants[0].buildRequests({ candidate, evidence: reverse, step: 2 });
+  assert.equal(probes.length, 2);
+  for (const [index, probe] of probes.entries()) {
+    assert(probe.kind === "eth-call");
+    assert(!Object.hasOwn(probe, "value"), "no invented direct eth-call value capability");
+    const args = FLUID_DEX_INTERFACE.decodeFunctionData("swapIn", probe.data);
+    assert.equal(args[0], index === 0);
+    assert.equal(args[1], 10n ** BigInt(index === 0 ? d.token0Decimals : d.token1Decimals));
+  }
+  for (const badDirection of [0, 1]) {
+    const results = [declaredRevert("active-quote-zero-to-one", 99n), declaredRevert("active-quote-one-to-zero", 98n)];
+    results[badDirection] = returnedCustomError(results[badDirection].id, 99n);
+    const behavior = fluidDexStrictFamilyPlugin.identity.variants[0].decode({
+      step: { candidate, evidence: reverse, step: 2 }, results });
+    const failed = fluidDexStrictFamilyPlugin.identity.variants[0].decide({ candidate, evidence: behavior, step: 3 });
+    assert.equal(failed.status, "chain-proven-rejected", "neither active quote direction may be bypassed");
+  }
+  assert.equal(fluidDexStrictFamilyPlugin.identity.variants[0].decide({ candidate,
+    evidence: runThroughReverse(candidate, OTHER_POOL, tokens), step: 2 }).status, "chain-proven-rejected");
+}
+assert.throws(() => runThroughReverse(candidate, POOL, [FLUID_DEX_NATIVE_TOKEN, ADDR.WETH]), /graph mapping conflict/);
+const missingCode = runThroughReverse(candidate, POOL, [FLUID_DEX_NATIVE_TOKEN, TOKEN1], "0x");
+assert(missingCode.phase === "reverse-binding");
+assert.equal(missingCode.assets[0].kind, "native");
+assert(!Object.hasOwn(missingCode.assets[0], "code"));
+assert(!Object.hasOwn(missingCode, "token0HasCode"));
+assert.equal(missingCode.assets[1].kind, "erc20");
+assert.equal(missingCode.assets[1].decimals, null);
+assert.equal(fluidDexStrictFamilyPlugin.identity.variants[0].decide({ candidate, evidence: missingCode, step: 2 }).status,
+  "chain-proven-rejected", "an ERC20 with no code cannot become native");
+assert.throws(() => runThroughReverse(candidate, POOL, [TOKEN0, TOKEN1], "0x6000", 37), /invalid decimals/);
 console.log("fluid-dex-family-plugin PASS");
 
 function runIdentity(
   input: FluidDexCandidate,
   reversePool: string,
+  tokens: readonly [string, string] = [TOKEN0, TOKEN1],
 ): FluidDexIdentity {
   const variant = fluidDexStrictFamilyPlugin.identity.variants[0];
-  const reverse = runThroughReverse(input, reversePool);
+  const reverse = runThroughReverse(input, reversePool, tokens);
   const quoteRequests = variant.buildRequests({
     candidate: input,
     evidence: reverse,
@@ -293,43 +352,47 @@ function runIdentity(
 function runThroughReverse(
   input: FluidDexCandidate,
   reversePool: string,
+  tokens: readonly [string, string] = [TOKEN0, TOKEN1],
+  erc20Code = "0x6000",
+  erc20Decimals = 6,
 ): FluidDexIdentityEvidence {
   const variant = fluidDexStrictFamilyPlugin.identity.variants[0];
   const constants = variant.decode({
     step: { candidate: input, step: 0 },
     results: [
-      success("pool-constants", encodedConstants()),
+      success("pool-constants", encodedConstants(tokens)),
       success("pool-code", "0x6000"),
     ],
   }) as FluidDexIdentityEvidence;
   assert.deepEqual(variant.decide({ candidate: input, evidence: constants, step: 1 }), {
     status: "continue",
   });
-  return variant.decode({
-    step: { candidate: input, evidence: constants, step: 1 },
-    results: [
-      success(
-        "factory-reverse-dex",
-        FLUID_DEX_FACTORY_INTERFACE.encodeFunctionResult(
-          "getDexAddress",
-          [reversePool],
-        ),
-      ),
-      success("token0-code", "0x6001"),
-      success("token1-code", "0x6002"),
-      success(
-        "token0-decimals",
-        FLUID_DEX_ERC20_INTERFACE.encodeFunctionResult("decimals", [6]),
-      ),
-      success(
-        "token1-decimals",
-        FLUID_DEX_ERC20_INTERFACE.encodeFunctionResult("decimals", [6]),
-      ),
-    ],
-  }) as FluidDexIdentityEvidence;
+  const step = { candidate: input, evidence: constants, step: 1 };
+  assert(variant.assets);
+  const declarations = variant.assets(step);
+  const plan = createIdentityAssetMetadataPlan(declarations, SOURCE);
+  const familyRequests = variant.buildRequests(step);
+  assert.deepEqual(familyRequests.map(r => r.id), ["factory-reverse-dex"], "asset reads are centrally appended in the same round");
+  const requests = plan.append(familyRequests);
+  assert.equal(requests.length, 1 + 2 * declarations.filter(a => a.kind === "erc20").length);
+  const results = requests.map(request => {
+    assert(request.kind === "eth-call" || request.kind === "get-code");
+    const target = request.kind === "get-code" ? request.address : request.to;
+    assert.notEqual(target.toLowerCase(), FLUID_DEX_NATIVE_TOKEN.toLowerCase(), "native has no ERC20 code/decimals query");
+    if (request.id === "factory-reverse-dex") return success(request.id,
+      FLUID_DEX_FACTORY_INTERFACE.encodeFunctionResult("getDexAddress", [reversePool]));
+    return success(request.id, request.kind === "get-code" ? erc20Code
+      : FLUID_DEX_ERC20_INTERFACE.encodeFunctionResult("decimals", [erc20Decimals]));
+  });
+  const assets = plan.decode(results);
+  assert.throws(() => variant.decode({ step, results }), /metadata missing/);
+  assert.throws(() => variant.decode({ step, results, assets: [assets[0], assets[0]] }), /metadata binding/);
+  assert.throws(() => plan.decode(results.map(r => r.id.startsWith("central-asset:")
+    ? { ...r, source: { ...SOURCE, number: SOURCE.number + 1 } } : r)), /source mismatch/);
+  return variant.decode({ step, results, assets }) as FluidDexIdentityEvidence;
 }
 
-function encodedConstants(): string {
+function encodedConstants(tokens: readonly [string, string] = [TOKEN0, TOKEN1]): string {
   const zero = ethers.ZeroAddress;
   const word = ethers.ZeroHash;
   return FLUID_DEX_CONSTANTS_INTERFACE.encodeFunctionResult("constantsView", [[
@@ -338,8 +401,8 @@ function encodedConstants(): string {
     FACTORY,
     [zero, zero, zero, zero, zero],
     zero,
-    TOKEN0,
-    TOKEN1,
+    tokens[0],
+    tokens[1],
     word,
     word,
     word,

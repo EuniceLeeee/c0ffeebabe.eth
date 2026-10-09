@@ -23,6 +23,8 @@ export const fluidDexPricing = {
   stateKey: (route) => route.routeKey,
   staticBindingProjection: ({ descriptor, routes }) => ({
     pool: descriptor.pool,
+    rawToken0: descriptor.rawToken0,
+    rawToken1: descriptor.rawToken1,
     token0: descriptor.token0,
     token1: descriptor.token1,
     token0Decimals: descriptor.token0Decimals,
@@ -56,6 +58,7 @@ export const fluidDexPricing = {
       swap0To1: route.swap0To1,
       tokenIn: route.tokenIn,
       tokenOut: route.tokenOut,
+      executionAssets: route.executionAssets!,
     })),
   }),
   compileDraft({ descriptor, routes }) {

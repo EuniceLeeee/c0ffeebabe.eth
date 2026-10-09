@@ -9,6 +9,8 @@ import {
   type CentralCallerAuthority,
   type CentralCallerAuthorityInput,
 } from "../adapter-work-intent.js";
+import { createIdentityAssetMetadataPlan } from "../identity-asset-metadata.js";
+import { MAX_EXECUTION_ROUNDING_RAW_UNITS, assertExecutionRounding } from "../../shared/executor/amount-rounding.js";
 import {
   assertIssuedAdapterFamilyLifecycleContentCache,
   type AdapterStaticEvidenceStage,
@@ -66,6 +68,7 @@ import { ExactAmountRejectedError } from "./adapter-amount-rejection.js";
 import { applyExactTrialState, emptyExactTrialState, ExactTrialStateConflictError,
   type ExactTrialSnapshot } from "../exact-trial-state.js";
 import { compileExactPrefix } from "../exact-prefix-plan.js";
+import { applyRuntimeAssetBoundary, applyQuotedAssetBoundary, executionNativeSides } from "../execution-asset-boundary.js";
 import type {
   FamilyCapabilityCatalog,
   LoadedFamilyBox,
@@ -2745,6 +2748,9 @@ export interface FamilyExecutionInvocation {
   readonly exact: SealedFamilyExactQuoteHandle;
   /** Central planner-owned execution protection; Family code only encodes it. */
   readonly minAmountOut: bigint;
+  /** Optional central live policy; absent retains the generic boundary's
+   * refund semantics for existing non-live callers. */
+  readonly quoteToleranceRawUnits?: bigint;
   readonly executor: string;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
 }
@@ -2791,7 +2797,8 @@ export function buildFamilyRuntimeAmountLeg(input: {
       typeof leg.program !== "string" || !/^0x01(?:[a-fA-F0-9]{2})+$/.test(leg.program) || leg.program.length > 131074) {
     throw new Error("runtime execution program ownership or bounds");
   }
-  return Object.freeze({ actionAdapterId: leg.actionAdapterId, program: leg.program });
+  return applyRuntimeAssetBoundary({ route: record.route, executor: input.executor,
+    leg: Object.freeze({ actionAdapterId: leg.actionAdapterId, program: leg.program }) });
 }
 
 interface ResolvedFamilyExecutionInvocation {
@@ -2806,6 +2813,7 @@ export function buildFamilyExecutionFragment(
 ): FamilyExecutionOutcome {
   let resolved: ResolvedFamilyExecutionInvocation | undefined;
   try {
+    if (input.quoteToleranceRawUnits !== undefined) assertExecutionRounding(input.quoteToleranceRawUnits);
     assertIssuedLoadedFamilyBox(input.family);
     const routeRecord = resolveFamilyRouteRuntimeHandle(
       input.family,
@@ -2848,7 +2856,13 @@ export function buildFamilyExecutionFragment(
     if (!Array.isArray(expectedEffects)) {
       throw new Error("execution expectedEffects must return an array");
     }
-    const sealedFragment = sealPlanFragment(fragment);
+    const rawSealedFragment = sealPlanFragment(fragment);
+    const boundedFragment = applyQuotedAssetBoundary({
+      route: routeRecord.route, executor: exactRecord.executor, amountIn: exactRecord.amountIn,
+      minimum: input.minAmountOut, fragment: rawSealedFragment,
+      inputToleranceRawUnits: input.quoteToleranceRawUnits,
+    });
+    const sealedFragment = boundedFragment === rawSealedFragment ? rawSealedFragment : sealPlanFragment(boundedFragment);
     const sealedEffects = Object.freeze(expectedEffects.map((effect) =>
       Object.freeze({ ...effect })
     ));
@@ -3556,6 +3570,10 @@ async function resolveIdentity(input: {
   readonly runtime: CentralAdapterRuntime;
   readonly maxSteps: number;
 }): Promise<IdentityResult> {
+  // Admission attests the framework's fixed precision ceiling, not an ambient
+  // lane setting. A live lane can select stricter execution (0) without changing
+  // or silently reusing a configuration-dependent identity verdict.
+  const executionRoundingRawUnits = MAX_EXECUTION_ROUNDING_RAW_UNITS;
   const plugin = runtimeInstanceLifecyclePlugin(input.family);
   const applicable: IdentityVariant<FamilyCandidate, VerifiedIdentity, unknown>[] = [];
   const applicabilityFailures: string[] = [];
@@ -3590,6 +3608,7 @@ async function resolveIdentity(input: {
         candidate: input.candidate.candidate,
         ...(evidence === undefined ? {} : { evidence }),
         step,
+        executionRoundingRawUnits,
       });
       let decision;
       try {
@@ -3655,12 +3674,29 @@ async function resolveIdentity(input: {
         break;
       }
 
+      let assets: ReturnType<typeof createIdentityAssetMetadataPlan> | undefined;
+      try {
+        if (variant.assets !== undefined) {
+          assets = createIdentityAssetMetadataPlan(variant.assets(stepInput), input.source);
+        }
+      } catch (error) {
+        failed.push(`variant-assets:${variant.id}:${errorMessage(error)}`);
+        break;
+      }
       const program: RequestProgram<typeof stepInput, IdentityProgramEvidence> = {
-        requirements: (programInput) => variant.requirements(programInput),
-        buildRequests: (programInput) => variant.buildRequests(programInput),
+        requirements: (programInput) => {
+          const base = variant.requirements(programInput);
+          return assets === undefined ? base : assets.requirements(base);
+        },
+        buildRequests: (programInput) => {
+          const base = variant.buildRequests(programInput);
+          return assets === undefined ? base : assets.append(base);
+        },
         decode: ({ programInput, results }) => ({
-          evidence: variant.decode({ step: programInput, results }),
-          successfulResultCount: results.filter((result) => result.ok).length,
+          evidence: variant.decode({ step: programInput, results,
+            ...(assets === undefined ? {} : { assets: assets.decode(results) }) }),
+          // Chain metadata does not stand in for the protocol's identity proof.
+          successfulResultCount: results.filter((result) => result.ok && !assets?.isMetadataResult(result.id)).length,
         }),
       };
       const work = await executeAdapterWork({
@@ -4426,6 +4462,7 @@ function assertPreparedRoute(
   instance: PreparedFamilyInstance,
   route: FamilyRouteDescriptor,
 ): void {
+  executionNativeSides(route);
   if (
     instance.familyId !== family.plugin.manifest.familyId ||
     instance.descriptor.familyId !== family.plugin.manifest.familyId ||
@@ -5187,6 +5224,9 @@ function validateRoutes(
     }
     canonicalKey(route.tokenIn, "route tokenIn");
     canonicalKey(route.tokenOut, "route tokenOut");
+    // Keep malformed asset declarations within the existing per-instance
+    // route-projection failure boundary, before any handles are issued.
+    executionNativeSides(route);
     if (!allowedTaxonomy.has(taxonomyKey(route.taxonomy))) {
       throw new Error(`route ${route.routeKey} uses undeclared taxonomy`);
     }

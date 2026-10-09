@@ -1,6 +1,14 @@
 import { ExactAmountRejectedError } from "../venues/adapter-amount-rejection.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
+import { RuntimeAmountProgram, runtimeProgramScript } from "../../adapters/runtime-amount-program.js";
+import {
+  identityAssetRequestId,
+  type IdentityAssetDeclaration,
+  type IdentityAssetMetadata,
+} from "../identity-asset-metadata.js";
 import {
   type AdapterGenerationFence,
   type CentralAdapterRuntime,
@@ -20,6 +28,7 @@ import {
 } from "../adapter-family-graph-runtime.js";
 import {
   buildFamilyExecutionFragment,
+  buildFamilyRuntimeAmountLeg,
   executeAdapterFamilyLifecycleBatch,
   executeFamilyExactQuote,
   describeFamilyAmountQuoteReuse,
@@ -37,6 +46,7 @@ import {
   type FamilyOwnedActionAdapter,
   type FamilyRouteDescriptor,
   type FamilySharedBindingRef,
+  type IdentityStepInput,
   type ProtocolFamilyPlugin,
   type RuntimeEvidence,
   type VerifiedIdentity,
@@ -68,6 +78,7 @@ import {
 } from "../venues/family-capability-catalog.js";
 import { bindFamilyOwnedAction } from "../venues/family-owned-action.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
+import type { PlanFragment } from "../venues/route-leg-adapter.js";
 import type { AmountQuoteReusePolicy } from "../amount-quote-continuity.js";
 import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
 import { buildSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
@@ -137,6 +148,13 @@ interface FixtureExactEvidence {
 }
 
 interface FixtureControls {
+  readonly identityAssets?: (step: IdentityStepInput<Candidate, unknown>) => readonly IdentityAssetDeclaration[];
+  readonly identityRequests?: (step: IdentityStepInput<Candidate, unknown>) => readonly AdapterRequest[];
+  readonly identityDecode?: (input: {
+    readonly step: IdentityStepInput<Candidate, unknown>;
+    readonly results: readonly AdapterRequestResult[];
+    readonly assets?: readonly IdentityAssetMetadata[];
+  }) => FixtureProbe;
   readonly prematureNegative?: boolean;
   readonly candidateTagFromData?: boolean;
   readonly localExact?: boolean;
@@ -163,6 +181,10 @@ interface FixtureControls {
   onExpectedEffects?: () => void;
   readonly executionAdapterId?: string;
   readonly executionThenable?: boolean;
+  readonly executionRequirements?: PlanFragment["requirements"];
+  readonly routeAssets?: (pool: string) => Pick<FamilyRouteDescriptor, "tokenIn" | "tokenOut" | "executionAssets">;
+  readonly runtimeProgram?: string;
+  runtimeBuildCalls?: number;
   readonly omitClassifyUnavailable?: boolean;
   readonly sharedBindingKey?: "pool" | "token0";
   readonly sharedProjectionThenable?: boolean;
@@ -248,14 +270,15 @@ function defineFixture(name: string, controls: FixtureControls) {
         kind: "standalone-contract",
         lineageId: lineage,
         applies: () => true,
+        ...(controls.identityAssets === undefined ? {} : { assets: controls.identityAssets }),
         requirements: () => ({ transports: ["eth-call"] }),
-        buildRequests: ({ candidate }) => [call(
-          `identity:${candidate.pool}`,
-          candidate.pool,
+        buildRequests: (step) => controls.identityRequests?.(step) ?? [call(
+          `identity:${step.candidate.pool}`,
+          step.candidate.pool,
           "0xaaaaaaaa",
         )],
-        decode: ({ results }) => ({
-          accepted: successful(results[0]).data === "0x01",
+        decode: (input) => controls.identityDecode?.(input) ?? ({
+          accepted: successful(input.results[0]).data === "0x01",
         }),
         decide: ({ candidate, evidence }) => {
           if (controls.prematureNegative) {
@@ -294,8 +317,8 @@ function defineFixture(name: string, controls: FixtureControls) {
         provenance: identity.provenance,
         runtimeRequirements: [],
         pool: identity.subject,
-        token0: TOKEN0,
-        token1: TOKEN1,
+        token0: controls.routeAssets?.(identity.subject).tokenIn ?? TOKEN0,
+        token1: controls.routeAssets?.(identity.subject).tokenOut ?? TOKEN1,
       }),
       staticEvidence: {
         reusePolicy: { kind: "source-local" },
@@ -370,6 +393,7 @@ function defineFixture(name: string, controls: FixtureControls) {
         instanceKey: descriptor.instanceKey,
         tokenIn: descriptor.token0,
         tokenOut: descriptor.token1,
+        ...(controls.routeAssets?.(descriptor.pool) ?? {}),
         taxonomy: { slotKind: "protocol", protocolAction: "convert" },
         bindingRef: {
           bindingKey: descriptor.pool,
@@ -696,6 +720,13 @@ function defineFixture(name: string, controls: FixtureControls) {
       },
     },
     execution: {
+      ...(controls.runtimeProgram === undefined ? {} : {
+        buildRuntimeLeg: () => {
+          controls.runtimeBuildCalls = (controls.runtimeBuildCalls ?? 0) + 1;
+          return { actionAdapterId: controls.executionAdapterId ?? actionId,
+            program: controls.runtimeProgram! };
+        },
+      }),
       runtimeProjection: () => ({
         allowanceSpender: null,
         prewarmQuoteCalls: [],
@@ -716,7 +747,7 @@ function defineFixture(name: string, controls: FixtureControls) {
         controls.lastExecutionExactEvidence = exactEvidence;
         controls.lastExecutionRuntimeEvidence = runtimeEvidence;
         const fragment = {
-          requirements: [],
+          requirements: controls.executionRequirements ?? [],
           nodes: [{
             adapterId: controls.executionAdapterId ?? actionId,
             target: descriptor.pool,
@@ -857,6 +888,7 @@ class TestFence implements AdapterGenerationFence {
 
 class TestScheduler implements CentralAdapterScheduler {
   readonly requestIds: string[] = [];
+  readonly batches: Parameters<CentralAdapterScheduler["issueExecutor"]>[0][] = [];
   readonly callerAuthorities: Parameters<CentralAdapterScheduler["issueExecutor"]>[0]["callerAuthority"][] = [];
 
   constructor(private readonly options: {
@@ -872,6 +904,7 @@ class TestScheduler implements CentralAdapterScheduler {
   issueExecutor(
     input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
   ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
+    this.batches.push(input);
     this.callerAuthorities.push(input.callerAuthority);
     const executor = createBoundedRequestExecutor({
       assertSupported: (requirements) => assert.deepEqual(
@@ -1840,6 +1873,363 @@ async function testRequestExactAndOwnedExecution(): Promise<void> {
   assert.throws(() => {
     (returnedNode.params as { amountOut: bigint }).amountOut = 2n;
   }, TypeError);
+}
+
+async function testCentralExecutionAssetBoundaryIssuers(): Promise<void> {
+  const weth = ADDR.WETH.toLowerCase();
+  const cases: readonly {
+    name: string;
+    assets: ReturnType<NonNullable<FixtureControls["routeAssets"]>>;
+    nativeInput: boolean;
+    nativeOutput: boolean;
+  }[] = [
+    { name: "synthetic-native-debit", nativeInput: true, nativeOutput: false,
+      assets: { tokenIn: weth, tokenOut: TOKEN1,
+        executionAssets: { input: "native", output: "erc20" } } },
+    { name: "unrelated-native-credit", nativeInput: false, nativeOutput: true,
+      assets: { tokenIn: TOKEN0, tokenOut: weth,
+        executionAssets: { input: "erc20", output: "native" } } },
+    { name: "implicit-weth-erc20", nativeInput: false, nativeOutput: false,
+      assets: { tokenIn: weth, tokenOut: TOKEN1 } },
+    { name: "explicit-weth-erc20", nativeInput: false, nativeOutput: false,
+      assets: { tokenIn: TOKEN0, tokenOut: weth,
+        executionAssets: { input: "erc20", output: "erc20" } } },
+  ];
+  for (const sample of cases) {
+    const raw = ethers.hexlify(new RuntimeAmountProgram().call(
+      GOOD, `${SELECTOR}${"00".repeat(32)}`, {
+        patches: [{ offset: 4, reg: 0 }],
+        ...(sample.nativeInput ? { valueReg: 0 } : {}),
+      },
+    ).bytes());
+    const controls: FixtureControls = {
+      descriptorPools: [], unavailableCalls: 0,
+      routeAssets: () => sample.assets, runtimeProgram: raw,
+      ...(sample.nativeOutput ? { executionRequirements: [
+        { kind: "approve" as const, token: TOKEN0, spender: GOOD, amount: 10n },
+        { kind: "transfer-to-pool" as const, token: TOKEN0, pool: GOOD, amount: 10n },
+      ] } : {}),
+    };
+    const family = defineFixture(sample.name, controls);
+    // No synthetic Family owns or opts into the central infrastructure action.
+    assert.deepEqual(family.plugin.manifest.requiredInfraActionAdapterIds, []);
+    const scheduler = new TestScheduler();
+    const { publications } = await run({ family, pools: [GOOD], scheduler });
+    assert.equal(publications.length, 1);
+    const instance = publications[0].instances[0];
+    const route = issuedRoute(instance);
+    const sharedRuntime: CentralAdapterRuntime = {
+      ...runtime(scheduler), callerAuthority: { bind: () => ({ executor: EXECUTOR }) },
+    };
+    const invocation = { family, route, source: SOURCE, runtime: sharedRuntime,
+      executor: EXECUTOR, runtimeEvidence: [], actionOwnership: ownershipFor(family) };
+    const forbidden = () => { throw new Error("runtime construction invoked Exact/quoted fallback"); };
+    controls.onExactInput = forbidden;
+    controls.onExactDecode = forbidden;
+    controls.onExecution = forbidden;
+    const requestsBeforeRuntime = [...scheduler.requestIds];
+    const leg = buildFamilyRuntimeAmountLeg(invocation);
+    assert(leg, sample.name);
+    assert.equal(leg.actionAdapterId, `${sample.name}-convert`);
+    assert(Object.isFrozen(leg));
+    assert.equal(controls.runtimeBuildCalls, 1);
+    assert.equal(controls.exactDecodeCalls ?? 0, 0);
+    assert.equal(controls.localExactCalls ?? 0, 0);
+    assert.equal(controls.executionCalls ?? 0, 0);
+    assert.deepEqual(scheduler.requestIds, requestsBeforeRuntime, "runtime construction must not schedule reads");
+    if (sample.nativeInput || sample.nativeOutput) {
+      assert.notEqual(leg.program, raw, `${sample.name} must be centrally wrapped`);
+      // Check the actual issued bytes, not the wrapper helper's return value.
+      const nestedRaw = buildSubscriptCalldata(runtimeProgramScript(ethers.getBytes(raw)));
+      assert(leg.program.includes(nestedRaw.slice(2)), "the original raw program must stay inside execSubscript");
+      assert(leg.program.includes(weth.slice(2)), "the issuer must supply the WETH boundary");
+      assert(leg.program.includes("d0e30db0"), "the native delta must be wrapped");
+      if (sample.nativeInput) assert(leg.program.includes("2e1a7d4d"), "native input must be unwrapped");
+    } else {
+      assert.equal(leg.program, raw, "WETH alone must not trigger a native boundary");
+    }
+    const forgedRoute = Object.freeze({ ...route }) as FamilyRouteRuntimeHandle;
+    assert.throws(() => buildFamilyRuntimeAmountLeg({ ...invocation, route: forgedRoute }), /must be issued/);
+    assert.equal(controls.runtimeBuildCalls, 1, "forged handles must fail before the raw builder");
+    const wrongOwner = { ownerOfAction: () => familyId("protocol:not-the-owner") };
+    assert.throws(() => buildFamilyRuntimeAmountLeg({ ...invocation, actionOwnership: wrongOwner }), /ownership/);
+    assert.deepEqual(scheduler.requestIds, requestsBeforeRuntime);
+
+    controls.onExactInput = undefined;
+    controls.onExactDecode = undefined;
+    controls.onExecution = undefined;
+    const exact = await executeFamilyExactQuote({ ...invocation, amountIn: 10n,
+      generation: SOURCE.generation });
+    assert.equal(exact.status, "resolved");
+    if (exact.status !== "resolved") throw new Error(`${sample.name}: exact quote did not resolve`);
+    const quotedInput = { family, route, exact, minAmountOut: 9n, executor: EXECUTOR,
+      runtimeEvidence: [], actionOwnership: ownershipFor(family) };
+    const requestsBeforeQuoted = [...scheduler.requestIds];
+    controls.onExactInput = forbidden;
+    controls.onExactDecode = forbidden;
+    const execution = buildFamilyExecutionFragment(quotedInput);
+    assert.equal(execution.status, "resolved");
+    if (execution.status !== "resolved") throw new Error(`${sample.name}: quoted execution did not resolve`);
+    assert.equal(execution.fragment.nodes.length, 1);
+    assert.deepEqual(execution.fragment.requirements, []);
+    const root = execution.fragment.nodes[0];
+    let child = root;
+    if (sample.nativeInput || sample.nativeOutput) {
+      assert.equal(root.adapterId, "execution-asset-boundary");
+      assert.equal(root.target, EXECUTOR);
+      assert.equal(root.tokenIn, sample.assets.tokenIn);
+      assert.equal(root.tokenOut, sample.assets.tokenOut);
+      assert.equal(root.amount, 10n);
+      assert.deepEqual(root.params, { nativeInput: sample.nativeInput,
+        nativeOutput: sample.nativeOutput, minAmountOut: 9n });
+      assert.deepEqual(root.children.map(node => node.adapterId), sample.nativeOutput
+        ? ["erc20-approve", "erc20-transfer", `${sample.name}-convert`]
+        : [`${sample.name}-convert`]);
+      child = root.children[root.children.length - 1];
+    } else {
+      assert.equal(root.adapterId, `${sample.name}-convert`);
+      assert.deepEqual(root.children, []);
+    }
+    assert.deepEqual(child, controls.lastPlanNode, "sealing/wrapping must preserve the owned raw child");
+    assert(Object.isFrozen(root));
+    assert(Object.isFrozen(root.children));
+    assert(Object.isFrozen(child));
+    assert(Object.isFrozen(child.params));
+    controls.lastPlanNode!.params.amountOut = 999n;
+    assert.equal(child.params.amountOut, 10n, "the raw Family object cannot mutate the sealed child");
+    const executionCalls = controls.executionCalls;
+    for (const forged of [
+      { ...quotedInput, route: forgedRoute },
+      { ...quotedInput, exact: Object.freeze({ ...exact }) as SealedFamilyExactQuoteHandle },
+    ]) {
+      const result = buildFamilyExecutionFragment(forged);
+      assert.equal(result.status, "failed");
+      assert(result.outcome.reasonCode.includes("must be issued"));
+    }
+    assert.equal(controls.executionCalls, executionCalls, "forged authority must fail before Family execution");
+    assert.equal(buildFamilyExecutionFragment({ ...quotedInput, actionOwnership: wrongOwner }).status, "rejected");
+    assert.deepEqual(scheduler.requestIds, requestsBeforeQuoted, "quoted wrapping must remain pure");
+  }
+}
+
+async function testNativeBoundaryCannotLaunderForeignActions(): Promise<void> {
+  for (const foreign of ["foreign-action", "execution-asset-boundary"]) {
+    const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0,
+      executionAdapterId: foreign,
+      routeAssets: () => ({ tokenIn: ADDR.WETH.toLowerCase(), tokenOut: TOKEN1,
+        executionAssets: { input: "native", output: "erc20" } }),
+      runtimeProgram: ethers.hexlify(new RuntimeAmountProgram().constant(1, 7n).bytes()),
+    };
+    const family = defineFixture(`native-ownership-${foreign}`, controls);
+    const scheduler = new TestScheduler();
+    const { publications } = await run({ family, pools: [GOOD], scheduler });
+    const route = issuedRoute(publications[0].instances[0]);
+    const sharedRuntime: CentralAdapterRuntime = {
+      ...runtime(scheduler), callerAuthority: { bind: () => ({ executor: EXECUTOR }) },
+    };
+    const input = { family, route, source: SOURCE, runtime: sharedRuntime,
+      executor: EXECUTOR, runtimeEvidence: [], actionOwnership: ownershipFor(family) };
+    assert.throws(() => buildFamilyRuntimeAmountLeg(input), /ownership/);
+    const exact = await executeFamilyExactQuote({ ...input, amountIn: 10n, generation: SOURCE.generation });
+    assert.equal(exact.status, "resolved");
+    if (exact.status !== "resolved") throw new Error("native ownership exact failed");
+    const rejected = buildFamilyExecutionFragment({ ...input, exact, minAmountOut: 9n });
+    assert.equal(rejected.status, "rejected");
+    assert(rejected.outcome.reasonCode.includes(foreign), "ownership must be checked before adding the central wrapper");
+  }
+}
+
+async function testInvalidExecutionAssetsFailBeforePublication(): Promise<void> {
+  const invalid: readonly ReturnType<NonNullable<FixtureControls["routeAssets"]>>[] = [
+    { tokenIn: TOKEN0, tokenOut: TOKEN1, executionAssets: { input: "native", output: "erc20" } },
+    { tokenIn: TOKEN0, tokenOut: TOKEN1, executionAssets: { input: "erc20", output: "native" } },
+    { tokenIn: ADDR.WETH.toLowerCase(), tokenOut: TOKEN1, executionAssets: { input: "native", output: "native" } },
+  ];
+  for (const [index, assets] of invalid.entries()) {
+    const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0,
+      routeAssets: pool => pool === GOOD ? assets : { tokenIn: TOKEN0, tokenOut: TOKEN1 } };
+    const family = defineFixture(`invalid-native-declaration-${index}`, controls);
+    const scheduler = new TestScheduler();
+    const { publications, result } = await run({ family, pools: [GOOD, OTHER], scheduler });
+    assert.equal(publications.length, 1, "an invalid declaration must not abort a valid sibling's publication");
+    assert.deepEqual(publications[0].instances.map(instance => instance.instanceKey), [instanceKey(OTHER)]);
+    assert(result.outcomes.some(outcome => outcome.candidateKey === GOOD &&
+      outcome.stage === "route-projection" && outcome.status === "failed" &&
+      outcome.reasonCode.includes("execution native graph binding")));
+    assert.equal(controls.runtimeBuildCalls ?? 0, 0);
+    assert.equal(controls.executionCalls ?? 0, 0);
+    assert(!scheduler.requestIds.some(id => id.startsWith("exact:")));
+  }
+}
+
+async function testIdentityAssetsUseTheOriginalRequestRound(): Promise<void> {
+  for (const withErc20 of [false, true]) {
+    const declarations: readonly IdentityAssetDeclaration[] = [
+      { key: "native", kind: "native" },
+      ...(withErc20 ? [
+        { key: "token", kind: "erc20" as const, address: TOKEN0 },
+        { key: "wrapped", kind: "erc20" as const, address: ADDR.WETH.toLowerCase() },
+      ] : []),
+    ];
+    const expected: readonly IdentityAssetMetadata[] = [
+      { key: "native", kind: "native", token: ethers.getAddress(ADDR.WETH), decimals: 18 },
+      ...(withErc20 ? [
+        { key: "token", kind: "erc20" as const, token: TOKEN0, code: "0x6000", decimals: 6 },
+        { key: "wrapped", kind: "erc20" as const, token: ethers.getAddress(ADDR.WETH), code: "0x6001", decimals: 18 },
+      ] : []),
+    ];
+    const metadataResponses = new Map([
+      [identityAssetRequestId("token", "code"), "0x6000"],
+      [identityAssetRequestId("token", "decimals"), ethers.toBeHex(6n, 32)],
+      [identityAssetRequestId("wrapped", "code"), "0x6001"],
+      [identityAssetRequestId("wrapped", "decimals"), ethers.toBeHex(18n, 32)],
+    ]);
+    const expectedIds = [`identity:${GOOD}`, ...(withErc20 ? [...metadataResponses.keys()] : [])];
+    const steps: number[] = [];
+    let decoded = 0;
+    const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0,
+      identityAssets: step => {
+        steps.push(step.step);
+        assert.equal(step.candidate.pool, GOOD);
+        assert.equal(step.evidence, undefined);
+        return declarations;
+      },
+      identityDecode: ({ step, results, assets }) => {
+        decoded++;
+        assert.equal(step.step, 0);
+        assert(results.some(result => result.id === `identity:${GOOD}`));
+        assert.deepEqual(assets, expected);
+        assert(Object.isFrozen(assets));
+        assert(assets!.every(asset => Object.isFrozen(asset)));
+        assert.throws(() => (assets as IdentityAssetMetadata[]).push(expected[0]), TypeError);
+        assert.throws(() => { (assets![0] as { decimals: number }).decimals = 9; }, TypeError);
+        return { accepted: successful(results.find(result => result.id === `identity:${GOOD}`)).data === "0x01" };
+      },
+    };
+    const family = defineFixture(`identity-assets-same-round-${withErc20}`, controls);
+    const scheduler = new TestScheduler({ data: request =>
+      metadataResponses.get(request.id) ?? responseData(request, true) });
+    const stages: string[] = [];
+    const { publications } = await run({ family, pools: [GOOD], scheduler, observedStages: stages });
+    assert.equal(publications[0].instances.length, 1);
+    assert.deepEqual(steps, [0]);
+    assert.equal(decoded, 1);
+    assert.equal(stages.filter(stage => stage === "identity").length, 1, "metadata must not create another identity round");
+    const batches = scheduler.batches.filter(batch => batch.requests.some(request => request.id === `identity:${GOOD}`));
+    assert.equal(batches.length, 1);
+    assert.deepEqual(batches[0].requests.map(request => request.id), expectedIds,
+      "metadata and the protocol probe must share the actual scheduler issuance");
+    assert.deepEqual(new Set(batches[0].requirements.transports),
+      new Set(withErc20 ? ["eth-call", "get-code"] : ["eth-call"]));
+    for (const field of ["code", "decimals"] as const) {
+      assert(!scheduler.requestIds.includes(identityAssetRequestId("native", field)), "native must issue no ERC20 reads");
+      if (withErc20) assert(scheduler.requestIds.includes(identityAssetRequestId("wrapped", field)), "WETH remains ERC20 when declared ERC20");
+    }
+  }
+
+  let legacyDecodes = 0;
+  const legacy = defineFixture("identity-assets-undeclared", { descriptorPools: [], unavailableCalls: 0,
+    identityDecode: ({ assets, results }) => {
+      legacyDecodes++;
+      assert.equal(assets, undefined, "undeclared assets must not inject metadata into existing Families");
+      return { accepted: successful(results[0]).data === "0x01" };
+    } });
+  assert.equal((await run({ family: legacy, pools: [GOOD], scheduler: new TestScheduler() })).publications.length, 1);
+  assert.equal(legacyDecodes, 1);
+}
+
+async function testIdentityAssetEmptyCodeIsNotNative(): Promise<void> {
+  let decoded = 0;
+  const family = defineFixture("identity-assets-empty-code", { descriptorPools: [], unavailableCalls: 0,
+    identityAssets: () => [{ key: "missing", kind: "erc20", address: TOKEN0 }],
+    identityDecode: ({ assets, results }) => {
+      decoded++;
+      assert.equal(successful(results.find(result => result.id === `identity:${GOOD}`)).data, "0x01");
+      assert.deepEqual(assets, [{ key: "missing", kind: "erc20", token: TOKEN0, code: "0x", decimals: null }]);
+      // The Family interprets the negative code evidence. Central metadata
+      // must neither call it native nor manufacture a successful token proof.
+      const asset = assets![0];
+      return { accepted: asset.kind === "erc20" && asset.code !== "0x" };
+    } });
+  const codeId = identityAssetRequestId("missing", "code");
+  const decimalsId = identityAssetRequestId("missing", "decimals");
+  const scheduler = new TestScheduler({ data: request =>
+    request.id === codeId || request.id === decimalsId ? "0x" : responseData(request, true) });
+  const { publications, result } = await run({ family, pools: [GOOD], scheduler });
+  assert.equal(decoded, 1);
+  assert.equal(publications.length, 0);
+  assert.deepEqual(scheduler.requestIds, [`identity:${GOOD}`, codeId, decimalsId]);
+  assert(result.outcomes.some(outcome => outcome.stage === "identity" && outcome.status === "rejected" &&
+    outcome.reasonCode.includes("active-probe-negative")));
+}
+
+async function testInvalidIdentityAssetsAreCandidateLocal(): Promise<void> {
+  const invalid: readonly unknown[] = [
+    null,
+    [{ key: "same", kind: "native" }, { key: "same", kind: "erc20", address: TOKEN0 }],
+    [{ key: "native", kind: "native", address: TOKEN0 }],
+    [{ key: "token", kind: "erc20", address: ethers.ZeroAddress }],
+    [{ key: "bad:key", kind: "native" }],
+    [{ key: "token", kind: "unknown" }],
+  ];
+  for (const [index, declarations] of invalid.entries()) {
+    const decoded: string[] = [];
+    const family = defineFixture(`identity-assets-invalid-${index}`, { descriptorPools: [], unavailableCalls: 0,
+      identityAssets: ({ candidate }) => candidate.pool === GOOD
+        ? declarations as readonly IdentityAssetDeclaration[] : [{ key: "native", kind: "native" }],
+      identityDecode: ({ step, assets, results }) => {
+        decoded.push(step.candidate.pool);
+        assert.deepEqual(assets, [{ key: "native", kind: "native", token: ethers.getAddress(ADDR.WETH), decimals: 18 }]);
+        return { accepted: successful(results[0]).data === "0x01" };
+      } });
+    const scheduler = new TestScheduler();
+    const { publications, result } = await run({ family, pools: [GOOD, OTHER], scheduler });
+    assert.deepEqual(publications[0].instances.map(instance => instance.instanceKey), [instanceKey(OTHER)]);
+    assert.deepEqual(decoded, [OTHER]);
+    assert(!scheduler.requestIds.includes(`identity:${GOOD}`), "bad declarations must fail before transport");
+    assert(result.outcomes.some(outcome => outcome.candidateKey === GOOD && outcome.stage === "identity" &&
+      outcome.status === "failed" && outcome.reasonCode.includes("variant-assets:")));
+  }
+}
+
+async function testIdentityMetadataCannotSupplyProtocolProof(): Promise<void> {
+  const actual: unknown[] = [];
+  const expected: unknown[] = [];
+  const reasons: string[] = [];
+  for (const kind of ["native", "erc20"] as const) for (const accepted of [true, false]) {
+    let decoded = 0;
+    const family = defineFixture(`identity-assets-no-proof-${kind}-${accepted}`, { descriptorPools: [], unavailableCalls: 0,
+      identityAssets: () => kind === "native" ? [{ key: "only", kind }]
+        : [{ key: "only", kind, address: TOKEN0 }],
+      // A declared optional probe fails; only the central metadata can
+      // succeed. Decode may observe the failure but must not gain authority.
+      identityRequests: ({ candidate }) => [{
+        ...call(`identity:${candidate.pool}`, candidate.pool, "0xaaaaaaaa"), required: false,
+      }],
+      identityDecode: ({ assets, results }) => {
+        decoded++;
+        assert.equal(results.find(result => result.id === `identity:${GOOD}`)?.ok, false);
+        assert.equal(assets?.length, 1);
+        assert.equal(assets[0].kind, kind);
+        return { accepted };
+      } });
+    const scheduler = new TestScheduler({ fail: request => request.id === `identity:${GOOD}`, data: request => {
+      if (request.id === identityAssetRequestId("only", "code")) return "0x6000";
+      if (request.id === identityAssetRequestId("only", "decimals")) return ethers.toBeHex(18n, 32);
+      return responseData(request, true);
+    } });
+    const { publications, result } = await run({ family, pools: [GOOD], scheduler });
+    const identity = result.outcomes.find(outcome => outcome.stage === "identity");
+    assert(decoded <= 1, "a missing protocol proof may fail before or after the Family decoder");
+    reasons.push(`${kind}/${accepted}: ${identity?.reasonCode}`);
+    actual.push({ kind, accepted, publications: publications.length,
+      blocked: identity?.status === "failed" || identity?.status === "unresolved",
+      missingProof: /protocol-(?:negative-)?proof-missing:|identity active behavior proof requires successful results/.test(identity?.reasonCode ?? "") });
+    expected.push({ kind, accepted, publications: 0, blocked: true, missingProof: true });
+    assert.equal(scheduler.requestIds.filter(id => id.startsWith("identity:")).length, 1,
+      "the only protocol request must be the failed optional probe");
+  }
+  assert.deepEqual(actual, expected, `asset metadata cannot authorize either protocol admission or chain-proven rejection; ${reasons.join("; ")}`);
 }
 
 async function testOpaquePublicationAndEvidenceAreSealed(): Promise<void> {
@@ -3456,6 +3846,9 @@ await testSharedBindingTwoPassDriftFailsClosed();
 await testSharedBindingProjectionThenableIsUnresolved();
 await testCallerCannotInjectSharedBindingRefs();
 await testRequestExactAndOwnedExecution();
+await testCentralExecutionAssetBoundaryIssuers();
+await testNativeBoundaryCannotLaunderForeignActions();
+await testInvalidExecutionAssetsFailBeforePublication();
 await testChainAmountUsesExistingExactBoundary();
 await testQuoteReuseDeclarationIsSealedAndCacheBound();
 await testCachedExactHonorsCallerControl();
@@ -3478,5 +3871,9 @@ await testExactCacheIsolatedByIssuedFamilyBox();
 await testNoReadLocalExactSkipsTransport();
 await testEmptyAndThrowingLocalExactFailClosed();
 await testExecutionOwnershipAndThenableFailClosed();
+await testIdentityAssetsUseTheOriginalRequestRound();
+await testIdentityAssetEmptyCodeIsNotNative();
+await testInvalidIdentityAssetsAreCandidateLocal();
+await testIdentityMetadataCannotSupplyProtocolProof();
 
 console.log("adapter Family terminal lifecycle runtime tests passed");

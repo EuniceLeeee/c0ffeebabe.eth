@@ -27,6 +27,8 @@ export const fluidDexInstance = {
       provenance: identity.provenance,
       runtimeRequirements: FLUID_DEX_RUNTIME_REQUIREMENTS,
       pool: canonicalAddress(identity.facts.pool),
+      rawToken0: canonicalAddress(identity.facts.rawToken0),
+      rawToken1: canonicalAddress(identity.facts.rawToken1),
       token0: canonicalAddress(identity.facts.token0),
       token1: canonicalAddress(identity.facts.token1),
       token0Decimals: identity.facts.token0Decimals,
@@ -48,6 +50,8 @@ export const fluidDexInstance = {
 export function fluidDexStaticBindingProjection(descriptor: FluidDexDescriptor) {
   return {
     pool: descriptor.pool,
+    rawToken0: descriptor.rawToken0,
+    rawToken1: descriptor.rawToken1,
     token0: descriptor.token0,
     token1: descriptor.token1,
     token0Decimals: descriptor.token0Decimals,

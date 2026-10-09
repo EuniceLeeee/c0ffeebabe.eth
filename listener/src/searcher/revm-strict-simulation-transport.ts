@@ -1,5 +1,6 @@
 import { keccak256 } from "ethers";
 import { assertSubscriptCalldata } from "../shared/executor/botvm-program-entry.js";
+import { applyStrictAssetBoundary, type StrictExecutionAssetBoundary } from "./execution-asset-boundary.js";
 import { snapshotCentralCallerAuthority, type AdapterWorkControl,
   type CentralCallerAuthority } from "./adapter-work-intent.js";
 import { RevmFatalError, RevmStrictError, type RevmFatalReason,
@@ -183,7 +184,7 @@ function prefixRequestSnapshot(invocation: Parameters<NonNullable<StrictSimulati
 
 function requestSnapshot(value: unknown, authority: CentralCallerAuthority, gas: number,
   executorRuntimeCode?: ExecutorRuntimeCode): { wire: WireCall; observe: ReadonlySet<string> } {
-  const r = record(value, ["id", "required", "kind", "call", "preCalls", "overrideIntent", "observe", "observeTokenBalances"]);
+  const r = record(value, ["id", "required", "kind", "call", "preCalls", "overrideIntent", "observe", "observeTokenBalances", "executionAssetBoundary"]);
   if (typeof r.id !== "string" || r.id.length === 0 || (r.required !== undefined && typeof r.required !== "boolean") ||
     typeof r.kind !== "string" || !["state-override-simulation", "effect-delta-simulation"].includes(r.kind)) invalid();
   const call = record(r.call, ["caller", "executionMode", "to", "data"]);
@@ -236,7 +237,18 @@ function requestSnapshot(value: unknown, authority: CentralCallerAuthority, gas:
     // token-delta observation. Explicit [] never falls back to this scope.
     pairs = observe.has("token-delta") ? [...new Set([...tokenDeals.map(d => d.token), to])].map(token => ({ token, account: from })) : [];
   }
-  return { observe, wire: freeze({ from, to, data, callerMode: mode === "top-level" ? mode : "impersonated-call-frame",
+  let executableData = data;
+  if (r.executionAssetBoundary !== undefined) {
+    if (!program || !observe.has("token-delta") || !observe.has("native-delta")) invalid();
+    try {
+      const boundary = r.executionAssetBoundary as StrictExecutionAssetBoundary;
+      executableData = applyStrictAssetBoundary({ boundary, executor: from, data });
+      for (const token of [boundary.tokenIn, boundary.tokenOut]) {
+        if (!pairs.some(p => p.token === address(token) && p.account === from)) invalid();
+      }
+    } catch { invalid(); }
+  }
+  return { observe, wire: freeze({ from, to, data: executableData, callerMode: mode === "top-level" ? mode : "impersonated-call-frame",
     gasLimit: gas, executionGasLimit: gas,
     ...(mode !== "top-level" ? { transactionOrigin: authority.transactionOrigin! } : {}),
     ...(program ? { executorRuntimeCode } : {}),

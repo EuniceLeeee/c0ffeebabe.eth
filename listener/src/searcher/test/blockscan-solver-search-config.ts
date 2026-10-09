@@ -7,7 +7,7 @@ assert.deepEqual(resolveBlockScanSolverSearchConfig({}), {
   gridHalfWidth: 2,
   gssMaxTries: 8,
   quoteConcurrency: 16,
-  quoteToleranceRawUnits: 0n,
+  quoteToleranceRawUnits: 1n,
 });
 
 assert.equal(resolveBlockScanSolverSearchConfig({
@@ -23,7 +23,7 @@ assert.deepEqual(resolveBlockScanSolverSearchConfig({
   gridHalfWidth: 3,
   gssMaxTries: 8,
   quoteConcurrency: 12,
-  quoteToleranceRawUnits: 0n,
+  quoteToleranceRawUnits: 1n,
 });
 
 assert.throws(
@@ -75,7 +75,7 @@ for (const flag of ["1", "true"]) {
     SEARCHER_BLOCKSCAN_QUOTE_SAFETY_PPM: "1000000",
   }).quoteToleranceRawUnits, 1n);
 }
-for (const flag of [undefined, "0", "false"]) {
+for (const flag of ["0", "false"]) {
   assert.equal(resolveBlockScanSolverSearchConfig({
     SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED: flag,
     SEARCHER_QUOTE_SAFETY_BPS: "9998",

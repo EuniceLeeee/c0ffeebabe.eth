@@ -1,0 +1,101 @@
+{
+  "schema": "native-asset-rounding-acceptance/v1",
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "ac39b0726beee8ee4bff5dc97339783474726f5d",
+  "claim": "Generic native-asset boundary and bounded raw-unit rounding implementation, offline safety regression, and same-N Fluid/Curve sample integration. Not a full opportunity, adapter merge gate, all-Family native migration or performance verdict.",
+  "broadcast": false,
+  "deployment": false,
+  "liveStarted": false,
+  "evidenceDirectory": "logs/rounding-central-20261009.V3Y8qS",
+  "sourceBinding": {
+    "historicalWorkingSourceFingerprint": "e5815418a94a96c4e232a67254ccfdc4bb28d70e902c340f7ca2a2ced2b32236",
+    "scope": "Both fresh dual runs bind the same full working-source fingerprint. Peer Ready/UniV1/xWin work remains dirty and is not included in this commit. A separate exported index tree passed build/contracts; its Curve and Fluid full/memo capability hashes equal the historical working tree. No claim that the entire dirty tree equals the scoped commit.",
+    "curveMemoHash": "c15911181bb57ea21f5246a9d93675a6bbe597fb33b93bab2f15a4e049353e05",
+    "fluidMemoHash": "623c7648dba3f1bf5e7d489a50ef0cb827990177ca2e13a7a9282e7af8fb3833",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "curveExecutorRuntimeCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+    "curveExecutorMetadataSourcesChecked": true
+  },
+  "policy": {
+    "rawUnits": [0, 1],
+    "percentageTolerance": false,
+    "nominalInputsOrQuotesReduced": false,
+    "blockscanDefaultRawUnits": 1,
+    "switch": "SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED",
+    "explicitZeroPreserved": true,
+    "identity": "Attest the fixed maximum precision ceiling (1), independent of ambient lane configuration; execution may select stricter zero.",
+    "input": "Require positive actual debit, never greater than requested, and shortfall at most the selected tolerance.",
+    "strictOutput": "Independently observed positive receipt differs from the quote by at most the precision ceiling; retain signed differences.",
+    "runtime": "Quote-free runtime forwards the actual current-flow receipt, including any residue of this flow on repeated tokens, never old inventory. There is no quote to compare at runtime.",
+    "conservation": "Non-principal route token inventory cannot decrease; at most one selected raw unit may remain. Native inventory remains exact. Repayment/min-profit/final simulation gates are not relaxed.",
+    "cost": "Per-hop input-debit protection adds one on-chain token balance read using the prior receipt balance as the before value. It adds no off-chain quote or balance RPC; execution-cost/performance acceptance remains pending."
+  },
+  "curve": {
+    "tx": "0x6fc18a5c63f708f6b03b1ccec5e14fcec03c4e7aaf01816814777fab97d6af91",
+    "block": 26139768,
+    "blockHash": "0xd7bdbad87da07f0885234e0a53200cf4ec3ae61d73dd7b71db79b2705cb634f5",
+    "pool": "0xdc24316b9ae028f1497c275eb9192a3ea0f67022",
+    "stateAndEnvironment": "N block-end state and N environment, not original transaction prestate",
+    "naturalReady": "single-N26139768-attempt02/ready.json",
+    "readySha256": "61a05112612db8a2402a4ae6c43ab2e4330e71d9fbfebdba470ec539d0d1026a",
+    "pricesSha256": "5ea941e6d7007e5c55e71d79338b8675c4e1a77cb813b6bb3a878972d6ca9a12",
+    "targetDirectionsAdmittedAndQuoted": 2,
+    "wholeGraphEdges": 7,
+    "wholeGraphRawRows": 7,
+    "wholeGraphEffectiveQuoted": 3,
+    "nonTargetPricingFailuresRetained": 4,
+    "result": "8/8 same-state quoted/runtime local EVM executions passed at production P and 10P; construction off-chain Exact/RPC=0",
+    "dualEvidence": "curve-dual-attempt02.json",
+    "dualSha256": "72c7408e4e0b7bac6affe4141133445fd9875655a838021d97ca4224d9570c57",
+    "caller": "Production public get_dy omits from. All four issued reads are preserved and independently repeated from the execution actor at the identical block hash; raw returns are equal. These diagnostic controls are not production RPC overhead.",
+    "samples": [
+      {"direction": "WETH->stETH", "input": "2000000000000000", "quote": "2000254691457174", "quotedAndRuntimeReceipt": "2000254691457173", "debitDelta": "0", "outputDelta": "-1"},
+      {"direction": "WETH->stETH", "input": "20000000000000000", "quote": "20002546892662011", "quotedAndRuntimeReceipt": "20002546892662010", "debitDelta": "0", "outputDelta": "-1"},
+      {"direction": "stETH->WETH", "input": "2000254691457174", "quote": "1999600019513298", "quotedAndRuntimeReceipt": "1999600019513298", "debitDelta": "-1", "outputDelta": "0"},
+      {"direction": "stETH->WETH", "input": "20002546914571740", "quote": "19996000173232598", "quotedAndRuntimeReceipt": "19996000173232598", "debitDelta": "-1", "outputDelta": "0"}
+    ]
+  },
+  "fluid": {
+    "tx": "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+    "block": 26152607,
+    "blockHash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+    "pool": "0x86f874212335af27c41cdb855c2255543d1499ce",
+    "ready": "logs/native-fluid-acceptance-20261009.QGszql/single-N26152607-attempt01/ready.json",
+    "readyReuse": "Current memo capability fingerprint still matches; no rescan or hand-patched admission.",
+    "naturalIntegration": "3 instances / 6 graph edges / 6 raw and effective quoted rows; target two directions",
+    "freshCurrentDual": "fluid-dual-current01.json",
+    "dualSha256": "17d8aafb67fcf5e544b2f2af35670e47e63df68ddf1ee7731b71c4e1cb1c6143",
+    "result": "8/8 same-N quoted/runtime EVM receipts at production P/10P; input debit and output exact, native delta zero; runtime construction Exact/RPC=0",
+    "limitation": "Existing Fluid harness does not separately capture actual quote-from or hash its own REVM executable. The current binary is independently hashed above; do not equate this with the Curve harness's complete per-run binding. Original five-hop opportunity/final sim/EV not rerun."
+  },
+  "checks": {
+    "workingAndStagedProductionBuild": "passed",
+    "stagedCapabilityGenerateAndCheck": "passed",
+    "stagedContracts": "246 passed, 0 failed",
+    "stagedFamilyDualContracts": "74 passed, 0 failed; synthetic construction, not all-Family chain acceptance",
+    "stagedRuntimeFundingProjectionContracts": "passed",
+    "runtimeVmEvm": "29 passed including fuzz, 0 failed",
+    "nativeBoundaryEvm": "7 passed, 0 failed",
+    "callerControlRegression": "3 passed, including mismatch/alien caller/wrong-source rejection",
+    "productionSelectorPolicyRegression": "34 passed; a positive one-unit output reaches sim with positive minimum; final-sim failures remain failures"
+  },
+  "failuresRetained": [
+    "Earlier zero-tolerance stETH native strict failures under logs/curve-native-acceptance-20261009.9ccu4I",
+    "ready-run02.log: unsupported tool-run --window argument rejected before Ready execution; corrected invocation separately recorded as ready-run02-started.log",
+    "selector-p3.log: old fixture expected one-unit positive output to be rejected; corrected fixture keeps positive minimum and lets simulation reject unprofitable amounts, selector-p4.log passes",
+    "curve-dual-attempt01.json: harness asserted mandatory executor from before issuing caller-free public quote; no EVM execution. Fixed observer/regression, subsequent attempt02 separate"
+  ],
+  "toolReconciliation": {
+    "ready": "current-curve-tools.json / listener:searcher:curve-plain-historical-ready / exit 0",
+    "curveDual": "curve-dual-p4-tools.json / listener:searcher:curve-plain-historical-native-dual / exit 0",
+    "fluidDual": "fluid-p4-tools.json / listener:searcher:fluid-dex-historical-dual / exit 0"
+  },
+  "notCompleted": [
+    "All-applicable-Family migration to central native boundaries (including remaining protocol, V4 and Ekubo declarations)",
+    "Original-TX prestate leg equality, natural route selection, independent full final simulation and EV for these native samples",
+    "Formal adapter replay / merge / systemic-live judgments",
+    "Performance: all adapted protocols, including every IMPL addition, plus Balancer V2/V3 and Curve plain/underlying; remain last, per-family single-Ready first, representative all-protocol batch second"
+  ]
+}

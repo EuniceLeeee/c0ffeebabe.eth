@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
-import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
-import { runtimeLeg, runtimeExecutor, assertProjectedRuntimeRoute } from "../../runtime-execution.js";
+import { runtimeLeg, assertProjectedRuntimeRoute } from "../../runtime-execution.js";
 import { fluidDexRoutes } from "./routes.js";
+import { fluidDexRawProgram } from "./raw-execution.js";
 import {
   hopTargetExecutionRuntimeProjection,
   type ExecutionSemantics,
@@ -13,27 +13,21 @@ import type {
   FluidDexRoute,
 } from "./types.js";
 
-const MAX_UINT = (1n << 256n) - 1n;
-
 export const fluidDexExecution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
-    assertProjectedRuntimeRoute(r, fluidDexRoutes.project({ descriptor: d })); runtimeExecutor(executor, d.pool);
-    const p = new RuntimeAmountProgram().allowance(r.tokenIn, d.pool, 0, MAX_UINT)
-      .call(d.pool, new ethers.Interface(["function swapIn(bool,uint256,uint256,address) payable"]).encodeFunctionData("swapIn",
-        [r.swap0To1, 0n, 1n, executor]), { patches: [{ offset: 36, reg: 0 }] });
+    assertProjectedRuntimeRoute(r, fluidDexRoutes.project({ descriptor: d }));
+    const p = fluidDexRawProgram({ pool: d.pool, tokenIn: r.tokenIn, tokenOut: r.tokenOut, executor,
+      swap0To1: r.swap0To1, nativeInput: r.executionAssets!.input === "native",
+      nativeOutput: r.executionAssets!.output === "native", minimum: 1n });
     return runtimeLeg("fluid-dex-swap", p);
   },
   runtimeProjection: hopTargetExecutionRuntimeProjection,
   buildFragment(input) {
+    assertProjectedRuntimeRoute(input.route, fluidDexRoutes.project({ descriptor: input.descriptor }));
     assertExecutionEvidence(input);
     return Object.freeze({
-      requirements: Object.freeze([Object.freeze({
-        kind: "approve" as const,
-        token: input.route.tokenIn,
-        spender: input.descriptor.pool,
-        amount: MAX_UINT,
-      })]),
+      requirements: Object.freeze([]),
       nodes: Object.freeze([Object.freeze({
         adapterId: "fluid-dex-swap",
         target: input.descriptor.pool,
@@ -43,6 +37,8 @@ export const fluidDexExecution = {
         params: Object.freeze({
           swap0to1: input.route.swap0To1,
           amountOutMin: input.minAmountOut,
+          nativeInput: input.route.executionAssets!.input === "native",
+          nativeOutput: input.route.executionAssets!.output === "native",
         }),
         children: [],
       })]),
@@ -55,18 +51,18 @@ export const fluidDexExecution = {
       account: "executor" as const,
       direction: "decrease" as const,
     }),
-    Object.freeze({
+    ...(route.executionAssets!.input === "native" ? [] : [Object.freeze({
       kind: "token-delta" as const,
       token: route.tokenIn,
       account: "route-target" as const,
       direction: "increase" as const,
-    }),
-    Object.freeze({
+    })]),
+    ...(route.executionAssets!.output === "native" ? [] : [Object.freeze({
       kind: "token-delta" as const,
       token: route.tokenOut,
       account: "route-target" as const,
       direction: "decrease" as const,
-    }),
+    })]),
     Object.freeze({
       kind: "token-delta" as const,
       token: route.tokenOut,
@@ -86,9 +82,13 @@ function assertExecutionEvidence(input: {
   readonly amountIn: bigint;
   readonly quotedAmountOut: bigint;
   readonly exactEvidence: FluidDexExactEvidence;
+  readonly minAmountOut: bigint;
 }): void {
   const evidence = input.exactEvidence;
   if (
+    input.amountIn <= 0n || input.amountIn > ethers.MaxUint256 ||
+    input.quotedAmountOut <= 0n || input.quotedAmountOut > ethers.MaxUint256 ||
+    input.minAmountOut < 0n || input.minAmountOut > input.quotedAmountOut ||
     evidence.kind !== "fluid-dex-declared-revert-quote" ||
     evidence.completion !== "reverted-as-declared" ||
     !sameAddress(evidence.pool, input.descriptor.pool) ||

@@ -10,7 +10,7 @@ export const fluidDexFamilyManifest = {
   familyId: FLUID_DEX_FAMILY_ID,
   domain: "swap",
   ownedActionAdapterIds: ["fluid-dex-swap"],
-  requiredInfraActionAdapterIds: ["erc20-approve"],
+  requiredInfraActionAdapterIds: [],
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [FLUID_DEX_FACTORY_LINEAGE_ID],
   poolAdapterIds: ["fluid-dex"],

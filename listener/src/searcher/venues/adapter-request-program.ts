@@ -1,4 +1,5 @@
 import type { FamilyId } from "./adapter-family-identifiers.js";
+import { assertStrictExecutionAssetBoundary, type StrictExecutionAssetBoundary } from "../execution-asset-boundary.js";
 import {
   hashCanonical,
   type CanonicalValue,
@@ -84,6 +85,9 @@ export type AdapterRequest =
       readonly id: string;
       readonly required?: boolean;
       readonly kind: "state-override-simulation" | "effect-delta-simulation";
+      /** Declarative raw-native executor program, enveloped centrally before
+       * transport. It never authorizes caller, bytecode or source overrides. */
+      readonly executionAssetBoundary?: StrictExecutionAssetBoundary;
       /** Ordered calls executed in the same isolated simulation before call. */
       readonly preCalls?: readonly {
         readonly caller: CallerRef;
@@ -785,6 +789,10 @@ function freezeAdapterRequest(request: AdapterRequest): AdapterRequest {
         id: request.id,
         ...(request.required === undefined ? {} : { required: request.required }),
         kind: request.kind,
+        ...(request.executionAssetBoundary === undefined ? {} : {
+          executionAssetBoundary: Object.freeze({ ...request.executionAssetBoundary,
+            executionAssets: Object.freeze({ ...request.executionAssetBoundary.executionAssets }) }),
+        }),
         ...(request.preCalls === undefined
           ? {}
           : {
@@ -1295,6 +1303,7 @@ function assertRequestShape(request: AdapterRequest): void {
           "overrideIntent",
           "observe",
           "observeTokenBalances",
+          "executionAssetBoundary",
         ],
         `${request.id} simulation request`,
       );
@@ -1349,6 +1358,19 @@ function assertRequestShape(request: AdapterRequest): void {
         `${request.id} override intent`,
       );
       assertCallerRef(request.call.caller);
+      if (request.executionAssetBoundary !== undefined) {
+        assertStrictExecutionAssetBoundary(request.executionAssetBoundary);
+        if (request.call.executionMode !== "executor-program" || request.call.caller.kind !== "executor" ||
+            !request.observe.includes("native-delta") || !request.observe.includes("token-delta")) {
+          throw new Error(`${request.id} native boundary requires an observed executor program`);
+        }
+        for (const token of [request.executionAssetBoundary.tokenIn, request.executionAssetBoundary.tokenOut]) {
+          if (!request.observeTokenBalances?.some(item => item.token.toLowerCase() === token.toLowerCase() &&
+              typeof item.account !== "string" && item.account.kind === "executor")) {
+            throw new Error(`${request.id} native boundary requires input and output observations`);
+          }
+        }
+      }
       if (request.call.executionMode !== undefined &&
           request.call.executionMode !== "top-level" &&
           request.call.executionMode !== "impersonated-call-frame" &&
@@ -1851,6 +1873,13 @@ function physicalRequestCanonicalValue(request: AdapterRequest): CanonicalValue 
     case "effect-delta-simulation":
       return {
         kind: request.kind,
+        ...(request.executionAssetBoundary === undefined ? {} : { executionAssetBoundary: {
+          tokenIn: request.executionAssetBoundary.tokenIn.toLowerCase(),
+          tokenOut: request.executionAssetBoundary.tokenOut.toLowerCase(),
+          executionAssets: { ...request.executionAssetBoundary.executionAssets },
+          amountIn: request.executionAssetBoundary.amountIn,
+          minimum: request.executionAssetBoundary.minimum,
+        } }),
         preCalls: (request.preCalls ?? []).map((call) => ({
           caller: callerRefCanonicalValue(call.caller),
           to: call.to.toLowerCase(),

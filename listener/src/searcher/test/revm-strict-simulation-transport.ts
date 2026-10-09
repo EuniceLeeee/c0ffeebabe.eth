@@ -8,6 +8,8 @@ import { createStrictCentralAdapterRuntime, type StrictSimulationTransport } fro
 import { executeAdapterWork } from "../adapter-work-intent.js";
 import { RevmStrictSourceOwner, type RevmStrictSourceLease } from "../revm-strict-source-owner.js";
 import { buildSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
+import { ADDR } from "../../shared/constants/addresses.js";
+import { materializeAdapterRequests } from "../reth-adapter-work-runtime.js";
 
 type Invocation = Parameters<StrictSimulationTransport["simulate"]>[0];
 type MutableInvocation = { -readonly [K in keyof Invocation]: Invocation[K] };
@@ -79,6 +81,55 @@ function programResponse(req: StrictSimulateRequest): DaemonResponse {
   r.strict!.counterfactualExecutorCode = { address: req.trialPrefix?.executor ?? req.to, keccak256: code!.keccak256 };
   return r;
 }
+function nativeProgramInvocation(nativeInput = true): MutableInvocation {
+  const v = programInvocation(), weth = ADDR.WETH.toLowerCase();
+  const tokenIn = nativeInput ? weth : TOKEN, tokenOut = nativeInput ? TOKEN : weth;
+  v.request = { ...v.request, executionAssetBoundary: { tokenIn, tokenOut, amountIn: 137n, minimum: 1n,
+    executionAssets: { input: nativeInput ? "native" : "erc20", output: nativeInput ? "erc20" : "native" } },
+    overrideIntent: { caller: { kind: "executor" }, tokenBalances: [{ token: tokenIn, amount: 137n }] },
+    observeTokenBalances: [tokenIn, tokenOut].map(token => ({ token, account: { kind: "executor" } })),
+  };
+  return v;
+}
+test("Ready strict issuer automatically applies the same native envelope as the work runtime", async () => {
+  for (const nativeInput of [true, false]) {
+    const f = fixture(async req => programResponse(req));
+    const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
+    const v = nativeProgramInvocation(nativeInput);
+    const runtime = createStrictCentralAdapterRuntime({ simulator: t, executor: EXECUTOR, transactionOrigin: ORIGIN,
+      generationFence: { assertCurrent() {} }, provider: { call: async () => assert.fail("raw RPC"),
+        getCode: async () => assert.fail(), getStorage: async () => assert.fail() } });
+    const outcome = await executeAdapterWork({ runtime, intent: { stage: "identity", familyId: "test:native-strict" as never,
+      source: SOURCE, generation: SOURCE.generation, programInput: undefined, program: {
+        requirements: () => ({ transports: ["effect-delta-simulation"], caller: "executor", effects: v.request.observe }),
+        buildRequests: () => [v.request], decode: ({ results }) => results,
+      } } });
+    assert.equal(outcome.status, "resolved");
+    assert.equal(f.calls.length, 1);
+    const materialized = materializeAdapterRequests([v.request], v.callerAuthority)[0];
+    assert(materialized.kind === "effect-delta-simulation");
+    assert.equal(f.calls[0].data, materialized.call.data);
+    assert.notEqual(f.calls[0].data, v.request.call.data);
+    assert.deepEqual(f.calls[0].sourcePin, PIN);
+    assert.deepEqual(f.calls[0].executorRuntimeCode, PROGRAM_CODE);
+    assert.equal(f.calls[0].transactionOrigin, ORIGIN);
+  }
+});
+for (const [name, mutate] of [
+  ["wrong mode", v => v.request.call.executionMode = "impersonated-call-frame"],
+  ["missing native observation", v => v.request.observe = ["token-delta"]],
+  ["missing token observation", v => v.request.observe = ["native-delta"]],
+  ["missing input/output scope", v => v.request.observeTokenBalances = []],
+  ["foreign input/output account", v => v.request.observeTokenBalances[0].account = ACTOR],
+  ["wrong native graph token", v => v.request.executionAssetBoundary.tokenIn = TOKEN],
+  ["negative amount", v => v.request.executionAssetBoundary.amountIn = -1n],
+  ["extra declaration", v => v.request.executionAssetBoundary.executorRuntimeCode = PROGRAM_CODE],
+] as readonly [string, (v: any) => void][]) test(`native strict boundary rejects ${name} before a lease`, async () => {
+  const f = fixture(), v = nativeProgramInvocation(); mutate(v);
+  const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
+  await assert.rejects(t.simulate(v), notEvidence);
+  assert.equal(f.sources.length, 0); assert.equal(f.calls.length, 0);
+});
 test("executor program binds trusted code, actor/origin, source and canonical self entry", async () => {
   const f = fixture(async req => programResponse(req));
   const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });

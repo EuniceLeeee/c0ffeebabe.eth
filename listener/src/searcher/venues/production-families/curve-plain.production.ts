@@ -1,6 +1,6 @@
 import { defineFamilyActivation } from "./activation.js";
 import { defineSwapFamily } from "../adapter-family-plugin.js";
-import { curvePlainReceivedAction, curvePlainNoReceiverAction, curvePlainRegularAction, curvePlainUintReceivedAction, curvePlainUintExchangeAction } from "../swaps/curve-plain-family/action.js";
+import { curvePlainReceivedAction, curvePlainNoReceiverAction, curvePlainRegularAction, curvePlainUintReceivedAction, curvePlainUintExchangeAction, curvePlainNativeAction, curvePlainNativeUintAction } from "../swaps/curve-plain-family/action.js";
 import { curvePlainCapture } from "../swaps/curve-plain-family/capture.js";
 import { curvePlainDiscovery } from "../swaps/curve-plain-family/discovery.js";
 import { curvePlainExact } from "../swaps/curve-plain-family/exact.js";
@@ -17,4 +17,4 @@ export const plugin = defineSwapFamily({ manifest: curvePlainManifest, capture: 
   discovery: curvePlainDiscovery, identity: curvePlainIdentity, instance: curvePlainInstance,
   routes: curvePlainRoutes, pricing: curvePlainPricing, exact: curvePlainExact,
   execution: curvePlainExecution, swap: curvePlainSwap,
-  actionAdapters: [curvePlainReceivedAction, curvePlainNoReceiverAction, curvePlainRegularAction, curvePlainUintReceivedAction, curvePlainUintExchangeAction] });
+  actionAdapters: [curvePlainReceivedAction, curvePlainNoReceiverAction, curvePlainRegularAction, curvePlainUintReceivedAction, curvePlainUintExchangeAction, curvePlainNativeAction, curvePlainNativeUintAction] });

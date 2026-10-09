@@ -13,6 +13,45 @@ import { AnvilSolver } from "../solver/solver.js";
 import type { CanonicalEdgeId } from "../venues/blockscan-state-capability.js";
 import { EXECUTOR, makePlans, sharedSession } from "./blockscan-solver-quote-concurrency.js";
 import type { StrictProductionRuntimeSession } from "../strict-production-runtime-session.js";
+import { executionInputMatches, executionOutputMatches, minimumExecutionOutput } from "../../shared/executor/amount-rounding.js";
+import { runtimeAmountFlowAdapter } from "../../adapters/runtime-amount-program.js";
+
+test("raw-unit execution policy distinguishes unspent dust from forbidden over-debit", () => {
+  for (const tolerance of [0n, 1n]) {
+    assert(executionInputMatches(100n, 100n, tolerance));
+    assert(executionOutputMatches(100n, 100n, tolerance));
+    assert.equal(executionInputMatches(99n, 100n, tolerance), tolerance === 1n);
+    assert.equal(executionOutputMatches(99n, 100n, tolerance), tolerance === 1n);
+    assert.equal(executionOutputMatches(101n, 100n, tolerance), tolerance === 1n);
+    assert.equal(executionInputMatches(101n, 100n, tolerance), false, "never consume old input inventory");
+    assert.equal(executionInputMatches(98n, 100n, tolerance), false);
+    assert.equal(executionOutputMatches(98n, 100n, tolerance), false);
+    assert.equal(executionOutputMatches(102n, 100n, tolerance), false);
+    assert.equal(executionInputMatches(0n, 1n, tolerance), false);
+    assert.equal(executionOutputMatches(0n, 1n, tolerance), false);
+    assert.equal(minimumExecutionOutput(100n, tolerance), 100n - tolerance);
+  }
+  for (const invalid of [-1n, 2n]) assert.throws(() => minimumExecutionOutput(100n, invalid));
+  assert.equal(minimumExecutionOutput(1n, 1n), 1n);
+  assert.throws(() => minimumExecutionOutput(0n, 1n), /positive minimum/);
+});
+
+test("runtime flow carries the same 0/1 flag without changing amount or final floor", () => {
+  const tokenA = "0x1111111111111111111111111111111111111111";
+  const tokenB = "0x2222222222222222222222222222222222222222";
+  const program = "0x010001" + "00".repeat(31) + "01";
+  const node = { adapterId: "runtime-amount-flow", target: EXECUTOR, tokenIn: tokenA, tokenOut: tokenA,
+    amount: 100n, children: [], params: { minimumReturn: 101n, legs: JSON.stringify([
+      { tokenIn: tokenA, tokenOut: tokenB, program }, { tokenIn: tokenB, tokenOut: tokenA, program }]) } };
+  const exact = runtimeAmountFlowAdapter.encode(node, EXECUTOR, new Uint8Array());
+  const tolerant = runtimeAmountFlowAdapter.encode({ ...node,
+    params: { ...node.params, quoteToleranceRawUnits: 1n } }, EXECUTOR, new Uint8Array());
+  assert.equal(exact[36], 2); assert.equal(tolerant[36], 0x82);
+  const restored = tolerant.slice(); restored[36] = exact[36];
+  assert.deepEqual(restored, exact, "only the dust policy bit changes");
+  for (const invalid of [-1n, 2n, "1"]) assert.throws(() => runtimeAmountFlowAdapter.encode({ ...node,
+    params: { ...node.params, quoteToleranceRawUnits: invalid } }, EXECUTOR, new Uint8Array()));
+});
 
 const noState = new Proxy({} as StateBackend, {
   get(_target, key) { throw new Error(`unexpected state I/O: ${String(key)}`); },

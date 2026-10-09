@@ -497,6 +497,9 @@ export interface IdentityStepInput<
   readonly candidate: Candidate;
   readonly evidence?: Evidence;
   readonly step: number;
+  /** Central execution policy, snapshotted once per identity invocation.
+   * Missing in isolated fixtures means exact comparison. Never a percentage. */
+  readonly executionRoundingRawUnits?: bigint;
 }
 
 export type IdentityRejectReason = string;
@@ -523,6 +526,10 @@ export interface IdentityVariant<
   /** Explicitly binds the variant to the manifest lineage set. */
   readonly lineageId: LineageId;
   applies(candidate: Candidate): boolean;
+  /** Optional asset facts interpreted by the Family. Central strict appends
+   * standard metadata reads in this round and handles native ETH without
+   * ERC20 calls. This is a declaration, not a separate identity lifecycle. */
+  assets?(input: IdentityStepInput<Candidate, Evidence>): readonly import("../identity-asset-metadata.js").IdentityAssetDeclaration[];
   requirements(input: IdentityStepInput<Candidate, Evidence>): RequestRequirements;
   buildRequests(
     input: IdentityStepInput<Candidate, Evidence>,
@@ -530,6 +537,7 @@ export interface IdentityVariant<
   decode(input: {
     readonly step: IdentityStepInput<Candidate, Evidence>;
     readonly results: readonly AdapterRequestResult[];
+    readonly assets?: readonly import("../identity-asset-metadata.js").IdentityAssetMetadata[];
   }): Evidence;
   decide(
     input: IdentityStepInput<Candidate, Evidence>,
@@ -662,6 +670,13 @@ export interface FamilyRouteDescriptor {
   readonly instanceKey: InstanceKey;
   readonly tokenIn: string;
   readonly tokenOut: string;
+  /** Actual protocol settlement assets, not graph denomination. ERC20 is the
+   * default. Native sides are bridged centrally; Family programs must perform
+   * only the raw protocol operation, without their own wrap/unwrap. */
+  readonly executionAssets?: {
+    readonly input: "erc20" | "native";
+    readonly output: "erc20" | "native";
+  };
   readonly taxonomy: AllowedTaxonomy;
   readonly bindingRef: RouteBindingRef;
   readonly runtimeRequirements: readonly RuntimeRequirement[];
@@ -2237,6 +2252,7 @@ function installSynchronousGuards(
   for (const variant of routedPlugin.identity.variants) {
     const label = `identity variant ${variant.id}`;
     guardSynchronousMethod(variant, "applies", `${label}.applies`);
+    if (variant.assets !== undefined) guardSynchronousMethod(variant, "assets", `${label}.assets`);
     guardSynchronousMethod(
       variant,
       "requirements",
@@ -2718,6 +2734,7 @@ function validateFamilyPlugin(
         id: variant.id,
         kind: variant.kind,
         lineageId: variant.lineageId,
+        ...(variant.assets === undefined ? {} : { assets: "declared-settlement-v1" }),
       }))
       .sort((left, right) => left.id.localeCompare(right.id));
   const boundary: CanonicalValue = {
@@ -3825,6 +3842,7 @@ function validateIdentity(
       variant,
       [
         "applies",
+        "assets",
         "buildRequests",
         "decide",
         "decode",
@@ -3834,6 +3852,8 @@ function validateIdentity(
         "requirements",
       ],
       "identity variant",
+      false,
+      ["applies", "buildRequests", "decide", "decode", "id", "kind", "lineageId", "requirements"],
     );
     const id = nonemptyString(variant.id, "identity variant id");
     if (variantIds.has(id)) throw new Error(`duplicate identity variant ${id}`);
@@ -3849,6 +3869,7 @@ function validateIdentity(
     }
     variantLineages.add(lineage);
     assertSynchronousFunction(variant.applies, `identity variant ${id}.applies`);
+    if (variant.assets !== undefined) assertSynchronousFunction(variant.assets, `identity variant ${id}.assets`);
     assertSynchronousFunction(
       variant.requirements,
       `identity variant ${id}.requirements`,

@@ -1,5 +1,16 @@
 import { ethers } from "ethers";
 import type { AdapterRequestResult } from "../../adapter-request-program.js";
+import type { IdentityAssetDeclaration } from "../../../identity-asset-metadata.js";
+
+// Fluid's protocol identifier, not an ERC20 or a graph token address.
+export const FLUID_DEX_NATIVE_TOKEN = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+export function isFluidDexNative(token: string): boolean {
+  return sameAddress(token, FLUID_DEX_NATIVE_TOKEN);
+}
+export function fluidDexAsset(key: string, token: string): IdentityAssetDeclaration {
+  return isFluidDexNative(token) ? { key, kind: "native" }
+    : { key, kind: "erc20", address: canonicalAddress(token) };
+}
 
 export const FLUID_DEX_ADDRESS_DEAD = ethers.getAddress(
   "0x000000000000000000000000000000000000dEaD",

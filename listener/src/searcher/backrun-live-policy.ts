@@ -1,4 +1,5 @@
 import { TemplatePlanner } from "./planner/planner.js";
+import { readExecutionRoundingFlag } from "../shared/executor/amount-rounding.js";
 
 export const DEFAULT_BACKRUN_MAX_HOPS = 6;
 
@@ -9,10 +10,8 @@ export function resolveLiveBackrunSettings(env: NodeJS.ProcessEnv = process.env)
   if (!Number.isSafeInteger(solverQuoteConcurrency) || solverQuoteConcurrency < 1 || solverQuoteConcurrency > 64) {
     throw new Error("SEARCHER_BACKRUN_SOLVER_QUOTE_CONCURRENCY must be an integer in [1, 64]");
   }
-  const tolerance = env.SEARCHER_BACKRUN_QUOTE_TOLERANCE_ENABLED ?? "1";
-  if (!["0", "1", "false", "true"].includes(tolerance)) {
-    throw new Error("SEARCHER_BACKRUN_QUOTE_TOLERANCE_ENABLED must be 0, 1, false or true");
-  }
+  const tolerance = readExecutionRoundingFlag(env.SEARCHER_BACKRUN_QUOTE_TOLERANCE_ENABLED,
+    "SEARCHER_BACKRUN_QUOTE_TOLERANCE_ENABLED");
   return {
     planner: {
       maxHops: Number(env.SEARCHER_MAX_HOPS ?? DEFAULT_BACKRUN_MAX_HOPS),
@@ -34,7 +33,7 @@ export function resolveLiveBackrunSettings(env: NodeJS.ProcessEnv = process.env)
       // Never pre-discount a hop's output. Disabling tolerance means exact
       // amounts, not falling back to the legacy percentage haircut.
       quoteSafetyBps: 10000n,
-      quoteToleranceRawUnits: tolerance === "1" || tolerance === "true" ? 1n : 0n,
+      quoteToleranceRawUnits: tolerance,
       quoteProfitFloorBps: BigInt(env.SEARCHER_QUOTE_PROFIT_FLOOR_BPS ??
         (env.SEARCHER_DRY_RUN === "1" ? "20" : "0")),
       revmPrewarmRouteHops: Number(env.SEARCHER_REVM_PREWARM_ROUTE_HOPS ?? "0"),

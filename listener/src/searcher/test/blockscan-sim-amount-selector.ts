@@ -68,17 +68,22 @@ test("repeated-instance trial still quotes later hops on the preceding trial sta
   assert.equal(f.quotes[1].amountIn, f.quotes[1].priorQuotes[0].amountOut);
 });
 
-for (const rejection of ["zero-output", "minimum-output"] as const)
-test(`larger ${rejection} rejection retains profitable P without skipping infrastructure faults`, async () => {
+for (const output of ["zero-output", "one-unit-output"] as const)
+test(`larger ${output} retains profitable P with positive output decided by simulation`, async () => {
   const f = fixture(), simulated: bigint[] = []; let finalists: any[] = [];
   f.session.issueExact = async ({ amountIn }: any) => ({ amountIn,
-    amountOut: amountIn >= 1000n ? (rejection === "zero-output" ? 0n : 1n) : amountIn + 5n });
+    amountOut: amountIn >= 1000n ? (output === "zero-output" ? 0n : 1n) : amountIn + 5n });
   const selector = createBlockScanSimAmountSelector({ source, executor, async simulate(plan) {
-    simulated.push(plan.flashAmount); return f.result(10n);
+    simulated.push(plan.flashAmount);
+    // A one-unit receipt is valid with either policy. It must retain a positive
+    // minimum and reach final sim, which rejects this unprofitable large input.
+    return f.result(plan.flashAmount >= 1000n ? 0n : 10n);
   } });
   const selected = await selector.solve(f.plan, f.state, f.probe,
     { ...f.opts, onDeferredCandidates(values) { finalists = [...values]; } });
-  assert.deepEqual(simulated.sort((a, b) => Number(a - b)), [10n, 100n]);
+  assert.deepEqual(simulated.sort((a, b) => Number(a - b)),
+    output === "zero-output" ? [10n, 100n] : [10n, 100n, 1000n, 10000n]);
+  for (const build of f.builds) assert(build.minAmountOut > 0n);
   assert.equal(selected.flashAmount, 10n); assert.equal(finalists.length, 2);
 });
 
