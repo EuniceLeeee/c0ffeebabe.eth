@@ -3,7 +3,7 @@ import type { CaptureNominationSemantics, CaptureNominationInput, CaptureNominat
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import { MODULE, MODULE_CODE_HASH, SET, SET_CODE_HASH, address, decode } from "./codec.js";
 import { decodeLegacyCandidate, legacyLogPatterns } from "./legacy.js";
-import { LEGACY_ACTION } from "./manifest.js";
+import { LEGACY_ACTION, LEGACY_ISSUE_ACTION } from "./manifest.js";
 export const SURFACE = "set-basic-redemption-binding-v1";
 export async function bindingObservation(n: CaptureNominationInput, provider: CaptureNominationProvider, source: CanonicalSource): Promise<UnifiedObservation | null> {
   const o = n.opaque as Record<string, unknown> | null;
@@ -24,7 +24,7 @@ export const nomination: CaptureNominationSemantics = {
     const out: UnifiedObservation[] = [];
     for (const n of nominations) {
       const opaque = n.opaque as Record<string, unknown> | null;
-      if (!opaque || ![opaque.familyId, opaque.adapter, opaque.adapterId].some(v => ["protocol:set-redemption", "set-redemption", "set-basic-redeem", LEGACY_ACTION].includes(String(v)))) continue;
+      if (!opaque || ![opaque.familyId, opaque.adapter, opaque.adapterId].some(v => ["protocol:set-redemption", "set-redemption", "set-basic-redeem", LEGACY_ACTION, LEGACY_ISSUE_ACTION].includes(String(v)))) continue;
       // A legacy Core has no BasicIssuance getModules binding. Its receipt
       // events retain Set+Core and are materialized by the same discovery path.
       const binding = opaque.legacyCore === true ? null : await bindingObservation(n, provider, source);

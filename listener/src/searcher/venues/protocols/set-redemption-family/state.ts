@@ -45,6 +45,25 @@ export function redemptionOutputs(s: State, amount: bigint): readonly bigint[] {
     return out;
   });
 }
+// Core.issue is exact-out in Set units. This single-component projection
+// accepts only an EXACT component multiple: no hidden rounding/donation and no
+// other inventory supplies the basket. Multi-component issuance is not a unary edge.
+class IssuanceUnavailable extends Error {}
+export function issuanceOutput(s: State, amount: bigint, executor?: string): bigint {
+  uint(amount);
+  if (!s.issuance?.operational || !s.naturalUnit || s.units.length !== 1 || !s.units[0]) throw new IssuanceUnavailable("set-legacy issuance unavailable");
+  if (amount % s.units[0]) throw new IssuanceUnavailable("set-legacy input must be an exact component-unit multiple");
+  const quantity = amount / s.units[0] * s.naturalUnit;
+  if (quantity > MAX || s.supply + quantity > MAX || quantity * s.issuance.entryFee > MAX)
+    throw new IssuanceUnavailable("set-legacy issuance uint256 overflow");
+  const fee = quantity * s.issuance.entryFee / WAD;
+  if (fee > 0n && s.issuance.feeRecipient === ethers.ZeroAddress) throw new IssuanceUnavailable("set-legacy positive fee requires nonzero recipient");
+  return executor === s.issuance.feeRecipient ? quantity : quantity - fee;
+}
+export function issuanceMid(s: State): { amountIn: bigint; amountOut: bigint } | null {
+  try { return { amountIn: s.units[0], amountOut: issuanceOutput(s, s.units[0]) }; }
+  catch (e) { if (e instanceof IssuanceUnavailable) return null; throw e; }
+}
 export function capacity(s: State): bigint {
   if (s.naturalUnit !== undefined) {
     const natural = uint(s.naturalUnit);

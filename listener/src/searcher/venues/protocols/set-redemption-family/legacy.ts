@@ -21,6 +21,7 @@ export const CORE_LIBRARIES = [
 ] as const;
 export const CORE = new ethers.Interface([
   "function vault() view returns(address)", "function validSets(address) view returns(bool)",
+  "function transferProxy() view returns(address)", "function operationState() view returns(uint8)",
   "function issue(address,uint256)", "function issueTo(address,address,uint256)", "function redeem(address,uint256)",
   "function redeemTo(address,address,uint256)", "function redeemAndWithdrawTo(address,address,uint256,uint256)",
   "event SetIssued(address,uint256)", "event SetRedeemed(address,uint256)",
@@ -29,6 +30,7 @@ export const LEGACY_SET = new ethers.Interface([
   "function factory() view returns(address)", "function getComponents() view returns(address[])", "function getUnits() view returns(uint256[])",
   "function naturalUnit() view returns(uint256)", "function totalSupply() view returns(uint256)",
   "function core() view returns(address)", "function vault() view returns(address)", "function rebalanceState() view returns(uint8)",
+  "function entryFee() view returns(uint256)", "function feeRecipient() view returns(address)",
 ]);
 export const FACTORY = new ethers.Interface(["function core() view returns(address)"]);
 export const VAULT = new ethers.Interface(["function getOwnerBalance(address,address) view returns(uint256)", "function authorized(address) view returns(bool)"]);
@@ -68,10 +70,12 @@ function checkLibraries(get: (id: string) => string) {
 function identityRequests(c: Candidate, p?: Proof) {
   if (!p) return [code("set-code", c.set), code("core-code", c.module)];
   if (p.phase === "code") return [call("factory", c.set, LEGACY_SET.encodeFunctionData("factory")),
-    call("getComponents", c.set, LEGACY_SET.encodeFunctionData("getComponents")), call("vault", c.module, CORE.encodeFunctionData("vault"))];
+    call("getComponents", c.set, LEGACY_SET.encodeFunctionData("getComponents")), call("vault", c.module, CORE.encodeFunctionData("vault")),
+    call("transfer-proxy", c.module, CORE.encodeFunctionData("transferProxy"))];
   if (p.phase !== "binding" || !p.binding?.legacy) return [];
   const d = p.binding, l = d.legacy!;
   return [code("factory-code", l.factory), code("vault-code", l.vault), ...libraryRequests(),
+    ...(l.issuance ? [code("transfer-proxy-code", l.issuance.transferProxy)] : []),
     call("factory-core", l.factory, FACTORY.encodeFunctionData("core")),
     call("registered-set", d.module, CORE.encodeFunctionData("validSets", [d.set])),
     call("vault-authorized", l.vault, VAULT.encodeFunctionData("authorized", [d.module])),
@@ -94,10 +98,12 @@ export const legacyIdentity = {
     if (p.phase === "code") {
       const set = address(c.set), module = address(c.module), factory = address(decode(LEGACY_SET, "factory", r.get("factory"))[0]);
       const vault = address(decode(CORE, "vault", r.get("vault"))[0]);
-      if (new Set([set, module, factory, vault]).size !== 4) throw new Error("set-legacy aliased identity");
+      const transferProxy = address(decode(CORE, "transferProxy", r.get("transfer-proxy"))[0]);
+      if (new Set([set, module, factory, vault, transferProxy]).size !== 5) throw new Error("set-legacy aliased identity");
+      const components = members(decode(LEGACY_SET, "getComponents", r.get("getComponents"))[0], [set, module, factory, vault, transferProxy]);
       return { ...p, phase: "binding", ids, binding: { set, module, controller: module, controllerCodeHash: CORE_HASH,
-        components: members(decode(LEGACY_SET, "getComponents", r.get("getComponents"))[0], [set, module, factory, vault]),
-        legacy: { kind: p.kind!, setCodeHash: p.setCodeHash!, factory, factoryCodeHash: "", vault } } };
+        components, legacy: { kind: p.kind!, setCodeHash: p.setCodeHash!, factory, factoryCodeHash: "", vault,
+          ...(components.length === 1 ? { issuance: { transferProxy, codeHash: "" } } : {}) } } };
     }
     if (p.phase !== "binding" || !p.binding?.legacy) throw new Error("set-legacy invalid identity phase");
     const d = p.binding, l = d.legacy!;
@@ -110,7 +116,9 @@ export const legacyIdentity = {
       throw new Error("set-legacy component code or decimals unavailable");
     const eligible = decode(CORE, "validSets", r.get("registered-set"))[0] &&
       decode(VAULT, "authorized", r.get("vault-authorized"))[0] && (l.kind !== "rebalancing-v3" || decode(LEGACY_SET, "rebalanceState", r.get("set-rebalanceState"))[0] === 0n);
-    return { ...p, phase: "complete", ids, binding: { ...d, legacy: { ...l, factoryCodeHash: ethers.keccak256(r.get("factory-code")) } },
+    if (l.issuance && r.get("transfer-proxy-code") === "0x") throw new Error("set-legacy transfer proxy code unavailable");
+    return { ...p, phase: "complete", ids, binding: { ...d, legacy: { ...l, factoryCodeHash: ethers.keccak256(r.get("factory-code")),
+      ...(l.issuance ? { issuance: { ...l.issuance, codeHash: ethers.keccak256(r.get("transfer-proxy-code")) } } : {}) } },
       ...(eligible ? {} : { unavailable: "legacy-set-disabled-or-rebalancing-or-vault-unauthorized" }) };
   },
   decide({ evidence }) {
@@ -127,6 +135,10 @@ export const legacyIdentity = {
 export function legacyStateRequests(d: Descriptor) {
   const l = d.legacy!;
   return [code("set-code", d.set), code("core-code", d.module), code("factory-code", l.factory), code("vault-code", l.vault), ...libraryRequests(),
+    ...(l.issuance ? [code("transfer-proxy-code", l.issuance.transferProxy), call("transfer-proxy", d.module, CORE.encodeFunctionData("transferProxy")),
+      call("operation-state", d.module, CORE.encodeFunctionData("operationState")),
+      call("transfer-authorized", l.issuance.transferProxy, VAULT.encodeFunctionData("authorized", [d.module])),
+      ...(l.kind === "rebalancing-v3" ? ["entryFee", "feeRecipient"].map(k => call("set-" + k, d.set, LEGACY_SET.encodeFunctionData(k))) : [])] : []),
     ...["factory", "getComponents", "getUnits", "naturalUnit", "totalSupply"].map(k => call(k, d.set, LEGACY_SET.encodeFunctionData(k))),
     call("vault", d.module, CORE.encodeFunctionData("vault")), call("factory-core", l.factory, FACTORY.encodeFunctionData("core")),
     call("registered-set", d.module, CORE.encodeFunctionData("validSets", [d.set])),
@@ -151,7 +163,15 @@ export function decodeLegacyState(d: Descriptor, results: readonly AdapterReques
       decode(LEGACY_SET, "rebalanceState", r.get("set-rebalanceState"))[0] !== 0n))) throw new Error("set-legacy currently ineligible");
   const units = [...decode(LEGACY_SET, "getUnits", r.get("getUnits"))[0]].map(uint), naturalUnit = uint(decode(LEGACY_SET, "naturalUnit", r.get("naturalUnit"))[0]);
   if (!naturalUnit || units.length !== components.length || units.some(u => !u)) throw new Error("set-legacy invalid units");
+  if (l.issuance && (address(decode(CORE, "transferProxy", r.get("transfer-proxy"))[0]) !== l.issuance.transferProxy ||
+      ethers.keccak256(r.get("transfer-proxy-code")) !== l.issuance.codeHash)) throw new Error("set-legacy transfer proxy changed; new Ready required");
+  const entryFee = l.issuance && l.kind === "rebalancing-v3" ? uint(decode(LEGACY_SET, "entryFee", r.get("set-entryFee"))[0]) : 0n;
   return { source: r.source, multiplier: WAD, naturalUnit, units, supply: uint(decode(LEGACY_SET, "totalSupply", r.get("totalSupply"))[0]),
+    ...(l.issuance ? { issuance: {
+      operational: decode(CORE, "operationState", r.get("operation-state"))[0] === 0n && decode(VAULT, "authorized", r.get("transfer-authorized"))[0] === true && entryFee < WAD,
+      // The deployed setter permits zero. It blocks only a positive fee mint,
+      // not redemption, and not an issuance whose fee rounds to zero.
+      entryFee, ...(l.kind === "rebalancing-v3" ? { feeRecipient: ethers.getAddress(decode(LEGACY_SET, "feeRecipient", r.get("set-feeRecipient"))[0]).toLowerCase() } : {}) } } : {}),
     balances: components.map((_, i) => { const owned = uint(decode(VAULT, "getOwnerBalance", r.get("owner-balance-" + i))[0]),
       available = uint(decode(TOKEN, "balanceOf", r.get("vault-balance-" + i))[0]); return owned < available ? owned : available; }) };
 }

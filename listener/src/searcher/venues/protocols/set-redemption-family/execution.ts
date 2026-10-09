@@ -6,6 +6,7 @@ import { address, MODULE, SET, TOKEN, uint, WAD } from "./codec.js";
 import { ACTION } from "./manifest.js";
 import { actionId, assertRoute } from "./routes.js";
 import { CORE, LEGACY_SET } from "./legacy.js";
+import { legacyIssueRuntime } from "./issuance.js";
 import type { Descriptor, Evidence, Route } from "./types.js";
 const SUBSCRIPT = new Interface(["function execSubscript(bytes)"]);
 // A legacy redemption burns the entire input, or fails. It never rounds the
@@ -43,6 +44,10 @@ export const execution = {
     const { descriptor: d, route: r, executor } = input;
     assertRoute(d, r);
     const actor = runtimeExecutor(executor, d.set, d.module, d.controller, ...d.components);
+    if (r.issue) {
+      runtimeExecutor(actor, d.legacy!.factory, d.legacy!.vault, d.legacy!.issuance!.transferProxy);
+      return runtimeLeg(actionId(d, r), legacyIssueRuntime(d, actor));
+    }
     if (d.legacy) {
       runtimeExecutor(actor, d.legacy.factory, d.legacy.vault);
       return runtimeLeg(actionId(d), legacyRuntime(d, actor));
@@ -104,15 +109,20 @@ export const execution = {
       e.outputs.length !== d.components.length || e.outputs.some(v => uint(v) !== v) || e.outputs[d.components.indexOf(r.component)] !== i.quotedAmountOut)
       throw new Error("set-redemption execution evidence mismatch");
     if (d.legacy) {
-      const actor = runtimeExecutor(i.executor, d.set, d.module, d.controller, d.legacy.factory, d.legacy.vault, ...d.components);
-      return { requirements: [], nodes: [{ adapterId: actionId(d), target: d.module, tokenIn: d.set, tokenOut: r.component, amount: i.amountIn,
-        params: { runtimeAmountProgram: hexlify(legacyRuntime(d, actor, e.outputs).bytes()) }, children: [] }] };
+      const actor = runtimeExecutor(i.executor, d.set, d.module, d.controller, d.legacy.factory, d.legacy.vault, ...d.components,
+        ...(d.legacy.issuance ? [d.legacy.issuance.transferProxy] : []));
+      return { requirements: [], nodes: [{ adapterId: actionId(d, r), target: d.module, tokenIn: r.tokenIn, tokenOut: r.tokenOut, amount: i.amountIn,
+        params: { runtimeAmountProgram: hexlify((r.issue ? legacyIssueRuntime(d, actor, i.quotedAmountOut) : legacyRuntime(d, actor, e.outputs)).bytes()) }, children: [] }] };
     }
     return { requirements: [], nodes: [{ adapterId: ACTION, target: d.module, tokenIn: d.set, tokenOut: r.component, amount: i.amountIn, params: {}, children: [] },
       ...d.components.flatMap((t, n) => e.outputs[n] > 0n ? [{ adapterId: "assert-balance", target: t, tokenIn: t, tokenOut: t,
         amount: e.outputs[n], params: {}, children: [] }] : [])] };
   },
-  expectedEffects: ({ descriptor: d, route: r }) => { assertRoute(d, r); return [
+  expectedEffects: ({ descriptor: d, route: r }) => { assertRoute(d, r); if (r.issue) return [
+    { kind: "token-delta", token: r.tokenIn, account: "executor", direction: "decrease" },
+    { kind: "token-delta", token: r.tokenOut, account: "executor", direction: "increase" },
+    { kind: "total-supply-delta", token: d.set, direction: "increase" },
+  ]; return [
     { kind: "token-delta", token: d.set, account: "executor", direction: "decrease" },
     { kind: "total-supply-delta", token: d.set, direction: "decrease" },
     ...d.components.map(token => ({ kind: "token-delta" as const, token, account: "executor" as const, direction: "increase" as const })),

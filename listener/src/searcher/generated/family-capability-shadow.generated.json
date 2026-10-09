@@ -9731,7 +9731,7 @@
         "familyId": "protocol:set-redemption",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "00f9e43f9e7467b0f507a2da5633e88a3683cbe857053516f597bb42fa947c2d",
+        "contentHash": "1615f346e18c4a0fd207bb5acdeddd7c79dac2f218b4633601386a1900191ffb",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -9788,7 +9788,7 @@
         "familyId": "protocol:set-redemption",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "e10b1e4e67fbf20e9322f40efd9d98f61f4240870f0e79857b8d1341390cc4cd",
+        "contentHash": "246eb51cead633162c8356aa6ed9a56b990658f26f281bd2f06b7d18d0904fee",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -9823,7 +9823,7 @@
         "familyId": "protocol:set-redemption",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "5b7d0637f04b802b9410e7adaa1a5d7376182668c5b045e45e2b4a5c86cac7f0",
+        "contentHash": "2cc0be5e5b594ebcfc5aa802dd86f6995773292254390d39ed5525338a83fa27",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -9860,7 +9860,7 @@
         "familyId": "protocol:set-redemption",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "2918cf2854263772f1db06e55f7793fce56f1c8b95bf21ee7041e4a8bca5abff",
+        "contentHash": "b89ba8375fbc8bd66b6c497906d66e36a51d793228d3722ced156dd3f892551b",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -9876,6 +9876,7 @@
           "src/searcher/venues/protocols/set-redemption-family/action.ts",
           "src/searcher/venues/protocols/set-redemption-family/codec.ts",
           "src/searcher/venues/protocols/set-redemption-family/instance.ts",
+          "src/searcher/venues/protocols/set-redemption-family/issuance.ts",
           "src/searcher/venues/protocols/set-redemption-family/legacy.ts",
           "src/searcher/venues/protocols/set-redemption-family/manifest.ts",
           "src/searcher/venues/protocols/set-redemption-family/routes.ts",
@@ -9921,7 +9922,7 @@
         "familyId": "protocol:set-redemption",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "338fbde7e037c02b244d1fa8453781c1b197e938a6b6c8650a027067aefe8682",
+        "contentHash": "5a52f130b1dd1477b7108275f0b6215d39bfd66e85ffe2fd23c7536ceaea4ac1",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -9955,7 +9956,7 @@
         "familyId": "protocol:set-redemption",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "607e3171f4eb56416528f8b3e5e4ac61bc80e9c98c0f53abfe90bf077e8924c0",
+        "contentHash": "31964587886b40ab480905c14e119bd7c61628262cc94ce991dd8c3064c90fdb",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
@@ -9985,7 +9986,7 @@
         "familyId": "protocol:set-redemption",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "695e37619fc189a0e6d5f2657d17370977b68e48bae51033ca1bb0e55f9f0f7b",
+        "contentHash": "b9f94f51e93959b51af82364bbbbd7bdc25034e79cabcf8c6915d708b1df0d32",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -10022,7 +10023,7 @@
         "familyId": "protocol:set-redemption",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "6752a60255607bba6c9119187541997ee7e8cc9fafe680ef0fdeda6a779f114e",
+        "contentHash": "8441def7b4fbcf3c7ff2ce2447b70826fc575e19d7e0a3d38c1e183b84d9853e",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
@@ -13266,5 +13267,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "cacf695d0fe8b65dfb99afc96bc3862ae2040a85a785eaa9034ab0f7d945a665"
+  "artifactHash": "35e17061982e2791adefd4c337bb64db71093523136bf56a794eadde5f9df360"
 }

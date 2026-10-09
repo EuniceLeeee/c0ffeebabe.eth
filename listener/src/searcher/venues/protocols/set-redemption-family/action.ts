@@ -3,7 +3,7 @@ import { encodeCall } from "../../../../encoder.js";
 import { bindFamilyOwnedAction } from "../../family-owned-action.js";
 import { encodeRuntimeAmountNode } from "../../../../adapters/runtime-amount-program.js";
 import { address, MODULE, uint } from "./codec.js";
-import { ACTION, LEGACY_ACTION } from "./manifest.js";
+import { ACTION, LEGACY_ACTION, LEGACY_ISSUE_ACTION } from "./manifest.js";
 import { CORE } from "./legacy.js";
 export const action = bindFamilyOwnedAction({ action: { id: ACTION, isWrapper: false, field2Offset: null,
   encode(node, executor, inner) {
@@ -25,4 +25,14 @@ export const legacyAction = bindFamilyOwnedAction({ action: { id: LEGACY_ACTION,
     return result;
   }, matchTrace: (_target, selector) => selector === CORE.getFunction("redeemAndWithdrawTo")!.selector },
   descriptor: { adapterId: LEGACY_ACTION, lineage: "custom-protocol:set-redemption:legacy-core", edgeKind: "protocol", action: "redeem", canSendValue: false, leavesStandingPositionDefault: false },
+});
+export const legacyIssueAction = bindFamilyOwnedAction({ action: { id: LEGACY_ISSUE_ACTION, isWrapper: false, field2Offset: null,
+  encode(node, executor, inner) {
+    if (node.adapterId !== LEGACY_ISSUE_ACTION || new Set([node.tokenIn, node.tokenOut, node.target, executor].map(address)).size !== 4 ||
+      Object.keys(node.params).length !== 1 || typeof node.params.runtimeAmountProgram !== "string") throw new Error("set-legacy invalid issue action");
+    const result = encodeRuntimeAmountNode(node, inner);
+    if (!result) throw new Error("set-legacy issue program required");
+    return result;
+  }, matchTrace: (_target, selector) => selector === CORE.getFunction("issue")!.selector },
+  descriptor: { adapterId: LEGACY_ISSUE_ACTION, lineage: "custom-protocol:set-redemption:legacy-core", edgeKind: "protocol", action: "wrap", canSendValue: false, leavesStandingPositionDefault: false },
 });

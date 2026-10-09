@@ -9,10 +9,10 @@ import { inspectRuntime } from "../../../../test/runtime-program-testkit.js";
 import { createBlockScanSimAmountSelector } from "../../../../simulator/blockscan-sim-amount-selector.js";
 import { CORE, CORE_HASH, CORE_LIBRARIES, FACTORY, LEGACY_SET, LEGACY_SET_HASH, REBALANCING_V3_HASH, VAULT, VAULT_HASH, legacyIdentity } from "../legacy.js";
 import { TOKEN, MAX, WAD } from "../codec.js";
-import { FAMILY, LEGACY_ACTION, LEGACY_LINEAGE } from "../manifest.js";
+import { FAMILY, LEGACY_ACTION, LEGACY_ISSUE_ACTION, LEGACY_LINEAGE } from "../manifest.js";
 import { dependencies } from "../pricing.js";
-import { decodeState, stateRequests, capacity, redemptionOutputs, midSample } from "../state.js";
-import { program } from "../exact.js";
+import { decodeState, stateRequests, capacity, redemptionOutputs, issuanceOutput, midSample } from "../state.js";
+import { program, exactRequests } from "../exact.js";
 import { nomination } from "../nomination.js";
 import type { Candidate, Descriptor } from "../types.js";
 import { actor, source } from "./fixture.js";
@@ -23,7 +23,8 @@ function fixture(rebalancing = false, count = 1) {
   return { set: rebalancing ? rebal : base, core, vault, factory: addr(31), rebalancing,
     components: Array.from({ length: count }, (_, n) => addr(n + 100)), units: Array.from({ length: count }, (_, n) => BigInt(n + 1) * 400n),
     naturalUnit: 1000000000000n, supply: 1000000000000000000n, owned: Array<bigint>(count).fill(9999999999999n), available: Array<bigint>(count).fill(MAX),
-    validSet: true, validFactory: true, authorized: true, rebalanceState: 0n, factoryCore: core, setCore: core, setVault: vault };
+    validSet: true, validFactory: true, authorized: true, rebalanceState: 0n, factoryCore: core, setCore: core, setVault: vault,
+    transferProxy: addr(32), operationState: 0n, proxyAuthorized: true, entryFee: 0n, feeRecipient: addr(33), issuerCredit: 0n };
 }
 type Fixture = ReturnType<typeof fixture>;
 function results(f: Fixture, requests: readonly AdapterRequest[]): AdapterRequestResult[] {
@@ -37,7 +38,7 @@ function results(f: Fixture, requests: readonly AdapterRequest[]): AdapterReques
         a === CORE_LIBRARIES[1].address ? runtimes.runtimes["issuance-library"] : "0x6000";
     } else {
       assert.equal(r.kind, "eth-call"); if (r.kind !== "eth-call") throw Error("unexpected request");
-      const a = r.to.toLowerCase(), abi = a === f.set ? LEGACY_SET : a === f.core ? CORE : a === f.vault ? VAULT : a === f.factory ? FACTORY : TOKEN;
+      const a = r.to.toLowerCase(), abi = a === f.set ? LEGACY_SET : a === f.core ? CORE : a === f.vault || a === f.transferProxy ? VAULT : a === f.factory ? FACTORY : TOKEN;
       const p = abi.parseTransaction({ data: r.data }); assert(p); let v: unknown;
       switch (p.name) {
         case "factory": v = f.factory; break;
@@ -49,9 +50,14 @@ function results(f: Fixture, requests: readonly AdapterRequest[]): AdapterReques
         case "vault": v = a === f.core ? f.vault : f.setVault; break;
         case "validSets": assert.equal(p.args[0].toLowerCase(), f.set); v = f.validSet; break;
         case "validFactories": assert.equal(p.args[0].toLowerCase(), f.factory); v = f.validFactory; break;
-        case "authorized": assert.equal(p.args[0].toLowerCase(), f.core); v = f.authorized; break;
+        case "authorized": assert.equal(p.args[0].toLowerCase(), f.core); v = a === f.transferProxy ? f.proxyAuthorized : f.authorized; break;
+        case "transferProxy": v = f.transferProxy; break;
+        case "operationState": v = f.operationState; break;
+        case "entryFee": v = f.entryFee; break;
+        case "feeRecipient": v = f.feeRecipient; break;
         case "rebalanceState": v = f.rebalanceState; break;
-        case "getOwnerBalance": assert.equal(p.args[1].toLowerCase(), f.set); v = f.owned[f.components.indexOf(p.args[0].toLowerCase())]; break;
+        case "getOwnerBalance": assert([f.set, actor].includes(p.args[1].toLowerCase()));
+          v = p.args[1].toLowerCase() === actor ? f.issuerCredit : f.owned[f.components.indexOf(p.args[0].toLowerCase())]; break;
         case "balanceOf": assert.equal(p.args[0].toLowerCase(), f.vault); v = f.available[f.components.indexOf(a)]; break;
         case "decimals": v = 18n; break;
         default: throw Error("unexpected getter " + p.name);
@@ -114,7 +120,7 @@ test("legacy logs and calls nominate Set+Core, never the whole shared Core as on
 test("receipt nomination keeps two baskets sharing one Core separate before production attestation", async () => {
   const tx = ethers.toBeHex(1001, 32), logs = [base, rebal].flatMap(set => ["SetIssued", "SetRedeemed"].map(name =>
     ({ address: core, ...CORE.encodeEventLog(CORE.getEvent(name)!, [set, 1000n]) })));
-  for (const set of [base, rebal]) for (const hint of [true, false]) for (const tag of [{ familyId: FAMILY }, { adapterId: LEGACY_ACTION }]) {
+  for (const set of [base, rebal]) for (const hint of [true, false]) for (const tag of [{ familyId: FAMILY }, { adapterId: LEGACY_ACTION }, { adapterId: LEGACY_ISSUE_ACTION }]) {
     const observations = await nomination.nominate({ source: at,
       nominations: [{ address: core, opaque: { ...tag, set, module: core, ...(hint ? { legacyCore: true } : {}) }, evidence: { transactionHash: tx } }],
       provider: { async getTransactionReceipt(hash: string) { assert.equal(hash, tx); return { blockNumber: at.number, logs }; },
@@ -141,7 +147,7 @@ test("legacy quotes use Vault owner credit AND available tokens; quantized input
   const largeState = decodeState(largeDescriptor, results(large, stateRequests(largeDescriptor)), at);
   assert.equal(midSample(largeState), 2n * WAD); assert.deepEqual(redemptionOutputs(largeState, midSample(largeState)), [400n]);
   const largeRoutes = plugin.routes.project({ descriptor: largeDescriptor });
-  assert.equal(plugin.pricing.current.deriveMids({ descriptor: largeDescriptor, snapshot: largeState, routes: largeRoutes }).size, 1);
+  assert.equal(plugin.pricing.current.deriveMids({ descriptor: largeDescriptor, snapshot: largeState, routes: largeRoutes }).size, 2);
   for (const k of ["owned", "available"] as const) {
     const limited = { ...f, [k]: [399n] };
     const current = decodeState(d, results(limited, stateRequests(d)), at);
@@ -217,29 +223,134 @@ test("legacy runtime construction consumes no amount, quote evidence or chain re
   assert.equal(plugin.manifest.familyId, FAMILY); assert.equal(plugin.manifest.supportedLineages.length, 2);
 });
 test("production sim amount selector uses legacy actual-receipt emitters without Exact or quoted fallback", async () => {
-  for (const rebalancing of [false, true]) {
-    const d = descriptor(fixture(rebalancing)), route = plugin.routes.project({ descriptor: d })[0];
+  for (const rebalancing of [false, true]) for (const issue of [false, true]) {
+    const d = descriptor(fixture(rebalancing)), route = plugin.routes.project({ descriptor: d }).find(r => Boolean(r.issue) === issue)!;
     const leg = plugin.execution.buildRuntimeLeg!({ descriptor: d, route, executor: actor, source: at, runtimeEvidence: [] })!;
-    const edges: any[] = [{ adapterId: LEGACY_ACTION, target: core, tokenIn: route.tokenIn, tokenOut: route.tokenOut },
+    const edges: any[] = [{ adapterId: issue ? LEGACY_ISSUE_ACTION : LEGACY_ACTION, target: core, tokenIn: route.tokenIn, tokenOut: route.tokenOut },
       { adapterId: "fixture-return", target: actor, tokenIn: route.tokenOut, tokenOut: route.tokenIn }];
     let exact = 0, quoted = 0, rpc = 0, simulated = 0; const events: any[] = [];
     const session: any = { source: at, fundingActionIds: () => ["verified-fixture-funding"],
       buildRuntimeAmountLeg({ edge }: any) { return edge === edges[0] ? leg : { actionAdapterId: "fixture-return", program: "0x010001" + "00".repeat(32) }; },
       issueExact() { exact++; throw Error("unexpected Exact"); },
       buildExecution() { quoted++; throw Error("unexpected quoted fallback"); },
-      buildFundingRoot(i: any) { return { adapterId: "fixture", target: actor, tokenIn: d.set, tokenOut: d.set, amount: i.amount, params: {}, children: i.children }; } };
+      buildFundingRoot(i: any) { return { adapterId: "fixture", target: actor, tokenIn: route.tokenIn, tokenOut: route.tokenIn, amount: i.amount, params: {}, children: i.children }; } };
     const selector = createBlockScanSimAmountSelector({ source: at, executor: actor, record: e => events.push(e),
       async simulate(plan) {
         simulated++; const flow = plan.root.children[0]!;
         assert.equal(flow.adapterId, "runtime-amount-flow"); assert.equal(JSON.parse(String(flow.params.legs))[0].program, leg.program);
-        return { success: true, netProfit: 1n, grossProfit: 1n, gasUsed: 1n, profitToken: d.set, calldata: "0x" };
+        return { success: true, netProfit: 1n, grossProfit: 1n, gasUsed: 1n, profitToken: route.tokenIn, calldata: "0x" };
       } });
-    await selector.solve({ opportunity: { kind: "block-scan-arb", searchSeed: { searchCenter: 10n }, flashToken: d.set, profitToken: d.set },
+    await selector.solve({ opportunity: { kind: "block-scan-arb", searchSeed: { searchCenter: 10n }, flashToken: route.tokenIn, profitToken: route.tokenIn },
       tokenPath: { edges }, maxFlashAmount: 10000n, templateName: "synthetic-legacy-set-construction" } as any,
       { call() { rpc++; throw Error("unexpected RPC"); } } as any, { executor: actor } as any,
       { strictSession: session, deferPhase2Sim: true, gssMaxTries: 2, deadlineAtMs: Date.now() + 10000 });
     assert.deepEqual([exact, quoted, rpc], [0, 0, 0]); assert(simulated >= 4);
     assert(events.some(e => e.type === "sim_amount_construction"));
     assert(events.filter(e => e.type === "sim_amount_construction").every(e => e.mode === "runtime-actual"));
+  }
+});
+
+test("legacy unary issuance quotes retain exact input, fee rounding, caller credit and operation eligibility", () => {
+  for (const rebalancing of [false, true]) {
+    const f = fixture(rebalancing), d = descriptor(f), route = plugin.routes.project({ descriptor: d }).find(r => r.issue)!;
+    assert(route); assert.equal(route.taxonomy.protocolAction, "wrap");
+    assert.equal(plugin.routes.projectGraph({ descriptor: d, route }).routeActionAdapterId, LEGACY_ISSUE_ACTION);
+    const quote = (value: Fixture, amountIn: bigint) => {
+      const i = { descriptor: d, route, amountIn, source: at, executor: actor, runtimeEvidence: [] };
+      return program.decode({ programInput: i, initialResults: results(value, exactRequests(i)), dependentEvidence: [] });
+    };
+    for (const multiple of [1n, 13n, 1000000001n]) {
+      const amount = f.units[0] * multiple, quantity = f.naturalUnit * multiple;
+      assert.equal(quote(f, amount).amountOut, quantity);
+      assert.throws(() => quote(f, amount + 1n), /component-unit multiple/);
+      if (rebalancing) {
+        const fee = 123456789123456789n;
+        assert.equal(quote({ ...f, entryFee: fee }, amount).amountOut, quantity - quantity * fee / WAD);
+        assert.equal(quote({ ...f, entryFee: fee, feeRecipient: actor }, amount).amountOut, quantity);
+        assert.throws(() => quote({ ...f, entryFee: WAD }, amount), /issuance unavailable/);
+      }
+    }
+    for (const mutate of [{ operationState: 1n }, { proxyAuthorized: false }, { issuerCredit: 1n }])
+      assert.throws(() => quote({ ...f, ...mutate }, f.units[0]), /issuance unavailable|Vault credit/);
+    assert.throws(() => quote({ ...f, supply: MAX }, f.units[0]), /overflow/);
+    assert.equal(redemptionOutputs(decodeState(d, results({ ...f, operationState: 1n }, stateRequests(d)), at), f.naturalUnit)[0], 400n,
+      "shutdown issuance does not disable supported redemption");
+    assert(dependencies(d).includes(f.transferProxy));
+  }
+  const multi = descriptor(fixture(false, 2));
+  assert(plugin.routes.project({ descriptor: multi }).every(r => !r.issue), "no unary projection of multi-asset issuance");
+});
+
+test("issuance-only fee and capacity rejection preserves the independently valid redemption direction", () => {
+  const f = { ...fixture(true), feeRecipient: ethers.ZeroAddress }, d = descriptor(f), routes = plugin.routes.project({ descriptor: d });
+  const issue = routes.find(r => r.issue)!, redeem = routes.find(r => !r.issue)!;
+  for (const [value, canIssue] of [[f, true], [{ ...f, entryFee: 1n, naturalUnit: 100n }, true],
+    [{ ...f, entryFee: WAD / 10n }, false], [{ ...f, supply: MAX }, false]] as const) {
+    const s = decodeState(d, results(value, stateRequests(d)), at);
+    assert.deepEqual(redemptionOutputs(s, s.naturalUnit!), [400n]);
+    const mids = plugin.pricing.current.deriveMids({ descriptor: d, snapshot: s, routes });
+    assert(mids.has(redeem.routeKey)); assert.equal(mids.has(issue.routeKey), canIssue);
+    const unavailable = plugin.pricing.current.classifyUnavailable!({ descriptor: d, snapshot: s, routes });
+    assert(!unavailable.has(redeem.routeKey)); assert.equal(unavailable.has(issue.routeKey), !canIssue);
+    if (canIssue) assert(issuanceOutput(s, value.units[0]) > 0n);
+    else assert.throws(() => issuanceOutput(s, value.units[0]), /overflow|nonzero recipient/);
+  }
+});
+
+test("legacy issuance runtime and quoted encoders guard full debit, net receipt, old Vault credit and temporary allowance", () => {
+  const approvals = new ethers.Interface(["function approve(address,uint256) returns(bool)", "function allowance(address,address) view returns(uint256)"]);
+  for (const rebalancing of [false, true]) for (const quoted of [false, true]) for (const feeRecipient of [addr(1), actor, ethers.toBeHex(BigInt(actor) + 1n, 20)]) {
+    const f = { ...fixture(rebalancing), feeRecipient, entryFee: rebalancing ? 123456789123456789n : 0n };
+    const d = descriptor(f), route = plugin.routes.project({ descriptor: d }).find(r => r.issue)!;
+    const run = (amount: bigint, opts: { short?: bigint; debit?: bigint; oldCredit?: bigint; oldAllowance?: bigint; cleanup?: boolean; omitOwnFee?: boolean } = {}) => {
+      const i = { descriptor: d, route, source: at, executor: actor, runtimeEvidence: [] };
+      let programBytes: string;
+      if (quoted) {
+        const qi = { ...i, amountIn: amount }, q = program.decode({ programInput: qi, initialResults: results(f, exactRequests(qi)), dependentEvidence: [] });
+        const node = plugin.execution.buildFragment({ ...qi, exactEvidence: q.evidence, quotedAmountOut: q.amountOut, minAmountOut: q.amountOut }).nodes[0];
+        assert.equal(plugin.actionAdapters.find(a => a.id === LEGACY_ISSUE_ACTION)!.encode(node, actor, new Uint8Array())[0], 14);
+        programBytes = String(node.params.runtimeAmountProgram);
+      } else {
+        for (const key of ["amountIn", "quotedAmountOut", "exactEvidence", "minAmountOut"]) Object.defineProperty(i, key, { get() { throw Error("construction accessed " + key); } });
+        programBytes = plugin.execution.buildRuntimeLeg!(i)!.program;
+      }
+      const inventory = 10n ** 35n;
+      let inputBalance = inventory, outputBalance = inventory, allowance = opts.oldAllowance ?? 0n, issues = 0;
+      const output = inspectRuntime(programBytes, amount, { call(c) {
+        const a = c.target.toLowerCase();
+        if (c.data.startsWith(TOKEN.getFunction("balanceOf")!.selector)) {
+          assert(c.static); assert([f.components[0], f.set].includes(a));
+          return TOKEN.encodeFunctionResult("balanceOf", [a === f.set ? outputBalance : inputBalance]);
+        }
+        if (a === f.components[0]) {
+          const tx = approvals.parseTransaction({ data: c.data })!; assert.equal(tx.args[0].toLowerCase(), tx.name === "allowance" ? actor : f.transferProxy);
+          if (tx.name === "allowance") { assert(c.static); assert.equal(tx.args[1].toLowerCase(), f.transferProxy); return approvals.encodeFunctionResult("allowance", [allowance]); }
+          assert(!c.static); if (!(opts.cleanup === false && tx.args[1] === 0n)) allowance = tx.args[1];
+          return approvals.encodeFunctionResult("approve", [true]);
+        }
+        if (a === f.core && c.data.startsWith(CORE.getFunction("issue")!.selector)) {
+          assert(!c.static); const [set, quantity] = CORE.decodeFunctionData("issue", c.data);
+          assert.equal(set.toLowerCase(), f.set); assert.equal(quantity, amount / f.units[0] * f.naturalUnit); assert.equal(allowance, amount);
+          issues++; inputBalance -= amount + (opts.debit ?? 0n);
+          outputBalance += quantity - (f.feeRecipient !== actor || opts.omitOwnFee ? quantity * f.entryFee / WAD : 0n) - (opts.short ?? 0n);
+          return "0x";
+        }
+        assert(c.static);
+        if (a === f.vault) return VAULT.encodeFunctionResult("getOwnerBalance", [opts.oldCredit ?? 0n]);
+        if (a === f.core) return CORE.encodeFunctionResult("transferProxy", [f.transferProxy]);
+        assert.equal(a, f.set); const tx = LEGACY_SET.parseTransaction({ data: c.data })!;
+        const value = tx.name === "getComponents" ? f.components : tx.name === "getUnits" ? f.units : tx.name === "naturalUnit" ? f.naturalUnit :
+          tx.name === "feeRecipient" ? f.feeRecipient : f.entryFee;
+        return LEGACY_SET.encodeFunctionResult(tx.name, [value]);
+      } });
+      assert.equal(issues, 1); assert.equal(allowance, 0n); assert.equal(output.allowances.length, 0);
+      assert.equal(inventory - inputBalance, amount);
+      assert.equal(outputBalance - inventory, issuanceOutput(decodeState(d, results(f, stateRequests(d)), at), amount, actor));
+    };
+    for (const amount of [400n, 5200n, 400000000400n]) run(amount);
+    for (const opts of [{ short: 1n }, { debit: 1n }, { debit: -1n }, { oldCredit: 1n }, { oldAllowance: 1n }, { cleanup: false }])
+      assert.throws(() => run(5200n, opts), /mismatch|checked uint256/);
+    assert.throws(() => run(5201n), /mismatch|component-unit multiple/);
+    if (rebalancing && feeRecipient === actor) assert.throws(() => run(5200n, { omitOwnFee: true }), /checked uint256/);
   }
 });

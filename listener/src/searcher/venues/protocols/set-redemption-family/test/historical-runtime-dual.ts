@@ -72,20 +72,22 @@ function sourcePin() {
 function options(argv: string[]) {
   const names = ["--ready", "--prices", "--rpc-file", "--out", "--port"], values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
-    assert([...names, "--sample"].includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
+    assert([...names, "--sample", "--direction"].includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
     assert(argv[i + 1] && !argv[i + 1].startsWith("--"), "missing option value");
     values.set(argv[i], argv[i + 1]);
   }
   assert(names.every(n => values.has(n)), "required: --ready --prices --rpc-file --out --port");
   const sample = values.get("--sample") ?? "basic";
   assert(sample === "basic" || Object.hasOwn(LEGACY_SAMPLES, sample), "unknown sample");
+  const direction = values.get("--direction") ?? "redeem";
+  assert(direction === "redeem" || (direction === "issue" && sample !== "basic"), "unsupported direction");
   assert.equal(values.get("--port"), "8593", "this narrow test owns only loopback port 8593");
   const out = resolve(values.get("--out")!), parent = realpathSync(dirname(out)), logs = realpathSync(resolve(ROOT, "logs"));
   assert(parent === logs || parent.startsWith(logs + sep), "output parent must exist under this repo's logs/");
   assert.equal(git("check-ignore", "--", out).trim(), out, "output must be gitignored");
   // Reserve output before resolving/reading inputs, so input failures persist.
   return { ready: resolve(values.get("--ready")!), prices: resolve(values.get("--prices")!),
-    rpcFile: resolve(values.get("--rpc-file")!), out, sample };
+    rpcFile: resolve(values.get("--rpc-file")!), out, sample, issue: direction === "issue" };
 }
 
 function currentBotVm() {
@@ -110,7 +112,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   const SAMPLE = legacy ?? BASIC_SAMPLE;
   const report: Record<string, any> = { schemaVersion: 1, result: "failed", family: FAMILY, instanceKey: key(SAMPLE),
     claim: "N end-state + N environment single-leg dual execution, all basket receipts; not pre-call replay, next-hop flow, full-route sim, EV or merge acceptance",
-    actor: { executor: EXECUTOR, owner: OWNER }, samples: [], errors: [],
+    actor: { executor: EXECUTOR, owner: OWNER }, direction: args.issue ? "issue" : "redeem", samples: [], errors: [],
     safety: { signing: false, broadcast: false, minedBlocks: 0, remoteSubmission: false,
       executionOverrides: "actor code/native gas/ERC20 balance slots only; no protocol liquidity, units, supply, registry or eligibility override" } };
   let backend: AnvilStateBackend | undefined, secret = "", stage = "offline-inputs";
@@ -179,13 +181,19 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     assert.equal(d.components.length, legacy ? legacy.components.length : 4, "whole historical basket required");
     if (legacy) { assert.equal(d.legacy?.kind, legacy.kind); assert(same(d.legacy!.vault, legacy.vault)); }
     else assert.equal(d.legacy, undefined);
-    const tokens = [d.set, ...d.components].map(lower);
+    if (args.issue) assert(d.legacy?.issuance && d.components.length === 1, "unary issuance must be admitted");
+    const inputToken = args.issue ? d.components[0] : d.set;
+    const outputTokens = args.issue ? [d.set] : [...d.components];
+    const tokens = [inputToken, ...outputTokens].map(lower);
     const dependencies = [...new Set([...tokens, d.module, d.controller,
-      ...(d.legacy ? [d.legacy.vault, d.legacy.factory, ...CORE_LIBRARIES.map(l => l.address)] : [])].map(lower))];
+      ...(d.legacy ? [d.legacy.vault, d.legacy.factory, ...CORE_LIBRARIES.map(l => l.address),
+        ...(d.legacy.issuance ? [d.legacy.issuance.transferProxy] : [])] : [])].map(lower))];
     assert.equal(new Set(tokens).size, tokens.length);
     assert(!dependencies.some(t => same(t, OWNER) || same(t, EXECUTOR)), "actor aliases protocol dependency");
-    const edges = graph.filter(e => e.instanceKey === instance.instanceKey);
-    assert.equal(edges.length, instance.routes.length); assert.equal(edges.length, d.components.length);
+    const allEdges = graph.filter(e => e.instanceKey === instance.instanceKey);
+    assert.equal(allEdges.length, instance.routes.length);
+    const edges = allEdges.filter(e => same(e.tokenIn, inputToken));
+    assert.equal(edges.length, outputTokens.length);
     report.pricingChecks = [];
     const rows = edges.map(edge => {
       assert(same(edge.target, d.module), "Set execution target is module, not instanceKey");
@@ -206,7 +214,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const handles = instance.routeHandles.filter(h => h.routeKey === routes[0].routeKey); assert.equal(handles.length, 1);
       return { row, raw, edgeId: id, tokenOut: edge.tokenOut, route: handles[0] };
     });
-    assert.deepEqual(rows.map(r => lower(r.tokenOut)).sort(), [...d.components].map(lower).sort());
+    assert.deepEqual(rows.map(r => lower(r.tokenOut)).sort(), outputTokens.map(lower).sort());
     if (legacy) report.productionReferenceAcceptance = { status: "not-verified",
       reason: "isolated graph lacks valuation; legal unit/multi-unit trials below do not replace actual production P" };
     report.inputs = { source, graphHash: ready.graphHash, priceGeneration: saved.runtime.generation,
@@ -370,8 +378,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       // If P equals the historical amount, halve the latter for a second
       // distinct trial. Never shrink or replace the actual production P.
       const second = row?.amountIn === SAMPLE.amountIn ? SAMPLE.amountIn / 2n : SAMPLE.amountIn;
+      const unit = args.issue ? BigInt(LEGACY_SET.decodeFunctionResult("getUnits", await call(d.set, LEGACY_SET.encodeFunctionData("getUnits")))[0][0]) : 0n;
       const amounts: readonly (readonly [string, bigint])[] = legacy
-        ? [["legal-unit-N-not-production-P", legacy.amounts[0]], ["legal-multi-unit-N-not-production-P", legacy.amounts[1]]]
+        ? [["legal-unit-N-not-production-P", args.issue ? unit : legacy.amounts[0]], ["legal-multi-unit-N-not-production-P", args.issue ? unit * 1000n : legacy.amounts[1]]]
         : [["production-P", row!.amountIn], ["historical-amount-at-N", second]];
       for (const [label, amountIn] of amounts) {
         const sample: Record<string, any> = { routeKey: route.routeKey, edgeId, label, amountIn,
@@ -383,7 +392,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           // Evidence is sealed: request every basket projection through production
           // Exact; never inspect private evidence or duplicate unit math.
           const quotes = [];
-          for (const component of d.components) {
+          for (const component of outputTokens) {
             const r = rows.find(v => same(v.tokenOut, component))!;
             const quote = await exact(r.route, amountIn);
             assert.equal(quote.status, "resolved", "production Exact unresolved");
@@ -391,11 +400,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
             assert.equal(quote.amountIn, amountIn); assert.deepEqual(quote.source, source); assert(quote.amountOut > 0n);
             quotes.push(quote);
           }
-          const outputs = quotes.map(q => q.amountOut), quote = quotes[d.components.findIndex(t => same(t, tokenOut))];
+          const outputs = quotes.map(q => q.amountOut), quote = quotes[outputTokens.findIndex(t => same(t, tokenOut))];
           sample.quote = { model: "Family local state model", outputs, selectedAmountOut: quote.amountOut,
             reads: queryReads.slice(before), cacheBefore, cacheAfter: cache.snapshot(), evidenceRefs: quotes.map(q => q.evidenceRefs) };
           if (label === "production-P") assert.equal(quote.amountOut, row!.amountOut, "P quote differs from production price");
-          sample.originalTxComparison = { originalAmountIn: SAMPLE.amountIn, originalOutputs: SAMPLE.outputs,
+          sample.originalTxComparison = args.issue ? { preCallParity: "unverified; original redemption receipt is provenance, not an issuance comparison" } : { originalAmountIn: SAMPLE.amountIn, originalOutputs: SAMPLE.outputs,
             sameAmount: amountIn === SAMPLE.amountIn, signedDeltas: amountIn === SAMPLE.amountIn ? outputs.map((v, n) => v - SAMPLE.outputs[n]) : null,
             preCallParity: "unverified; source is N end-state" };
           const fragment = buildFamilyExecutionFragment({ family, route, exact: quote, minAmountOut: quote.amountOut,
@@ -403,7 +412,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           assert.equal(fragment.status, "resolved"); if (fragment.status !== "resolved") throw new Error("fragment unresolved");
           sample.requirements = fragment.fragment.requirements;
           const scripts: [string, Uint8Array][] = [
-            ["old-fragment", concatBytes(...planFragmentNodes(fragment.fragment, d.set, amountIn).map(compile))],
+            ["old-fragment", concatBytes(...planFragmentNodes(fragment.fragment, inputToken, amountIn).map(compile))],
             ["runtime-program", runtimeProgramScript(ethers.getBytes(legs[direction].program), amountIn)],
           ];
           // Large old inventory exposes underpayment even where an absolute
@@ -434,10 +443,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               const observedPost: Overrides = {};
               tokens.forEach((token, n) => { observedPost[token] = { stateDiff: { [slots.get(token)!]: word(measured[n].after) } }; });
               for (const [n, token] of tokens.entries()) assert.equal(await balance(token, EXECUTOR, observedPost), measured[n].after);
-              assertBasket(measured[0], measured.slice(1), amountIn, outputs, inventory.slice(1), d.components.length);
+              assertBasket(measured[0], measured.slice(1), amountIn, outputs, inventory.slice(1), outputTokens.length);
               assert.equal(measured[0].after, inventory[0]);
               const noInput = structuredClone(overrides);
-              noInput[d.set].stateDiff![slots.get(d.set)!] = word(0n);
+              noInput[inputToken].stateDiff![slots.get(inputToken)!] = word(0n);
               const rejected = await rpc("debug_traceCall", [tx, pin, { tracer: "callTracer", timeout: "30s", stateOverrides: noInput }]);
               assertExecutionRevert(rejected);
               result.missingInputControl = { error: rejected.error, reverted: true };
@@ -452,7 +461,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         abort.signal.throwIfAborted();
       }
     }
-    if (legacy) {
+    if (legacy && !args.issue) {
       stage = "legacy-invalid-amount-controls"; report.invalidAmountControls = [];
       const naturalUnit = BigInt(await call(d.set, LEGACY_SET.encodeFunctionData("naturalUnit")));
       const supply = BigInt(await call(d.set, LEGACY_SET.encodeFunctionData("totalSupply")));
@@ -480,6 +489,26 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         control.status = "pass";
       }
     }
+    if (args.issue) {
+      stage = "legacy-issuance-quantization-control";
+      const unit = BigInt(LEGACY_SET.decodeFunctionResult("getUnits", await call(d.set, LEGACY_SET.encodeFunctionData("getUnits")))[0][0]);
+      assert(unit > 1n, "sample must have a nontrivial component unit");
+      const amountIn = unit + 1n, quote = await exact(rows[0].route, amountIn);
+      report.invalidAmountControls = [{ label: "non-component-multiple", amountIn, unit, quote, status: "failed" }];
+      assert.equal(quote.status, "failed");
+      if (quote.status !== "failed") throw Error("non-component multiple unexpectedly quoted");
+      assert.equal(quote.outcome.reasonCode, "exact-decode:set-legacy input must be an exact component-unit multiple");
+      const overrides: Overrides = { [OWNER]: { balance: ethers.toQuantity(100n * 10n ** 18n) }, [EXECUTOR]: { code: botvm.code },
+        [inputToken]: { stateDiff: { [slots.get(inputToken)!]: word(amountIn) } } };
+      const trace = await rpc("debug_traceCall", [{ from: OWNER, to: EXECUTOR,
+        data: buildExecuteCalldata(runtimeProgramScript(ethers.getBytes(legs[0].program), amountIn)), gas: "0x800000",
+        gasPrice: ethers.toQuantity(header.baseFeePerGas) }, pin, { tracer: "callTracer", timeout: "30s", stateOverrides: overrides }]);
+      report.invalidAmountControls[0].trace = trace;
+      assertExecutionRevert(trace);
+      assert.equal(trace.output.slice(0, 10), "0x08c379a0");
+      assert.equal(ethers.AbiCoder.defaultAbiCoder().decode(["string"], "0x" + trace.output.slice(10))[0], "runtime amount mismatch");
+      report.invalidAmountControls[0].status = "pass";
+    }
     report.exactCache = cache.snapshot();
     assert(report.samples.length === report.expectedSamples && report.samples.every((s: any) => s.status === "pass"),
       "one or more direction/amount cases failed");
@@ -505,6 +534,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE (with sibling input.json) --rpc-file FILE --out NEW_IGNORED_JSON --port 8593 [--sample basic|legacy-base|legacy-rebalancing]; legacy trials do not claim production P acceptance");
+  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE (with sibling input.json) --rpc-file FILE --out NEW_IGNORED_JSON --port 8593 [--sample basic|legacy-base|legacy-rebalancing] [--direction redeem|issue]; legacy trials do not claim production P acceptance");
   else main().catch(() => { console.error("Set historical test: input/output reservation failed; existing receipts were not overwritten"); process.exitCode = 1; });
 }

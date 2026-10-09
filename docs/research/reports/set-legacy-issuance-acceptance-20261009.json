@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-09",
+  "family": "protocol:set-redemption",
+  "verdict": "implemented; same-state single-component issuance/redemption locally verified; whole legacy opportunity and performance incomplete",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "source": {
+    "parentCommit": "8ca5e98161ca59dd2e958081218e574e0f614db1",
+    "productionSourceTreeSha256": "467ae01768cb8ba6644ca7e50d8dbb12ff82b0ad848a8abb8b5419274e5883fe",
+    "familyDefinitionHash": "b2a7833dfa444148a1dc79ad4a9c17668e2a9979935cb5b4dfaf857f176669f2",
+    "binding": "Historical artifacts bind the actual dirty production tree. The scoped staged-source export independently passes generate/build/contracts; unrelated Ready/Uniswap V1/DODO edits are excluded from this commit. A final above-actor test-fixture correction did not change production code or the historical runner.",
+    "centralProductionChanges": false,
+    "defaultEnabled": false
+  },
+  "implementation": [
+    "Preserves BasicIssuanceModule and both authenticated legacy redemption variants.",
+    "Adds legacy Base Set and RebalancingSetV3 single-component Core.issue directions using existing wrap taxonomy and VM instructions.",
+    "Requires exact component-unit input multiples; computes native exact-out Set quantity without silent rounding or partial spend. Multi-component issuance is not projected as a unary route.",
+    "Reverse-derived TransferProxy and its code hash are bound into identity/state; current Core status and authorization are checked.",
+    "Rejects existing executor Vault credit and old allowance; grants exact input, checks full debit and independent net receipt, then clears and checks allowance.",
+    "Checks quantity/supply overflow and native entry-fee rounding. Fee-to-executor receipt is included. Zero feeRecipient does not disable redemption or zero-rounded-fee issuance; positive mint to zero rejects.",
+    "Issuance-only capacity or fee failures do not remove valid redemption mids. Runtime construction does not read quote/Exact/RPC or precompute the runtime input amount."
+  ],
+  "anchor": {
+    "transactionHash": "0x00f865180dc1ffacd181f69a99db506d08766a5086a4f57a886f9611669f4375",
+    "blockNumber": 26132613,
+    "transactionIndex": 8,
+    "blockHash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+    "stateAndEnvironment": "N end-state and N execution environment; opcode environment checked; no mining",
+    "core": "0xf55186cc537e7067ea616f2aae007b4427a120c8",
+    "vault": "0x5b67871c3a857de81a1ca0f9f7945e5670d986dc",
+    "transferProxy": "0x882d80d3a191859d64477eb78cca46599307ec1c",
+    "transferProxyCodeHash": "0x109c39a4fe9768cc1830d1b9af4ffae4ad8c8b9c575d6adc741d53bac2a9096a"
+  },
+  "evidenceRoot": "logs/set-legacy-issuance-20261009.kO1BRc",
+  "naturalSingleBlock": {
+    "directory": "single-N26132613-reviewed",
+    "admittedInstances": 2,
+    "graphDirections": 4,
+    "rawMidRows": 4,
+    "effectiveQuotedRows": 0,
+    "effectiveReason": "missing-valuation",
+    "targetSeedingOrManualGraphEdges": false,
+    "readySha256": "f21fd196f68614c957f1533b492507a51f2f00f1bfc4afd935b26988355264bb",
+    "pricesSha256": "bbbf2bbebb1cfb5b6fbf7fe802ca4e00b161f01a31c8602a17e7c84547ce9708",
+    "inputSha256": "9f2265262f91203b396ada151ba8f827185a6951ec4bb08f2dc6fbfc683d5f96"
+  },
+  "sameStateDualExecution": {
+    "passedReceipts": 16,
+    "testedEncoders": ["quoted", "runtime-actual"],
+    "allQuoteToIndependentReceiptDeltas": "0",
+    "constructionExactQuotedRpcOrAmountReadAttempts": 0,
+    "missingInputWithOldOutputInventoryRejections": 16,
+    "forksStopped": 4,
+    "overrideScope": "Ephemeral actor code, gas funds and ERC20 input/output inventory only; no protocol supply, liquidity or permission overrides.",
+    "samples": [
+      {
+        "variant": "legacy-base", "direction": "issue", "tokenDirection": "WBTC to Base Set",
+        "amountsIn": ["400", "400000"], "amountsOut": ["1000000000000", "1000000000000000"],
+        "receipts": 4, "directLogicalRpcCalls": 112,
+        "artifact": "dual-legacy-base-issue-reviewed.json",
+        "sha256": "ac55061c0aa33b3c909486ff94958bb13249abc6d693c3ac51fbba45ecd8dbcf"
+      },
+      {
+        "variant": "legacy-rebalancing", "direction": "issue", "tokenDirection": "Base Set to Rebalancing Set",
+        "amountsIn": ["238105", "238105000"], "amountsOut": ["100000000", "100000000000"],
+        "receipts": 4, "directLogicalRpcCalls": 127,
+        "artifact": "dual-legacy-rebalancing-issue-reviewed.json",
+        "sha256": "68a7e7bd59136ba196f78831146504799bb599f7b2acdc1200bf53fb867e7a03"
+      },
+      {
+        "variant": "legacy-base", "direction": "redeem", "tokenDirection": "Base Set to WBTC",
+        "amountsIn": ["1000000000000", "1000000000000000"], "amountsOut": ["400", "400000"],
+        "receipts": 4, "directLogicalRpcCalls": 126,
+        "artifact": "dual-legacy-base-redeem-reviewed.json",
+        "sha256": "5099f0bfdc1e23b59fd8b6a031a496cda998ecd05a38c3ec4bc9775aa64e50c9"
+      },
+      {
+        "variant": "legacy-rebalancing", "direction": "redeem", "tokenDirection": "Rebalancing Set to Base Set",
+        "amountsIn": ["100000000", "1000000000000000000"], "amountsOut": ["238105", "2381050000000000"],
+        "receipts": 4, "directLogicalRpcCalls": 146,
+        "artifact": "dual-legacy-rebalancing-redeem-reviewed.json",
+        "sha256": "760a3d6f2927e67bdddfa1b4f4991b8d1c46b1c6cab0da4da255a59ea985a3eb"
+      }
+    ],
+    "negativeControls": "Issuance nonmultiples reject in Exact/runtime. Redemption non-natural-multiples and above-N-supply inputs reject in Exact/native/runtime; semantic revert is distinguished from OOG/RPC failure. Direct RPC counts do not claim total upstream CU."
+  },
+  "verification": {
+    "actualProductionBuild": "pass: build-reviewed.log",
+    "familyContracts": "18/18 pass: contracts-reviewed.log",
+    "observerContracts": "7/7 pass: observer-contract.log",
+    "basicProductionRefresh": "pass: refresh-contract.log",
+    "strictProductionDeclarations": "pass: strict-declarations.log",
+    "stagedSourceGenerateBuildContracts": "pass; 18/18 final corrected contracts: staged-generate.log, staged-build.log, staged-contracts.log",
+    "generatedSetCapabilitiesIdenticalToHistoricalWorkingTree": 11,
+    "independentReview": "Two passes; all three production findings closed (zero-recipient redemption, executor-owned entry fee, issuance-only pricing overflow). Additional 198 address pairs and 198 one-wei-short negatives passed. Final above-actor fixture corrected. Nonzero-fee cases remain fixture-only."
+  },
+  "reconciliation": {
+    "capabilityQuery": "set-legacy,set-dual",
+    "executedToolIds": ["listener:searcher:set-legacy-historical-ready", "listener:searcher:set-dual-historical"],
+    "manifest": "logs/set-legacy-issuance-tools-20261009.json",
+    "manifestSha256": "f82dd55f40d2e305f47bfb15c95831ab4c5de5855ba4a4b2cecf7f749a2b027a"
+  },
+  "preservedAttempts": [
+    "Unsupported tool-run --window rejected before chain requests; corrected invocation retained separately.",
+    "Initial tool-index lacked scoped safe.directory, corrected without global Git configuration changes.",
+    "Initial build Map inference failure fixed; initial local observer missing Git context and refresh missing explicit enable flag retained as setup failures.",
+    "single-N26132613-attempt02 and four earlier dual attempt01 successes are pre-review evidence, not counted as current-source acceptance."
+  ],
+  "notVerifiedOrNotImplemented": [
+    "Production-reference input amounts and naturally valued effective rows; unit/multi-unit samples above are not production P.",
+    "Arbitrary-input quantization; current unary issuance explicitly rejects nonmultiples.",
+    "Original deposit/internalTransfer donation and actualizeFee sequence, original pre-call state and full opportunity replay.",
+    "Historical nonzero entry fee, fee-to-executor and zero-recipient samples (fixture coverage only).",
+    "Formal Adapter Replay failure-to-pass, adapter_fixed/adapter_merge_ready/production_gap_fixed gates.",
+    "Natural opportunity enumeration, autonomous sizing, independent final sim/EV and representative performance."
+  ],
+  "priorEvidencePreserved": "docs/research/reports/set-legacy-redemption-acceptance-20261009.json; implementation 67dddb7; report 8ca5e98",
+  "originalImplTablePatch": "docs/research/reports/set-legacy-issuance-impl-table-20261009.patch"
+}
