@@ -5,7 +5,8 @@ import { decodeState, redemptionOutputs, stateRequests } from "./state.js";
 import type { Descriptor, Evidence, Route } from "./types.js";
 type Input = ExactQuoteInput<Descriptor, Route>;
 function check(i: Input) { assertRoute(i.descriptor, i.route); uint(i.amountIn); const a = address(i.executor);
-  if ([i.descriptor.set, i.descriptor.module, i.descriptor.controller, ...i.descriptor.components].includes(a)) throw new Error("set-redemption executor aliases dependency");
+  if ([i.descriptor.set, i.descriptor.module, i.descriptor.controller, ...i.descriptor.components,
+    ...(i.descriptor.legacy ? [i.descriptor.legacy.factory, i.descriptor.legacy.vault] : [])].includes(a)) throw new Error("set-redemption executor aliases dependency");
   if (i.prefix?.length) throw new Error("set-redemption local baseline cannot consume a prefix; shared EVM prefix required"); }
 function result(i: Input, outputs: readonly bigint[]) {
   return { amountOut: outputs[i.descriptor.components.indexOf(i.route.component)], evidence: { kind: "set-redemption-local-quote" as const,

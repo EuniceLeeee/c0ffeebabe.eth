@@ -8,6 +8,8 @@ import { resolve } from "node:path";
 import { ethers } from "ethers";
 import { MODULE } from "../codec.js";
 import { SAMPLE, ERC20, word, observeBalance, assertBasket, historicalReceipt } from "./historical-runtime-observations.js";
+import { CORE } from "../legacy.js";
+import { LEGACY_SAMPLES, legacyHistoricalReceipt, assertExecutionRevert, assertLegacyInvalidAmountEvidence } from "./historical-legacy-observations.js";
 
 const components = [11, 12, 13, 14].map(n => ethers.toBeHex(n, 20));
 const recipient = ethers.toBeHex(91, 20), next = ethers.toBeHex(92, 20);
@@ -57,6 +59,33 @@ test("prestate diff distinguishes unchanged, created and deleted balances", () =
   assert.throws(() => observeBalance({ pre: {}, post: { [token]: { storage: { [slot]: word(9n) } } } }, token, slot, 103n),
     /prestate disagrees/);
 });
+test("legacy observation binds the whole basket and the actual Vault receipt after Core's redemption log", () => {
+  for (const sample of Object.values(LEGACY_SAMPLES)) {
+    const base = { transactionHash: sample.tx, blockHash: sample.hash, blockNumber: ethers.toQuantity(sample.number),
+      transactionIndex: ethers.toQuantity(sample.index), status: "0x1" };
+    const log = (address: string, n: number, event: { topics: string[]; data: string }) =>
+      ({ ...base, address, logIndex: ethers.toQuantity(n), ...event });
+    const r = { ...base, logs: [
+      log(sample.set, 100, ERC20.encodeEventLog(ERC20.getEvent("Transfer")!, [recipient, ethers.ZeroAddress, sample.amountIn])),
+      log(sample.module, 101, CORE.encodeEventLog(CORE.getEvent("SetRedeemed")!, [sample.set, sample.amountIn])),
+      log(sample.components[0], 102, ERC20.encodeEventLog(ERC20.getEvent("Transfer")!, [sample.vault, recipient, sample.outputs[0]])),
+      log(sample.components[0], 103, ERC20.encodeEventLog(ERC20.getEvent("Transfer")!, [recipient, next, sample.outputs[0] + 1n])),
+    ] };
+    assert.equal(legacyHistoricalReceipt(r, sample, sample.components).outputs[0].amountOut, sample.outputs[0]);
+    for (const mutate of [
+      (x: typeof r) => { x.status = "0x0"; },
+      (x: typeof r) => { x.logs[2].data = word(sample.outputs[0] - 1n); },
+      (x: typeof r) => { x.logs.push(x.logs[2]); },
+      (x: typeof r) => { x.logs[2].topics[1] = word(BigInt(next)); },
+      (x: typeof r) => { x.logs[2].transactionIndex = "0x0"; },
+    ]) { const bad = structuredClone(r); mutate(bad); assert.throws(() => legacyHistoricalReceipt(bad, sample, sample.components)); }
+    const amount = sample.amounts[0], initial = 2000n, delta = 400n;
+    assertBasket({ before: amount + 101n, after: 101n, delta: -amount },
+      [{ before: initial, after: initial + delta, delta }], amount, [delta], [initial], sample.components.length);
+    assert.throws(() => assertBasket({ before: amount + 101n, after: 101n, delta: -amount },
+      [{ before: initial, after: initial + delta - 1n, delta: delta - 1n }], amount, [delta], [initial], sample.components.length), /quote\/receipt/);
+  }
+});
 test("independent basket comparison rejects one wei shortfall despite enough old absolute inventory", () => {
   const amount = SAMPLE.amountIn, inventory = SAMPLE.outputs.map(v => v * 2n);
   const input = { before: amount + 101n, after: 101n, delta: -amount };
@@ -73,6 +102,37 @@ test("independent basket comparison rejects one wei shortfall despite enough old
   assert.throws(() => assertBasket(input, outputs.slice(0, 1), amount, SAMPLE.outputs, inventory), /four-component/);
   const absent = structuredClone(outputs); absent[3] = { before: inventory[3], after: inventory[3], delta: 0n };
   assert.throws(() => assertBasket(input, absent, amount, SAMPLE.outputs, inventory), /component 3/);
+});
+
+test("invalid amount controls reject unrelated Exact errors, OOG and wrong burn instead of recording a pass", () => {
+  const sample = LEGACY_SAMPLES["legacy-base"], executor = ethers.toBeHex(2, 20);
+  const encode = (reason: string) => "0x08c379a0" + ethers.AbiCoder.defaultAbiCoder().encode(["string"], [reason]).slice(2);
+  for (const label of ["non-natural-multiple", "original-amount-exceeds-N-capacity"]) {
+    const quantization = label === "non-natural-multiple", amountIn = quantization ? sample.naturalUnit + 1n : sample.amountIn;
+    const coreData = CORE.encodeFunctionData("redeemAndWithdrawTo", [sample.set, executor, amountIn, 0n]);
+    const burn = { to: sample.set, from: sample.module, error: "execution reverted", gas: "0x100000", gasUsed: "0x1000",
+      input: new ethers.Interface(["function burn(address,uint256)"]).encodeFunctionData("burn", [executor, amountIn]) };
+    const native = { to: sample.module, from: executor, input: coreData, error: "execution reverted", gas: "0x700000", gasUsed: "0x20000",
+      ...(quantization ? { output: encode("SetTokenLibrary.isMultipleOfSetNaturalUnit: Quantity is not a multiple of nat unit") } : { calls: [burn] }) };
+    const runtime = { to: executor, from: recipient, error: "execution reverted", gas: "0x700000", gasUsed: "0x20000",
+      output: encode(quantization ? "runtime amount mismatch" : "runtime external call"), ...(quantization ? {} : { calls: [native] }) };
+    const data = { sample, executor, label, amountIn, naturalUnit: sample.naturalUnit, supply: sample.amounts[1],
+      quote: { status: "failed", outcome: { reasonCode: quantization
+        ? "exact-decode:set-legacy quantity must be an exact multiple of naturalUnit" : "exact-decode:set-redemption supply capacity exceeded" } },
+      results: [{ mode: "protocol-native", trace: native }, { mode: "runtime-program", trace: runtime }] };
+    assertLegacyInvalidAmountEvidence(data);
+    assert.throws(() => assertLegacyInvalidAmountEvidence({ ...data, quote: { status: "failed", outcome: { reasonCode: "rpc-timeout" } } }), /unrelated Exact/);
+    for (const error of ["out of gas", "timeout", "invalid opcode"]) {
+      const changed = structuredClone(data); changed.results[0].trace.error = error;
+      assert.throws(() => assertLegacyInvalidAmountEvidence(changed), /semantic revert/);
+    }
+    const exhausted = structuredClone(native); exhausted.gasUsed = exhausted.gas;
+    assert.throws(() => assertExecutionRevert(exhausted), /remaining gas/);
+    if (!quantization) {
+      const wrongBurn = structuredClone(data); wrongBurn.results[0].trace.calls![0].input = "0x";
+      assert.throws(() => assertLegacyInvalidAmountEvidence(wrongBurn), /authenticated Set burn/);
+    }
+  }
 });
 
 test("offline input failure retains a private receipt; an existing receipt is never overwritten", () => {

@@ -2,7 +2,9 @@ import { ethers } from "ethers";
 import type { AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
 import { address, call, code, CONTROLLER, decode, MAX, members, MODULE, MODULE_CODE_HASH, rows, SET, SET_CODE_HASH, TOKEN, uint, WAD } from "./codec.js";
 import type { Descriptor, State } from "./types.js";
+import { decodeLegacyState, legacyStateRequests } from "./legacy.js";
 export function stateRequests(d: Descriptor) {
+  if (d.legacy) return legacyStateRequests(d);
   return [code("set-code", d.set), code("module-code", d.module), code("controller-code", d.controller),
     ...["controller", "getComponents", "getModules", "isLocked", "totalSupply", "positionMultiplier"].map(k => call(k, d.set, SET.encodeFunctionData(k))),
     call("module-controller", d.module, MODULE.encodeFunctionData("controller")), call("module-state", d.set, SET.encodeFunctionData("moduleStates", [d.module])),
@@ -11,6 +13,7 @@ export function stateRequests(d: Descriptor) {
       call(`external-${i}`, d.set, SET.encodeFunctionData("getExternalPositionModules", [t])), call(`balance-${i}`, t, TOKEN.encodeFunctionData("balanceOf", [d.set]))])];
 }
 export function decodeState(d: Descriptor, results: readonly AdapterRequestResult[], expected?: CanonicalSource): State {
+  if (d.legacy) return decodeLegacyState(d, results, expected);
   const r = rows(results, stateRequests(d).map(v => v.id), expected);
   if (ethers.keccak256(r.get("set-code")) !== SET_CODE_HASH || ethers.keccak256(r.get("module-code")) !== MODULE_CODE_HASH || ethers.keccak256(r.get("controller-code")) !== d.controllerCodeHash)
     throw new Error("set-redemption code binding changed; new Ready required");
@@ -31,20 +34,36 @@ export function decodeState(d: Descriptor, results: readonly AdapterRequestResul
 export function redemptionOutputs(s: State, amount: bigint): readonly bigint[] {
   uint(amount);
   if (amount > s.supply || s.units.length !== s.balances.length) throw new Error("set-redemption supply capacity exceeded");
+  if (s.naturalUnit !== undefined && (uint(s.naturalUnit) === 0n || amount % s.naturalUnit !== 0n))
+    throw new Error("set-legacy quantity must be an exact multiple of naturalUnit");
   return s.units.map((unit, i) => {
     uint(unit); uint(s.balances[i]);
-    const product = amount * unit;
+    const product = (s.naturalUnit === undefined ? amount : amount / s.naturalUnit) * unit;
     if (product > MAX) throw new Error("set-redemption preciseMul overflow");
-    const out = product / WAD;
+    const out = s.naturalUnit === undefined ? product / WAD : product;
     if (out > s.balances[i]) throw new Error("set-redemption component balance capacity exceeded");
     return out;
   });
 }
 export function capacity(s: State): bigint {
+  if (s.naturalUnit !== undefined) {
+    const natural = uint(s.naturalUnit);
+    if (!natural || s.units.length !== s.balances.length) throw new Error("set-legacy invalid capacity state");
+    const multiples = s.units.reduce((q, unit, i) => {
+      uint(unit); uint(s.balances[i]);
+      return unit && s.balances[i] / unit < q ? s.balances[i] / unit : q;
+    }, uint(s.supply) / natural);
+    return multiples * natural;
+  }
   return s.units.reduce((q, unit, i) => {
     if (!unit) return q;
     // floor(q*u/WAD) <= balance, preserving the last valid raw unit.
     const balanceCap = ((s.balances[i] + 1n) * WAD - 1n) / unit, overflowCap = MAX / unit;
     return [q, balanceCap, overflowCap].reduce((a, b) => a < b ? a : b);
   }, s.supply);
+}
+export function midSample(s: State): bigint {
+  const cap = capacity(s), reference = s.naturalUnit !== undefined && s.naturalUnit > WAD ? s.naturalUnit : WAD;
+  const sample = cap < reference ? cap : reference;
+  return s.naturalUnit === undefined ? sample : sample / s.naturalUnit * s.naturalUnit;
 }
