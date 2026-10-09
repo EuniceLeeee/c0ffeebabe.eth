@@ -4,7 +4,9 @@
       "learning_case_id": "tooldef-20261009-set-legacy-rejection-controls",
       "status": "manual_required",
       "strategy_kind": "unknown",
-      "edge_kinds": ["protocol"],
+      "edge_kinds": [
+        "protocol"
+      ],
       "trigger": "competitor_not_seen",
       "competitor_tx": "0x00f865180dc1ffacd181f69a99db506d08766a5086a4f57a886f9611669f4375",
       "target_block": 26132613,
@@ -17,7 +19,10 @@
         "fix": "Require exact amount-rejection reason, independently read same-N naturalUnit/supply, semantic revert with remaining gas, and authenticated Core/burn failure sites. Preserve failed control quote/traces before assertions.",
         "regression": "7/7 observer tests locally/cloud; reviewer accepted four fixtures and rejected64 corruptions. Cloud stronger-gate reruns independently pass8 quoted/runtime receipts with delta0 and all four invalid-amount cases.",
         "report": "docs/research/reports/set-legacy-redemption-acceptance-20261009.json",
-        "artifacts": ["logs/set-legacy-acceptance-20261009.QmKyAh/dual-legacy-base-reviewed.json", "logs/set-legacy-acceptance-20261009.QmKyAh/dual-legacy-rebalancing-reviewed.json"],
+        "artifacts": [
+          "logs/set-legacy-acceptance-20261009.QmKyAh/dual-legacy-base-reviewed.json",
+          "logs/set-legacy-acceptance-20261009.QmKyAh/dual-legacy-rebalancing-reviewed.json"
+        ],
         "limitations": "Production reference amount, natural effective valuation, original issue/donation/fee-update opportunity and representative performance remain unverified; the LearningCase opportunity status is not promoted."
       },
       "tooling_defect": {
@@ -35,7 +40,10 @@
       "learning_case_id": "tooldef-20261009-historical-dual-eip7702-origin",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap", "protocol"],
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -44,8 +52,14 @@
         "observation": "The former historical owner 0xb8578b6de173c8554ff0390db5a7effa567dda3c had exact EIP-7702 delegation code; an empty-code-only origin assertion stopped before executing the Family. A separate incompatible executor code check correctly stopped and was not relaxed.",
         "scope": "Opt-in historical dual test harness only. Accept empty code or exact 23-byte ef0100 delegation designator, record and recheck code, never override owner code or an unrelated executor contract.",
         "regression": "Positive empty/delegated origin and malformed/arbitrary-contract negatives; final evidence+nomination suite 21/21 PASS on cloud and source snapshot.",
-        "independentReview": {"agent": "01a11aba-3bcc-7620-8433-2b9d1b94022f", "verdict": "Origin correction legitimate; executor protection retained. Final scoped offline checks independently 21/21 PASS; no historical/performance assertion."},
-        "artifacts": ["logs/four-family-integration-20261009.CuNyy3/kyber-current-N25953136-attempt01/", "logs/four-family-integration-20261009.CuNyy3/nomination-probe-final-20261009.log"],
+        "independentReview": {
+          "agent": "01a11aba-3bcc-7620-8433-2b9d1b94022f",
+          "verdict": "Origin correction legitimate; executor protection retained. Final scoped offline checks independently 21/21 PASS; no historical/performance assertion."
+        },
+        "artifacts": [
+          "logs/four-family-integration-20261009.CuNyy3/kyber-current-N25953136-attempt01/",
+          "logs/four-family-integration-20261009.CuNyy3/nomination-probe-final-20261009.log"
+        ],
         "limitation": "Successful historical reruns use clean public test actors; do not claim end-to-end delegated-owner execution from this offline guard regression. No production opportunity closure."
       },
       "tooling_defect": {
@@ -63,7 +77,9 @@
       "learning_case_id": "tooldef-20261009-historical-dual-balance-probe-response",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["protocol"],
+      "edge_kinds": [
+        "protocol"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -72,7 +88,10 @@
         "observation": "Access lists may include proxy implementation/control slots. Overriding a wrong slot during actor-balance discovery can return empty data or declared local EVM revert; neither proves a balance slot and neither alone is a transport failure.",
         "scope": "Catch only declared local eth_call EVM revert for the injected-slot hypothesis; exact 32-byte ABI match, two probes, unique match and protected balances/supply remain mandatory. HTTP/429/unknown/upstream/baseline/protected-read failures propagate.",
         "reviewFinding": "Reviewer reproduced odd-length 0x1/0xabc accepted by ethers.isHexString(data); corrected to isHexString(data,true), both negatives added, 0x/0x1234 positives retained.",
-        "independentReview": {"agent": "01a11aba-3bcc-7620-8433-2b9d1b94022f", "verdict": "P2 closed; final 21/21 offline tests PASS with compilation caches disabled; no blocker within local contract."},
+        "independentReview": {
+          "agent": "01a11aba-3bcc-7620-8433-2b9d1b94022f",
+          "verdict": "P2 closed; final 21/21 offline tests PASS with compilation caches disabled; no blocker within local contract."
+        },
         "historicalRerun": "Compound final helper attempt05: all 8 same-N quoted/runtime executions pass with signed delta 0; overall exit 2 accurately retains missing production valuation. Earlier actor/probe failures and omitted-activation attempt04 remain preserved.",
         "artifact": "logs/four-family-integration-20261009.CuNyy3/compound-current-N25944463-attempt02/dual-attempt05-byte-guard-enabled.json",
         "artifactSha256": "c263bda18a1208273e1fbbf30819bab42e875da3290e8744cf0bc62365424e30",
@@ -689,7 +708,9 @@
       "learning_case_id": "tooldef-20260916-canonical-family-metadata-classified-as-dispatch",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -716,7 +737,9 @@
       "learning_case_id": "tooldef-20260916-runtime-session-stale-valuation-and-gas-fixtures",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -743,7 +766,9 @@
       "learning_case_id": "tooldef-20261007-blockscan-pass-latency-large-log",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -768,7 +793,9 @@
       "learning_case_id": "tooldef-20261007-redact-live-run-event-range-stack",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -823,6 +850,38 @@
       },
       "created_at": "2026-10-07T09:16:09Z",
       "updated_at": "2026-10-07T09:16:09Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261009-dodo-executor-provenance",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Historical test-consumer optional-field mismatch, not a protocol or strategy failure.",
+      "evidence": {
+        "failed_receipt": "logs/dodo-gsp-acceptance-20261009.Nkm2su/dual-attempt01.json",
+        "failure": "source/receipt: Cannot read properties of undefined (reading keccak256); zero execution samples",
+        "producer": "listener/src/searcher/blockscan-at-block-cli.ts omits counterfactualExecutorCode when price construction does not need an executor override",
+        "independent_review": "Poincare reproduced the undefined access, inspected the writer, ran two DODO tests and ten additional malformed-binding negatives; agreed this is a test-tool bug.",
+        "successful_receipt": "logs/dodo-gsp-acceptance-20261009.Nkm2su/dual-current-attempt02.json",
+        "successful_receipt_sha256": "0201f9a6d3a29614062dcdc02780aebf1348b72fae5a325dfb3995b854cda481",
+        "executions": "16/16 same-N quoted/runtime receipts, all observed quote deltas zero",
+        "report": "docs/research/reports/dodo-gsp-acceptance-20261009.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:dodo-v2-dual-historical",
+        "issue": "Checked optional provenance field against null only, then dereferenced undefined; present provenance did not also bind executor address.",
+        "evidence": "Original failed artifact and producer omission contract agree; non-author reproduced failure. Fixed consumer accepts absence but rejects malformed, wrong-address and wrong-runtime hash. Execution still independently binds trusted runtime code.",
+        "codify_target": "dodo-v2-family/test/historical-dual.ts assertExecutorCodeProvenance and historical-dual.test.ts omission/negative regressions",
+        "codify_commit": "fec8f5c63481c24525625fda02a5ab741f4d845c",
+        "status": "codified"
+      },
+      "created_at": "2026-10-09T13:00:59.000Z",
+      "updated_at": "2026-10-09T13:00:59.000Z"
     }
   ]
 }
