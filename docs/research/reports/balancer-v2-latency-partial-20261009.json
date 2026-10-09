@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "reportType": "redacted-partial-family-latency-observation",
+  "date": "2026-10-09",
+  "family": "balancer-v2",
+  "latestUserPriority": "Balancer V2 remaining acceptance is deferred until after the other Families. Preserve these results; every other Family requires both correctness and representative latency acceptance.",
+  "verdict": {
+    "implementation": "implemented; cloud offline regressions passed",
+    "observedCompletedPricePairs": "7 pairs identical in row semantics and request workload",
+    "representativePerformanceAcceptance": "NOT PASSED: incomplete cohort, heavy-block prices exceed combined state/enumeration budget, and outstanding coverage",
+    "systemicLive": "NOT RUN",
+    "adapterMergeReady": "NOT CLAIMED",
+    "productionGapFixed": "NOT CLAIMED",
+    "goalComplete": false
+  },
+  "source": {
+    "vm": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "baseCommit": "2a2243bdf009ac1951644794ed38cb9e98d138e4",
+    "frozenSharedProductionSourceSha256": "dd183def76110b2caecea598bd39e923c15878cbf73387527e042ebaf2740176",
+    "configurationSha256": "ac3eff5a4bf9999e4b6ca2e846e28e819f03ae4078731de37198020a4944bd7f",
+    "baselineCodecSha256": "d640c0270e72924557ea50a0f14341932b368dd9e46ed342880638ab9141fc91",
+    "candidateCodecSha256": "b7d349c2c0ff739d831f16b100b9706ebe25baa7518f5c115e674a615fa7f4a3",
+    "codecEquivalenceTestSha256": "353cb505dd1eff9e88c113b67946bd2319093aecf32e01747191a37a7d9bc56b",
+    "codecCostTestSha256": "06d3211f404245988ffeff82316ded7fac9f0a183ca426ad970b01440030959c",
+    "committedManifestSha256": "0a224eba27bbcecce26d574b996a989023fc220f4ddd3b7a588076aff0f4f81f",
+    "benchmarkSourceIncludesOtherUncommittedChanges": true,
+    "commitScope": "Only Balancer V2 codec, its two new tests, generator-derived V2 capability changes and this redacted report. Unrelated Ready/Uniswap V1 changes remain uncommitted and untouched.",
+    "packagingCheck": "The exact base commit plus these V2 files was materialized as a temporary, non-Git source fixture. The production generator and build:live plus 30 V2/codec tests passed locally, avoiding concurrent cloud load. This is an additional packaging check, not a new cloud historical or performance run."
+  },
+  "change": {
+    "productionFile": "listener/src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+    "scope": [
+      "Bounded 2048-entry cache of successful address validation, keyed by original spelling; lowercase 20-byte (40-hex-digit) addresses use shape validation and mixed-case retains checksum checks",
+      "Precompile the existing one-step, two-asset, empty-userData queryBatchSwap ABI shape and fill its six variable words",
+      "Decode only canonical 128-byte two-delta returns, preserving signed range, input equality, zero-output policy and malformed-data rejection"
+    ],
+    "unchanged": [
+      "quote mathematics and amounts",
+      "RPC requests, transport, concurrency and budgets",
+      "each-block refresh policy",
+      "identity, source and execution safety gates",
+      "default activation set and central pipeline"
+    ]
+  },
+  "experiment": {
+    "candidateEpoch": "detached-recovery-20261009",
+    "comparisonPlanSha256": "68b5407b0dc2c6f71e587270137c64980d58bcc2237606ce01ae1250f7994603",
+    "recoveryPlanSha256": "9e4033bdf530dc037d82b6d1ab5298d2b04e3cb52a996464084a9f70322d0c82",
+    "baselineReadySha256": "1f35bd03e7ea9429059c59f198f4929ea87183e9f24349c9f4a955e53666b38b",
+    "candidateReadySha256": "b6a7a579f7fd4cc9a7241c729410f8f85ff42357247ba7ed5a795256353b2b40",
+    "graphEdges": 28040,
+    "activeInstances": 13781,
+    "targetInstances": 94,
+    "targetEdges": 727,
+    "graphCorrection": "The initially frozen old graph had 28038 edges. Both versions were revalidated through production to the same 28040-edge topology before these paired measurements; neither graph was manually patched.",
+    "productionEntry": "listener/benchmarks/effective-update.ts -> live-stage.ts -> BlockScanRuntimeLoop.schedule()/waitForIdle()",
+    "through": "prices",
+    "effectiveBoundary": "Received head through price publication and drain; publicationReadyMs is also retained in original artifacts",
+    "setupExcluded": true,
+    "enumerationMeasured": false,
+    "simMeasured": false,
+    "predeclaredBudget": {
+      "combinedStateAndEnumerationMs": 4000,
+      "perBlockNoMedianRegression": true,
+      "twoSlowBlocksMustImprove": true,
+      "diagnosticDeadlineIsNotRealtimeAcceptance": true
+    },
+    "completedCandidateRepetitions": 7,
+    "plannedCandidateRepetitions": 9,
+    "observations": [
+      {
+        "block": 26146938,
+        "blockHash": "0x300437c730d09431cb74d03d572c0d14d83bf893092ae1527a7db478172f8d09",
+        "baselineStageMs": [9032.728667999967, 9197.875670999987, 8985.93592999992],
+        "candidateStageMs": [3522.74020499998, 3379.7447310000425, 3517.870831000153],
+        "baselineMedianMs": 9032.728667999967,
+        "candidateCompleteMedianMs": 3517.870831000153,
+        "observedMedianReductionPercent": 61.054173547105094,
+        "logicalRequests": 725,
+        "physicalCallItems": 570,
+        "httpBatches": 5,
+        "comparedPairs": 3,
+        "combinedBudgetVerdict": "unverified: enumeration was not run"
+      },
+      {
+        "block": 26146969,
+        "blockHash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+        "baselineStageMs": [13469.81309000001, 13821.26597999991, 14121.64049999998],
+        "candidateStageMs": [4276.945360000012, 6167.414007000043, 3956.1516249999404],
+        "baselineMedianMs": 13821.26597999991,
+        "candidateCompleteMedianMs": 4276.945360000012,
+        "observedMedianReductionPercent": 69.05532846130757,
+        "logicalRequests": 887,
+        "physicalCallItems": 659,
+        "httpBatches": 6,
+        "comparedPairs": 3,
+        "combinedBudgetVerdict": "not passed: prices alone exceed 4000ms at the complete median"
+      },
+      {
+        "block": 26146977,
+        "blockHash": "0x3734f712322c645e220aec78d7ee8333825a945201807df980dcd1dfc52ceb93",
+        "baselineStageMs": [3780.069131999975, 3746.3596039999975, 3850.047120000003],
+        "candidateStageMs": [2790.4653800000087, null, null],
+        "candidateStatuses": ["completed", "setup_failed_http_429", "not_started"],
+        "baselineMedianMs": 3780.069131999975,
+        "candidateCompleteMedianMs": null,
+        "observedMedianReductionPercent": null,
+        "logicalRequests": 677,
+        "physicalCallItems": 539,
+        "httpBatches": 5,
+        "comparedPairs": 1,
+        "combinedBudgetVerdict": "incomplete",
+        "negativeControlQualification": "light-load control only; not proven to have no target state changes"
+      }
+    ]
+  },
+  "semanticAndWorkloadComparison": {
+    "allSevenCompletedPairsIdentical": true,
+    "fields": ["semantic direction", "amountIn", "amountOut", "status", "effectiveMid", "source", "reference", "quotedAt", "freshness"],
+    "sameLogicalWorkload": true,
+    "samePhysicalWorkload": true,
+    "sameQuoteOutcomes": true,
+    "targetRowsPerCompletedRun": {
+      "freshQuoted": 307,
+      "quoteFailed": 13,
+      "disabledForRun": 407,
+      "effectiveTrialDirections": 320
+    },
+    "coverageLimitation": "407 target directions were already disabled by production startup failure isolation in both versions. The codec did not remove them. These runs do not prove all 727 directions are successfully priceable; concrete causes of those disabled directions remain unclassified.",
+    "failureIsolationSource": "listener/src/searcher/strict-current-runtime-coordinator.ts: disabledEffectiveEdges() and recordFailedEffectiveInstances()"
+  },
+  "verification": {
+    "cloudOffline": {
+      "evidence": "candidate-offline-checks.json",
+      "passed": ["build:live", "30 Family/codec tests", "family-capability-manifest check", "production-family-composition", "strict-production-family-declarations", "strict-family-lifecycle-runner", "strict-central-adapter-runtime", "strict-execution-projection", "family-dual-execution"],
+      "networkIsolated": true,
+      "historicalExecution": false
+    },
+    "cloudSyntheticEvm": {
+      "evidence": "candidate-runtime-safety.json",
+      "suite": "BalancerV2RuntimeTest",
+      "passed": 7,
+      "networkIsolated": true,
+      "historicalExecution": false,
+      "executorArtifactSha256": "ff8b61348f037390645448c44d923b5cb43fbda34afe0ff5a34dfaf2a3676b0b"
+    },
+    "costRegression": "1128 independently encoded multi-pool rows; zero per-direction general ABI encode/decode calls in candidate. The baseline positive-control test fails as expected. This is a work-count regression, not a realtime latency gate.",
+    "independentReview": "Two existing non-author review passes and boundary/cost regressions retained in logs/balancer-v2-codec-review2.GAol7G/; no new historical or performance pass inferred.",
+    "canonicalReconciliation": {
+      "capabilityQuery": ["benchmark", "stage-timing", "effective-update"],
+      "manifest": "cpu-diagnostic-tool-manifest.json",
+      "selectedTool": "listener:benchmark:effective-update",
+      "descriptorSha256": "d04d6c64b2d93922ff73daef7b20c4a44ceb5a2f0a495fadcd6d5f70f1a7ffcf",
+      "actualExitCode": 1,
+      "result": "Failed during setup under monthly capacity limit. Not a successful canonical reconciliation or hot-stage CPU profile."
+    }
+  },
+  "preservedFailures": [
+    "Earlier graph-mismatch, 429 and SSH-interrupted epochs remain separate; no samples from them are mixed into this cohort.",
+    "Third block repetition 2 stopped during setup after about 176438ms with stale_state/runtime_error:JSON-RPC HTTP 429; the hot phase was never entered. Repetition 3 did not start.",
+    "The independent CPU diagnostic failed with Monthly capacity limit exceeded before any measured head; its setup/retry profile cannot identify the hot-stage CPU bottleneck.",
+    "A single chainId HTTP 200 response did not prove historical-read capacity recovery. A later actual historical block read at 2026-10-09T03:11:52Z still returned HTTP429/monthly capacity exceeded.",
+    "The failed CPU diagnostic overlapped another window's process and used a different heap limit; even a successful diagnostic wall time would not belong in the formal cohort."
+  ],
+  "remainingBeforeAcceptance": [
+    "Restore already-authorized historical RPC capacity or obtain an explicitly authorized alternate endpoint; do not change billing or credentials autonomously",
+    "Predeclare a new complete experiment after recovery, preserving this cohort's failure and null median rather than replacing them",
+    "Explain target startup failures and prove representative successful coverage without dropping pools or weakening gates",
+    "Complete real target-change and unrelated/no-change controls using the production dispatcher",
+    "Profile the remaining heavy-block critical path, then verify state plus enumeration and the applicable production sim workload within the declared budget",
+    "Report historical representative-load evidence separately from unrun live competition/tail latency"
+  ],
+  "evidence": {
+    "root": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf",
+    "comparison": "detached-recovery-20261009-partial-comparison.json",
+    "comparisonSha256": "a77dc560c484abb87e6ef80a022c1676831f39bffab36fcf495dcc61a7598933",
+    "workloadFiles": ["partial-workload-26146938-1.json", "partial-workload-26146938-2.json", "partial-workload-26146938-3.json", "partial-workload-26146969-1.json", "partial-workload-26146969-2.json", "partial-workload-26146969-3.json", "partial-workload-26146977-1.json"],
+    "capacityProbe": "rpc-capacity-user-resume-20261009.json",
+    "capacityProbeSha256": "9806586f9392779908b79d90f75963e6ed1942f7aba03c05fd4743eb59aa0a9c"
+  },
+  "safety": {
+    "originalReadyModified": false,
+    "otherProcessesModified": false,
+    "deepseekMergeStarted": false,
+    "liveStartedByThisTask": false,
+    "deployed": false,
+    "signing": false,
+    "broadcast": false,
+    "rawLogsOrCredentialsIncluded": false
+  }
+}

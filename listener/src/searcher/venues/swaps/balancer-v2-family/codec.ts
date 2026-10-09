@@ -18,10 +18,27 @@ export const POOL_ABI = new ethers.Interface([
   "function getPoolId() view returns(bytes32)",
 ]);
 export const TOKEN_ABI = new ethers.Interface(["function decimals() view returns(uint8)"]);
-export const lower = (a: string): string => ethers.getAddress(a).toLowerCase();
+// Pure string validation only, never a chain-state/price/identity cache. Vault
+// observations reuse the same addresses across every registered pool; repeated
+// checksum hashing here otherwise becomes observation-count × pool-count work.
+// Key by the original spelling so an invalid mixed-case spelling cannot reuse
+// another spelling's validation, and bound the cache for untrusted observations.
+const checkedAddresses = new Map<string, string>();
+function checkedAddress(a: string): string {
+  const known = checkedAddresses.get(a);
+  if (known !== undefined) return known;
+  const value = ethers.getAddress(a);
+  if (checkedAddresses.size >= 2048) checkedAddresses.clear();
+  checkedAddresses.set(a, value);
+  return value;
+}
+export const lower = (a: string): string =>
+  // Lowercase RPC addresses need only shape validation, not an EIP-55 hash.
+  // Mixed-case inputs still go through ethers checksum validation.
+  typeof a === "string" && /^0x[0-9a-f]{40}$/.test(a) ? a : checkedAddress(a).toLowerCase();
 export const same = (a: string, b: string): boolean => lower(a) === lower(b);
 export function nonzero(a: string): string {
-  const value = ethers.getAddress(a);
+  const value = checkedAddress(a);
   if (value === ethers.ZeroAddress) throw new Error("balancer-v2 zero address");
   return value;
 }
@@ -80,14 +97,39 @@ export function poolInfo(data: string) {
   }
   return { tokens, balances, lastChangeBlock: BigInt(decoded[2]) };
 }
+// This Family always asks one exact-in step, two assets and empty userData.
+// Compile that fixed ABI shape once, then fill only its six variable words.
+// The independent ethers oracle tests bind these offsets to the public ABI.
+const queryTemplate = VAULT_ABI.encodeFunctionData("queryBatchSwap", [0,
+  [[ethers.ZeroHash, 0, 1, 0n, "0x"]], [ethers.ZeroAddress, ethers.ZeroAddress],
+  [ethers.ZeroAddress, false, ethers.ZeroAddress, false]]);
+const queryWord = (n: number) => 10 + 64 * n; // 0x + four-byte selector
+const queryParts = [
+  queryTemplate.slice(0, queryWord(3)),
+  queryTemplate.slice(queryWord(4), queryWord(5)),
+  queryTemplate.slice(queryWord(6), queryWord(9)),
+  queryTemplate.slice(queryWord(10), queryWord(12)),
+  queryTemplate.slice(queryWord(13), queryWord(16)),
+] as const;
+const addressWord = (a: string) => lower(a).slice(2).padStart(64, "0");
 export function queryData(poolId: string, tokenIn: string, tokenOut: string, amount: bigint, executor: string) {
-  return VAULT_ABI.encodeFunctionData("queryBatchSwap", [0, [[poolId, 0, 1, amount, "0x"]],
-    [tokenIn, tokenOut], [executor, false, executor, false]]);
+  if (!ethers.isHexString(poolId, 32)) throw new Error("balancer-v2 invalid pool id");
+  if (typeof amount !== "bigint" || amount < 0n || amount > MAX_UINT) throw new Error("balancer-v2 invalid uint input");
+  const caller = addressWord(executor);
+  return queryParts[0] + caller + queryParts[1] + caller + queryParts[2] + poolId.slice(2).toLowerCase() +
+    queryParts[3] + amount.toString(16).padStart(64, "0") + queryParts[4] + addressWord(tokenIn) + addressWord(tokenOut);
 }
 export function quoteOutput(data: string, amountIn: bigint, allowZero = false): bigint {
-  const deltas = decodeReturn("queryBatchSwap", data)[0] as readonly bigint[];
-  if (deltas.length !== 2 || deltas[0] !== amountIn || deltas[1] > 0n || deltas[1] < -MAX_INPUT || (!allowZero && deltas[1] === 0n)) throw new Error("balancer-v2 invalid quote deltas");
-  return -deltas[1];
+  // Canonical ABI return for int256[dynamic] of length two is exactly four
+  // words: offset=32, length=2, input delta, output delta. Reject every other
+  // shape before reading it, including offset aliases and trailing bytes.
+  if (!ethers.isHexString(data, 128) || BigInt("0x" + data.slice(2, 66)) !== 32n ||
+      BigInt("0x" + data.slice(66, 130)) !== 2n) throw new Error("balancer-v2 noncanonical queryBatchSwap deltas");
+  const inputDelta = BigInt.asIntN(256, BigInt("0x" + data.slice(130, 194)));
+  const outputDelta = BigInt.asIntN(256, BigInt("0x" + data.slice(194, 258)));
+  if (inputDelta !== amountIn || outputDelta > 0n || outputDelta < -MAX_INPUT ||
+      (!allowZero && outputDelta === 0n)) throw new Error("balancer-v2 invalid quote deltas");
+  return -outputDelta;
 }
 export function swapData(poolId: string, tokenIn: string, tokenOut: string, amount: bigint, minimum: bigint, executor: string) {
   return VAULT_ABI.encodeFunctionData("swap", [[poolId, 0, tokenIn, tokenOut, amount, "0x"],
