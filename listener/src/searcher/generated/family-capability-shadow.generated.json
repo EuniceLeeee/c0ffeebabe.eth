@@ -10123,7 +10123,7 @@
         "familyId": "protocol:token-conversion",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "76ba99350bd5c3549be65069a53a1b7b8b081cfe1dea156ee4f0b96afaf7e398",
+        "contentHash": "17f682c27bdb8675f9f834ff5aa8ebb19ace0c6fea3b3f15a1c86bd5ce8c61cc",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -10180,7 +10180,7 @@
         "familyId": "protocol:token-conversion",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "24798ebfd7c735e01d4d472592823bc4a076940ecc6c15bdf44fb09e88e134e4",
+        "contentHash": "29af98d19773a2439b812cd0ca1b68cef93913385dc149ea8b51a1a7c0ccbb70",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -10215,7 +10215,7 @@
         "familyId": "protocol:token-conversion",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "bc6f8cdfc047d0fc186ac53cac90292c4ff68e8745b2341b82331874fe9836be",
+        "contentHash": "5666ca00d37c3d1e4e9345a832833cc86936d178c5b1c7df122e96a9cdc54dd4",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -10264,7 +10264,7 @@
         "familyId": "protocol:token-conversion",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "ece5cd74541b7b8b33abc9692857729cb2f6a828ea690cbbe766bd963817a47b",
+        "contentHash": "a50fe45afe552a75e7e09a9dd42cf31a5a12aded55810a53b8824502f7426497",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -10326,7 +10326,7 @@
         "familyId": "protocol:token-conversion",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "d073c4e40b83ec076465efe9fc1077850e09e256d2913d4c823af5a34e834918",
+        "contentHash": "2d232fa0ea9d6a38a8433d1b649870053ff59de4546b07283213ee2f44a7dba6",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -10394,7 +10394,7 @@
         "familyId": "protocol:token-conversion",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "feb681ee523a1f53199352d2018cb6af93787322c9ebcc8666fb700fec92470a",
+        "contentHash": "2147275403d9a80b1f82bfdcdf5761719df97e24a3c94ea67ea9fea86940ff74",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -13326,5 +13326,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "d2379623cfc7aa95d6a4e63b29c13c23c1a1d4dc21a81db7e0c6981eef4b50c7"
+  "artifactHash": "5817a93aac35ee871fa4f74bbcaa0fa156fbb335d4a6953d537272a61a67b5b4"
 }

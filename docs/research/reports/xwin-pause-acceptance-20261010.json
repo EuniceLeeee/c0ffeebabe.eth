@@ -1,0 +1,107 @@
+{
+  "schema": "family-scoped-state-guard-evidence-v1",
+  "date": "2026-10-10",
+  "family": "protocol:token-conversion",
+  "variant": "xwin-allocations-v1",
+  "status": "implemented; historical paused-state retry classification verified; full Family acceptance incomplete",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "parentCommit": "87ac63281b6aa3c25542e554ff399c4ae805bca2",
+  "scope": [
+    "Retain existing reverse/code/dependency identity checks and both active-state effect probes.",
+    "Read paused() in the existing dependency round, before attempting effect simulation.",
+    "Only an exact source-bound canonical boolean true yields retryable xwin_paused; malformed, absent, foreign-source or failed reads do not.",
+    "The state refusal is not a permanent identity rejection, an admission bypass, a new central protocol branch or a default activation change."
+  ],
+  "sourceBinding": {
+    "filesSha256": {
+      "listener/src/searcher/venues/protocols/token-conversion-family/xwin.ts": "44c3314593691acd4e98968410d8a96e5b2e3c1997821e0f968d55c4b26a024a",
+      "listener/src/searcher/venues/protocols/token-conversion-family/xwin-identity.ts": "405de06db1bc3156b931ad2412604477f784309c8cf092da97b1f4f662ebf3cf",
+      "listener/src/searcher/venues/protocols/token-conversion-family/test/xwin-contract.ts": "0bd000a1c64c43dd07a44dfc7d94de579ce8ee88da330ccfbc8f059a205e9dc2"
+    },
+    "generatedManifestGitBlob": "437a7fdb3a9a3656793913b8d98fc4a1c3010c09",
+    "isolation": "Build/contracts/dual checks ran on an index export of the parent plus these changes. The generated artifact was taken from that export, excluding other owners' dirty UniV1/Ready/main changes.",
+    "historicalProbeLimit": "The probe ran in the actual dirty cloud workspace. Relevant three-file hashes were checked, but this diagnostic did not freeze/hash the entire working TypeScript tree before and after. It is not formal adapter_merge_ready, full current-source historical execution or whole-Family acceptance."
+  },
+  "historicalCandidate": {
+    "transaction": "0x10b7f1d5ac14281c916b4f94bd8c781c2795bfdd7d1a527885e83f4f22ec9ae3",
+    "discoveryBlock": 26075823,
+    "discoveryBlockHash": "0x4256c70c1fba6d441343680f94d07e2a1034dddb5628bb11858b9157490b501c",
+    "target": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+    "familyCandidateKey": "3654cebec08392e4c2d2f4b4c6c6f7babd0ea6a4b698669b367fa25454d58343",
+    "probeSource": {
+      "number": 26144845,
+      "hash": "0x8a86d4c8892bc77b24dbb43ce6894c7ed330d8f0ba12aa86620175fdaf82dc05",
+      "generation": 26144845
+    },
+    "stateDistinction": "The fixed original coffee Ready cutoff was probed, not the discovery transaction's N-end or pre-call state.",
+    "before": {
+      "status": "retryable",
+      "attemptCount": 6,
+      "reasonCode": "identity_unverified:unresolved:identity-work-unresolved:xwin-proxy-implementation-and-executor-effects:scheduler-failure:request result identity-xwin-mint returned undeclared revert data"
+    },
+    "after": {
+      "status": "retryable",
+      "attemptCount": 7,
+      "reasonCode": "identity_unverified:unresolved:identity-work-unresolved:xwin-proxy-implementation-and-executor-effects:xwin_paused",
+      "legacyFailureCodeBucket": "rpc",
+      "bucketCaveat": "The unchanged coarse retry bucket is still named rpc; the source-bound reason is a contract pause, not proof of an RPC failure.",
+      "admitted": false,
+      "newGraphEdges": 0
+    }
+  },
+  "evidence": {
+    "root": "logs/xwin-pause-acceptance-20261010.WMo26y",
+    "originalCheckpoint": "logs/coffee-tx-ready-20261008/checkpoint.json",
+    "originalCheckpointSha256BeforeAndAfter": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "copy": "logs/xwin-pause-acceptance-20261010.WMo26y/checkpoint-copy.json",
+    "copySha256After": "a5ea7a91a5af3a1810699d3a4dffb32ff972f73103baee59aeb610b38fef13a7",
+    "readyGenerationCanonicalJsonSha256OriginalAndCopy": "7462b900946982683e527e5946b6cbc8d26f2a49ca2b9e6248b0bf8798c6dc06",
+    "readyGenerationHashMethod": "jq -cS .readyGeneration including its trailing newline",
+    "graphPublication": "Unchanged. This diagnostic did not publish the unfinished coffee rebuild or promote retryable records.",
+    "probeLog": "probe-attempt01.log",
+    "probeLogSha256": "2270e99c7fc3bf9b7e051a68854ef793635acce51db3151c460de0c6d269ea5c"
+  },
+  "reconciliation": {
+    "capabilityQuery": ["universe", "rebuild", "probe"],
+    "toolId": "listener:searcher:universe-rebuild-probe",
+    "manifest": "logs/xwin-pause-acceptance-20261010.WMo26y/tool-selection.json",
+    "manifestSha256": "398552b0b7ce69baa60db7795ef80eee3c753d583ea75bddeaba8bcd960d737d",
+    "exitCode": 0,
+    "startedAtUtc": "2026-10-09T17:36:25.904Z",
+    "finishedAtUtc": "2026-10-09T17:36:30.895Z",
+    "result": "Confirms paused-state diagnosis through the production retry/lifecycle path; a successful probe process is not an admitted Family or performance verdict."
+  },
+  "checks": {
+    "stagedGenerationAndCheck": {"status": "pass", "log": "staged-generate.log", "sha256": "9e61aaced757f64d0da33365120c0d03540bf45b9b36f210f6805d7e92ae47cc"},
+    "stagedProductionBuild": {"status": "pass", "log": "staged-build.log", "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"},
+    "stagedConversionContracts": {"status": "pass", "passed": 23, "log": "staged-contracts-with-cache.log", "sha256": "91da17b8d6d1221e6589ff5a4f2b9d7a281f08ed591119289da5b34954a22425"},
+    "stagedProductionDual": {"status": "pass", "passed": 74, "log": "staged-dual.log", "sha256": "6e3a3ec5eb2c3efc68ae505bf4cd5c63c9acf1b7c8eb2982339e28dc4bb9bbb8"},
+    "stagedStrictDeclarations": {"status": "pass", "log": "staged-strict-declarations.log", "sha256": "116c154208b1ee31e557be02138d0c4ac2fb7e5987d8b83ea522880daaca846c"},
+    "scope": "Offline contracts exercise production issuance/lifecycle and active/paused/invalid/source-bound cases, not fresh historical active execution.",
+    "retainedFailure": "staged-contracts.log: first invocation omitted required offline evidence environment paths and failed during setup before contract tests; the configured rerun is kept separately."
+  },
+  "independentReview": {
+    "agent": "01a121bc-5d46-7842-bc4e-05f1c2a2ab75",
+    "status": "no scoped blocker",
+    "executed": "On the cloud workspace with network isolation and empty environment: xwin-contract.ts 16/16 pass; diff whitespace check pass; four extra canonical/malformed-boolean boundary checks pass.",
+    "sourceHashesBeforeAfter": "All three hashes match sourceBinding.filesSha256 and were unchanged during the review.",
+    "scope": "No RPC, build, historical probe or performance run; independent review of this narrow identity guard only, not full Family approval."
+  },
+  "remaining": [
+    "Current-source active historical single-block Ready/Graph/raw/effective and production-reference quote versus independent quoted/runtime receipts.",
+    "Natural historical opportunity replay, if claimed, remains separate from state-guard acceptance.",
+    "Local and representative production-stage latency remain NOT RUN. A paused sample that skips simulation cannot prove active-state performance.",
+    "All applicable protocols added through the original IMPL table remain in the final timing scope: per-protocol single-block checks first, then representative combined-graph acceptance, including Balancer V2/V3 and Curve plain/underlying."
+  ],
+  "safety": {
+    "originalReadyChanged": false,
+    "otherDirtyChangesCommitted": false,
+    "newGitWorktreeOrBranch": false,
+    "deployed": false,
+    "liveStarted": false,
+    "signing": false,
+    "broadcast": false,
+    "privateKeyRead": false
+  }
+}
