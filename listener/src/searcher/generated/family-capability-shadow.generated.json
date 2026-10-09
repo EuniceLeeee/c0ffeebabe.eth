@@ -636,16 +636,20 @@
         "familyId": "balancer-v3",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "e50c5e306e0cc4ed37f92ece2c095d725f660c6fbaea670aac08a47969f126f2",
+        "contentHash": "828ad883147c9787c8b5780934ca65b77f9b83c4d1f48976b72fc2e0df8e2544",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/capture-materialization.ts",
           "src/searcher/venues/swaps/balancer-v3-family/codec.ts",
           "src/searcher/venues/swaps/balancer-v3-family/discovery.ts",
           "src/searcher/venues/swaps/balancer-v3-family/manifest.ts",
-          "src/searcher/venues/swaps/balancer-v3-family/nomination.ts"
+          "src/searcher/venues/swaps/balancer-v3-family/nomination.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-pool-template.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-templates.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge.ts"
         ],
         "provenanceCommit": null
       },
@@ -685,14 +689,18 @@
         "familyId": "balancer-v3",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "ec48218e1f06c997816d621257417de93695c8aba172178acf6f75c677215a43",
+        "contentHash": "8c842f1835f58057f544fd561480009c13808055e5b8c03d661a188e74c9d1f9",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/swaps/balancer-v3-family/codec.ts",
           "src/searcher/venues/swaps/balancer-v3-family/manifest.ts",
-          "src/searcher/venues/swaps/balancer-v3-family/nomination.ts"
+          "src/searcher/venues/swaps/balancer-v3-family/nomination.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-pool-template.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-templates.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge.ts"
         ],
         "provenanceCommit": null
       },
@@ -712,7 +720,7 @@
         "familyId": "balancer-v3",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "2223a4c1a54c5e49b2071bbdc4b6980ce982e73b4edac5b558ec37d252cf039a",
+        "contentHash": "560423aa7420aac030f6bd36633bdfabdd521b51e1403f6f33c888f4f6b5e44d",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -728,7 +736,10 @@
           "src/searcher/venues/swaps/balancer-v3-family/local-math/fixed-point.ts",
           "src/searcher/venues/swaps/balancer-v3-family/local-state.ts",
           "src/searcher/venues/swaps/balancer-v3-family/manifest.ts",
-          "src/searcher/venues/swaps/balancer-v3-family/routes.ts"
+          "src/searcher/venues/swaps/balancer-v3-family/routes.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-pool-template.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-templates.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge.ts"
         ],
         "provenanceCommit": null
       },
@@ -748,7 +759,7 @@
         "familyId": "balancer-v3",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "e9bdf831ee5344ad14f44aac761d7c7da7b2a6297478685594ae44a36a2b6638",
+        "contentHash": "e4e246ef3b62fd73379c603b503e779fb93bc3b6baff14e9472c525e0e767895",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -764,8 +775,14 @@
           "src/searcher/venues/swaps/balancer-v3-family/action.ts",
           "src/searcher/venues/swaps/balancer-v3-family/codec.ts",
           "src/searcher/venues/swaps/balancer-v3-family/instance.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/local-math.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/local-math/fixed-point.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/local-state.ts",
           "src/searcher/venues/swaps/balancer-v3-family/manifest.ts",
           "src/searcher/venues/swaps/balancer-v3-family/routes.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-pool-template.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-templates.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge.ts",
           "src/shared/executor/amount-rounding.ts"
         ],
         "provenanceCommit": null
@@ -807,7 +824,7 @@
         "familyId": "balancer-v3",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "5f13c8abdd1de0557fe8fc33f7ecaa702cbeaf4bba4d924c636da24e59387ce4",
+        "contentHash": "66f5bd7d8ee93b8752263a08996a3def738da50d28e9f3e2cc067764403d65aa",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -819,6 +836,9 @@
           "src/searcher/venues/swaps/balancer-v3-family/local-math/vault-templates.ts",
           "src/searcher/venues/swaps/balancer-v3-family/local-model.ts",
           "src/searcher/venues/swaps/balancer-v3-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-pool-template.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-templates.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge.ts",
           "src/searcher/venues/swaps/balancer-v3-family/vault-model.ts"
         ],
         "provenanceCommit": null
@@ -839,13 +859,17 @@
         "familyId": "balancer-v3",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "964a4feac80bdc8928f339b3c460b8403af816ef001b61856edac0331bf67085",
+        "contentHash": "d9519946c8c749befdc68102e89ec0fad98eb0dd301135a0b64f72415903dce7",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/swaps/balancer-v3-family/codec.ts",
-          "src/searcher/venues/swaps/balancer-v3-family/manifest.ts"
+          "src/searcher/venues/swaps/balancer-v3-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-pool-template.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-templates.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge.ts"
         ],
         "provenanceCommit": null
       },
@@ -865,7 +889,7 @@
         "familyId": "balancer-v3",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "4bc291c9208141a2b1edcb656da88783167d241856b4f91d3fa76d344ec4826f",
+        "contentHash": "b4af560c19eb81a3b5b80450e604645a8c64e58ae8b4aa64b1cf194ee3025951",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -884,7 +908,10 @@
           "src/searcher/venues/swaps/balancer-v3-family/manifest.ts",
           "src/searcher/venues/swaps/balancer-v3-family/nomination.ts",
           "src/searcher/venues/swaps/balancer-v3-family/refresh-scope.ts",
-          "src/searcher/venues/swaps/balancer-v3-family/routes.ts"
+          "src/searcher/venues/swaps/balancer-v3-family/routes.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-pool-template.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-templates.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge.ts"
         ],
         "provenanceCommit": null
       },
@@ -904,7 +931,7 @@
         "familyId": "balancer-v3",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "62b886d7fb3d5110486c731df11361ef9e464208f63f6ef8269dac3315005b77",
+        "contentHash": "070573a4766809d0ca8533bfd17211225006ed407ecc5fb780d90470cd3d7504",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
@@ -913,7 +940,10 @@
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/swaps/balancer-v3-family/codec.ts",
           "src/searcher/venues/swaps/balancer-v3-family/instance.ts",
-          "src/searcher/venues/swaps/balancer-v3-family/manifest.ts"
+          "src/searcher/venues/swaps/balancer-v3-family/manifest.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-pool-template.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-templates.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge.ts"
         ],
         "provenanceCommit": null
       },
@@ -933,15 +963,19 @@
         "familyId": "balancer-v3",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
-        "contentHash": "502794d72a85ad2233dce7fa57ccc1684521b905ee3dc5f12e37c1077032cfec",
+        "contentHash": "1e8efe51cc06a4d15d89303744f816da37df521ac24232abe231916096b521c5",
         "semanticDependencies": [
           "contract:adapter-family/victim@s1-victim-v2",
           "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/swaps/balancer-v3-family/codec.ts",
           "src/searcher/venues/swaps/balancer-v3-family/discovery.ts",
           "src/searcher/venues/swaps/balancer-v3-family/manifest.ts",
-          "src/searcher/venues/swaps/balancer-v3-family/nomination.ts"
+          "src/searcher/venues/swaps/balancer-v3-family/nomination.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-pool-template.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge-templates.ts",
+          "src/searcher/venues/swaps/balancer-v3-family/stable-surge.ts"
         ],
         "provenanceCommit": null
       },
@@ -13336,5 +13370,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "c1299ad1ba35f5e34f565daccfd32c39cd4eb444a4328f6b69296f1c928f94a0"
+  "artifactHash": "701e64f0a62e43e8e7bb63093f462c73838ec15ae3324e7bde515e3577689c9e"
 }

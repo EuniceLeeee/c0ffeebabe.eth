@@ -7,7 +7,7 @@ import { staticBinding } from "./instance.js";
 import { assertRoute } from "./routes.js";
 import { decodeSwapLog } from "./discovery.js";
 import type { BalancerV3Descriptor, BalancerV3PricingDescriptor, BalancerV3Route, BalancerV3Snapshot } from "./types.js";
-import { decodeLocalState, localStateRequests, quoteLocal } from "./local-state.js";
+import { decodeLocalState, localStateRequests, quoteLocal, supportsLocalPricing } from "./local-state.js";
 import { hasStateOnlyWeightedPrice, directRefreshAddresses } from "./refresh-scope.js";
 
 function state(descriptor: BalancerV3PricingDescriptor, results: Parameters<typeof resultSource>[0]) {
@@ -43,12 +43,12 @@ export const balancerV3Pricing = {
     requirements: () => ({ transports: ["eth-call"] }),
     buildRequests({ descriptor }) {
       assertRoute(descriptor.instance, descriptor.route);
-      if (descriptor.instance.binding.localModel) return localStateRequests(descriptor.instance);
+      if (supportsLocalPricing(descriptor.instance)) return localStateRequests(descriptor.instance);
       return [call("current-tokens", VAULT, VAULT_ABI.encodeFunctionData("getPoolTokenInfo", [descriptor.instance.pool])),
         call("current-hooks", VAULT, VAULT_ABI.encodeFunctionData("getHooksConfig", [descriptor.instance.pool]))];
     },
     buildDependentProgram({ current, completedRound, initialResults, priorEvidence }) {
-      if (current.descriptor.instance.binding.localModel) return null;
+      if (supportsLocalPricing(current.descriptor.instance)) return null;
       if (completedRound > 1) return null;
       const results = collectRequestProgramResults(initialResults, priorEvidence);
       assertSource(resultSource(results), current.source);
@@ -73,7 +73,7 @@ export const balancerV3Pricing = {
       })));
     },
     decodeSnapshot({ descriptor, initialResults, dependentEvidence }) {
-      if (descriptor.instance.binding.localModel) {
+      if (supportsLocalPricing(descriptor.instance)) {
         if (dependentEvidence.length !== 0) throw new Error("balancer-v3 unexpected local pricing round");
         const local = decodeLocalState(descriptor.instance, initialResults);
         const { route } = descriptor;
@@ -162,7 +162,7 @@ export const balancerV3Pricing = {
       directRefreshAddresses(descriptor.instance).some(address => same(address, target)))
       ? routes.map(route => route.routeKey) : [];
   } },
-  liveStateProjection: { project: ({ descriptor, snapshot }) => ({ kind: descriptor.instance.binding.localModel
+  liveStateProjection: { project: ({ descriptor, snapshot }) => ({ kind: supportsLocalPricing(descriptor.instance)
     ? "balancer-v3-local-exact-in" : "balancer-v3-router-exact-in", pool: descriptor.instance.pool,
     i: descriptor.route.i, j: descriptor.route.j, ...snapshot, source: { ...snapshot.source } }) },
 } satisfies PricingSemantics<BalancerV3Descriptor, BalancerV3Route, BalancerV3PricingDescriptor, BalancerV3Snapshot>;

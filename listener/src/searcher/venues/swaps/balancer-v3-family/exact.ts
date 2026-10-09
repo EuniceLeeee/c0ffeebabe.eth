@@ -6,7 +6,7 @@ import { ROUTER, MAX_INPUT, assertSource, call, lower, nonzero, queryData, retur
 import { assertRoute } from "./routes.js";
 import { staticBinding } from "./instance.js";
 import type { BalancerV3Descriptor, BalancerV3ExactEvidence, BalancerV3Route } from "./types.js";
-import { decodeLocalState, localStateRequests, quoteLocal, quoteLocalTransition, type BalancerLocalState } from "./local-state.js";
+import { decodeLocalState, localStateRequests, quoteLocal, quoteLocalTransition, supportsLocalPricing, type BalancerLocalState } from "./local-state.js";
 
 type Input = ExactQuoteInput<BalancerV3Descriptor, BalancerV3Route>;
 function validate(input: Input): void {
@@ -108,7 +108,7 @@ const localProgram: ExactRequestProgram<BalancerV3Descriptor, BalancerV3Route, B
 export const balancerV3Exact = {
   methods: (input) => [localZeroExactMethod<BalancerV3Descriptor, BalancerV3Route, BalancerV3ExactEvidence>("local-zero", input => {
     validate(input); return quote(input, 0n);
-  }), ...(input.descriptor.binding.localModel ? [{ id: "balancer-v3-local-exact-in", kind: "request-program" as const,
+  }), ...(supportsLocalPricing(input.descriptor) ? [{ id: "balancer-v3-local-exact-in", kind: "request-program" as const,
     // These amount-independent reads can depend on block time. Reuse is the
     // existing same-source byte memo, not a stateOnlyReads cross-source promise.
     ...(supportsTrialState(input.descriptor) ? { trialState: {

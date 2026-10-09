@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import test from "node:test";
 import { ethers } from "ethers";
 import { plugin } from "../../../production-families/balancer-v3.production.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../../adapter-request-program.js";
-import { buildFamilyExecutionFragment, executeFamilyExactQuote } from "../../../adapter-family-runtime.js";
+import { buildFamilyExecutionFragment, buildFamilyRuntimeAmountLeg, executeFamilyExactQuote } from "../../../adapter-family-runtime.js";
 import { buildEffectiveMids } from "../../../../blockscan-effective-mid.js";
 import { createStrictCentralAdapterRuntime } from "../../../../strict-central-adapter-runtime.js";
 import { StrictCurrentRuntimeCoordinator } from "../../../../strict-current-runtime-coordinator.js";
@@ -24,6 +25,10 @@ import type { BalancerV3Descriptor, BalancerV3PricingDescriptor, BalancerV3Snaps
 import { BALANCER_VAULT_EXTENSION, BALANCER_VAULT_ADMIN } from "../vault-model.js";
 import { syntheticBalancerVaultCodes } from "./local-vault-fixture.js";
 import { hasStateOnlyWeightedPrice } from "../refresh-scope.js";
+import { syntheticStableSurgeCode, syntheticStableSurgePoolCode } from "./stable-surge-fixture.js";
+import { STABLE_SURGE_TEMPLATES } from "../stable-surge-templates.js";
+import { STABLE_SURGE_POOL_TEMPLATES } from "../stable-surge-pool-template.js";
+import { STABLE_SURGE_ROUTER_CODE_HASH } from "../stable-surge.js";
 
 // Synthetic state/transport fixtures exercise real production issuers and
 // consumers. These are NOT historical on-chain, fork-execution or latency proofs.
@@ -74,6 +79,11 @@ function fixture(model: BalancerLocalModel | null = "weighted-v1", decimals = [1
     configLowBits: 3n,
     hooks: Array<boolean>(10).fill(false),
     hookAddress: ethers.ZeroAddress,
+    hookCode: "0x60006000",
+    routerNumerator: 999n,
+    failRouter: false,
+    poolCode: model === null ? "0x60006000" : modelCode(model, tokens.length),
+    routerCode: "0x60006000",
     weights: decimals.map((_, index) => WAD / BigInt(decimals.length) + (index === 0 ? WAD % BigInt(decimals.length) : 0n)),
     minTokenBalances: decimals.map(() => 1n),
     tokenInfo: tokens.map(() => [withRates ? 1 : 0, withRates ? RATE : ethers.ZeroAddress, false]),
@@ -84,7 +94,7 @@ function fixture(model: BalancerLocalModel | null = "weighted-v1", decimals = [1
   const calls: { to: string; data: string }[] = [];
   const hooksData = () => VAULT_ABI.encodeFunctionResult("getHooksConfig", [[...values.hooks, values.hookAddress]]);
   const liveBalances = () => values.balancesRaw.map((balance, i) => balance * values.scalingFactors[i] * values.rates[i] / WAD);
-  const code = model === null ? "0x60006000" : modelCode(model, tokens.length);
+  const code = values.poolCode;
   const vaultCodes = syntheticBalancerVaultCodes();
   function answer(tx: { to: string; data: string }): string {
     calls.push(tx);
@@ -117,8 +127,9 @@ function fixture(model: BalancerLocalModel | null = "weighted-v1", decimals = [1
     if (lower(tx.to) === lower(ROUTER)) {
       if (is(ROUTER_ABI, "getPermit2")) return ROUTER_ABI.encodeFunctionResult("getPermit2", [PERMIT2]);
       assert(values.allowRouter, "proven local model must never query Router");
+      assert(!values.failRouter, "synthetic Router query failure");
       const args = ROUTER_ABI.decodeFunctionData("querySwapSingleTokenExactIn", tx.data);
-      return word(BigInt(args[3]) * 999n / 1000n);
+      return word(BigInt(args[3]) * values.routerNumerator / 1000n);
     }
     throw new Error(`unexpected synthetic call ${tx.to}:${selector}`);
   }
@@ -126,7 +137,9 @@ function fixture(model: BalancerLocalModel | null = "weighted-v1", decimals = [1
     async call(tx: { to: string; data: string }, _block?: number) { return answer(tx); },
     async getCode(address: string) {
       const index = [VAULT, BALANCER_VAULT_EXTENSION, BALANCER_VAULT_ADMIN].map(lower).indexOf(lower(address));
-      return index >= 0 ? vaultCodes[index] : lower(address) === lower(pool) ? code : "0x60006000";
+      return index >= 0 ? vaultCodes[index] : lower(address) === lower(ROUTER) ? values.routerCode :
+        lower(address) === lower(pool) ? values.poolCode :
+        lower(address) === lower(values.hookAddress) ? values.hookCode : "0x60006000";
     },
     async getStorage() { throw new Error("unexpected storage read"); },
   };
@@ -720,7 +733,8 @@ async function coordinatorFixture(primary = fixture(),
   const primaryKeys = primaryEdges.map(blockScanEdgeKey);
   const root = new StrictProductionRuntimeRoot({ catalog: admittedPools[0].catalog, readySource: startupSource,
     readyGraph: edges, readyInstances: admittedPools.flatMap(a => a.lifecycle.publication!.instances), readyFundingAssets: [] });
-  assert.deepEqual(root.pricingIndex().perBlockRefreshStateKeys, []);
+  assert.equal(root.pricingIndex().perBlockRefreshStateKeys.length, admittedPools
+    .filter(a => !hasStateOnlyWeightedPrice(a.descriptor)).reduce((n, a) => n + a.instance.pricingInstances.length, 0));
   const attempts: { source: CanonicalSource; edgeId: string }[] = [];
   const source = (offset: number): CanonicalSource => ({
     number: startupSource.number + offset, hash: ethers.toBeHex(startupSource.number + offset, 32),
@@ -736,6 +750,13 @@ async function coordinatorFixture(primary = fixture(),
       async getStorage() { throw new Error("unexpected current-state storage read"); },
       async call(tx, block) {
         assert.equal(block, at.number);
+        if (lower(tx.to) === lower(ROUTER)) {
+          const decoded = ROUTER_ABI.parseTransaction({ data: tx.data });
+          assert(decoded?.name === "querySwapSingleTokenExactIn");
+          const owner = fixtures.find(f => lower(f.pool) === lower(String(decoded.args[0])));
+          assert(owner, "Router query must bind an admitted fixture pool");
+          return owner.answer(tx);
+        }
         if (lower(tx.to) === lower(VAULT)) {
           const decoded = VAULT_ABI.parseTransaction({ data: tx.data }) ??
             LOCAL_VAULT_ABI.parseTransaction({ data: tx.data });
@@ -882,5 +903,105 @@ test("production coordinator carries partial failed rows safely and refreshes el
     assert.deepEqual(row.quotedAt, h.source(3));
     assert.equal(refreshed.pricingProvenanceByEdgeKey!.get(row.edgeId), "refreshed");
     assert.notStrictEqual(row, quiet.effectiveMids!.rows.get(row.edgeId));
+  }
+});
+
+function surgeFixture(model: typeof STABLE_SURGE_TEMPLATES[number]["model"]) {
+  const f = fixture("stable-v2");
+  const router = JSON.parse(readFileSync(new URL("./fixtures/stable-surge-router.json", import.meta.url), "utf8"));
+  assert.equal(ethers.keccak256(router.runtimeCode), STABLE_SURGE_ROUTER_CODE_HASH);
+  assert.equal(router.expectedRuntimeCodeHash, STABLE_SURGE_ROUTER_CODE_HASH);
+  f.values.routerCode = router.runtimeCode;
+  f.values.hookAddress = "0x1000000000000000000000000000000000000042";
+  f.values.hookCode = syntheticStableSurgeCode(model, f.values.hookAddress);
+  f.values.hooks = Array.from({ length: 10 }, (_, i) => [3, 7, 9].includes(i));
+  f.values.allowRouter = true;
+  return f;
+}
+
+for (const { model } of STABLE_SURGE_TEMPLATES) {
+  test(`${model}: production lifecycle, Router Exact and quoted/runtime construction preserve dynamic fee semantics`, async () => {
+    const f = surgeFixture(model), a = await admitted(f);
+    assert.equal(a.descriptor.binding.hooks.stableSurgeModel, model);
+    assert.equal(a.descriptor.binding.localModel, "stable-v2", "preserve the pool behavior proof, not static-fee pricing");
+    assert.equal(a.graph.edges.length, 2);
+    assert.throws(() => localStateRequests(a.descriptor), /dynamic swap Hook/);
+    for (const route of a.routes) {
+      const pricing = a.instance.pricingInstances.find(p => p.routes.some(r => r.routeKey === route.routeKey))!;
+      assert.equal(plugin.pricing.refreshPolicyForInstance!({ descriptor: pricing.pricingDescriptor as BalancerV3PricingDescriptor,
+        routes: [route] }), "each-block");
+      for (const amount of [10n ** 15n, WAD, 100n * WAD]) {
+        const q = localQuote(f, a.descriptor, route, amount);
+        assert.equal(q.result.evidence.kind, "balancer-v3-router-exact-in");
+        assert.equal(q.method.chainAmountQuote, true);
+        assert.equal(q.requests.length, 1);
+        const request = q.requests[0]; assert(request.kind === "eth-call");
+        assert.equal(lower(request.to), lower(ROUTER));
+        const query = ROUTER_ABI.decodeFunctionData("querySwapSingleTokenExactIn", request.data);
+        assert.equal(query[3], amount); assert.equal(query[4], EXECUTOR);
+        assert.equal(q.result.amountOut, amount * f.values.routerNumerator / 1000n);
+        const fragmentInput = { ...q.input, exactEvidence: q.result.evidence,
+          quotedAmountOut: q.result.amountOut, minAmountOut: q.result.amountOut };
+        assert.equal(plugin.execution.buildFragment(fragmentInput).nodes[0].amount, amount);
+        assert.throws(() => plugin.execution.buildFragment({ ...fragmentInput,
+          exactEvidence: { ...q.result.evidence, kind: "balancer-v3-local-exact-in" } }), /incompatible/);
+      }
+      let forbidden = 0;
+      const runtime = new Proxy(a.runtime, { get(target, key, receiver) {
+        if (!["callerAuthority", "generationFence"].includes(String(key))) { forbidden++; throw new Error("runtime build performed I/O"); }
+        return Reflect.get(target, key, receiver);
+      } });
+      const before = f.calls.length;
+      const handle = a.instance.routeHandles.find(h => h.routeKey === route.routeKey)!;
+      assert(buildFamilyRuntimeAmountLeg({ family: a.family, route: handle, source: SOURCE,
+        runtime, executor: EXECUTOR, runtimeEvidence: [], actionOwnership: a.catalog }));
+      assert.equal(forbidden, 0); assert.equal(f.calls.length, before);
+    }
+    for (const mutate of [(f: ReturnType<typeof surgeFixture>) => { f.values.hookCode = "0x6000"; },
+      (f: ReturnType<typeof surgeFixture>) => { f.values.routerCode = "0x6000"; },
+      (f: ReturnType<typeof surgeFixture>) => { f.values.hooks[4] = true; },
+      (f: ReturnType<typeof surgeFixture>) => { f.vaultCodes[0] = "0x6000"; }]) {
+      const invalid = surgeFixture(model); mutate(invalid);
+      await assert.rejects(() => admitted(invalid), /unsupported-swap-hook/);
+    }
+  });
+}
+
+test("StableSurge quiet-block dynamic fees reach production effective and failed refresh withdraws prices", async () => {
+  const f = surgeFixture("stable-surge-v2"), h = await coordinatorFixture(f);
+  const before = await h.step(0);
+  assert(h.rows(before).every(row => row.status === "quoted"));
+  f.values.routerNumerator = 970n;
+  h.attempts.length = 0;
+  const updated = await h.step(1);
+  assert.deepEqual(h.attemptedPrimaryKeys(), [...h.primaryKeys].sort());
+  for (const row of h.rows(updated)) {
+    assert.equal(row.status, "quoted"); assert.deepEqual(row.quotedAt, h.source(1));
+    assert.equal(row.amountOut, row.amountIn! * 970n / 1000n);
+    assert.notEqual(row.amountOut, before.effectiveMids!.rows.get(row.edgeId)!.amountOut);
+  }
+  assert([...updated.effectiveMids!.rows.keys()].filter(key => !h.primaryKeys.includes(key))
+    .every(key => updated.pricingProvenanceByEdgeKey!.get(key) === "carried"), "unrelated static pool stays carried");
+  f.values.failRouter = true;
+  const failed = await h.step(2);
+  for (const row of h.rows(failed)) {
+    assert.notEqual(row.status, "quoted"); assert.equal(row.amountOut, null);
+    assert.equal(row.effectiveMid, null); assert.equal(row.quotedAt, undefined);
+    assert(!failed.coverage.resolvedEdgeKeys.includes(row.edgeId));
+  }
+});
+
+for (const template of STABLE_SURGE_POOL_TEMPLATES) test(`${template.model}: lifecycle uses Router rather than local math`, async () => {
+  const f = surgeFixture("stable-surge-v1");
+  f.values.poolCode = syntheticStableSurgePoolCode(f.pool, {}, template.model);
+  const a = await admitted(f);
+  assert.equal(a.descriptor.binding.localModel, null);
+  assert.equal(a.descriptor.binding.stableSurgePoolModel, template.model);
+  assert.equal(a.graph.edges.length, 2);
+  assert.throws(() => localStateRequests(a.descriptor), /unproven local model/);
+  for (const route of a.routes) {
+    const q = localQuote(f, a.descriptor, route, WAD);
+    assert.equal(q.result.evidence.kind, "balancer-v3-router-exact-in");
+    assert.equal(q.result.amountOut, WAD * 999n / 1000n);
   }
 });

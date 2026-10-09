@@ -8,6 +8,7 @@ import { BALANCER_V3_FAMILY_ID, BALANCER_V3_LINEAGE } from "./manifest.js";
 import type { BalancerV3Binding, BalancerV3Candidate, BalancerV3Identity } from "./types.js";
 import { classifyBalancerPoolCode } from "./local-model.js";
 import { BALANCER_VAULT_EXTENSION, BALANCER_VAULT_ADMIN, supportsBalancerLocalVault } from "./vault-model.js";
+import { classifyStableSurgeCode, classifyStableSurgePoolCode, supportsStableSurgeBinding, STABLE_SURGE_ROUTER_CODE_HASH } from "./stable-surge.js";
 
 interface Evidence {
   readonly phase: "membership" | "tokens" | "complete";
@@ -81,12 +82,15 @@ export const balancerV3Identity: IdentitySemantics<BalancerV3Candidate, Balancer
         if (codes[0] === "0x") rejection = "no-pool-code";
         else if (!bool(returned(results, "registered").data)) rejection = "no-vault-membership";
         else if (!same(addressWord(returned(results, "pool-vault").data), VAULT)) rejection = "foreign-vault";
+        const provenVault = supportsBalancerLocalVault(codes[1], returned(results, "vault-extension-code").data,
+          returned(results, "vault-admin-code").data);
+        const stableSurgePoolModel = provenVault ? classifyStableSurgePoolCode(codes[0], VAULT, pool) : null;
         return { phase: "membership", source, pool, requestIds, proofHashes: [proof],
           binding: { vault: VAULT, router: ROUTER, permit2: PERMIT2, poolCodeHash: ethers.keccak256(codes[0]),
             // Unknown infrastructure keeps Router pricing; this is a pricing
             // proof, not an additional pool-admission allowlist.
-            localModel: supportsBalancerLocalVault(codes[1], returned(results, "vault-extension-code").data,
-              returned(results, "vault-admin-code").data) ? classifyBalancerPoolCode(codes[0]) : null,
+            localModel: provenVault ? classifyBalancerPoolCode(codes[0]) : null,
+            ...(stableSurgePoolModel ? { stableSurgePoolModel } : {}),
             vaultCodeHash: ethers.keccak256(codes[1]), routerCodeHash: ethers.keccak256(codes[2]),
             permit2CodeHash: ethers.keccak256(codes[3]),
             tokens: [], tokenInfo: [], decimals: [], hooks: { address: ethers.ZeroAddress, flags: [], codeHash: ethers.keccak256("0x") } },
@@ -109,8 +113,11 @@ export const balancerV3Identity: IdentitySemantics<BalancerV3Candidate, Balancer
       const hookCode = prior.binding.hooks.address === ethers.ZeroAddress ? "0x" : returned(results, "hook-code").data;
       if (!ethers.isHexString(hookCode) || hookCode.length % 2 !== 0 ||
           (prior.binding.hooks.address !== ethers.ZeroAddress && hookCode === "0x")) throw new Error("balancer-v3 hook code unavailable");
+      const stableSurgeModel = hasSwapHooks(prior.binding.hooks)
+        ? classifyStableSurgeCode(hookCode, VAULT, prior.binding.hooks.address) : null;
       return { ...prior, phase: "complete", requestIds, proofHashes: [...prior.proofHashes, proof],
-        binding: { ...prior.binding, decimals, hooks: { ...prior.binding.hooks, codeHash: ethers.keccak256(hookCode) } } };
+        binding: { ...prior.binding, decimals, hooks: { ...prior.binding.hooks, codeHash: ethers.keccak256(hookCode),
+          ...(stableSurgeModel ? { stableSurgeModel } : {}) } } };
     },
     decide({ candidate, evidence }): IdentityDecision<BalancerV3Identity> {
       const prior = evidence as Evidence | undefined;
@@ -118,8 +125,11 @@ export const balancerV3Identity: IdentitySemantics<BalancerV3Candidate, Balancer
       if (!same(prior.pool, candidate.pool)) throw new Error("balancer-v3 foreign identity evidence");
       if (prior.rejection) return { status: "chain-proven-rejected", reasonCode: prior.rejection, evidenceRequestIds: prior.requestIds };
       // This is missing execution semantics, not proof that the pool is absent.
-      if (prior.phase !== "membership" && hasSwapHooks(prior.binding.hooks)) return { status: "retryable", reasonCode: UNSUPPORTED_SWAP_HOOK };
       if (prior.phase !== "complete") return { status: "continue" };
+      if (hasSwapHooks(prior.binding.hooks) && (prior.binding.routerCodeHash !== STABLE_SURGE_ROUTER_CODE_HASH ||
+        !supportsStableSurgeBinding(prior.binding.hooks, prior.binding.stableSurgePoolModel ?? prior.binding.localModel))) {
+        return { status: "retryable", reasonCode: UNSUPPORTED_SWAP_HOOK };
+      }
       return { status: "verified", identity: { familyId: BALANCER_V3_FAMILY_ID, lineageId: BALANCER_V3_LINEAGE,
         subject: prior.pool, facts: { pool: prior.pool, binding: prior.binding, proofSource: prior.source },
         provenance: [{ kind: "source-pinned-vault-membership", subject: VAULT,

@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
 import { VAULT, VAULT_ABI, MAX_INPUT, MAX_UINT, assertSource, bool, decodeReturn, hooksConfig,
-  resultSource, returned, same, uint } from "./codec.js";
+  resultSource, returned, same, uint, hasSwapHooks } from "./codec.js";
 import { assertRoute } from "./routes.js";
 import { quoteBalancerExactInScaled18 } from "./local-math.js";
 import type { BalancerLocalModel } from "./local-model.js";
@@ -43,12 +43,16 @@ export interface BalancerLocalTransition {
   readonly nextState: BalancerLocalState;
 }
 
+export function supportsLocalPricing(descriptor: BalancerV3Descriptor): boolean {
+  return Boolean(descriptor.binding.localModel) && !hasSwapHooks(descriptor.binding.hooks);
+}
+
 function read(id: string, to: string, data: string): AdapterRequest {
   return { id, kind: "eth-call", to, data, completion: "return-data" };
 }
 export function localStateRequests(descriptor: BalancerV3Descriptor): readonly AdapterRequest[] {
   const model = descriptor.binding.localModel;
-  if (!model) throw new Error("balancer-v3 unproven local model");
+  if (!model || !supportsLocalPricing(descriptor)) throw new Error("balancer-v3 unproven local model or dynamic swap Hook");
   return [
     read("local-data", VAULT, LOCAL_VAULT_ABI.encodeFunctionData("getPoolData", [descriptor.pool])),
     read("local-hooks", VAULT, VAULT_ABI.encodeFunctionData("getHooksConfig", [descriptor.pool])),
@@ -147,6 +151,7 @@ export function quoteLocalTransition(descriptor: BalancerV3Descriptor, route: Ba
   state: BalancerLocalState, amountIn: bigint, source: CanonicalSource): BalancerLocalTransition {
   assertRoute(descriptor, route);
   assertSource(state.source, source);
+  if (!supportsLocalPricing(descriptor)) throw new Error("balancer-v3 local static fee cannot price dynamic swap Hook");
   if (state.model !== descriptor.binding.localModel || amountIn < 0n || amountIn > MAX_INPUT) {
     throw new Error("balancer-v3 invalid local quote binding/amount");
   }

@@ -6,6 +6,7 @@ import type { PlanFragment } from "../../route-leg-adapter.js";
 import { ROUTER, MAX_INPUT, MAX_UINT, same } from "./codec.js";
 import { ROUTER_ACTION } from "./action.js";
 import { assertRoute } from "./routes.js";
+import { supportsLocalPricing } from "./local-state.js";
 import type { BalancerV3Descriptor, BalancerV3ExactEvidence, BalancerV3Route } from "./types.js";
 
 export const balancerV3Execution: ExecutionSemantics<BalancerV3Descriptor, BalancerV3Route, BalancerV3ExactEvidence> = {
@@ -29,7 +30,7 @@ export const balancerV3Execution: ExecutionSemantics<BalancerV3Descriptor, Balan
     if (input.amountIn <= 0n || input.amountIn > MAX_INPUT || input.quotedAmountOut <= 0n || input.quotedAmountOut > MAX_UINT ||
         input.minAmountOut < 0n || input.minAmountOut > input.quotedAmountOut ||
         (evidence.kind !== "balancer-v3-router-exact-in" &&
-          !(evidence.kind === "balancer-v3-local-exact-in" && input.descriptor.binding.localModel)) ||
+          !(evidence.kind === "balancer-v3-local-exact-in" && supportsLocalPricing(input.descriptor))) ||
         evidence.binding !== input.route.bindingRef.fingerprint ||
         evidence.routeKey !== input.route.routeKey || evidence.amountIn !== input.amountIn ||
         evidence.amountOut !== input.quotedAmountOut || !same(evidence.executor, input.executor)) {

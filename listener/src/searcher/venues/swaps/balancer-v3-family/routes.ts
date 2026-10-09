@@ -11,7 +11,7 @@ function key(descriptor: BalancerV3Descriptor, i: number, j: number): string {
 }
 export const balancerV3Routes = {
   project({ descriptor }) {
-    assertRouterQuoteCompatible(descriptor.binding.hooks);
+    assertRouterQuoteCompatible(descriptor.binding.hooks, descriptor.binding.stableSurgePoolModel ?? descriptor.binding.localModel);
     const fingerprint = hashCanonical(staticBinding(descriptor));
     return Object.freeze(descriptor.binding.tokens.flatMap((tokenIn, i) => descriptor.binding.tokens.flatMap((tokenOut, j) =>
       i === j ? [] : [Object.freeze({ familyId: descriptor.familyId, lineageId: descriptor.lineageId,
@@ -27,7 +27,7 @@ export const balancerV3Routes = {
   },
 } satisfies RouteProjectionSemantics<BalancerV3Descriptor, BalancerV3Route>;
 export function assertRoute(descriptor: BalancerV3Descriptor, route: BalancerV3Route): void {
-  assertRouterQuoteCompatible(descriptor.binding.hooks);
+  assertRouterQuoteCompatible(descriptor.binding.hooks, descriptor.binding.stableSurgePoolModel ?? descriptor.binding.localModel);
   const tokens = descriptor.binding.tokens;
   if (descriptor.familyId !== BALANCER_V3_FAMILY_ID || descriptor.lineageId !== BALANCER_V3_LINEAGE ||
       !same(descriptor.binding.vault, VAULT) || !same(descriptor.binding.router, ROUTER) ||

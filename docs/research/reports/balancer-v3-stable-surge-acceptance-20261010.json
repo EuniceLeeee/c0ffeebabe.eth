@@ -1,0 +1,4242 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "family": "balancer-v3",
+  "scope": "Coffee eight-pool admission and same-state dual-interface correctness; incomplete production-reference/natural-valuation coverage. NOT opportunity, merge-ready, full-family or performance acceptance.",
+  "workspace": {
+    "vm": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "path": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "baseCommit": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+    "workingEvidence": "Actual cloud production working source including unrelated peer dirty changes; execution source pins are recorded per sample.",
+    "scopedCommitValidation": "Separate exported staged-source snapshot excludes peer changes; no branch or Git worktree created."
+  },
+  "diagnosis": {
+    "sevenHooks": "Known StableSurge v1/v2 rejected under unsupported-swap-hook-caller-context. Prove complete nonproxy Hook runtime, full pool behavior and Router infrastructure instead of allowing arbitrary Hook.",
+    "newerPoolVariants": "Official factory pool releases differ from existing stable templates, including metadata. Full exact normalized runtimes sourced; metadata not discarded.",
+    "eighthNoHook": "Weighted V2 sample now naturally admitted and validated without Router quote fallback; no unsupported-Hook diagnosis is applied to it."
+  },
+  "implementation": [
+    "Recognize two official StableSurge Hook runtimes masking compiler-declared immutables only; repeated values, inherited Vault references, self-auth, bounds and v1 factory word verified.",
+    "Authenticate three official StableSurge factory pool runtimes as onSwap behavior, not as unverified local math; require canonical Vault delegate-chain and Router hash.",
+    "Dynamic Hook raw/Exact quotes remain Router queries; static-fee local pricing and forged local evidence rejected.",
+    "Runtime construction stays Router/Permit2 with exact authorization and cleanup; no chain-external quote used to fill next-hop amounts.",
+    "Per-block dynamic refresh retained; production coordinator quiet-block fee updates and failed refresh withdrawal tested. Unknown Hook/runtime/flags fail closed."
+  ],
+  "upstream": {
+    "repository": "balancer/balancer-deployments",
+    "commit": "b55dc2b8a46bce8f27aed5a3b03f719f662f860a",
+    "routerRuntimeCodeHash": "0x76d58a2f13ee78e52e3f414f0181bc77ff0fcc65ae35b0d215a26b6fd2980a18",
+    "provenance": "Full build-info/source/compiler/runtime hashes and immutable offsets recorded in Family templates; no pool/factory address allowlist."
+  },
+  "summary": {
+    "pools": 8,
+    "naturalGraphDirections": 36,
+    "measuredDirections": 33,
+    "referenceDirections": 25,
+    "amountTrials": 98,
+    "executions": 196,
+    "deltaRawUnits": "0",
+    "fullNaturalValuation": false,
+    "performanceAccepted": false
+  },
+  "results": [
+    {
+      "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+      "pool": "0x6b31a94029fd7840d780191b6d63fa0d269bd883",
+      "N": 26030897,
+      "blockHash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6",
+      "stateAndEnvironment": "N end state / N environment",
+      "strictAndGraph": {
+        "status": "pass",
+        "targetDirections": 2,
+        "totalNaturalInstances": 2,
+        "totalNaturalGraphEdges": 4,
+        "discovery": "actual whole single-block production discovery, no seeded target or injected edges"
+      },
+      "rawMidDirections": 2,
+      "naturalEffective": {
+        "statuses": {
+          "missing-valuation": 2
+        },
+        "quoted": 0,
+        "note": "family-only graph lacks WETH valuation; borrowed inputs do not turn this into natural effective success"
+      },
+      "dualExecution": {
+        "status": "measured-directions-pass",
+        "graphDirections": 2,
+        "measuredDirections": 2,
+        "referenceDirections": 0,
+        "productionReferenceComplete": false,
+        "amountTrials": 4,
+        "executions": 8,
+        "quoteDeltaRawUnits": "0",
+        "unmeasuredDirections": [],
+        "amounts": [
+          {
+            "tokenIn": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+            "tokenOut": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+            "amountIn": "35837899392064323",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "42825868607247735",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "42825868607247735",
+                "signedQuoteDelta": "0",
+                "amountSpent": "35837899392064323",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "42825868607247735",
+                "signedQuoteDelta": "0",
+                "amountSpent": "35837899392064323",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+            "tokenOut": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+            "amountIn": "17918949696032161",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "21414966898177382",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "21414966898177382",
+                "signedQuoteDelta": "0",
+                "amountSpent": "17918949696032161",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "21414966898177382",
+                "signedQuoteDelta": "0",
+                "amountSpent": "17918949696032161",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+            "tokenOut": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+            "amountIn": "42827581416880615",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "35822526733286632",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "35822526733286632",
+                "signedQuoteDelta": "0",
+                "amountSpent": "42827581416880615",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "35822526733286632",
+                "signedQuoteDelta": "0",
+                "amountSpent": "42827581416880615",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+            "tokenOut": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+            "amountIn": "21413790708440307",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "17913500188934113",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "17913500188934113",
+                "signedQuoteDelta": "0",
+                "amountSpent": "21413790708440307",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "17913500188934113",
+                "signedQuoteDelta": "0",
+                "amountSpent": "21413790708440307",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          }
+        ],
+        "referenceInputs": [],
+        "environmentOpcodes": [
+          "NUMBER",
+          "TIMESTAMP",
+          "BASEFEE",
+          "COINBASE",
+          "GASLIMIT",
+          "PREVRANDAO",
+          "CHAINID"
+        ],
+        "construction": {
+          "runtimeRpc": 0,
+          "offchainExact": 0,
+          "quotedFallback": false
+        },
+        "forkStopped": true
+      },
+      "variant": {
+        "hook": {
+          "address": "0xb18fA0cb5DE8cecB8899AAE6e38b1B7ed77885dA",
+          "codeHash": "0x6fde1481892b3cee3fffecd371ce6f4cd8da87af425427694bcac9e901ba8095",
+          "flags": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true
+          ],
+          "stableSurgeModel": "stable-surge-v1"
+        },
+        "localModel": null,
+        "stableSurgePoolModel": "stable-surge-pool-v1"
+      },
+      "pins": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "artifacts": [
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-dual-5.json",
+          "sha256": "4ee25b9853d0706b3d391c8ac0c7c047609b1398045bd09dde29ef6e81dcbaf1"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/ready-summary.json",
+          "sha256": "4c36fd883ea61e34a4e2412e390b245d925edf099634a0149909a1b7426edfb9"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/ready.json",
+          "sha256": "eee7ec8c1de2b42a8a6612a2d142069c18f92a03f8486c1242532c16b9a661d6"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/receipt.json",
+          "sha256": "b5403cff691a47c36e101b8be779c5290d839ee899f71f543b9c295253d59ae1"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/prices/prices.json",
+          "sha256": "6121e23f43fcc77ca152365ddd0ef186a1e81fcf513faccecafa6d9a9240ecef"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/prices/input.json",
+          "sha256": "1825f9a848bcb5a470fcb603696b95b4ce92023b8ab9159f5b53475eff7a846d"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready-canonical-status-2.log",
+          "sha256": "4e8bda9edcc895e32842b536f61fa79407054f96eb7ea433f0db88104c8911e1"
+        }
+      ],
+      "performance": "NOT RUN; single-Ready and representative combined-graph acceptance remain mandatory"
+    },
+    {
+      "tx": "0x1b474eb9c6da5bd400c4a20c0d029a039cb6d509df756140b3e09e42374845e3",
+      "pool": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+      "N": 25936827,
+      "blockHash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+      "stateAndEnvironment": "N end state / N environment",
+      "strictAndGraph": {
+        "status": "pass",
+        "targetDirections": 2,
+        "totalNaturalInstances": 1,
+        "totalNaturalGraphEdges": 2,
+        "discovery": "actual whole single-block production discovery, no seeded target or injected edges"
+      },
+      "rawMidDirections": 2,
+      "naturalEffective": {
+        "statuses": {
+          "missing-valuation": 2
+        },
+        "quoted": 0,
+        "note": "family-only graph lacks WETH valuation; borrowed inputs do not turn this into natural effective success"
+      },
+      "dualExecution": {
+        "status": "measured-directions-pass",
+        "graphDirections": 2,
+        "measuredDirections": 2,
+        "referenceDirections": 0,
+        "productionReferenceComplete": false,
+        "amountTrials": 4,
+        "executions": 8,
+        "quoteDeltaRawUnits": "0",
+        "unmeasuredDirections": [],
+        "amounts": [
+          {
+            "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+            "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+            "amountIn": "132890913",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "13804",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "13804",
+                "signedQuoteDelta": "0",
+                "amountSpent": "132890913",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "13804",
+                "signedQuoteDelta": "0",
+                "amountSpent": "132890913",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+            "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+            "amountIn": "66445456",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "6902",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "6902",
+                "signedQuoteDelta": "0",
+                "amountSpent": "66445456",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "6902",
+                "signedQuoteDelta": "0",
+                "amountSpent": "66445456",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+            "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+            "amountIn": "15135",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "132890911",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "132890911",
+                "signedQuoteDelta": "0",
+                "amountSpent": "15135",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "132890911",
+                "signedQuoteDelta": "0",
+                "amountSpent": "15135",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+            "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+            "amountIn": "7567",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "66441065",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "66441065",
+                "signedQuoteDelta": "0",
+                "amountSpent": "7567",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "66441065",
+                "signedQuoteDelta": "0",
+                "amountSpent": "7567",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          }
+        ],
+        "referenceInputs": [],
+        "environmentOpcodes": [
+          "NUMBER",
+          "TIMESTAMP",
+          "BASEFEE",
+          "COINBASE",
+          "GASLIMIT",
+          "PREVRANDAO",
+          "CHAINID"
+        ],
+        "construction": {
+          "runtimeRpc": 0,
+          "offchainExact": 0,
+          "quotedFallback": false
+        },
+        "forkStopped": true
+      },
+      "variant": {
+        "hook": {
+          "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+          "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+          "flags": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true
+          ],
+          "stableSurgeModel": "stable-surge-v2"
+        },
+        "localModel": null,
+        "stableSurgePoolModel": "stable-surge-pool-v2"
+      },
+      "pins": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b7b9aa47019ce637ba86b58b78fac5bed1a40c6d377c2f26f4cc3f28b2b105b7",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "artifacts": [
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-dual-2.json",
+          "sha256": "0cffde692c628d649a358cae0909981963780408e4f97fb1d85eeefcef5a7ed3"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/ready-summary.json",
+          "sha256": "1e13f47659c26968b793c6290b54af4bb6b058a384919f9b9e8589fc15359b9b"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/ready.json",
+          "sha256": "0df73b8b1cb1c19139540b17bdff7c4caf237d02c04e4c1e30deaca38918e1ec"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/receipt.json",
+          "sha256": "cb76e32d93298cdadb4db1b0cc5d7df982f611c86e39aaa11bf037996f2b6dd0"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/prices/prices.json",
+          "sha256": "67e73e4b940a57896c76f6b9e7312296ed4dfda5307adb0f437eaae953db45b6"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/prices/input.json",
+          "sha256": "4fed6489a23e8cbffd78d45340ccbdcd3ce1470d85bb9a2d5b8b0a35172e3e7e"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready-canonical-status-2.log",
+          "sha256": "9d92b86a9a5d4b6a55077c88d955275e1e9cbf0ce7da6a8f06734b93d1c184bc"
+        }
+      ],
+      "performance": "NOT RUN; single-Ready and representative combined-graph acceptance remain mandatory"
+    },
+    {
+      "tx": "0x1969dedd475168204d782dc62d65efa62d650e60d000ba040fea5cbe979dbd20",
+      "pool": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+      "N": 26105714,
+      "blockHash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+      "stateAndEnvironment": "N end state / N environment",
+      "strictAndGraph": {
+        "status": "pass",
+        "targetDirections": 12,
+        "totalNaturalInstances": 1,
+        "totalNaturalGraphEdges": 12,
+        "discovery": "actual whole single-block production discovery, no seeded target or injected edges"
+      },
+      "rawMidDirections": 12,
+      "naturalEffective": {
+        "statuses": {
+          "missing-valuation": 12
+        },
+        "quoted": 0,
+        "note": "family-only graph lacks WETH valuation; borrowed inputs do not turn this into natural effective success"
+      },
+      "dualExecution": {
+        "status": "measured-directions-pass-partial-coverage",
+        "graphDirections": 12,
+        "measuredDirections": 9,
+        "referenceDirections": 9,
+        "productionReferenceComplete": false,
+        "amountTrials": 30,
+        "executions": 60,
+        "quoteDeltaRawUnits": "0",
+        "unmeasuredDirections": [
+          {
+            "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f0f400c2372bcadf820591a7b4490bcb01cb99ceeb346bb59817ce7a8d89faf71",
+            "reason": "no-production-donor-or-original-token-input"
+          },
+          {
+            "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xa3931d71877c0e7a3148cb7eb4463524fec27fbd\u001f5a8de2367323e62074c1e1e0ba170cec7f57b24a43750c790f2d17d329a4fa88",
+            "reason": "no-production-donor-or-original-token-input"
+          },
+          {
+            "edgeId": "balancer-v3\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0x136fa856047918af169670d002ffd2dbbe8efbc9\u001f0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f1011d54980636631adf329fd1afe3ce7fe275d61504933c70f60fa0ec49e133d",
+            "reason": "no-production-donor-or-original-token-input"
+          }
+        ],
+        "amounts": [
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "amountIn": "5135191",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "4616825346455235147",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "4616825346455235147",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5135191",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "4616825346455235147",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5135191",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "amountIn": "2567595",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2308831530007688580",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2308831530007688580",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2567595",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2308831530007688580",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2567595",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "amountIn": "1980684",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1781143055020510820",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1781143055020510820",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1980684",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1781143055020510820",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1980684",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "amountIn": "990342",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "890633284321043825",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "890633284321043825",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990342",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "890633284321043825",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990342",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "amountIn": "5135191",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "5134019",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "5134019",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5135191",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "5134019",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5135191",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "amountIn": "2567595",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2567416",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2567416",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2567595",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2567416",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2567595",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "amountIn": "1980684",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1980618",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1980618",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1980684",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1980618",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1980684",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "amountIn": "990342",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "990370",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "990370",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990342",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "990370",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990342",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "amountIn": "5135191",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "5055224732608120957",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "5055224732608120957",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5135191",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "5055224732608120957",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5135191",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "amountIn": "2567595",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2527942326591365019",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2527942326591365019",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2567595",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2527942326591365019",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2567595",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "amountIn": "1980684",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1950155220767729195",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1950155220767729195",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1980684",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1950155220767729195",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1980684",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "amountIn": "990342",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "5135191",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "975128950853875287",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "975128950853875287",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990342",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "975128950853875287",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990342",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "amountIn": "4614002875920215811",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "4614002875920215811",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "5124239",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "5124239",
+                "signedQuoteDelta": "0",
+                "amountSpent": "4614002875920215811",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "5124239",
+                "signedQuoteDelta": "0",
+                "amountSpent": "4614002875920215811",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "amountIn": "2307001437960107905",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "4614002875920215811",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2562586",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2562586",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2307001437960107905",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2562586",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2307001437960107905",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "amountIn": "4614002875920215811",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "4614002875920215811",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "5126989",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "5126989",
+                "signedQuoteDelta": "0",
+                "amountSpent": "4614002875920215811",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "5126989",
+                "signedQuoteDelta": "0",
+                "amountSpent": "4614002875920215811",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "amountIn": "2307001437960107905",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "4614002875920215811",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2563898",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2563898",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2307001437960107905",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2563898",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2307001437960107905",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "amountIn": "4614002875920215811",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "4614002875920215811",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "5048305662640278882",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "5048305662640278882",
+                "signedQuoteDelta": "0",
+                "amountSpent": "4614002875920215811",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "5048305662640278882",
+                "signedQuoteDelta": "0",
+                "amountSpent": "4614002875920215811",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "amountIn": "2307001437960107905",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "4614002875920215811",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2524478834929296627",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2524478834929296627",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2307001437960107905",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2524478834929296627",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2307001437960107905",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "amountIn": "5133984",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "5127707",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "5127707",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5133984",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "5127707",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5133984",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "amountIn": "2566992",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2564286",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2564286",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2566992",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2564286",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2566992",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "amountIn": "1981113",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1979099",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1979099",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1981113",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1979099",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1981113",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "amountIn": "990556",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "989611",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "989611",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990556",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "989611",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990556",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "amountIn": "5133984",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "4613624728733763744",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "4613624728733763744",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5133984",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "4613624728733763744",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5133984",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "amountIn": "2566992",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2307197530148397946",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2307197530148397946",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2566992",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2307197530148397946",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2566992",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "amountIn": "1981113",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1780679395518976460",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1780679395518976460",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1981113",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1780679395518976460",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1981113",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "amountIn": "990556",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "890395017851654234",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "890395017851654234",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990556",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "890395017851654234",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990556",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "amountIn": "5133984",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "5051790552882954934",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "5051790552882954934",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5133984",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "5051790552882954934",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5133984",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "amountIn": "2566992",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2526170872072314261",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2526170872072314261",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2566992",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2526170872072314261",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2566992",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "amountIn": "1981113",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1949658098623622491",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1949658098623622491",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1981113",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1949658098623622491",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1981113",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "amountIn": "990556",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "5133984",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "974870719767758537",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "974870719767758537",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990556",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "974870719767758537",
+                "signedQuoteDelta": "0",
+                "amountSpent": "990556",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          }
+        ],
+        "referenceInputs": [
+          {
+            "token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "amountIn": "5135191",
+            "donorEdge": "univ3-standard\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x0ec78ed49c2d27b315d462d43b5bab94d2c79bf8\u001fdc3bc1478cf7a1a57d902343a55f923b87dbee50919851d75fe6794b799a7b04",
+            "donorQuoteSource": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "usage": "input-only; never output, identity, admission or graph"
+          },
+          {
+            "token": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "amountIn": "4614002875920215811",
+            "donorEdge": "univ3-standard\u001f0x0858e2b0f9d75f7300b38d64482ac2c8df06a755\u001f0x0858e2b0f9d75f7300b38d64482ac2c8df06a755\u001f0xa3931d71877c0e7a3148cb7eb4463524fec27fbd>0x64aa3364f17a4d01c6f1751fd97c2bd3d7e7f1d5\u001f06f0277c6d16a6388dee53a68921f34b9e15266b37c067caf1ca0fae7beb0cc7",
+            "donorQuoteSource": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "usage": "input-only; never output, identity, admission or graph"
+          },
+          {
+            "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "amountIn": "5133984",
+            "donorEdge": "univ3-standard\u001f0x00b72483a1a638e8863f10e378d090cec2770305\u001f0x00b72483a1a638e8863f10e378d090cec2770305\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fddd48fb8b4fb3bd5b4d9c0ee2703ab52de5a26e316926d026528afa07db9e538",
+            "donorQuoteSource": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "usage": "input-only; never output, identity, admission or graph"
+          }
+        ],
+        "environmentOpcodes": [
+          "NUMBER",
+          "TIMESTAMP",
+          "BASEFEE",
+          "COINBASE",
+          "GASLIMIT",
+          "PREVRANDAO",
+          "CHAINID"
+        ],
+        "construction": {
+          "runtimeRpc": 0,
+          "offchainExact": 0,
+          "quotedFallback": false
+        },
+        "forkStopped": true
+      },
+      "variant": {
+        "hook": {
+          "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+          "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+          "flags": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true
+          ],
+          "stableSurgeModel": "stable-surge-v2"
+        },
+        "localModel": null,
+        "stableSurgePoolModel": "stable-surge-pool-v3"
+      },
+      "pins": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b7b9aa47019ce637ba86b58b78fac5bed1a40c6d377c2f26f4cc3f28b2b105b7",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "artifacts": [
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-dual-1.json",
+          "sha256": "52a2de55795d79432bafd77509b8f391d98400603ebb841f8e417fcc006b550a"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/ready-summary.json",
+          "sha256": "c8a2180e143d092e19027aa66e9a5408865beae9cc56c2516b175712ba37ae79"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/ready.json",
+          "sha256": "31f1253dc323c6b3f074c687aab0a69da49ec1adba8a5271a4ff2a93b8472d05"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/receipt.json",
+          "sha256": "077b596a313dbd014c535b4d59784016711ad2e7abbe7ea6b029fffd831fbde3"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/prices/prices.json",
+          "sha256": "e8aded2dd5b4f5f0dc960e2c11fffef25b15cb2765d1aa4b9466b31ccf63fdef"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/prices/input.json",
+          "sha256": "6418f5408250cc62972b6b59a4d2630ba16a3f7ea3390f3ff57c79442fced921"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready-canonical-status-2.log",
+          "sha256": "acf1471ae6b1dfc45efb5d5bbb23b66dda806c85645f0a9b2f63d8a1e8d91f85"
+        }
+      ],
+      "performance": "NOT RUN; single-Ready and representative combined-graph acceptance remain mandatory"
+    },
+    {
+      "tx": "0x1eb6e238d7d3027a4d534347f2d4fb4b00f852b4545414c7eafed03ce4fd2e28",
+      "pool": "0x93bd81fe5e0359cddce996e0785d9f6cb39295a7",
+      "N": 26003625,
+      "blockHash": "0x9d417fc754cde217ca1ee8f6346f236c71ef1a449a84f0a7fb8ac887a3c38cea",
+      "stateAndEnvironment": "N end state / N environment",
+      "strictAndGraph": {
+        "status": "pass",
+        "targetDirections": 12,
+        "totalNaturalInstances": 1,
+        "totalNaturalGraphEdges": 12,
+        "discovery": "actual whole single-block production discovery, no seeded target or injected edges"
+      },
+      "rawMidDirections": 12,
+      "naturalEffective": {
+        "statuses": {
+          "missing-valuation": 12
+        },
+        "quoted": 0,
+        "note": "family-only graph lacks WETH valuation; borrowed inputs do not turn this into natural effective success"
+      },
+      "dualExecution": {
+        "status": "measured-directions-pass",
+        "graphDirections": 12,
+        "measuredDirections": 12,
+        "referenceDirections": 12,
+        "productionReferenceComplete": true,
+        "amountTrials": 36,
+        "executions": 72,
+        "quoteDeltaRawUnits": "0",
+        "unmeasuredDirections": [],
+        "amounts": [
+          {
+            "tokenIn": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "tokenOut": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "amountIn": "1866168422337445",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "1866168422337445",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "63845702672393",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "63845702672393",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1866168422337445",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "63845702672393",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1866168422337445",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "tokenOut": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "amountIn": "933084211168722",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "1866168422337445",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "31975631804157",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "31975631804157",
+                "signedQuoteDelta": "0",
+                "amountSpent": "933084211168722",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "31975631804157",
+                "signedQuoteDelta": "0",
+                "amountSpent": "933084211168722",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "1866168422337445",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "1866168422337445",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1688487995933192",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1688487995933192",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1866168422337445",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1688487995933192",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1866168422337445",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "933084211168722",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "1866168422337445",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "846238071702502",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "846238071702502",
+                "signedQuoteDelta": "0",
+                "amountSpent": "933084211168722",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "846238071702502",
+                "signedQuoteDelta": "0",
+                "amountSpent": "933084211168722",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "tokenOut": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "amountIn": "1866168422337445",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "1866168422337445",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1069280370023081415548",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1069280370023081415548",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1866168422337445",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1069280370023081415548",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1866168422337445",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "tokenOut": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "amountIn": "933084211168722",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "1866168422337445",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "536534382609200471682",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "536534382609200471682",
+                "signedQuoteDelta": "0",
+                "amountSpent": "933084211168722",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "536534382609200471682",
+                "signedQuoteDelta": "0",
+                "amountSpent": "933084211168722",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "tokenOut": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "amountIn": "61735062523676",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "61735062523676",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1783849222761967",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1783849222761967",
+                "signedQuoteDelta": "0",
+                "amountSpent": "61735062523676",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1783849222761967",
+                "signedQuoteDelta": "0",
+                "amountSpent": "61735062523676",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "tokenOut": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "amountIn": "30867531261838",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "61735062523676",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "893344347700833",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "893344347700833",
+                "signedQuoteDelta": "0",
+                "amountSpent": "30867531261838",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "893344347700833",
+                "signedQuoteDelta": "0",
+                "amountSpent": "30867531261838",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "61735062523676",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "61735062523676",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1625713303404188",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1625713303404188",
+                "signedQuoteDelta": "0",
+                "amountSpent": "61735062523676",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1625713303404188",
+                "signedQuoteDelta": "0",
+                "amountSpent": "61735062523676",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "30867531261838",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "61735062523676",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "814150530239054",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "814150530239054",
+                "signedQuoteDelta": "0",
+                "amountSpent": "30867531261838",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "814150530239054",
+                "signedQuoteDelta": "0",
+                "amountSpent": "30867531261838",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "tokenOut": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "amountIn": "61735062523676",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "61735062523676",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1029617016117533313229",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1029617016117533313229",
+                "signedQuoteDelta": "0",
+                "amountSpent": "61735062523676",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1029617016117533313229",
+                "signedQuoteDelta": "0",
+                "amountSpent": "61735062523676",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "tokenOut": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "amountIn": "30867531261838",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "61735062523676",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "516213286490681623500",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "516213286490681623500",
+                "signedQuoteDelta": "0",
+                "amountSpent": "30867531261838",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "516213286490681623500",
+                "signedQuoteDelta": "0",
+                "amountSpent": "30867531261838",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "amountIn": "1709292688940108",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1862008440089789",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1862008440089789",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1709292688940108",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1862008440089789",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1709292688940108",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "amountIn": "854646344470054",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "933214256829125",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "933214256829125",
+                "signedQuoteDelta": "0",
+                "amountSpent": "854646344470054",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "933214256829125",
+                "signedQuoteDelta": "0",
+                "amountSpent": "854646344470054",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "amountIn": "3825223353059921",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "4142696317594490",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "4142696317594490",
+                "signedQuoteDelta": "0",
+                "amountSpent": "3825223353059921",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "4142696317594490",
+                "signedQuoteDelta": "0",
+                "amountSpent": "3825223353059921",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "amountIn": "1912611676529960",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2082319683740376",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2082319683740376",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1912611676529960",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2082319683740376",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1912611676529960",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "amountIn": "1709292688940108",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "64165892767676",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "64165892767676",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1709292688940108",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "64165892767676",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1709292688940108",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "amountIn": "854646344470054",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "32136257825928",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "32136257825928",
+                "signedQuoteDelta": "0",
+                "amountSpent": "854646344470054",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "32136257825928",
+                "signedQuoteDelta": "0",
+                "amountSpent": "854646344470054",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "amountIn": "3825223353059921",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "143009867443895",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "143009867443895",
+                "signedQuoteDelta": "0",
+                "amountSpent": "3825223353059921",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "143009867443895",
+                "signedQuoteDelta": "0",
+                "amountSpent": "3825223353059921",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "amountIn": "1912611676529960",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "71770057941141",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "71770057941141",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1912611676529960",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "71770057941141",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1912611676529960",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "amountIn": "1709292688940108",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1074622528450221243199",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1074622528450221243199",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1709292688940108",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1074622528450221243199",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1709292688940108",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "amountIn": "854646344470054",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "539224481269347945179",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "539224481269347945179",
+                "signedQuoteDelta": "0",
+                "amountSpent": "854646344470054",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "539224481269347945179",
+                "signedQuoteDelta": "0",
+                "amountSpent": "854646344470054",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "amountIn": "3825223353059921",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2383926204873278808426",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2383926204873278808426",
+                "signedQuoteDelta": "0",
+                "amountSpent": "3825223353059921",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2383926204873278808426",
+                "signedQuoteDelta": "0",
+                "amountSpent": "3825223353059921",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "amountIn": "1912611676529960",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1201433406029509011436",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1201433406029509011436",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1912611676529960",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1201433406029509011436",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1912611676529960",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "amountIn": "325506429856670357245",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "560066531683526",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "560066531683526",
+                "signedQuoteDelta": "0",
+                "amountSpent": "325506429856670357245",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "560066531683526",
+                "signedQuoteDelta": "0",
+                "amountSpent": "325506429856670357245",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "amountIn": "162753214928335178622",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "280332689652592",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "280332689652592",
+                "signedQuoteDelta": "0",
+                "amountSpent": "162753214928335178622",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "280332689652592",
+                "signedQuoteDelta": "0",
+                "amountSpent": "162753214928335178622",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "amountIn": "2395701299544926676059",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "4066881011522959",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "4066881011522959",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2395701299544926676059",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "4066881011522959",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2395701299544926676059",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "amountIn": "1197850649772463338029",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2049299149533676",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2049299149533676",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1197850649772463338029",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2049299149533676",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1197850649772463338029",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "amountIn": "325506429856670357245",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "19281006986185",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "19281006986185",
+                "signedQuoteDelta": "0",
+                "amountSpent": "325506429856670357245",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "19281006986185",
+                "signedQuoteDelta": "0",
+                "amountSpent": "325506429856670357245",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "amountIn": "162753214928335178622",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "9648749931942",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "9648749931942",
+                "signedQuoteDelta": "0",
+                "amountSpent": "162753214928335178622",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "9648749931942",
+                "signedQuoteDelta": "0",
+                "amountSpent": "162753214928335178622",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "amountIn": "2395701299544926676059",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "140384462197587",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "140384462197587",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2395701299544926676059",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "140384462197587",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2395701299544926676059",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "amountIn": "1197850649772463338029",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "70630172096144",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "70630172096144",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1197850649772463338029",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "70630172096144",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1197850649772463338029",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "325506429856670357245",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "510417360240567",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "510417360240567",
+                "signedQuoteDelta": "0",
+                "amountSpent": "325506429856670357245",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "510417360240567",
+                "signedQuoteDelta": "0",
+                "amountSpent": "325506429856670357245",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "162753214928335178622",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "255481560398733",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "255481560398733",
+                "signedQuoteDelta": "0",
+                "amountSpent": "162753214928335178622",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "255481560398733",
+                "signedQuoteDelta": "0",
+                "amountSpent": "162753214928335178622",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "2395701299544926676059",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "3706357285935813",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "3706357285935813",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2395701299544926676059",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "3706357285935813",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2395701299544926676059",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "1197850649772463338029",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "325506429856670357245",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1867631438543582",
+            "queryCalls": 0,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1867631438543582",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1197850649772463338029",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1867631438543582",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1197850649772463338029",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          }
+        ],
+        "referenceInputs": [
+          {
+            "token": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "amountIn": "1866168422337445",
+            "donorEdge": "protocol:erc4626\u001f0xaafd07d53a7365d3e9fb6f3a3b09ec19676b73ce\u001f0xaafd07d53a7365d3e9fb6f3a3b09ec19676b73ce\u001f0x0bfc9d54fc184518a81162f8fb99c2eaca081202>0xaafd07d53a7365d3e9fb6f3a3b09ec19676b73ce\u001fe10994b7e1d58e36f4425d305dfe9241b14a02ca7e99d8aab16e8e698bdde4ca",
+            "donorQuoteSource": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "usage": "input-only; never output, identity, admission or graph"
+          },
+          {
+            "token": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "amountIn": "61735062523676",
+            "donorEdge": "univ3-standard\u001f0x17156ad656a9bf1ce4c917b702ae366d48c37428\u001f0x17156ad656a9bf1ce4c917b702ae366d48c37428\u001f0x18084fba666a33d37592fa2633fd49a74dd93a88>0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf\u001f7755ed2008300d9b7e79499b5b05777d855ca79f0183d9440dba97ef34d7e1b3",
+            "donorQuoteSource": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "usage": "input-only; never output, identity, admission or graph"
+          },
+          {
+            "token": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "1709292688940108",
+            "donorEdge": "univ3-standard\u001f0x3051607998fe3a690237af729caa6c6d1d6d99b4\u001f0x3051607998fe3a690237af729caa6c6d1d6d99b4\u001f0xae78736cd615f374d3085123a210448e74fc6393>0xd33526068d116ce69f19a9ee46f0bd304f21a51f\u001f9715745e91da8e7ed72d0bfec2521ff408aa009aa364e42f2523760fa98548fb",
+            "donorQuoteSource": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "usage": "input-only; never output, identity, admission or graph"
+          },
+          {
+            "token": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "amountIn": "325506429856670357245",
+            "donorEdge": "univ3-standard\u001f0x520e9f24e0f7e7d9c8ff37a137885c3d55a98e37\u001f0x520e9f24e0f7e7d9c8ff37a137885c3d55a98e37\u001f0xcdf7028ceab81fa0c6971208e83fa7872994bee5>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001ff423a941f2be2c11d2c1a938998d273b1db71fa271a7cc0dc5f3d1b47da85f3b",
+            "donorQuoteSource": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "usage": "input-only; never output, identity, admission or graph"
+          }
+        ],
+        "environmentOpcodes": [
+          "NUMBER",
+          "TIMESTAMP",
+          "BASEFEE",
+          "COINBASE",
+          "GASLIMIT",
+          "PREVRANDAO",
+          "CHAINID"
+        ],
+        "construction": {
+          "runtimeRpc": 0,
+          "offchainExact": 0,
+          "quotedFallback": false
+        },
+        "forkStopped": true
+      },
+      "variant": {
+        "hook": {
+          "address": "0x0000000000000000000000000000000000000000",
+          "codeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+          "flags": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ]
+        },
+        "localModel": "weighted-v2",
+        "stableSurgePoolModel": null
+      },
+      "pins": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "artifacts": [
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-dual-1.json",
+          "sha256": "35216a79a519e8cc3941ca3c2dc1607d99fb6a655c4ca9443c1466154f0e6bb7"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready/ready-summary.json",
+          "sha256": "0f0dac6fff561e78f0e7ebc37185f78790c2502ba44d4982765366792bf7ec31"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready/ready.json",
+          "sha256": "9c3b0a293a6e57d72dbdc65d164ea55022c9b934578e56b15a51248ebd093432"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready/receipt.json",
+          "sha256": "3535bdc2eb8ea1e440b4c2ab258af7acd10292c26486db035458f9b234680bab"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready/prices/prices.json",
+          "sha256": "4b9b57dea57fa06f3a55e651e0887d7a416ed9477175358c0f46b38dcfcb3350"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready/prices/input.json",
+          "sha256": "efe34af49501cb6ee7cf51c0d6bdb17e0e0b61f4ad76e0c5ea0ca0ae364e1ea9"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready-canonical-status-2.log",
+          "sha256": "e709c78fb1f1cb7f43e85c57051f845214f0ba6ba0a9c2b09c81ad39ae6b0915"
+        }
+      ],
+      "performance": "NOT RUN; single-Ready and representative combined-graph acceptance remain mandatory"
+    },
+    {
+      "tx": "0xf244dd0b413f99bb171d698d9b0c4392bdaad674329f70d26d11bf0183ccabd2",
+      "pool": "0xe00e947decfe01692070e113002705bdf77ddbd3",
+      "N": 25985457,
+      "blockHash": "0x2198a9b437e37b1f0e855be03b2989e7f725d2a67c232480f92a8e960975a80b",
+      "stateAndEnvironment": "N end state / N environment",
+      "strictAndGraph": {
+        "status": "pass",
+        "targetDirections": 2,
+        "totalNaturalInstances": 1,
+        "totalNaturalGraphEdges": 2,
+        "discovery": "actual whole single-block production discovery, no seeded target or injected edges"
+      },
+      "rawMidDirections": 2,
+      "naturalEffective": {
+        "statuses": {
+          "missing-valuation": 2
+        },
+        "quoted": 0,
+        "note": "family-only graph lacks WETH valuation; borrowed inputs do not turn this into natural effective success"
+      },
+      "dualExecution": {
+        "status": "measured-directions-pass",
+        "graphDirections": 2,
+        "measuredDirections": 2,
+        "referenceDirections": 1,
+        "productionReferenceComplete": false,
+        "amountTrials": 6,
+        "executions": 12,
+        "quoteDeltaRawUnits": "0",
+        "unmeasuredDirections": [],
+        "amounts": [
+          {
+            "tokenIn": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+            "tokenOut": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+            "amountIn": "8825534263706051102",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "8825534263706051102",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "3848089649040463058",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "3848089649040463058",
+                "signedQuoteDelta": "0",
+                "amountSpent": "8825534263706051102",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "3848089649040463058",
+                "signedQuoteDelta": "0",
+                "amountSpent": "8825534263706051102",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+            "tokenOut": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+            "amountIn": "4412767131853025551",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "8825534263706051102",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1925452113761665231",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1925452113761665231",
+                "signedQuoteDelta": "0",
+                "amountSpent": "4412767131853025551",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1925452113761665231",
+                "signedQuoteDelta": "0",
+                "amountSpent": "4412767131853025551",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+            "tokenOut": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+            "amountIn": "71020708320963607005",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "8825534263706051102",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "30647711870842664650",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "30647711870842664650",
+                "signedQuoteDelta": "0",
+                "amountSpent": "71020708320963607005",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "30647711870842664650",
+                "signedQuoteDelta": "0",
+                "amountSpent": "71020708320963607005",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+            "tokenOut": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+            "amountIn": "35510354160481803502",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "8825534263706051102",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "15414725926463126920",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "15414725926463126920",
+                "signedQuoteDelta": "0",
+                "amountSpent": "35510354160481803502",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "15414725926463126920",
+                "signedQuoteDelta": "0",
+                "amountSpent": "35510354160481803502",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+            "tokenOut": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+            "amountIn": "31375174201309683957",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "69784213352450840027",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "69784213352450840027",
+                "signedQuoteDelta": "0",
+                "amountSpent": "31375174201309683957",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "69784213352450840027",
+                "signedQuoteDelta": "0",
+                "amountSpent": "31375174201309683957",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+            "tokenOut": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+            "amountIn": "15687587100654841978",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "35094259499653387054",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "35094259499653387054",
+                "signedQuoteDelta": "0",
+                "amountSpent": "15687587100654841978",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "35094259499653387054",
+                "signedQuoteDelta": "0",
+                "amountSpent": "15687587100654841978",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          }
+        ],
+        "referenceInputs": [
+          {
+            "token": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+            "amountIn": "8825534263706051102",
+            "donorEdge": "univ3-standard\u001f0x950e0dae8795a4365c3dcacbe398968841df2161\u001f0x950e0dae8795a4365c3dcacbe398968841df2161\u001f0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f9596ceb9b250bc906b69871fa0b04765ad6f60227d4cca6a271ca4687d0c33cc",
+            "donorQuoteSource": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "usage": "input-only; never output, identity, admission or graph"
+          }
+        ],
+        "environmentOpcodes": [
+          "NUMBER",
+          "TIMESTAMP",
+          "BASEFEE",
+          "COINBASE",
+          "GASLIMIT",
+          "PREVRANDAO",
+          "CHAINID"
+        ],
+        "construction": {
+          "runtimeRpc": 0,
+          "offchainExact": 0,
+          "quotedFallback": false
+        },
+        "forkStopped": true
+      },
+      "variant": {
+        "hook": {
+          "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+          "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+          "flags": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true
+          ],
+          "stableSurgeModel": "stable-surge-v2"
+        },
+        "localModel": null,
+        "stableSurgePoolModel": "stable-surge-pool-v3"
+      },
+      "pins": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "artifacts": [
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-dual-1.json",
+          "sha256": "b4363598bc5ec206f2429c11ac7bf456647804663ee3e0ee9e048e5258912a3d"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/ready-summary.json",
+          "sha256": "f3f93c9108f7e8910f19e6c37ad26bacea814840a066d0089920e6ea5f126bc5"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/ready.json",
+          "sha256": "6a1f80cbdf33700a6d0c0e060061efde251469c5629f3572d648ed8d4ac28761"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/receipt.json",
+          "sha256": "ef6568b8da4bbf2aa61b71004fc829c4e43b8f8a8dd3cd7dc801ceee0a1a3ce9"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/prices/prices.json",
+          "sha256": "2f4c226dedc864139c72138b182927b6ef04703c90614787b364d624533fd008"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/prices/input.json",
+          "sha256": "98e9ef3a34d465c6b904276a294f684fd6c705553cbfd5f97247839a40207fe8"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready-canonical-status-2.log",
+          "sha256": "73bab2c88dd9481cd96bf74e7e08820c2a3fa53a9a995ac53e8b84ff498f0424"
+        }
+      ],
+      "performance": "NOT RUN; single-Ready and representative combined-graph acceptance remain mandatory"
+    },
+    {
+      "tx": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+      "pool": "0x071828acc755314e687448703775f22194f56867",
+      "N": 25944594,
+      "blockHash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+      "stateAndEnvironment": "N end state / N environment",
+      "strictAndGraph": {
+        "status": "pass",
+        "targetDirections": 2,
+        "totalNaturalInstances": 1,
+        "totalNaturalGraphEdges": 2,
+        "discovery": "actual whole single-block production discovery, no seeded target or injected edges"
+      },
+      "rawMidDirections": 2,
+      "naturalEffective": {
+        "statuses": {
+          "missing-valuation": 2
+        },
+        "quoted": 0,
+        "note": "family-only graph lacks WETH valuation; borrowed inputs do not turn this into natural effective success"
+      },
+      "dualExecution": {
+        "status": "measured-directions-pass",
+        "graphDirections": 2,
+        "measuredDirections": 2,
+        "referenceDirections": 1,
+        "productionReferenceComplete": false,
+        "amountTrials": 6,
+        "executions": 12,
+        "quoteDeltaRawUnits": "0",
+        "unmeasuredDirections": [],
+        "amounts": [
+          {
+            "tokenIn": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+            "tokenOut": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+            "amountIn": "4087650008190331620",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "4087650008190331620",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "4684956010688505528",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "4684956010688505528",
+                "signedQuoteDelta": "0",
+                "amountSpent": "4087650008190331620",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "4684956010688505528",
+                "signedQuoteDelta": "0",
+                "amountSpent": "4087650008190331620",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+            "tokenOut": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+            "amountIn": "2043825004095165810",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "4087650008190331620",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2342495994336743367",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2342495994336743367",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2043825004095165810",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2342495994336743367",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2043825004095165810",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+            "tokenOut": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+            "amountIn": "252115476348976516213",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "4087650008190331620",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "267962563911657100421",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "267962563911657100421",
+                "signedQuoteDelta": "0",
+                "amountSpent": "252115476348976516213",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "267962563911657100421",
+                "signedQuoteDelta": "0",
+                "amountSpent": "252115476348976516213",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+            "tokenOut": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+            "amountIn": "126057738174488258106",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "4087650008190331620",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "144406873585946241863",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "144406873585946241863",
+                "signedQuoteDelta": "0",
+                "amountSpent": "126057738174488258106",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "144406873585946241863",
+                "signedQuoteDelta": "0",
+                "amountSpent": "126057738174488258106",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+            "tokenOut": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+            "amountIn": "787606233728059501656",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "252095676815688559901",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "252095676815688559901",
+                "signedQuoteDelta": "0",
+                "amountSpent": "787606233728059501656",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "252095676815688559901",
+                "signedQuoteDelta": "0",
+                "amountSpent": "787606233728059501656",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+            "tokenOut": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+            "amountIn": "393803116864029750828",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "251564113521856191764",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "251564113521856191764",
+                "signedQuoteDelta": "0",
+                "amountSpent": "393803116864029750828",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "251564113521856191764",
+                "signedQuoteDelta": "0",
+                "amountSpent": "393803116864029750828",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          }
+        ],
+        "referenceInputs": [
+          {
+            "token": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+            "amountIn": "4087650008190331620",
+            "donorEdge": "univ2-standard\u001f0x2289f64e11a3c6a3e23d5f0c705bb0bb7661278a\u001f0x2289f64e11a3c6a3e23d5f0c705bb0bb7661278a\u001f0x9d39a5de30e57443bff2a8307a4256c8797a3497>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f40cadfe4d0d28e9d948419946e7827b5d6181bd9b37a257d17e8e5dab9554e7d",
+            "donorQuoteSource": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "usage": "input-only; never output, identity, admission or graph"
+          }
+        ],
+        "environmentOpcodes": [
+          "NUMBER",
+          "TIMESTAMP",
+          "BASEFEE",
+          "COINBASE",
+          "GASLIMIT",
+          "PREVRANDAO",
+          "CHAINID"
+        ],
+        "construction": {
+          "runtimeRpc": 0,
+          "offchainExact": 0,
+          "quotedFallback": false
+        },
+        "forkStopped": true
+      },
+      "variant": {
+        "hook": {
+          "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+          "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+          "flags": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true
+          ],
+          "stableSurgeModel": "stable-surge-v2"
+        },
+        "localModel": null,
+        "stableSurgePoolModel": "stable-surge-pool-v2"
+      },
+      "pins": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "artifacts": [
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-dual-1.json",
+          "sha256": "11cafcc5a24988d669ccb27d32ca9ce8ff8b6d4c080ab85003f77ba378ed5889"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/ready-summary.json",
+          "sha256": "7084ac66f7963c397934f673aee593de1b1e256b1bd34a7ad49c27ffe63014c4"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/ready.json",
+          "sha256": "cd8c69adb1c25cd007b3b45e6fa7e5d11ecac45b6d57e721fa2c720f65aa3a5a"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/receipt.json",
+          "sha256": "c5c1995946639f37ef2716af64033a30359e7ec4f1fb5e75d8c55f56c9d0fdc6"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/prices/prices.json",
+          "sha256": "6367fe97e524265c2f264ed0d4daec16aef3ee1e7ef4e75310b44d1ec736b485"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/prices/input.json",
+          "sha256": "c467a144b97aec7c270bd99833d03f972d6f83d4eeae5b1574fdbd4c38324173"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready-canonical-status-2.log",
+          "sha256": "28318bf828bd69d8e6eb9e7cd5a5e333a188abf61e42b63e6da058f6d93810c7"
+        }
+      ],
+      "performance": "NOT RUN; single-Ready and representative combined-graph acceptance remain mandatory"
+    },
+    {
+      "tx": "0x663e4452f85b0b91c729cc81122e565b61a76a85319fda2a0742ccdb7b1a0de0",
+      "pool": "0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566",
+      "N": 25978385,
+      "blockHash": "0x3f539aa4f4cc2ac1752d883e7af0862e17371bd1e3d916893e74f1228cacd50f",
+      "stateAndEnvironment": "N end state / N environment",
+      "strictAndGraph": {
+        "status": "pass",
+        "targetDirections": 2,
+        "totalNaturalInstances": 3,
+        "totalNaturalGraphEdges": 6,
+        "discovery": "actual whole single-block production discovery, no seeded target or injected edges"
+      },
+      "rawMidDirections": 2,
+      "naturalEffective": {
+        "statuses": {
+          "missing-valuation": 2
+        },
+        "quoted": 0,
+        "note": "family-only graph lacks WETH valuation; borrowed inputs do not turn this into natural effective success"
+      },
+      "dualExecution": {
+        "status": "measured-directions-pass",
+        "graphDirections": 2,
+        "measuredDirections": 2,
+        "referenceDirections": 1,
+        "productionReferenceComplete": false,
+        "amountTrials": 6,
+        "executions": 12,
+        "quoteDeltaRawUnits": "0",
+        "unmeasuredDirections": [],
+        "amounts": [
+          {
+            "tokenIn": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+            "tokenOut": "0x99999999999999cc837c997b882957dafdcb1af9",
+            "amountIn": "5156067822249628508",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "5156067822249628508",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "4153183100854597952",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "4153183100854597952",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5156067822249628508",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "4153183100854597952",
+                "signedQuoteDelta": "0",
+                "amountSpent": "5156067822249628508",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+            "tokenOut": "0x99999999999999cc837c997b882957dafdcb1af9",
+            "amountIn": "2578033911124814254",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "5156067822249628508",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "2076599887278753930",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "2076599887278753930",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2578033911124814254",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "2076599887278753930",
+                "signedQuoteDelta": "0",
+                "amountSpent": "2578033911124814254",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+            "tokenOut": "0x99999999999999cc837c997b882957dafdcb1af9",
+            "amountIn": "805075241858952581651",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "5156067822249628508",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "616145564663736422665",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "616145564663736422665",
+                "signedQuoteDelta": "0",
+                "amountSpent": "805075241858952581651",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "616145564663736422665",
+                "signedQuoteDelta": "0",
+                "amountSpent": "805075241858952581651",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+            "tokenOut": "0x99999999999999cc837c997b882957dafdcb1af9",
+            "amountIn": "402537620929476290825",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "5156067822249628508",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "317610666111943159481",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "317610666111943159481",
+                "signedQuoteDelta": "0",
+                "amountSpent": "402537620929476290825",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "317610666111943159481",
+                "signedQuoteDelta": "0",
+                "amountSpent": "402537620929476290825",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x99999999999999cc837c997b882957dafdcb1af9",
+            "tokenOut": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+            "amountIn": "649239160219360122690",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "796028108083829733523",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "796028108083829733523",
+                "signedQuoteDelta": "0",
+                "amountSpent": "649239160219360122690",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "796028108083829733523",
+                "signedQuoteDelta": "0",
+                "amountSpent": "649239160219360122690",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x99999999999999cc837c997b882957dafdcb1af9",
+            "tokenOut": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+            "amountIn": "324619580109680061345",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "402696835670300371329",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "402696835670300371329",
+                "signedQuoteDelta": "0",
+                "amountSpent": "324619580109680061345",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "402696835670300371329",
+                "signedQuoteDelta": "0",
+                "amountSpent": "324619580109680061345",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          }
+        ],
+        "referenceInputs": [
+          {
+            "token": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+            "amountIn": "5156067822249628508",
+            "donorEdge": "univ3-standard\u001f0x1e4dbb639ebbf725fd243a6190df5440ee38740e\u001f0x1e4dbb639ebbf725fd243a6190df5440ee38740e\u001f0x6440f144b7e50d6a8439336510312d2f54beb01d>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f31d61543d14e6d7da76a76c13cf6d28282941e59ccf27384cf39b73d190bdd98",
+            "donorQuoteSource": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "usage": "input-only; never output, identity, admission or graph"
+          }
+        ],
+        "environmentOpcodes": [
+          "NUMBER",
+          "TIMESTAMP",
+          "BASEFEE",
+          "COINBASE",
+          "GASLIMIT",
+          "PREVRANDAO",
+          "CHAINID"
+        ],
+        "construction": {
+          "runtimeRpc": 0,
+          "offchainExact": 0,
+          "quotedFallback": false
+        },
+        "forkStopped": true
+      },
+      "variant": {
+        "hook": {
+          "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+          "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+          "flags": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true
+          ],
+          "stableSurgeModel": "stable-surge-v2"
+        },
+        "localModel": null,
+        "stableSurgePoolModel": "stable-surge-pool-v2"
+      },
+      "pins": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "artifacts": [
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-dual-1.json",
+          "sha256": "bb895f161ffb39a44428304459c752f065ced7830a562fe4629db31618b3ea9a"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/ready-summary.json",
+          "sha256": "1ccc99957d21e4bc7261d4e07c6917c6acb6ca175706e92ac0110eb333944f37"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/ready.json",
+          "sha256": "febf5aa22d0055ecda17b1b400c53bd92bd59f0d050e38fd1a05891df12fc668"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/receipt.json",
+          "sha256": "84605d3e96d48dff6030663419a53b19febdf26f524985f7e529409dda6a1581"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/prices/prices.json",
+          "sha256": "091579466fbb97f83e972c1925e00e9d062ac77c2a895c62b980c2c49fa542d0"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/prices/input.json",
+          "sha256": "5af23bc8f9277574f49d3374accb16c5e233bcab00a48c56b054c3d9501ff77a"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready-canonical-status-2.log",
+          "sha256": "d1cee1b5c4f1ce6598437072a40242d8df9d64521687f93d0104202d81552c5d"
+        }
+      ],
+      "performance": "NOT RUN; single-Ready and representative combined-graph acceptance remain mandatory"
+    },
+    {
+      "tx": "0x7a068e5feffb98831e18cc0853c33072133ee233d0a215595002f0da71000640",
+      "pool": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
+      "N": 26073941,
+      "blockHash": "0x2058fcbae74c7dead9d719d83a27404a1ef33804ca4fe76c30a89b2e77b551d4",
+      "stateAndEnvironment": "N end state / N environment",
+      "strictAndGraph": {
+        "status": "pass",
+        "targetDirections": 2,
+        "totalNaturalInstances": 1,
+        "totalNaturalGraphEdges": 2,
+        "discovery": "actual whole single-block production discovery, no seeded target or injected edges"
+      },
+      "rawMidDirections": 2,
+      "naturalEffective": {
+        "statuses": {
+          "missing-valuation": 2
+        },
+        "quoted": 0,
+        "note": "family-only graph lacks WETH valuation; borrowed inputs do not turn this into natural effective success"
+      },
+      "dualExecution": {
+        "status": "measured-directions-pass",
+        "graphDirections": 2,
+        "measuredDirections": 2,
+        "referenceDirections": 1,
+        "productionReferenceComplete": false,
+        "amountTrials": 6,
+        "executions": 12,
+        "quoteDeltaRawUnits": "0",
+        "unmeasuredDirections": [],
+        "amounts": [
+          {
+            "tokenIn": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+            "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "791789990820519310",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "808581903312232127",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "808581903312232127",
+                "signedQuoteDelta": "0",
+                "amountSpent": "791789990820519310",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "808581903312232127",
+                "signedQuoteDelta": "0",
+                "amountSpent": "791789990820519310",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+            "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "395894995410259655",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": null,
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "404351798617063004",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "404351798617063004",
+                "signedQuoteDelta": "0",
+                "amountSpent": "395894995410259655",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "404351798617063004",
+                "signedQuoteDelta": "0",
+                "amountSpent": "395894995410259655",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+            "amountIn": "1709292688940108",
+            "amountKind": "donor-input-only",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "1672948145462810",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "1672948145462810",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1709292688940108",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "1672948145462810",
+                "signedQuoteDelta": "0",
+                "amountSpent": "1709292688940108",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+            "amountIn": "854646344470054",
+            "amountKind": "donor-input-only-half",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "836474354562808",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "836474354562808",
+                "signedQuoteDelta": "0",
+                "amountSpent": "854646344470054",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "836474354562808",
+                "signedQuoteDelta": "0",
+                "amountSpent": "854646344470054",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+            "amountIn": "809110644844043019",
+            "amountKind": "original-leg-amount-at-N-not-original-prestate",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "791631697233719400",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "791631697233719400",
+                "signedQuoteDelta": "0",
+                "amountSpent": "809110644844043019",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "791631697233719400",
+                "signedQuoteDelta": "0",
+                "amountSpent": "809110644844043019",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+            "amountIn": "404555322422021509",
+            "amountKind": "original-leg-half",
+            "productionReferenceAmountIn": "1709292688940108",
+            "targetEffectiveStatus": "missing-valuation",
+            "quoteAmountOut": "395888022968987170",
+            "queryCalls": 1,
+            "executions": [
+              {
+                "encoding": "old-fragment",
+                "amountOut": "395888022968987170",
+                "signedQuoteDelta": "0",
+                "amountSpent": "404555322422021509",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              },
+              {
+                "encoding": "runtime-program",
+                "amountOut": "395888022968987170",
+                "signedQuoteDelta": "0",
+                "amountSpent": "404555322422021509",
+                "oldInventoryConsumed": "0",
+                "allowanceRemaining": "0"
+              }
+            ]
+          }
+        ],
+        "referenceInputs": [
+          {
+            "token": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "amountIn": "1709292688940108",
+            "donorEdge": "univ3-standard\u001f0x3051607998fe3a690237af729caa6c6d1d6d99b4\u001f0x3051607998fe3a690237af729caa6c6d1d6d99b4\u001f0xae78736cd615f374d3085123a210448e74fc6393>0xd33526068d116ce69f19a9ee46f0bd304f21a51f\u001f9715745e91da8e7ed72d0bfec2521ff408aa009aa364e42f2523760fa98548fb",
+            "donorQuoteSource": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "usage": "input-only; never output, identity, admission or graph"
+          }
+        ],
+        "environmentOpcodes": [
+          "NUMBER",
+          "TIMESTAMP",
+          "BASEFEE",
+          "COINBASE",
+          "GASLIMIT",
+          "PREVRANDAO",
+          "CHAINID"
+        ],
+        "construction": {
+          "runtimeRpc": 0,
+          "offchainExact": 0,
+          "quotedFallback": false
+        },
+        "forkStopped": true
+      },
+      "variant": {
+        "hook": {
+          "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+          "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+          "flags": [
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            true
+          ],
+          "stableSurgeModel": "stable-surge-v2"
+        },
+        "localModel": null,
+        "stableSurgePoolModel": "stable-surge-pool-v2"
+      },
+      "pins": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "artifacts": [
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-dual-1.json",
+          "sha256": "0cf6405e39c0afabfbc6b8d7b5e5da459de0f7433f79e74aefa6bd8ad5ecc951"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/ready-summary.json",
+          "sha256": "39828aef5c73e9ea101d5d5bdc6c12c1830e22362b9f34e31a824ec20cacca07"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/ready.json",
+          "sha256": "60a84887922af3f2fbd35ac3021ca4ab82aff1abe465bcf44f70b680e51de4c1"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/receipt.json",
+          "sha256": "f090f42e4211591daa21279336d44578e404db7da9e3a3d4c2e8e2ebf551015e"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/prices/prices.json",
+          "sha256": "e6786c0717ec80901d543280075e26435017641c335a159b2efbffaddcefc1e7"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/prices/input.json",
+          "sha256": "266a9a8230ddd60adbf23bf738890f18a805f4d7c48df54fbccc31037162a167"
+        },
+        {
+          "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready-canonical-status-2.log",
+          "sha256": "e6f1af1c29711a63b98ffdc1a1a0caef59ca0b796a5ce2d231022d39cc588aad"
+        }
+      ],
+      "performance": "NOT RUN; single-Ready and representative combined-graph acceptance remain mandatory"
+    }
+  ],
+  "missingInputs": {
+    "search": {
+      "path": "logs/balancer-v3-coffee-20261010.Au7gjP/donor-history-search.json",
+      "sha256": "ffa74f3d3f04356d87757149d6e48175be39ca1f9f422e5304e05fcddcef1f5c"
+    },
+    "result": {
+      "tokens": [
+        "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+        "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+        "0x99999999999999cc837c997b882957dafdcb1af9",
+        "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+        "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+        "0x90551c1795392094fe6d29b758eccd233cfaa260"
+      ],
+      "files": [
+        {
+          "path": "/opt/mev-cloud/family-all-ready-20261008.0V7QIq/family-latency-rollback-20261008/evidence/interrupted-all-active/mids.jsonl",
+          "bytes": 142907700,
+          "unchanged": true,
+          "sha256": "b5a656bb4e6e1a69f26e140456252e5cc5a0bed4aa9da4573a39ee2c71226420",
+          "lines": 211,
+          "matchingLines": 5,
+          "quotedRows": []
+        },
+        {
+          "path": "/opt/mev-cloud/family-all-ready-20261008.0V7QIq/family-latency-rollback-20261008/live2500-rpc-observation-20261009-attempt02/mids.jsonl",
+          "bytes": 484383423,
+          "unchanged": true,
+          "sha256": "06c9c97aab2538dc4124428e21a9ab574fb222b26e69e1dd69e5a497ec2d04d0",
+          "lines": 2458,
+          "matchingLines": 13,
+          "quotedRows": []
+        }
+      ],
+      "claim": "Read-only search for recorded production input amounts; no invented valuation or graph changes"
+    },
+    "conclusion": "No quoted input rows for nine missing tokens in selected large table or two additional retained live histories. Eight measured input directions use original receipt quantities only; three four-token input directions unmeasured. Do not invent P or mark them accepted."
+  },
+  "checks": {
+    "actualWorkingTree": {
+      "productionBuild": "pass",
+      "familyTests": "56/56",
+      "strictProductionDeclarations": "pass",
+      "capabilityManifest": "pass",
+      "sharedDualExecution": "75/75 including peer changes",
+      "log": {
+        "path": "logs/balancer-v3-coffee-20261010.Au7gjP/final-checks.log",
+        "sha256": "fd7b279eae24dafb8f5d327bbd77f1729adb68a01ecf8f7fb34b821b5c9c2847"
+      }
+    },
+    "scopedStagedSnapshot": {
+      "log": {
+        "path": "logs/balancer-v3-coffee-20261010.Au7gjP/staged-checks.log",
+        "sha256": "01d9a9400ff94e88e7de2b04e26413ea36e81cf8e4863b9e4b2d8e85d93c64be"
+      }
+    },
+    "independentThirdAndFinalReview": {
+      "reviewer": "Beauvoir / 01a121fb-5e56-7360-8ba0-035395726d62",
+      "tests": "56 offline pass",
+      "evidence": "Independently recalculated 76 saved execution trajectories (v1 8, v2 8, four-token 60); no new EVM/RPC/build/live run. Last 72 weighted receipts seen passing but not independently recomputed.",
+      "verdict": "No new production safety blocker within inspected scope; incomplete reference/direction and performance gates retained.",
+      "laterEvidence": "v1-dual-5 subsequently rechecked seven opcode environment; later coffee 48 receipts author-verified, not another review pass."
+    }
+  },
+  "reconciliation": {
+    "capabilities": [
+      "universe",
+      "rebuild",
+      "status"
+    ],
+    "manifest": {
+      "path": "logs/balancer-v3-coffee-20261010.Au7gjP/final-tool-selection.json",
+      "sha256": "91a69b5b721d3e61e58cfd995e9ae05f1f2813dfe63260cf64b42dda9f8f6b0f"
+    },
+    "successfulTool": "listener:searcher:universe-rebuild-status",
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-09T19:27:55.441Z",
+        "finished_at": "2026-10-09T19:27:55.760Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "6885d32e5169727db34a44cb3ba78bda92f08724b3e9f99ec1f056119b008994",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "../logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/ready.json"
+        ],
+        "stdout_sha256": "5f3637793545af83153474835a41d38c56a1c2dee4e9b5accd37cbf9c6d4e862",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 423,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-09T19:27:56.160Z",
+        "finished_at": "2026-10-09T19:27:56.463Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "e31bb8585597fac871b43c3118894f176e658451c6e429180653104bb7d84195",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "../logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/ready.json"
+        ],
+        "stdout_sha256": "8f93b7a2af82e5985218d8880e7629bfb48229f1a4e2e097f82d6409ac5367d8",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 422,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-09T19:27:56.884Z",
+        "finished_at": "2026-10-09T19:27:57.239Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "4b1f316ee0c4c619e6f99774e4dbaca04fcb47ef26cce73fc384e3a2c47a8836",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "../logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/ready.json"
+        ],
+        "stdout_sha256": "bd7cba9814285978bb30348036c28a2aa8b32c058f87643624fb612f93eb353a",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 433,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-09T19:27:57.627Z",
+        "finished_at": "2026-10-09T19:27:57.947Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "bb6d2e809dd202226aeb662f795297db27151cbcc67a033b91864302aec0194f",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "../logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready/ready.json"
+        ],
+        "stdout_sha256": "82bf06c3f6fb300745a6e8571d427fc5f89c6f0e5873c2fa0653056c4289f13b",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 424,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-09T19:27:58.321Z",
+        "finished_at": "2026-10-09T19:27:58.631Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "7770eb3b33b36d3fb50e26d3830b6dfd37d9f5b4c954824e64871572cfec0941",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "../logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/ready.json"
+        ],
+        "stdout_sha256": "3c91a82535bf0833e370d7fa35c4732a4f8523a25c14f69d08284b2be0dcad60",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 426,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-09T19:27:59.019Z",
+        "finished_at": "2026-10-09T19:27:59.322Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "128fbc350491b4332d414cc9c712f3057f8d0e4433b76d8d762a13fcfb1dd51e",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "../logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/ready.json"
+        ],
+        "stdout_sha256": "2684f2ec158c07af0368bda35b9797d9531dbdaf3972bf32f06696bd1678155b",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 426,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-09T19:27:59.696Z",
+        "finished_at": "2026-10-09T19:28:00.013Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "dfd6d6ea119a9fb73a78e711f7ba943ca6aa11a4b92a6cc15743ace1eff8fcd9",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "../logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/ready.json"
+        ],
+        "stdout_sha256": "8e880c0ef20f4c1a0066f03610ce6ac5dad1ee07e7221129027d76416eb7236e",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 426,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-09T19:28:00.383Z",
+        "finished_at": "2026-10-09T19:28:00.690Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "40b6d088ebac3d2e9acdf4c01ca0b45ca261756f44226a8615d55327e1f91933",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "../logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/ready.json"
+        ],
+        "stdout_sha256": "a781e5eac94fcd5c288f357f27a0960a7a5fb922f8180dc72c1cb401ff5ff726",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 426,
+        "stderr_bytes": 0
+      }
+    ],
+    "result": "Eight compact canonical status checks agree with completed natural single-block Ready. Exact source windows bind via each checkpoint; status tool does not accept --window.",
+    "boundary": "Status tool reconciles Ready only; same-state quote/execution amounts come from Family historical EVM producer, not status output."
+  },
+  "retainedFailures": [
+    {
+      "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-dual-1.json",
+      "sha256": "e9859997562bcfd29c58b4b5dfe0f63ea56a9eb14ae26114f2e944840c1c7f68",
+      "errors": [
+        {
+          "stage": "offline-inputs",
+          "message": "invalid address (argument=\"address\", value=\"0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6\", code=INVALID_ARGUMENT, version=6.16.0)"
+        }
+      ],
+      "classification": "harness preparation before execution, not a protocol revert or transport diagnosis"
+    },
+    {
+      "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-dual-2.json",
+      "sha256": "e9859997562bcfd29c58b4b5dfe0f63ea56a9eb14ae26114f2e944840c1c7f68",
+      "errors": [
+        {
+          "stage": "offline-inputs",
+          "message": "invalid address (argument=\"address\", value=\"0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6\", code=INVALID_ARGUMENT, version=6.16.0)"
+        }
+      ],
+      "classification": "harness preparation before execution, not a protocol revert or transport diagnosis"
+    },
+    {
+      "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-dual-3.json",
+      "sha256": "5bc21aa986bf1107637b5c2f90e039115ffd5ceeda3867fab17218247014d52b",
+      "errors": [
+        {
+          "stage": "offline-inputs",
+          "message": "Cannot read properties of undefined (reading 'number')"
+        }
+      ],
+      "classification": "harness preparation before execution, not a protocol revert or transport diagnosis"
+    },
+    {
+      "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-dual-1.json",
+      "sha256": "9c2db4c4b69cb67a49e604208002fe341e364389f758693c9ddd7955a42871b8",
+      "errors": [
+        {
+          "stage": "actor-balance-mapping",
+          "message": "production balance-slot probe unresolved; do not guess layout",
+          "stack": "AssertionError [ERR_ASSERTION]: production balance-slot probe unresolved; do not guess layout\n    at main (/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/balancer-v3-family/test/historical-runtime-dual.ts:280:7)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+        }
+      ],
+      "classification": "harness preparation before execution, not a protocol revert or transport diagnosis"
+    }
+  ],
+  "additionalFailedInvocations": [
+    {
+      "artifact": {
+        "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready-canonical-status.log",
+        "sha256": "c8fb3867ce0c122700409532fcaea12620581fe6abf4da69b636b3df2ba5beb7"
+      },
+      "reason": "Unsupported --window rejected before running the status tool; rerun without unsupported flag, original failure retained."
+    },
+    {
+      "reason": "One shell redirection used listener/logs instead of ../logs and failed before starting historical-ready; no RPC, Ready or execution result was produced."
+    },
+    {
+      "artifact": {
+        "path": "logs/balancer-v3-coffee-20261010.Au7gjP/receipt-check-test.log",
+        "sha256": "a609b2b86777f5e9eb54a8c923aaf62e79ad1903306545ae5e0b6c7f92ef724a"
+      },
+      "reason": "Initial regression invoked before patch actually applied; failed result preserved alongside fixed run."
+    }
+  ],
+  "limitations": [
+    "No full original-transaction prefix/state replay, natural opportunity enumeration, production sizing/final sim/EV, Adapter Replay flip or family_local merge verdict.",
+    "Nine missing-token reference inputs and three unmeasured directions remain open. No target natural effective rows quoted in these isolated graphs.",
+    "External rate-provider behavior not universally proven caller/query invariant; actual same-N measurements establish only named samples and quantities.",
+    "All timing acceptance remains NOT RUN; V2/V3/Curve plain/underlying and every other adapted IMPL protocol require per-protocol single-Ready then representative combined-graph verification at the final phase.",
+    "Fresh historical execution uses current dirty cloud tree. Scoped commit snapshot tests prove no dependency on peer changes for build/contracts, not new same-state EVM execution of that snapshot."
+  ],
+  "safety": {
+    "originalCoffeeCheckpointSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "originalCheckpointModified": false,
+    "liveStarted": false,
+    "deployed": false,
+    "signed": false,
+    "broadcast": false,
+    "mainnetStateWrites": false,
+    "defaultsChanged": false,
+    "peerChangesIncludedInCommit": false
+  }
+}

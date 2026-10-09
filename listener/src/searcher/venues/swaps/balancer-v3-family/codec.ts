@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
+import { supportsStableSurgeBinding, type StableSurgeModel } from "./stable-surge.js";
 
 // Infrastructure identities, never a list of admitted pools.
 export const VAULT = ethers.getAddress("0xbA1333333333a1BA1108E8412f11850A5C319bA9");
@@ -113,8 +114,12 @@ export function hasSwapHooks(hooks: { readonly flags: readonly boolean[] }): boo
   // is unproven: retain the typed exclusion rather than broadening admission.
   return [0, 3, 4, 5].some(index => hooks.flags[index]);
 }
-export function assertRouterQuoteCompatible(hooks: { readonly flags: readonly boolean[] }): void {
-  if (hooks.flags.length !== 10 || hasSwapHooks(hooks)) throw new Error(UNSUPPORTED_SWAP_HOOK);
+export function assertRouterQuoteCompatible(hooks: {
+  readonly flags: readonly boolean[]; readonly stableSurgeModel?: StableSurgeModel;
+}, poolModel?: string | null): void {
+  if (hooks.flags.length !== 10 || (hasSwapHooks(hooks) && !supportsStableSurgeBinding(hooks, poolModel))) {
+    throw new Error(UNSUPPORTED_SWAP_HOOK);
+  }
 }
 export function queryData(pool: string, tokenIn: string, tokenOut: string, amountIn: bigint, sender: string): string {
   return ROUTER_ABI.encodeFunctionData("querySwapSingleTokenExactIn", [pool, tokenIn, tokenOut, amountIn, sender, "0x"]);

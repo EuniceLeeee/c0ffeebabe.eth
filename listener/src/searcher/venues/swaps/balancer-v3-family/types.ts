@@ -1,6 +1,7 @@
 import type { CompiledInstanceDescriptor, FamilyCandidate, FamilyRouteDescriptor, VerifiedIdentity } from "../../adapter-family-plugin.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import type { BalancerLocalModel } from "./local-model.js";
+import type { StableSurgeModel, StableSurgePoolModel } from "./stable-surge.js";
 
 export interface BalancerV3Candidate extends FamilyCandidate {
   readonly candidateKind: "balancer-v3-pool";
@@ -11,6 +12,8 @@ export interface BalancerV3Candidate extends FamilyCandidate {
 export interface BalancerV3Binding {
   /** Proven runtime math, not an admission gate. Unknown models retain Router quotes. */
   readonly localModel?: BalancerLocalModel | null;
+  /** StableSurge factory's pool behavior only; never enables local pricing. */
+  readonly stableSurgePoolModel?: StableSurgePoolModel;
   readonly vault: string;
   readonly router: string;
   readonly permit2: string;
@@ -21,7 +24,8 @@ export interface BalancerV3Binding {
   readonly tokens: readonly string[];
   readonly tokenInfo: readonly { readonly tokenType: number; readonly rateProvider: string; readonly paysYieldFees: boolean }[];
   readonly decimals: readonly number[];
-  readonly hooks: { readonly address: string; readonly flags: readonly boolean[]; readonly codeHash: string };
+  readonly hooks: { readonly address: string; readonly flags: readonly boolean[]; readonly codeHash: string;
+    readonly stableSurgeModel?: StableSurgeModel };
 }
 export interface BalancerV3Identity extends VerifiedIdentity {
   readonly facts: { readonly pool: string; readonly binding: BalancerV3Binding; readonly proofSource: CanonicalSource };
