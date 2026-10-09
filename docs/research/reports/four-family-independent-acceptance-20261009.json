@@ -4,6 +4,7 @@
   "workspace": "/opt/mev-cloud/family-runtime-20261007",
   "branch": "codex/family-runtime-actual-20261007",
   "baseCommit": "bba7e01fda781093a2d176f6305b120451dd41fc",
+  "revisionParent": "b3cc263d2f0b46a6c46eef52833f4c28c3d78497",
   "latestUserOrder": [
     "independently accept the integrated four Families for correctness AND latency",
     "remaining authorized Set/DODO/xWin/Curve/Balancer V3 Hook/Ekubo/Frax variants",
@@ -38,6 +39,47 @@
     "review": "independent non-author rerun: 3/3 central and 33/33 contracts; no local blocking finding",
     "claim": "implemented with deterministic synthetic production-issuer failure-to-pass; NOT historical EVM, adapter_merge_ready, or representative performance"
   },
+  "yieldBasisLt": {
+    "change": "existing each-block effective refresh for time/oracle/ramp changes; same-source current staker/executor eligibility in the amount quote",
+    "familyContractsAndProductionRefresh": "35/35 PASS on cloud-matching source snapshot",
+    "reviewCorrection": "non-author review found omitted disabledEdgeIds in the first refresh fixture; corrected to mirror main.ts; failed directions remain disabled for the run, including after backend/staker recovery; only a NEW coordinator/run recovers. Earlier automatic-next-block recovery claim is withdrawn",
+    "refreshCoverage": ["quiet block", "external AMM/oracle/pool/admin change", "failure removes price", "failed direction not retried in the same run", "new run recovery", "unrelated UniV2 carried without new reads"],
+    "rawMid": "bootstrap table retained; no claim of recurring raw repricing",
+    "requestCost": "positive amount quote: 5 to 6 logical eth-call items, one round; no performance pass inferred",
+    "sourceSha256": {
+      "exact.ts": "f1f0894ff3d72f451b96754a46c999df1824089822fe9099f48781d7e44180e0",
+      "pricing.ts": "f22f7824e6d389d51d2c5ca0c925d35654b7b3de8331746a2e50c4f7c75ea1ae",
+      "test/refresh.ts": "15fc066ad9cdc5743da8a420b89792fc49287bfa060dc0c6969452f532fcbe58"
+    },
+    "testLog": "logs/four-family-integration-20261009.CuNyy3/yb-contract-refresh-production-disable-20261009.log",
+    "testLogSha256": "cd372f5efbee029168825877b3fbb5570f0588112d536bbb5fd42b55d8300da0",
+    "independentReview": "original fixture omission corrected and rechecked; no remaining local blocker identified",
+    "claim": "implemented/local regression only; historical dual receipts and representative performance NOT RUN"
+  },
+  "compoundCToken": {
+    "change": "positive redeem effect proof instead of balance view; current accrued rate fails closed without stored fallback; quoted/runtime error-code, exact share debit and actual-receipt floor; each-block effective refresh",
+    "identity": "only executor cToken input is funded; no underlying pool cash or supply injection; source-bound zero return code, share/supply burns, equal underlying debit/credit and matching Redeem event",
+    "transportFailure": "unresolved; no liquidity/unproven behavior retryable, never transport-derived permanent identity rejection",
+    "requestCost": "positive Exact: 3 to 2 calls in one round; identity remains 3 dependency rounds but now includes real effect simulation, whose storage discovery/CU cost is not measured",
+    "executionCost": "four balance reads inside each emitted leg plus error-code/delta guards; runtime construction adds no chain-off Exact request; historical execution gas and latency NOT RUN",
+    "prefix": "local accrued-rate model explicitly declines an unmodeled prefix",
+    "sameStateReuse": "same-source same-amount central quote reuse tested; different amount reads current and cash again; no stateOnlyReads/cross-source accrual carry guarantee",
+    "checks": {"family": "58/58 PASS", "sharedRuntimeTransportCacheAndDual": "397/397 PASS", "actualBotVmSyntheticProtocol": "5/5 PASS"},
+    "sourceSha256": {
+      "behavior.ts": "e49891d05387c5603fc213e40ad2940d060b8ddd2e5bf141fb66b1054cbd6bf9",
+      "exact.ts": "9e9b94431c30afe695c05e239c30451fec227431c21aa79152ee2044ebb043ab",
+      "identity.ts": "b20ce971ab58a53b5b1247e79f0894a77f4d3f2bcf32feee674a7c1d73c1a4fa",
+      "redeem-program.ts": "89121e6767a712bb42ac8bc2daca15526182220653a489d7555b0c30f40b386e"
+    },
+    "testLogs": [
+      {"path": "logs/four-family-integration-20261009.CuNyy3/compound-main-family-local.log", "sha256": "24a25f919c93125706624fd90385ab7292abdbe001b38a5cdf97a9a9ffb440b5"},
+      {"path": "logs/four-family-integration-20261009.CuNyy3/compound-main-botvm.log", "sha256": "6ee0d07cdd7af4119bf0209f49721c43f936a1e813e88287376f810b6f2a6465"}
+    ],
+    "historicalDiagnostic": "encoding-only, not actual receipts; source hashes and traced ABI arguments corrected; excludes reverted subtrees and ambiguous interface assignment; N-end never labelled original pre-call parity",
+    "typecheckLimit": "build:live PASS; separate extended historical-harness check has three unchanged shared baseline errors, retained in proposal validation logs",
+    "independentReview": "non-author read-only review of 21-file proposal and evidence found no high-confidence local blocker; primary independently reran 58/397/5",
+    "claim": "implemented and offline validated, NOT historical strict/Ready/dual receipt, representative performance, or adapter_merge_ready"
+  },
   "verificationEnvironment": {
     "sourceChangesAppliedFirst": "cloud workspace",
     "testLocation": "local non-Git source snapshot /tmp/mev-four-family-commit-check.lA5dCf/listener",
@@ -46,7 +88,7 @@
     "checks": [
       "official capability generator and check PASS",
       "build:live PASS on source snapshot",
-      "family-dual-execution 71/71 PASS on clean commit baseline plus Kyber change",
+      "shared runtime/transport/exact-cache/dual-execution 397/397 PASS on clean commit baseline plus Kyber/YB/Compound changes; includes 71 dual-interface cases",
       "production-family-composition PASS: 28/39 active, 308 capabilities",
       "strict-production-family-declarations PASS",
       "git diff --check PASS"
@@ -54,8 +96,8 @@
     "limits": "synthetic transport and source snapshot checks do not prove historical admission, EVM receipts, or cloud timing"
   },
   "remaining": {
-    "yieldBasisLt": "time-dependent AMM interest/oracle EMA/ramp and transitive pricing dependencies require per-block effective refresh; caller/staker eligibility and historical dual execution need verification",
-    "compoundCToken": "replace balanceOfUnderlying-as-redemption-proof with actual positive-amount effect proof; check redeem error code and quoted minimum; fix accrued-rate failure/source handling and time refresh; historical harness currently reports encoding, not actual dual receipts",
+    "yieldBasisLt": "current-source historical strict/Ready/effective and measured same-state dual receipts, then representative performance; new local regressions do not replace these gates",
+    "compoundCToken": "selectively revalidate affected old view-only identity evidence on a Ready copy; current-source historical integration and measured same-state dual receipts, then representative performance",
     "algebraIntegral": "saved Ready proves target nomination and dynamic-plugin rejection, not a discovery omission; dynamic plugin fee model remains unsupported pending implementation and same-state evidence",
     "allFour": "current-source historical strict/Ready/Graph/effective/dual receipts and representative-load effective/sim timing remain incomplete"
   },
@@ -66,6 +108,16 @@
     "downloadSha256": "5b25643dd608e254d36024c41dfeb429398abdd5119a50b5b895ef0b1b47a745",
     "finding": "beforeSwap performs a security check, writes a timepoint, optionally computes dynamic fee, and applies a direction-dependent sliding factor; getCurrentFee alone does not execute that path",
     "limit": "public verified source inspection is not fresh historical bytecode/state binding or proof of supported execution; no rejection gate was removed"
+  },
+  "algebraQuoterLead": {
+    "officialDeploymentPage": "https://docs.cyphereth.com/docs/contracts/mainnet",
+    "quoter": "0x02f22D58d161d1C291ABfe88764d84120f20F723",
+    "listedFactory": "0xfb8Ed3485EfA29a0e4bed93351dD51B59fC4b0f0",
+    "publicSource": "https://etherscan.io/address/0x02f22D58d161d1C291ABfe88764d84120f20F723#code",
+    "downloadSha256": "e7c521e28283b4823786be97897627b0e01867b0960f21d55d0a67f549ad6cf5",
+    "finding": "quoteExactInputSingle invokes the pool swap, including plugin fee path, and decodes callback output; returned uint16 fee is globalState fee, not necessarily the plugin override fee",
+    "notYetVerified": "historical deployment bytecode/state; factory/poolDeployer and CREATE2 target binding; caller/security behavior; partial input consumption and tick boundaries; same-state quote versus actual receipt",
+    "claim": "read-only public-source implementation lead, not an admission authority or evidence that dynamic-plugin support is complete; existing rejection remains"
   },
   "performanceGate": {
     "required": "correctness plus live-source production-stage representative-load acceptance before delivery",

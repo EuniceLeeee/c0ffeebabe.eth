@@ -6006,7 +6006,7 @@
         "familyId": "protocol:compound-ctoken",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "4a81281bc9b1947279a553cdea01ab4bfbcf675dfaf95280d4bd176a36d0377e",
+        "contentHash": "c24c1c4e4e9426eebff44aec966ef5f85d40894d12232bbd6607b974046936ad",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6066,7 +6066,7 @@
         "familyId": "protocol:compound-ctoken",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "c6a3f2e7a2156ef5221f7ffce548aa4b48822b253f89bf275909052d26c3c33e",
+        "contentHash": "b6c5173518294375ede74d3ac00341e4153553f526e5a23db1032203b86e002e",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -6104,7 +6104,7 @@
         "familyId": "protocol:compound-ctoken",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "1ebf10752abf32c7b1fbb12d6b5c3aaefd2d35ac3136aea32c1a2f95d3bf9141",
+        "contentHash": "914acc8c294217d32f966194acc238cfa09d2db12103eeed07b3ce54ae02b5e4",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -6138,7 +6138,7 @@
         "familyId": "protocol:compound-ctoken",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "5b3093194ba9c6ddbfe6286df2a92822779fb20179e8ddc61333b77e960f8ee2",
+        "contentHash": "49d0cbaa4afd90bb7c5b997d860d809367eecf3bf4fd8f0640f3e39a9712e06d",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -6155,6 +6155,7 @@
           "src/searcher/venues/protocols/compound-ctoken-family/action.ts",
           "src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
           "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/redeem-program.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
           "src/searcher/venues/runtime-execution.ts"
         ],
@@ -6197,7 +6198,7 @@
         "familyId": "protocol:compound-ctoken",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "70ef92223340c068ab24819b78021d0d7a9d92e7df23720907d8cb0ed6160a04",
+        "contentHash": "3344bea2ae4294a38b134695550111056b87cc5734c7cdbd090b8992bfcea80d",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -6209,6 +6210,7 @@
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/protocols/compound-ctoken-family/abi.ts",
+          "src/searcher/venues/protocols/compound-ctoken-family/behavior.ts",
           "src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
           "src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts"
@@ -6231,7 +6233,7 @@
         "familyId": "protocol:compound-ctoken",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "b92e924af084ab0691bf4bc72a5f6abff676a45fc3a193a4102afd856b5efdd9",
+        "contentHash": "09367649eeecf54e74f0a0f0920f810dcfd6d36a2e957637171b095873d2e29a",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
@@ -6263,7 +6265,7 @@
         "familyId": "protocol:compound-ctoken",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "d9846c7808f395b3939a880d7ff437d87ee74dfce77ebc7f89dcab5d2badc1f8",
+        "contentHash": "549aab5d395c713c7a7da1d87115e8a6a92c181348f61c8ba507fc19667924f6",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -6297,7 +6299,7 @@
         "familyId": "protocol:compound-ctoken",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "42ef80a9d8491671c094b811f8ebf6a3be64d8ad31c3f6dfa7876cb39bacdafd",
+        "contentHash": "985bd97a3732b2040c01201dde3bc36a8e057ab8f2d6ad3d2dc97fde3e59ac72",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
@@ -11186,7 +11188,7 @@
         "familyId": "protocol:yieldbasis-lt",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "2c20723f34746f40235801d5ed1c76cd4719e3d9cca45af0e335ae8b36da0d3d",
+        "contentHash": "4f049ffdd34d58a7862a38336dde9af2d0c4a9d12df0c661d1d1c312ea9d00f0",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -11200,7 +11202,8 @@
           "src/searcher/venues/protocols/standard-family/common.ts",
           "src/searcher/venues/protocols/yieldbasis-lt-family/abi.ts",
           "src/searcher/venues/protocols/yieldbasis-lt-family/codec.ts",
-          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts"
+          "src/searcher/venues/protocols/yieldbasis-lt-family/manifest.ts",
+          "src/searcher/venues/runtime-execution.ts"
         ],
         "provenanceCommit": null
       },
@@ -11345,7 +11348,7 @@
         "familyId": "protocol:yieldbasis-lt",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "c08211f0045859d1693eb7393c2a5972ebeada20320fe8601e17288698cb47f3",
+        "contentHash": "88b8e93b94c98e97d1cfc9157f8a2ac97bf9c885e80cac8a59029149cb1e96bf",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -13236,5 +13239,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "8dee9f2d1b4f8bc4eb69d3d8f66fcffd0538a86378f2e8475a1f9b62eb6d7e35"
+  "artifactHash": "7054726ad39c62318504fa471de2f232cffb2e3d64e52670b39dd55b9cc08059"
 }

@@ -32,8 +32,10 @@ import {
   LT,
   POOL_ASSET_BALANCE,
   PREVIEW_PER_SHARE,
+  result,
   SOURCE,
   STABLECOIN,
+  STAKER,
   word,
 } from "./fixtures.js";
 
@@ -56,10 +58,14 @@ const inputFor = (
   runtimeEvidence: [],
 });
 
-function quote(amountIn: bigint, reply = answerFor()) {
+function quote(
+  amountIn: bigint,
+  reply = answerFor(),
+  actor: { readonly executor?: string; readonly transactionOrigin?: string } = {},
+) {
   const d = descriptor(reply);
   const route = routesFor(d)[0]!;
-  const input = inputFor(d, route, amountIn);
+  const input = { ...inputFor(d, route, amountIn), ...actor };
   const method = plugin.exact.methods(input as never)[1]!;
   assert.equal(method.kind, "request-program");
   if (method.kind !== "request-program") {
@@ -253,6 +259,65 @@ test("exact quote is not a point-price sample: larger inputs quote proportionall
   assert.notEqual(small, large);
   assert.equal(large, (10n ** 20n * PREVIEW_PER_SHARE) / 10n ** 18n);
   assert.ok(large > small);
+});
+
+test("exact reads the current staker in the same six-request amount round", () => {
+  const { input, method, requested } = quote(10n ** 18n);
+  assert.equal(method.chainAmountQuote, true);
+  assert.equal(requested.length, 6);
+  assert.equal(new Set(requested.map((request) => request.id)).size, 6);
+  assert.equal(method.program.buildDependentProgram, undefined);
+  const staker = requested.find((request) => request.id === "quote-staker")!;
+  assert(staker.kind === "eth-call");
+  assert.equal(staker.to.toLowerCase(), input.descriptor.lt.toLowerCase());
+  assert.equal(staker.data, LT_INTERFACE.encodeFunctionData("staker"));
+});
+
+test("exact refuses the current staker executor despite a different Ready staker", () => {
+  const reply = answerFor({ currentStaker: EXECUTOR });
+  assert.equal(descriptor(reply).staker, ethers.getAddress(STAKER));
+  assert.throws(() => quote(10n ** 18n, reply), /withdraw to\/from staker/);
+});
+
+test("exact permits zero or unrelated current staker, including a staker tx.origin", () => {
+  for (const currentStaker of [ethers.ZeroAddress, FOREIGN, STAKER]) {
+    assert(quote(10n ** 18n, answerFor({ currentStaker }), {
+      executor: EXECUTOR,
+      transactionOrigin: currentStaker === ethers.ZeroAddress ? FOREIGN : currentStaker,
+    }).quoted.amountOut > 0n);
+  }
+  // The old Ready staker may now execute after the live restriction moves.
+  assert(quote(10n ** 18n, answerFor({ currentStaker: FOREIGN }), {
+    executor: STAKER.toLowerCase(),
+  }).quoted.amountOut > 0n);
+  assert.throws(() => quote(10n ** 18n, answerFor(), {
+    executor: STAKER.toLowerCase(),
+  }), /withdraw to\/from staker/);
+});
+
+test("exact refuses an invalid executor", () => {
+  for (const executor of [ethers.ZeroAddress, "not-an-address", LT, ASSET]) {
+    assert.throws(() => quote(10n ** 18n, answerFor(), { executor }));
+  }
+});
+
+test("exact refuses missing, failed, malformed or differently sourced staker evidence", () => {
+  const { input, method, requested } = quote(10n ** 18n);
+  const answers = requested.map(answerFor());
+  const decode = (initialResults: typeof answers) => method.program.decode({
+    programInput: input as never, initialResults, dependentEvidence: [],
+  } as never);
+  assert.throws(() => decode(answers.filter((answer) => answer.id !== "quote-staker")));
+  for (const invalid of [
+    { id: "quote-staker", source: SOURCE, ok: false as const, failure: "rpc" as const },
+    result("quote-staker", "0x"),
+    result("quote-staker", word(STAKER), { ...SOURCE, number: SOURCE.number + 1 }),
+    result("quote-staker", word(STAKER), { ...SOURCE, hash: "0x" + "ab".repeat(32) }),
+    result("quote-staker", word(STAKER), { ...SOURCE, generation: SOURCE.generation + 1 }),
+  ]) {
+    assert.throws(() => decode(answers.map((answer) =>
+      answer.id === "quote-staker" ? invalid : answer)));
+  }
 });
 
 test("exact quote refuses a redemption above the cryptopool's crypto capacity without shrinking it", () => {

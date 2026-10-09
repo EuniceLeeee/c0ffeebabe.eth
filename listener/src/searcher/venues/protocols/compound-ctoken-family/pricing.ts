@@ -24,7 +24,9 @@ import type {
 /**
  * Raw mid sampling only: the share-side sample amount is one full share unit
  * (`oneShare`), never a substitute for a requested input amount. Effective and
- * explicit quoting keep the caller's amount (see exact.ts).
+ * explicit quoting keep the caller's amount (see exact.ts). Production freezes
+ * this raw table at bootstrap; exchangeRateStored remains that indicative raw
+ * anchor, not an executable quote. Every effective quote uses current accrual.
  */
 export const compoundCTokenPricing: PricingSemantics<
   CompoundCTokenDescriptor,
@@ -34,6 +36,9 @@ export const compoundCTokenPricing: PricingSemantics<
   CompoundCTokenPricingDraft,
   { readonly oneShare: bigint }
 > = {
+  // Accrual depends on block.number even when the market emits no event.
+  // The production coordinator merges these keys into effective/cache activity.
+  refreshPolicy: "each-block",
   stateKey: (route) => route.instanceKey,
   staticBindingProjection: ({ descriptor }) =>
     compoundCTokenStaticProjection(descriptor),

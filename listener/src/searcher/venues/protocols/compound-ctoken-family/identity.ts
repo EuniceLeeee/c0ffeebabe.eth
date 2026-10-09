@@ -7,6 +7,7 @@ import type { AdapterRequestResult } from
 import { hashCanonical } from "../../canonical-value.js";
 import {
   assertSameSource,
+  assertSource,
   callRequest,
   canonicalAddress,
   codeRequest,
@@ -19,8 +20,8 @@ import {
 import {
   COMPTROLLER_INTERFACE,
   CTOKEN_INTERFACE,
-  CTOKEN_PROBE_ACTOR,
 } from "./abi.js";
+import { probeShares, redeemProbe, redemptionProof, REDEEM_PROBE_ID } from "./behavior.js";
 import { candidateMarket, isZeroAddress, lower } from "./codec.js";
 import {
   CTOKEN_FAMILY_ID,
@@ -44,16 +45,6 @@ const BASE_IDS = [
   "market-decimals",
 ] as const;
 const REGISTRY_IDS = ["registry-markets", "registry-all-markets"] as const;
-/**
- * The active round always carries a required same-state exchange-rate read
- * (which must succeed) alongside the optional redemption probe, so the round
- * always produces successful evidence while a dead redemption surface still
- * surfaces as a chain-proven rejection.
- */
-const ACTIVE_IDS = [
-  "active-exchange-rate-stored",
-  "active-underlying-balance",
-] as const;
 
 /**
  * Compound V2 cToken identity — registry-admission, never an address allowlist.
@@ -62,8 +53,8 @@ const ACTIVE_IDS = [
  *      `totalSupply()` / `decimals()` are read at the pinned block;
  *   2. the Comptroller must reverse-admit the market: `markets(market)` reports
  *      `isListed == true` AND `getAllMarkets()` enumerates it;
- *   3. `balanceOfUnderlying(probe)` must return, proving the stored
- *      exchange-rate redemption path is live on that same state.
+ *   3. a positive funded-caller redeem must return error code zero and prove
+ *      exact share/supply burns, underlying debit/receipt and a matching event.
  *
  * The pinned-block reads prove registration existence at that block. They do
  * not claim creation lineage, and public metadata snapshots are never used as
@@ -91,7 +82,8 @@ export const compoundCTokenIdentity: IdentitySemantics<
       }
       if (proof.phase === "registry") {
         return proof.registryValid
-          ? { transports: ["eth-call" as const] }
+          ? { transports: ["effect-delta-simulation" as const], caller: "executor" as const,
+              effects: ["return-data", "revert-data", "token-delta", "total-supply-delta", "logs"] as const }
           : { transports: [] as const };
       }
       return { transports: [] as const };
@@ -107,42 +99,26 @@ export const compoundCTokenIdentity: IdentitySemantics<
       const proof = evidence as CompoundCTokenIdentityEvidence;
       if (proof.phase === "base") {
         if (!proof.baseValid) return Object.freeze([]);
-        return Object.freeze(registryRequests(proof.comptroller, market));
+        return Object.freeze([...registryRequests(proof.comptroller, market),
+          callRequest("registry-current-rate", market, CTOKEN_INTERFACE.encodeFunctionData("exchangeRateCurrent"))]);
       }
       if (proof.phase === "registry") {
-        if (!proof.registryValid) return Object.freeze([]);
-        return Object.freeze([
-          callRequest(
-            "active-exchange-rate-stored",
-            proof.market,
-            CTOKEN_INTERFACE.encodeFunctionData("exchangeRateStored"),
-          ),
-          callRequest(
-            "active-underlying-balance",
-            proof.market,
-            CTOKEN_INTERFACE.encodeFunctionData("balanceOfUnderlying", [
-              CTOKEN_PROBE_ACTOR,
-            ]),
-          ),
-        ]);
+        if (!proof.registryValid || proof.sampleShares <= 0n) return Object.freeze([]);
+        return Object.freeze([redeemProbe(proof)]);
       }
       return Object.freeze([]);
     },
     decode({ step, results }) {
-      const optionalIds = step.evidence === undefined
-        ? new Set<string>()
-        : new Set<string>([...REGISTRY_IDS, ...ACTIVE_IDS]);
       for (const result of results) {
-        if (!result.ok && !optionalIds.has(result.id)) {
-          throw new RequiredAdapterRequestError(result);
-        }
+        if (!result.ok) throw new RequiredAdapterRequestError(result);
+        if (step.evidence) assertSource(result.source, (step.evidence as CompoundCTokenIdentityEvidence).source);
       }
       const successful = results.filter(
         (result): result is Extract<AdapterRequestResult, { readonly ok: true }> =>
           result.ok,
       );
-      // A probe round may legitimately fail entirely (that is the inactive
-      // redemption path); only compare sources when something succeeded.
+      // Transport failures above are unresolved; only returned/reverted EVM
+      // evidence reaches the behavior decoder, still bound to the same source.
       if (successful.length > 0) assertSameSource(successful);
       const market = candidateMarket(step.candidate);
       if (step.evidence === undefined) return decodeBase(market, results);
@@ -171,6 +147,9 @@ export const compoundCTokenIdentity: IdentitySemantics<
             };
       }
       if (proof.phase === "registry") {
+        if (proof.registryValid && proof.sampleShares <= 0n) {
+          return { status: "retryable", reasonCode: "compound_ctoken_no_positive_liquid_probe" };
+        }
         return proof.registryValid
           ? { status: "continue" as const }
           : {
@@ -184,9 +163,8 @@ export const compoundCTokenIdentity: IdentitySemantics<
       const active: CompoundCTokenActiveEvidence = proof;
       if (!active.redemptionPathLive) {
         return {
-          status: "chain-proven-rejected" as const,
-          reasonCode: "compound_ctoken_redemption_path_inactive",
-          evidenceRequestIds: [...ACTIVE_IDS],
+          status: "retryable" as const,
+          reasonCode: "compound_ctoken_redemption_not_proven",
         };
       }
       return {
@@ -211,7 +189,7 @@ export const compoundCTokenIdentity: IdentitySemantics<
             registeredInAllMarkets: active.registeredInAllMarkets,
           },
           provenance: [{
-            kind: "comptroller-registry-and-live-exchange-rate-path",
+            kind: "comptroller-registry-and-positive-redeem-effects",
             subject: active.comptroller,
             evidenceHash: hashCanonical({
               market: active.market,
@@ -221,6 +199,7 @@ export const compoundCTokenIdentity: IdentitySemantics<
               listed: active.listedInComptroller,
               enumerated: active.registeredInAllMarkets,
               probeUnderlying: active.probeUnderlying.toString(),
+              behaviorProofHash: active.behaviorProofHash,
               behaviorProof: active.behaviorProofHash,
             }),
           }],
@@ -309,6 +288,7 @@ function decodeBase(
   }
   return {
     phase: "base",
+    source: assertSameSource(results.map(r => returnedResult(results, r.id))),
     market,
     marketCodeHash: ethers.keccak256(code),
     comptroller: canonicalAddress(comptroller),
@@ -329,7 +309,7 @@ function decodeRegistry(
   const marketsResult = results.find((result) =>
     result.id === "registry-markets");
   let listedInComptroller = false;
-  if (marketsResult !== undefined && marketsResult.ok) {
+  if (marketsResult !== undefined && marketsResult.ok && marketsResult.completion === "returned") {
     const decoded = COMPTROLLER_INTERFACE.decodeFunctionResult(
       "markets",
       marketsResult.data,
@@ -339,7 +319,7 @@ function decodeRegistry(
   const allResult = results.find((result) =>
     result.id === "registry-all-markets");
   let registeredInAllMarkets = false;
-  if (allResult !== undefined && allResult.ok) {
+  if (allResult !== undefined && allResult.ok && allResult.completion === "returned") {
     const decoded = COMPTROLLER_INTERFACE.decodeFunctionResult(
       "getAllMarkets",
       allResult.data,
@@ -348,9 +328,14 @@ function decodeRegistry(
       lowerAddress(String(value)));
     registeredInAllMarkets = markets.includes(lowerAddress(prior.market));
   }
+  const rate = results.find(r => r.id === "registry-current-rate");
+  const exchangeRateCurrent = rate?.ok && rate.completion === "returned"
+    ? BigInt(CTOKEN_INTERFACE.decodeFunctionResult("exchangeRateCurrent", rate.data)[0]) : 0n;
   return {
     ...prior,
     phase: "registry",
+    exchangeRateCurrent,
+    sampleShares: probeShares(exchangeRateCurrent, prior.cash, prior.shareSupply, prior.decimals),
     listedInComptroller,
     registeredInAllMarkets,
     registryValid: prior.baseValid && listedInComptroller &&
@@ -362,36 +347,30 @@ function decodeActive(
   prior: CompoundCTokenRegistryEvidence,
   results: readonly AdapterRequestResult[],
 ): CompoundCTokenActiveEvidence {
-  const probe = results.find((result) =>
-    result.id === "active-underlying-balance");
-  const storedResult = results.find((result) =>
-    result.id === "active-exchange-rate-stored");
-  const activeRate = storedResult !== undefined && storedResult.ok
-    ? BigInt(CTOKEN_INTERFACE.decodeFunctionResult(
-        "exchangeRateStored",
-        storedResult.data,
-      )[0])
-    : prior.exchangeRateStored;
-  const probeUnderlying = probe !== undefined && probe.ok
-    ? BigInt(CTOKEN_INTERFACE.decodeFunctionResult(
-        "balanceOfUnderlying",
-        probe.data,
-      )[0])
-    : 0n;
-  const redemptionPathLive = probe !== undefined && probe.ok;
+  const probe = results.find(result => result.id === REDEEM_PROBE_ID);
+  if (!probe) throw new Error("compound redemption proof missing");
+  if (!probe.ok) throw new RequiredAdapterRequestError(probe);
+  const verified = redemptionProof(prior, probe);
+  const probeUnderlying = verified?.amountOut ?? 0n;
+  const redemptionPathLive = verified !== null;
   return {
     ...prior,
     phase: "active",
-    exchangeRateStored: activeRate,
+    probeActor: verified?.actor ?? null,
     probeUnderlying,
     redemptionPathLive,
     behaviorProofHash: hashCanonical({
       market: prior.market,
-      exchangeRateStored: activeRate.toString(),
+      source: { ...prior.source },
+      exchangeRateCurrent: prior.exchangeRateCurrent.toString(),
+      sampleShares: prior.sampleShares.toString(),
       cash: prior.cash.toString(),
       shareSupply: prior.shareSupply.toString(),
       probeUnderlying: probeUnderlying.toString(),
-      probeActor: CTOKEN_PROBE_ACTOR,
+      probeActor: verified?.actor ?? null,
+      completion: probe.completion,
+      returnData: probe.data,
+      effects: JSON.stringify(probe.effects ?? null, (_key, value) => typeof value === "bigint" ? value.toString() : value),
       redemptionPathLive,
     }),
   };

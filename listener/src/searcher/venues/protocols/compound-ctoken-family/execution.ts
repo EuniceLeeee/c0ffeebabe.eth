@@ -1,12 +1,9 @@
-import { ethers } from "ethers";
-import { RuntimeAmountProgram } from
-  "../../../../adapters/runtime-amount-program.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
 } from "../../adapter-family-plugin.js";
-import { runtimeExecutor, runtimeLeg } from "../../runtime-execution.js";
-import { CTOKEN_INTERFACE } from "./abi.js";
+import { runtimeLeg } from "../../runtime-execution.js";
+import { redeemProgram } from "./redeem-program.js";
 import {
   assertCompoundCTokenInvocation,
   lower,
@@ -33,19 +30,14 @@ export const compoundCTokenExecution: ExecutionSemantics<
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertCompoundCTokenInvocation(d, r);
-    runtimeExecutor(executor, d.market, d.underlying);
-    const program = new RuntimeAmountProgram();
-    program.call(
-      d.market,
-      ethers.getBytes(CTOKEN_INTERFACE.encodeFunctionData("redeem", [0n])),
-      { patches: [{ offset: 4, reg: 0 }] },
-    );
-    return runtimeLeg(CTOKEN_REDEEM_ACTION, program);
+    return runtimeLeg(CTOKEN_REDEEM_ACTION, redeemProgram(d.market, d.underlying, executor));
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertCompoundCTokenInvocation(input.descriptor, input.route);
     const e = input.exactEvidence;
+    // The central issued-exact boundary binds source before this callback;
+    // ExecutionSemantics.buildFragment does not expose a second source input.
     if (
       input.amountIn <= 0n ||
       input.quotedAmountOut <= 0n ||
@@ -53,6 +45,7 @@ export const compoundCTokenExecution: ExecutionSemantics<
       input.minAmountOut > input.quotedAmountOut ||
       e.kind !== "compound-ctoken-exchange-rate" ||
       e.direction !== "redeem" ||
+      e.rateSource !== "exchange-rate-current" ||
       e.amountIn !== input.amountIn ||
       e.amountOut !== input.quotedAmountOut ||
       e.bindingFingerprint !== input.route.bindingRef.fingerprint ||

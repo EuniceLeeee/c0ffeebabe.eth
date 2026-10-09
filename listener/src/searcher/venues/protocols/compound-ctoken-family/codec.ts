@@ -26,9 +26,18 @@ export function isZeroAddress(value: string): boolean {
 }
 
 export function assertShares(amount: bigint): void {
-  if (typeof amount !== "bigint" || amount < 0n) {
-    throw new Error("compound cToken share amount must be a non-negative bigint");
+  if (typeof amount !== "bigint" || amount < 0n || amount > ethers.MaxUint256) {
+    throw new Error("compound cToken share amount must be a uint256 bigint");
   }
+}
+
+/** Compound's checked Exp multiplication followed by integer truncation. */
+export function redemptionAmount(shares: bigint, rate: bigint): bigint {
+  assertShares(shares);
+  if (rate <= 0n || rate > ethers.MaxUint256 || shares * rate > ethers.MaxUint256) {
+    throw new Error("compound cToken redemption multiplication out of range");
+  }
+  return shares * rate / 10n ** 18n;
 }
 
 /**

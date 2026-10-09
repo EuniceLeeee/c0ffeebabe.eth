@@ -69,6 +69,23 @@ export function answerFor(
   const cash = options.cash ?? CASH;
   const probe = options.probeReplies ?? true;
   return (request: AdapterRequest): AdapterRequestResult => {
+    if (request.id === "active-redeem") {
+      assert.equal(request.kind, "effect-delta-simulation");
+      if (request.kind !== "effect-delta-simulation") throw new Error("expected real redeem probe");
+      if (!probe) return { id: request.id, ok: false, failure: "rpc", source: SOURCE };
+      const shares = BigInt(CTOKEN_INTERFACE.decodeFunctionData("redeem", request.call.data)[0]);
+      const amountOut = shares * exchangeRate / 10n ** 18n;
+      return { ...result(request.id, word(0n)), ok: true, completion: "returned", data: word(0n),
+        source: SOURCE, provenance: { kind: "synthetic-ctoken-contract", fingerprint: "fixture" },
+        effects: {
+          tokenDeltas: [{ token: MARKET, account: EXECUTOR, delta: -shares },
+            { token: UNDERLYING, account: EXECUTOR, delta: amountOut },
+            { token: UNDERLYING, account: MARKET, delta: -amountOut }],
+          totalSupplyDeltas: [{ token: MARKET, delta: -shares }],
+          logs: [{ address: MARKET, ...CTOKEN_INTERFACE.encodeEventLog(CTOKEN_INTERFACE.getEvent("Redeem")!,
+            [EXECUTOR, amountOut, shares]) }],
+        } };
+    }
     const values: Record<string, string> = {
       "market-code": "0x60016000f3",
       "market-comptroller": word(COMPTROLLER),
@@ -85,22 +102,10 @@ export function answerFor(
         "getAllMarkets",
         [[...enumerated]],
       ),
-      "active-exchange-rate-stored": word(exchangeRate),
-      "active-underlying-balance": word(
-        (SAMPLE_SHARES * exchangeRate) / 10n ** 18n,
-      ),
+      "registry-current-rate": word(exchangeRate),
       "quote-rate-current": word(exchangeRate),
-      "quote-rate-stored": word(exchangeRate),
       "quote-cash": word(cash),
     };
-    if (!probe && request.id === "active-underlying-balance") {
-      return {
-        id: request.id,
-        ok: false,
-        failure: "rpc",
-        source: SOURCE,
-      } as unknown as AdapterRequestResult;
-    }
     assert(request.id in values, `unexpected fixture request ${request.id}`);
     return result(request.id, values[request.id]!);
   };

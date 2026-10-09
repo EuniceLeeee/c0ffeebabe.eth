@@ -1,5 +1,4 @@
 import { ethers } from "ethers";
-import { canonicalAddress } from "../standard-family/common.js";
 
 /**
  * Compound V2 cToken surfaces used by the share-redemption capability.
@@ -49,13 +48,6 @@ export const CTOKEN_REDEEM_UNDERLYING_CALL_PATTERN_ID =
   "compound-ctoken-redeem-underlying-call";
 export const CTOKEN_REDEEM_LOG_PATTERN_ID = "compound-ctoken-redeem-log";
 export const CTOKEN_SURFACE_PATTERN_ID = "compound-ctoken-comptroller-surface";
-
-/**
- * Fixed probe actor used for read-only behaviour probing (`balanceOfUnderlying`
- * exercises the stored exchange-rate path without requiring any balance).
- * It is an infrastructure constant, never an instance-admission allowlist.
- */
-export const CTOKEN_PROBE_ACTOR = canonicalAddress(`0x${"00".repeat(18)}face`);
 
 /** Sample share amounts for the family's specified-amount quote contracts. */
 export const CTOKEN_SAMPLE_SHARES = [10n ** 6n, 10n ** 18n] as const;

@@ -14,6 +14,7 @@ export interface CompoundCTokenCandidate extends FamilyCandidate {
 /** Phase 1 — the market's own surfaces at the pinned block. */
 export interface CompoundCTokenBaseEvidence {
   readonly phase: "base";
+  readonly source: CanonicalSource;
   readonly market: string;
   readonly marketCodeHash: string;
   readonly comptroller: string;
@@ -37,16 +38,19 @@ export interface CompoundCTokenRegistryEvidence
   readonly listedInComptroller: boolean;
   readonly registeredInAllMarkets: boolean;
   readonly registryValid: boolean;
+  readonly exchangeRateCurrent: bigint;
+  readonly sampleShares: bigint;
 }
 
 /**
  * Phase 3 — the redemption surface is live on the same state
- * (`balanceOfUnderlying` exercises the stored exchange-rate path).
+ * Positive share-input redemption in a source-bound, funded caller simulation.
  */
 export interface CompoundCTokenActiveEvidence
   extends Omit<CompoundCTokenRegistryEvidence, "phase"> {
   readonly phase: "active";
   readonly probeUnderlying: bigint;
+  readonly probeActor: string | null;
   readonly redemptionPathLive: boolean;
   readonly behaviorProofHash: string;
 }
@@ -105,6 +109,6 @@ export interface CompoundCTokenExactEvidence {
   readonly amountIn: bigint;
   readonly amountOut: bigint;
   readonly exchangeRate: bigint;
-  readonly rateSource: "exchange-rate-current" | "exchange-rate-stored";
+  readonly rateSource: "exchange-rate-current" | "local-zero";
   readonly bindingFingerprint: string;
 }

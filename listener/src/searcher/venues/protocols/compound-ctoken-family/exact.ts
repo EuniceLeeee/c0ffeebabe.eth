@@ -1,5 +1,6 @@
 import {
   localZeroExactMethod,
+  type ExactQuoteInput,
   type ExactQuoteSemantics,
   type ExactRequestProgram,
 } from "../../adapter-family-plugin.js";
@@ -12,12 +13,12 @@ import {
   returnedResult,
 } from "../standard-family/common.js";
 import {
-  CTOKEN_EXCHANGE_RATE_SCALE,
   CTOKEN_INTERFACE,
 } from "./abi.js";
 import {
   assertCompoundCTokenInvocation,
   assertShares,
+  redemptionAmount,
 } from "./codec.js";
 import type {
   CompoundCTokenDescriptor,
@@ -25,34 +26,32 @@ import type {
   CompoundCTokenRoute,
 } from "./types.js";
 
-type Input = {
-  readonly descriptor: CompoundCTokenDescriptor;
-  readonly route: CompoundCTokenRoute;
-  readonly amountIn: bigint;
-  readonly source: import("../../adapter-request-program.js").CanonicalSource;
-};
+type Input = ExactQuoteInput<CompoundCTokenDescriptor, CompoundCTokenRoute>;
+function check(input: Input): void {
+  assertCompoundCTokenInvocation(input.descriptor, input.route);
+  assertShares(input.amountIn);
+  if (input.prefix?.length) throw new Error("Compound cToken local model cannot consume a prefix; shared EVM prefix required");
+}
 
 /**
  * Specified-amount share→underlying quote.
  *
  * `exchangeRateCurrent()` is requested through `eth_call`, so the simulated
  * accrual inside the call yields the rate a real redemption would realise at
- * that block; `exchangeRateStored()` is the documented fallback when the
- * accrual call is unavailable on the transport. The share amount requested by
- * the caller is never replaced by a point-price sample.
+ * that block. Failed accrual never falls back to a stale stored rate. This is
+ * source reading plus checked local amount math, not a chain amount quote.
  */
 const program: ExactRequestProgram<
   CompoundCTokenDescriptor,
   CompoundCTokenRoute,
   CompoundCTokenExactEvidence
 > = {
-  requirements: ({ descriptor, route }) => {
-    assertCompoundCTokenInvocation(descriptor, route);
-    return { transports: ["eth-call"] };
+  requirements: (input) => {
+    check(input);
+    return { transports: input.amountIn === 0n ? [] : ["eth-call"] };
   },
   buildRequests(input) {
-    assertCompoundCTokenInvocation(input.descriptor, input.route);
-    assertShares(input.amountIn);
+    check(input);
     if (input.amountIn === 0n) return Object.freeze([]);
     return Object.freeze([
       callRequest(
@@ -61,47 +60,33 @@ const program: ExactRequestProgram<
         CTOKEN_INTERFACE.encodeFunctionData("exchangeRateCurrent"),
       ),
       callRequest(
-        "quote-rate-stored",
-        input.descriptor.market,
-        CTOKEN_INTERFACE.encodeFunctionData("exchangeRateStored"),
-      ),
-      callRequest(
         "quote-cash",
         input.descriptor.market,
         CTOKEN_INTERFACE.encodeFunctionData("getCash"),
       ),
     ]);
   },
-  decode({ programInput, initialResults }) {
-    assertCompoundCTokenInvocation(programInput.descriptor, programInput.route);
-    assertShares(programInput.amountIn);
+  decode({ programInput, initialResults, dependentEvidence }) {
+    check(programInput);
+    if (dependentEvidence.length) throw new Error("Compound cToken unexpected dependent evidence");
     if (programInput.amountIn === 0n) {
       return Object.freeze({
         amountOut: 0n,
-        evidence: evidence(programInput, 0n, 0n, "exchange-rate-stored"),
+        evidence: evidence(programInput, 0n, 0n, "local-zero"),
       });
     }
     const results = initialResults;
-    const currentResult = results.find((result) =>
-      result.id === "quote-rate-current");
-    const current = currentResult !== undefined && currentResult.ok
-      ? currentResult
-      : undefined;
-    const stored = returnedResult(results, "quote-rate-stored");
-    assertSource(stored.source, programInput.source);
+    const current = returnedResult(results, "quote-rate-current");
+    assertSource(current.source, programInput.source);
     const cashResult = returnedResult(results, "quote-cash");
     assertSource(cashResult.source, programInput.source);
-    const rateSource = current === undefined
-      ? "exchange-rate-stored" as const
-      : "exchange-rate-current" as const;
-    const rateResult: Extract<AdapterRequestResult, { readonly ok: true }> =
-      current ?? stored;
-    const rate = decodeRate(rateResult, rateSource);
+    const rateSource = "exchange-rate-current" as const;
+    const rate = decodeUintAtIndex(current, "exchangeRateCurrent");
     if (rate <= 0n) {
       throw new Error("Compound cToken exchange rate is not positive");
     }
     const cash = decodeUintAtIndex(cashResult, "getCash");
-    const amountOut = (programInput.amountIn * rate) / CTOKEN_EXCHANGE_RATE_SCALE;
+    const amountOut = redemptionAmount(programInput.amountIn, rate);
     if (amountOut <= 0n) {
       // Below one underlying base unit: no representable redemption output.
       throw new Error("Compound cToken quote produced no underlying output");
@@ -127,14 +112,16 @@ export const compoundCTokenExact = {
       CompoundCTokenDescriptor,
       CompoundCTokenRoute,
       CompoundCTokenExactEvidence
-    >("local-zero", (input) => Object.freeze({
+    >("local-zero", (input) => { check(input); return Object.freeze({
       amountOut: 0n,
-      evidence: evidence(input, 0n, 0n, "exchange-rate-stored"),
-    })),
+      evidence: evidence(input, 0n, 0n, "local-zero"),
+    }); }),
     Object.freeze({
       id: "compound-ctoken-exchange-rate",
       kind: "request-program" as const,
-      chainAmountQuote: true as const,
+      // No stateOnlyReads/reusePolicy: accrual depends on the execution block,
+      // even without market logs. Do not grant cross-source retained reads.
+      trialState: { unsupportedReason: "cToken accrual, burns and underlying transfers require shared EVM prefix execution" },
       program,
     }),
   ]),
@@ -150,16 +137,6 @@ export const compoundCTokenExact = {
   CompoundCTokenRoute,
   CompoundCTokenExactEvidence
 >;
-
-function decodeRate(
-  result: Extract<AdapterRequestResult, { readonly ok: true }>,
-  rateSource: CompoundCTokenExactEvidence["rateSource"],
-): bigint {
-  const method = rateSource === "exchange-rate-current"
-    ? "exchangeRateCurrent"
-    : "exchangeRateStored";
-  return BigInt(CTOKEN_INTERFACE.decodeFunctionResult(method, result.data)[0]);
-}
 
 function decodeUintAtIndex(
   result: Extract<AdapterRequestResult, { readonly ok: true }>,

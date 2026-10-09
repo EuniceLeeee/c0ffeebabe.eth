@@ -93,6 +93,7 @@ export interface AnswerOptions {
   readonly poolCoin0?: string;
   readonly poolCoin1?: string;
   readonly killed?: boolean;
+  readonly currentStaker?: string;
   readonly probeReplies?: boolean;
   readonly previewReplies?: boolean;
   readonly previewAmountFor?: (amountIn: bigint) => bigint;
@@ -162,6 +163,7 @@ export function answerFor(
       "active-amm-is-killed": word(killed ? 1n : 0n),
       "active-preview-withdraw": word(preview(PROBE_SHARES)),
       "quote-is-killed": word(killed ? 1n : 0n),
+      "quote-staker": word(options.currentStaker ?? STAKER),
       "quote-live-supply": LT_INTERFACE.encodeFunctionResult(
         "updated_balances",
         [liveSupply, STAKED_TOKENS],

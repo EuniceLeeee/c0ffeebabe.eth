@@ -37,6 +37,9 @@ export const yieldBasisLtPricing: PricingSemantics<
   YieldBasisLtPricingDraft,
   { readonly oneShare: bigint }
 > = {
+  // AMM accrual, oracle EMA and cryptopool ramps can change the withdrawal
+  // preview without an LT log. Requote through the existing per-block path.
+  refreshPolicy: "each-block",
   stateKey: (route) => route.instanceKey,
   staticBindingProjection: ({ descriptor }) =>
     yieldBasisLtStaticProjection(descriptor),

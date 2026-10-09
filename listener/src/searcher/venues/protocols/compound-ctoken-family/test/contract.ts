@@ -5,6 +5,8 @@ import { plugin } from
   "../../../production-families/compound-ctoken.production.js";
 import type { AdapterRequest } from "../../../adapter-request-program.js";
 import { CTOKEN_INTERFACE } from "../abi.js";
+import { probeShares } from "../behavior.js";
+import { redemptionAmount } from "../codec.js";
 import {
   CTOKEN_FAMILY_ID,
   CTOKEN_REDEEM_ACTION,
@@ -26,6 +28,61 @@ import {
 const REDEEM_SELECTOR = CTOKEN_INTERFACE.getFunction("redeem")!.selector;
 const UNDERLYING_SELECTOR = CTOKEN_INTERFACE.getFunction("redeemUnderlying")!
   .selector;
+
+test("positive behavior sample respects cash, supply, rounding and uint256 product", () => {
+  assert.equal(probeShares(1500000000000000000n, 1n, 100n, 8), 1n);
+  assert.equal(probeShares(1n, 1n, 10n ** 18n, 8), 10n ** 18n);
+  assert.equal(probeShares(1n, 1n, 10n ** 18n - 1n, 8), 0n);
+  assert.equal(probeShares(10n ** 18n, 0n, 100n, 8), 0n);
+  assert.equal(probeShares(ethers.MaxUint256, ethers.MaxUint256, 100n, 8), 1n);
+  assert.throws(() => redemptionAmount(2n, ethers.MaxUint256), /multiplication out of range/i);
+  assert.throws(() => redemptionAmount(ethers.MaxUint256 + 1n, 1n));
+});
+
+test("identity requires a positive funded redemption, not a balance view", () => {
+  const requests: AdapterRequest[] = [];
+  descriptor(request => { requests.push(request); return answerFor()(request); });
+  const probe = requests.find(r => r.kind === "effect-delta-simulation");
+  assert(probe?.kind === "effect-delta-simulation");
+  assert.equal(CTOKEN_INTERFACE.decodeFunctionData("redeem", probe.call.data)[0] > 0n, true);
+  assert.deepEqual(probe.overrideIntent.tokenBalances?.map(d => d.token.toLowerCase()), [MARKET.toLowerCase()]);
+});
+
+for (const mutation of ["rpc", "revert", "source"] as const) {
+  test(`Exact refuses ${mutation} current-rate evidence without stored fallback`, () => {
+    assert.throws(() => quote(10n ** 9n, request => {
+      const result = answerFor()(request);
+      if (request.id !== "quote-rate-current") return result;
+      if (mutation === "rpc") return { id: request.id, ok: false, failure: "rpc", source: SOURCE };
+      return mutation === "revert" ? { ...result, completion: "reverted-as-declared" } as typeof result
+        : { ...result, source: { ...SOURCE, generation: SOURCE.generation + 1 } };
+    }));
+  });
+}
+
+test("Exact declares local math with a prefix limitation and no accrual carry guarantee", () => {
+  const { method, requested } = quote(10n ** 9n);
+  assert.deepEqual(requested.map(r => r.id), ["quote-rate-current", "quote-cash"]);
+  assert.equal((method as any).chainAmountQuote, undefined);
+  assert.equal((method as any).stateOnlyReads, undefined, "current rate depends on execution block accrual");
+  assert.equal(typeof (method as any).trialState?.unsupportedReason, "string");
+});
+
+test("Exact rejects an unmodeled prefix even when a trial object is supplied", () => {
+  const { input, method } = quote(10n ** 9n);
+  const prefixed = { ...input, prefix: [{}], trialState: { get: () => undefined } };
+  assert.throws(() => method.program.buildRequests(prefixed as never), /prefix/i);
+});
+
+test("quoted minimum is executable data, not unused metadata", () => {
+  const { input, quoted } = quote(10n ** 9n);
+  const encode = (minimum: bigint) => {
+    const fragment = plugin.execution.buildFragment({ ...input, quotedAmountOut: quoted.amountOut,
+      minAmountOut: minimum, exactEvidence: quoted.evidence } as never);
+    return ethers.hexlify(plugin.actionAdapters[0]!.encode(fragment.nodes[0] as never, EXECUTOR, new Uint8Array()));
+  };
+  assert.notEqual(encode(1n), encode(quoted.amountOut));
+});
 
 const routesFor = (d: ReturnType<typeof descriptor>) =>
   plugin.routes.project({ descriptor: d });
@@ -77,7 +134,7 @@ test("manifest declares the registry-admitted cToken redemption family", () => {
   assert.deepEqual(actionIds, [CTOKEN_REDEEM_ACTION]);
 });
 
-test("identity verifies through the comptroller registry plus a live exchange-rate path", () => {
+test("identity verifies the registry plus positive redemption effects", () => {
   const identity = descriptor();
   assert.equal(identity.market, ethers.getAddress(MARKET));
   assert.equal(identity.comptroller, ethers.getAddress(COMPTROLLER));
@@ -114,13 +171,53 @@ test("identity rejects a market whose stored exchange rate is zero", () => {
   );
 });
 
-test("identity rejects an inactive redemption path", () => {
-  const decision = decisionWith(answerFor({ probeReplies: false }));
-  assert.equal(decision.status, "chain-proven-rejected");
-  assert.equal(
-    (decision as { reasonCode: string }).reasonCode,
-    "compound_ctoken_redemption_path_inactive",
-  );
+test("identity transport failure is unresolved, never a permanent rejection", () => {
+  assert.throws(() => decisionWith(answerFor({ probeReplies: false })), /request.*failed|rpc/i);
+});
+
+test("zero market cash is retryable and never schedules a zero-input redeem", () => {
+  const requests: AdapterRequest[] = [];
+  const decision = decisionWith(request => { requests.push(request); return answerFor({ cash: 0n })(request); });
+  assert.equal(decision.status, "retryable");
+  assert.equal(requests.some(r => r.kind === "effect-delta-simulation"), false);
+});
+
+for (const fault of ["return-code", "no-effects", "short-burn", "supply", "short-output", "pool-debit", "foreign-actor", "event", "revert"] as const) {
+  test(`identity does not verify ${fault} even when the request returned successfully`, () => {
+    const decision = decisionWith(request => {
+      // Deliberately mutable negative fixture; production evidence is readonly.
+      const r = structuredClone(answerFor()(request)) as any;
+      if (request.id !== "active-redeem" || !r.ok) return r;
+      if (fault === "return-code") r.data = ethers.toBeHex(1n, 32);
+      if (fault === "revert") r.completion = "reverted-as-declared";
+      if (fault === "no-effects") r.effects = { tokenDeltas: [], totalSupplyDeltas: [], logs: [] };
+      if (fault === "short-burn") (r.effects!.tokenDeltas![0] as any).delta += 1n;
+      if (fault === "supply") (r.effects!.totalSupplyDeltas![0] as any).delta = 0n;
+      if (fault === "short-output") (r.effects!.tokenDeltas![1] as any).delta -= 1n;
+      if (fault === "pool-debit") (r.effects!.tokenDeltas![2] as any).delta = 0n;
+      if (fault === "foreign-actor") (r.effects!.tokenDeltas![1] as any).account = FOREIGN;
+      if (fault === "event") r.effects = { ...r.effects, logs: [] };
+      return r;
+    });
+    assert.equal(decision.status, "retryable");
+  });
+}
+
+test("identity binds source across registry and simulation and accrues in registry round", () => {
+  const seen: string[][] = [];
+  const variant = plugin.identity.variants[0]!;
+  let evidence: unknown;
+  for (let step = 0; step < 3; step++) {
+    const input = { candidate: CANDIDATE, evidence, step };
+    const requests = variant.buildRequests(input as never);
+    seen.push(requests.map(r => r.id));
+    const results = requests.map(answerFor());
+    if (step > 0) assert.throws(() => variant.decode({ step: input as never,
+      results: results.map(r => ({ ...r, source: { ...SOURCE, generation: 2 } })) } as never), /foreign source/);
+    evidence = variant.decode({ step: input as never, results } as never);
+  }
+  assert(seen[1].includes("registry-current-rate") && seen[1].includes("registry-markets"));
+  assert.deepEqual(seen[2], ["active-redeem"]);
 });
 
 test("routes project exactly one share-to-underlying redeem direction", () => {
@@ -205,7 +302,7 @@ test("explicit-amount quote capability stays available for any positive amount",
 test("buildRuntimeLeg patches the working amount into redeem's first argument and needs no approval", () => {
   const d = descriptor();
   const route = routesFor(d)[0]!;
-  const leg = plugin.execution.buildRuntimeLeg(
+  const leg = plugin.execution.buildRuntimeLeg!(
     inputFor(d, route, 10n ** 12n) as never,
   );
   assert.ok(leg, "a supported route must construct a runtime leg");
@@ -232,14 +329,14 @@ test("buildRuntimeLeg constructs without reading any quoted amount field", () =>
       },
     });
   }
-  const leg = plugin.execution.buildRuntimeLeg(input as never);
+  const leg = plugin.execution.buildRuntimeLeg!(input as never);
   assert.ok(leg);
 });
 
 test("buildRuntimeLeg rejects a foreign tokenOut", () => {
   const d = descriptor();
   const route = routesFor(d)[0]!;
-  assert.throws(() => plugin.execution.buildRuntimeLeg(
+  assert.throws(() => plugin.execution.buildRuntimeLeg!(
     inputFor(d, { ...route, tokenOut: FOREIGN } as never, 10n ** 12n) as never,
   ));
 });
@@ -294,7 +391,7 @@ test("expected effects describe a conserving share burn for underlying", () => {
 });
 
 test("discovery nominates markets from both observed redemption entry points", () => {
-  const patternIds = plugin.discovery.callPatterns.map((pattern) => pattern.id);
+  const patternIds = plugin.discovery.callPatterns!.map((pattern) => pattern.id);
   assert.ok(patternIds.includes("compound-ctoken-redeem-call"));
   assert.ok(patternIds.includes("compound-ctoken-redeem-underlying-call"));
   assert.equal(plugin.discovery.evidenceChannel, "nominate");
@@ -340,12 +437,14 @@ test("identity is not satisfied by a hardcoded market list", () => {
 
 test("foreign candidates are rejected as invalid programs", () => {
   const variant = plugin.identity.variants[0]!;
+  const step = { candidate: CANDIDATE, evidence: undefined, step: 0 };
+  const evidence = variant.decode({ step, results: variant.buildRequests(step).map(answerFor()) });
   const decision = variant.decide({
     candidate: { candidateKind: "compound-ctoken-market", market: FOREIGN },
-    evidence: undefined,
-    step: 0,
+    evidence,
+    step: 1,
   } as never);
-  assert.equal(decision.status, "continue");
+  assert.equal(decision.status, "invalid-program");
 });
 
 test("fixture answers cover every declared request id", () => {

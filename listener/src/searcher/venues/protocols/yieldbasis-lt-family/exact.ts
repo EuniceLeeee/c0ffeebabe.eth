@@ -5,6 +5,7 @@ import {
 } from "../../adapter-family-plugin.js";
 import type { AdapterRequestResult } from
   "../../adapter-request-program.js";
+import { runtimeExecutor } from "../../runtime-execution.js";
 import {
   assertSource,
   callRequest,
@@ -75,6 +76,11 @@ const program: ExactRequestProgram<
         LT_INTERFACE.encodeFunctionData("is_killed"),
       ),
       callRequest(
+        "quote-staker",
+        input.descriptor.lt,
+        LT_INTERFACE.encodeFunctionData("staker"),
+      ),
+      callRequest(
         "quote-live-supply",
         input.descriptor.lt,
         LT_INTERFACE.encodeFunctionData("updated_balances"),
@@ -107,6 +113,8 @@ const program: ExactRequestProgram<
     assertSource(preview.source, programInput.source);
     const killed = returnedResult(results, "quote-is-killed");
     assertSource(killed.source, programInput.source);
+    const staker = returnedResult(results, "quote-staker");
+    assertSource(staker.source, programInput.source);
     const liveSupply = returnedResult(results, "quote-live-supply");
     assertSource(liveSupply.source, programInput.source);
     const liquidity = returnedResult(results, "quote-liquidity");
@@ -114,6 +122,20 @@ const program: ExactRequestProgram<
     const poolBalance = returnedResult(results, "quote-pool-asset-balance");
     assertSource(poolBalance.source, programInput.source);
 
+    const executor = runtimeExecutor(
+      programInput.executor,
+      programInput.descriptor.lt,
+      programInput.descriptor.asset,
+    );
+    const currentStaker = String(LT_INTERFACE.decodeFunctionResult(
+      "staker",
+      staker.data,
+    )[0]);
+    // The routed two-argument withdraw defaults receiver to msg.sender: both
+    // are the executor, not tx.origin. staker is mutable, not Ready authority.
+    if (lowerAddress(currentStaker) === lowerAddress(executor)) {
+      throw new Error("Yield Basis LT withdraw to/from staker would revert");
+    }
     if (Boolean(LT_INTERFACE.decodeFunctionResult("is_killed", killed.data)[0])) {
       // `withdraw` asserts `not amm.is_killed()`: a killed LT is unquotable.
       throw new Error(

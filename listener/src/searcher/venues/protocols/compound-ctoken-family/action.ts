@@ -1,8 +1,6 @@
 import { ethers } from "ethers";
-import {
-  concatBytes,
-  encodeCall,
-} from "../../../../encoder.js";
+import { runtimeProgramScript } from "../../../../adapters/runtime-amount-program.js";
+import { redeemProgram } from "./redeem-program.js";
 import { bindFamilyOwnedAction } from "../../family-owned-action.js";
 import { CTOKEN_INTERFACE } from "./abi.js";
 import { lower } from "./codec.js";
@@ -29,6 +27,9 @@ export const compoundCTokenRedeemAction = bindFamilyOwnedAction({
         node.adapterId !== CTOKEN_REDEEM_ACTION ||
         typeof node.amount !== "bigint" ||
         node.amount <= 0n ||
+        node.amount > ethers.MaxUint256 ||
+        typeof node.params.minUnderlyingOut !== "bigint" ||
+        lower(node.tokenIn) !== target ||
         inner.length !== 0 ||
         node.children.length !== 0 ||
         target === actor ||
@@ -36,14 +37,8 @@ export const compoundCTokenRedeemAction = bindFamilyOwnedAction({
       ) {
         throw new Error("compound cToken invalid action");
       }
-      return ethers.getBytes(concatBytes(
-        encodeCall(
-          target,
-          ethers.getBytes(
-            CTOKEN_INTERFACE.encodeFunctionData("redeem", [node.amount]),
-          ),
-        ),
-      ));
+      return runtimeProgramScript(redeemProgram(target, node.tokenOut, actor,
+        node.params.minUnderlyingOut).bytes(), node.amount);
     },
     matchTrace: (_target, selector) =>
       selector.toLowerCase() === REDEEM_SELECTOR,

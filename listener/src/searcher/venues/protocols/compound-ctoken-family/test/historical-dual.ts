@@ -1,17 +1,8 @@
-// Opt-in same-block dual-interface evidence for the Compound cToken family.
-//
-// For ONE pinned block this drives the family's production specified-amount
-// quote, its production quoted-fragment encoding and its production
-// runtime-actual leg, and reports the four integers side by side with the
-// block's real on-chain `Redeem` integers, naming the artifact each came from.
-//
-// It exists to answer one question with integers instead of prose: at this
-// block, is the family's share-input `redeem` route comparable, state for
-// state, against a real share-input redemption? The on-chain leg is therefore
-// CLASSIFIED by tracing the emitting transaction, because
-// `redeemUnderlying(uint256)` emits the very same `Redeem` event as
-// `redeem(uint256)`. An underlying-output integer is never presented here as
-// share-input parity, and quote-vs-quote is never presented as on-chain parity.
+// Opt-in historical quote/ENCODING diagnostic, not dual-execution acceptance.
+// N-end eth_call is not the original redemption's pre-call state. The quoted
+// and runtime programs below are compiled, NOT executed: their output/minimum
+// fields are not measured receipts. Same-state dual execution requires a
+// separate EVM run; this read-only RPC harness cannot establish it.
 //
 // Read-only archive RPC only: no anvil fork, no signing, no broadcast, no
 // submission, no pool/flag/edge/hash insertion. Every reported integer is
@@ -36,15 +27,15 @@ import { asPricedFamily } from "../../../family-capability-catalog.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../../../production-infra-actions.js";
 import { CTOKEN_INTERFACE, CTOKEN_REDEEM_TOPIC } from "../abi.js";
-import { ID } from "../manifest.js";
+import { CTOKEN_FAMILY_ID as ID } from "../manifest.js";
+import type { CompoundCTokenDescriptor, CompoundCTokenRoute } from "../types.js";
+import { assertAnchors, classifyRedeemLog, runtimeScriptEnvelope, successfulRedeemCalls, type RedeemCall } from "./history-evidence.js";
 
 /** Argument layout comes from the OBSERVED log shape, never from a declaration. */
 const REDEEM_PLAIN = new ethers.Interface(["event Redeem(address redeemer,uint256 redeemAmount,uint256 redeemTokens)"]);
 const REDEEM_INDEXED = new ethers.Interface(["event Redeem(address indexed redeemer,uint256 redeemAmount,uint256 redeemTokens)"]);
 assert.equal(REDEEM_PLAIN.getEvent("Redeem")!.topicHash.toLowerCase(), CTOKEN_REDEEM_TOPIC);
 assert.equal(REDEEM_INDEXED.getEvent("Redeem")!.topicHash.toLowerCase(), CTOKEN_REDEEM_TOPIC);
-const REDEEM_SELECTOR = CTOKEN_INTERFACE.getFunction("redeem")!.selector.toLowerCase();
-const REDEEM_UNDERLYING_SELECTOR = CTOKEN_INTERFACE.getFunction("redeemUnderlying")!.selector.toLowerCase();
 
 const json = (value: unknown) => JSON.stringify(value, (_k, v) => typeof v === "bigint" ? v.toString() : v, 1);
 const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
@@ -64,7 +55,8 @@ async function main() {
   const fd = openSync(out, "wx", 0o600);
   const report: any = {
     result: "failed", rows: [], errors: [],
-    claim: "same-block, N end-state dual-interface integers for the family's share-input redeem route; NOT pre-call parity, NOT route EV, NOT an acceptance or ranking claim",
+    claim: "N-end quote and production encoding only; no historical encoded execution, no same-state TX parity, no EV or acceptance claim",
+    historicalDualExecution: "NOT RUN",
     safety: { signing: false, broadcast: false, remoteSubmission: false, fork: false,
       writes: "one 0600 report file; no pool, admitted flag, graph edge or Ready hash inserted" },
   };
@@ -84,7 +76,8 @@ async function main() {
     const files = readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile() && e.name.endsWith(".ts"))
       .map(e => e.name).sort();
     return { files: files.map(name => ({ name, sha256: sha256(readFileSync(resolve(dir, name))) })),
-      harnessSha256: sha256(readFileSync(import.meta.filename)) };
+      harnessSha256: sha256(readFileSync(import.meta.filename)),
+      evidenceHelperSha256: sha256(readFileSync(resolve(import.meta.dirname, "history-evidence.ts"))) };
   };
 
   try {
@@ -116,13 +109,7 @@ async function main() {
     const block = source.number;
     report.source = source;
     report.graphHash = ready.graphHash;
-    for (const [kind, observed] of [["prices.runtime.sourceBlock", saved.runtime?.sourceBlock],
-      ["prices.runtime.sourceBlockHash", saved.runtime?.sourceBlockHash],
-      ["provenance.stateSource.number", provenance.stateSource?.number],
-      ["provenance.stateSource.hash", provenance.stateSource?.hash]]) {
-      assert.equal(observed, kind.endsWith("Hash") ? source.hash : source.number, `${kind} mismatch`);
-    }
-    assert.equal(Number(BigInt(provenance.sourceHeader.number)), source.number);
+    assertAnchors(source, saved, provenance);
 
     stage = "strict-admission";
     const wiring = createRebuildWiring({ rpcUrl: "http://127.0.0.1:1/read-only",
@@ -132,7 +119,9 @@ async function main() {
       .filter(memo => memo.familyId === ID && memo.candidateSnapshot !== null)
       .map(memo => {
         assert([familyDefinitionHash(ID), familyMemoDefinitionHash(ID)].includes(memo.familyDefinitionHash));
-        const instance = wiring.rehydrateVerifiedInstance({ memo, cutoff: source }) as PreparedFamilyInstance;
+        const instance = wiring.rehydrateVerifiedInstance({ memo, cutoff: source }) as Omit<PreparedFamilyInstance, "descriptor" | "routes"> & {
+          readonly descriptor: CompoundCTokenDescriptor; readonly routes: readonly CompoundCTokenRoute[];
+        };
         assertIssuedPreparedFamilyInstance({ family, instance, source, generation: source.generation });
         assert(instance.descriptor.redemptionPathVerified === true);
         return { memo, instance, market: String(instance.descriptor.market).toLowerCase() };
@@ -150,7 +139,7 @@ async function main() {
       : effectiveRows && typeof effectiveRows === "object" ? Object.values(effectiveRows) : [];
     const rawEntries = Array.isArray(pricing?.mids?.entries) ? pricing.mids.entries : [];
     const mentions = (list: any[]) => list.filter(r => {
-      const text = JSON.stringify(r).toLowerCase();
+      const text = json(r).toLowerCase();
       return instances.some(i => text.includes(i.market) || text.includes(String(i.instance.descriptor.underlying).toLowerCase()));
     }).length;
     report.pricesArtifact = { rawMidEntries: rawEntries.length, effectiveRows: effectiveList.length,
@@ -161,7 +150,7 @@ async function main() {
 
     secret = JSON.parse(readFileSync(values.get("--rpc-file")!, "utf8")).MAINNET_RPC_URL;
     assert(typeof secret === "string" && /^https?:\/\//.test(secret));
-    const allowed = new Set(["web3_clientVersion", "eth_chainId", "eth_getBlockByNumber", "eth_call",
+    const allowed = new Set(["web3_clientVersion", "eth_chainId", "eth_getBlockByNumber", "eth_call", "eth_getCode", "eth_getStorageAt",
       "eth_getLogs", "eth_getTransactionReceipt", "debug_traceTransaction"]);
     const rpc = async (method: string, params: unknown[]): Promise<any> => {
       assert(allowed.has(method), `unallowlisted RPC method ${method}`);
@@ -180,7 +169,6 @@ async function main() {
     assert.equal(header.hash, source.hash, "archive RPC canonical block hash differs from Ready cutoff");
 
     const marketSet = new Set(instances.map(i => i.market));
-    const uint = (hex: string, index: number) => BigInt(ethers.dataSlice(hex, 32 * index, 32 * index + 32));
 
     // ---- Integer 4: the block's real on-chain Redeem integers ---------------
     stage = "on-chain-redeem-logs";
@@ -207,40 +195,33 @@ async function main() {
     assert(onChain.length > 0, "no Redeem log at this block to compare against");
     // Classify the INTERFACE each emitting transaction actually called. The
     // Redeem event alone cannot distinguish the two redemption interfaces.
-    const interfaces = new Map<string, { calls: { to: string; selector: string; argument: bigint }[] }>();
+    const interfaces = new Map<string, { calls: RedeemCall[] }>();
     for (const tx of [...new Set<string>(onChain.map(r => r.tx))]) {
+      const receipt = await rpc("eth_getTransactionReceipt", [tx]);
+      assert.equal(BigInt(receipt.status), 1n);
+      assert.equal(String(receipt.transactionHash).toLowerCase(), tx.toLowerCase());
+      assert.equal(String(receipt.blockHash).toLowerCase(), source.hash.toLowerCase());
+      assert.equal(Number(BigInt(receipt.blockNumber)), block);
+      for (const row of onChain.filter(r => r.tx === tx)) {
+        assert(receipt.logs.some((log: any) => Number(BigInt(log.logIndex)) === row.logIndex &&
+          String(log.address).toLowerCase() === row.emitter && String(log.topics?.[0]).toLowerCase() === CTOKEN_REDEEM_TOPIC));
+      }
       const traced = await rpc("debug_traceTransaction", [tx, { tracer: "callTracer" }]);
-      const found: { to: string; selector: string; argument: bigint }[] = [];
-      const walk = (frame: any): void => {
-        if (!frame || typeof frame !== "object") return;
-        const to = String(frame.to ?? "").toLowerCase();
-        const input = String(frame.input ?? "");
-        if (marketSet.has(to) && input.length >= 10) {
-          const selector = input.slice(0, 10).toLowerCase();
-          if (selector === REDEEM_SELECTOR || selector === REDEEM_UNDERLYING_SELECTOR) {
-            found.push({ to, selector, argument: uint(input, 0) });
-          }
-        }
-        for (const child of frame.calls ?? []) walk(child);
-      };
-      walk(traced);
-      interfaces.set(tx, { calls: found });
+      interfaces.set(tx, { calls: successfulRedeemCalls(traced, marketSet) });
     }
-    const shareInput = onChain.filter(r => (interfaces.get(r.tx)?.calls ?? [])
-      .some(c => c.to === r.emitter && c.selector === REDEEM_SELECTOR));
-    const underlyingInput = onChain.filter(r => (interfaces.get(r.tx)?.calls ?? [])
-      .some(c => c.to === r.emitter && c.selector === REDEEM_UNDERLYING_SELECTOR));
+    for (const row of onChain) row.interfaceUsed = classifyRedeemLog(row, interfaces.get(row.tx)?.calls ?? [],
+      onChain.filter(r => r.tx === row.tx && r.emitter === row.emitter).length);
+    const shareInput = onChain.filter(r => r.interfaceUsed === "share-input");
+    const underlyingInput = onChain.filter(r => r.interfaceUsed === "underlying-output");
     report.onChain = {
       block, blockHash: source.hash, logCount: onChain.length,
       emitters: [...new Set(onChain.map(r => r.emitter))],
       transactions: [...interfaces.entries()].map(([tx, v]) => ({ tx,
-        cTokenRedemptionCalls: v.calls.map(c => ({ market: c.to,
-          interface: c.selector === REDEEM_SELECTOR ? "redeem(uint256) share-input"
-            : "redeemUnderlying(uint256) underlying-output", selector: c.selector, argument: c.argument })) })),
+        cTokenRedemptionCalls: v.calls.map(c => ({ market: c.to, caller: c.from,
+          interface: c.method, argument: c.argument })) })),
       emitted: onChain.map(r => ({ emitter: r.emitter, tx: r.tx, logIndex: r.logIndex, shape: r.shape,
         redeemer: r.redeemer, redeemAmount: r.redeemAmount, redeemTokens: r.redeemTokens,
-        interfaceUsed: (interfaces.get(r.tx)?.calls ?? []).some(c => c.to === r.emitter && c.selector === REDEEM_SELECTOR)
-          ? "redeem(uint256) share-input" : "redeemUnderlying(uint256) underlying-output" })),
+        interfaceUsed: r.interfaceUsed })),
       rowsUsingShareInputInterface: shareInput.length,
       rowsUsingUnderlyingOutputInterface: underlyingInput.length,
       source: "archive RPC eth_getLogs + debug_traceTransaction (callTracer) at the pinned blockHash",
@@ -306,16 +287,16 @@ async function main() {
         };
         const planned = planFragmentNodes(frag, route.tokenIn, amountIn);
         const script = concatBytes(...planned.map(compile));
-        const payloadLength = (script[21]! << 16) | (script[22]! << 8) | script[23]!;
-        const payload = ethers.hexlify(script.slice(24, 24 + payloadLength));
+        const encoded = runtimeScriptEnvelope(script);
+        assert.equal(encoded.amount, amountIn);
         row.integer2_quotedFragmentEncoding = {
           artifact: "production execution.buildFragment + the family's own action adapter + planFragmentNodes",
           plannedAdapters: planned.map((n: any) => n.adapterId), requirements: frag.requirements.length,
           amountField: node.amount, minAmountOutField: node.params.minUnderlyingOut,
           rateSourceField: node.params.rateSource,
-          encodedSelector: payload.slice(0, 10),
-          encodedArgument: CTOKEN_INTERFACE.decodeFunctionData("redeem", payload)[0],
-          scriptSha256: ethers.keccak256(script),
+          encodedInitialAmount: encoded.amount, programBytes: encoded.length,
+          scriptKeccak256: ethers.keccak256(script),
+          actualReceived: null, execution: "NOT RUN: encoding is not a receipt",
         };
         // (3) production runtime-actual leg, built under a construction guard:
         // a throwing getter on every amount-ish key and a runtime proxy that
@@ -334,28 +315,13 @@ async function main() {
         }
         const leg = buildFamilyRuntimeAmountLeg(legInput as never);
         assert(leg, "runtime leg decline is not a pass");
-        const program = ethers.getBytes(leg.program);
-        const patchCountOffset = 2 + 20 + 1 + 1 + 3 + 3;
-        const patchCount = program[patchCountOffset]!;
-        const patches = Array.from({ length: patchCount }, (_v, i) => {
-          const b = patchCountOffset + 1 + i * 4;
-          return { offset: (program[b]! << 16) | (program[b + 1]! << 8) | program[b + 2]!, reg: program[b + 3]! };
-        });
-        const calldataLen = (program[program.length - 39]! << 16) | (program[program.length - 38]! << 8)
-          | program[program.length - 37]!;
-        const embedded = ethers.hexlify(program.slice(program.length - calldataLen));
-        assert.equal(embedded.slice(0, 10), REDEEM_SELECTOR, "runtime leg must call the routed share-input interface");
-        assert.deepEqual(patches, [{ offset: 4, reg: 0 }]);
         assert.equal(amountAccesses, 0);
         assert.equal(serviceAccesses, 0);
         row.integer3_runtimeActualLeg = {
           artifact: "production execution.buildRuntimeLeg through buildFamilyRuntimeAmountLeg",
-          actionAdapterId: leg.actionAdapterId, programSha256: ethers.keccak256(leg.program),
-          programHex: leg.program, embeddedSelector: embedded.slice(0, 10),
-          embeddedArgumentPlaceholder: CTOKEN_INTERFACE.decodeFunctionData("redeem", embedded)[0],
-          patches, amountAccesses, serviceAccesses, quotedAmountTouched: false,
-          consumesPreviousHopActual: patches.some(p => p.offset === 4 && p.reg === 0),
-          consumptionNote: "the first ABI argument word (offset 4) is patched from register r0, which the enclosing runtime flow primes with the previous hop's actually-received cToken amount; the embedded placeholder is 0, so no quoted amount is an input",
+          actionAdapterId: leg.actionAdapterId, programKeccak256: ethers.keccak256(leg.program),
+          programHex: leg.program, amountAccesses, serviceAccesses, quotedAmountTouched: false,
+          actualReceived: null, execution: "NOT RUN: construction guard proves no quote input, not actual receipt/next-hop consumption",
         };
         // (4) real on-chain integers, classified by interface
         row.integer4_onChainRedeem = {
@@ -363,39 +329,30 @@ async function main() {
           tx: usage.tx, logIndex: usage.logIndex, emitter: usage.emitter, redeemer: usage.redeemer,
           redeemAmount: usage.redeemAmount, redeemTokens: usage.redeemTokens,
           interfaceUsed: usage.interfaceUsed,
-          isShareInputRedemption: usage.interfaceUsed === "redeem(uint256) share-input",
+          isShareInputRedemption: usage.interfaceUsed === "share-input",
         };
         // Explicitly NOT parity: quantify the difference but never label it equal.
-        const shareInputComparable = usage.interfaceUsed === "redeem(uint256) share-input";
+        const shareInputComparable = usage.interfaceUsed === "share-input";
         row.comparison = {
-          sameState: true,
+          sameState: false,
           onChainInterfaceIsShareInput: shareInputComparable,
           signedDeltaQuotedMinusOnChain: resolved.amountOut - usage.redeemAmount,
-          verdict: shareInputComparable
-            ? "comparable: on-chain leg used the same share-input interface"
-            : "NOT COMPARABLE: the on-chain redemption used redeemUnderlying(uint256) (underlying-output), so this integer pair is a quote-vs-different-interface observation, not share-input parity",
-          reconciliationNote: shareInputComparable ? "n/a" : "the delta above mixes two different rounding paths (mul-then-div from shares vs div-then-mul from an underlying target) and must not be read as quote accuracy",
+          verdict: "NOT SAME STATE: original call pre-state/prefix was not restored; N-end quote minus receipt is descriptive, not quote accuracy",
+          reconciliationNote: shareInputComparable ? "same interface, different state" : "different or unverified interface as well as different state",
         };
         report.rows.push(row);
       }
     }
 
-    const missing: string[] = [];
-    if (report.onChain.rowsUsingShareInputInterface === 0) {
-      missing.push("no transaction in this block calls redeem(uint256) on any admitted cToken market, so no real share-input redemption exists to compare against state-for-state");
-      missing.push("the only Redeem-emitting transactions in this block call redeemUnderlying(uint256)");
-    }
     report.sameStateShareInputComparison = {
-      possible: report.onChain.rowsUsingShareInputInterface > 0,
-      verdict: report.onChain.rowsUsingShareInputInterface > 0
-        ? "possible: a share-input redemption exists at this block"
-        : "IMPOSSIBLE at this block",
-      missingEvidence: missing,
+      verified: false, verdict: "NOT RUN",
+      missingEvidence: ["original call pre-state and prefix not restored", "quoted/runtime encoded programs not executed"],
       scope: `block ${block}; all ${report.onChain.logCount} Redeem logs at this block enumerated and every emitting transaction traced`,
     };
     report.chainReads = reads.length;
     report.rpcCalls = calls;
-    report.result = "pass";
+    assert(report.rows.length > 0, "no admitted market encoding observations");
+    report.result = "encoding-only";
   } catch (error) {
     report.errors.push(failure(error));
   } finally {
@@ -419,10 +376,8 @@ async function main() {
   for (const row of report.rows) {
     console.log(json({ market: row.market, statedShareAmount: row.statedShareAmount,
       integer1_quotedAmountOut: row.integer1_quotedAmountOut.value,
-      integer2_encodedArgument: row.integer2_quotedFragmentEncoding.encodedArgument,
+      integer2_encodedInitialAmount: row.integer2_quotedFragmentEncoding.encodedInitialAmount,
       integer2_minAmountOut: row.integer2_quotedFragmentEncoding.minAmountOutField,
-      integer3_patches: row.integer3_runtimeActualLeg.patches,
-      integer3_embeddedArgumentPlaceholder: row.integer3_runtimeActualLeg.embeddedArgumentPlaceholder,
       integer3_amountAccesses: row.integer3_runtimeActualLeg.amountAccesses,
       integer3_serviceAccesses: row.integer3_runtimeActualLeg.serviceAccesses,
       integer4_redeemAmount: row.integer4_onChainRedeem.redeemAmount,
@@ -431,7 +386,7 @@ async function main() {
       signedDeltaQuotedMinusOnChain: row.comparison.signedDeltaQuotedMinusOnChain,
       onChainInterfaceIsShareInput: row.comparison.onChainInterfaceIsShareInput }));
   }
-  if (report.result !== "pass") process.exitCode = 1;
+  if (report.result !== "encoding-only") process.exitCode = 1;
 }
 main().catch(() => {
   console.error("compound cToken historical-dual invalid input; existing files not overwritten");
