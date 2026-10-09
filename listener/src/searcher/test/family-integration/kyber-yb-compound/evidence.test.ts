@@ -6,6 +6,7 @@ import { KYSWAP_POOL_INTERFACE as KYBER } from "../../../venues/swaps/kyberswap-
 import { ALGEBRA_POOL_INTERFACE as ALGEBRA } from "../../../venues/swaps/algebra-integral-family/abi.js";
 import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-family/abi.js";
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
+import { ERC4626_INTERFACE as VAULT } from "../../../venues/protocols/erc4626-family/abi.js";
 import { options, SAMPLES, ERC20, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, originalLeg,
   assertReceipt, observeBalance, assertDeltas, constructionGuard, word, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory, assertExecutorCode } from "./evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
@@ -237,6 +238,48 @@ for (const key of ["algebra", "algebra2", "algebra3", "algebra4", "algebra5", "a
   });
 }
 
+for (const deposit of [true, false]) test(`standard ERC4626 ${deposit ? "deposit" : "redeem"} binds call, event and independent receipt`, () => {
+  const instance = SAMPLES["erc4626-fluid"].instances[deposit ? 0 : 1];
+  const descriptor = { vault: instance, share: instance, asset };
+  const method = deposit ? "deposit" : "redeem";
+  const log = event(VAULT, deposit ? "Deposit" : "Withdraw",
+    deposit ? [actor, actor, 17n, 19n] : [actor, actor, actor, 19n, 17n], instance);
+  const receipt = { logs: [log, event(ERC20, "Transfer",
+    [deposit ? ethers.ZeroAddress : instance, actor, 19n], deposit ? instance : asset)] };
+  const input = (amount: bigint) => VAULT.encodeFunctionData(method,
+    deposit ? [amount, actor] : [amount, actor, actor]);
+  const trace = { type: "CALL", from: actor, to: instance, input: input(17n),
+    output: VAULT.encodeFunctionResult(method, [19n]), logs: receipt.logs };
+  const leg = originalLeg("erc4626-fluid", instance, descriptor, receipt, trace);
+  assert.equal(leg.amountIn, 17n); assert.equal(leg.amountOut, 19n);
+  assert.equal(leg.tokenIn, deposit ? asset : instance);
+  assert.equal(leg.tokenOut, deposit ? instance : asset);
+  assert.equal(leg.originalInterface, method);
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, receipt, { ...trace, input: input(18n) }));
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, receipt,
+    { ...trace, output: VAULT.encodeFunctionResult(method, [18n]) }));
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, { logs: [log] }, trace));
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, { logs: [...receipt.logs, log] }, trace));
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, receipt, { error: "revert", calls: [trace] }));
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, receipt,
+    { calls: [{ error: "revert", calls: [trace] }] }));
+  assert.throws(() => originalLeg("erc4626-fluid", instance, { ...descriptor, custodian: {} }, receipt, trace));
+  const wrongReceipt = { logs: [log, event(ERC20, "Transfer",
+    [deposit ? ethers.ZeroAddress : instance, token0, 19n], deposit ? instance : asset)] };
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, wrongReceipt, trace));
+  // Receipt-wide uniqueness is insufficient: bind both event and payment to
+  // this successful subtree, including a non-vault liquidity payer.
+  const payment = receipt.logs[1]!;
+  for (const [inside, sibling] of [[[log], [payment]], [[payment], [log]]]) {
+    assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, receipt,
+      { calls: [{ ...trace, logs: inside }, { logs: sibling }] }), /selected successful vault subtree/);
+  }
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, receipt,
+    { ...trace, logs: [log], calls: [{ error: "revert", logs: [payment] }] }), /selected successful vault subtree/);
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, receipt,
+    { ...trace, calls: [{ logs: [payment] }] }), /selected successful vault subtree/);
+});
+
 test("YB accepts ordinary withdraw; same Withdraw event with emergency call is insufficient", () => {
   const instance = SAMPLES.yb.instances[0], descriptor = { share: instance, asset };
   const receipt = { logs: [event(LT, "Withdraw", [actor, actor, actor, 19n, 17n], instance), transfer(instance, 19n)] };
@@ -279,4 +322,34 @@ test("observation rejects missing credit even when initial output inventory exce
   assert.throws(() => observeBalance(diff, asset, slot, 0n));
   assert.throws(() => assertDeltas({ before: 27n, after: 0n, delta: -27n }, observeBalance(diff, asset, slot, initial), 17n, 19n));
   assert.throws(() => observeBalance({}, asset, slot, initial));
+});
+
+for (const native of [true, false]) test(`standard vault original ${native ? "depositNative" : "withdraw"} is mapped, not same-interface parity`, () => {
+  const instance = SAMPLES["erc4626-fluid"].instances[native ? 0 : 1];
+  const wrapped = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+  const descriptor = { vault: instance, share: instance, asset: native ? wrapped : asset };
+  const abi = new ethers.Interface(["function depositNative(address) payable returns(uint256)",
+    "function withdraw(uint256,address,address) returns(uint256)"]);
+  const method = native ? "depositNative" : "withdraw";
+  const log = event(VAULT, native ? "Deposit" : "Withdraw",
+    native ? [actor, actor, 17n, 19n] : [actor, actor, actor, 19n, 17n], instance);
+  const receipt = { logs: [log, event(ERC20, "Transfer",
+    [native ? ethers.ZeroAddress : token0, actor, 19n], native ? instance : asset)] };
+  const trace = { type: "CALL", from: actor, to: instance,
+    input: abi.encodeFunctionData(method, native ? [actor] : [19n, actor, actor]),
+    output: abi.encodeFunctionResult(method, [native ? 19n : 17n]), value: native ? "0x11" : "0x0",
+    logs: [log], calls: [{ logs: [receipt.logs[1]!] }] };
+  const leg = originalLeg("erc4626-fluid", instance, descriptor, receipt, trace);
+  assert.equal(leg.amountIn, 17n); assert.equal(leg.amountOut, 19n);
+  assert.equal(leg.tokenIn, native ? wrapped : instance);
+  assert.equal(leg.originalInterface, method); assert.match(leg.comparison, /NOT original interface/);
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, receipt,
+    { ...trace, value: native ? "0x12" : "0x1" }));
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, receipt,
+    { ...trace, output: abi.encodeFunctionResult(method, [native ? 18n : 16n]) }));
+  assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, receipt,
+    { calls: [{ error: "revert", calls: [trace] }] }));
+  if (native) assert.throws(() => originalLeg("erc4626-fluid", instance, { ...descriptor, asset }, receipt, trace));
+  else assert.throws(() => originalLeg("erc4626-fluid", instance, descriptor, receipt,
+    { ...trace, input: abi.encodeFunctionData(method, [20n, actor, actor]) }));
 });

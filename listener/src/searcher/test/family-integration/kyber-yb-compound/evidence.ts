@@ -10,10 +10,15 @@ import { successfulRedeemCalls, classifyRedeemLog } from "../../../venues/protoc
 import { assertHistoricalPriceDirection } from "../three-family/historical-input-observations.js";
 import { originalEkuboLeg } from "../../../venues/swaps/ekubo-family/test/history-evidence.js";
 import { originalXwinLeg } from "../../../venues/protocols/token-conversion-family/test/history-evidence.js";
+import { originalStandardErc4626Leg } from "../../../venues/protocols/erc4626-family/test/history-evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 export { json, sha, word, observeBalance } from "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.js";
 
 export const SAMPLES = {
+  "erc4626-fluid": { family: "protocol:erc4626", number: 26030897,
+    tx: "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+    instances: ["0x90551c1795392094fe6d29b758eccd233cfaa260",
+      "0x2411802d8bea09be0af8fd8d08314a63e706b29c"] },
   "xwin-mint": { family: "protocol:token-conversion", number: 26075823,
     tx: "0x10b7f1d5ac14281c916b4f94bd8c781c2795bfdd7d1a527885e83f4f22ec9ae3",
     instances: ["0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1"] },
@@ -240,6 +245,8 @@ function successfulCalls(trace: any, target: string, selector: string): any[] {
 /** Extract only one unambiguous real successful call + event per instance. */
 export function originalLeg(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any) {
   assert(!trace.error && !trace.revertReason, "original transaction reverted");
+  if (key === "erc4626-fluid")
+    return originalStandardErc4626Leg(instance, descriptor, receipt, trace);
   if (key === "xwin-mint" || key === "xwin-redeem")
     return originalXwinLeg(instance, descriptor, receipt, trace, key === "xwin-mint" ? "mint" : "redeem");
   if (SAMPLES[key].family === "custom-swap:ekubo-router-v1") return originalEkuboLeg(instance, descriptor, receipt, trace);

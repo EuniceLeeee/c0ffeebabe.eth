@@ -1,0 +1,231 @@
+{
+  "schema": 1,
+  "date": "2026-10-10",
+  "scope": "ERC4626 Fluid wrapper production-reference dual-execution supplement; no production/default changes",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "20a3f30c68bfb336bc314104a4210e9407b7fa4d",
+  "status": "four same-N directions verified; performance and full opportunity acceptance not run",
+  "precedingReport": "docs/research/reports/erc4626-deposit-fallback-20261010.json",
+  "productionBinding": {
+    "sourceTreeSha256": "614fb81dd45cf7f2d36cd79d8e6a810125bba689f32ce000ed2c683a9847ea7e",
+    "scope": "Actual production working tree includes preserved peer changes; HEAD alone is not its fingerprint.",
+    "changesThisCommit": "test observation/helper and existing historical dual harness only; no generated catalog, Ready mutation or production policy"
+  },
+  "source": {
+    "chainId": 1,
+    "number": 26030897,
+    "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6",
+    "environment": "N-end state and N execution environment"
+  },
+  "transaction": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+  "actors": {
+    "executor": "0x1000000000000000000000000000000000000002",
+    "owner": "0x1000000000000000000000000000000000000001",
+    "scope": "Same actors as the reused Ready/prices, isolated fork eth_call/debug_traceCall; no key/signing"
+  },
+  "bindings": [
+    {
+      "path": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/26030897-ready-3/ready.json",
+      "sha256": "abe1be329ca1a0ccb3aed9b17340d4be45f54a9fdb04c4e5922df3fb2de37f78"
+    },
+    {
+      "path": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/26030897-ready-3/prices/prices.json",
+      "sha256": "1cc8d5a51fc902bf42fd2a3de21a93960bd247b058cfaa89a22d40cf9a57fe6f"
+    },
+    {
+      "path": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/26030897-ready-3/prices/input.json",
+      "sha256": "1222175a3cb0dd6a39a8a989b39737d480221c816a71389ec5d83d63845d886f"
+    },
+    {
+      "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+      "sha256": "370bd90b04b189b8fbd53d56a1540a959cf8a11bb0729416e89c0040d43d0f2b"
+    },
+    {
+      "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+      "sha256": "f35c3b014728e3fd36e811f5087a97d11bcf92cc3ab4fcdf366c17a23092aff9"
+    },
+    {
+      "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.test.ts",
+      "sha256": "e636252e1ab4fedbd164432ead85311bbd2a00d6e1bf4375669ebfd5bddc6eb9"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/test/history-evidence.ts",
+      "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+    }
+  ],
+  "runtime": {
+    "keccak256": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+    "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3"
+  },
+  "originalEvidence": {
+    "receiptSha256": "ef5dc6c9b3997f8a6d6ea4f92bbb69b6c543b8a9250ef048fa0b5aba78e64b59",
+    "traceWithLogsSha256": "929fa0b2e2cf697dff35738b02986b125a124d8d8bbcd95d614548aa60a270c3",
+    "mappings": [
+      {
+        "vault": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+        "originalInterface": "depositNative(address)",
+        "selector": "0x33bb7f91",
+        "originalInputNativeWei": "46324882139804417",
+        "originalMintedShares": "42827581416880614",
+        "testedMapping": "Observed ETH quantity used as WETH input for existing standard deposit at N-end; NOT original interface/pre-call parity"
+      },
+      {
+        "vault": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+        "originalInterface": "withdraw(uint256,address,address)",
+        "selector": "0xb460af94",
+        "originalAssetOutput": "37216501029875539",
+        "originalBurnedShares": "35837899392064324",
+        "testedMapping": "Observed burned shares used as standard redeem input at N-end; NOT original interface/pre-call parity"
+      }
+    ],
+    "binding": "Successful direct vault CALL, arguments/return, vault event and independent output Transfer agree. Both receipt logs are uniquely matched to selected successful call subtree; failed ancestors/children and sibling-only evidence are rejected. Withdrawal payer can be liquidity, not necessarily vault."
+  },
+  "acceptance": {
+    "result": "pass",
+    "naturalProductionReferenceGate": "met",
+    "directions": 4,
+    "amountTrials": 8,
+    "positiveExecutions": 32,
+    "noInputWithOldOutputReverts": 16,
+    "amountPolicy": "Each direction uses its actual natural production effective amountIn, plus original mapped input for original directions or 2x effective for reverse directions. No arbitrary reference P or donor output.",
+    "signedQuoteToOutputDelta": "0 for all 32 positive executions",
+    "inputDebit": "exact tested input; observed independently",
+    "inventory": "Existing input/output inventory preserved; positive native inventory 17 -> 17 wei; no-input negative controls use the same execution calldata.",
+    "runtimeConstruction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "scope": "Each of four directions; explicit quote path separately calls production Exact 8 times."
+    },
+    "allowances": "Existing standard ERC4626 quoted/runtime deposit MAX allowance policy unchanged. This supplement DOES NOT prove allowance cleanup.",
+    "ready": "Original 58-instance/116-edge single-block Ready and prices reused unchanged; no re-admission, injected edges, identity or prices."
+  },
+  "directions": [
+    {
+      "vault": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+      "direction": "WETH -> share",
+      "productionAmountIn": "2000000000000000",
+      "productionAmountOut": "1849009838282188",
+      "secondAmountIn": "46324882139804417",
+      "secondAmountOut": "42827581416880614"
+    },
+    {
+      "vault": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+      "direction": "share -> WETH",
+      "productionAmountIn": "1849009838282188",
+      "productionAmountOut": "1999999999999998",
+      "secondAmountIn": "3698019676564376",
+      "secondAmountOut": "3999999999999997"
+    },
+    {
+      "vault": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+      "direction": "share -> wstETH",
+      "productionAmountIn": "1546926641909882",
+      "productionAmountOut": "1606433355146065",
+      "secondAmountIn": "35837899392064324",
+      "secondAmountOut": "37216501029875539"
+    },
+    {
+      "vault": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+      "direction": "wstETH -> share",
+      "productionAmountIn": "1597911582892575",
+      "productionAmountOut": "1538720539557124",
+      "secondAmountIn": "3195823165785150",
+      "secondAmountOut": "3077441079114248"
+    }
+  ],
+  "tests": {
+    "actualWorkingTree": {
+      "contract": "40/40 pass",
+      "buildLive": "exit 0",
+      "log": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/wrapper-dual-offline-3.log",
+      "sha256": "dc0547a3046023d7151747a4824541b2d98eea633294555f8286d92ec61a010c"
+    },
+    "isolatedOwnedSnapshot": {
+      "path": "logs/erc4626-wrapper-commitcheck-20261010.p1M1N0",
+      "contents": "git archive baseCommit plus these four owned test files; peer diffs excluded",
+      "contract": "40/40 pass",
+      "buildLive": "exit 0",
+      "log": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/wrapper-owned-gates-1.log",
+      "sha256": "35ae9300ee9984fc909a5929d5a5e0459e2f8c5c887ed8215692bda33ddb6e5b"
+    },
+    "negativeEvidence": "Wrong amount/return/recipient, failed ancestor, missing or ambiguous receipt, native non-WETH mapping, nonzero ERC20 call value, sibling-only event/payment, failed child and duplicate subtree logs reject."
+  },
+  "attempts": [
+    {
+      "path": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/wrapper-dual-1.json",
+      "sha256": "cbb749250e6cd2201d76ea64cefe4eca759b533fc8910ea2d280626dc92cd585",
+      "exit": 1,
+      "outcome": "Observation assumed standard deposit/redeem; original selectors were depositNative/withdraw. Zero amount trials, not a protocol-execution failure."
+    },
+    {
+      "path": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/wrapper-dual-2.json",
+      "sha256": "e2a66b53217806068e9ad57f501e87f7d5df29634de78fbec018674c4b0741b4",
+      "exit": 0,
+      "outcome": "32 N-end executions valid, original output receipt not yet subtree-bound; retained, supplemented by attempt 4."
+    },
+    {
+      "path": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/wrapper-dual-3.log",
+      "sha256": "9908998f6245d2efbc47ed083bdc2114af565e48f5f4deafc899528bc8845117",
+      "exit": 1,
+      "outcome": "Operator passed --window to fixed-sample indexed tool without window binding. Rejected before runner/RPC; no result JSON/execution receipt. Not a performance failure."
+    },
+    {
+      "path": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/wrapper-dual-4.json",
+      "sha256": "0cc2e512675ec55b6a46b9bb0d151aa3717cde70f83e27ac744a6df827b9e8d8",
+      "exit": 0,
+      "outcome": "Canonical reconciliation with real withLog trace and subtree-bound original observations; 4 directions / 8 amounts / 32 positives / 16 negative controls pass."
+    }
+  ],
+  "reconciliation": {
+    "query": "universe,rebuild,status,kyber,compound,dual,historical,fork",
+    "manifest": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/wrapper-tool-selection.json",
+    "sha256": "2156248c7bf8eedbbcae286e901a8748af408aa328108668f4301c36cf1b05b9",
+    "successfulTools": [
+      "listener:searcher:kyber-yb-compound-dual-historical-fork",
+      "listener:searcher:universe-rebuild-status"
+    ],
+    "coverage": "successful capability union covers query; agrees with independent amount/balance inspection; fixed sample runner binds N/hash internally",
+    "receipts": [
+      {
+        "tool": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+        "exit": 0,
+        "finishedAt": "2026-10-09T22:58:02.945Z",
+        "argvSha256": "d735eba9bbbc21d2470d24bf27ef2401c94a0c52afce325f77f1fb8158b1aa21"
+      },
+      {
+        "tool": "listener:searcher:universe-rebuild-status",
+        "exit": 0,
+        "finishedAt": "2026-10-09T22:58:30.610Z",
+        "argvSha256": "c2e5ff9696e1329410ee787676dd1ea8709d666f8a9bc9ff53359d3a4f04298b"
+      }
+    ]
+  },
+  "review": {
+    "reviewer": "Tesla",
+    "passes": 2,
+    "result": "P2 receipt subtree-binding finding resolved in pass 2; no new high/medium findings in scoped read-only review; final actual hashes verified",
+    "scope": "Not formal Adapter Replay/merge-ready or performance approval"
+  },
+  "remaining": {
+    "balancerV3ProductionReferenceDirections": "unchanged 33/36; these 4 wrapper directions are not extra V3 directions",
+    "balancerV3MeasuredDirections": "unchanged 36/36 cumulative compatible evidence; not full-corpus rerun",
+    "originalPreCallAndInterfaceParity": "NOT VERIFIED",
+    "opportunityReplay": "NOT RUN",
+    "singleReadyPerformance": "NOT RUN",
+    "representativeLargeGraphPerformance": "NOT RUN",
+    "live": "NOT RUN",
+    "performanceScope": "Every applicable IMPL adapted/repaired protocol, including later additions, plus Balancer V2/V3 and Curve plain/underlying: correctness first, then per-protocol single Ready and combined representative large-graph stage acceptance. Diagnostic duration/call counts do not satisfy this."
+  },
+  "safety": {
+    "signing": false,
+    "broadcast": false,
+    "liveStarted": false,
+    "protocolOrPermissionOverrides": false,
+    "oldReadyModified": false,
+    "peerFilesCommitted": false,
+    "forkPort8591": "owned fork exited; port verified free"
+  }
+}

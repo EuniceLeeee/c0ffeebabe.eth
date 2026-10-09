@@ -56,6 +56,7 @@ export function sourcePin() {
     observationHelpers: ["../three-family/historical-input-observations.ts",
       "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
       "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+      "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
       "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
       "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts"]
       .map(path => ({ path, sha256: sha(readFileSync(new URL(path, import.meta.url))) })) };
@@ -169,7 +170,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const tx = await rpc("eth_getTransactionByHash", [sample.tx], true);
     assert(same(tx.hash, sample.tx) && same(tx.blockHash, source.hash)); assert.equal(BigInt(tx.blockNumber), BigInt(source.number));
     const trace = await rpc("debug_traceTransaction", [sample.tx, { tracer: "callTracer", timeout: "30s",
-      ...((args.family === "xwin-mint" || args.family === "xwin-redeem") ? { tracerConfig: { withLog: true } } : {}) }], true);
+      ...((args.family === "xwin-mint" || args.family === "xwin-redeem" || args.family === "erc4626-fluid") ? { tracerConfig: { withLog: true } } : {}) }], true);
     assert(trace.type === "CALL" && same(trace.from, tx.from) && same(trace.to, tx.to) && same(trace.input, tx.input));
     report.original = { receipt, transaction: tx, trace, receiptSha256: sha(json(receipt)), traceSha256: sha(json(trace)) };
     stage = "owned-local-fork";
@@ -257,7 +258,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assertHistoricalDiscoveryReceipt(await rpc("eth_getTransactionReceipt", [candidate.transactionHash]), candidate, source);
       const original = originalLeg(args.family, entry.instanceKey, entry.instance.descriptor, receipt, trace);
       directions.push({ entry, original, tokenIn: original.tokenIn, tokenOut: original.tokenOut });
-      if (sample.family === "kyberswap-elastic" || sample.family === "swap:algebra-integral" || sample.family === "custom-swap:ekubo-router-v1" || args.family === "frax") {
+      if (sample.family === "kyberswap-elastic" || sample.family === "swap:algebra-integral" || sample.family === "custom-swap:ekubo-router-v1" || sample.family === "protocol:erc4626") {
         assert.equal(entry.instance.routes.length, 2, "fixed swap instance must project both directions");
         directions.push({ entry, original: null, tokenIn: original.tokenOut, tokenOut: original.tokenIn });
       }
