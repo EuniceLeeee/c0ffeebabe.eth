@@ -11,9 +11,13 @@ import { canonicalAddress } from "../standard-family/common.js";
  * receiver; it is declared here as OBSERVED evidence only (see discovery.ts)
  * so the negative contracts can prove it is never routed.
  *
- * DECLARED-ONLY, NEVER ROUTED (chain evidence in the family report):
+ * DECLARED-ONLY, NOT IMPLEMENTED AS A ROUTE:
  *   deposit(uint256 assets, uint256 debt, uint256 min_shares[, address receiver])
- *     two inputs (crypto asset + borrowed stablecoin) -> not a single-leg swap.
+ *     The caller pays crypto; the stablecoin is pulled from the LT's AMM,
+ *     not from the caller. `debt` is an internal AMM parameter, not evidence
+ *     of a second caller-funded input. Supporting this direction still needs
+ *     a validated amount/debt policy, quote and dual execution implementation.
+ * EXCLUDED DIFFERENT SEMANTICS (chain evidence in the family report):
  *   emergency_withdraw(uint256 shares[, address receiver[, address owner]])
  *     -> (uint256 assets, int256 stables) : two outputs, the second SIGNED.
  *     The LT source states it "does not necessarily work as single asset

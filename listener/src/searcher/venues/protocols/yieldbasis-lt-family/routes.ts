@@ -19,10 +19,11 @@ import type {
  * Exactly one routed direction: LT shares in, `ASSET_TOKEN()` out, executed by
  * `withdraw(uint256 shares, uint256 min_assets)`.
  *
- * No second projection exists for `deposit` (two inputs) or
- * `emergency_withdraw` (two outputs with a signed stablecoin leg); neither can
- * be expressed as one tokenIn -> one tokenOut edge, so neither is ever admitted
- * as a route and `buildRuntimeLeg` is never asked to decline one.
+ * `deposit` is not implemented yet. Its crypto input comes from the caller,
+ * while its stablecoin input comes from the protocol AMM; the latter is not
+ * a reason to classify deposit as requiring two caller-funded assets.
+ * `emergency_withdraw` has two outputs with a signed stablecoin leg and is a
+ * different, unsupported semantic. Neither unimplemented direction is projected.
  */
 export const yieldBasisLtRoutes: RouteProjectionSemantics<
   YieldBasisLtDescriptor,

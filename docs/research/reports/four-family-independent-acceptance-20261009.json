@@ -97,8 +97,8 @@
   },
   "remaining": {
     "kyber": "representative instance/amount/tick coverage and production-stage performance; the historical two-direction sample below is not full-family acceptance",
-    "yieldBasisLt": "production-reference amount through genuine background valuation connectivity, additional amount/variant coverage, then representative performance; original-amount same-state dual receipts already pass",
-    "compoundCToken": "production-reference amount through genuine background valuation connectivity, additional amount/variant coverage, then representative performance; both corrected candidate-emitter identities and original-share-amount dual receipts already pass",
+    "yieldBasisLt": "implement and validate the missing deposit direction: observed stablecoin debt is paid by the protocol AMM, not a second user input; the previous two-input exclusion was incorrect. Do not fabricate a valuation edge. Then production-reference amounts, additional coverage and representative performance; prior original-amount withdraw receipts remain valid for their pinned source",
+    "compoundCToken": "the selected TX redeems wrapper shares and invokes cTokens internally, with no searcher cToken transfer. Identify the outer protocol route separately; this sample does not establish a missing DEX-to-cToken ingress. Keep direct cToken production-reference/variant coverage and representative performance open; prior cToken same-state dual receipts do not prove the outer opportunity",
     "algebraIntegral": "all six named handoff instances have current-source single-block Ready/Graph/effective and real dual execution receipts; untested plugin/security/tick states and representative performance remain pending. See algebraHistoricalIntegration and algebraSixSampleCoverage",
     "allFour": "full coverage and representative-load effective/sim timing remain incomplete; no live or adapter_merge_ready verdict"
   },
@@ -267,6 +267,56 @@
     "build": "build:live PASS on pure committed baseline plus scoped changes; cloud build still NOT RUN during other owner's active live2500",
     "generatedArtifactIsolation": "official generator pure result and cloud working result each contain 429 exact entries; all nine differences belong to pre-existing other-owner UniswapV1 changes. Commit only pure generated artifact; keep working artifact intact",
     "safety": "original handoff Ready/checkpoint files unchanged; no activation/default change, live start, deployment, signature or broadcast"
+  },
+  "inputOriginFindings": {
+    "scope": "read-only inspection of two frozen real receipt/trace artifacts, plus synthetic negative controls; no RPC, new EVM execution, new admission or performance run",
+    "baseCommit": "8e745f4c71026cdf7366065879b2d458c333df69",
+    "yieldBasisLt": {
+      "block": 26003536,
+      "tx": "0x022a9ff85219675bcf0a0a2b17c76ac72b98d5e2c4177bc104edff56e706ee77",
+      "assetPaidByCaller": "41885594439574942 WETH raw units",
+      "stablePaidByAmm": "5305581559900699486054 crvUSD raw units",
+      "stablePayer": "0x5f8d24f33cc5a1d5d1bf012261e6a2214c92233c",
+      "sharesMintedThenWithdrawn": "41886001261762273",
+      "sourceEvidence": "/opt/mev-cloud/deepseek-four-families-20261008-handoff/public-contract-metadata/0x2b9c9f3bdceb5d8e36a4704f08a78fca53343cea.json",
+      "sourceEvidenceSha256": "09d324b505448bc4f0a4ab24e9aa0c60afa3f5d88f23e66efdc46c3d38e1824f",
+      "sourceFinding": "LT.deposit transfers STABLECOIN from amm.address and ASSET_TOKEN from msg.sender. Both are independently present in the receipt/trace. The Family comment declaring two caller-funded inputs was incorrect and has been corrected",
+      "implementation": "deposit remains NOT IMPLEMENTED; quote/amount-debt policy, runtime computation, both execution paths and historical/performance acceptance still required. No route/default/central behavior change in this correction"
+    },
+    "compoundCToken": {
+      "block": 25944463,
+      "tx": "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df",
+      "wrapperRedeemer": "0x35101c731b1548b5e48bb23f99edbc2f5c341935",
+      "wrapperSelector": "0x27b25fa9",
+      "wrapperSharesReceivedInTx": "6993378911195926074",
+      "wrapperSharesBurned": "6993378911195926075",
+      "unaccountedWrapperShareInput": "1 raw unit, retained rather than hidden or used to claim a conserving route",
+      "searcherCTokenTransfers": 0,
+      "finding": "both cToken redeems are descendants of the searcher's call to the wrapper, which forwards USDC/DAI. Direct cToken adapter execution and reproduction of this outer protocol action are different claims"
+    },
+    "evidence": {
+      "artifact": "logs/four-family-integration-20261009.CuNyy3/protocol-input-origin-final.json",
+      "sha256": "197eca0de3761ecb46cf7ad94b1e9c5e538e3c2cf60177fed177bffd0765ef85",
+      "query": ["yb", "compound", "historical", "inputs"],
+      "tool": "listener:searcher:yb-compound-historical-inputs",
+      "exit": 0,
+      "manifest": "logs/four-family-integration-20261009.CuNyy3/protocol-input-origin-final-selection.json",
+      "manifestSha256": "d13c2f0cc9cfeee6a1e2f4acbc19413be1f5c999aa3154703495d42de35107b7",
+      "tests": "32/32 offline contracts including five new input-origin groups; real cached evidence inspection is separate from these fixtures",
+      "contractManifest": "logs/four-family-integration-20261009.CuNyy3/protocol-input-origin-contract-selection.json",
+      "contractManifestSha256": "d35ea9c827bf3168324cbd0aadacbf68084f932b340ea2d60dc228c11eb142d1",
+      "inspectorSha256": "66ca67e62dfbe2682245f863e99ca871ffa50b093de3ff36e08c3f110d3a7e23",
+      "regressionSha256": "022fbc30635e18d517c6a7a9504538affe13c550c302f6d197a74b3348f174d9",
+      "buildLive": "PASS on existing pure cloud-source validation snapshot; cloud build not run while the other owner's live remains active",
+      "narrowTypecheck": "PASS for both new files and their imports. Initial check found 14 new helper diagnostics from an untyped transfer-array result; explicit Transfer[] annotation corrected them. This is not a full-repository typecheck pass",
+      "indexCheck": "PASS: 375 indexed tools",
+      "commentOnlyRuntimeCheck": "TypeScript transpile with comments removed: abi.ts and routes.ts emitted JavaScript byte-identical to the baseline",
+      "independentReview": "non-author 01a11aba-3bcc-7620-8433-2b9d1b94022f checked final inspector hash, independently ran new offline tests 5/5, primary cached evidence assertions 2/2 and final inspector/report comparisons 2/2, all rc0. No scoped blocker; not an independent build/typecheck/fork/performance pass",
+      "rpcCalls": 0,
+      "cuSpent": 0,
+      "newEvmExecutions": 0
+    },
+    "limits": "does not authenticate all protocol variants, prove deposit encoding/quote parity, satisfy current production reference amounts, claim whole-route reproduction or pass representative latency. Existing historical results remain bound to their original production fingerprints; no Ready hash was rewritten"
   },
   "algebraSixSampleCoverage": {
     "scope": "four additional named handoff samples through existing production single-block discovery/strict/Ready/prices and existing local-Anvil/BotVM dual harness. Only three test files expanded; no production model, scheduler or activation-default change",
