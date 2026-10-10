@@ -10516,7 +10516,7 @@
         "familyId": "protocol:self-burn-native",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "9926a020b152fa25ebc3af0a6d93509fe4acaf3ea1b446160f43e98634317cea",
+        "contentHash": "4649b018fea417105469522d46e9bbbee3bd2e37f443d2ab067d5a4ed7dc77b7",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -10572,7 +10572,7 @@
         "familyId": "protocol:self-burn-native",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "76efcb33ebe6f1d30d8ebc40daae5892ae5ba0d27c5e1ee6be59ec998943069f",
+        "contentHash": "5bbfeb174e0e33ab252b6c52484b1a6934f0b5c385681249210463f166c87ced",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -14753,5 +14753,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "999145f4f9f0c13c2b0986a14d06f0d154edf41a8e9040878755286cf4bacaca"
+  "artifactHash": "bbd63b9333414a68e5f250c09e1373ca1d0a294326dff00f63bcc7f143fd9cdd"
 }

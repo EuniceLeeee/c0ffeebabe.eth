@@ -14,7 +14,7 @@ const TRANSFER_SELF_PATTERN_ID = "self-burn-transfer-self";
 const PROXY_SHORTLIST_PATTERN_ID = "self-burn-proxy-shortlist";
 
 /**
- * Self-burn receipts emit a family-specific Destruction event. Candidate
+ * Self-burn receipts emit a family-specific Unwrap event. Candidate
  * provenance for the observed lane; admission still requires the ERC20
  * surface and an active state-override delta proof.
  */
@@ -39,7 +39,7 @@ export const selfBurnNativeDiscovery = {
   logPatterns: [{
     id: "self-burn-destruction-log",
     topic: SELF_BURN_NATIVE_EVENT_TOPIC as `0x${string}`,
-    signature: "Destruction(address,uint256)",
+    signature: "Unwrap(address,uint256)",
   }],
   addressSurfaces: [{
     id: PROXY_SHORTLIST_PATTERN_ID,

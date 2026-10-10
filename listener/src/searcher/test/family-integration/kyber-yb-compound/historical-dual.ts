@@ -59,6 +59,7 @@ export function sourcePin() {
       "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
       "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
       "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+      "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
       "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts"]
       .map(path => ({ path, sha256: sha(readFileSync(new URL(path, import.meta.url))) })) };
 }

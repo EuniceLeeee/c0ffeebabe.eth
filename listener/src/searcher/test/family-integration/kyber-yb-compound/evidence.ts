@@ -12,10 +12,14 @@ import { originalEkuboLeg } from "../../../venues/swaps/ekubo-family/test/histor
 import { originalXwinLeg } from "../../../venues/protocols/token-conversion-family/test/history-evidence.js";
 import { originalStandardErc4626Leg } from "../../../venues/protocols/erc4626-family/test/history-evidence.js";
 import { originalEtherTokenLeg } from "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.js";
+import { originalSelfBurnLeg } from "../../../venues/protocols/self-burn-native-family/test/history-evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 export { json, sha, word, observeBalance } from "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.js";
 
 export const SAMPLES = {
+  "self-burn-native": { family: "protocol:self-burn-native", number: 25619948,
+    tx: "0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7",
+    instances: ["0x292a477e521230fe230c13c93374adde8ddec1c1"] },
   "ethertoken-native": { family: "protocol:ethertoken-native-redeem", number: 25648967,
     tx: "0xdf54ad38d4b812c4ab23ba6225543caaa433897f9454414c70bf7fda1290694e",
     instances: ["0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315"] },
@@ -250,6 +254,7 @@ function successfulCalls(trace: any, target: string, selector: string): any[] {
 export function originalLeg(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any) {
   assert(!trace.error && !trace.revertReason, "original transaction reverted");
   if (key === "ethertoken-native") return originalEtherTokenLeg(instance, descriptor, receipt, trace);
+  if (key === "self-burn-native") return originalSelfBurnLeg(instance, descriptor, receipt, trace);
   if (key === "erc4626-fluid")
     return originalStandardErc4626Leg(instance, descriptor, receipt, trace);
   if (key === "xwin-mint" || key === "xwin-redeem")
