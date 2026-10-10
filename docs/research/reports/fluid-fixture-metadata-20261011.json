@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "scope": "Repair the synthetic Fluid lifecycle fixture after common identity-asset metadata wiring; no production behavior change.",
+  "verdict": "tooling regression corrected; offline production-runtime session contract passes; no historical, Family-completion, performance or systemic-live verdict",
+  "cloud": {
+    "vm": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "baseCommit": "cf47fb39bc6de506c4c4e230d022b7c264d6d1ab",
+    "codifyCommit": "0b9ffa745a024b6e5a4a12134e2f1edf99c64c5e",
+    "codePatchSha256": "2c44b7c9cb179a6099c489aa105049df497e6d15ea9c6b33f81a0ff905a94c61",
+    "workingTree": "Shared dirty checkout; existing peer main/Ready/Univ1/generated changes not included in this patch.",
+    "unrelatedNonGeneratedDiffSha256": "98c67fbc9b8f33d2311b2d7824e60028e10d1348b6061ce53f0860a799b79776"
+  },
+  "finding": {
+    "before": "The real identity lifecycle appends central-asset:token0/token1 code and decimals requests to the reverse-binding round. The shared fixture already handles get-code but only recognizes obsolete token0-decimals/token1-decimals IDs, so metadata lookup throws before any publication.",
+    "change": "Use the existing identityAssetRequestId helper for the two exact decimal matches. Preserve unknown-request rejection, source binding, factory reverse binding, active probes and the fixture's existing 18/18 decimal economics.",
+    "affectedTestConsumers": ["strict-production-runtime-session", "captureFluidDexFixtureCase", "captureFluidDexOnchainCase when default fixture runtime is used"],
+    "notChanged": ["Production Family identity or execution", "common asset metadata validation", "scheduling or concurrency", "default activation", "Ready/checkpoints", "final simulation or conservation gates"]
+  },
+  "evidenceRoot": "logs/fluid-fixture-20261011.RAWlw1",
+  "sourceHashes": {
+    "fixtureBefore": "1f1467b76f02db2cc1719aca1b30ef5bda33af1f743c608e12c809593519d765",
+    "fixtureAfter": "94c20e6875a1a454bde38653ee7dcf73587917c007544196bf746107652fafcd",
+    "runtimeSessionBefore": "fb883fc859b2c12384a3ea29d589f2173d3accb90a62e12ba161ace55df7b245",
+    "runtimeSessionAfter": "4df08a942ef4f6d06909b929b1c0eb27e6774fcdb864346819c2a204bddd8b7f"
+  },
+  "before": [
+    { "file": "requests-before.log", "sha256": "99e5765d4f9ab516413cae5b4573e7ae1149f28e610a0ac084fa31b78b9a6b9a", "exitCode": 1, "meaning": "Read-only interception of the real fixture lifecycle shows new metadata request IDs and no publication." },
+    { "file": "session-red.log", "sha256": "98bc2058efd74a8913d7114002f9f8f4a5367d01389816c777b016d71501d3b9", "exitCode": 1, "meaning": "New test assertions installed, old dispatcher retained: broad production-runtime test still fails at the same Fluid publication assertion." }
+  ],
+  "regression": {
+    "entry": "listener/src/searcher/test/strict-production-runtime-session.ts",
+    "newCoverage": [
+      "Actual lifecycle requests retain STARTUP source and common code/decimals metadata for both tokens in the factory reverse-binding round.",
+      "Exactly one verified instance with two routes is published; existing assertions retain distinct directional state keys and currently priced outputs.",
+      "Missing, malformed and wrong-source metadata each reach a successful real fixture response before corruption and fail the no-publication assertion. No synthetic admitted instance is injected."
+    ],
+    "initialCandidate": { "file": "session-green.log", "sha256": "55c8bbe495ebc781c0e2c7bf7b9aac760341048983ffd39b5d76a18ac8f781b5", "exitCode": 0 },
+    "finalCandidate": { "file": "session-final.log", "sha256": "d441622cfe14d5da389f03b1b51c919b5d3be66384f4b0e7f4079638aa235d27", "exitCode": 0 },
+    "sourceChangeBetweenRuns": "Added an explicit result.ok assertion before corrupting a successful metadata response; this supplies type narrowing and confirms the negative-control premise. Final suite and reviewer bind the resulting final source hash."
+  },
+  "validation": {
+    "buildLive": { "file": "build-live.log", "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933", "exitCode": 0, "scope": "Production bundle; final post-build edit is one test-only assertion." },
+    "fluidPlugin": { "file": "fluid-plugin-final.log", "sha256": "363a7f121851f16005846aa9163bc15b0a0555cfbea449afdcb44eb48397aa97", "exitCode": 0 },
+    "assetMetadata": { "file": "asset-metadata-final.log", "sha256": "e00b1d44ac7dd6303321815cf849d743de199e9d2625f00afcdfca0cfc2d73a6", "exitCode": 0 },
+    "typecheck": {
+      "status": "No new diagnostics; project-options targeted entry still has one identical pre-existing declaration error, so not a clean typecheck PASS.",
+      "comparison": "type-compare.json",
+      "comparisonSha256": "0ca67d23774d76700b150684ecc752cd4e7fe56e934dd0a5fb5328da77b807be",
+      "diagnosticsBefore": 1,
+      "diagnosticsAfter": 1,
+      "newDiagnostics": 0,
+      "unchangedDiagnostic": "TS4023 curve-lp.production.ts:14 exported plugin uses unnamed Snapshot from curve-lp-family/pricing.",
+      "method": "Actual listener tsconfig options. Baseline supplies only the two owned test files from cf47fb39 via an in-memory compiler host; peer dirty sources are identical. Diagnostics are identical, including locations.",
+      "initialNonProjectOptionsLog": "typecheck.log",
+      "initialResult": "Failed; retained, not used as a project typecheck verdict. Identified and repaired the new negative-control union narrowing."
+    },
+    "toolReconciliation": {
+      "query": ["session", "fluid", "strict-identity"],
+      "selected": ["listener:searcher:strict-production-runtime-session", "listener:searcher:fluid-dex-family-plugin", "listener:searcher:identity-asset-metadata"],
+      "manifest": "final-tools.json",
+      "manifestSha256": "1a24b9ee02151c6161cc8f0e114a69c69283630687710771c7874c2f3268eb5a",
+      "result": "All three selected current descriptors executed with exit 0. Selected relevant alternatives rather than transcript-session or Fluid Credit tools. Manual dispatcher diagnosis agrees with registered red/green tests.",
+      "earlierAttempts": "tool-selection.json retains the expected red failure and initial candidate passes. The first query incorrectly used script names as capabilities and returned no coverage; no execution was claimed for that query."
+    }
+  },
+  "independentReview": {
+    "reviewer": "James / 01a1272c-d7f4-7790-a183-0ec9d094348e",
+    "pass1": "Independent source and immutable-log review confirms stale request IDs in the test fixture, not a production Fluid failure.",
+    "pass2": "Approved bounded tooling fix, no blocking findings. Independently executed the current registered broad runtime-session test, exit 0 with empty stderr; 1,940 source/config hashes unchanged. Confirmed exact two-file commit and negative-control correctness. No new RPC, EVM, build or performance run.",
+    "executed": "review-pass2.qw1DHx/session.log",
+    "executedSha256": "719258c143c69757ef5906af571093800717412a6ca34dfd685cef4c48573af2",
+    "sourceManifestBeforeAndAfterSha256": "2ac5cc1317d9114bfe32be4dd9ef0b73cc0c75a0e064d03fa23ac753e683f1e2",
+    "manifest": "review-pass2.qw1DHx/tools.json",
+    "manifestSha256": "dcc25111e3559ebe038250fae45fd982d7ef09a7246caf449fe6cc305060ac25",
+    "reviewedPatchSha256": "78a0f18a0324a16063f323d121b97ae7c3c40c795b1b6318a0b482d5a6bbe458",
+    "inventory": "Fresh inventory of 412 tools; query strict,runtime,session; selected listener:searcher:strict-production-runtime-session."
+  },
+  "limits": [
+    "Synthetic bounded wiring only; no new historical RPC/EVM, natural Ready, original-TX comparison or full opportunity evidence.",
+    "This supersedes only the broad-suite Fluid fixture blockage reported in effective-failure-recovery-20261011.json; it does not extend its focused policy result to live behavior.",
+    "Formal timing NOT RUN. Every applicable existing/new IMPL adaptation, DeepSeek and own Families, including Balancer V2/V3 and Curve plain/underlying, still needs single-Ready timing followed by representative combined large-graph timing after correctness work.",
+    "No deployment, live, signing, broadcast, default activation changes or original Ready/checkpoint writes."
+  ],
+  "implTable": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "unchangedSha256": "e6e033d1350c2e673578fa093b471ced178509d4d405e657bd0b67edc932b35e",
+    "disposition": "No protocol acceptance status changed for this synthetic harness correction. Existing all-Family timing requirement remains in the original table and active goal."
+  }
+}
