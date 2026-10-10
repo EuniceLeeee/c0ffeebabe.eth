@@ -90,6 +90,20 @@ test("Algebra historical quote probe declares real RPC cost without claiming Rea
   assert.equal(selected[0]?.capabilities.includes("execution"), false);
 });
 
+test("Ella historical Ready and local fork execution declare real costs and separate claims", () => {
+  const tools = discoverToolIndex(repoRoot);
+  const ready = selectTools(tools, ["ella", "historical", "ready"])[0];
+  const dual = selectTools(tools, ["ella", "historical", "dual"])[0];
+  assert.equal(ready?.id, "listener:searcher:ella-historical-ready");
+  assert.equal(ready?.cost, "archive-rpc");
+  assert.equal(ready?.capabilities.includes("execution"), false);
+  assert.equal(dual?.id, "listener:searcher:ella-historical-dual");
+  assert.equal(dual?.cost, "fork");
+  assert.equal(dual?.capabilities.includes("ready"), false);
+  for (const tool of [ready, dual]) for (const absent of ["live-window", "stage-timing", "benchmark"])
+    assert.equal(tool?.capabilities.includes(absent), false);
+});
+
 test("Yield Basis dual execution is archive-RPC acceptance, not zero-CU or representative latency", () => {
   const selected = selectTools(discoverToolIndex(repoRoot), ["yieldbasis", "dual", "historical"]);
   assert.equal(selected[0]?.id, "listener:searcher:yieldbasis-lt-dual-historical");

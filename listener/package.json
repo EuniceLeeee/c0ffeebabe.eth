@@ -241,6 +241,8 @@
     "searcher:univ4-family-plugin": "node --import tsx src/searcher/test/univ4-family-plugin.ts",
     "searcher:dodo-v2-family-plugin": "node --import tsx src/searcher/test/dodo-v2-family-plugin.ts",
     "searcher:ethertoken-historical-ready": "node --import tsx src/searcher/venues/protocols/ethertoken-native-redeem-family/test/historical-ready.ts",
+    "searcher:ella-historical-ready": "node --import tsx src/searcher/venues/swaps/ella-exchange-family/test/historical-ready.ts",
+    "searcher:ella-historical-dual": "node --import tsx src/searcher/venues/swaps/ella-exchange-family/test/historical-fork.ts",
     "searcher:set-legacy-historical-ready": "node --import tsx src/searcher/venues/protocols/set-redemption-family/test/historical-legacy-ready.ts",
     "searcher:set-legacy-contract": "node --import tsx --test src/searcher/venues/protocols/set-redemption-family/test/legacy-contract.ts",
     "searcher:set-dual-historical": "node --import tsx src/searcher/venues/protocols/set-redemption-family/test/historical-runtime-dual.ts",

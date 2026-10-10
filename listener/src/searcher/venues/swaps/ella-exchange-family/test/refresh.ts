@@ -6,7 +6,7 @@ import { createStrictCentralAdapterRuntime } from "../../../../strict-central-ad
 import { StrictProductionRuntimeRoot, type StrictProductionRuntimeSession } from "../../../../strict-production-runtime-session.js";
 import { StrictCurrentRuntimeCoordinator } from "../../../../strict-current-runtime-coordinator.js";
 import { buildFamilyRouteGraphView } from "../../../../adapter-family-graph-runtime.js";
-import { buildEffectiveMids } from "../../../../blockscan-effective-mid.js";
+import { buildEffectiveMids, effectiveEnumerationMids } from "../../../../blockscan-effective-mid.js";
 import { createVerifiedGraphView } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { executeAdapterFamilyLifecycleBatch } from "../../../adapter-family-runtime.js";
@@ -94,17 +94,21 @@ const graph = (at: CanonicalSource) => createVerifiedGraphView({ id: `ella-refre
   perSourceCoverage: [{ familyId: ELLA_ID, sourceId: "fixture", sourceFingerprint: "ella-refresh",
     completeThroughBlock: at.number, completeThroughHash: at.hash }],
 });
-const coordinator = new StrictCurrentRuntimeCoordinator(request => root.createSession({
-  source: request.source, runtime: runtime(request.source, "raw"), fundingAssets: [], kind: "pricing",
+function createCoordinator() {
+const sessionRoot = new StrictProductionRuntimeRoot({ catalog, readySource: start, readyGraph: edges,
+  readyInstances: ready, readyFundingAssets: [] });
+return new StrictCurrentRuntimeCoordinator(request => sessionRoot.createSession({
+  source: request.source, runtime: runtime(request.source, "raw"), fundingAssets: [],
+  kind: request.requiredEdgeIds === undefined ? "pricing" : "exact", requiredEdgeIds: request.requiredEdgeIds,
   touchedPools: request.touchedPools, control: request.control,
 }), () => {}, undefined, async (pricing, control, _backend, reuse) => {
   const target = reuse?.quoteGraph ?? pricing;
   const at = { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation };
   let exact: StrictProductionRuntimeSession | undefined;
   return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, previous: reuse?.previous,
-    touchedStateKeys: reuse?.touchedStateKeys, control, weth: ADDR.WETH,
+    touchedStateKeys: reuse?.touchedStateKeys, disabledEdgeIds: reuse?.disabledEdgeIds, control, weth: ADDR.WETH,
     gasCostWei: null, enumerationSpreadBps: 50, concurrency: 2,
-    prepareQuote: async requiredEdgeIds => { exact = await root.createSession({ source: at,
+    prepareQuote: async requiredEdgeIds => { exact = await sessionRoot.createSession({ source: at,
       runtime: runtime(at, "exact"), fundingAssets: [], kind: "exact", requiredEdgeIds, control }); },
     quote: async request => {
       assert(exact);
@@ -113,6 +117,8 @@ const coordinator = new StrictCurrentRuntimeCoordinator(request => root.createSe
     },
   });
 });
+}
+const coordinator = createCoordinator();
 await coordinator.prepareCoarsePricing({ graph: graph(start), deadlineAtMs: Date.now() + 10_000 });
 const before = coordinator.latestPricingSnapshot()!;
 assert.equal(before.effectiveMids!.rows.size, 4);
@@ -125,9 +131,9 @@ const touched = new Set([aggregator, ...root.resolveBlockTouchedStateKeys({ kind
 assert(touched.has(pool)); assert(!touched.has(otherPool));
 rawReads.length = 0; amountReads.length = 0;
 await coordinator.prepareCoarsePricing({ graph: graph(next), deadlineAtMs: Date.now() + 10_000,
-  touchedPools: touched, canonicalActivity: { source: next, touchedStateKeys: touched, complete: true } });
+  touchedPools: touched, canonicalActivity: { source: next, parentHash: start.hash, touchedStateKeys: touched, complete: true } });
 const after = coordinator.latestPricingSnapshot()!;
-assert.deepEqual(rawReads, [pool]);
+assert.deepEqual(rawReads, [], "steady updates retain startup raw basis; current amounts use Exact");
 assert.deepEqual(amountReads, [pool, pool]);
 for (const [key, row] of before.effectiveMids!.rows) {
   const updated = after.effectiveMids!.rows.get(key)!;
@@ -140,24 +146,33 @@ for (const [key, row] of before.effectiveMids!.rows) {
     assert.equal(updated, row);
   }
 }
-for (const [number, mode, dirty] of [
-  [902, "read", true], [903, undefined, true],
-  [904, "oracle", true], [905, "oracle", false], [906, undefined, true],
-  [907, "aggregator", true], [908, "aggregator", false],
-] as const) {
-  failureMode = mode;
-  const at = source(number);
-  const changed = dirty ? new Set([pool]) : new Set<string>();
-  await coordinator.prepareCoarsePricing({ graph: graph(at), deadlineAtMs: Date.now() + 10_000,
-    touchedPools: changed, canonicalActivity: { source: at, touchedStateKeys: changed, complete: true } });
-  const current = coordinator.latestPricingSnapshot()!;
-  if (mode === undefined) {
-    assert.equal(current.effectiveMids!.rows.size, 4, "original proven binding may recover after a transient failure");
-  } else {
-    assert([...current.effectiveMids!.rows.values()].every(row => row.instanceKey !== pool),
-      `${mode}: failure or changed binding cannot carry stale effective output, including subsequent quiet blocks`);
-    for (const [key, row] of before.effectiveMids!.rows) if (row.instanceKey === pool) assert(!current.mids.has(key));
-    assert.equal(current.effectiveMids!.rows.size, 2, "unrelated pool remains usable");
+for (const mode of ["read", "oracle", "aggregator"] as const) {
+  // A full instance failure is disabled for this run. Use independent runs so
+  // one failure cannot prevent the later binding-negative from being exercised.
+  failureMode = undefined;
+  const scenario = createCoordinator();
+  await scenario.prepareCoarsePricing({ graph: graph(start), deadlineAtMs: Date.now() + 10_000 });
+  const scenarioBefore = scenario.latestPricingSnapshot()!;
+  for (const [number, dirty, fail] of [[901, true, true], [902, false, true], [903, true, false]] as const) {
+    failureMode = fail ? mode : undefined;
+    const at = source(number), changed = dirty ? new Set([pool]) : new Set<string>();
+    await scenario.prepareCoarsePricing({ graph: graph(at), deadlineAtMs: Date.now() + 10_000,
+      touchedPools: changed, canonicalActivity: { source: at, parentHash: source(number - 1).hash,
+        touchedStateKeys: changed, complete: true } });
+    const current = scenario.latestPricingSnapshot()!;
+    const rows = [...current.effectiveMids!.rows.values()];
+    assert.equal(rows.length, 4, "failed rows remain auditable rather than disappearing");
+    assert(rows.filter(row => row.instanceKey === pool).every(row => row.status !== "quoted"),
+      `${mode}: failed or disabled instance must not publish stale quotes, even when the binding later recovers`);
+    for (const [key, row] of scenarioBefore.effectiveMids!.rows) if (row.instanceKey === pool) {
+      assert.equal(current.mids.get(key), scenarioBefore.mids.get(key), "raw startup basis is retained, not republished as a current quote");
+      assert.equal(current.effectiveMids!.rows.get(key)!.effectiveMid, null);
+      assert(!effectiveEnumerationMids(current).has(key), "the real enumeration view must exclude the failed price");
+      assert(!current.coverage.resolvedEdgeKeys.includes(key));
+      assert.notEqual(current.coverageByEdgeKey!.get(key)!.status, "resolved");
+    }
+    assert.equal(rows.filter(row => row.instanceKey === otherPool && row.status === "quoted").length, 2,
+      "unrelated pool remains usable");
   }
 }
-console.log("Ella oracle-only production refresh, transient recovery and changed-binding safe stop: PASS");
+console.log("Ella oracle-only effective refresh, startup raw carry and independent failed/binding-change run-disable controls: PASS");
