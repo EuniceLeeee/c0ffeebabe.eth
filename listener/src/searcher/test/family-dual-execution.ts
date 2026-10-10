@@ -87,6 +87,10 @@ synthetic("protocol:badger-sett-withdraw", { binding: {
   strategyAdmin: "0x1000000000000000000000000000000000000009",
 } });
 
+// Synthetic single-asset POD only; production identity is verified separately.
+synthetic("protocol:peapods-debond", { binding: { pod: foreign.toLowerCase(), asset: ADDR.USDC.toLowerCase(),
+  staking: "0x1000000000000000000000000000000000000005", codeHash: word(1n), assetCodeHash: word(2n),
+  stakingCodeHash: word(3n), decimals: 6, feeBps: 200n } });
 // Algebra Integral: static-fee (plugin DYNAMIC_FEE clear) exact-input swap.
 // Synthetic descriptor only: no Ready/admission object is issued here.
 fixtures.push(algebraIntegralFixture());
@@ -206,6 +210,7 @@ const direct = [
   ["protocol:rocksolid", "syncDeposit(uint256,address,address)", "syncDeposit", 0],
   ["protocol:metronome-synth", "swap(address,address,uint256)", "swap", 2],
   ["protocol:token-migration", "migrateBIT(uint256)", "migrateBIT", 0],
+  ["protocol:peapods-debond", "debond(uint256,address[],uint8[])", "debond", 0],
   ["fluid-dex", "swapIn(bool,uint256,uint256,address)", "swapIn", 1],
   ["curve-underlying", "exchange_underlying(int128,int128,uint256,uint256)", "exchange_underlying", 2],
 ] as const;

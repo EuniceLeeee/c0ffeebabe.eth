@@ -8814,6 +8814,358 @@
     {
       "precision": "capability-exact",
       "identity": {
+        "familyId": "protocol:peapods-debond",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "e8e6e18ae4fefbeb0e4c321ae7e3a56fb973f185686db6760e7d43bafcf3fc20",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/codec.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/discovery.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/protocols/peapods-debond-family/capture.ts",
+        "entryExport": "capture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:peapods-debond",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:peapods-debond",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "a977ca7d02e95a490d79ffb2695c95b7283186d95bd079968bef4eca594c4c28",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/codec.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/protocols/peapods-debond-family/discovery.ts",
+        "entryExport": "discovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:peapods-debond",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "320caa96577e2a3f1a6f5a2d9559eb31420a5fb5a3174a97ce2b05c1e18bf1d4",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/local-state-models/resources.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/codec.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/instance.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/math.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/routes.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/state.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/protocols/peapods-debond-family/exact.ts",
+        "entryExport": "exact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:peapods-debond",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "6629ef69254b159ca69a0de69753060f5174a0eb1f3bd4ec4531d23da535bed1",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/action.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/codec.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/instance.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/routes.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/protocols/peapods-debond-family/execution.ts",
+        "entryExport": "execution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/peapods-debond-family/action.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:peapods-debond",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:peapods-debond",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "3d2af718d169978861ccdef75e23d6ab7f48ceafa96a3f2d514eadfe0525810d",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/codec.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/math.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/runtime-shape.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/protocols/peapods-debond-family/identity.ts",
+        "entryExport": "identity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:peapods-debond",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "3324723471e069b15c2eeec48768e442eef782f6bee2ce859b51e5deffba3115",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "package:ethers@6.16.0",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/codec.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/protocols/peapods-debond-family/instance.ts",
+        "entryExport": "instance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:peapods-debond",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "82caa24e313c4bcaf955a0e54bcc0e629623aa9b375fa491ea372a82e490d1f7",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/codec.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/instance.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/math.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/routes.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/state.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/protocols/peapods-debond-family/pricing.ts",
+        "entryExport": "pricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:peapods-debond",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "e1edb170b56642cf76ab265c37ab5aef4e00cb06442bd0a8b02c83c1d31452c2",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/codec.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/instance.ts",
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/protocols/peapods-debond-family/routes.ts",
+        "entryExport": "routes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/peapods-debond-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:peapods-debond",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "abfd24bb4384bfcb32fd9c525b3cf9deb4bcbdea9f31b8e5a08d9dbc72c69718",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
         "familyId": "protocol:psm",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
@@ -13378,5 +13730,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "7cbdaec41aad6b646c3c7ca09499fec9c4d932a407efa2091b208e41ed8101f2"
+  "artifactHash": "7a363a4e9f9640099a924b5905e375a928d792aa45b823536326be848df2f14d"
 }

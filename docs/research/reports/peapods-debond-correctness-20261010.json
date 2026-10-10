@@ -1,0 +1,1012 @@
+{
+  "schema": "peapods-family-correctness/v1",
+  "createdAt": "2026-10-10T01:19:06.513Z",
+  "result": "sample-correctness-passed-performance-pending",
+  "workspace": {
+    "host": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "path": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "baseHead": "62207b524ddd8e8621cc07ee66543db98f3e23a4",
+    "code": {
+      "sourceTreeSha256": "58c91ed78ce5b00921e01c912e3ed791d51397a4fcceb82fe331a09b5795bd78",
+      "harnessSha256": "370bd90b04b189b8fbd53d56a1540a959cf8a11bb0729416e89c0040d43d0f2b",
+      "evidenceSha256": "f35c3b014728e3fd36e811f5087a97d11bcf92cc3ab4fcdf366c17a23092aff9",
+      "observationHelpers": [
+        {
+          "path": "../three-family/historical-input-observations.ts",
+          "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+        },
+        {
+          "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+          "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+        },
+        {
+          "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+          "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+        },
+        {
+          "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+          "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+        },
+        {
+          "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+          "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+        },
+        {
+          "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+          "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+        }
+      ]
+    },
+    "note": "Historical checks used actual shared dirty production source. Only owned Family/entry/tests and canonically regenerated owned catalog records are committed; peer Ready/main/V1 changes remain unstaged."
+  },
+  "family": {
+    "id": "protocol:peapods-debond",
+    "action": "peapods-debond",
+    "defaultEnabled": false,
+    "env": "SEARCHER_FAMILY_PEAPODS_DEBOND_ENABLED",
+    "implemented": "single-asset source-matched WeightedIndex 0.7.6 debond; neither bond nor multi-asset",
+    "identity": "compiler-runtime matching with only compiler immutable spans masked; reciprocal staking indexFund; positive four-token-delta, supply-burn and Debond-event proof; no instance allowlist",
+    "transactionConstruction": "one debond call patched from r0; no extra Family balance reads or chain-external Exact in runtime leg; generic flow owns inventory safety",
+    "semantics": "unchecked uint256 products, retained fee shares, two Q96 floors and 98%-supply fee exemption retained"
+  },
+  "sourceProof": {
+    "chainId": 1,
+    "block": 26152716,
+    "blockHash": "0x0c80d557cb71bdb448a893597f138dd7c6ec530b04fd7b1136a266877c647c5b",
+    "pod": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+    "asset": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+    "codeBytes": 16972,
+    "codeHash": "0x4b99d52fb1278f2f62b1213af991003c86aa5b4565fd7a7f3747f9c848bad591",
+    "runtimeMatchesCompiledSource": true,
+    "compilerVersion": "0.7.6+commit.7338295f",
+    "compilerSha256": "0xbd69ea85427bf2f4da74cb426ad951dd78db9dfdd01d791208eccc2d4958a6bb",
+    "inputSha256": "a40f3b9fa85b683e914797fad4037aaf909a62828b5ec4eea1b2f3c5a47015f9",
+    "normalizedCodeHash": "0xd6c722955476be393dbf38f51df65318135545023e97da5f532fdf48cb53a768",
+    "immutableValues": {
+      "BOND_FEE": {
+        "value": "0x0000000000000000000000000000000000000000000000000000000000000064",
+        "references": [
+          {
+            "length": 32,
+            "start": 5745
+          },
+          {
+            "length": 32,
+            "start": 8534
+          }
+        ]
+      },
+      "DEBOND_FEE": {
+        "value": "0x00000000000000000000000000000000000000000000000000000000000000c8",
+        "references": [
+          {
+            "length": 32,
+            "start": 7321
+          },
+          {
+            "length": 32,
+            "start": 7937
+          }
+        ]
+      },
+      "V2_ROUTER": {
+        "value": "0x0000000000000000000000007a250d5630b4cf539739df2c5dacb4c659f2488d",
+        "references": [
+          {
+            "length": 32,
+            "start": 2245
+          },
+          {
+            "length": 32,
+            "start": 2284
+          },
+          {
+            "length": 32,
+            "start": 4047
+          },
+          {
+            "length": 32,
+            "start": 4192
+          },
+          {
+            "length": 32,
+            "start": 4239
+          },
+          {
+            "length": 32,
+            "start": 11982
+          },
+          {
+            "length": 32,
+            "start": 12170
+          }
+        ]
+      },
+      "V2_POOL": {
+        "value": "0x0000000000000000000000001b40cb1931be2f2c0735b07937fd1decae827290",
+        "references": [
+          {
+            "length": 32,
+            "start": 1781
+          },
+          {
+            "length": 32,
+            "start": 2002
+          },
+          {
+            "length": 32,
+            "start": 2158
+          },
+          {
+            "length": 32,
+            "start": 2211
+          },
+          {
+            "length": 32,
+            "start": 2517
+          },
+          {
+            "length": 32,
+            "start": 2692
+          },
+          {
+            "length": 32,
+            "start": 2835
+          },
+          {
+            "length": 32,
+            "start": 9295
+          },
+          {
+            "length": 32,
+            "start": 9373
+          }
+        ]
+      },
+      "DAI": {
+        "value": "0x0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",
+        "references": [
+          {
+            "length": 32,
+            "start": 2332
+          },
+          {
+            "length": 32,
+            "start": 3867
+          },
+          {
+            "length": 32,
+            "start": 4105
+          },
+          {
+            "length": 32,
+            "start": 4158
+          },
+          {
+            "length": 32,
+            "start": 4279
+          },
+          {
+            "length": 32,
+            "start": 4528
+          },
+          {
+            "length": 32,
+            "start": 4703
+          },
+          {
+            "length": 32,
+            "start": 4846
+          },
+          {
+            "length": 32,
+            "start": 6606
+          },
+          {
+            "length": 32,
+            "start": 6759
+          },
+          {
+            "length": 32,
+            "start": 11900
+          },
+          {
+            "length": 32,
+            "start": 12307
+          },
+          {
+            "length": 32,
+            "start": 12949
+          },
+          {
+            "length": 32,
+            "start": 13709
+          }
+        ]
+      },
+      "WETH": {
+        "value": "0x000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "references": [
+          {
+            "length": 32,
+            "start": 9750
+          },
+          {
+            "length": 32,
+            "start": 9894
+          },
+          {
+            "length": 32,
+            "start": 10614
+          },
+          {
+            "length": 32,
+            "start": 12982
+          }
+        ]
+      },
+      "V3_TWAP_UTILS": {
+        "value": "0x000000000000000000000000024ff47d552cb222b265d68c7aeb26e586d5229d",
+        "references": [
+          {
+            "length": 32,
+            "start": 1437
+          },
+          {
+            "length": 32,
+            "start": 7501
+          }
+        ]
+      },
+      "V2_FACTORY": {
+        "value": "0x0000000000000000000000005c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f",
+        "references": [
+          {
+            "length": 32,
+            "start": 9847
+          },
+          {
+            "length": 32,
+            "start": 12902
+          }
+        ]
+      }
+    },
+    "supply": "2535006550096062157911310",
+    "backing": "2535006550096062157911311",
+    "bondFee": "100",
+    "debondFee": "200",
+    "decimals": "18",
+    "podDecimals": "18",
+    "indexType": "0",
+    "isAsset": true,
+    "stake": "0x8b71d003e3c876f46ebbf8ad0d6c11a5049e1360",
+    "reverse": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+    "assetInfo": {
+      "token": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+      "weighting": "100000000000000000000",
+      "basePriceUSDX96": "0",
+      "c1": "0x0000000000000000000000000000000000000000",
+      "q1": "79228162514264337593543950336000000000000000000"
+    },
+    "originalAmountDiagnosticAtBlockEnd": {
+      "amountIn": "11759600366451075559109",
+      "amountAfterFee": "11524408359122054047926",
+      "amountOut": "11524408359122054047926",
+      "note": "source-derived diagnostic only; not fresh execution or original pre-call state"
+    },
+    "rpcCount": 14,
+    "storageLayout": {
+      "storage": [
+        {
+          "astId": 481,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_balances",
+          "offset": 0,
+          "slot": "0",
+          "type": "t_mapping(t_address,t_uint256)"
+        },
+        {
+          "astId": 487,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_allowances",
+          "offset": 0,
+          "slot": "1",
+          "type": "t_mapping(t_address,t_mapping(t_address,t_uint256))"
+        },
+        {
+          "astId": 489,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_totalSupply",
+          "offset": 0,
+          "slot": "2",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 491,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_name",
+          "offset": 0,
+          "slot": "3",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 493,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_symbol",
+          "offset": 0,
+          "slot": "4",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 495,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_decimals",
+          "offset": 0,
+          "slot": "5",
+          "type": "t_uint8"
+        },
+        {
+          "astId": 1848,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "indexType",
+          "offset": 1,
+          "slot": "5",
+          "type": "t_enum(IndexType)4680"
+        },
+        {
+          "astId": 1851,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "created",
+          "offset": 0,
+          "slot": "6",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 1854,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "lpStakingPool",
+          "offset": 0,
+          "slot": "7",
+          "type": "t_address"
+        },
+        {
+          "astId": 1857,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "lpRewardsToken",
+          "offset": 0,
+          "slot": "8",
+          "type": "t_address"
+        },
+        {
+          "astId": 1860,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "indexTokens",
+          "offset": 0,
+          "slot": "9",
+          "type": "t_array(t_struct(IndexAssetInfo)4691_storage)dyn_storage"
+        },
+        {
+          "astId": 1864,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_isTokenInIndex",
+          "offset": 0,
+          "slot": "10",
+          "type": "t_mapping(t_address,t_bool)"
+        },
+        {
+          "astId": 1868,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_fundTokenIdx",
+          "offset": 0,
+          "slot": "11",
+          "type": "t_mapping(t_address,t_uint256)"
+        },
+        {
+          "astId": 1870,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_swapping",
+          "offset": 0,
+          "slot": "12",
+          "type": "t_bool"
+        },
+        {
+          "astId": 1873,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_swapOn",
+          "offset": 1,
+          "slot": "12",
+          "type": "t_bool"
+        },
+        {
+          "astId": 1876,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_unlocked",
+          "offset": 2,
+          "slot": "12",
+          "type": "t_bool"
+        },
+        {
+          "astId": 3956,
+          "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+          "label": "_totalWeights",
+          "offset": 0,
+          "slot": "13",
+          "type": "t_uint256"
+        }
+      ],
+      "types": {
+        "t_address": {
+          "encoding": "inplace",
+          "label": "address",
+          "numberOfBytes": "20"
+        },
+        "t_array(t_struct(IndexAssetInfo)4691_storage)dyn_storage": {
+          "base": "t_struct(IndexAssetInfo)4691_storage",
+          "encoding": "dynamic_array",
+          "label": "struct IDecentralizedIndex.IndexAssetInfo[]",
+          "numberOfBytes": "32"
+        },
+        "t_bool": {
+          "encoding": "inplace",
+          "label": "bool",
+          "numberOfBytes": "1"
+        },
+        "t_enum(IndexType)4680": {
+          "encoding": "inplace",
+          "label": "enum IDecentralizedIndex.IndexType",
+          "numberOfBytes": "1"
+        },
+        "t_mapping(t_address,t_bool)": {
+          "encoding": "mapping",
+          "key": "t_address",
+          "label": "mapping(address => bool)",
+          "numberOfBytes": "32",
+          "value": "t_bool"
+        },
+        "t_mapping(t_address,t_mapping(t_address,t_uint256))": {
+          "encoding": "mapping",
+          "key": "t_address",
+          "label": "mapping(address => mapping(address => uint256))",
+          "numberOfBytes": "32",
+          "value": "t_mapping(t_address,t_uint256)"
+        },
+        "t_mapping(t_address,t_uint256)": {
+          "encoding": "mapping",
+          "key": "t_address",
+          "label": "mapping(address => uint256)",
+          "numberOfBytes": "32",
+          "value": "t_uint256"
+        },
+        "t_string_storage": {
+          "encoding": "bytes",
+          "label": "string",
+          "numberOfBytes": "32"
+        },
+        "t_struct(IndexAssetInfo)4691_storage": {
+          "encoding": "inplace",
+          "label": "struct IDecentralizedIndex.IndexAssetInfo",
+          "members": [
+            {
+              "astId": 4682,
+              "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+              "label": "token",
+              "offset": 0,
+              "slot": "0",
+              "type": "t_address"
+            },
+            {
+              "astId": 4684,
+              "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+              "label": "weighting",
+              "offset": 0,
+              "slot": "1",
+              "type": "t_uint256"
+            },
+            {
+              "astId": 4686,
+              "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+              "label": "basePriceUSDX96",
+              "offset": 0,
+              "slot": "2",
+              "type": "t_uint256"
+            },
+            {
+              "astId": 4688,
+              "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+              "label": "c1",
+              "offset": 0,
+              "slot": "3",
+              "type": "t_address"
+            },
+            {
+              "astId": 4690,
+              "contract": "contracts/WeightedIndex.sol:WeightedIndex",
+              "label": "q1",
+              "offset": 0,
+              "slot": "4",
+              "type": "t_uint256"
+            }
+          ],
+          "numberOfBytes": "160"
+        },
+        "t_uint256": {
+          "encoding": "inplace",
+          "label": "uint256",
+          "numberOfBytes": "32"
+        },
+        "t_uint8": {
+          "encoding": "inplace",
+          "label": "uint8",
+          "numberOfBytes": "1"
+        }
+      }
+    },
+    "limitations": [
+      "not strict admission",
+      "not EVM execution",
+      "not natural Ready",
+      "not latency acceptance"
+    ],
+    "artifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/source-state-proof.json",
+      "sha256": "657a860b6fcf1c32835483cf2187068df5b8e679e5a1b673aaee0f9b3ba79d4e"
+    }
+  },
+  "naturalReady": {
+    "tx": "0xb71237be54af5987a37dc5b9fdab19c3b39dae5d0803c3e4237a8b9d4f22b01d",
+    "source": {
+      "number": 26152716,
+      "hash": "0x0c80d557cb71bdb448a893597f138dd7c6ec530b04fd7b1136a266877c647c5b",
+      "generation": 26152716
+    },
+    "checkpoint": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/natural-refreshed-1/ready.json",
+      "sha256": "e71bfc7e45a705ca8616e970243cdb003069b286cc972b938e9ffda019183da1"
+    },
+    "originalPreserved": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/natural-1/ready.json",
+      "sha256": "bca869f18bd42793c0aa5a0cea7f303a630615fb1773f711a551f15777254803"
+    },
+    "scope": "whole receipt block only; no seeded pools/edges/admission",
+    "activeInstances": 38,
+    "graphEdges": 75,
+    "targetEdges": [
+      {
+        "instanceKey": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+        "executionVariantKey": "d03a27aeac0dd8d76b23a495caf9a0904c5ff273286493fb6d00260bf42e5b1c",
+        "adapterId": "peapods-debond",
+        "target": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+        "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+        "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+        "slotKind": "protocol",
+        "protocolAction": "redeem",
+        "edgeKind": "protocol",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "protocol:peapods-debond\u001f0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34\u001f0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34\u001f0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34>0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce\u001fd03a27aeac0dd8d76b23a495caf9a0904c5ff273286493fb6d00260bf42e5b1c"
+      }
+    ],
+    "targetMemoFingerprint": "5234de0f628ba4f31b5923b1fa9bfa15068946069284b9a8e4b788b800fe6bdb",
+    "familyDefinitionHash": "6b3ca514d89f84a201633f682da1d63508cd61d88c04f262d113ef81f27b00bf",
+    "refresh": {
+      "stale": [
+        {
+          "familyId": "protocol:peapods-debond",
+          "instanceKey": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34"
+        }
+      ],
+      "scan": false,
+      "reattested": 1,
+      "reused": 37,
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/natural-refreshed-1/refresh.json",
+        "sha256": "3c48660ad775a5e7bd8d60ac34399ea088150c8b8c45a08dc1f4a0cb42c24d33"
+      }
+    }
+  },
+  "prices": {
+    "artifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/prices-2/prices/prices.json",
+      "sha256": "ca39675b5dc1af37786bf136c35c3a238c85266f32ca6d51f13167b15f9c5d96"
+    },
+    "input": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/prices-2/prices/input.json",
+      "sha256": "7c51b12632667ca66804c2cdad23c8aa9afa1fad91dc28cabbffd03f0ee53f21"
+    },
+    "rawMid": {
+      "kind": "protocol",
+      "pool": "0xf7D7cf9195eD7e1fDC0FB26E463618BC09C67c34",
+      "edges": [
+        {
+          "instanceKey": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+          "executionVariantKey": "d03a27aeac0dd8d76b23a495caf9a0904c5ff273286493fb6d00260bf42e5b1c",
+          "adapterId": "peapods-debond",
+          "target": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+          "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+          "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+          "slotKind": "protocol",
+          "protocolAction": "redeem",
+          "edgeKind": "protocol",
+          "leavesStandingPosition": false,
+          "score": 0,
+          "canonicalEdgeId": "protocol:peapods-debond\u001f0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34\u001f0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34\u001f0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34>0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce\u001fd03a27aeac0dd8d76b23a495caf9a0904c5ff273286493fb6d00260bf42e5b1c"
+        }
+      ],
+      "mid": 0.98,
+      "feeBps": 0,
+      "reserveA": "10000000000000000000000",
+      "reserveB": "9799999999999999990000",
+      "depthProxy": 9.8e+21
+    },
+    "effective": {
+      "edgeId": "protocol:peapods-debond\u001f0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34\u001f0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34\u001f0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34>0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce\u001fd03a27aeac0dd8d76b23a495caf9a0904c5ff273286493fb6d00260bf42e5b1c",
+      "instanceKey": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+      "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+      "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+      "amountIn": "1907361111151028811545",
+      "status": "quoted",
+      "amountOut": "1869213888928008235314",
+      "effectiveMid": 0.98,
+      "quotedAt": {
+        "number": 26152716,
+        "hash": "0x0c80d557cb71bdb448a893597f138dd7c6ec530b04fd7b1136a266877c647c5b",
+        "generation": 1
+      }
+    },
+    "productionReference": {
+      "status": "met",
+      "amountIn": "1907361111151028811545",
+      "amountOut": "1869213888928008235314"
+    },
+    "referenceBorrowed": false,
+    "background": "69/75 effective rows quoted; six unrelated UniV3 rows unavailable. Not a whole-graph success claim."
+  },
+  "sameStateExecution": {
+    "artifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/dual-2.json",
+      "sha256": "e954484627a602509dc279411aa9be2cda2a09656a5de36aa07590532ef287d5"
+    },
+    "source": {
+      "number": 26152716,
+      "hash": "0x0c80d557cb71bdb448a893597f138dd7c6ec530b04fd7b1136a266877c647c5b",
+      "generation": 26152716
+    },
+    "executor": {
+      "executor": "0x1000000000000000000000000000000000000002",
+      "owner": "0x1000000000000000000000000000000000000001"
+    },
+    "executorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+    "executorArtifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "inputOnlyActorFunding": true,
+    "protocolOverrides": false,
+    "oldInventory": "positive cases include +101 old input units and amountOut+103 old output units; actual debits/receipts measured independently",
+    "samples": [
+      {
+        "label": "production-effective",
+        "amountIn": "1907361111151028811545",
+        "amountOut": "1869213888928008235314",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "label": "original-input-at-N-end",
+        "amountIn": "11759600366451075559109",
+        "amountOut": "11524408359122054047926",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "label": "one-token-control",
+        "amountIn": "1000000000000000000",
+        "amountOut": "979999999999999999",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "label": "below-98-percent-exemption",
+        "amountIn": "2484306419094140914753082",
+        "amountOut": "2434620290712258096458020",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "label": "at-98-percent-exemption",
+        "amountIn": "2484306419094140914753083",
+        "amountOut": "2484306419094140914753083",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "label": "full-supply",
+        "amountIn": "2535006550096062157911310",
+        "amountOut": "2535006550096062157911311",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      }
+    ],
+    "positiveExecutions": 12,
+    "declaredRevertControls": 4,
+    "negativeScope": "same script with no input, or positive script followed by guaranteed failing assertion; returned declared EVM reverts, not transport failures; empty negative effects follow the transport contract, not an independent post-revert state observation",
+    "supplyScope": "direct strict identity measured totalSupply; executor-program dual measured burn event and retained-share balance, not BotVM totalSupply",
+    "construction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "scope": "production issuer; selector contract separately tested offline"
+    },
+    "invocationCounts": {
+      "exact": 6,
+      "quoted": 6,
+      "forbiddenDuringBuild": 0
+    },
+    "originalReceipt": {
+      "amountIn": "11759600366451075559109",
+      "amountOut": "11524408359122054047926",
+      "receiver": "0xE08D97e151473A848C3d9CA3f323Cb720472D015",
+      "note": "N-end output at original amount happens to equal receipt; pre-call state not reconstructed, no exact original replay claim"
+    }
+  },
+  "offline": {
+    "family": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/contract-final.log",
+      "sha256": "167e1826f5dcac0078458bd4d847d31db42cb5339edd12aefe548022c7540aa9",
+      "tests": 26,
+      "pass": 26,
+      "fail": 0
+    },
+    "allFamiliesDual": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/searcher-family-dual-execution-final-2.log",
+      "sha256": "e2426dfaf8dd4eb44ca4f2aa86a9568c64f65b13527bcff0e68d4df3155dd905",
+      "tests": 77,
+      "pass": 77,
+      "fail": 0
+    },
+    "build": {
+      "exitCode": 0,
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/build-2.log",
+        "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      }
+    },
+    "otherChecks": [
+      {
+        "exitCode": 0,
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/family-capability-manifest-check-final.log",
+        "sha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef"
+      },
+      {
+        "exitCode": 0,
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/searcher-production-family-composition-final-2.log",
+        "sha256": "180d9163d891e61bc274b08a17f55ea2610f402e16dbd9943091761ec8c02acd"
+      },
+      {
+        "exitCode": 0,
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/searcher-strict-production-family-declarations-final.log",
+        "sha256": "116c154208b1ee31e557be02138d0c4ac2fb7e5987d8b83ea522880daaca846c"
+      },
+      {
+        "exitCode": 0,
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/searcher-strict-family-lifecycle-runner-final.log",
+        "sha256": "6ef7e8e525f87e9652311bf24bf58e50c0a400fe7ad8ebaccfab3bc1746a73b7"
+      },
+      {
+        "exitCode": 0,
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/searcher-strict-central-adapter-runtime-final.log",
+        "sha256": "2d841b5a768391c00ddbadaa936300caa2ac14fd5f76235fc6325c6aceea34fd"
+      },
+      {
+        "exitCode": 0,
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/searcher-strict-execution-projection-final.log",
+        "sha256": "2fcb18e90f6883ebe96b57862b8591c6193f9cb420543140407c2f160dd8d1b5"
+      }
+    ],
+    "typecheck": {
+      "ownedDiagnostics": 0,
+      "transitiveDiagnostics": 6,
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/typecheck-final.log",
+        "sha256": "1e914a3702fe67f300e6243ac65d204261b6adce4a803538a559be8d8333567b"
+      },
+      "note": "Not a full TypeScript pass: existing transitive at-block/main signature, rebuild provider Buffer and historical helper diagnostics remain; those files were not changed by this increment."
+    },
+    "stagedSource": {
+      "scope": "Git-index export for canonical generation/build only; no branch/worktree created; peer edits excluded",
+      "build": {
+        "exitCode": 0,
+        "artifact": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/staged-build.log",
+          "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+        }
+      },
+      "catalog": {
+        "exitCode": 0,
+        "artifact": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/staged-artifact-check.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "composition": {
+        "exitCode": 0,
+        "artifact": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/staged-searcher-production-family-composition.log",
+          "sha256": "180d9163d891e61bc274b08a17f55ea2610f402e16dbd9943091761ec8c02acd"
+        }
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/staged-searcher-family-dual-execution.log",
+        "sha256": "a9df8ad05a1e7245d5b5593ab13bce30e25b8eb1c4a9ecf031fd2bf8290d5146",
+        "tests": 76,
+        "pass": 76,
+        "fail": 0
+      }
+    }
+  },
+  "mutation": {
+    "fixed": "compiled production mutation path now applies same backing-Transfer filter as per-instance callback; address index selects only subscribers",
+    "coverage": "two PODs sharing one asset: unrelated transfer, donation, withdrawal, inter-POD, malformed/unknown controls; independent review additionally checked overlapping POD/underlying roles",
+    "historicalMutationBlocks": "NOT RUN",
+    "actualLatency": "NOT RUN",
+    "unknownCalls": "remain conservative"
+  },
+  "independentReview": {
+    "passes": 3,
+    "pass1": "one P2 compiled mutation bypass, corrected",
+    "pass2": "P2 closed; no new finding",
+    "pass3": "artifact/source/amount/executor bindings and all 12 positive/4 revert evidence checks supported; no actionable finding",
+    "limitations": "non-author offline evidence review, not an additional EVM run, live, latency or formal merge verdict"
+  },
+  "reconciliation": {
+    "query": [
+      "family",
+      "runtime",
+      "status"
+    ],
+    "manifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/reconciliation-selection.json",
+      "sha256": "dc7dc79f31148e341134aa99eba5dc91f5bb7aa6956057c8666d5d0b6e1cc079"
+    },
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-10T01:07:57.033Z",
+        "finished_at": "2026-10-10T01:07:57.258Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "f6173628b1045cca009ce2bf9957e02b44dfd7852ba119862c8876be376ebcec",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/natural-refreshed-1/ready.json",
+          "--json"
+        ],
+        "stdout_sha256": "dc400dcf94518c1578f291adf39314a9f88cd39729e900e1e05ca13ec4289627",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1412019,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:family-runtime-audit",
+        "descriptor_sha256": "27103edb52549d98e10e8597a4f8a2bf3836df2790b80c18b9c4ba76ac301995",
+        "started_at": "2026-10-10T01:07:57.516Z",
+        "finished_at": "2026-10-10T01:07:58.553Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "608f2d3663010160dfee5c3e548caadd49650e78e9462115e87973f096a6ae27",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:family-runtime-audit",
+          "--",
+          "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/natural-refreshed-1/ready.json"
+        ],
+        "stdout_sha256": "8a58231e51dd9ef8bee2da1a603087a55bdf33e9c39ca2a8ce3db8cfd5f03c46",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 9792,
+        "stderr_bytes": 0
+      }
+    ],
+    "actualReadyRuntimeAudit": {
+      "family": "protocol:peapods-debond",
+      "domain": "protocol",
+      "instances": 1,
+      "routes": 1,
+      "constructed": 1,
+      "declined": 0,
+      "failed": 0,
+      "variants": {
+        "default": 1
+      },
+      "errors": []
+    },
+    "window": {
+      "from": 26152716,
+      "to": 26152716,
+      "source": "immutable Ready contents/hash; tool CLIs do not accept --window"
+    },
+    "conclusion": "actual saved Ready/status and runtime construction agree; audit is not fresh admission/quote/EVM evidence"
+  },
+  "failuresPreserved": [
+    {
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/natural-1/failure.json",
+        "sha256": "58f35a84779c97b29201a9842a5b97cb404d924fe021ad7073fca1eb05009eab"
+      },
+      "cause": "harness filtered nonexistent graph edge.familyId; actual adapterId/canonicalEdgeId showed target admitted; resumed price stage on immutable Ready"
+    },
+    {
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/dual-1.json",
+        "sha256": "27684c6407c7509f9c48a98e3f0226ea9d7e03270aa234a90d79c4506391a31e"
+      },
+      "cause": "test requested totalSupply observation at call.to=BotVM, not POD; not a protocol revert or proved RPC shortage"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/typecheck-1.log",
+      "sha256": "387e50c98682bfc07ede3217dfa9a942d21f83169447f4aea3ed81b275f5555d"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/typecheck-2.log",
+      "sha256": "92c60e9f50e1e8da92aca0cde789978816c9f471999ced5e2f5b9d8838ffc430"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/searcher-production-family-composition-final.log",
+      "sha256": "7b229904de7b6497987d3af05180a93de9962ba11d85030320b265cd4e9f31c3"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/searcher-family-dual-execution-final.log",
+      "sha256": "be14ad3cb883551be217f0f51ce3eaf3114a56b44f092ff08439bf5ce0cf7825"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/tool-ready-status.log",
+      "sha256": "9fb1d6391eb1c6fe81dd41751c92105e0eccd6a05108f3d52a7b15ef2c70405f"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/peapods-identity-20261010.tzfOAU/tool-runtime-audit.log",
+      "sha256": "a5337c9e0502702fa9265ad66ddff2068d5c807e39ea4339ad0c90e18483c88f"
+    }
+  ],
+  "originalImplTableUpdate": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "sha256": "a3ffa9764305a2065ed6578fc4a7f75cc5f4c33f813ec7baef3e5d5aec91c5fa",
+    "oldRow": "| 第2笔：Peapods POD 赎回；`0xb71237be54af5987a37dc5b9fdab19c3b39dae5d0803c3e4237a8b9d4f22b01d` | **待新增适配**。核心 WETH→DAI→ppBEAM→BEAM→WETH；缺 POD `0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34` 的 `debond(uint256,address[],uint8[])`（`0xee9c79da`），本例即时赎回费用2%。其余三个DEX实例已在Ready。需完整发现／身份／strict／金额报价／实收执行接入，不只注册selector；不以样本地址作准入白名单。 | +0.000012923862293833 ETH；lane因果未判定。 | [报告](/Users/eunice/src/MEV/logs/tx-b71237-live-gap-20261009.mhh8uT/report.txt) · [档案](/Users/eunice/src/MEV/logs/replay-history/1/0xb71237be54af5987a37dc5b9fdab19c3b39dae5d0803c3e4237a8b9d4f22b01d/20261009-b71237-live-gap-d02-mhh8ut.json) |",
+    "afterSha256": "2aa06c2397e48a345f47905015dbbb1d6c746ec8d5caa2135e3179bd7379458a",
+    "newRow": "| 第2笔：Peapods POD 赎回；`0xb71237be54af5987a37dc5b9fdab19c3b39dae5d0803c3e4237a8b9d4f22b01d` | **2026-10-10：单资产 WeightedIndex debond 样本正确性通过；默认关闭，时效性待验。** 核心 WETH→DAI→ppBEAM→BEAM→WETH；新增 `protocol:peapods-debond`，POD `0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34`，`debond(uint256,address[],uint8[])`（`0xee9c79da`）。以已验证源码重编译字节码、staking反向绑定及真实行为准入，不用实例白名单。N=26152716 单块自然Ready：38实例／75边，目标1边；raw/effective已发布。生产amountIn=`1907361111151028811545`、amountOut=`1869213888928008235314`，不借外图输入。保留2%费、两次Q96舍入及98%份额免手续费语义；6组金额quoted/runtime各6次到账差0，另4个缺资金／回滚负例通过。26项Family合同与77项共用双接口测试通过；生产sim选额器的无链外Exact／无quoted fallback仅为离线接线验收，历史已测实际单腿执行，不冒称整环。已修生产索引对无关底层Transfer的过度刷新；只经合成回归，尚无实测时效性结论。多资产／bond方向、原调用前状态、自然闭环复现与局部／大图性能均未验。 | +0.000012923862293833 ETH；原交易净增，非我方EV。lane因果仍未判定；N块末单腿验收不等于原调用前复现。 | [原报告](/Users/eunice/src/MEV/logs/tx-b71237-live-gap-20261009.mhh8uT/report.txt) · [原档案](/Users/eunice/src/MEV/logs/replay-history/1/0xb71237be54af5987a37dc5b9fdab19c3b39dae5d0803c3e4237a8b9d4f22b01d/20261009-b71237-live-gap-d02-mhh8ut.json) · [云端适配验收](/Users/eunice/src/MEV/logs/peapods-acceptance-20261010.X6Thon/peapods-debond-correctness-20261010.json) |"
+  },
+  "notVerified": [
+    "historical production sim selector and full financing/repayment/EV loop",
+    "blockscan/backrun attribution",
+    "original call prestate parity",
+    "multi-asset/bond/other Peapods implementations",
+    "real changed-block mutation revalidation",
+    "single-Ready latency",
+    "representative combined-graph latency",
+    "adapter_fixed/adapter_merge_ready/production_gap_fixed formal replay gates",
+    "real live"
+  ],
+  "latencyPlan": "User order retained: finish correctness/IMPL tasks, then every applicable adapted/repaired protocol including this one gets single-Ready checks followed by representative combined production-stage 3x3 median acceptance with negative controls; preparation separate and failures retained.",
+  "safety": {
+    "signing": false,
+    "broadcast": false,
+    "liveStarted": false,
+    "deployed": false,
+    "originalReadyModified": false,
+    "privateKeysRead": false
+  }
+}

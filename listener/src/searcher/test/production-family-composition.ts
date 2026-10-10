@@ -30,6 +30,7 @@ const defaultDisabledSources = new Set([
   "algebra-integral.production.ts",
   "kyberswap-elastic.production.ts",
   "yieldbasis-lt.production.ts",
+  "peapods-debond.production.ts",
 ]);
 for (const activation of PRODUCTION_FAMILY_ACTIVATIONS) {
   assert.equal(activation.envKey, "SEARCHER_FAMILY_" +
