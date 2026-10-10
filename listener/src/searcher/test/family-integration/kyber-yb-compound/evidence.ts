@@ -13,10 +13,12 @@ import { originalXwinLeg } from "../../../venues/protocols/token-conversion-fami
 import { originalStandardErc4626Leg } from "../../../venues/protocols/erc4626-family/test/history-evidence.js";
 import { originalEtherTokenLeg } from "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.js";
 import { originalSelfBurnLeg } from "../../../venues/protocols/self-burn-native-family/test/history-evidence.js";
+import { SAT1_SAMPLE, SAT1_INSTANCE, originalV4Leg } from "../../../venues/swaps/univ4-family/test/history-evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 export { json, sha, word, observeBalance } from "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.js";
 
 export const SAMPLES = {
+  "v4-sat1": { family: "univ4-fee-hook", number: SAT1_SAMPLE.block, tx: SAT1_SAMPLE.tx, instances: [SAT1_INSTANCE] },
   "self-burn-native": { family: "protocol:self-burn-native", number: 25619948,
     tx: "0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7",
     instances: ["0x292a477e521230fe230c13c93374adde8ddec1c1"] },
@@ -253,6 +255,7 @@ function successfulCalls(trace: any, target: string, selector: string): any[] {
 /** Extract only one unambiguous real successful call + event per instance. */
 export function originalLeg(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any) {
   assert(!trace.error && !trace.revertReason, "original transaction reverted");
+  if (key === "v4-sat1") return originalV4Leg(instance, descriptor, receipt, trace, true);
   if (key === "ethertoken-native") return originalEtherTokenLeg(instance, descriptor, receipt, trace);
   if (key === "self-burn-native") return originalSelfBurnLeg(instance, descriptor, receipt, trace);
   if (key === "erc4626-fluid")

@@ -242,6 +242,8 @@
     "searcher:dodo-v2-family-plugin": "node --import tsx src/searcher/test/dodo-v2-family-plugin.ts",
     "searcher:ethertoken-historical-ready": "node --import tsx src/searcher/venues/protocols/ethertoken-native-redeem-family/test/historical-ready.ts",
     "searcher:ella-historical-ready": "node --import tsx src/searcher/venues/swaps/ella-exchange-family/test/historical-ready.ts",
+    "searcher:v4-sat1-historical-ready": "node --import tsx src/searcher/venues/swaps/univ4-family/test/historical-ready.ts",
+    "searcher:v4-sat1-historical-dual": "node --import tsx src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts --family v4-sat1",
     "searcher:self-burn-historical-ready": "node --import tsx src/searcher/venues/protocols/self-burn-native-family/test/historical-ready.ts",
     "searcher:self-burn-historical-dual": "node --import tsx src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts --family self-burn-native",
     "searcher:ella-historical-dual": "node --import tsx src/searcher/venues/swaps/ella-exchange-family/test/historical-fork.ts",

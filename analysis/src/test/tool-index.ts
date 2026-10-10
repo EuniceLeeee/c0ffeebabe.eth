@@ -104,6 +104,18 @@ test("Ella historical Ready and local fork execution declare real costs and sepa
     assert.equal(tool?.capabilities.includes(absent), false);
 });
 
+test("Sat1 history tools separate natural Ready from dual execution and timing", () => {
+  const tools = discoverToolIndex(repoRoot);
+  const ready = selectTools(tools, ["sat1", "historical", "ready"])[0];
+  const dual = selectTools(tools, ["sat1", "historical", "dual"])[0];
+  assert.equal(ready?.id, "listener:searcher:v4-sat1-historical-ready");
+  assert.equal(ready?.cost, "archive-rpc"); assert.equal(ready?.capabilities.includes("execution"), false);
+  assert.equal(dual?.id, "listener:searcher:v4-sat1-historical-dual");
+  assert.equal(dual?.cost, "fork"); assert.equal(dual?.capabilities.includes("ready"), false);
+  for (const tool of [ready, dual]) for (const absent of ["live-window", "stage-timing", "benchmark"])
+    assert.equal(tool?.capabilities.includes(absent), false);
+});
+
 test("SelfBurn historical Ready and dual execution keep separate non-timing scopes", () => {
   const tools = discoverToolIndex(repoRoot);
   const ready = selectTools(tools, ["self-burn", "historical", "ready"])[0];
