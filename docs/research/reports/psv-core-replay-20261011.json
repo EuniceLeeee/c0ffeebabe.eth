@@ -1,0 +1,1184 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "recordedAt": "2026-10-10T20:38:44.371Z",
+  "tx": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8",
+  "N": 26152596,
+  "B": 26152595,
+  "claim": "Same natural core and independent execution gross within 20 percent PASS; full profitable production replay FAIL below EV gate; formal timing NOT RUN",
+  "code": {
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "head": "1b3fd30245156dfd456414bad06de267120c71a0",
+    "dirty": true,
+    "productionSourceSha256": "f5c61a35f67d50d9853ae8fa7eda53b2d16478e5c84ffc6cdb20e1ba9eba06a4",
+    "peerNonGeneratedDiffSha256": "98c67fbc9b8f33d2311b2d7824e60028e10d1348b6061ce53f0860a799b79776",
+    "implementationChangesThisRun": false,
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "executorCodeHash": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419"
+  },
+  "continuation": {
+    "priorRunId": "20261009-live-psv-gap-d62e-qquzeq",
+    "sourceReadyCopied": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/ready.json",
+    "sourceReadySha256": "9c27ae170a25c04c32031d0e88cfe4033f676338289215247e4855d8975852ec",
+    "originalReadyUnchanged": true
+  },
+  "state": {
+    "lane": "blockscan B/B diagnostic",
+    "S": 26152595,
+    "stateHash": "0xa7fdffa917be700eb5b707817fd1c252017ad9f2b4fdf0f66cf00819cfa90b3e",
+    "stateRoot": "0x9db0354101855cc9c41284a7891094ee748794908e1c9555e5b9863b760a18bd",
+    "E": 26152595,
+    "NHash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+    "topologyBlock": 26152596,
+    "noPrefix": true,
+    "naturalPreBDiscoveryProven": false,
+    "originalPreCallStateReconstructed": false
+  },
+  "configuration": {
+    "requested": {
+      "SEARCHER_TEST_DISABLE_DOTENV": "1",
+      "SEARCHER_DRY_RUN": "1",
+      "SEARCHER_BLOCKSCAN_SUBMIT": "0",
+      "SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE": "1",
+      "SEARCHER_REBUILD_REVM_TIMEOUT_MS": "180000",
+      "SEARCHER_FAMILY_PSV_ENABLED": "1",
+      "SEARCHER_FAMILY_UNIV4_ENABLED": "1",
+      "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED": "1",
+      "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED": "0",
+      "SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED": "0",
+      "SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED": "1",
+      "SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP": "3",
+      "SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR": "3",
+      "SEARCHER_BLOCKSCAN_MAX_HOPS": "6",
+      "SEARCHER_BLOCKSCAN_ENUMERATION_METHOD": "joint-dfs",
+      "SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND": "typescript",
+      "SEARCHER_BLOCKSCAN_PREFIX_PRUNING_ENABLED": "1",
+      "SEARCHER_BLOCKSCAN_MAX_PREFIX_DRAWDOWN_BPS": "0",
+      "SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS": "0",
+      "SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS": "0",
+      "SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS": "2000",
+      "SEARCHER_BLOCKSCAN_EFFECTIVE_AMOUNT_CASCADE_ENABLED": "0"
+    },
+    "resolved": {
+      "maxHops": 6,
+      "deduplicateRotations": true,
+      "allowRepeatedPools": true,
+      "allowRepeatedTokens": false,
+      "prefixPruningEnabled": true,
+      "maxPrefixDrawdownBps": 0,
+      "enumerationMethod": "joint-dfs",
+      "enumerationBackend": "typescript",
+      "rustEnumerationThreads": 1,
+      "rustEnumerationScratchMb": 512,
+      "ethSignalPairsPerToken": 50,
+      "hopTokensPerStep": 3,
+      "hopPoolsPerPair": 3,
+      "minSpreadBps": 0,
+      "requireDislocatedPair": true,
+      "exactAdmissionSpreadBps": 0,
+      "minCapitalFraction": 0.001,
+      "maxCandidates": 100,
+      "budgetMs": 2000,
+      "pricedTokens": {
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "maxBorrow": "2000000000000000000000"
+        },
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+          "maxBorrow": "5000000000"
+        },
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+          "maxBorrow": "5000000000000"
+        },
+        "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+          "maxBorrow": "5000000000000"
+        },
+        "0x6b175474e89094c44da98b954eedeac495271d0f": {
+          "maxBorrow": "5000000000000000000000000"
+        }
+      }
+    },
+    "coarseCfg": {
+      "maxHops": 6,
+      "deduplicateRotations": true,
+      "allowRepeatedPools": true,
+      "allowRepeatedTokens": false,
+      "prefixPruningEnabled": true,
+      "maxPrefixDrawdownBps": 0,
+      "enumerationMethod": "joint-dfs",
+      "enumerationBackend": "typescript",
+      "rustEnumerationThreads": 1,
+      "rustEnumerationScratchMb": 512,
+      "ethSignalPairsPerToken": 50,
+      "hopTokensPerStep": 3,
+      "hopPoolsPerPair": 3,
+      "minSpreadBps": 0,
+      "requireDislocatedPair": true,
+      "exactAdmissionSpreadBps": 0,
+      "minCapitalFraction": 0.001,
+      "maxCandidates": 512,
+      "budgetMs": 2000,
+      "pricedTokens": {
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "maxBorrow": "2000000000000000000000"
+        },
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+          "maxBorrow": "5000000000"
+        },
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+          "maxBorrow": "5000000000000"
+        },
+        "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+          "maxBorrow": "5000000000000"
+        },
+        "0x6b175474e89094c44da98b954eedeac495271d0f": {
+          "maxBorrow": "5000000000000000000000000"
+        }
+      }
+    },
+    "search": {
+      "amountGrid": "multiples",
+      "gridHalfWidth": 2,
+      "gssMaxTries": 8,
+      "quoteConcurrency": 16,
+      "quoteToleranceRawUnits": "1"
+    },
+    "policy": {
+      "dryRun": true,
+      "finalVerifyFloorBps": "7",
+      "maxProfitBpsOfFlash": "10000",
+      "profitHaircutBps": 0,
+      "bribeBps": 5000,
+      "bribeAllAboveGas": false,
+      "evGate": true,
+      "minNetEth": "0",
+      "blockScanSubmit": false,
+      "inclusionWatchBlocks": 3
+    },
+    "fixedEffectiveWethInput": "2000000000000000",
+    "amountSelector": "sim",
+    "executionMode": "source-block",
+    "simTrialConcurrency": 1,
+    "diagnosticFundingOverride": false,
+    "rotationOverride": false,
+    "totalBudgetMs": 600000,
+    "compatibilityWithOldRecord": "Old record was coverage-only against frozen live d02f05d3, not a prior successful replay. Current code and combined Ready are independently pinned; production-config differences are explicit."
+  },
+  "ready": {
+    "generation": 3,
+    "instances": 62,
+    "edges": 120,
+    "scan": {
+      "fromBlock": 26152596,
+      "toBlock": 26152596
+    },
+    "accounting": {
+      "total": 73,
+      "verified": 62,
+      "terminalRejected": 10,
+      "retryable": 1,
+      "remainingUnaccounted": 0
+    },
+    "selectedFamilies": [
+      "protocol:psv",
+      "univ2-standard",
+      "univ3-standard",
+      "univ4",
+      "flash-loan:morpho"
+    ],
+    "retryablePreserved": [
+      {
+        "familyId": "protocol:psv",
+        "instance": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+        "stage": "identity",
+        "code": "rpc",
+        "reason": "identity_unverified:unresolved:identity-work-unresolved:source-uups-pair-and-dual-execution:PSV unavailable GEM"
+      }
+    ],
+    "naturalFunding": {
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+        "amount": "117044307845911",
+        "adapterId": "morpho-flash",
+        "fundingId": "flash-loan:morpho\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      },
+      "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+        "amount": "16405167841579733228302",
+        "adapterId": "morpho-flash",
+        "fundingId": "flash-loan:morpho\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+      }
+    },
+    "sha256": "26ac2b211e6565ed91334687a21d3766ff6cfb4af5766671fd93ee8798934557",
+    "targetInjection": false
+  },
+  "pricing": {
+    "rows": 120,
+    "quoted": 120,
+    "freshAtB": 120,
+    "missing": 0,
+    "noBorrowedValuationInput": true,
+    "psvRows": [
+      {
+        "edgeId": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x14913815bcfde78baead2111f463d038ac9c2949\u001fa3cb2816e192c26fe52dbbe3b1b57a0e247e56a3401d92845d19651ac92da5cd",
+        "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "amountIn": "4970091",
+        "status": "quoted",
+        "amountOut": "4970091",
+        "effectiveMid": 1,
+        "quotedAt": {
+          "number": 26152595,
+          "hash": "0xa7fdffa917be700eb5b707817fd1c252017ad9f2b4fdf0f66cf00819cfa90b3e",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0x14913815bcfde78baead2111f463d038ac9c2949>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f922ae3adeb9f64f5ed1ae9394f191382c9d14f4c54c698cae1fbb69a87a0401e",
+        "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "4970091",
+        "status": "quoted",
+        "amountOut": "4970091",
+        "effectiveMid": 1,
+        "quotedAt": {
+          "number": 26152595,
+          "hash": "0xa7fdffa917be700eb5b707817fd1c252017ad9f2b4fdf0f66cf00819cfa90b3e",
+          "generation": 1
+        }
+      }
+    ],
+    "v4CoreOutputRow": {
+      "edgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xdda3c47e70fb237fb50e3856169019bf26fe4c09d7b6618c4f9d6e2423903870\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x14913815bcfde78baead2111f463d038ac9c2949>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f8ffcb222395402ea3966af9be4e55efb0430995f0bccaed2cd97ef9a419361a7",
+      "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xdda3c47e70fb237fb50e3856169019bf26fe4c09d7b6618c4f9d6e2423903870",
+      "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "4970091",
+      "status": "quoted",
+      "amountOut": "4970225",
+      "effectiveMid": 1.0000269612769666,
+      "quotedAt": {
+        "number": 26152595,
+        "hash": "0xa7fdffa917be700eb5b707817fd1c252017ad9f2b4fdf0f66cf00819cfa90b3e",
+        "generation": 1
+      }
+    }
+  },
+  "enumeration": {
+    "count": 7,
+    "selected": 7,
+    "coreRank": 7,
+    "forcedSelectionCount": 0,
+    "deadlineHit": false,
+    "initialAndThroughEvCandidateOrderEqual": true
+  },
+  "execution": {
+    "routes": 7,
+    "amountTrials": 84,
+    "trialSuccess": 53,
+    "trialRevert": 31,
+    "gssTrials": 56,
+    "constructionCount": 84,
+    "runtimeActual": true,
+    "quotedFallback": false,
+    "solverHopExactCalls": 0,
+    "finalistInputs": 21,
+    "independentFinalSimCount": 7,
+    "finalSimSuccess": 7,
+    "positiveEV": 0,
+    "rejectedEV": 7,
+    "otherFinalistInputsNotSeparatelyFinalSimulated": 14,
+    "failures": [
+      {
+        "file": "simulation-9.json",
+        "amount": "200000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-10.json",
+        "amount": "2000000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-12.json",
+        "amount": "200000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-13.json",
+        "amount": "2000000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-15.json",
+        "amount": "200000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-16.json",
+        "amount": "2000000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-18.json",
+        "amount": "200000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-19.json",
+        "amount": "2000000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-21.json",
+        "amount": "200000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-22.json",
+        "amount": "2000000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-24.json",
+        "amount": "200000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-25.json",
+        "amount": "2000000000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-29.json",
+        "amount": "77636000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-30.json",
+        "amount": "124364000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-31.json",
+        "amount": "77636000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-32.json",
+        "amount": "124364000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-33.json",
+        "amount": "77636000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-34.json",
+        "amount": "124364000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-36.json",
+        "amount": "124364000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-37.json",
+        "amount": "77636000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-38.json",
+        "amount": "124364000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-39.json",
+        "amount": "77636000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-40.json",
+        "amount": "124364000000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-43.json",
+        "amount": "48743048000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-44.json",
+        "amount": "48743048000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-45.json",
+        "amount": "48743048000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-47.json",
+        "amount": "48743048000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-48.json",
+        "amount": "48743048000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-51.json",
+        "amount": "30892952000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-52.json",
+        "amount": "30892952000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-55.json",
+        "amount": "30892952000000000",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      }
+    ],
+    "results": [
+      {
+        "naturalRank": 1,
+        "sameCore": false,
+        "route": [
+          {
+            "adapterId": "univ2-swap",
+            "instanceKey": "0x17c1ae82d99379240059940093762c5e4539aba5",
+            "target": "0x17C1Ae82D99379240059940093762c5e4539aba5",
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "adapterId": "univ4-unlock",
+            "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x2287a9620adcbf6250dc71be9ee9b2d3a1ec85a464fc6f5c06669e8d07b61bba",
+            "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          }
+        ],
+        "inputRaw": "19855844336000000",
+        "profitToken": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "profitRaw": "6971620817779",
+        "grossEthWei": "6971620817779",
+        "gasUsed": "486915",
+        "gasWeiPerUnit": "96072158",
+        "gasCostWei": "46778974812570",
+        "bidWei": "0",
+        "netEvWei": "-39807353994791",
+        "decision": "below_ev_gate",
+        "repaymentVerified": true,
+        "conservationVerified": true,
+        "standingPosition": false,
+        "finalSim": "simulation-80.json",
+        "ev": "ev-1.json",
+        "solver": "solver-1.json",
+        "calldataSha256": "f20ae90a7002ed663c218a83dc2864013001fb2641076cc9b1b6c325611a9c21"
+      },
+      {
+        "naturalRank": 2,
+        "sameCore": false,
+        "route": [
+          {
+            "adapterId": "univ2-swap",
+            "instanceKey": "0x17c1ae82d99379240059940093762c5e4539aba5",
+            "target": "0x17C1Ae82D99379240059940093762c5e4539aba5",
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "adapterId": "univ3-swap",
+            "instanceKey": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+            "target": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          }
+        ],
+        "inputRaw": "13037107664000000",
+        "profitToken": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "profitRaw": "2937313453761",
+        "grossEthWei": "2937313453761",
+        "gasUsed": "351265",
+        "gasWeiPerUnit": "96072158",
+        "gasCostWei": "33746786579870",
+        "bidWei": "0",
+        "netEvWei": "-30809473126109",
+        "decision": "below_ev_gate",
+        "repaymentVerified": true,
+        "conservationVerified": true,
+        "standingPosition": false,
+        "finalSim": "simulation-82.json",
+        "ev": "ev-2.json",
+        "solver": "solver-4.json",
+        "calldataSha256": "a6079316ab6c9a53fcf80a2ba3e819175ba475814d681c270e213eef28d9758d"
+      },
+      {
+        "naturalRank": 3,
+        "sameCore": false,
+        "route": [
+          {
+            "adapterId": "univ2-swap",
+            "instanceKey": "0x17c1ae82d99379240059940093762c5e4539aba5",
+            "target": "0x17C1Ae82D99379240059940093762c5e4539aba5",
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "adapterId": "univ3-swap",
+            "instanceKey": "0x11b815efb8f581194ae79006d24e0d814b7697f6",
+            "target": "0x11b815efB8f581194ae79006d24E0d814B7697F6",
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          }
+        ],
+        "inputRaw": "13037107664000000",
+        "profitToken": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "profitRaw": "2079320261384",
+        "grossEthWei": "2079320261384",
+        "gasUsed": "350310",
+        "gasWeiPerUnit": "96072158",
+        "gasCostWei": "33655037668980",
+        "bidWei": "0",
+        "netEvWei": "-31575717407596",
+        "decision": "below_ev_gate",
+        "repaymentVerified": true,
+        "conservationVerified": true,
+        "standingPosition": false,
+        "finalSim": "simulation-84.json",
+        "ev": "ev-3.json",
+        "solver": "solver-7.json",
+        "calldataSha256": "5a040e8e89a0b0fc661827092420f5e5be576d626d542cc26fb9e2744a7f374a"
+      },
+      {
+        "naturalRank": 4,
+        "sameCore": false,
+        "route": [
+          {
+            "adapterId": "univ3-swap",
+            "instanceKey": "0xe0554a476a092703abdb3ef35c80e0d76d32939f",
+            "target": "0xE0554a476A092703abdB3Ef35c80e0D76d32939F",
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          },
+          {
+            "adapterId": "univ3-swap",
+            "instanceKey": "0x1445f32d1a74872ba41f3d8cf4022e9996120b31",
+            "target": "0x1445F32D1A74872bA41f3D8cF4022E9996120b31",
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          }
+        ],
+        "inputRaw": "48743048000000000",
+        "profitToken": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "profitRaw": "4637945825786",
+        "grossEthWei": "4637945825786",
+        "gasUsed": "380071",
+        "gasWeiPerUnit": "96072158",
+        "gasCostWei": "36514241163218",
+        "bidWei": "0",
+        "netEvWei": "-31876295337432",
+        "decision": "below_ev_gate",
+        "repaymentVerified": true,
+        "conservationVerified": true,
+        "standingPosition": false,
+        "finalSim": "simulation-86.json",
+        "ev": "ev-4.json",
+        "solver": "solver-10.json",
+        "calldataSha256": "62b4a0a3c54e45e6960d9a5021940ef94db3560567c4b3856a83db5a23592fae"
+      },
+      {
+        "naturalRank": 5,
+        "sameCore": false,
+        "route": [
+          {
+            "adapterId": "univ4-unlock",
+            "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7",
+            "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          },
+          {
+            "adapterId": "univ3-swap",
+            "instanceKey": "0x1445f32d1a74872ba41f3d8cf4022e9996120b31",
+            "target": "0x1445F32D1A74872bA41f3D8cF4022E9996120b31",
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          }
+        ],
+        "inputRaw": "17252443971465536",
+        "profitToken": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "profitRaw": "1181602220478",
+        "grossEthWei": "1181602220478",
+        "gasUsed": "515738",
+        "gasWeiPerUnit": "96072158",
+        "gasCostWei": "49548062622604",
+        "bidWei": "0",
+        "netEvWei": "-48366460402126",
+        "decision": "below_ev_gate",
+        "repaymentVerified": true,
+        "conservationVerified": true,
+        "standingPosition": false,
+        "finalSim": "simulation-88.json",
+        "ev": "ev-5.json",
+        "solver": "solver-13.json",
+        "calldataSha256": "0de14ab11d1b60ad342b1e9b545bd27677a4193e50242670876033061cf0e9c2"
+      },
+      {
+        "naturalRank": 6,
+        "sameCore": false,
+        "route": [
+          {
+            "adapterId": "univ3-swap",
+            "instanceKey": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+            "target": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "adapterId": "univ4-unlock",
+            "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x2287a9620adcbf6250dc71be9ee9b2d3a1ec85a464fc6f5c06669e8d07b61bba",
+            "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          }
+        ],
+        "inputRaw": "13037107664000000",
+        "profitToken": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "profitRaw": "623330661929",
+        "grossEthWei": "623330661929",
+        "gasUsed": "475499",
+        "gasWeiPerUnit": "96072158",
+        "gasCostWei": "45682215056842",
+        "bidWei": "0",
+        "netEvWei": "-45058884394913",
+        "decision": "below_ev_gate",
+        "repaymentVerified": true,
+        "conservationVerified": true,
+        "standingPosition": false,
+        "finalSim": "simulation-90.json",
+        "ev": "ev-6.json",
+        "solver": "solver-16.json",
+        "calldataSha256": "b382d174db195ceea81e557014ae8cef1777d135f4b11ec7b72e5ccb4e946679"
+      },
+      {
+        "naturalRank": 7,
+        "sameCore": true,
+        "route": [
+          {
+            "adapterId": "psv",
+            "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+            "target": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949"
+          },
+          {
+            "adapterId": "univ4-unlock",
+            "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xdda3c47e70fb237fb50e3856169019bf26fe4c09d7b6618c4f9d6e2423903870",
+            "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+            "tokenIn": "0x14913815bCFDE78BAeAd2111F463D038Ac9C2949",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          }
+        ],
+        "inputRaw": "4970091000",
+        "profitToken": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "profitRaw": "90084",
+        "grossEthWei": "36257292408831",
+        "gasUsed": "435602",
+        "gasWeiPerUnit": "96072158",
+        "gasCostWei": "41849224169116",
+        "bidWei": "0",
+        "netEvWei": "-5591931760285",
+        "decision": "below_ev_gate",
+        "repaymentVerified": true,
+        "conservationVerified": true,
+        "standingPosition": false,
+        "finalSim": "simulation-91.json",
+        "ev": "ev-7.json",
+        "solver": "solver-19.json",
+        "calldataSha256": "5357237aebcaa28dcc07e8da0dc4ff24cdf58fd3ca0d9518243d81672bb0afad"
+      }
+    ]
+  },
+  "coreComparison": {
+    "boundary": "USDC -> PSV eUSD -> same V4 pool USDC; excludes Balancer V2 profit-only WETH conversion",
+    "profitToken": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "originalInputRaw": "7361655916",
+    "originalBorrowRaw": "7361655915",
+    "temporaryOriginalOldBalanceRaw": "1",
+    "originalOldBalanceRestored": true,
+    "originalOutputRaw": "7361757354",
+    "originalGrossRaw": "101438",
+    "oursInputRaw": "4970091000",
+    "oursOutputRaw": "4970181084",
+    "oursGrossRaw": "90084",
+    "originalProfitRateBps": 0.1377,
+    "oursProfitRateBps": 0.1812,
+    "signedGrossDifferencePercent": -11.193,
+    "within20Percent": true,
+    "independentFinalSimPassed": true,
+    "profitableProductionReproduction": false,
+    "netEvWei": "-5591931760285"
+  },
+  "originalBoundaryDiagnostic": {
+    "scope": {
+      "purpose": "Original calldata attribution at B state/N header; no natural B/N production run, no prefix or original actor state override",
+      "stateBlock": 26152595,
+      "stateHash": "0xa7fdffa917be700eb5b707817fd1c252017ad9f2b4fdf0f66cf00819cfa90b3e",
+      "stateRoot": "0x9db0354101855cc9c41284a7891094ee748794908e1c9555e5b9863b760a18bd",
+      "environment": 26152596,
+      "environmentOverrides": {
+        "number": "0x18f0e94",
+        "time": "0x6ac873bb",
+        "baseFee": "0x5609afa",
+        "coinbase": "0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97",
+        "random": "0x0dce1ad633163dee47139114eb9fd492e9c38e08930138ac3974039af593cd33",
+        "gasLimit": "0x3938700"
+      },
+      "scriptSha256": "59e924cb85bc1987310174fd162a987e6ea7ffd6c1478b395b448d6a88f2fbd8",
+      "blockStartSystemChanges": "not materialized; trace-local header diagnostic only",
+      "gasPricePolicy": "landed effectiveGasPrice, independently checked against canonical N baseFee",
+      "performance": "NOT RUN"
+    },
+    "stateBlock": 26152595,
+    "executionEnvironment": 26152596,
+    "traceSuccess": true,
+    "allEightTransferLogsEqualToLanded": true,
+    "allSixHeaderFieldsProbed": true,
+    "noPrefix": true,
+    "noActorOverrides": true,
+    "borrowedRaw": "7361655915",
+    "repaidRaw": "7361655915",
+    "usdcAndEusdBotNetRaw": "0",
+    "nativeBotNetWei": "0",
+    "temporaryOneRawUsdcRestored": true,
+    "grossEthWei": "41521473774674",
+    "gasUsed": "377451",
+    "gasWeiPerUnit": "90217210",
+    "gasCostWei": "34052576131710",
+    "directBuilderWei": "668495727697",
+    "netEthWei": "6800401915267",
+    "senderTraceBalanceDeltaWei": "40852978046977",
+    "gasAccountingNote": "prestate tracer sender delta equals native inflow minus msg.value and excludes transaction gas debit; gas is independently deducted once.",
+    "interpretation": "No-prefix header-only trace supports an original standing opportunity; not an exact block-start-system-state or natural B/N production replay and not a backrun causal proof."
+  },
+  "observedCorrectnessRunTiming": {
+    "formalPerformance": "NOT RUN",
+    "sampleCount": 1,
+    "median": null,
+    "totalMs": 108200.710956,
+    "stages": {
+      "stateMs": 1220.179316,
+      "enumerationMs": 4.647852999999941,
+      "exactRefineMs": 0,
+      "plannerSolverMs": 104981.48287,
+      "finalSimMs": 9522.328571000005,
+      "evMs": 344.13638000001083
+    },
+    "detail": {
+      "stages": {
+        "state": {
+          "status": "ran",
+          "started_at_ms": 1791664086805,
+          "finished_at_ms": 1791664088026,
+          "stage_ms": 1220.179316,
+          "cumulative_ms": 1221
+        },
+        "enumeration": {
+          "status": "ran",
+          "started_at_ms": 1791664088028,
+          "finished_at_ms": 1791664088032,
+          "stage_ms": 4.647852999999941,
+          "cumulative_ms": 1227
+        },
+        "exact_refine": {
+          "status": "not-run",
+          "started_at_ms": null,
+          "finished_at_ms": null,
+          "stage_ms": 0,
+          "cumulative_ms": null
+        },
+        "planner_solver": {
+          "status": "ran",
+          "started_at_ms": 1791664088042,
+          "finished_at_ms": 1791664193023,
+          "stage_ms": 104981.48287,
+          "cumulative_ms": 106218
+        },
+        "final_sim": {
+          "status": "ran",
+          "started_at_ms": 1791664184859,
+          "finished_at_ms": 1791664194942,
+          "stage_ms": 9522.328571000005,
+          "cumulative_ms": 108137
+        },
+        "ev": {
+          "status": "ran",
+          "started_at_ms": 1791664186147,
+          "finished_at_ms": 1791664195005,
+          "stage_ms": 344.13638000001083,
+          "cumulative_ms": 108200
+        }
+      },
+      "plannerBuildMs": 1.1391090000001896,
+      "solverWallMs": 104979.089058,
+      "solverPlans": 7,
+      "solverQuoteWorkers": 7,
+      "solverAmountPoints": 84,
+      "solverGssPoints": 56,
+      "solverHopExactCalls": 0,
+      "exactTransportDrainMs": 1
+    },
+    "preparationExcluded": true,
+    "mode": "historical source-pinned REVM with independent charged-gas trace/balance checks, not live eth_simulateV1 throughput",
+    "note": "Final-sim cumulative time overlaps per-route sizing; do not sum into wall total or treat this run as 3x3 latency acceptance."
+  },
+  "safety": {
+    "signing": false,
+    "broadcast": false,
+    "live": false,
+    "defaultActivationChanged": false,
+    "principalInjected": false,
+    "permissionsInjected": false,
+    "productionActorOverride": "executor code only",
+    "originalActorOverride": false,
+    "otherProcessesStopped": false
+  },
+  "limitations": [
+    "N-derived hindsight topology does not prove discovery before B.",
+    "Current counterfactual executor code is not a deployed or historical executor claim.",
+    "B/B natural core passes gross matching, but all seven routes are rejected on net EV.",
+    "Only finite production sizing points were sampled; no claim of global optimality.",
+    "B/N original diagnostic is separate and does not turn B/B EV into a pass; block-start system changes were not materialized.",
+    "One unrelated unavailable-GEM candidate remains retryable outside Graph.",
+    "No new production implementation changes, build or formal adapter/production-gap promotion gate this run.",
+    "Single-Ready and combined representative-graph latency acceptance remain NOT RUN for PSV and every applicable IMPL adaptation."
+  ],
+  "reconciliation": {
+    "query": [
+      "at",
+      "block",
+      "universe",
+      "rebuild",
+      "startup"
+    ],
+    "selectedTools": [
+      "listener:searcher:universe-rebuild-startup",
+      "listener:searcher:at-block"
+    ],
+    "successfulExecutions": 3,
+    "manifestSha256": "2e1bb50799d9f19e12f24391b01a23ebbaefdb23950850c9938f4303fff11d7f",
+    "manualFinding": "Previously absent PSV edge is now naturally discovered and the core reaches independent final sim; remaining full-profit miss is below EV, not missing identity/graph/route. Original B/N transfer conservation agrees with prior landed-flow diagnosis.",
+    "result": "agrees",
+    "newToolingDefect": false
+  },
+  "rawArchive": {
+    "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU-raw.tgz",
+    "sha256": "6aff085f1962b779d721da4d7b7c2a1d69b27d45e553cd0665b5ac65ed767167"
+  },
+  "artifacts": [
+    {
+      "role": "configuration",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/config.json",
+      "sha256": "f7934e6dd2deb2317d92dee5aa66d3edd8f18a6105e0af9ded47f9b32ac7c5fa",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/config.json"
+    },
+    {
+      "role": "production Ready",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/ready.json",
+      "sha256": "26ac2b211e6565ed91334687a21d3766ff6cfb4af5766671fd93ee8798934557",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/ready.json"
+    },
+    {
+      "role": "original receipt",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/receipt.json",
+      "sha256": "cd3256cf4cb9296267544ff56dc8414fc02a2e1b36b238e690fa06198295c399",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/receipt.json"
+    },
+    {
+      "role": "canonical B header",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/header-B.json",
+      "sha256": "b449fb5bf0467179574c883a7f3d46457b2839a90e754340ad0556fde9ad88ed",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/header-B.json"
+    },
+    {
+      "role": "canonical N header",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/header-N.json",
+      "sha256": "87954797ca8ae24235a863883c7a3fa12f964f1696c5e86116cb13969066dbcd",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/header-N.json"
+    },
+    {
+      "role": "pre-run source binding",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1-source-before.json",
+      "sha256": "bab64a70cb03b25a8d81783b9c73fd95e2381d80dd91152e9ca04cd9a2103b3a",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1-source-before.json"
+    },
+    {
+      "role": "post-run source binding",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1-source-after.json",
+      "sha256": "bab64a70cb03b25a8d81783b9c73fd95e2381d80dd91152e9ca04cd9a2103b3a",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1-source-after.json"
+    },
+    {
+      "role": "producer input",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/input.json",
+      "sha256": "fa4fe94d30983c2f2a9ef1e2209fca4b89ac413be0ce38fdd7decccf5aea3d2c",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/input.json"
+    },
+    {
+      "role": "B effective prices",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/prices.json",
+      "sha256": "3127f98fc8fa7a7ea4bb73efee83044f4a171384ae96356a6d805c12e97ad56a",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/prices.json"
+    },
+    {
+      "role": "natural enumeration",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/enumeration.json",
+      "sha256": "aebb12e95e8f9069f79787beb2832e2bcafe303242a407e93129311d9e3c8cd1",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/enumeration.json"
+    },
+    {
+      "role": "production terminal summary",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/summary.json",
+      "sha256": "636460e5af8d221ad7dc8625d4473a7f3127a87ff9664e888fe2744db16934cd",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/summary.json"
+    },
+    {
+      "role": "canonical execution receipts",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/production-tools.json",
+      "sha256": "2e1bb50799d9f19e12f24391b01a23ebbaefdb23950850c9938f4303fff11d7f",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/production-tools.json"
+    },
+    {
+      "role": "independent final simulation rank 1",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-80.json",
+      "sha256": "fa3d2a6ff305831401fb7c29b7ed24a62a5cde37ae54c2e7d7abf8a0a17d90bf",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-80.json"
+    },
+    {
+      "role": "production EV rank 1",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-1.json",
+      "sha256": "1bb8032369ad29c41e2902aa1a3903d245fae26813a43468e7404c7cd90bd860",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-1.json"
+    },
+    {
+      "role": "selected execution input rank 1",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-1.json",
+      "sha256": "a811ebc385273782c63585556d28623db95efdbcb62434a2e7705baaafb8f4db",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-1.json"
+    },
+    {
+      "role": "independent final simulation rank 2",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-82.json",
+      "sha256": "b3dcff0c7b8d32088d6cd5a2f2b659020dba254a0bafd6926d981856119390cd",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-82.json"
+    },
+    {
+      "role": "production EV rank 2",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-2.json",
+      "sha256": "c4075803f89850ef287768015b0c0491c6c6803616f4654d9cdb59b754a1a545",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-2.json"
+    },
+    {
+      "role": "selected execution input rank 2",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-4.json",
+      "sha256": "0a6e56ebf3f9ee0c4630cd0f34b600650659c8963e74f61d79bb5a08d33f16db",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-4.json"
+    },
+    {
+      "role": "independent final simulation rank 3",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-84.json",
+      "sha256": "84bcfa98b32ef0606ed94da93a7f022bc0f722e338c333366e3c184f09d83187",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-84.json"
+    },
+    {
+      "role": "production EV rank 3",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-3.json",
+      "sha256": "9795dd30c47dedeef436ab34985951c6ac1a550a000ad41cc6558b8f90db0c0c",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-3.json"
+    },
+    {
+      "role": "selected execution input rank 3",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-7.json",
+      "sha256": "8f0a365d6aea3f7bfda3ade22c7b36b2ca0d7c375f469efa24f4165617f16208",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-7.json"
+    },
+    {
+      "role": "independent final simulation rank 4",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-86.json",
+      "sha256": "479d19562bbdf8459eb1406fa70181865d93014c422a581f71f19435c4ad449b",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-86.json"
+    },
+    {
+      "role": "production EV rank 4",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-4.json",
+      "sha256": "2411a72693c35a422e5339db6e7e10b610da758109ef557762ce999403dd612f",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-4.json"
+    },
+    {
+      "role": "selected execution input rank 4",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-10.json",
+      "sha256": "7022c9b098dff2c17028d5a9fb34e09e2218beea2a9415797b801ff34ee181f7",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-10.json"
+    },
+    {
+      "role": "independent final simulation rank 5",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-88.json",
+      "sha256": "53a49e3f9458ec5a0d35f2d288d1e5348fe5fb9e82c23ea245b0205b528055fb",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-88.json"
+    },
+    {
+      "role": "production EV rank 5",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-5.json",
+      "sha256": "697628344fb0b5d49e6e9ae4c46f7f028f30262a8f0542e77037bf02be7c5c55",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-5.json"
+    },
+    {
+      "role": "selected execution input rank 5",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-13.json",
+      "sha256": "8b759c36a6576c795f7393337c8d8bd08c6bdd96511c2c0952aefffc8afd62f9",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-13.json"
+    },
+    {
+      "role": "independent final simulation rank 6",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-90.json",
+      "sha256": "97aa95b347b984eb8269bc9968a98e70a9a2b95f7972dd5bac90a7e70ea5ea5a",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-90.json"
+    },
+    {
+      "role": "production EV rank 6",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-6.json",
+      "sha256": "44c39078f0a21cf6d0f8502cd1b1d858da6aefc9ae546e0f0fd0cbd100498939",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-6.json"
+    },
+    {
+      "role": "selected execution input rank 6",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-16.json",
+      "sha256": "9cea17ac025c414621a30a4de6e29d49a140b2d80ef5831ea3b3e588f592ba19",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-16.json"
+    },
+    {
+      "role": "independent final simulation rank 7",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-91.json",
+      "sha256": "f5fd7469ae292b393b98c7f627d3d8a585823e932bf7f8a7a452bdc7ee9ad921",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/simulation-91.json"
+    },
+    {
+      "role": "production EV rank 7",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-7.json",
+      "sha256": "7867fbc19a5aee293df1ab191b1a858b192ac5989cfc16e54b7a4f99acb9a7e9",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/ev-7.json"
+    },
+    {
+      "role": "selected execution input rank 7",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-19.json",
+      "sha256": "a1778447ad06d6c1ed0dcfeb356895764490951af43216ebecd6fb4203c3c395",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/parent-ev-1/solver-19.json"
+    },
+    {
+      "role": "original calldata B/N trace",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/original-calldata-BN.json",
+      "sha256": "6e69f28de2c49e10c7da5b799fc44af63a29d8fd448d2504f8a771a4c09d06ad",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/original-calldata-BN.json"
+    },
+    {
+      "role": "B/N prestate delta diagnostic",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/original-calldata-BN-prestate.json",
+      "sha256": "2e773a9f481ab4f84a8fe9a7e8890427219268c07311e14946be4542d47cff10",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/original-calldata-BN-prestate.json"
+    },
+    {
+      "role": "B/N actual header probe",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/BN-header-probe.json",
+      "sha256": "c0d83d4bfe08a831b3a4ec34a4aacb39a1185e0328ad50040aa0be97e1c3029d",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/BN-header-probe.json"
+    },
+    {
+      "role": "B/N scope and limitations",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/boundary-scope.json",
+      "sha256": "12e9b9131beb95ab4bed43f6d113b07bc6072ec62797bb5ccf63ee7e8679d790",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/boundary-scope.json"
+    },
+    {
+      "role": "B/N terminal result",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/boundary-terminal.json",
+      "sha256": "e6d563f30d3b491071ef091b68ae2c1c0e4995465a46fdd5e64d6741fbce346e",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/boundary-terminal.json"
+    },
+    {
+      "role": "collector assertions",
+      "path": "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/collect.mjs",
+      "sha256": "6b909bd57f46cc42fe6936ad1965732ab9782d3247559a5a96d3589e62eab161",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/psv-loop-20261011.yxRNJU/collect.mjs"
+    }
+  ]
+}
