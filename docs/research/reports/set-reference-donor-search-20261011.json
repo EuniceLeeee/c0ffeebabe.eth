@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "purpose": "Read-only search for actual production input amounts for the three still-unvalidated Set directions; no fabricated reference, quotes, admission or graph",
+  "tokens": [
+    "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+    "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e"
+  ],
+  "files": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+      "bytes": 209621643,
+      "sha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378",
+      "unchanged": true,
+      "lines": 2908103,
+      "matchingLines": 0,
+      "tokenOccurrences": {
+        "0x6011242b6dc2c67ed3d484db09327e933054c90a": 0,
+        "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e": 0
+      },
+      "inputRows": []
+    },
+    {
+      "path": "/opt/mev-cloud/family-all-ready-20261008.0V7QIq/family-latency-rollback-20261008/evidence/interrupted-all-active/mids.jsonl",
+      "bytes": 142907700,
+      "sha256": "b5a656bb4e6e1a69f26e140456252e5cc5a0bed4aa9da4573a39ee2c71226420",
+      "unchanged": true,
+      "lines": 211,
+      "matchingLines": 0,
+      "tokenOccurrences": {
+        "0x6011242b6dc2c67ed3d484db09327e933054c90a": 0,
+        "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e": 0
+      },
+      "inputRows": []
+    },
+    {
+      "path": "/opt/mev-cloud/family-all-ready-20261008.0V7QIq/family-latency-rollback-20261008/live2500-rpc-observation-20261009-attempt02/mids.jsonl",
+      "bytes": 484383423,
+      "sha256": "06c9c97aab2538dc4124428e21a9ab574fb222b26e69e1dd69e5a497ec2d04d0",
+      "unchanged": true,
+      "lines": 2458,
+      "matchingLines": 0,
+      "tokenOccurrences": {
+        "0x6011242b6dc2c67ed3d484db09327e933054c90a": 0,
+        "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e": 0
+      },
+      "inputRows": []
+    }
+  ],
+  "productionCodeChanged": false,
+  "rpcCalls": 0,
+  "formalPerformance": "NOT RUN"
+}

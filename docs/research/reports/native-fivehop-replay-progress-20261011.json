@@ -1,0 +1,760 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "recordedAt": "2026-10-10T20:59:51.548Z",
+  "tx": "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+  "N": 26152607,
+  "B": 26152606,
+  "claim": "Natural Ready and B/B pricing completed; target not enumerated. Original B/B and B/N-header diagnostics revert. Causal replay and natural target sizing/final sim/EV NOT RUN; performance NOT RUN.",
+  "code": {
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "head": "68093a355a615d9753e5cb79b9a46c48f625817b",
+    "dirty": true,
+    "sourceSha256": "f5c61a35f67d50d9853ae8fa7eda53b2d16478e5c84ffc6cdb20e1ba9eba06a4",
+    "peerNonGeneratedDiffSha256": "98c67fbc9b8f33d2311b2d7824e60028e10d1348b6061ce53f0860a799b79776",
+    "sourceBeforeAfterEqual": true,
+    "productionChangesThisRun": false
+  },
+  "continuation": {
+    "priorRunId": "20261009-live-fluid-native-curveplain-5b6114-xgipla",
+    "originalReady": "/opt/mev-cloud/family-runtime-20261007/logs/native-fluid-acceptance-20261009.QGszql/single-N26152607-attempt01/ready.json",
+    "originalReadySha256": "949ce49c29006e32c6ffd05f81384a3dbc9f942360c449e966a883590d05a3ea",
+    "originalReadyUnchanged": true
+  },
+  "state": {
+    "lane": "unknown; blockscan B/B diagnostic attempted",
+    "S": 26152606,
+    "E": 26152606,
+    "stateHash": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+    "stateRoot": "0xb013ee88cd486c5e84d01f7d0c0d702e692d94240c84151e959c40ba185e0924",
+    "targetHash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+    "topologyBlock": 26152607,
+    "postHocTopology": true,
+    "noPrefix": true,
+    "naturalDiscoveryBeforeBProven": false
+  },
+  "configuration": {
+    "requested": {
+      "SEARCHER_TEST_DISABLE_DOTENV": "1",
+      "SEARCHER_DRY_RUN": "1",
+      "SEARCHER_BLOCKSCAN_SUBMIT": "0",
+      "SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE": "1",
+      "SEARCHER_REBUILD_REVM_TIMEOUT_MS": "180000",
+      "SEARCHER_FAMILY_UNIV4_ENABLED": "1",
+      "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED": "1",
+      "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED": "0",
+      "SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED": "0",
+      "SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED": "1",
+      "SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP": "3",
+      "SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR": "3",
+      "SEARCHER_BLOCKSCAN_MAX_HOPS": "6",
+      "SEARCHER_BLOCKSCAN_ENUMERATION_METHOD": "joint-dfs",
+      "SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND": "typescript",
+      "SEARCHER_BLOCKSCAN_PREFIX_PRUNING_ENABLED": "1",
+      "SEARCHER_BLOCKSCAN_MAX_PREFIX_DRAWDOWN_BPS": "0",
+      "SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS": "0",
+      "SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS": "0",
+      "SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS": "2000",
+      "SEARCHER_BLOCKSCAN_EFFECTIVE_AMOUNT_CASCADE_ENABLED": "0",
+      "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED": "1",
+      "SEARCHER_FAMILY_FLUID_DEX_ENABLED": "1"
+    },
+    "resolved": {
+      "maxHops": 6,
+      "deduplicateRotations": true,
+      "allowRepeatedPools": true,
+      "allowRepeatedTokens": false,
+      "prefixPruningEnabled": true,
+      "maxPrefixDrawdownBps": 0,
+      "enumerationMethod": "joint-dfs",
+      "enumerationBackend": "typescript",
+      "rustEnumerationThreads": 1,
+      "rustEnumerationScratchMb": 512,
+      "ethSignalPairsPerToken": 50,
+      "hopTokensPerStep": 3,
+      "hopPoolsPerPair": 3,
+      "minSpreadBps": 0,
+      "requireDislocatedPair": true,
+      "exactAdmissionSpreadBps": 0,
+      "minCapitalFraction": 0.001,
+      "maxCandidates": 100,
+      "budgetMs": 2000,
+      "pricedTokens": {
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "maxBorrow": "2000000000000000000000"
+        },
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+          "maxBorrow": "5000000000"
+        },
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+          "maxBorrow": "5000000000000"
+        },
+        "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+          "maxBorrow": "5000000000000"
+        },
+        "0x6b175474e89094c44da98b954eedeac495271d0f": {
+          "maxBorrow": "5000000000000000000000000"
+        }
+      }
+    },
+    "coarseCfg": {
+      "maxHops": 6,
+      "deduplicateRotations": true,
+      "allowRepeatedPools": true,
+      "allowRepeatedTokens": false,
+      "prefixPruningEnabled": true,
+      "maxPrefixDrawdownBps": 0,
+      "enumerationMethod": "joint-dfs",
+      "enumerationBackend": "typescript",
+      "rustEnumerationThreads": 1,
+      "rustEnumerationScratchMb": 512,
+      "ethSignalPairsPerToken": 50,
+      "hopTokensPerStep": 3,
+      "hopPoolsPerPair": 3,
+      "minSpreadBps": 0,
+      "requireDislocatedPair": true,
+      "exactAdmissionSpreadBps": 0,
+      "minCapitalFraction": 0.001,
+      "maxCandidates": 512,
+      "budgetMs": 2000,
+      "pricedTokens": {
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "maxBorrow": "2000000000000000000000"
+        },
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+          "maxBorrow": "5000000000"
+        },
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+          "maxBorrow": "5000000000000"
+        },
+        "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+          "maxBorrow": "5000000000000"
+        },
+        "0x6b175474e89094c44da98b954eedeac495271d0f": {
+          "maxBorrow": "5000000000000000000000000"
+        }
+      }
+    },
+    "search": {
+      "amountGrid": "multiples",
+      "gridHalfWidth": 2,
+      "gssMaxTries": 8,
+      "quoteConcurrency": 16,
+      "quoteToleranceRawUnits": "1"
+    },
+    "policy": {
+      "dryRun": true,
+      "finalVerifyFloorBps": "7",
+      "maxProfitBpsOfFlash": "10000",
+      "profitHaircutBps": 0,
+      "bribeBps": 5000,
+      "bribeAllAboveGas": false,
+      "evGate": true,
+      "minNetEth": "0",
+      "blockScanSubmit": false,
+      "inclusionWatchBlocks": 3
+    },
+    "referenceWethInput": "2000000000000000",
+    "mode": "source-block",
+    "counterfactualExecutor": "0x1000000000000000000000000000000000000002",
+    "owner": "0x1000000000000000000000000000000000000001",
+    "executorCodeHash": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "simNotStarted": true,
+    "totalBudgetMs": 600000
+  },
+  "ready": {
+    "generation": 2,
+    "instances": 50,
+    "edges": 106,
+    "scope": {
+      "fromBlock": 26152607,
+      "toBlock": 26152607
+    },
+    "accounting": {
+      "total": 51,
+      "verified": 50,
+      "terminalRejected": 1,
+      "retryable": 0,
+      "remainingUnaccounted": 0
+    },
+    "families": [
+      "curve-plain",
+      "fluid-dex",
+      "univ2-standard",
+      "univ3-standard",
+      "univ4",
+      "flash-loan:morpho"
+    ],
+    "sha256": "2294f8eb425db372525502d77d801828b724e64959f07864b4c90b64001c54f5",
+    "poolRouteOrAmountInjection": false
+  },
+  "pricing": {
+    "quoted": 106,
+    "total": 106,
+    "freshAtB": 106,
+    "targetRows": [
+      {
+        "edgeId": "curve-plain\u001f0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5\u001f0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee\u001fc114e023b3c5b36c499edb7f3083394b58a7c8c19feda64bc5c8aa3ce7c066e3",
+        "instanceKey": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee",
+        "amountIn": "2000000000000000",
+        "status": "quoted",
+        "amountOut": "1809480786637593",
+        "effectiveMid": 0.9047403933187965,
+        "quotedAt": {
+          "number": 26152606,
+          "hash": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+          "generation": 1
+        },
+        "pairPoolRank": 2,
+        "pairPoolCount": 2,
+        "survivesProductionPoolCap": true,
+        "survivesProductionForwardTokenCap": true,
+        "survivesProductionReverseTokenCap": true
+      },
+      {
+        "edgeId": "fluid-dex\u001f0x86f874212335af27c41cdb855c2255543d1499ce\u001f0x86f874212335af27c41cdb855c2255543d1499ce\u001f0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fbdb69ebb3778797536704a6569094b1fe4c624fa7474c408350846ec32bc1d26",
+        "instanceKey": "0x86f874212335af27c41cdb855c2255543d1499ce",
+        "tokenIn": "0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "1809539338000000",
+        "status": "quoted",
+        "amountOut": "1999652013000000",
+        "effectiveMid": 1.1050613661762794,
+        "quotedAt": {
+          "number": 26152606,
+          "hash": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+          "generation": 1
+        },
+        "pairPoolRank": 2,
+        "pairPoolCount": 2,
+        "survivesProductionPoolCap": true,
+        "survivesProductionForwardTokenCap": true,
+        "survivesProductionReverseTokenCap": false
+      },
+      {
+        "edgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xdac17f958d2ee523a2206206994597c13d831ec7\u001fe9f4c86030b758bf665f32a1478b6fc3732a15f758def6c9df7ba07510211f81",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountIn": "2000000000000000",
+        "status": "quoted",
+        "amountOut": "4971981",
+        "effectiveMid": 2.4859905e-9,
+        "quotedAt": {
+          "number": 26152606,
+          "hash": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+          "generation": 1
+        },
+        "pairPoolRank": 6,
+        "pairPoolCount": 8,
+        "survivesProductionPoolCap": false,
+        "survivesProductionForwardTokenCap": false,
+        "survivesProductionReverseTokenCap": false
+      },
+      {
+        "edgeId": "fluid-dex\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f059edb097760dcf5d6b3143eec02c1b7cfdbb58eac93463d7fc1cd1dec6131a3",
+        "instanceKey": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "4977087",
+        "status": "quoted",
+        "amountOut": "4973787",
+        "effectiveMid": 0.999336961560045,
+        "quotedAt": {
+          "number": 26152606,
+          "hash": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+          "generation": 1
+        },
+        "pairPoolRank": 1,
+        "pairPoolCount": 5,
+        "survivesProductionPoolCap": true,
+        "survivesProductionForwardTokenCap": true,
+        "survivesProductionReverseTokenCap": false
+      },
+      {
+        "edgeId": "univ3-standard\u001f0xe0554a476a092703abdb3ef35c80e0d76d32939f\u001f0xe0554a476a092703abdb3ef35c80e0d76d32939f\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f6305cc9feb1e67fd47a4bfd11d513ae30238c1bbd4c0432c646fdb4494980cc3",
+        "instanceKey": "0xe0554a476a092703abdb3ef35c80e0d76d32939f",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "4972582",
+        "status": "quoted",
+        "amountOut": "1999825848831068",
+        "effectiveMid": 402170511.9857386,
+        "quotedAt": {
+          "number": 26152606,
+          "hash": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+          "generation": 1
+        },
+        "pairPoolRank": 1,
+        "pairPoolCount": 5,
+        "survivesProductionPoolCap": true,
+        "survivesProductionForwardTokenCap": true,
+        "survivesProductionReverseTokenCap": false
+      }
+    ],
+    "borrowedReferenceAmounts": false
+  },
+  "enumeration": {
+    "baseline": {
+      "count": 16,
+      "fullTargetRanks": [],
+      "sameOrderedRoutesAsOnline": true,
+      "deadlineHit": false
+    },
+    "repeatOnly": {
+      "count": 481,
+      "fullTargetRanks": [],
+      "deadlineHit": false,
+      "changedParameter": "allowRepeatedTokens=false -> true; all other requested CLI settings unchanged"
+    }
+  },
+  "sampledRatios": {
+    "notSequentialQuotesOrSimulation": true,
+    "fullFive": {
+      "num": "178944033161320520936648133173437415383045486490726964000000",
+      "den": "179136962529288364017168000000000000000000000000000000000000",
+      "positive": false,
+      "approximateBps": -10.76993
+    },
+    "firstTwo": {
+      "num": "3618331897484686343924709000000",
+      "den": "3619078676000000000000000000000",
+      "positive": false,
+      "approximateBps": -2.06344
+    },
+    "lastThree": {
+      "num": "49454842239794243579880476196",
+      "den": "49497946457268000000000000000",
+      "positive": false,
+      "approximateBps": -8.70828
+    }
+  },
+  "firstBlockers": {
+    "targetV4PairPoolRank": 6,
+    "poolCap": 3,
+    "actualSelectorEliminatesTarget": true,
+    "independentRepeatTokenPolicy": "normalized WETH -> weETH -> WETH -> USDT -> USDC -> WETH is not a simple cycle",
+    "independentEconomicGate": "sampled whole route is below strict positive threshold; not equivalent to executing the same propagated amount",
+    "targetReachedSizing": false
+  },
+  "execution": {
+    "naturalTargetSolver": "not-run",
+    "naturalTargetFinalSim": "not-run",
+    "naturalTargetEV": "not-run",
+    "grossTwentyPercentMatch": "not-run",
+    "unrelatedCandidatesNotSimulated": 16
+  },
+  "attribution": {
+    "original": {
+      "tokens": [
+        "WETH",
+        "weETH",
+        "native ETH",
+        "USDT",
+        "USDC",
+        "WETH"
+      ],
+      "principalRaw": "752645725294836224",
+      "grossWethRaw": "773290759263276",
+      "residualUSDC": "6101",
+      "inventoryWeEthRaw": "-1",
+      "familySequence": [
+        "curve-plain",
+        "fluid-dex",
+        "univ4",
+        "fluid-dex",
+        "univ3-standard"
+      ]
+    },
+    "originalFees": {
+      "gasUsed": 664146,
+      "gasCostWei": "78505521385536",
+      "directCoinbaseWei": "12604639375938",
+      "priorityTipWei": "0",
+      "netNativeWei": "682180598501802",
+      "originalMsgValueWei": "163",
+      "nativeDeltaProof": {
+        "requestCount": 1,
+        "sender": "0xc0ffeebabe5d496b2dde509f9fa189c25cf29671",
+        "preBalance": "74341446986751316775",
+        "postBalance": "74342129167349818577",
+        "deltaWei": "682180598501802"
+      }
+    },
+    "BB": {
+      "status": "reverted",
+      "gasUsed": "276644",
+      "firstFailure": "second leg Fluid custom error selector 0x2fee3e0e, code 51010; no decoded semantic claim",
+      "gasPriceAtLeastBaseFee": true
+    },
+    "BN": {
+      "status": "reverted",
+      "gasUsed": "733738",
+      "allSixEnvironmentFieldsProbed": true,
+      "noActorOverrides": true,
+      "noUserPrefix": true,
+      "blockStartSystemState": "not materialized",
+      "failure": "Morpho WETH repayment transferFrom reverted",
+      "legComparison": [
+        {
+          "leg": 1,
+          "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+          "selector": "0x3df02124",
+          "sameCalldata": true,
+          "originalOutput": "680948927573948064",
+          "BNAttemptedOutput": "680948927573948064",
+          "delta": "0",
+          "caution": "BN ancestor reverts; outputs are tentative trace values, not settled balances or successful final simulation"
+        },
+        {
+          "leg": 2,
+          "target": "0x86f874212335af27c41cdb855c2255543d1499ce",
+          "selector": "0x2668dfaa",
+          "sameCalldata": true,
+          "originalOutput": "752490278265000000",
+          "BNAttemptedOutput": "752490278265000000",
+          "delta": "0",
+          "caution": "BN ancestor reverts; outputs are tentative trace values, not settled balances or successful final simulation"
+        },
+        {
+          "leg": 3,
+          "target": "0x000000000004444c5dc75cb358380d2e3de08a90",
+          "selector": "0xf3cd914c",
+          "sameCalldata": true,
+          "originalOutput": "1870435127",
+          "BNAttemptedOutput": "1870435127",
+          "delta": "0",
+          "caution": "BN ancestor reverts; outputs are tentative trace values, not settled balances or successful final simulation"
+        },
+        {
+          "leg": 4,
+          "target": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+          "selector": "0x2668dfaa",
+          "sameCalldata": true,
+          "originalOutput": "1869194930",
+          "BNAttemptedOutput": "1869195131",
+          "delta": "201",
+          "caution": "BN ancestor reverts; outputs are tentative trace values, not settled balances or successful final simulation"
+        },
+        {
+          "leg": 5,
+          "target": "0xe0554a476a092703abdb3ef35c80e0d76d32939f",
+          "selector": "0x128acb08",
+          "sameCalldata": true,
+          "originalOutput": "753419016054099500",
+          "BNAttemptedOutput": "751703862132896529",
+          "delta": "-1715153921202971",
+          "caution": "BN ancestor reverts; outputs are tentative trace values, not settled balances or successful final simulation"
+        }
+      ]
+    },
+    "candidateTrigger": {
+      "tx": "0x50354ee2a5ada3aec4d176ec8e127723f3de40e20b0d5f9e9f31f13a099796ae",
+      "index": 3,
+      "pool": "0xe0554a476a092703abdb3ef35c80e0d76d32939f",
+      "amount0USDC": "-55261133228",
+      "amount1WETH": "22254195076405707815",
+      "evidence": "canonical Swap log in opposite direction before winner",
+      "causalReplay": "NOT RUN"
+    },
+    "otherPriorEvents": [
+      {
+        "tx": "0x8d869f76d35a3c4fd7543586bbb91e639933dc5cd716171f1959a533cd3a2a10",
+        "index": 22,
+        "address": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+        "topic": "0xdc004dbca4ef9c966218431ee5d9133d337ad018dd5b5c5493722803f75c64f7"
+      },
+      {
+        "tx": "0x8d869f76d35a3c4fd7543586bbb91e639933dc5cd716171f1959a533cd3a2a10",
+        "index": 22,
+        "address": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+        "topic": "0xdc004dbca4ef9c966218431ee5d9133d337ad018dd5b5c5493722803f75c64f7"
+      }
+    ],
+    "targetV4PriorSwapCount": 0,
+    "conclusion": "Strong same-block V3-state-dependence lead, not a completed trigger-only/full-prefix causal proof. BB/B-header failures alone do not classify backrun."
+  },
+  "timing": {
+    "formalPerformance": "NOT RUN",
+    "sameTableCorrectnessDiagnosticsOnly": true,
+    "productionOneShot": {
+      "stateMs": 910.303234,
+      "enumerationMs": 6.858420000000024,
+      "exactRefineMs": 0,
+      "plannerSolverMs": 0,
+      "finalSimMs": 0,
+      "evMs": 0
+    },
+    "notMedian": true,
+    "allApplicableImplFamiliesStillRequireSingleReadyThenCombinedGraph": true
+  },
+  "reconciliation": {
+    "query": [
+      "at",
+      "block",
+      "universe",
+      "rebuild",
+      "startup"
+    ],
+    "tools": [
+      "listener:searcher:universe-rebuild-startup",
+      "listener:searcher:at-block"
+    ],
+    "successfulExecutions": 4,
+    "manifestSha256": "aed3cce1e89914088a43cb5d9d8ebedc5a486d7c3ba26b2e3f09216c54f06c96",
+    "result": "Online baseline matches same-table canonical offline enumeration exactly; production pool selector confirms V4 pruning. No canonical causal producer was executed or claimed.",
+    "newToolingDefect": false
+  },
+  "safety": {
+    "signing": false,
+    "broadcast": false,
+    "liveStarted": false,
+    "defaultsChanged": false,
+    "originalActorStateOrPermissionsOverridden": false,
+    "originalReadyModified": false,
+    "peerEditsModified": false
+  },
+  "remaining": [
+    "Validate real trigger-only and full-prefix states using the existing trusted historical backend, then use actual backrun production lane if causality is established.",
+    "Do not hand-inject the five-hop target or original successful amount into natural search.",
+    "Original consumes one raw weETH inventory; report conservation and gross comparisons explicitly.",
+    "All adapted IMPL protocols retain NOT RUN for single-Ready and representative combined-graph performance."
+  ],
+  "artifacts": [
+    {
+      "role": "config.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/config.json",
+      "sha256": "8ee932dbf1a10d26eb7d21dc1ff76de9ff0b6c09aa6bf6a58013ab5b257730d8",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/config.json"
+    },
+    {
+      "role": "ready.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/ready.json",
+      "sha256": "2294f8eb425db372525502d77d801828b724e64959f07864b4c90b64001c54f5",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/ready.json"
+    },
+    {
+      "role": "receipt.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/receipt.json",
+      "sha256": "c881dc92472428366a7830ef45f68a577c01da95b6fd047970bddbc245965f51",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/receipt.json"
+    },
+    {
+      "role": "header-B.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/header-B.json",
+      "sha256": "279b59933e157e09a331c9e81b714f7e5a9e4c46f3501a15f622aa174ff3e8ff",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/header-B.json"
+    },
+    {
+      "role": "header-N.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/header-N.json",
+      "sha256": "298cbb8b3e8945850de22b93f6d17b2088af49603d924ba53be0627c2d1d5560",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/header-N.json"
+    },
+    {
+      "role": "seed-provenance.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/seed-provenance.json",
+      "sha256": "72c6bc41495b54a6ca37a495ef7aa6c6401831cf4d4afd2223fd28b00f8ae69b",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/seed-provenance.json"
+    },
+    {
+      "role": "parent-enumerate-1/input.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/parent-enumerate-1/input.json",
+      "sha256": "9609826267b41aa0ef504ed133744af4e8a6fb0643a0587782921e7eef0fcb75",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/parent-enumerate-1/input.json"
+    },
+    {
+      "role": "parent-enumerate-1/prices.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/parent-enumerate-1/prices.json",
+      "sha256": "efa1be5430f11d03af4c7219cd7af443ad647dcaca92cb3b87d3396e7143ae7d",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/parent-enumerate-1/prices.json"
+    },
+    {
+      "role": "parent-enumerate-1/enumeration.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/parent-enumerate-1/enumeration.json",
+      "sha256": "1a49868c15aa6cb238b635bf365de99804fdcdedaeb866b801504d440b2da020",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/parent-enumerate-1/enumeration.json"
+    },
+    {
+      "role": "parent-enumerate-1/summary.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/parent-enumerate-1/summary.json",
+      "sha256": "0ee4ece7ff799ae3add840e3dc197da17dd2ef9025b367b5cfd69cbf5b5e0cc8",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/parent-enumerate-1/summary.json"
+    },
+    {
+      "role": "parent-enumerate-1-source-before.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/parent-enumerate-1-source-before.json",
+      "sha256": "b5272d827b20ced0ca04ce47f44da8538ce84284fd5934dcd47337c91768a1f9",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/parent-enumerate-1-source-before.json"
+    },
+    {
+      "role": "parent-enumerate-1-source-after.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/parent-enumerate-1-source-after.json",
+      "sha256": "b5272d827b20ced0ca04ce47f44da8538ce84284fd5934dcd47337c91768a1f9",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/parent-enumerate-1-source-after.json"
+    },
+    {
+      "role": "terminal-check-source-before.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/terminal-check-source-before.json",
+      "sha256": "b5272d827b20ced0ca04ce47f44da8538ce84284fd5934dcd47337c91768a1f9",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/terminal-check-source-before.json"
+    },
+    {
+      "role": "terminal-check-source-after.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/terminal-check-source-after.json",
+      "sha256": "b5272d827b20ced0ca04ce47f44da8538ce84284fd5934dcd47337c91768a1f9",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/terminal-check-source-after.json"
+    },
+    {
+      "role": "offline-baseline/enumeration.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/offline-baseline/enumeration.json",
+      "sha256": "d583a1f9afa4a57b9f79f56f89fba47ceec4c02ab268e5f7d3fbfffe6f2588cb",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/offline-baseline/enumeration.json"
+    },
+    {
+      "role": "offline-baseline/summary.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/offline-baseline/summary.json",
+      "sha256": "eb625c878a8437d4dd42c6a1559f50b7018543f691abc5941312d778fc9b64cf",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/offline-baseline/summary.json"
+    },
+    {
+      "role": "offline-baseline-request.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/offline-baseline-request.json",
+      "sha256": "f4661d31063736eab54fff278b82cd71e034ddee2e05ed125e38a9dd81b0deba",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/offline-baseline-request.json"
+    },
+    {
+      "role": "offline-baseline-exit.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/offline-baseline-exit.json",
+      "sha256": "e6ac01b5d2f8768b688dc78d825aaa1c81f2e8d1d5503cc9ccfeed9f5140674b",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/offline-baseline-exit.json"
+    },
+    {
+      "role": "offline-repeat/enumeration.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/offline-repeat/enumeration.json",
+      "sha256": "1d94a9aaad5ea9ef646f6f1e9a3374b622ab00ed1bf0cf7ab4375947b2eb6827",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/offline-repeat/enumeration.json"
+    },
+    {
+      "role": "offline-repeat/summary.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/offline-repeat/summary.json",
+      "sha256": "6fbf5d54e4007939e88501f73008d815a0d68e0947b6efe5f3b1abcb69b45e93",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/offline-repeat/summary.json"
+    },
+    {
+      "role": "offline-repeat-request.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/offline-repeat-request.json",
+      "sha256": "003cc8f7d084f511f9104a3640f83e7156c48b12d70575e66e8c35e675322209",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/offline-repeat-request.json"
+    },
+    {
+      "role": "offline-repeat-exit.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/offline-repeat-exit.json",
+      "sha256": "0cdcd9ead2ed0dda0ccd9cc00ceb9352c1e7c7c4f775cbadffdbe7f32e942824",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/offline-repeat-exit.json"
+    },
+    {
+      "role": "production-tools.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/production-tools.json",
+      "sha256": "aed3cce1e89914088a43cb5d9d8ebedc5a486d7c3ba26b2e3f09216c54f06c96",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/production-tools.json"
+    },
+    {
+      "role": "diagnose.mts",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/diagnose.mts",
+      "sha256": "e9d51913505c742f659f4f5f51202262b1fd57da486d7ffeac76b834e7649cf1",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/diagnose.mts"
+    },
+    {
+      "role": "enumeration-diagnosis.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/enumeration-diagnosis.json",
+      "sha256": "b93057fcd2f23342dfd83eff9d3487c8f99c7251b855a32507e53867ab6c2307",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/enumeration-diagnosis.json"
+    },
+    {
+      "role": "attribution.mjs",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/attribution.mjs",
+      "sha256": "173d46efdf7ef2ed83f012633bd97f1fb92a2d566197f63ec98d6ee01d5be60e",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/attribution.mjs"
+    },
+    {
+      "role": "attribution-scope.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/attribution-scope.json",
+      "sha256": "d21f8787b9abc6e4237812818f050e4f2419dbfb7606e19445fec5ece2753aed",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/attribution-scope.json"
+    },
+    {
+      "role": "attribution-terminal.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/attribution-terminal.json",
+      "sha256": "b8a3fb2fb6edc26464540367246af7fa284b43c94b194f480d8e0f6e463c684f",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/attribution-terminal.json"
+    },
+    {
+      "role": "BN-header-probe.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/BN-header-probe.json",
+      "sha256": "c6e2baa8ed48362522f8876cff7d373ac78eaa5c70320e98e800eed92a9933a3",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/BN-header-probe.json"
+    },
+    {
+      "role": "original-calldata-BB.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/original-calldata-BB.json",
+      "sha256": "0dfeeffe2340fbb80ef62971e8942ef7a763d29f3a6cd72d47a4c60dd45b219e",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/original-calldata-BB.json"
+    },
+    {
+      "role": "original-calldata-BN.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/original-calldata-BN.json",
+      "sha256": "91de31f574b51840ce0ea52d876efe76d5784caf84eb947ea1b9e9c94914cd6c",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/original-calldata-BN.json"
+    },
+    {
+      "role": "original-transaction.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/original-transaction.json",
+      "sha256": "bc671565eef441a773a1b79721b602b30abaa1517fa8b4fe09c6c6f32f6f0f22",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/original-transaction.json"
+    },
+    {
+      "role": "target-v4-swaps-N.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/target-v4-swaps-N.json",
+      "sha256": "4cca88b243347ff2e7e4b4f18a3a405ab6c87b3c8736776e8c69fef87ddbb0d4",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/target-v4-swaps-N.json"
+    },
+    {
+      "role": "target-other-logs-N.json",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/target-other-logs-N.json",
+      "sha256": "faf7850943bc1bfee31b708a849f7e32424834cf1d78c40c30a1b4b9e129d106",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/target-other-logs-N.json"
+    },
+    {
+      "role": "prefix-logs.mjs",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/prefix-logs.mjs",
+      "sha256": "4f7218c48c6d94ce33217be774d8bc147aa15ca446fcffedd645bbbd4b871b1b",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/prefix-logs.mjs"
+    },
+    {
+      "role": "collect.mjs",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/collect.mjs",
+      "sha256": "120672c0b3c304031a148a54f035698a1827a760c6c87719cb2f173a5e10a1e4",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-loop-20261011.FX7zDx/collect.mjs"
+    },
+    {
+      "role": "original landed trace",
+      "path": "/Users/eunice/src/MEV/logs/tx5b6114-live-gap-20261009.XGipla/tx5b6114-live-gap-20261009.z9UKuz/0x5b6114b5/trace.json",
+      "sha256": "d7b01f8c28f1deee406cf9eaf290f7e3460c62cb9670a44baf18dab699e545c8"
+    },
+    {
+      "role": "previous independent record",
+      "path": "/Users/eunice/src/MEV/logs/replay-history/1/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663/20261009-live-fluid-native-curveplain-5b6114-xgipla.json",
+      "sha256": "2a7f875a62d3e42d25ab342be2263fc5ee6b6f4fa42d5e353bac09ec316ab2da"
+    },
+    {
+      "role": "raw run archive",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx-raw.tgz",
+      "sha256": "a8e7028883b62cc6bc5ac4cfb1e5b3d777dd73ee50ca47d2d07fabd9fb40e6f2"
+    }
+  ]
+}
