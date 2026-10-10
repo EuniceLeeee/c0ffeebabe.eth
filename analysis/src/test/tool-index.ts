@@ -137,6 +137,16 @@ test("Yield Basis dual execution is archive-RPC acceptance, not zero-CU or repre
     assert.equal(selected[0]?.capabilities.includes(unsupported), false);
 });
 
+test("InfiniFi historical cache reads declare archive RPC and only quote-cache scope", () => {
+  const selected = selectTools(discoverToolIndex(repoRoot), ["infinifi", "historical", "cache"]);
+  assert.equal(selected[0]?.id, "listener:searcher:infinifi-historical-cache");
+  assert.equal(selected[0]?.kind, "analysis");
+  assert.equal(selected[0]?.cost, "archive-rpc");
+  assert.equal(selected[0]?.capabilities.includes("exact-quote"), true);
+  for (const unsupported of ["live-window", "stage-timing", "benchmark", "execution", "ready", "replay"])
+    assert.equal(selected[0]?.capabilities.includes(unsupported), false);
+});
+
 test("AppleDouble metadata is ignored without hiding an ordinary orphan CLI", () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "mev-tool-index-"));
   try {

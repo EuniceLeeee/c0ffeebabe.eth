@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "claim": "Real historical InfiniFi deposit whole-quote cache isolation and same-source reuse through production Exact; limited correctness evidence only",
+  "result": "pass-scoped-historical-cache-check",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "testedHead": "e1462a055fe04b004bf5024abb4680f9f56807e5",
+  "testedProductionSourceTreeSha256": "75b7b59833fce675adc5df8bc8a466af3989b07a8931d33bf3c865bfc5df4c69",
+  "unchangedPeerDiffExcludingGeneratedSha256": "98c67fbc9b8f33d2311b2d7824e60028e10d1348b6061ce53f0860a799b79776",
+  "implementationChange": "New opt-in test plus package script and explicit archive-RPC tool registration; production behavior, defaults and original Ready unchanged",
+  "family": "protocol:erc4626",
+  "variant": "InfiniFi Gateway",
+  "instance": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+  "discoveryTx": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+  "sourceReady": {
+    "path": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-natural-ready-3/ready.json",
+    "sha256": "91a4f8286f1f0cfe60ecd6bb76cd7aeed911edc55d5d9ac7cd41fd4c8a8270c7",
+    "naturalAdmission": "Existing active memo and current Family definition checked, issued instance rehydrated at each canonical source; no injected admission or graph"
+  },
+  "input": {
+    "kind": "borrowed-recorded-production-input-only",
+    "token": "0x48f9e38f3070ad8945dfeae3fa70987722e3d89c",
+    "amountRaw": "5131980894925000000",
+    "tableBlock": 26146969,
+    "tableHash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+    "rowQuotedBlock": 26146968,
+    "rowQuotedHash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+    "freshness": "carried",
+    "sourceCommit": "2a2243bdf009ac1951644794ed38cb9e98d138e4",
+    "pricesSha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378",
+    "declarationSha256": "6536fa18b3c2c18accc342a3941c907825914e4e531887c76a51916b2f968f8f",
+    "naturalTargetValuation": false
+  },
+  "samples": [
+    {
+      "block": 25944594,
+      "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+      "pendingRewardsRaw": "0",
+      "amountOutRaw": "4715253459959721041",
+      "firstQuoteRpcReads": 27,
+      "secondIdenticalQuoteRpcReads": 0,
+      "cacheMissDelta": 1,
+      "cacheStoreDelta": 1,
+      "cacheHitDelta": 1
+    },
+    {
+      "block": 25944595,
+      "hash": "0x51a7fb91a39d3dac70e86ee6e13e186522ad4cee2addc7bfe44a718a47c9b10e",
+      "pendingRewardsRaw": "675478145931876864",
+      "amountOutRaw": "4715253346395352225",
+      "firstQuoteRpcReads": 27,
+      "secondIdenticalQuoteRpcReads": 0,
+      "cacheMissDelta": 1,
+      "cacheStoreDelta": 1,
+      "cacheHitDelta": 1
+    }
+  ],
+  "outputDeltaRaw": "-113564368816",
+  "reads": {
+    "total": 62,
+    "maxAllowed": 300,
+    "blockPin": "EIP-1898 blockHash requireCanonical for every state read; canonical headers and inputs/source rechecked after quotes",
+    "syntheticCacheEntries": false,
+    "stateOnlyCacheStores": 0,
+    "cacheMeaning": "Amount-dependent chain quote; source-bound whole-quote cache, not state-only refresh sentinel"
+  },
+  "evidence": {
+    "directory": "logs/infinifi-cache-20261011.y8UEmr",
+    "historicalFile": "historical-cache-1.json",
+    "historicalSha256": "eaf6ec5931e67a6751fc1dffd39d84eb6e169e659781a25a2d090cf6d3555d02",
+    "harnessSha256": "0a43488cb2b686de950f30f7e83ed8f676a2419af3e787299c886d2d3aa03bfc",
+    "toolManifest": "tools-registered.json",
+    "toolManifestSha256": "0017f869805638ad00b2d6b89f1ac39de7cdde5bc9ac2f549699727e1b4535d1",
+    "capabilityQuery": ["infinifi", "historical", "cache"],
+    "executedTool": "listener:searcher:infinifi-historical-cache",
+    "toolDescriptorSha256": "df5a16ff6793b63bd62de8c7ad89a643d739bf68d1027a2da5a3876ddb136381",
+    "executionExit": 0,
+    "reconciliation": "Production Exact uses fresh quote requests at each real source and a cache hit on the same-source repeat. This agrees with manual method inspection; initial unregistered tool manifest retained and corrected before first execution, no global heuristic change."
+  },
+  "regressions": {
+    "buildLiveExit": 0,
+    "erc4626FamilyPluginExit": 0,
+    "adapterFamilyExactQuoteCacheExit": 0,
+    "infinifiContract": "12/12 pass, exit 0; includes synthetic production-coordinator refresh/failure/recovery regression, distinct from the real historical cache check",
+    "toolIndex": "18/18 pass",
+    "targetedTypecheck": "New harness has zero diagnostics; four transitive diagnostics remain. Existing historical-dual entrypoint with identical compiler options reproduces byte-identical diagnostics (both exit 2). Not a full typecheck pass.",
+    "typecheckAndBaselineLogSha256": "ab64d4977a5f563939008fee9a8340e0f1819dafecab47329d6419824987b080"
+  },
+  "unverified": [
+    "Real coordinator-driven effective publication, failure withdrawal and recovery with this whole-quote cache are not proven by direct Exact calls",
+    "siUSD redemption production reference amount and target natural effective valuation remain missing; three-hop policy unchanged",
+    "No new quoted/runtime EVM execution in this cache check; prior historical dual-execution evidence remains separate",
+    "No original transaction pre-call replay, opportunity/EV or complete Family acceptance claim",
+    "All relevant Family single-Ready and combined representative-graph stage timing remains NOT RUN; current/future IMPL adaptations all remain in required timing scope"
+  ],
+  "safety": {"liveStarted": false, "deploy": false, "signing": false, "broadcast": false, "privateKeyRead": false, "protocolStateOverrides": false, "actorFunding": false, "newBranchOrWorktree": false},
+  "independentReview": {
+    "reviewer": "Hilbert",
+    "agentId": "01a1271c-12ed-7ac3-9ab6-f6ea3eb2a00d",
+    "verdict": "no blocking findings for the narrow whole-quote-cache claim",
+    "executedChecks": "Independently decoded both historical aggregate return values, recomputed output delta and all cache counters; verified all 62 replies and canonical pins, adjacent headers, receipt/log, Ready/graph/catalog, eight code hashes per source, dependency addresses, permission/pause guards, four input hashes, current source/helper fingerprints and descriptor/receipt binding.",
+    "scope": "Read-only offline evidence verification; zero archive RPC, builds, file changes or process control. Explicitly not coordinator/effective publication, new EVM execution or latency acceptance."
+  }
+}
