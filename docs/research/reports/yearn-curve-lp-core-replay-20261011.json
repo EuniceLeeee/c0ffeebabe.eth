@@ -1,0 +1,695 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "recordedAt": "2026-10-10T20:19:09.337Z",
+  "tx": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+  "N": 26152335,
+  "B": 26152334,
+  "claim": "Core opportunity reproduction PASS on hindsight single-block topology at B/B; not production_gap_fixed or performance acceptance",
+  "code": {
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "head": "f8f9d546edd540608532486176660fc65e483283",
+    "dirty": true,
+    "productionSourceSha256": "f5c61a35f67d50d9853ae8fa7eda53b2d16478e5c84ffc6cdb20e1ba9eba06a4",
+    "peerNonGeneratedDiffSha256": "98c67fbc9b8f33d2311b2d7824e60028e10d1348b6061ce53f0860a799b79776",
+    "implementationChangesThisRun": false,
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "executorCodeHash": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419"
+  },
+  "continuation": {
+    "priorRunId": "20261009-live-gap-6cc7a620-tispfp",
+    "priorArtifactsVerified": 8,
+    "sourceReadyCopied": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152335-r2/ready.json",
+    "sourceReadySha256": "7266cc43d9d6f07568cc643cf7d43de1958f004d1506a676cfde87e5e97ce3c6",
+    "defaultFundingAttemptPreserved": true
+  },
+  "state": {
+    "lane": "blockscan",
+    "stateBlock": 26152334,
+    "stateHash": "0x7808a2f01ccbd8af8bf957d9bfdfcd481bec0ee8d3907c59a585de0759996d65",
+    "stateRoot": "0x5d4da193aee6bd7f1e0765f5a5f9194d6d7e256416c7021f2059f6ecc8871874",
+    "executionEnvironment": 26152334,
+    "NHash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+    "topologyBlock": 26152335,
+    "noPrefix": true,
+    "priorBNAttributionReused": true,
+    "newBNRun": false,
+    "originalPreCallParity": false
+  },
+  "configuration": {
+    "requested": {
+      "SEARCHER_TEST_DISABLE_DOTENV": "1",
+      "SEARCHER_DRY_RUN": "1",
+      "SEARCHER_BLOCKSCAN_SUBMIT": "0",
+      "SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE": "1",
+      "SEARCHER_REBUILD_REVM_TIMEOUT_MS": "180000",
+      "SEARCHER_FAMILY_YEARN_AUCTION_ENABLED": "1",
+      "SEARCHER_FAMILY_CURVE_LP_ENABLED": "1",
+      "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED": "1",
+      "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED": "1",
+      "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED": "0",
+      "SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED": "0",
+      "SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED": "1",
+      "SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP": "3",
+      "SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR": "3",
+      "SEARCHER_BLOCKSCAN_MAX_HOPS": "6",
+      "SEARCHER_BLOCKSCAN_ENUMERATION_METHOD": "joint-dfs",
+      "SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND": "typescript",
+      "SEARCHER_BLOCKSCAN_PREFIX_PRUNING_ENABLED": "1",
+      "SEARCHER_BLOCKSCAN_MAX_PREFIX_DRAWDOWN_BPS": "0",
+      "SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS": "0",
+      "SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS": "0",
+      "SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS": "2000",
+      "SEARCHER_BLOCKSCAN_EFFECTIVE_AMOUNT_CASCADE_ENABLED": "0"
+    },
+    "resolved": {
+      "maxHops": 6,
+      "deduplicateRotations": false,
+      "allowRepeatedPools": true,
+      "allowRepeatedTokens": false,
+      "prefixPruningEnabled": true,
+      "maxPrefixDrawdownBps": 0,
+      "enumerationMethod": "joint-dfs",
+      "enumerationBackend": "typescript",
+      "rustEnumerationThreads": 1,
+      "rustEnumerationScratchMb": 512,
+      "ethSignalPairsPerToken": 50,
+      "hopTokensPerStep": 3,
+      "hopPoolsPerPair": 3,
+      "minSpreadBps": 0,
+      "requireDislocatedPair": true,
+      "exactAdmissionSpreadBps": 0,
+      "minCapitalFraction": 0.001,
+      "maxCandidates": 100,
+      "budgetMs": 2000,
+      "pricedTokens": {
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "maxBorrow": "2000000000000000000000"
+        },
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+          "maxBorrow": "5000000000"
+        },
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+          "maxBorrow": "5000000000000"
+        },
+        "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+          "maxBorrow": "5000000000000"
+        },
+        "0x6b175474e89094c44da98b954eedeac495271d0f": {
+          "maxBorrow": "5000000000000000000000000"
+        },
+        "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e": {
+          "maxBorrow": "3012194440514411970888"
+        }
+      }
+    },
+    "coarseCfg": {
+      "maxHops": 6,
+      "deduplicateRotations": false,
+      "allowRepeatedPools": true,
+      "allowRepeatedTokens": false,
+      "prefixPruningEnabled": true,
+      "maxPrefixDrawdownBps": 0,
+      "enumerationMethod": "joint-dfs",
+      "enumerationBackend": "typescript",
+      "rustEnumerationThreads": 1,
+      "rustEnumerationScratchMb": 512,
+      "ethSignalPairsPerToken": 50,
+      "hopTokensPerStep": 3,
+      "hopPoolsPerPair": 3,
+      "minSpreadBps": 0,
+      "requireDislocatedPair": true,
+      "exactAdmissionSpreadBps": 0,
+      "minCapitalFraction": 0.001,
+      "maxCandidates": 512,
+      "budgetMs": 2000,
+      "pricedTokens": {
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "maxBorrow": "2000000000000000000000"
+        },
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+          "maxBorrow": "5000000000"
+        },
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+          "maxBorrow": "5000000000000"
+        },
+        "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+          "maxBorrow": "5000000000000"
+        },
+        "0x6b175474e89094c44da98b954eedeac495271d0f": {
+          "maxBorrow": "5000000000000000000000000"
+        },
+        "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e": {
+          "maxBorrow": "3012194440514411970888"
+        }
+      }
+    },
+    "search": {
+      "amountGrid": "multiples",
+      "gridHalfWidth": 2,
+      "gssMaxTries": 8,
+      "quoteConcurrency": 16,
+      "quoteToleranceRawUnits": "1"
+    },
+    "policy": {
+      "dryRun": true,
+      "finalVerifyFloorBps": "7",
+      "maxProfitBpsOfFlash": "10000",
+      "profitHaircutBps": 0,
+      "bribeBps": 5000,
+      "bribeAllAboveGas": false,
+      "evGate": true,
+      "minNetEth": "0",
+      "blockScanSubmit": false,
+      "inclusionWatchBlocks": 3
+    },
+    "fixedEffectiveWethInput": "2000000000000000",
+    "amountSelector": "sim",
+    "executionMode": "source-block",
+    "simTrialConcurrency": 1,
+    "diagnosticOverrides": {
+      "fundingToken": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+      "deduplicateRotations": false
+    },
+    "inputConfigNote": "input.json precedes onSnapshot funding-start resolution; funding-starts.json and terminal summary bind the effective added crvUSD start."
+  },
+  "ready": {
+    "generation": 3,
+    "instances": 24,
+    "edges": 47,
+    "scan": {
+      "fromBlock": 26152335,
+      "toBlock": 26152335
+    },
+    "accounting": {
+      "total": 27,
+      "verified": 24,
+      "terminalRejected": 0,
+      "retryable": 3,
+      "remainingUnaccounted": 0
+    },
+    "selectedFamilies": [
+      "protocol:yearn-auction",
+      "protocol:curve-lp",
+      "curve-plain",
+      "univ2-standard",
+      "univ3-standard",
+      "flash-loan:morpho"
+    ],
+    "retryablePreserved": [
+      {
+        "familyId": "protocol:curve-lp",
+        "instance": "0xdd167502a53030f13fd362494e9ed3e0a189431b",
+        "stage": "identity",
+        "code": "rpc",
+        "reason": "curve-lp unsupported runtime class"
+      },
+      {
+        "familyId": "protocol:curve-lp",
+        "instance": "0x390f3595bca2df7d23783dfd126427cceb997bf4",
+        "stage": "identity",
+        "code": "rpc",
+        "reason": "curve-lp unsupported runtime class"
+      },
+      {
+        "familyId": "univ3-standard",
+        "instance": "0x97d4bfc991bc4a293bc5f23b7d60e9c4df4e6b7c",
+        "stage": "identity",
+        "code": "rpc",
+        "reason": "identity_unverified:unresolved:identity-work-unresolved:factory-child-reverse-binding:family-decode:family decode failed: univ3 request result pool-factory did not return normally"
+      }
+    ],
+    "naturalFunding": {
+      "asset": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+      "amount": "3012194440514411970888",
+      "adapterId": "morpho-flash",
+      "fundingId": "flash-loan:morpho\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e"
+    },
+    "outputSha256": "4c742a3c366e2d0dce8b06061524e6d2af4efacadc08cc113d07afa42fb0a385"
+  },
+  "pricing": {
+    "rows": 47,
+    "quoted": 45,
+    "missing": [
+      {
+        "edgeId": "univ2-standard\u001f0x9da0dee228d9ceab44b4359ddc30ed97cb147ff6\u001f0x9da0dee228d9ceab44b4359ddc30ed97cb147ff6\u001f0x8e07d2ffa9bcffefec05d7268d07bacd16c5aa67>0xa250cc729bb3323e7933022a67b52200fe354767\u001ff964823a050d6b75ca7fdd9496a69bfee775b320af161c230e547aaf289df41d",
+        "instanceKey": "0x9da0dee228d9ceab44b4359ddc30ed97cb147ff6",
+        "tokenIn": "0x8e07d2ffa9bcffefec05d7268d07bacd16c5aa67",
+        "tokenOut": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "amountIn": null,
+        "status": "missing-valuation",
+        "amountOut": null,
+        "effectiveMid": null
+      },
+      {
+        "edgeId": "univ2-standard\u001f0x9da0dee228d9ceab44b4359ddc30ed97cb147ff6\u001f0x9da0dee228d9ceab44b4359ddc30ed97cb147ff6\u001f0xa250cc729bb3323e7933022a67b52200fe354767>0x8e07d2ffa9bcffefec05d7268d07bacd16c5aa67\u001fd8fc3287d27f0e7749862afee2c2e9eed7bd2e774509f6a4a55532a6cebe9f60",
+        "instanceKey": "0x9da0dee228d9ceab44b4359ddc30ed97cb147ff6",
+        "tokenIn": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "tokenOut": "0x8e07d2ffa9bcffefec05d7268d07bacd16c5aa67",
+        "amountIn": null,
+        "status": "missing-valuation",
+        "amountOut": null,
+        "effectiveMid": null
+      }
+    ],
+    "yearnNaturalAmountIn": "4987195534568940993",
+    "yearnNaturalAmountOut": "1981373554748887429",
+    "noBorrowedValuationInput": true
+  },
+  "enumeration": {
+    "initialOriginalFullLoopRank": 1,
+    "initialCount": 2,
+    "withVerifiedFundingStart": {
+      "mode": "natural_ranked",
+      "enumeratedCount": 8,
+      "admittedCount": 8,
+      "selectedCount": 8,
+      "forcedSelectionCount": 0
+    },
+    "deadlineHit": false,
+    "unfundedStartCandidates": 6,
+    "planningReached": 2,
+    "forcedSelectionCount": 0
+  },
+  "execution": {
+    "amountSearchRoutes": 2,
+    "amountTrials": 24,
+    "trialSuccess": 18,
+    "trialRevert": 6,
+    "runtimeConstructionCount": 24,
+    "unsupportedLegs": 0,
+    "solverHopExactCalls": 0,
+    "quotedFallback": false,
+    "finalistInputs": 6,
+    "independentFinalSimCount": 2,
+    "positiveEV": 2,
+    "failures": [
+      {
+        "file": "simulation-5.json",
+        "amount": "3012194440514411970888",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-8.json",
+        "amount": "3012194440514411970888",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-9.json",
+        "amount": "1181479144680141428216",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-10.json",
+        "amount": "1880587251179959952602",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-11.json",
+        "amount": "1181479144680141428216",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      },
+      {
+        "file": "simulation-12.json",
+        "amount": "1880587251179959952602",
+        "kind": "revert",
+        "code": "TRANSACTION_REVERTED",
+        "outcome": "Revert"
+      }
+    ],
+    "results": [
+      {
+        "naturalRank": 4,
+        "originalFullPoolDirectionLoop": true,
+        "sameCore": true,
+        "route": [
+          {
+            "adapterId": "yearn-auction",
+            "target": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+            "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+            "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df"
+          },
+          {
+            "adapterId": "curve-exchange-uint",
+            "target": "0x4149d1038575CE235E03E03B39487a80FD709D31",
+            "tokenIn": "0xdBdb4d16EdA451D0503b854CF79D55697F90c8DF",
+            "tokenOut": "0x3175Df0976dFA876431C2E9eE6Bc45b65d3473CC"
+          },
+          {
+            "adapterId": "curve-lp",
+            "target": "0xdcef968d416a41cdac0ed8702fac8128a64241a2",
+            "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+            "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          },
+          {
+            "adapterId": "univ3-swap",
+            "target": "0xE0554a476A092703abdB3Ef35c80e0D76d32939F",
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          },
+          {
+            "adapterId": "univ3-swap",
+            "target": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "adapterId": "curve-exchange-plain",
+            "target": "0x390f3595bCa2Df7d23783dFd126427CCeb997BF4",
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E"
+          }
+        ],
+        "inputRaw": "419046455285098752436",
+        "profitToken": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+        "profitRaw": "642828628140253387",
+        "grossEthWei": "257687832581821",
+        "originalGrossEthWei": "234735125287579",
+        "signedDifferencePercent": 9.7781,
+        "within20Percent": true,
+        "gasUsed": "1090389",
+        "gasWeiPerUnit": "133425042",
+        "gasCostWei": "145485198121338",
+        "bidWei": "56101317230241",
+        "netEvWei": "56101317230242",
+        "repaymentVerified": true,
+        "conservationVerified": true,
+        "standingPosition": false,
+        "finalSim": "simulation-25.json",
+        "ev": "ev-1.json",
+        "solver": "solver-1.json",
+        "calldataSha256": "5d8bd79684d2a34c05f31863a344e7ca7735fec2ab2aa28511e0b276a60e7a06"
+      },
+      {
+        "naturalRank": 8,
+        "originalFullPoolDirectionLoop": false,
+        "sameCore": true,
+        "route": [
+          {
+            "adapterId": "yearn-auction",
+            "target": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+            "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+            "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df"
+          },
+          {
+            "adapterId": "curve-exchange-uint",
+            "target": "0x4149d1038575CE235E03E03B39487a80FD709D31",
+            "tokenIn": "0xdBdb4d16EdA451D0503b854CF79D55697F90c8DF",
+            "tokenOut": "0x3175Df0976dFA876431C2E9eE6Bc45b65d3473CC"
+          },
+          {
+            "adapterId": "curve-lp",
+            "target": "0xdcef968d416a41cdac0ed8702fac8128a64241a2",
+            "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+            "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+          },
+          {
+            "adapterId": "univ3-swap",
+            "target": "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          },
+          {
+            "adapterId": "univ3-swap",
+            "target": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "adapterId": "curve-exchange-plain",
+            "target": "0x390f3595bCa2Df7d23783dFd126427CCeb997BF4",
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E"
+          }
+        ],
+        "inputRaw": "380096397518649804752",
+        "profitToken": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+        "profitRaw": "536855333286054648",
+        "grossEthWei": "215206728387827",
+        "originalGrossEthWei": "234735125287579",
+        "signedDifferencePercent": -8.3193,
+        "within20Percent": true,
+        "gasUsed": "1087353",
+        "gasWeiPerUnit": "133425042",
+        "gasCostWei": "145080119693826",
+        "bidWei": "35063304347000",
+        "netEvWei": "35063304347001",
+        "repaymentVerified": true,
+        "conservationVerified": true,
+        "standingPosition": false,
+        "finalSim": "simulation-26.json",
+        "ev": "ev-2.json",
+        "solver": "solver-4.json",
+        "calldataSha256": "c09c8372806195152401bbd333522afe5e960064c28efc6e2ba1aa45c8046588"
+      }
+    ]
+  },
+  "original": {
+    "inputCrvUsdRaw": "267759246788654353808",
+    "grossEthWei": "234735125287579",
+    "netEthWei": "120295276699498",
+    "comparisonScope": "Same Yearn take -> ALCX/FRAXBP Curve swap -> LP redeem core. First result retains all original pool/direction legs. Inputs, final profit currency and state differ; our crvUSD profit uses same-B production ETH valuation; original WETH is ETH-denominated.",
+    "coreWithin20Percent": true
+  },
+  "observedCorrectnessRunTiming": {
+    "formalPerformance": "NOT RUN",
+    "sampleCount": 1,
+    "sourceMode": "historical REVM plus independent charged-gas trace and balance observation, not live eth_simulateV1 throughput",
+    "totalMs": 93185.479849,
+    "stages": {
+      "stateMs": 689.3815710000001,
+      "enumerationMs": 3.022544999999809,
+      "exactRefineMs": 0,
+      "plannerSolverMs": 88441.129109,
+      "finalSimMs": 7672.8748799999885,
+      "evMs": 89.22503600000346
+    },
+    "detail": {
+      "stages": {
+        "state": {
+          "status": "ran",
+          "started_at_ms": 1791663192412,
+          "finished_at_ms": 1791663193102,
+          "stage_ms": 689.3815710000001,
+          "cumulative_ms": 690
+        },
+        "enumeration": {
+          "status": "ran",
+          "started_at_ms": 1791663193104,
+          "finished_at_ms": 1791663193107,
+          "stage_ms": 3.022544999999809,
+          "cumulative_ms": 695
+        },
+        "exact_refine": {
+          "status": "not-run",
+          "started_at_ms": null,
+          "finished_at_ms": null,
+          "stage_ms": 0,
+          "cumulative_ms": null
+        },
+        "planner_solver": {
+          "status": "ran",
+          "started_at_ms": 1791663193117,
+          "finished_at_ms": 1791663281558,
+          "stage_ms": 88441.129109,
+          "cumulative_ms": 89146
+        },
+        "final_sim": {
+          "status": "ran",
+          "started_at_ms": 1791663277770,
+          "finished_at_ms": 1791663285531,
+          "stage_ms": 7672.8748799999885,
+          "cumulative_ms": 93119
+        },
+        "ev": {
+          "status": "ran",
+          "started_at_ms": 1791663281662,
+          "finished_at_ms": 1791663285597,
+          "stage_ms": 89.22503600000346,
+          "cumulative_ms": 93185
+        }
+      },
+      "plannerBuildMs": 1.0925090000000637,
+      "solverWallMs": 88438.97607799999,
+      "solverPlans": 2,
+      "solverQuoteWorkers": 2,
+      "solverAmountPoints": 24,
+      "solverGssPoints": 16,
+      "solverHopExactCalls": 0,
+      "exactTransportDrainMs": 0
+    },
+    "readyAndLauncherPreparationIncluded": false,
+    "medians": null
+  },
+  "safety": {
+    "broadcast": false,
+    "signing": false,
+    "live": false,
+    "defaultActivationChanged": false,
+    "principalInjected": false,
+    "permissionOverride": false,
+    "onlyCounterfactualExecutorCode": true,
+    "originalReadyUnchanged": true,
+    "otherProcessesStopped": false
+  },
+  "limitations": [
+    "Not pre-B natural discovery: topology is from N.",
+    "Current counterfactual BotVM code, not historical deployed executor.",
+    "Diagnostic crvUSD-start/rotation config differs from default; the unmodified configuration reached no plan.",
+    "Background Uniswap V2 pair retains two missing-valuation rows; three unrelated retryable admissions remain outside Graph.",
+    "Separate B/N original-calldata attribution is reused; this new production run is B/B, not exact original pre-call replay.",
+    "Single-Ready formal timing and combined representative-graph timing remain NOT RUN for these and every applicable IMPL adaptation.",
+    "No new source build, isolated contracts or formal adapter/production-gap gate run: this is integration of existing verified code."
+  ],
+  "reconciliation": {
+    "query": [
+      "at",
+      "block",
+      "universe",
+      "rebuild",
+      "startup"
+    ],
+    "selectedTools": [
+      "listener:searcher:universe-rebuild-startup",
+      "listener:searcher:at-block"
+    ],
+    "successfulExecutions": 5,
+    "manifestSha256": "6a08bb27fff3002e6145fda8ee6337fbd95fdf8f41ab6864dc1cc1d39913893c",
+    "manualFinding": "Prior small Family Ready sets lacked the combined valuation path; natural combined Ready and production enumeration prove the original core is present. First downstream miss is unverified WETH funding; existing crvUSD-start diagnostic advances to autonomous sim and final EV.",
+    "result": "agrees",
+    "newToolingDefect": false
+  },
+  "artifacts": [
+    {
+      "role": "run configuration",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/config.json",
+      "sha256": "eda4e5ff410335e6734107667e88837fa1485d08c280ea1facd77b24f473ae28",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/config.json"
+    },
+    {
+      "role": "production Ready",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/ready.json",
+      "sha256": "4c742a3c366e2d0dce8b06061524e6d2af4efacadc08cc113d07afa42fb0a385",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/ready.json"
+    },
+    {
+      "role": "canonical N header",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/header-N.json",
+      "sha256": "c3bb57c1c36970cd75d760250c4e3c030b2ad980cf79cab36732c4a27459cba2",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/header-N.json"
+    },
+    {
+      "role": "canonical B header",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/header-B.json",
+      "sha256": "b4b3dc4861337d32eebc96d44b9f2bb55bed09760a76dfd05268c06c2873fcc5",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/header-B.json"
+    },
+    {
+      "role": "N original receipt",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/receipt.json",
+      "sha256": "f3bc1d1e379c5a2bf73790540c8c3c832010ceaeb73c4dd3c119e6f7d9f6fed2",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/receipt.json"
+    },
+    {
+      "role": "current source binding",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1-source-before.json",
+      "sha256": "8b4cda44e5042c4d4c018d2af9e12d043c680353da6d154f9b797db94945176c",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1-source-before.json"
+    },
+    {
+      "role": "post-run source binding",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1-source-after.json",
+      "sha256": "8b4cda44e5042c4d4c018d2af9e12d043c680353da6d154f9b797db94945176c",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1-source-after.json"
+    },
+    {
+      "role": "producer initial input",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/input.json",
+      "sha256": "37ba431cfb57b75bb57238d76ea932c2e2fc5f74fae0166a474e62bd85030f8c",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/input.json"
+    },
+    {
+      "role": "resolved funding starts",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/funding-starts.json",
+      "sha256": "db14b780177322ffb3564de2bcc608cc044c33a0a798d254482d8261ee1f93d7",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/funding-starts.json"
+    },
+    {
+      "role": "current B effective prices",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/prices.json",
+      "sha256": "86b6ec10f32036d0fa7f557327f472970436518d2fe3b9d09d90d8cb8aad9e50",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/prices.json"
+    },
+    {
+      "role": "natural enumeration",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/enumeration.json",
+      "sha256": "84740c73c40f1bb0b02de532d32e8f37ca13206876ea66c6654666051839df3f",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/enumeration.json"
+    },
+    {
+      "role": "terminal production summary",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/summary.json",
+      "sha256": "ccea899fe0661fa47d666d52ac77f0d400b15ad7484be6d1839897f38d80b41a",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/summary.json"
+    },
+    {
+      "role": "prior missing-funding result",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-ev-1/summary.json",
+      "sha256": "6668703f876bafd181cbef4b9e3ef71f385d99044f890effd77dddc91bab57a1",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-ev-1/summary.json"
+    },
+    {
+      "role": "indexed canonical execution receipts",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/production-tools.json",
+      "sha256": "6a08bb27fff3002e6145fda8ee6337fbd95fdf8f41ab6864dc1cc1d39913893c",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/production-tools.json"
+    },
+    {
+      "role": "independent final simulation 4",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/simulation-25.json",
+      "sha256": "2d36801dc3703c7d6d4f7b12ba550cd05bc9dd8d3819418e8ceb28608324ab01",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/simulation-25.json"
+    },
+    {
+      "role": "EV 4",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/ev-1.json",
+      "sha256": "9b55dbb8211db890bec227546fc93f421e6ad57665fb78b0a81a232e8d2c66f0",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/ev-1.json"
+    },
+    {
+      "role": "naturally selected execution input 4",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/solver-1.json",
+      "sha256": "33ac773cb9166456c6ffe49f58be5b95ee87dae9b9578b5dd02cd111dc70d61f",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/solver-1.json"
+    },
+    {
+      "role": "independent final simulation 8",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/simulation-26.json",
+      "sha256": "f7acde51f1dc8d010020a15e592a59b4b1101fa34a9feca9b7b67fac7d357fd7",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/simulation-26.json"
+    },
+    {
+      "role": "EV 8",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/ev-2.json",
+      "sha256": "0c373077268e823f8c98ef10308ebac34c5c06bae764957edf577d59a3532512",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/ev-2.json"
+    },
+    {
+      "role": "naturally selected execution input 8",
+      "path": "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/solver-4.json",
+      "sha256": "38b066b05c241b0f224b0b9d4b286494f04d39a880b320bfb856b8de9821e6d5",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/parent-funded-ev-1/solver-4.json"
+    }
+  ]
+}
