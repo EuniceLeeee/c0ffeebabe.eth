@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "b8c559fd4deab0a935168397bef639b204f3353d",
+  "codeCommit": "1d3e61efd0e232db8bb09afe38b9ed08f1e758bd",
+  "status": "sampled-same-N-native-dual-and-natural-production-reference-verified; performance-not-run",
+  "claim": "SelfBurn supplement to the existing common native-asset boundary. Real natural single-block Ready and same-N quote/quoted/runtime receipts; not original pre-call/full opportunity/formal merge/performance acceptance.",
+  "family": "protocol:self-burn-native",
+  "anchor": {
+    "transaction": "0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7",
+    "N": 25619948,
+    "transactionIndex": 63,
+    "blockHash": "0x8a2813204e354d1024b359d61ad4cbcb6af2e1f3d6c7aa3034faeb5abc58eb31",
+    "stateRoot": "0xf464b304f307a2b7ac6aa228e7953dbc8cea6d03b2ebe06819b1b7c23bf4e25c",
+    "token": "0x292a477e521230fe230c13c93374adde8ddec1c1",
+    "wrappedNative": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    "originalCaller": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+    "owner": "0x1000000000000000000000000000000000000001",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "environment": "Canonical N end-state plus N execution environment, on task-owned local Anvil with disposable actor/executor overlays. Protocol state/code historical; not the original burn pre-call state."
+  },
+  "evidenceRoot": "logs/selfburn-native-acceptance-20261010.uSuCVR",
+  "naturalIntegration": {
+    "scope": [
+      "protocol:self-burn-native",
+      "univ2-standard",
+      "univ3-standard"
+    ],
+    "producer": "Current createRebuildWiring/rebuildUniverse from=N/to=N, then runAtBlock through prices in source-block mode. Target receipt/token assertions follow natural discovery; no target candidate, admitted flag or edge injection.",
+    "ready": {
+      "path": "single-N25619948-1/ready.json",
+      "sha256": "ae48f211ab39c787d78fe0eee0a97815b3638fd51d3e8ed81551757c5f85052e"
+    },
+    "summary": {
+      "path": "single-N25619948-1/ready-summary.json",
+      "sha256": "2a9c1d501fbc24a23b8102bbf70f4d3bc65701ba97799228b5c07d63a6c236b7"
+    },
+    "prices": {
+      "path": "single-N25619948-1/prices/prices.json",
+      "sha256": "a406eeaf48e28331e31288d479270167618885be9f7c860f013ab0bd3b19ee03"
+    },
+    "priceInput": {
+      "path": "single-N25619948-1/prices/input.json",
+      "sha256": "0e2b92beafa78b3869b010f72402e2def9ced730a2afcb1b3e798d189d46ebab"
+    },
+    "instances": 27,
+    "graphEdges": 52,
+    "targetEdges": 1,
+    "rawRows": 52,
+    "effective": {
+      "quoted": 46,
+      "missingValuation": 6
+    },
+    "coverageLimit": "Six background UniV3 directions lack valuation, retained as missing-valuation. Another naturally discovered SelfBurn instance has a quoted row but is not covered by this fresh dual execution sample. Whole runtime completeness is degraded, not globally complete.",
+    "target": {
+      "strict": "admitted",
+      "graph": "one token-to-WETH direction",
+      "effective": "quoted",
+      "amountIn": "2018537428147323",
+      "amountOut": "1998352053865850",
+      "effectiveMid": 0.9900000000000001,
+      "quotedAt": 25619948,
+      "provenance": "fresh same-N natural effective valuation; no donor amount, reference-P modification or rounding"
+    }
+  },
+  "originalObservation": {
+    "receiptSha256": "d3e947e57d7bd5835364f724d2a747dd7c3a1431756ef60e7e7488700eed802a",
+    "traceSha256": "6ab3e3e6d757adb27d46a1ee0858e05076d0cfc2fdf66b26b3c278bd842b56c9",
+    "headerSha256": "e6f52a5e88db91ec86107575cbdd00e366b6a15106054c9e8f0002f515f72575",
+    "input": "12306616935116519",
+    "actualNativePayment": "12183550765765354",
+    "method": "transfer(self,uint256)",
+    "meaning": "Successful original burn subtree including proxy delegate calls, exact debit/burn logs, true transfer return and token-to-actual-caller native payment. This is observed landed leg output, not whole-TX profit or original-precall replay."
+  },
+  "execution": {
+    "artifact": "dual-1.json",
+    "sha256": "9c692e7740f9977c2efffed1c214f35a45047da6528abbdbf9379c613613ed62",
+    "result": "pass",
+    "sourceTreeSha256": "25354d3b8f0a6cf5fccac6c89bf02861387ed32d396924260d36b42ab7bca201",
+    "sourceBindingLimit": "Real Ready/dual ran on current cloud working sources including peer dirty production changes. They did not run on a pristine codeCommit checkout. Exact sourcePin was rechecked unchanged; scoped staged-source build/contracts are separate evidence.",
+    "harnessSha256": "01949884bbdbf9496eead83c0dfe6a80c7e19600814f56fc0bd3db3ebc9f8d50",
+    "sharedEvidenceSha256": "49f94ee9e99d0c6659fe52c82955c1225a6d202673ca67ef5296652ce15dad0c",
+    "observerSha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb",
+    "executorCodeKeccak256": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419",
+    "executorArtifactSha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+    "positiveGroups": [
+      {
+        "input": "2018537428147323",
+        "quoteAndObservedWethOutput": "1998352053865850",
+        "purpose": "current natural production effective input"
+      },
+      {
+        "input": "12306616935116519",
+        "quoteAndObservedWethOutput": "12183550765765354",
+        "purpose": "original input evaluated at N end-state, not original pre-call"
+      }
+    ],
+    "successfulExecutions": 8,
+    "interfaces": [
+      "quoted",
+      "runtime"
+    ],
+    "controls": "Each amount uses both interfaces with normal and abundant-old-output inventory. Actual input debit and output delta are independently observed.",
+    "allSignedOutputDeltas": "0",
+    "nativeInventory": {
+      "before": "17",
+      "after": "17",
+      "delta": "0"
+    },
+    "outputInventoryControl": "1000000000000000000000000",
+    "inputInventoryLimit": "Existing executor input balance was zero; this sample does not newly prove preservation of a positive old-input inventory.",
+    "missingInputWithAbundantOutput": {
+      "cases": 4,
+      "result": "all correctly reverted; no output-inventory subsidy"
+    },
+    "runtimeConstruction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "programHash": "0x0266438c2c9f81f90ebb3796b231e0bd89936114b997b65f6eeb3adf36db0820",
+      "scope": "Single-leg construction with throwing Exact/quoted/RPC entrances and poisoned preset amounts; separate shared selector contracts invoke production selector."
+    },
+    "explicitInterfaceInvocations": {
+      "exact": 2,
+      "quoted": 2
+    },
+    "localLogicalRpcCalls": 87,
+    "forkInternalRpcCalls": "not counted",
+    "diagnosticElapsedIsPerformance": false,
+    "originalPreCallParity": "NOT RUN; original output is numerically equal for the original input at N-end, which does not prove state parity."
+  },
+  "declarationCorrection": {
+    "before": "Destruction(address,uint256)",
+    "after": "Unwrap(address,uint256)",
+    "unchangedDeployedTopic": "0x5dd085b6070b4cae004f84daafd199fd55b0bdfa11c3a802baffe89c2419d8c2",
+    "scope": "Correct human-readable discovery signature and new receipt observer. Topic bytes, discovery pattern id, candidate selection, identity checks, pricing/execution semantics and activation defaults remain unchanged.",
+    "regression": "Declared signature hash must equal actual deployed topic; same saved real receipt/trace fails before repair and passes after."
+  },
+  "regression": {
+    "workingTreeContracts": {
+      "helper": 13,
+      "sharedEvidence": 27,
+      "native": 3,
+      "trialState": 4,
+      "total": 47,
+      "log": "contracts-2.log",
+      "sha256": "1b83fc2dba35bcd14a1c278b8a03cf0dd487dd465a8d67091604b14a303ec880"
+    },
+    "workingFamilyAndDependency": "PASS; final-offline-1.log",
+    "workingDual": {
+      "passed": 80,
+      "failed": 0,
+      "log": "final-offline-1.log",
+      "sha256": "ae38a96f62cf5f6fd39746348722d0fcbd265631f49b58e391acf57f197f9a5e"
+    },
+    "workingBuild": "build:live exit0 in generate-build-1.log; manifest generate/check also exit0",
+    "stagedSource": {
+      "directory": "/tmp/mev-selfburn-index.yo0OU5",
+      "notGitWorktree": true,
+      "productionBuild": "PASS",
+      "helperAndSharedEvidence": "40/40",
+      "family": "PASS (two independent instances)",
+      "dual": "79/79; peer-added UniV1 fixture remains outside commit",
+      "log": "staged-build-contracts-1.log",
+      "sha256": "88068b6d7dbad0dbeb8a0482316145bcc51eb7b239f9435c34c690d18f811fea",
+      "combinedExit": 1,
+      "exitExplanation": "All preceding build/contracts passed; terminal tool-index invocation could not locate Git metadata in plain export. Preserved failure; corrected read-only Git context tested separately."
+    },
+    "toolIndex": {
+      "working": "16/16 in tool-index-contracts-2.log",
+      "workingSha256": "34ec51751decf4051ffe1357e317f470d9ae8391f7cb422342e12f54a7c581e4",
+      "staged": "16/16 in staged-tool-index-contracts-2.log",
+      "stagedSha256": "265a132328d5fda351374b5353211bfee788891557a62c92f0fd679472c0f403",
+      "isolation": "One-shot exact safe.directory and, for export, read-only existing Git metadata plus explicit export work tree; no global config edits or new branch/worktree."
+    },
+    "sourceRecheck": {
+      "result": "current source/harness/helpers equal dual binding",
+      "log": "source-recheck-1.log",
+      "sha256": "273b7febcc4ee7ab0b997f74546a0e4e2a83dc9463066686a99016b8bec334f8"
+    },
+    "manifest": {
+      "working": "generated and checked against working sources",
+      "staged": "generated and checked from exact staged-source export; only SelfBurn capture/discovery and aggregate hash committed",
+      "stagedFileSha256": "ec1ffb66855ad2fb546b317c21d18deb2fe847c2c0602f5244366a4a85269d14",
+      "workingPeerChangesPreserved": true
+    },
+    "fullTypecheck": "NOT RUN; production build is not a full repository typecheck"
+  },
+  "reconciliation": {
+    "capabilityQuery": [
+      "self-burn"
+    ],
+    "executedTools": [
+      "listener:searcher:self-burn-historical-ready",
+      "listener:searcher:self-burn-historical-dual"
+    ],
+    "eachExit": 0,
+    "manifest": "tools.json",
+    "manifestSha256": "557cf34d724e959270e5db60ac6baf8cdd1837955182a3dec01796461080608f",
+    "metadata": "Ready archive-rpc and dual fork; capabilities do not claim stage timing or full-route acceptance."
+  },
+  "retainedFailures": [
+    "contracts-1.log: 46 synthetic tests passed before real receipt revealed wrong event ABI; not final proof.",
+    "receipt-observer-before.log: exit1 on wrong Destruction declaration; retained sha256 833e698fff2da436972a2ecf4737782656354a694fc3904d3b407176924a740c.",
+    "receipt-observer-after.log: exit0 on same saved evidence; sha256 28c4350e64e27c4d91dcbdab4f9f1b7213ec94ee215ecf55f21435bf1d44b7a3.",
+    "manifest-check.log: stale generated identity after signature correction; fixed by generator, not handwritten hashes.",
+    "staged-build-contracts-1.log: terminal tool-index test lacks Git metadata in plain source export; prior build/40 helper+shared/79 dual passed.",
+    "tool-index-contracts-1.log: sanitized environment omitted existing exact Git ownership trust; fails before tests. One-shot path-specific context fixes invocation only; no source/security gate relaxation."
+  ],
+  "independentReview": {
+    "agentId": "01a125bd-7fee-71c0-b0b0-adc7a3abae0e",
+    "verdict": "No remaining blockers in scoped final cloud increment; not whole-goal/performance approval.",
+    "executed": [
+      "helper13/13",
+      "shared evidence27/27",
+      "index16/16",
+      "read-only generated check",
+      "diff check",
+      "saved receipt/trace parsing"
+    ],
+    "additional": "29 negative mutations and 3 interference controls executed separately on cloned saved evidence in memory. Some overlap suite coverage; not EVM runs and not counted as unique persisted tests.",
+    "additionalEvidence": "Reviewer tool transcript session67770/chunkd59631/exit0; no standalone script, stdout artifact or hash exists.",
+    "toolingDefect": "docs/research/tool-divergences/selfburn-event-observer-20261010.json",
+    "codifyCommit": "1d3e61efd0e232db8bb09afe38b9ed08f1e758bd"
+  },
+  "limits": [
+    "Only target token, one output direction and two input amounts are covered by fresh historical dual execution.",
+    "No fresh totalSupply assertion or positive old-input inventory preservation beyond separate existing strict/contracts.",
+    "No complete route repayment/final sim/EV, original pre-call replay, formal adapter_fixed/adapter_merge_ready/production_gap_fixed claim.",
+    "V4 native migration historical gaps, other remaining Family references/IMPL replays and final performance phases remain open."
+  ],
+  "performance": {
+    "singleReady": "NOT RUN",
+    "representativeCombinedGraph": "NOT RUN",
+    "scope": "Every applicable IMPL adaptation/repair, current and future, requires final 4A single-Ready timing then 4B combined representative large-graph timing. Includes Balancer V2/V3, Curve plain/underlying. Do not count these diagnostic execution timings as performance acceptance."
+  },
+  "implTableUpdate": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "row": "Existing Curve plain + Fluid native/common migration row38; append SelfBurn supplement only",
+    "archive": "docs/research/reports/impl-selfburn-native-20261010.patch",
+    "beforeSha256": "e4b09f345fcb7ad92ac8784e5dc620a368fdbbf022e7843fdea51a8b5d54e39f",
+    "afterSha256": "2fa505b7821adfd766567e77aa9bf818167e84847af5adc6c8bca816b7bef45e",
+    "inverseVerified": true
+  },
+  "safety": {
+    "productionExecutionChanged": false,
+    "productionDeclarationCorrected": true,
+    "defaultActivationChanged": false,
+    "liveStarted": false,
+    "deployed": false,
+    "signed": false,
+    "broadcast": false,
+    "privateKeysRead": false,
+    "originalReadyChanged": false,
+    "newBranchOrWorktree": false,
+    "peerNonGeneratedDiffSha256": "98c67fbc9b8f33d2311b2d7824e60028e10d1348b6061ce53f0860a799b79776"
+  }
+}

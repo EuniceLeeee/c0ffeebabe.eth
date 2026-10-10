@@ -1,0 +1,59 @@
+{
+  "divergence_id": "selfburn-event-observer-20261010",
+  "kind": "tooling_defect",
+  "status": "closed-scoped-declaration-and-observer-repair",
+  "tool": "SelfBurn discovery event declaration plus new test/history-evidence.ts observer",
+  "codify_commit": "1d3e61efd0e232db8bb09afe38b9ed08f1e758bd",
+  "realized_disagreement": "Initial synthetic tests reused incorrect Destruction ABI and passed46/46; actual saved receipt observer failed. Actual deployed topic corresponds to Unwrap(address,uint256), while production matched that topic byte-for-byte already.",
+  "repair": "Correct descriptive signature and observer to Unwrap; preserve topic bytes and pattern id. Add explicit signature-to-topic regression and failed-ancestor/false-return/ambiguous-payment/debit-burn/source-binding tests.",
+  "regressions": {
+    "path": "listener/src/searcher/venues/protocols/self-burn-native-family/test/history-evidence.test.ts",
+    "observerSha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb",
+    "before": "logs/selfburn-native-acceptance-20261010.uSuCVR/receipt-observer-before.log",
+    "after": "logs/selfburn-native-acceptance-20261010.uSuCVR/receipt-observer-after.log",
+    "sameEvidence": [
+      "d3e947e57d7bd5835364f724d2a747dd7c3a1431756ef60e7e7488700eed802a",
+      "6ab3e3e6d757adb27d46a1ee0858e05076d0cfc2fdf66b26b3c278bd842b56c9"
+    ],
+    "passed": "helper13/13; shared27/27; combined working47/47; staged production build, helper+shared40/40, dual79/79, tool-index16/16"
+  },
+  "independent_review": {
+    "agent_id": "01a125bd-7fee-71c0-b0b0-adc7a3abae0e",
+    "verdict": "Confirmed scoped P2 declaration/observer mismatch; final repair has no remaining blockers.",
+    "executed": "Saved actual receipt/trace observation, helper13, shared27, index16, manifest/diff checks; extra transcript-only29 negative+3 interference mutations are not EVM or unique persisted suite counts."
+  },
+  "learning_case": {
+    "learning_case_id": "tooling-selfburn-event-observer-20261010",
+    "status": "manual_required",
+    "strategy_kind": "unknown",
+    "edge_kinds": [
+      "protocol"
+    ],
+    "trigger": "competitor_not_seen",
+    "competitor_tx": "0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7",
+    "target_block": 25619948,
+    "comparable": false,
+    "primary_gap": "manual_required",
+    "gap_detail": "Same-N single-leg acceptance tooling closure only; not an opportunity-classification/route verdict.",
+    "evidence": {
+      "report": "docs/research/reports/selfburn-native-historical-acceptance-20261010.json",
+      "execution_manifest": "logs/selfburn-native-acceptance-20261010.uSuCVR/tools.json",
+      "preserved_transition": "Same real receipt observer fail-to-pass after correcting deployed event signature; no output amounts fabricated."
+    },
+    "tooling_defect": {
+      "tool": "SelfBurn event declaration and receipt observer",
+      "issue": "Synthetic ABI shared the erroneous Destruction name and therefore missed a deployed-topic mismatch.",
+      "evidence": "Saved real receipt observer fails before; corrected Unwrap observer passes; independent reviewer confirms.",
+      "codify_target": "Declared signature hash equals deployed topic and original successful burn subtree/actual payment/transfer logs all bind.",
+      "codify_commit": "1d3e61efd0e232db8bb09afe38b9ed08f1e758bd",
+      "status": "codified"
+    },
+    "created_at": "2026-10-10",
+    "updated_at": "2026-10-10"
+  },
+  "exclusions": [
+    "No production event topic/identity admission/safety/execution/default activation change.",
+    "Not formal adapter, production-gap or timing approval.",
+    "Scoped LearningCase filed here; shared learning store unchanged."
+  ]
+}
