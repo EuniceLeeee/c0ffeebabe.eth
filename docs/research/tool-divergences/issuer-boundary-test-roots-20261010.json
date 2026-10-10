@@ -1,0 +1,58 @@
+{
+  "divergence_id": "issuer-boundary-test-roots-20261010",
+  "kind": "tooling_defect",
+  "status": "closed-scoped-production-root-selection",
+  "tool": "listener:searcher:adapter-family-central-issuer-boundary",
+  "capability": "central",
+  "codify_commit": "8cba45c7cf950cf855de4742d793d90f7268adb0",
+  "realized_false_positive": "The production boundary scanner enumerated Family test files as production roots and rejected legitimate test imports of central issuers. It did not establish a production Family boundary violation.",
+  "repair": "Exclude test/tests/__tests__ directories and *.test.ts(x)/*.spec.ts(x) only from root enumeration. Transitive import scanning is unchanged: a production root importing a test helper that imports a central issuer still fails.",
+  "regressions": {
+    "file": "listener/src/searcher/test/adapter-family-central-issuer-boundary.ts",
+    "file_sha256": "4d16fbc6911fcf6cd1bf0e10f9a737a74b3a6a851cfeb576ff2c86871d67c6c0",
+    "before": "logs/ethertoken-native-dual-20261010.GwVMvE/central-tool-run.log",
+    "after": "logs/ethertoken-native-dual-20261010.GwVMvE/issuer-boundary-after.log",
+    "result": "PASS: 807 production roots, 879 transitive closure files",
+    "controls": [
+      "A standalone Family test importing a central issuer is not a production root.",
+      "A production root importing a test helper that imports a central issuer is still rejected."
+    ]
+  },
+  "independent_review": {
+    "agent_id": "01a12511-926c-7701-886c-c397fb8e321b",
+    "verdict": "No blocking finding; independently ran seven additional scanner controls.",
+    "reviewed_combined_diff_sha256": "f9f8b2c4c6a85312ba137b995d0aaea4dd7d27aea01530bf83c4339ff27e8d60"
+  },
+  "learning_case": {
+    "learning_case_id": "tooling-issuer-boundary-test-roots-20261010",
+    "status": "manual_required",
+    "strategy_kind": "unknown",
+    "edge_kinds": ["protocol"],
+    "trigger": "competitor_not_seen",
+    "competitor_tx": "0xdf54ad38d4b812c4ab23ba6225543caaa433897f9454414c70bf7fda1290694e",
+    "target_block": 25648967,
+    "comparable": false,
+    "primary_gap": "manual_required",
+    "gap_detail": "Tooling-only closure. This Family acceptance round does not classify or claim reproduction of the original opportunity; the route-level classification stays unknown.",
+    "evidence": {
+      "report": "docs/research/reports/ethertoken-astra-native-acceptance-20261010.json",
+      "execution_manifest": "logs/ethertoken-native-dual-20261010.GwVMvE/tools-central.json",
+      "preserved_transition": "Canonical scanner exit 1 before the root-selection repair; exit 0 after it, with transitive negative control still rejected."
+    },
+    "tooling_defect": {
+      "tool": "listener:searcher:adapter-family-central-issuer-boundary",
+      "issue": "Test files were incorrectly included as production roots.",
+      "evidence": "The preserved canonical failure, root-only fix, transitive-import regression, and fresh non-author reviewer agree on this false-positive defect.",
+      "codify_target": "listener/src/searcher/test/adapter-family-central-issuer-boundary.ts: production-only root enumeration plus transitive test-helper rejection regression",
+      "codify_commit": "8cba45c7cf950cf855de4742d793d90f7268adb0",
+      "status": "codified"
+    },
+    "created_at": "2026-10-10",
+    "updated_at": "2026-10-10"
+  },
+  "exclusions": [
+    "No weakening of production transitive import boundaries.",
+    "No Adapter Replay, family_local merge, production opportunity, performance or live verdict.",
+    "This scoped LearningCase is filed here; the shared learning-case store is unchanged."
+  ]
+}

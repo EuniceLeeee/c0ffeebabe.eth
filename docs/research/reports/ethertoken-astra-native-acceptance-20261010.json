@@ -1,0 +1,626 @@
+{
+  "schema": "ethertoken-astra-native-acceptance/v1",
+  "date": "2026-10-10",
+  "workspace": {
+    "vm": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "path": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "base": "cdaea4ce998ba8d585e8bfc9cae300c6fa31d4ac",
+    "codeCommit": "8cba45c7cf950cf855de4742d793d90f7268adb0",
+    "testContext": "Current cloud working source, including preserved peer Ready/Uniswap V1 changes. Not a clean-commit release/deployment claim.",
+    "sourceTreeSha256": "1100ea59ded0a71cb59f0d6a60f89d0185b2aaa855762ea614c0258bc6224e62"
+  },
+  "claim": "Scoped single-block natural integration and same-N EtherToken quote/quoted/runtime correctness; not a whole-goal, opportunity, Adapter Replay or performance verdict.",
+  "anchor": {
+    "tx": "0xdf54ad38d4b812c4ab23ba6225543caaa433897f9454414c70bf7fda1290694e",
+    "block": 25648967,
+    "blockHash": "0x65058fd339c9dbdabc378620f354a7e48b2dfae2df896536c985885f66085c1d",
+    "stateRoot": "0x41847893bb421ace707e24f8f6ed80c594caa2eccf06b87220af9e5f4981de2f",
+    "actors": {
+      "executor": "0x1000000000000000000000000000000000000002",
+      "owner": "0x1000000000000000000000000000000000000001"
+    }
+  },
+  "repairs": [
+    {
+      "owner": "Astra Family identity",
+      "cause": "Observed OMG allowance was nonzero; direct exact approve reverted before the swap.",
+      "change": "Simulate approve(0) before the exact grant, retaining actor, spender, amount and all effect checks.",
+      "evidence": "Paired original/reset production strict requests. The second Astra succeeded in both variants; do not attribute its old failure to approval reset."
+    },
+    {
+      "owner": "Generic transaction-evidence nomination",
+      "cause": "Bound B candidate took first same-topic A log/call in the same transaction; publication then incorrectly reused A identity and was deduplicated.",
+      "change": "Bind declared log/call candidate projection, preserve unbound TX seeds, distinguish singleton logical ids; reject missing/malformed bound bytes32 id and failed trace subtrees.",
+      "scope": "No protocol branch, identity weakening, hand-inserted graph or peer Ready source edits."
+    },
+    {
+      "owner": "Generic strict central runtime",
+      "cause": "Exact contract permits a declared positive-input program without reads, but strict executor rejected an empty request batch.",
+      "change": "Keep central policy/budget/caller/source/control/decoder path; allow an empty physical batch. Positive local-method prohibition and trial-state requirements unchanged; no dummy RPC."
+    }
+  ],
+  "ready": {
+    "originalPath": "/opt/mev-cloud/family-runtime-20261007/logs/ethertoken-native-historical-20261010.Njode0/single-N25648967-4/ready.json",
+    "originalSha256": "4dd77028f656b8ece33c7ba9ee6080df1ce4e1264cbaf1cb7380c44f31885cd8",
+    "originalUnchanged": true,
+    "instances": [
+      {
+        "instance": "0x35ac7dcba25ba2192c87981bfcf024208070a25f",
+        "family": "protocol:astra-multitoken",
+        "familyInstanceKey": "5f80c6f63079331cb1e2546c39dad4a21a57ab6b91c1300fe1059886d01161c7",
+        "candidateKey": "629a3db41d18b31e9c162c94b616c2e4f47059b9fc2512c71c26455a5995c10f",
+        "memoFingerprint": "1ceb3a7e70577d11b83b1a4b3101e67c22d4cbdc5ba603da41648a3c6d083f04",
+        "graphEdges": 90,
+        "quoted": 90
+      },
+      {
+        "instance": "0x5150d2869ce26095f4493bce916d9c0292d5d0fe",
+        "family": "protocol:astra-multitoken",
+        "familyInstanceKey": "744c4861048dab55073f4d7bdca3986313289253f0c5ae04a9e7408d8140713e",
+        "candidateKey": "218bdd6a890585fcc341babb5f2c633b2e12b205e8e5fbe27d920e47c4d9fdc4",
+        "memoFingerprint": "7a82709ad81ee9a889200581ee64f81107f7a85e20f1a96972dd0c2051ec3bf9",
+        "graphEdges": 2,
+        "quoted": 2
+      },
+      {
+        "instance": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+        "family": "protocol:ethertoken-native-redeem",
+        "familyInstanceKey": "7d773ca3669e2a8bf92f595e5575b272afd8d3805df776bdeebf7ce84ad741d8",
+        "candidateKey": "fbe0bc279dfa514a72976db11b844a511213aec49f24e8fd4881a66e293acdc0",
+        "memoFingerprint": "f26cb9e73a6464026377585ef9a8fcaa9c06d7f7d2bd174ccaf2eab37ae99d79",
+        "graphEdges": 1,
+        "quoted": 1
+      }
+    ],
+    "edges": 113,
+    "graphHash": "b4325e461a626fdfc10980033c08a0fe9d5178e1793a0d09719846353fd22b51",
+    "totalInstances": 13,
+    "retryables": 0,
+    "rawDirections": 113,
+    "effectiveDirections": 113,
+    "quotedDirections": 111,
+    "nonQuotedStatuses": [
+      "missing-valuation",
+      "missing-valuation"
+    ],
+    "scope": "Three-Family full N-block discovery, selective revalidation of an isolated original-Ready copy; neither coffee Ready nor live modified."
+  },
+  "etherToken": {
+    "instance": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+    "direction": "EtherToken -> native ETH -> shared boundary WETH",
+    "naturalProductionReferenceGate": "met",
+    "samples": [
+      {
+        "instance": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+        "reference": {
+          "status": "met",
+          "amountIn": "1887004883045915",
+          "amountOut": "1887004883045915"
+        },
+        "originalAmount": "1056367846106427",
+        "originalNativeOut": "1056367846106427",
+        "runtimeConstruction": {
+          "exactCalls": 0,
+          "quotedCalls": 0,
+          "rpcCalls": 0,
+          "quotedFallback": false,
+          "programHash": "0xca18a36627b06e432890a6857aaeb562848f7d83db9574decb379bb9839ba8f9"
+        },
+        "trials": [
+          {
+            "label": "production-effective",
+            "amountIn": "1887004883045915",
+            "amountOut": "1887004883045915",
+            "status": "pass",
+            "quoteReadCount": 0,
+            "executions": [
+              {
+                "encoding": "quoted",
+                "inventoryControl": false,
+                "status": "pass",
+                "inputDelta": "-1887004883045915",
+                "outputDelta": "1887004883045915",
+                "signedDelta": "0",
+                "nativeInventory": {
+                  "before": "17",
+                  "after": "17",
+                  "delta": "0"
+                }
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": false,
+                "status": "pass",
+                "inputDelta": "-1887004883045915",
+                "outputDelta": "1887004883045915",
+                "signedDelta": "0",
+                "nativeInventory": {
+                  "before": "17",
+                  "after": "17",
+                  "delta": "0"
+                }
+              },
+              {
+                "encoding": "quoted",
+                "inventoryControl": true,
+                "status": "pass",
+                "inputDelta": "-1887004883045915",
+                "outputDelta": "1887004883045915",
+                "signedDelta": "0",
+                "nativeInventory": {
+                  "before": "17",
+                  "after": "17",
+                  "delta": "0"
+                },
+                "noInputWithAbundantOutput": {
+                  "status": "expected-revert",
+                  "error": "execution reverted"
+                }
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": true,
+                "status": "pass",
+                "inputDelta": "-1887004883045915",
+                "outputDelta": "1887004883045915",
+                "signedDelta": "0",
+                "nativeInventory": {
+                  "before": "17",
+                  "after": "17",
+                  "delta": "0"
+                },
+                "noInputWithAbundantOutput": {
+                  "status": "expected-revert",
+                  "error": "execution reverted"
+                }
+              }
+            ]
+          },
+          {
+            "label": "historical-input-at-N",
+            "amountIn": "1056367846106427",
+            "amountOut": "1056367846106427",
+            "status": "pass",
+            "quoteReadCount": 0,
+            "executions": [
+              {
+                "encoding": "quoted",
+                "inventoryControl": false,
+                "status": "pass",
+                "inputDelta": "-1056367846106427",
+                "outputDelta": "1056367846106427",
+                "signedDelta": "0",
+                "nativeInventory": {
+                  "before": "17",
+                  "after": "17",
+                  "delta": "0"
+                }
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": false,
+                "status": "pass",
+                "inputDelta": "-1056367846106427",
+                "outputDelta": "1056367846106427",
+                "signedDelta": "0",
+                "nativeInventory": {
+                  "before": "17",
+                  "after": "17",
+                  "delta": "0"
+                }
+              },
+              {
+                "encoding": "quoted",
+                "inventoryControl": true,
+                "status": "pass",
+                "inputDelta": "-1056367846106427",
+                "outputDelta": "1056367846106427",
+                "signedDelta": "0",
+                "nativeInventory": {
+                  "before": "17",
+                  "after": "17",
+                  "delta": "0"
+                },
+                "noInputWithAbundantOutput": {
+                  "status": "expected-revert",
+                  "error": "execution reverted"
+                }
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": true,
+                "status": "pass",
+                "inputDelta": "-1056367846106427",
+                "outputDelta": "1056367846106427",
+                "signedDelta": "0",
+                "nativeInventory": {
+                  "before": "17",
+                  "after": "17",
+                  "delta": "0"
+                },
+                "noInputWithAbundantOutput": {
+                  "status": "expected-revert",
+                  "error": "execution reverted"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "successfulExecutions": 8,
+    "missingInputNegatives": 4,
+    "originalPreCallParity": "NOT RUN; original landed withdrawal observed separately. N-end equality is not original-call-state restoration.",
+    "simSizing": "Historical runner verifies actual direct runtime construction; production sim selector zero-Exact/no-fallback coverage remains the separate offline family-dual suite."
+  },
+  "tests": {
+    "productionBuild": "PASS",
+    "generatedManifestAndStrictComposition": "PASS",
+    "strictCentralRuntime": 174,
+    "zeroReadNewCases": 7,
+    "nomination": 15,
+    "observerAndSharedEvidence": 41,
+    "familyDualExecution": 80,
+    "otherPassing": [
+      "adapter-work-intent",
+      "adapter-family-exact-quote-cache",
+      "strict-solver-consumer",
+      "astra-multitoken-family-plugin",
+      "capture-nomination-framework"
+    ],
+    "issuerBoundary": {
+      "before": "FAIL: test-only roots misclassified",
+      "after": "PASS: 807 roots / 879 closure files; root exclusion and transitive-test-helper regression"
+    },
+    "fullRepositoryTypecheck": "NOT RUN"
+  },
+  "independentReview": {
+    "centralObserverAndScanner": {
+      "reviewer": "01a12511-926c-7701-886c-c397fb8e321b",
+      "verdict": "No blocking finding",
+      "diffSha256": "f9f8b2c4c6a85312ba137b995d0aaea4dd7d27aea01530bf83c4339ff27e8d60",
+      "executedTests": 210,
+      "extraObserverNegatives": 8,
+      "scannerAdditionalChecks": 7
+    },
+    "nomination": {
+      "initialPatch": "Worker authored; parent independently reviewed. Worker independent reviewer identified missing bound bytes32 id guard.",
+      "finalResidual": "Parent fixed; worker independently reran 15 tests + 36 behavioral probes and two strict failed-ancestor controls. This is not author self-approval of initial patch."
+    }
+  },
+  "canonicalReconciliation": {
+    "manifests": [
+      {
+        "path": "logs/ethertoken-native-dual-20261010.GwVMvE/tools-central.json",
+        "sha256": "a9b4c7217074f6d6b070bcaaa1fc4780074f6e6697d0caef23faefbe732e0171",
+        "requestedCapabilities": [
+          "central"
+        ],
+        "executions": [
+          {
+            "toolId": "listener:searcher:strict-central-adapter-runtime",
+            "exitCode": 0,
+            "descriptorSha256": "cbfb3b513f50e494e5a64c066bf4f2d46aac02563789ae7432bfbc16a1589671",
+            "argvSha256": "09a289d1f6df013c7109fe363716e4660dca769d376c4cac234e6355aae4822f",
+            "stdoutSha256": "5004c1d9f78aa2bdda2ea7d28f209fd4d6700792c943f8467be2c264686a8b82",
+            "stderrSha256": "c156c5763f8b2f9a95c83759d7853e38f4d4412b1240749db288a54e42464d75",
+            "startedAt": "2026-10-10T09:13:06.389Z",
+            "finishedAt": "2026-10-10T09:13:08.757Z"
+          },
+          {
+            "toolId": "listener:searcher:adapter-family-central-issuer-boundary",
+            "exitCode": 1,
+            "descriptorSha256": "c79c584974ff7136e25ab2b95d7c5740a1e601ee43330768475ff5072e33faf4",
+            "argvSha256": "2d773b138604ed305535bf007168f7e79713efde46ba80c069d74cf1fbb63a49",
+            "stdoutSha256": "045b52458c6b2f38de2e5a8520ea95c1d0f8709e746588a8cb99e89f928a2df4",
+            "stderrSha256": "b77d8f4a9ddc8a8558d1cac3203020dcdb3303e70c0ce446fe4c35fd0cef4712",
+            "startedAt": "2026-10-10T09:13:09.022Z",
+            "finishedAt": "2026-10-10T09:13:10.921Z"
+          },
+          {
+            "toolId": "listener:searcher:adapter-family-central-issuer-boundary",
+            "exitCode": 0,
+            "descriptorSha256": "c79c584974ff7136e25ab2b95d7c5740a1e601ee43330768475ff5072e33faf4",
+            "argvSha256": "2d773b138604ed305535bf007168f7e79713efde46ba80c069d74cf1fbb63a49",
+            "stdoutSha256": "513f3af06e2f42d4caf009dc78ad69d2917b2eaaac544ee2722b6d58c60f408c",
+            "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "startedAt": "2026-10-10T09:21:20.741Z",
+            "finishedAt": "2026-10-10T09:21:21.986Z"
+          }
+        ]
+      },
+      {
+        "path": "logs/ethertoken-native-dual-20261010.GwVMvE/tools-astra.json",
+        "sha256": "6eb137449d7cffbc751e186f4b816ccdb56f154ff215953b7fa0ff00d5c27ad9",
+        "requestedCapabilities": [
+          "astra"
+        ],
+        "executions": [
+          {
+            "toolId": "listener:searcher:astra-multitoken-family-plugin",
+            "exitCode": 0,
+            "descriptorSha256": "257affd6af8c2e585537ef4d233e2af5d9e82364aa8ec28405006f54c7264c4b",
+            "argvSha256": "f7c25e9b6586f4a4ba795b25cbc1d517f37aa32438b1dc2acf0b203070d7c718",
+            "stdoutSha256": "4687aee401053e8edeb3dc6b513d99ad29475d51b78658f3f2a939183ed8a775",
+            "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "startedAt": "2026-10-10T09:08:53.241Z",
+            "finishedAt": "2026-10-10T09:08:56.808Z"
+          }
+        ]
+      },
+      {
+        "path": "logs/ethertoken-native-dual-20261010.GwVMvE/tools-nomination.json",
+        "sha256": "5c20b7466e781b8572d9c6bb4118ed8851333c1df1a1a23784f406e85c1156e3",
+        "requestedCapabilities": [
+          "nomination"
+        ],
+        "executions": [
+          {
+            "toolId": "listener:searcher:tx-evidence-nomination",
+            "exitCode": 0,
+            "descriptorSha256": "ebd805b4d61c2ef01de473c156b97a441b658a92353cdd1e64e8f67ebfd045c2",
+            "argvSha256": "16da9443718cb4c6f622aaa9eb15635e108e08363ad5475d2254da4a08d58b20",
+            "stdoutSha256": "a273f7ae072121753df6c999aae1fb39f5acf1da224493293af63b3d97cbf41e",
+            "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "startedAt": "2026-10-10T09:43:33.875Z",
+            "finishedAt": "2026-10-10T09:43:35.236Z"
+          },
+          {
+            "toolId": "listener:searcher:capture-nomination-framework",
+            "exitCode": 0,
+            "descriptorSha256": "3ca05570387a3f23bd548a02f0b23c3571c5164ec1b1d36f9f42ca164ccb7c9d",
+            "argvSha256": "8bace64fa40d11aff0c46dc6b20be5dd26a1e7e96e39e22844f710883b73b321",
+            "stdoutSha256": "728536d4d842f9cbcefb08ef8b4bb26c422d64b602119d7fb4a986c40e9d8402",
+            "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "startedAt": "2026-10-10T09:43:35.497Z",
+            "finishedAt": "2026-10-10T09:43:35.746Z"
+          }
+        ]
+      },
+      {
+        "path": "logs/ethertoken-native-dual-20261010.GwVMvE/tools-dual.json",
+        "sha256": "f040f0103122de68932d2e32006c4e930a6dff9926c6b78095968bef292ec5fd",
+        "requestedCapabilities": [
+          "compound",
+          "dual"
+        ],
+        "executions": [
+          {
+            "toolId": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+            "exitCode": 1,
+            "descriptorSha256": "be49b52e9cd477b396d8aeced305700f21dd9c83fa82b0839dab601d0d78a0fb",
+            "argvSha256": "b11caa29fd27f3ced2006da6da4ec00b0c31c2e747246f373a329c443d3d8000",
+            "stdoutSha256": "373f4f0cdecf756e83193196ab37470c8cd5fe932bec6d517729c23192a197eb",
+            "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "startedAt": "2026-10-10T08:39:27.464Z",
+            "finishedAt": "2026-10-10T08:39:30.383Z"
+          },
+          {
+            "toolId": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+            "exitCode": 1,
+            "descriptorSha256": "be49b52e9cd477b396d8aeced305700f21dd9c83fa82b0839dab601d0d78a0fb",
+            "argvSha256": "675b93f764d82bd0874f8d887692e6b65233e1b0910e4fe8c9da268107e73ba9",
+            "stdoutSha256": "04c13ccc4df08a287b93b988b336a52ad41510494c7cddd0fcd2e121409dc40c",
+            "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "startedAt": "2026-10-10T08:47:19.695Z",
+            "finishedAt": "2026-10-10T08:47:22.294Z"
+          },
+          {
+            "toolId": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+            "exitCode": 0,
+            "descriptorSha256": "be49b52e9cd477b396d8aeced305700f21dd9c83fa82b0839dab601d0d78a0fb",
+            "argvSha256": "d7942df12aa28a4e815c2c5cad827ef443c70217eddfc88c9d65b2e10173086b",
+            "stdoutSha256": "9134e61623aa4dbb734288465496672a99f54e56d7af7e2b181fe516a8b52501",
+            "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "startedAt": "2026-10-10T09:34:26.807Z",
+            "finishedAt": "2026-10-10T09:34:29.400Z"
+          }
+        ]
+      },
+      {
+        "path": "logs/ethertoken-native-dual-20261010.GwVMvE/tools-ethertoken.json",
+        "sha256": "01803a1428765c50b9398380023ee0811649538745c49f5036ef87e7931ad0d5",
+        "requestedCapabilities": [
+          "ethertoken"
+        ],
+        "executions": [
+          {
+            "toolId": "listener:searcher:ethertoken-historical-ready",
+            "exitCode": 1,
+            "descriptorSha256": "e2d2c773a50eb5f5a55067eb4b7742ca394f2e05b84130b67dd1566f9880caf1",
+            "argvSha256": "d0e3c787568d21c6e0d5493b2802edfc0dcd36788cb051ccf738e063b9854e6e",
+            "stdoutSha256": "84f25662a15bc77ba6417a2cf5709c497a5e42688a0cb25d61680cf582db244f",
+            "stderrSha256": "49f9c0dfd100fba67313faabb2a8860ffa5e3b37493531745f07f21a64d5d392",
+            "startedAt": "2026-10-10T09:38:21.723Z",
+            "finishedAt": "2026-10-10T09:38:23.360Z"
+          },
+          {
+            "toolId": "listener:searcher:ethertoken-historical-ready",
+            "exitCode": 0,
+            "descriptorSha256": "e2d2c773a50eb5f5a55067eb4b7742ca394f2e05b84130b67dd1566f9880caf1",
+            "argvSha256": "c20c9f63f2f3ccd3d2bc1029c3baae72564367be031f2a4d282f822120ac7c06",
+            "stdoutSha256": "e444c50959d0588b4fd497a1340bdde8d4cd882774432b8a32acc8857384941a",
+            "stderrSha256": "d8085cb3356068299771dfbfb947915809c70b7b82500c377520be36f7967516",
+            "startedAt": "2026-10-10T09:41:25.096Z",
+            "finishedAt": "2026-10-10T09:41:27.826Z"
+          }
+        ]
+      }
+    ],
+    "successfulTools": [
+      "listener:searcher:strict-central-adapter-runtime",
+      "listener:searcher:adapter-family-central-issuer-boundary",
+      "listener:searcher:astra-multitoken-family-plugin",
+      "listener:searcher:tx-evidence-nomination",
+      "listener:searcher:capture-nomination-framework",
+      "listener:searcher:kyber-yb-compound-dual-historical-fork",
+      "listener:searcher:ethertoken-historical-ready"
+    ],
+    "toolDefect": "docs/research/tool-divergences/issuer-boundary-test-roots-20261010.json"
+  },
+  "preservedFailures": [
+    "dual-1 wrapper window unsupported: no execution",
+    "dual-2 observer assumed explicit empty output",
+    "dual-3 real Exact scheduler failure before execution",
+    "first revised Ready incorrectly deduplicated second Astra",
+    "zero-read and nomination guard pre-fix failures",
+    "issuer boundary false-positive run",
+    "canonical-ready relative REVM path rejected before prices; next invocation supplied required absolute path"
+  ],
+  "performance": {
+    "perFamilySingleReady": "NOT RUN",
+    "representativeCombinedGraph": "NOT RUN",
+    "policy": "Every applicable current/future IMPL adaptation and repair must pass single-Ready then combined-graph production-stage timing after correctness; includes Balancer V2/V3, Curve plain/underlying. Preparation separate, default 3 blocks x 3 medians, retain failures. No timing acceptance inferred from diagnostics."
+  },
+  "implTable": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "line": 38,
+    "beforeSha256": "d9c309356a764676e65381f362798a3d2152bf2217ee93b9a010ea42e2e81073",
+    "afterSha256": "cb9f3027f79179fc68fc42e3dc98677726eba1f7d43d64ca37a583791efced6e",
+    "otherRowsUnchanged": true,
+    "committedPatch": "docs/research/reports/ethertoken-astra-impl-table-20261010.patch",
+    "patchSha256": "af8f6b4f290c47ad3db580bb0ce47a81ca369fbe3b10110f221fdce22fbbe4fc"
+  },
+  "safety": {
+    "signing": false,
+    "broadcast": false,
+    "deployed": false,
+    "liveStarted": false,
+    "full14400Rescan": false,
+    "privateKeysRead": false,
+    "peerChangesCommitted": false,
+    "originalReadyOverwritten": false
+  },
+  "artifacts": [
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/astra-approve-comparison.json",
+      "sha256": "736da7bcd9ce77909cec56677733fe579be021ab593aec62258976b0301ecab5"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/astra-diagnostic-3.json",
+      "sha256": "0085519897c77dd04f1a5d0d0e3a89ee77fb3c074550e862cf83f20b5f1e4468"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/single-N25648967/ready.json",
+      "sha256": "c24726f5fdce0797219d2aba4ac6487e376250cb8631e7cf8652b88bbcfcdc36"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/single-N25648967/prices/prices.json",
+      "sha256": "4a887564b0979f592ce3e70c49f11b6b4736c166216bf0b814b55b5f731a66a1"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/single-N25648967-2/ready.json",
+      "sha256": "a3cc1c06e29bbc6b414a2e39612d4156922b625be052c003a9b0f1a27d902f32"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/single-N25648967-2/prices/prices.json",
+      "sha256": "33151ebf85a48547f113d4675da8d8c106c1ab544a36b3b135306fd64e9028dc"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/single-N25648967-2/prices/input.json",
+      "sha256": "2f4241fa6435e11ed0e9f43d31a037c8a322dc482a9271360b08368c98586a3a"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/dual-2.json",
+      "sha256": "06de3d8940e377c1ed6955c608bcc62b705cef4a37bae505663f4a7b071fc8ee"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/dual-3.json",
+      "sha256": "12ed6ee31f468cb052be3c762ad65d16673808523ffaca8c084ab31f84b5b9c4"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/dual-4.json",
+      "sha256": "79f2ace36b1ff44bdcae0b8c232f1a41e885d28a1fcb7e9c7e97efa1102bde45"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/zero-read-before.log",
+      "sha256": "d54d27896b1bdbfd84af54506fec637b03fd870007c641361f2d310c0ccd49fa"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/zero-read-after.log",
+      "sha256": "c876ba605d18de93b5a1d3b2e21509b2aa893db04fb749473f7a004b4f6a79ae"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/central-runtime-full.log",
+      "sha256": "a947a9e47cd1f359aba273ec15fb973f1edcc7188f52732366716f499035651c"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/zero-read-contract-regressions.log",
+      "sha256": "2924cfafb5cd28c11d4849f8f3d09f93edaf36e6f97030509032e4e1afc4c169"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/nomination-guard-before.log",
+      "sha256": "cbee926faedba6563fca922e4327c760a105462f572d1fdc4f53cacc78258a90"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/nomination-final.log",
+      "sha256": "e0150840e7be7766200f53a73619d0c0a2de7920cdbd0857e02a2992dbfb5647"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/dual-offline-v2.log",
+      "sha256": "94557e9b7020d116a93fe2e84dd193a207c151c40511c02f72113f7c6da25686"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/central-tool-run.log",
+      "sha256": "fa6f2d7efdfe5345c3a5e519a2a0a51841efbdc2fd1aa82ad90e9b3b73ff567f"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/issuer-boundary-after.log",
+      "sha256": "220c9b2a2afa7efa3529a707707f688fd5a7969bf2bc0cb86517679b9ae31f9d"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/astra-tool-run.log",
+      "sha256": "c3d3ddd6b1a0d3c7d3cec9b1ecf2cd7e25667b2bcb4fdaec88b33bbdd577577f"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/build-final.log",
+      "sha256": "e866f0f87b36400a9338731e57629a427d8f9218c1849037ffd5d4d2fda137d5"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/family-dual-final.log",
+      "sha256": "f68acd48b6bd6c78cd5ea4dd27b09315f647f4ed8b544615cbb3828c80c4de06"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/canonical-ready.log",
+      "sha256": "79a4191d25ff09fd84656e7ae46fc4447c8af534d97241b8ab5e6a4f6ceb3ad1"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/canonical-ready-2.log",
+      "sha256": "55a4e5f0edb8760b76ad8f188a3fe1e1b1dae1c5c7137832157853c8a726ef6a"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/canonical-ready-2/ready-summary.json",
+      "sha256": "bf7243e185da9654811c60af6247b08fb5b4cc58a8073fbb8b05156963653b4b"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/nomination-tool-run.log",
+      "sha256": "bc191555c5fe380b1d15e5b65273ee30238cda2813395423212198965073354b"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/tools-central.json",
+      "sha256": "a9b4c7217074f6d6b070bcaaa1fc4780074f6e6697d0caef23faefbe732e0171"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/tools-astra.json",
+      "sha256": "6eb137449d7cffbc751e186f4b816ccdb56f154ff215953b7fa0ff00d5c27ad9"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/tools-dual.json",
+      "sha256": "f040f0103122de68932d2e32006c4e930a6dff9926c6b78095968bef292ec5fd"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/tools-ethertoken.json",
+      "sha256": "01803a1428765c50b9398380023ee0811649538745c49f5036ef87e7931ad0d5"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/tools-nomination.json",
+      "sha256": "5c20b7466e781b8572d9c6bb4118ed8851333c1df1a1a23784f406e85c1156e3"
+    },
+    {
+      "path": "logs/ethertoken-native-dual-20261010.GwVMvE/scoped-capability.json",
+      "sha256": "10610193f75e58123a9073371104a1e722b7cd247ee04d1579181cad53736f94"
+    }
+  ]
+}
