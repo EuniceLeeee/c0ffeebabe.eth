@@ -1,0 +1,614 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "recordedAt": "2026-10-10T21:15:50.120Z",
+  "tx": "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+  "N": 26152607,
+  "B": 26152606,
+  "winnerIndex": 55,
+  "claim": "Full-prefix canonical receipt and fixed original calldata output equivalence demonstrated. Trigger-only fails; strict single-trigger causality and natural production backrun remain unverified. No formal performance acceptance.",
+  "code": {
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "head": "9321a68eda345cee6164c52767de8c8bf84dd893",
+    "dirty": true,
+    "backendSha256": "156ebb26b1084c18b5577ed0c03d800dd8736ba2779b71971d14546c3c9ecc1c",
+    "sourceTreeSha256": "f5c61a35f67d50d9853ae8fa7eda53b2d16478e5c84ffc6cdb20e1ba9eba06a4",
+    "peerNonGeneratedDiffSha256": "98c67fbc9b8f33d2311b2d7824e60028e10d1348b6061ce53f0860a799b79776",
+    "productionChanged": false
+  },
+  "continuation": {
+    "priorRunId": "20261011-native-fivehop-bb-gap-fx7zdx",
+    "priorArtifactsVerified": 40,
+    "readyRebuilt": false,
+    "pricesRebuilt": false,
+    "enumerationRerun": false,
+    "naturalTargetResult": "previous 16/481 candidate diagnostics still lack full five-hop target; no new target search claimed"
+  },
+  "environment": {
+    "parentHash": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+    "parentStateRoot": "0xb013ee88cd486c5e84d01f7d0c0d702e692d94240c84151e959c40ba185e0924",
+    "canonicalNHash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+    "executionBlock": 26152607,
+    "anvilVersion": "anvil Version: 1.7.1\nCommit SHA: 4072e48705af9d93e3c0f6e29e93b5e9a40caed8\nBuild Timestamp: 2026-05-08T07:50:55.527285345Z (1778226655)\nBuild Profile: dist",
+    "preparation": "existing AnvilStateBackend.queueHistoricalRawTransactions; real signed envelopes, one local N block per branch; no sender state rewrite",
+    "prefixes": [
+      {
+        "name": "boundary",
+        "orderedTransactionCount": 0,
+        "derivedFingerprint": "c5600bd9519ad8f0ede690bef3f172b0838f5f57136d85dc01ad1aa1b2b151c0",
+        "environment": {
+          "number": true,
+          "timestamp": true,
+          "baseFeePerGas": true,
+          "miner": true,
+          "mixHash": false,
+          "gasLimit": true
+        },
+        "originalCallSixFieldProbePassed": true,
+        "systemSlots": [
+          {
+            "label": "beacon timestamp",
+            "address": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
+            "slot": "2729",
+            "expected": "0x6ac8744b",
+            "actual": "0x000000000000000000000000000000000000000000000000000000006ac6f457",
+            "match": false
+          },
+          {
+            "label": "parent beacon root",
+            "address": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
+            "slot": "10920",
+            "expected": "0x57e24305f0105f988d714c6dc2f6438de1104bcb593841abb116907bdd058efe",
+            "actual": "0x5fdfdc8d7beb2479d6c5d67be7c4491b24638929e76cb752087bf5c8d4fe3198",
+            "match": false
+          },
+          {
+            "label": "parent execution hash",
+            "address": "0x0000f90827f1c53a10cb7a02335b175320002935",
+            "slot": "6934",
+            "expected": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+            "actual": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+            "match": true
+          }
+        ]
+      },
+      {
+        "name": "trigger-only",
+        "orderedTransactionCount": 1,
+        "derivedFingerprint": "616138b4115c0fcb33ee618477fb922c9b2a1b642d80620cd2e9c02132bffb8c",
+        "environment": {
+          "number": true,
+          "timestamp": true,
+          "baseFeePerGas": true,
+          "miner": true,
+          "mixHash": false,
+          "gasLimit": true
+        },
+        "originalCallSixFieldProbePassed": true,
+        "systemSlots": [
+          {
+            "label": "beacon timestamp",
+            "address": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
+            "slot": "2729",
+            "expected": "0x6ac8744b",
+            "actual": "0x000000000000000000000000000000000000000000000000000000006ac6f457",
+            "match": false
+          },
+          {
+            "label": "parent beacon root",
+            "address": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
+            "slot": "10920",
+            "expected": "0x57e24305f0105f988d714c6dc2f6438de1104bcb593841abb116907bdd058efe",
+            "actual": "0x5fdfdc8d7beb2479d6c5d67be7c4491b24638929e76cb752087bf5c8d4fe3198",
+            "match": false
+          },
+          {
+            "label": "parent execution hash",
+            "address": "0x0000f90827f1c53a10cb7a02335b175320002935",
+            "slot": "6934",
+            "expected": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+            "actual": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+            "match": true
+          }
+        ]
+      },
+      {
+        "name": "full-prefix",
+        "orderedTransactionCount": 55,
+        "derivedFingerprint": "da4edc1c1efa6955755c5226d9304d19e8e3e381fc370348b1077e230dbcba05",
+        "environment": {
+          "number": true,
+          "timestamp": true,
+          "baseFeePerGas": true,
+          "miner": true,
+          "mixHash": false,
+          "gasLimit": true
+        },
+        "originalCallSixFieldProbePassed": true,
+        "systemSlots": [
+          {
+            "label": "beacon timestamp",
+            "address": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
+            "slot": "2729",
+            "expected": "0x6ac8744b",
+            "actual": "0x000000000000000000000000000000000000000000000000000000006ac6f457",
+            "match": false
+          },
+          {
+            "label": "parent beacon root",
+            "address": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
+            "slot": "10920",
+            "expected": "0x57e24305f0105f988d714c6dc2f6438de1104bcb593841abb116907bdd058efe",
+            "actual": "0x5fdfdc8d7beb2479d6c5d67be7c4491b24638929e76cb752087bf5c8d4fe3198",
+            "match": false
+          },
+          {
+            "label": "parent execution hash",
+            "address": "0x0000f90827f1c53a10cb7a02335b175320002935",
+            "slot": "6934",
+            "expected": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+            "actual": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+            "match": true
+          }
+        ]
+      }
+    ],
+    "limitations": [
+      "anvil_setPrevRandao is unavailable; materialized prefix block mixHash differs from N. Only the fixed winner call had independently verified N block overrides.",
+      "EIP-4788 timestamp/root slots were not advanced to canonical N; EIP-2935 parent hash slot matched. No manual system or actor storage injection.",
+      "Matching all prefix receipts and target outputs is not proof of complete prefix state equivalence or exact system state."
+    ]
+  },
+  "diagnostics": {
+    "boundary": {
+      "callStatus": 0,
+      "firstTerminal": "Morpho WETH repayment transferFrom reverted",
+      "errors": [
+        {
+          "path": "0",
+          "to": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+          "selector": "0x1d23a9c4",
+          "error": "execution reverted"
+        },
+        {
+          "path": "0.0",
+          "to": "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb",
+          "selector": "0xe0232b42",
+          "error": "execution reverted",
+          "output": "0x08c379a0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000157472616e7366657246726f6d2072657665727465640000000000000000000000"
+        },
+        {
+          "path": "0.0.2",
+          "to": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "selector": "0x23b872dd",
+          "error": "execution reverted"
+        }
+      ]
+    },
+    "triggerOnly": {
+      "triggerIndex": 3,
+      "trigger": "0x50354ee2a5ada3aec4d176ec8e127723f3de40e20b0d5f9e9f31f13a099796ae",
+      "triggerCanonicalStatus": 1,
+      "triggerLocalStatus": 0,
+      "receiptAudit": [
+        {
+          "index": 3,
+          "hash": "0x50354ee2a5ada3aec4d176ec8e127723f3de40e20b0d5f9e9f31f13a099796ae",
+          "canonicalStatus": "0x1",
+          "localStatus": "0x0",
+          "statusMatch": false,
+          "gasUsedMatch": false,
+          "logsMatch": false,
+          "localGasUsed": "0x31f45",
+          "canonicalGasUsed": "0x31545"
+        }
+      ],
+      "winnerCallStatus": 0,
+      "interpretation": "real trigger does not execute independently from B under this replay; omitted prerequisite state or environment dependency remains to locate; not economic proof of a valid trigger failing to create profit"
+    },
+    "fullPrefix": {
+      "count": 55,
+      "allReceiptStatusGasLogsMatch": true,
+      "failedTransactionsPreserved": [
+        {
+          "index": 45,
+          "tx": "0x44f3a3b6b5784dd96771f1df1e74d45c8b000cc929a4e32a99245fb7364b20c2",
+          "gasUsed": "0xcaeea"
+        },
+        {
+          "index": 46,
+          "tx": "0x67ff736ad8e4d17d815404593409c353fcb5b89765385a19d05e59274749cc13",
+          "gasUsed": "0x44cb1"
+        },
+        {
+          "index": 47,
+          "tx": "0x7c0f4d27cb1ebcd03bb99d7bee723005050e57c65be39fde2086a7152e153285",
+          "gasUsed": "0xa3dc5"
+        },
+        {
+          "index": 48,
+          "tx": "0x655e77d6cb68fd4302a97a2718c5b9a216d538e454c0c961abb8481fa787fc78",
+          "gasUsed": "0x4342e"
+        },
+        {
+          "index": 49,
+          "tx": "0xc57acc57717005066cd59531c5387ed1524b639ea02a8ede1b4a6e9973af863a",
+          "gasUsed": "0x3a4ce"
+        },
+        {
+          "index": 50,
+          "tx": "0x83bdb7ec3ae06b171e759101a0ce00f871e92f62fce380faac3793ec5764b0d7",
+          "gasUsed": "0x4a7c5"
+        },
+        {
+          "index": 51,
+          "tx": "0x8a90c3039857e6ce07b4bcd2ebc429cf1e0d4a4afa260377c9307aed022d0f3e",
+          "gasUsed": "0x5b9c9"
+        },
+        {
+          "index": 52,
+          "tx": "0x27fb6e25b6c1f12ee3c0bad91d1fdc9bb00d46cec1e63aef5d2bab9e049085fb",
+          "gasUsed": "0x5d13b"
+        },
+        {
+          "index": 53,
+          "tx": "0xa97158060324694e9137fa37aba61b830384894905b12e6e6db0895817b8927b",
+          "gasUsed": "0x467be"
+        },
+        {
+          "index": 54,
+          "tx": "0x9082b0a883de5d09d0df9696d6cd8b306bb4c10704ec0a18a2e3f05a471297eb",
+          "gasUsed": "0x3c5be"
+        }
+      ],
+      "winnerReadOnlyCallStatus": 1,
+      "legOutputs": [
+        {
+          "leg": 1,
+          "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+          "selector": "0x3df02124",
+          "sameCalldata": true,
+          "originalOutput": "680948927573948064",
+          "fullPrefixOutput": "680948927573948064",
+          "delta": 0
+        },
+        {
+          "leg": 2,
+          "target": "0x86f874212335af27c41cdb855c2255543d1499ce",
+          "selector": "0x2668dfaa",
+          "sameCalldata": true,
+          "originalOutput": "752490278265000000",
+          "fullPrefixOutput": "752490278265000000",
+          "delta": 0
+        },
+        {
+          "leg": 3,
+          "target": "0x000000000004444c5dc75cb358380d2e3de08a90",
+          "selector": "0xf3cd914c",
+          "sameCalldata": true,
+          "originalOutput": "1870435127",
+          "fullPrefixOutput": "1870435127",
+          "delta": 0
+        },
+        {
+          "leg": 4,
+          "target": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+          "selector": "0x2668dfaa",
+          "sameCalldata": true,
+          "originalOutput": "1869194930",
+          "fullPrefixOutput": "1869194930",
+          "delta": 0
+        },
+        {
+          "leg": 5,
+          "target": "0xe0554a476a092703abdb3ef35c80e0d76d32939f",
+          "selector": "0x128acb08",
+          "sameCalldata": true,
+          "originalOutput": "753419016054099500",
+          "fullPrefixOutput": "753419016054099500",
+          "delta": 0
+        }
+      ],
+      "funding": {
+        "borrowed": "752645725294836224",
+        "repaid": "752645725294836224"
+      },
+      "originalGrossWeth": "773290759263276",
+      "replayGrossWeth": "773290759263276",
+      "residualUsdcRaw": "6101",
+      "oldWeethInventoryConsumedRaw": "1",
+      "gasUsed": "664146",
+      "gasCostWei": "78505521385536",
+      "builderPaymentWei": "12604639375938",
+      "senderNativeDeltaWei": "682180598501802",
+      "independentOriginalStateDiffMatches": true,
+      "strictlyInventoryFree": false
+    }
+  },
+  "acceptance": {
+    "familyCorrectness": "no new Family correctness verdict; prior valid receipts retained",
+    "fullOriginalCalldataDiagnostic": "matches outputs and gas with full prefix; limited environment fidelity",
+    "strictSingleTriggerBackrun": "NOT PASSED; trigger-only is not equivalent to full-prefix",
+    "naturalProductionHintDetectorPlannerSizingFinalSimEV": "NOT RUN",
+    "naturalCoreGrossTwentyPercentMatch": "NOT RUN; fixed competitor calldata is not own natural execution",
+    "singleReadyPerformance": "NOT RUN",
+    "combinedGraphPerformance": "NOT RUN",
+    "allImplAdaptationsIncludedInFinalPerformanceStage": true
+  },
+  "reconciliation": {
+    "query": [
+      "backrun"
+    ],
+    "tool": "analysis:tx-source-shape",
+    "result": "victim",
+    "scope": "same-block opposite-direction shape hint, agrees with prior log lead; not causal or public-mempool proof",
+    "source": "immutable canonical receipts served read-only to current tool-run; zero external RPC",
+    "manifestSha256": "6c0436a454cf405702063baddaa135140ee05f0b371d4d59d32a9a63cf76ff5e",
+    "retainedInvocationFailure": "generic --window unsupported; first invocation rc1 with zero calls, corrected TX-bound invocation rc0",
+    "newToolingDefect": false
+  },
+  "resources": {
+    "startedAt": "2026-10-10T21:10:08.690Z",
+    "endedAt": "2026-10-10T21:10:31.825Z",
+    "upstreamRequests": 1187,
+    "requestCap": 4000,
+    "wallCapMs": 720000,
+    "note": "correctness diagnostics with disk fork cache; runtime must not be used as Family/live stage timing"
+  },
+  "safety": {
+    "productionChanges": false,
+    "signing": false,
+    "publicBroadcast": false,
+    "liveStarted": false,
+    "defaultsChanged": false,
+    "originalReadyModified": false,
+    "actorBalanceNonceOrPermissionOverrides": false,
+    "isolatedEnvironmentProbeCodeOnly": true,
+    "ownedForkProcessesStopped": true,
+    "peerDiffUnchanged": true
+  },
+  "remaining": [
+    "Locate minimal prerequisite dependence of index3 while preserving actual signatures and same environment; do not inject balances or force failed trigger success.",
+    "Actual live backrun pipeline and own natural sizing/final sim/EV still required if that lane is proven.",
+    "Strict exact environment remains limited by prefix random/beacon-root fidelity; do not relabel this diagnostic as trusted causal gate pass.",
+    "Finish remaining correctness/IMPL gaps, then time every applicable Family using single Ready and subsequently representative combined graph; include V2/V3 and Curve plain/underlying."
+  ],
+  "artifacts": [
+    {
+      "role": "accounting.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/accounting.json",
+      "sha256": "820143f2c504306f4934a043778c14cd762a5765e38452eae36592e4588e211a",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/accounting.json"
+    },
+    {
+      "role": "boundary-derived-header.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/boundary-derived-header.json",
+      "sha256": "5d687f18353333b92d304956fb27764dcd697620f5a0587abe34f820b9a6696f",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/boundary-derived-header.json"
+    },
+    {
+      "role": "boundary-header-probe.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/boundary-header-probe.json",
+      "sha256": "1fff900e33b661a42af64dab7fa1e598376430f5aedfecf02847ae0c94a20fed",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/boundary-header-probe.json"
+    },
+    {
+      "role": "boundary-receipts.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/boundary-receipts.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/boundary-receipts.json"
+    },
+    {
+      "role": "boundary-result.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/boundary-result.json",
+      "sha256": "d38dbe1bd8bf57f3131f1680b13261179250b248b218b885dfd74ff0c453d699",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/boundary-result.json"
+    },
+    {
+      "role": "boundary-state-diff.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/boundary-state-diff.json",
+      "sha256": "310e1d7c1a5c29b26aab6bdcd4225ae5513584201022e8a0b7810bfbd429c08f",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/boundary-state-diff.json"
+    },
+    {
+      "role": "boundary-trace.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/boundary-trace.json",
+      "sha256": "47db232e458c2ad2e1819ba72c4c9f6ca2a952541f1f43f054c925970b06b2fc",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/boundary-trace.json"
+    },
+    {
+      "role": "canonical-block.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/canonical-block.json",
+      "sha256": "a4df20c184c54c5ae3db337e528c112d9981a619a78376d320f74793f4e91d85",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/canonical-block.json"
+    },
+    {
+      "role": "canonical-receipts.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/canonical-receipts.json",
+      "sha256": "3ab5ceeab3b314015b26e556ad22bd9c8a3d4e6d4aff5ea5e3caa88d183840ae",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/canonical-receipts.json"
+    },
+    {
+      "role": "canonical-source-shape-exit.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/canonical-source-shape-exit.json",
+      "sha256": "d0e14882bf93eadf3feff88b06e7763f851356afb0fa0d8b3710458849e9c080",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/canonical-source-shape-exit.json"
+    },
+    {
+      "role": "canonical-source-shape-v2-exit.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/canonical-source-shape-v2-exit.json",
+      "sha256": "739b28e912640f8f202b6fed018a1e951701c98dab226d3d955a07029497f62b",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/canonical-source-shape-v2-exit.json"
+    },
+    {
+      "role": "canonical-source-shape-v2.stderr.txt",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/canonical-source-shape-v2.stderr.txt",
+      "sha256": "764326d746c20392bdd55dda9d273856106d1f63d61329c20c983cbb9cf5758d",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/canonical-source-shape-v2.stderr.txt"
+    },
+    {
+      "role": "canonical-source-shape-v2.stdout.txt",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/canonical-source-shape-v2.stdout.txt",
+      "sha256": "3b2f4ba48bdcdb04abdfebd3f442136ea1b6aa042a9da48cf9bfc1d5c5e6ba00",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/canonical-source-shape-v2.stdout.txt"
+    },
+    {
+      "role": "canonical-source-shape.stderr.txt",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/canonical-source-shape.stderr.txt",
+      "sha256": "2e6dea958af72d0851d96a7d43d8ef7abd69e8cba16ea7ae95406c025f826797",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/canonical-source-shape.stderr.txt"
+    },
+    {
+      "role": "canonical-source-shape.stdout.txt",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/canonical-source-shape.stdout.txt",
+      "sha256": "7e2727949db9681c0e32c8012474d38645791a4cf4aa5e24d56bd6694a76e511",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/canonical-source-shape.stdout.txt"
+    },
+    {
+      "role": "causal.mjs",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/causal.mjs",
+      "sha256": "d9dcba8463518ea7dd051fb6906c67d30c9982571aad61f7aabce89c4d3bd08e",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/causal.mjs"
+    },
+    {
+      "role": "full-prefix-derived-header.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/full-prefix-derived-header.json",
+      "sha256": "443219d2cfb93c36ae11ebfcb8770d64dac56517dcb8f2174f619180434d6f3b",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/full-prefix-derived-header.json"
+    },
+    {
+      "role": "full-prefix-header-probe.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/full-prefix-header-probe.json",
+      "sha256": "1fff900e33b661a42af64dab7fa1e598376430f5aedfecf02847ae0c94a20fed",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/full-prefix-header-probe.json"
+    },
+    {
+      "role": "full-prefix-receipts.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/full-prefix-receipts.json",
+      "sha256": "ce53dd593323937217db97cd6ffd57e5f1b975114b052659faaf74a8a12d34ec",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/full-prefix-receipts.json"
+    },
+    {
+      "role": "full-prefix-result.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/full-prefix-result.json",
+      "sha256": "6ae4a92cc6fe2e2a534a2bfaa1eabdba62133e44138f22c91d6bf6052ebefeff",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/full-prefix-result.json"
+    },
+    {
+      "role": "full-prefix-state-diff.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/full-prefix-state-diff.json",
+      "sha256": "e1b4ae2c9ba939f28d0ae70d897fbd260f6b26f64126a9976e7568ac0bcf41ad",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/full-prefix-state-diff.json"
+    },
+    {
+      "role": "full-prefix-trace.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/full-prefix-trace.json",
+      "sha256": "392997c0a37e427d077e243ae112ec1f0c84aac187ebd6078fd0990ef18dc84b",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/full-prefix-trace.json"
+    },
+    {
+      "role": "reconcile-v2.mjs",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/reconcile-v2.mjs",
+      "sha256": "23076fc730266de00564a00eac1b72aacc63d97a5cfea8824145c3173a6c4efc",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/reconcile-v2.mjs"
+    },
+    {
+      "role": "reconcile.mjs",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/reconcile.mjs",
+      "sha256": "ae08a8eb127d02bc60fe9ef6b0c824337f6ac386a9d3d50b08927275e886ef3f",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/reconcile.mjs"
+    },
+    {
+      "role": "results.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/results.json",
+      "sha256": "7fa540cd8ecf71e89031e0ea77cf9917225388e9beeaf22373b1a849adff7068",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/results.json"
+    },
+    {
+      "role": "run.log",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/run.log",
+      "sha256": "dcd268ee1c169c2f2d5268b62c8abc36a9f56bc151890cf3e7b89f3cee6d18b5",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/run.log"
+    },
+    {
+      "role": "scope.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/scope.json",
+      "sha256": "ff7a9f499b31aa1cda7145fbd21a24e7eb1f3a9a32b9e2f1dee88684adda424a",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/scope.json"
+    },
+    {
+      "role": "signed-prefix.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/signed-prefix.json",
+      "sha256": "994d3fd9c6ef1aeb2b7dde488f9125701ad88ff6e33674a3a03d4acd979c8973",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/signed-prefix.json"
+    },
+    {
+      "role": "tools-backrun.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/tools-backrun.json",
+      "sha256": "6c0436a454cf405702063baddaa135140ee05f0b371d4d59d32a9a63cf76ff5e",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/tools-backrun.json"
+    },
+    {
+      "role": "trigger-only-derived-header.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/trigger-only-derived-header.json",
+      "sha256": "a21532d9b841c268336c504788a1b1f876c26564c921510519ebb97310442f56",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/trigger-only-derived-header.json"
+    },
+    {
+      "role": "trigger-only-header-probe.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/trigger-only-header-probe.json",
+      "sha256": "1fff900e33b661a42af64dab7fa1e598376430f5aedfecf02847ae0c94a20fed",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/trigger-only-header-probe.json"
+    },
+    {
+      "role": "trigger-only-receipts.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/trigger-only-receipts.json",
+      "sha256": "2659ad0d7c783cada187266ce121149088776f7e9f19fa8d45e17b0a48d0e7fc",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/trigger-only-receipts.json"
+    },
+    {
+      "role": "trigger-only-result.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/trigger-only-result.json",
+      "sha256": "db0f73fcaa5f3b297501f13632bbd0516d5066ff0f51b24165743bd7958242fa",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/trigger-only-result.json"
+    },
+    {
+      "role": "trigger-only-state-diff.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/trigger-only-state-diff.json",
+      "sha256": "310e1d7c1a5c29b26aab6bdcd4225ae5513584201022e8a0b7810bfbd429c08f",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/trigger-only-state-diff.json"
+    },
+    {
+      "role": "trigger-only-trace.json",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/trigger-only-trace.json",
+      "sha256": "47db232e458c2ad2e1819ba72c4c9f6ca2a952541f1f43f054c925970b06b2fc",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/native-causal-20261011.0wJXKh/trigger-only-trace.json"
+    },
+    {
+      "role": "original trace",
+      "path": "/Users/eunice/src/MEV/logs/tx5b6114-live-gap-20261009.XGipla/tx5b6114-live-gap-20261009.z9UKuz/0x5b6114b5/trace.json",
+      "sha256": "d7b01f8c28f1deee406cf9eaf290f7e3460c62cb9670a44baf18dab699e545c8"
+    },
+    {
+      "role": "original native state diff",
+      "path": "/Users/eunice/src/MEV/logs/tx5b6114-live-gap-20261009.XGipla/tx5b6114-live-gap-20261009.z9UKuz/0x5b6114b5/prestate-diff.json",
+      "sha256": "829ab825f7b0ce8018bf5188c39c67ac570da26323451463639fa6fc2f1118b5"
+    },
+    {
+      "role": "prior immutable replay record",
+      "path": "/Users/eunice/src/MEV/logs/replay-history/1/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663/20261011-native-fivehop-bb-gap-fx7zdx.json",
+      "sha256": "32dec79c46f8fc002e56b2ad76543784bd951a1047c99b2765af46952ed0d576"
+    },
+    {
+      "role": "raw cloud archive",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh-raw.tgz",
+      "sha256": "3fc9b68a5f2358cbf3f0734c38f789822098a8981101e0f42c4cce422835602c"
+    },
+    {
+      "role": "assertion-based report producer",
+      "path": "/Users/eunice/src/MEV/logs/native-causal-20261011-staging/collect.mjs",
+      "sha256": "2423ed6633a1322e502a9da240fae5df85766a5edb756966a88a6cfc033f94b1"
+    }
+  ]
+}
