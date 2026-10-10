@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "0f6684ff2871a2703711044af711c21bfa4a8646",
+  "claim": "Additional natural single-block pricing and V3 same-state execution, plus InfiniFi synthetic production-coordinator refresh regression. Not full adaptation, opportunity, formal merge or performance acceptance.",
+  "productionSourceTreeSha256": "85546d105030100a0e65a70fb66d8fa86833679d8ef83606cf7ff85c6c28f9e5",
+  "productionCodeChanged": false,
+  "changedTest": {
+    "path": "listener/src/searcher/venues/protocols/erc4626-family/test/infinifi-contract.ts",
+    "sha256": "406af80468dd8f2e4f05e51358c3506b224c4022d439d83f5eae074bdc199e0a",
+    "scope": "One offline integration regression using the actual catalog, strict issuer, runtime root, coordinator, shared Exact and buildEffectiveMids. All provider responses and identity simulation effects in this test are synthetic."
+  },
+  "historicalAnchor": {
+    "tx": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+    "N": 25944594,
+    "blockHash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+    "stateAndEnvironment": "N block end plus N execution environment, not original transaction pre-call state",
+    "pool": "0x071828acc755314e687448703775f22194f56867",
+    "vault": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb"
+  },
+  "naturalIntegration": {
+    "originalReady": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/ready.json",
+    "originalReadySha256": "cd8c69adb1c25cd007b3b45e6fa7e5d11ecac45b6d57e721fa2c720f65aa3a5a",
+    "originalUnchanged": true,
+    "runner": "logs/v3-natural-reference-20261010.RCIyYe/runner-with-scope.mts",
+    "runnerSha256": "234ec8a5a9e5929c5b272e1be41bc849358a7dee51828477a14ab7ab846dfede",
+    "attempts": [
+      {
+        "directory": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-natural-ready-2",
+        "result": "production-ready-and-prices-complete",
+        "readySha256": "623db731452c9e0bde558949342b642d8772a6687c56178ca8d07902f574a2e2",
+        "pricesSha256": "51ae8e594a89acff9b5fbc6d2cb0d0d934f724a02117d6afedd3bbb1c212557d",
+        "scope": ["balancer-v3", "univ3-standard", "protocol:erc4626", "curve-plain", "protocol:wsteth"]
+      },
+      {
+        "directory": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-natural-ready-3",
+        "result": "production-ready-and-prices-complete",
+        "readySha256": "91a4f8286f1f0cfe60ecd6bb76cd7aeed911edc55d5d9ac7cd41fd4c8a8270c7",
+        "pricesSha256": "45f93ea4e10f7cd57c55cb56e508da1e4f0d050e99927856a2583aa9fbe83481",
+        "scope": ["balancer-v3", "univ3-standard", "protocol:erc4626", "curve-plain", "protocol:wsteth", "fluid-dex"],
+        "additionalFluidCandidates": 0,
+        "wstethCandidates": 0,
+        "note": "No shorter valuation route was discovered. Neither absent candidate set is a protocol rejection."
+      }
+    ],
+    "graphEdges": 24,
+    "rawRows": 24,
+    "effectiveQuoted": 19,
+    "effectiveMissingValuation": 5,
+    "candidateAccounting": { "total": 11, "verified": 10, "terminalRejected": 0, "retryable": 1, "remainingUnaccounted": 0 },
+    "retainedRetryable": {
+      "family": "univ3-standard",
+      "candidate": "0x7d697d789ee19bc376474e0167bade9535a28cf4",
+      "reason": "pool-fee did not return normally; unresolved identity, not a proven rejection or RPC root-cause diagnosis"
+    },
+    "sourceBeforeAfterArtifactSha256": "6be2841d336c12c763f4b81b1696f5d717b3a667134530607266c56742648360",
+    "noInjectedCandidatesEdgesOrAmounts": true,
+    "activation": "Process-local flags only; production defaults unchanged"
+  },
+  "referenceDiagnosis": {
+    "policyFile": "listener/src/searcher/blockscan-effective-mid.ts",
+    "policy": "Reference inputs use shortest successful forward effective paths of at most three hops. Depth-three tokens can quote outgoing edges, but their output cannot seed depth-four reference inputs.",
+    "observedForwardAmounts": [
+      { "pool": "0x109830a1aaad605bbf02a9dfa7b0b92ec2fb7daa", "from": "WETH", "to": "wstETH", "amountIn": "2000000000000000", "amountOut": "1608179666215318" },
+      { "pool": "0x2889302a794da87fbf1d6db415c1492194663d13", "from": "wstETH", "to": "crvUSD", "amountIn": "1608179666215318", "amountOut": "4951593393237176093" },
+      { "pool": "0x57064f49ad7123c92560882a45518374ad982e85", "from": "crvUSD", "to": "sUSDe", "amountIn": "4951593393237176093", "amountOut": "3969838393931800405" },
+      { "pool": "0x071828acc755314e687448703775f22194f56867", "from": "sUSDe", "to": "siUSD", "amountIn": "3969838393931800405", "amountOut": "4549931237571597530" }
+    ],
+    "conclusion": "Same-block sUSDe reference is now natural. siUSD lies at depth four in this graph, and iUSD is beyond it. V3 siUSD input and both InfiniFi inputs remain missing-valuation. A successful fourth outgoing quote is not a production siUSD reference.",
+    "policyChanged": false,
+    "priorBorrowedIusdInput": "5131980894925000000",
+    "priorBorrowedInputEvidence": "docs/research/reports/siusd-gateway-implementation-20261010.json",
+    "borrowedInputLimit": "Existing iUSD donor-input deposit execution remains valid. No siUSD tokenIn donor row was found in that saved production table; redeem production reference is still unmet."
+  },
+  "v3Execution": {
+    "path": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/v3-natural-reference-dual-1.json",
+    "sha256": "1a2081c06371e62e309a4de58262d5287b8b461a954e9df41d4ee17fb4b9a593",
+    "result": "pass",
+    "amountGroups": 6,
+    "positiveExecutions": 12,
+    "measuredDirections": 2,
+    "sameStateRawDelta": "0",
+    "naturalReferenceInput": "3969838393931800405",
+    "naturalReferenceOutput": "4549931237571597530",
+    "referenceDirection": "sUSDe->siUSD",
+    "productionReferenceComplete": false,
+    "runtimeConstructionRpc": 0,
+    "forkStopped": true,
+    "executorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+    "cumulativeRetainedCoverage": { "measuredDirections": 36, "referenceDirections": 33, "totalDirections": 36, "newReferenceDirectionsThisSupplement": 0 },
+    "coverageNote": "Strengthens the already counted sUSDe direction with same-block natural reference. Does not increment retained 33/36, which previously included borrowed input. Not a fresh all-pool rerun."
+  },
+  "offlineRefreshRegression": {
+    "syntheticStates": 11,
+    "checks": [
+      "Real production strict issuer admits the synthetic InfiniFi variant, producing two directions; no manually admitted instance",
+      "Actual production pricing index selects only InfiniFi stateKey for each-block refresh",
+      "Quiet blocks change current effective while preserving startup raw map and rawMidSource",
+      "InfiniFi Exact state-cache sentinel invalidates; unrelated state-cache sentinel remains",
+      "Both directions issue real Family quote request programs; synthetic transport failure uses central bounded retries",
+      "Repeated quote failures, pause and lost ENTRY_POINT role withdraw prices, not carry stale rows",
+      "Negative unaccruedYield blocks redeem while the supported deposit direction remains quoted",
+      "Changed registry binding stays unpriced on a second quiet block; restoring the original valid binding permits recovery",
+      "Unrelated on-touch V2 pools retain original rows and perform no new reserve reads"
+    ],
+    "notProven": ["Real chain dependency mutation publication", "Automatic re-attestation to a permanently replaced dependency", "Real Exact cache population/hit-to-invalidation end-to-end: this regression checks injected cache sentinels only", "Latency or representative load"]
+  },
+  "checks": {
+    "familyContracts": { "passed": 44, "failed": 0, "log": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-refresh-final-contracts-1.log", "sha256": "15aaa34e42035aa00bcbd1adbedf76355df6dc623b12e40d52d44faa41b58115" },
+    "buildLive": { "exitCode": 0, "log": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-refresh-build-1.log", "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933" },
+    "targetedTypecheck": { "config": "listener/tsconfig.json", "ownedDiagnostics": 0, "unchangedImportedDiagnostics": 5, "fullRepoTypecheckPassed": false, "log": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-refresh-typecheck-config-1.log", "sha256": "54b7ccc3a160d42e7861531a40489e570b7450bf65bc5c66663f612eabb4a2ed" }
+  },
+  "retainedFailures": [
+    { "file": "infinifi-refresh-1.log", "cause": "New test incorrectly read lineageId from instance.identity instead of instance.descriptor", "sha256": "a405d11746bddf377fc7b8815dcf139c21709821737794103df37dde5070b477" },
+    { "file": "infinifi-refresh-2.log", "cause": "New test assumed one attempt for injected RPC failures; current central policy retries twice. Assertion corrected to verify four total calls for two directions, two otherwise", "sha256": "adfe879c9b72e105fc1398cbaaa7d97373db7eb37e1b3bd6f6669f998d7583e9" },
+    { "file": "infinifi-refresh-typecheck-1.log", "cause": "Two owned test typing errors, now corrected; initial ad-hoc compiler invocation also lacked the repository strict options" },
+    { "file": "infinifi-refresh-typecheck-2.log", "cause": "Owned errors gone; NodeNext invocation added a module-policy diagnostic. Final targeted run uses actual repository config and retains five previously recorded imported errors" }
+  ],
+  "reconciliation": {
+    "query": ["universe", "rebuild", "status"],
+    "manifest": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-refresh-tool-selection.json",
+    "manifestSha256": "6897c79b1b8c236cf9ba757cd7347c0116b51e3ebacedd01a77bb634b973d02c",
+    "executedId": "listener:searcher:universe-rebuild-status",
+    "exitCode": 0,
+    "log": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-natural3-canonical-status.log",
+    "logSha256": "0a57cd69ed154a8398a333f1dbde7fe85fffcb4cb93ea7259a84d0f0d7840961",
+    "result": "Agrees with direct checkpoint/Graph inspection; checkpoint READY does not imply every candidate admitted or every effective row quoted"
+  },
+  "manifestCheck": { "exitCode": 0, "log": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-refresh-manifest-check-1.log", "sha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef" },
+  "reportVerification": { "result": "pass", "artifactHashChecks": 19, "independentlyRecheckedExecutionDeltas": 12, "log": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-refresh-report-check-1.log", "sha256": "12aa874bccb7da0aa8621b4d0a93284f5e008bc453bca5f31eb7fa52325bc1e0" },
+  "review": {
+    "status": "passed-narrow-scope",
+    "agent": "01a12331-fd0e-7761-b40d-1e1bb445a32c",
+    "scope": "New test and this supplement's underlying evidence only; not a fourth review of prior production implementation",
+    "independentChecks": ["Targeted new regression 1/1 passed", "Final 44/44 log and test SHA checked", "Natural Ready/price artifacts and V3 twelve quote/receipt deltas checked", "Actual production source fingerprint recomputed and unchanged"],
+    "remainingBlockingFindings": [],
+    "boundaries": ["Synthetic dependency and transport transitions are not historical execution", "Cache invalidation uses injected sentinels, not a shared production Exact-cache hit lifecycle", "Restoring old binding does not prove re-attestation to a new binding", "V3 reference coverage stays 33/36; no performance verdict"]
+  },
+  "performance": { "status": "NOT RUN", "requiredFor": "All applicable task adaptations and IMPL additions, including Balancer V2/V3 and Curve plain/underlying", "order": "After correctness: per-protocol single-Ready first, representative combined graph second; existing median/failure/preparation rules unchanged" },
+  "safety": { "liveStarted": false, "deployment": false, "signing": false, "broadcast": false, "newBranchOrWorktree": false, "peerChangesPreserved": true, "originalCoffeeReadyChanged": false },
+  "limitations": [
+    "Current source has not rerun the entire historical Family corpus; referenced prior results keep their own source and harness fingerprints",
+    "Same-state leg equality does not establish original transaction pre-call equality or complete opportunity execution",
+    "No formal adapter_merge_ready or production_gap_fixed verdict is claimed",
+    "All missing reference inputs, retryables, prior failures and unrun performance remain open"
+  ]
+}

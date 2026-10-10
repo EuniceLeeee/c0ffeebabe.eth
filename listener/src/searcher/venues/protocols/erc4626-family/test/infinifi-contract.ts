@@ -19,6 +19,19 @@ import { inspectRuntime } from "../../../../test/runtime-program-testkit.js";
 import { RuntimeAmountProgram } from "../../../../../adapters/runtime-amount-program.js";
 import { createBlockScanSimAmountSelector } from "../../../../simulator/blockscan-sim-amount-selector.js";
 import { assertInfiniFiEffects } from "./infinifi-historical-dual.js";
+import { ADDR } from "../../../../../shared/constants/addresses.js";
+import { runUniv2Lifecycle } from "../../../../architecture-migration-fixture-replay.js";
+import { buildFamilyRouteGraphView } from "../../../../adapter-family-graph-runtime.js";
+import { createAdapterFamilyExactQuoteCache, type AdapterExactStateCacheAddress } from "../../../../adapter-family-exact-quote-cache.js";
+import { buildEffectiveMids } from "../../../../blockscan-effective-mid.js";
+import { createStrictCentralAdapterRuntime } from "../../../../strict-central-adapter-runtime.js";
+import { runStrictFamilyLifecycle } from "../../../../strict-family-lifecycle-runner.js";
+import { StrictCurrentRuntimeCoordinator } from "../../../../strict-current-runtime-coordinator.js";
+import { StrictProductionRuntimeRoot, type StrictProductionRuntimeSession } from "../../../../strict-production-runtime-session.js";
+import { blockScanEdgeKey, createVerifiedGraphView } from "../../../blockscan-state-capability.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
+import { UNIV2_PAIR_INTERFACE, UNIV2_TOKEN_INTERFACE } from "../../../swaps/univ2-family/codec.js";
+import { ERC4626_FAMILY_ID, INFINIFI_LINEAGE_ID } from "../manifest.js";
 
 // Synthetic contract tests only; no RPC or historical identity claim.
 const addr = (n: number) => ethers.getAddress(ethers.toBeHex(n, 20));
@@ -303,4 +316,169 @@ test("historical observer rejects missing, duplicate, wrong-sign and old-invento
     (x: typeof good) => { x.tokenDeltas[2]!.delta = 1n; },
     (x: typeof good) => { x.nativeDeltas[0]!.delta = -1n; },
   ]) { const bad = structuredClone(good); mutate(bad); assert.throws(() => check(bad)); }
+});
+
+test("production coordinator refreshes InfiniFi without pool activity, withdraws failed prices and recovers without refreshing unrelated pools", async () => {
+  // Offline wiring evidence: synthetic observations/state/simulation effects,
+  // unchanged production Family, catalog, strict issuer, coordinator and Exact.
+  // This is not historical EVM parity, an opportunity or a latency result.
+  const at = (tick: number) => tick === 0 ? source : ({ number: source.number + tick,
+    generation: source.generation + tick, hash: ethers.id("infinifi-offline-source-" + tick) });
+  const pools = [addr(201), addr(202)], poolTokens = [asset, vault];
+  type Mode = "healthy" | "rpc-failed" | "paused" | "role-disabled" | "loss" | "binding-changed";
+  let mode: Mode = "healthy";
+  const observed: { lane: string; method: string; target: string; tick: number }[] = [];
+  function runtime(tick: number, lane: string) {
+    const current = at(tick);
+    return createStrictCentralAdapterRuntime({ executor, verifiedActors: { "erc4626-probe-actor": actor },
+      generationFence: { assertCurrent(generation, requested) { assert.equal(generation, current.generation); assert.deepEqual(requested, current); } },
+      simulator: { async simulate({ request, source: requested }) {
+        assert.deepEqual(requested, source); assert.equal(tick, 0);
+        assert(["infinifi-active-deposit", "infinifi-active-redeem"].includes(request.id));
+        const response = active(request.id.endsWith("deposit") ? "deposit" : "redeem");
+        assert(response.ok); return { data: response.data, effects: response.effects };
+      } },
+      provider: {
+        async getCode(_address, block) { assert.equal(block, current.number); return "0x6001600055"; },
+        async getStorage(address, slot, block) {
+          assert.equal(block, current.number); assert.equal(slot, INFINIFI_SLOT);
+          assert([lower(ys), lower(INFINIFI_GATEWAY)].includes(lower(address)));
+          return word(BigInt(lower(address) === lower(ys) ? yi : gi));
+        },
+        async call(request, block) {
+          assert.equal(block, current.number);
+          const target = lower(request.to), selector = request.data.slice(0, 10);
+          if (pools.some(p => lower(p) === target)) {
+            assert.equal(selector, UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector);
+            observed.push({ lane, method: "getReserves", target, tick });
+            return UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves", [1000n * amount, 2000n * amount, source.number]);
+          }
+          if (selector === ABI.getFunction("balanceOf")!.selector) {
+            const holder = lower(String(ABI.decodeFunctionData("balanceOf", request.data)[0]));
+            assert(pools.some(p => lower(p) === holder));
+            return UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [target === lower(ADDR.WETH) ? 1000n * amount : 2000n * amount]);
+          }
+          // Deliberately non-standard synthetic vault, so the real lifecycle
+          // proceeds to registry-backed InfiniFi instead of standard ERC4626.
+          if (["totalAssets", "totalSupply", "convertToShares", "convertToAssets", "previewDeposit", "previewRedeem"]
+            .some(name => ERC4626_INTERFACE.getFunction(name)!.selector === selector)) return word(0n);
+          const parsed = ABI.parseTransaction({ data: request.data }); assert(parsed);
+          observed.push({ lane, method: parsed.name, target, tick });
+          if (parsed.name === "aggregate3") {
+            if (mode === "rpc-failed") throw new Error("synthetic offline quote transport failure");
+            const calls = parsed.args[0]; assert.equal(calls.length, 2);
+            assert.equal(lower(String(calls[0].target)), lower(ys));
+            assert.equal(ABI.parseTransaction({ data: calls[0].callData })!.name, "distributeInterpolationRewards");
+            assert.equal(lower(String(calls[1].target)), lower(vault));
+            const q = ABI.parseTransaction({ data: calls[1].callData })!;
+            // Canned changing response; NOT a second implementation of pricing.
+            const value = out(q.name === "previewDeposit", BigInt(q.args[0])) + BigInt(tick);
+            return ABI.encodeFunctionResult("aggregate3", [[{ success: true, returnData: "0x" }, { success: true, returnData: word(value) }]]);
+          }
+          if (parsed.name === "hasRole" && mode === "role-disabled") return word(0n);
+          if (parsed.name === "paused" && mode === "paused") return word(1n);
+          if (parsed.name === "unaccruedYield" && mode === "loss") return word(ethers.MaxUint256);
+          if (parsed.name === "getAddress" && parsed.args[0] === "yieldSharing" && mode === "binding-changed") return word(BigInt(addr(999)));
+          const reply = reads([{ id: "offline", kind: "eth-call", to: request.to, data: request.data, completion: "return-data" }])[0]!;
+          assert(reply.ok); return reply.data;
+        },
+      },
+    });
+  }
+  const event = ERC4626_INTERFACE.encodeEventLog(ERC4626_INTERFACE.getEvent("Withdraw")!,
+    [INFINIFI_GATEWAY, actor, INFINIFI_GATEWAY, out(false, amount), amount]);
+  const admitted = await runStrictFamilyLifecycle({ catalog, familyId: ERC4626_FAMILY_ID, source,
+    observations: [{ kind: "log", address: vault, ...event, source }], runtime: runtime(0, "identity") });
+  assert.equal(admitted.instances.length, 1);
+  assert.equal(Reflect.get(admitted.instances[0]!.descriptor, "lineageId"), INFINIFI_LINEAGE_ID);
+  assert.equal(admitted.instances[0]!.routes.length, 2);
+  const background = await Promise.all(pools.map((pool, i) => runUniv2Lifecycle(source, {
+    pool, factory: addr(203), token0: ADDR.WETH, token1: poolTokens[i]!,
+    reserves: { reserve0: 1000n * amount, reserve1: 2000n * amount, blockTimestampLast: source.number },
+  }, catalog)));
+  const instances = [...admitted.instances, ...background.flatMap(r => r.instances)];
+  const edges = buildFamilyRouteGraphView({ routes: instances.flatMap(instance => instance.routes.map((route, i) => ({
+    family: catalog.forFamily(instance.familyId), descriptor: instance.descriptor, route, handle: instance.routeHandles[i],
+  }))) }).edges;
+  assert.equal(edges.length, 6);
+  const root = new StrictProductionRuntimeRoot({ catalog, readySource: source, readyGraph: edges, readyInstances: instances, readyFundingAssets: [] });
+  const ownKeys = edges.filter(e => lower(e.instanceKey!) === lower(vault)).map(blockScanEdgeKey);
+  assert.equal(ownKeys.length, 2);
+  const unrelatedKeys = edges.map(blockScanEdgeKey).filter(k => !ownKeys.includes(k));
+  const stateKey = root.pricingIndex().stateKeyByEdgeKey.get(ownKeys[0]!)!;
+  assert.deepEqual(root.pricingIndex().perBlockRefreshStateKeys, [stateKey]);
+  const cache = createAdapterFamilyExactQuoteCache();
+  const coordinator = new StrictCurrentRuntimeCoordinator(request => root.createSession({
+    source: request.source, runtime: runtime(request.source.number - source.number, "raw"), fundingAssets: [],
+    kind: request.purpose === "exact-execution" ? "exact" : "pricing", touchedPools: request.touchedPools,
+    requiredEdgeIds: request.requiredEdgeIds, control: request.control,
+  }), () => {}, undefined, async (pricing, control, _backend, reuse) => {
+    const current = reuse?.quoteGraph ?? pricing;
+    const requested = { number: current.sourceBlock, hash: current.sourceBlockHash, generation: current.generation };
+    let exact: StrictProductionRuntimeSession | undefined;
+    return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, previous: reuse?.previous,
+      touchedStateKeys: reuse?.touchedStateKeys, control, weth: ADDR.WETH, gasCostWei: null, enumerationSpreadBps: 50, concurrency: 2,
+      prepareQuote: async requiredEdgeIds => { exact = await root.createSession({ source: requested,
+        runtime: runtime(requested.number - source.number, "exact"), fundingAssets: [], kind: "exact", requiredEdgeIds, control }); },
+      quote: async request => { assert(exact); const quoted = await exact.issueExact({ ...request, executor, runtimeEvidence: [] });
+        assert("amountIn" in quoted); return quoted; },
+    });
+  }, cache);
+  async function step(tick: number) {
+    observed.length = 0;
+    const current = at(tick), touched = new Set<string>();
+    const graph = createVerifiedGraphView({ id: "infinifi-offline-" + tick, edges, generation: current.generation,
+      sourceBlock: current.number, sourceBlockHash: current.hash, completenessWatermark: current.number,
+      familyIdForEdge: e => root.pricingIndex().familyIdByEdgeKey.get(blockScanEdgeKey(e))!,
+      perSourceCoverage: [...new Set(instances.map(i => i.familyId))].map(familyId => ({ familyId,
+        sourceId: "offline-fixture", sourceFingerprint: "infinifi-refresh-contract", completeThroughBlock: current.number, completeThroughHash: current.hash })),
+    });
+    await coordinator.prepareCoarsePricing({ graph, deadlineAtMs: Date.now() + 10000, touchedPools: touched,
+      canonicalActivity: { source: current, parentHash: tick === 0 ? ethers.ZeroHash : at(tick - 1).hash, touchedStateKeys: touched, complete: true } });
+    assert.equal(touched.size, 0);
+    const snapshot = coordinator.latestPricingSnapshot()!; assert.equal(snapshot.sourceBlock, current.number);
+    if (tick > 0) {
+      assert(!observed.some(r => r.lane === "raw"), "must not reread startup raw mids");
+      assert(!observed.some(r => r.method === "getReserves"), "unrelated on-touch pools must carry");
+      assert.equal(observed.filter(r => r.method === "aggregate3").length, mode === "rpc-failed" ? 4 : 2,
+        "both directions refresh; transport failure uses the central bounded retry: " + mode);
+    }
+    return snapshot;
+  }
+  const before = await step(0);
+  assert.equal(before.mids.size, 6); assert.equal(before.effectiveMids!.rows.size, 6);
+  assert([...before.effectiveMids!.rows.values()].every(r => r.status === "quoted"));
+  const sentinel: AdapterExactStateCacheAddress = { familyRuntimeIdentity: {}, familyId: ERC4626_FAMILY_ID,
+    instanceKey: admitted.instances[0]!.instanceKey, routeKey: admitted.instances[0]!.routes[0]!.routeKey, stateKey,
+    instanceFingerprint: "01".repeat(32), routeBindingFingerprint: "02".repeat(32), capabilityHash: "03".repeat(32),
+    compatibilityFingerprint: "04".repeat(32), methodId: "sentinel", methodIndex: 0, methodOrderFingerprint: "05".repeat(32),
+    requestFingerprint: "06".repeat(32), amountIn: 1n, executor, source };
+  const cached = { trustedResults: [returned("sentinel", "0x6000")], roundFingerprints: ["07".repeat(32)], evidenceRefs: [] };
+  const unrelated = { ...sentinel, stateKey: root.pricingIndex().stateKeyByEdgeKey.get(unrelatedKeys[0]!)! };
+  assert(cache.storeState(sentinel, cached)); assert(cache.storeState(unrelated, cached));
+  const after = await step(1);
+  assert(!cache.lookupState({ ...sentinel, source: at(1) })); assert(cache.lookupState({ ...unrelated, source: at(1) }));
+  for (const key of ownKeys) {
+    assert.notEqual(after.effectiveMids!.rows.get(key)!.amountOut, before.effectiveMids!.rows.get(key)!.amountOut);
+    assert.deepEqual(after.effectiveMids!.rows.get(key)!.quotedAt, at(1));
+  }
+  const modes: Mode[] = ["rpc-failed", "rpc-failed", "healthy", "paused", "role-disabled", "loss", "binding-changed", "binding-changed", "healthy"];
+  for (const [i, nextMode] of modes.entries()) {
+    mode = nextMode; const tick = i + 2, snapshot = await step(tick);
+    assert.strictEqual(snapshot.mids, before.mids); assert.deepEqual(snapshot.rawMidSource, source);
+    for (const key of unrelatedKeys) {
+      assert.strictEqual(snapshot.effectiveMids!.rows.get(key), before.effectiveMids!.rows.get(key));
+      assert.equal(snapshot.pricingProvenanceByEdgeKey!.get(key), "carried");
+    }
+    for (const key of ownKeys) {
+      const row = snapshot.effectiveMids!.rows.get(key)!;
+      const allowed = nextMode === "healthy" || (nextMode === "loss" && lower(row.tokenIn) === lower(asset));
+      assert.equal(row.status, allowed ? "quoted" : "quote-failed", nextMode + ":" + row.tokenIn);
+      if (allowed) { assert.deepEqual(row.quotedAt, at(tick)); assert(snapshot.coverage.resolvedEdgeKeys.includes(key)); }
+      else {
+        assert.equal(row.amountOut, null); assert.equal(row.quotedAt, undefined);
+        assert(snapshot.coverage.unresolvedEdgeKeys.includes(key)); assert(!snapshot.coverage.resolvedEdgeKeys.includes(key));
+      }
+    }
+  }
 });
