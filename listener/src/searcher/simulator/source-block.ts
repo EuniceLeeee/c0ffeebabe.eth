@@ -118,12 +118,14 @@ export class SourceBlockSimulator {
   }
 
   captureInput(plan: ResolvedPlan, context: Pick<Context, "source" | "header">, scriptHex?: string): SourceBlockExecutionInput {
-    const tokens: string[] = [];
+    const tokens = [...(plan.simulationTokens ?? [])];
     const visit = (node: ResolvedPlan["root"]) => { tokens.push(node.tokenIn, node.tokenOut); node.children.forEach(visit); };
     visit(plan.root);
+    const compiled = bytesToHex(compilePlan(plan.root, this.options.executor));
+    assert(scriptHex === undefined || scriptHex.toLowerCase() === compiled, "source-block script does not match plan");
     return buildSourceBlockExecutionInput({ ...context, ...this.options, profitToken: plan.profitToken,
       funding: this.options.fundingForPlan(plan), tokens,
-      scriptHex: scriptHex ?? bytesToHex(compilePlan(plan.root, this.options.executor)) });
+      scriptHex: compiled });
   }
   async simulate(plan: ResolvedPlan, context: Context): Promise<SourceBlockSimulationResult> {
     return this.simulateExecutionInput(this.captureInput(plan, context), context);

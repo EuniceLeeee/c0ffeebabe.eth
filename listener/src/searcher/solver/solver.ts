@@ -50,6 +50,9 @@ const BLOCKSCAN_AMOUNT_MULTIPLIERS = [1n, 10n, 100n, 1000n] as const;
 
 export interface ResolvedPlan {
   root: ResolvedPlanNode;
+  /** Additional token observations carried by opaque/flattened execution.
+   * Extends the simulator's safety set; never replaces tree-derived tokens. */
+  simulationTokens?: readonly string[];
   netProfit: bigint;
   profitToken: string;
   flashAmount: bigint;

@@ -5,6 +5,9 @@ import test from "node:test";
 import { createBlockScanSimAmountSelector } from "../simulator/blockscan-sim-amount-selector.js";
 import { createTrialLimiter, SimAmountNoOpportunityError } from "../simulator/sim-amount-selector.js";
 import type { SimulationResult } from "../simulator/botvm-simulator.js";
+import { SourceBlockSimulator, sourceBlockRevmRequest } from "../simulator/source-block.js";
+import * as registry from "../../adapters/registry.js";
+import { RuntimeAmountProgram, runtimeAmountFlowAdapter } from "../../adapters/runtime-amount-program.js";
 
 const addr = (n: string) => `0x${n.repeat(40)}`;
 const executor = addr("a"), token = addr("b"), middle = addr("c");
@@ -230,6 +233,49 @@ test("runtime trial constructs from admitted legs without any hop Exact and pres
   assert(tried.length > 4, "positive runtime trials must retain fine search");
   assert.equal(f.quotes.length, 0); assert.equal(f.builds.length, 0);
   assert.equal(finalists.length, 3); assert(modes.every(mode => mode === "runtime-actual"));
+});
+
+test("runtime selection preserves intermediate token observations through finalists and source-block capture", async () => {
+  const f = fixture();
+  const third = addr("9"), tokens = [token, middle, third].sort();
+  f.plan.tokenPath.edges[1].tokenOut = third;
+  f.plan.tokenPath.edges.push({ adapterId: "skip", target: addr("3"), tokenIn: third, tokenOut: token });
+  f.session.issueExact = async () => { throw new Error("runtime observations must not issue Exact"); };
+  f.session.buildExecution = () => { throw new Error("runtime observations must not use quoted fallback"); };
+  f.session.buildRuntimeAmountLeg = () => ({ actionAdapterId: "fixture-owned",
+    program: `0x${Buffer.from(new RuntimeAmountProgram().constant(1, 1n).bytes()).toString("hex")}` });
+  if (!registry.listAll().some(a => a.id === runtimeAmountFlowAdapter.id)) registry.register(runtimeAmountFlowAdapter);
+  const fundingId = "fixture-source-observation-funding";
+  registry.register({ id: fundingId, isWrapper: true, field2Offset: null, matchTrace: () => false,
+    descriptor: { adapterId: fundingId, lineage: "erc20-infra", edgeKind: null,
+      action: "guard", canSendValue: false, leavesStandingPositionDefault: false },
+    encode: (_node, _executor, inner) => inner });
+  const fundingRoot = f.session.buildFundingRoot;
+  f.session.buildFundingRoot = (request: any) => ({ ...fundingRoot(request), adapterId: fundingId });
+  const header = { ...source, parentHash: `0x${"e".repeat(64)}`, timestamp: 1_800_000_000,
+    baseFeePerGas: 1n, gasLimit: 60_000_000n, gasUsed: 0n, transactionHashes: [] };
+  const observer = new SourceBlockSimulator({ rpcUrl: "unused", executor, owner: addr("d"), chainId: 1,
+    stateRoot: `0x${"f".repeat(64)}`, executablePath: process.execPath,
+    fundingForPlan: plan => ({ asset: token, target: addr("e"), liquidityHolder: addr("e"), amount: plan.flashAmount.toString() }) });
+  const check = (plan: Parameters<typeof observer.captureInput>[0]) => {
+    const captured = observer.captureInput(plan, { source, header });
+    assert(captured.scriptHex.startsWith("0x0c"), "compile the actual runtime-flow program");
+    assert.deepEqual(captured.tokens, tokens);
+    assert.deepEqual(observer.captureInput(plan, { source, header }, captured.scriptHex), captured);
+    assert.throws(() => observer.captureInput(plan, { source, header }, "0x0102"), /script does not match plan/);
+    assert.deepEqual(sourceBlockRevmRequest(captured, "unused").observeTokenBalances,
+      [...tokens.flatMap(t => [executor, addr("d")].map(account => ({ token: t, account }))),
+        { token, account: addr("e") }]);
+    return captured;
+  };
+  let trials = 0, finalists = 0;
+  const selector = createBlockScanSimAmountSelector({ source, executor,
+    async simulate(plan) { check(plan); trials++; return f.result(plan.flashAmount === 100n ? 55n : 1n); } });
+  const selected = await selector.solve(f.plan, f.state, f.probe,
+    { ...f.opts, onDeferredCandidates: plans => { plans.forEach(check); finalists = plans.length; } });
+  check(selected);
+  assert.equal(trials, 4); assert.equal(finalists, 3);
+  assert.equal(f.quotes.length, 0); assert.equal(f.builds.length, 0);
 });
 
 test("one unsupported runtime leg preserves the complete quoted route and reports fallback", async () => {

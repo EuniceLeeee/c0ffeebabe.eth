@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { id, keccak256 } from "ethers";
 import { buildSourceBlockExecutionInput, sourceBlockRevmRequest, sourceBlockResult as reconcile,
-  validateSourceBlockExecutionInput, sourceBlockPostState, sourceBlockTraceDeltas } from "../simulator/source-block.js";
+  validateSourceBlockExecutionInput, sourceBlockPostState, sourceBlockTraceDeltas, SourceBlockSimulator } from "../simulator/source-block.js";
 import { buildEthSimulateV1ExecutionInput } from "../simulator/eth-simulate-v1.js";
 import { evaluateEv } from "../ev-evaluator.js";
 import { parseAtBlockArgs } from "../blockscan-at-block-cli.js";
@@ -10,6 +10,7 @@ import { maybeSubmitBlockScanAtomic, resolveBlockScanAtomicPolicy } from "../mai
 import { createFinalSimulationWorkRuntime } from "../final-simulation-work-runtime.js";
 import { BlockScanSimRejectCache } from "../blockscan-sim-reject-cache.js";
 import type { DaemonResponse } from "../revm-sim-client.js";
+import * as registry from "../../adapters/registry.js";
 
 const addr = (n: number) => `0x${n.toString(16).padStart(40, "0")}`;
 const word = (n: bigint | number) => `0x${n.toString(16).padStart(64, "0")}`;
@@ -31,6 +32,51 @@ const response = (): DaemonResponse => ({ ok: true, success: true, output: "0x",
 const trace = () => ({ type: "CALL", from: owner, to: executor, input: input.calldata, output: "0x", gasUsed: "0x61a8" });
 const traceDeltas = ["25", "0", "0", "0", "0", "0"];
 const sourceBlockResult = (i: typeof input, r: DaemonResponse, t: unknown) => reconcile(i, r, t, traceDeltas);
+
+const observer = new SourceBlockSimulator({ rpcUrl: "unused", executor, owner, chainId: 1,
+  stateRoot: input.stateRoot, executablePath: process.execPath, fundingForPlan: () => input.funding });
+const observationAction = "fixture-source-observation";
+registry.register({ id: observationAction, isWrapper: false, field2Offset: null, matchTrace: () => false,
+  descriptor: { adapterId: observationAction, lineage: "erc20-infra", edgeKind: null,
+    action: "guard", canSendValue: false, leavesStandingPositionDefault: false },
+  encode: () => new Uint8Array([1, 2]) });
+const observationPlan = () => ({ root: { adapterId: observationAction, target: holder, tokenIn: token, tokenOut: token,
+  amount: 100n, params: {}, children: [] }, profitToken: token, flashAmount: 100n, netProfit: 0n, templateName: "fixture" });
+
+test("additional program token observations extend, never replace, the tree's frozen safety set", () => {
+  const simulationTokens = [other.toUpperCase().replace("0X", "0x"), other];
+  const plan = { ...observationPlan(), simulationTokens };
+  const captured = observer.captureInput(plan, { source, header }, input.scriptHex);
+  assert.deepEqual(captured, input);
+  simulationTokens.splice(0);
+  assert.deepEqual(captured.tokens, [token, other]);
+  assert(Object.isFrozen(captured.tokens));
+  assert.deepEqual(validateSourceBlockExecutionInput(JSON.parse(JSON.stringify(captured))), captured);
+  assert.deepEqual(observer.captureInput(observationPlan(), { source, header }, input.scriptHex).tokens, [token]);
+  assert.throws(() => observer.captureInput(plan, { source, header }, "0x0103"), /script does not match plan/);
+  assert.throws(() => observer.captureInput({ ...observationPlan(), simulationTokens: ["bad-token"] },
+    { source, header }, input.scriptHex), /invalid source-block address/);
+});
+
+test("runtime intermediate movement is reconciled only when both engines actually observe it", () => {
+  const captured = observer.captureInput({ ...observationPlan(), simulationTokens: [other] }, { source, header }, input.scriptHex);
+  const r = response();
+  r.strict!.logs.push({ ...transfer(holder, executor, 7), address: other },
+    { ...transfer(executor, holder, 7), address: other });
+  assert(sourceBlockResult(captured, r, trace()).sourceBlockEvidence.conservationVerified);
+  const oldInput = observer.captureInput(observationPlan(), { source, header }, input.scriptHex);
+  const oldResponse = response(); oldResponse.strict!.logs = r.strict!.logs;
+  oldResponse.strict!.tokenDeltas = [r.strict!.tokenDeltas[0]!, r.strict!.tokenDeltas[1]!, r.strict!.tokenDeltas[4]!];
+  assert.throws(() => reconcile(oldInput, oldResponse, trace(), ["25", "0", "0", "0"]), /unobserved token movement/);
+  assert.throws(() => reconcile(captured, oldResponse, trace(), ["25", "0", "0", "0"]));
+  for (const [index, delta] of [[2, "-1"], [3, "-1"], [3, "1"]] as const) {
+    const loss = response(); loss.strict!.tokenDeltas[index]!.delta = delta;
+    const deltas = [...traceDeltas]; deltas[index] = delta;
+    assert.throws(() => reconcile(captured, loss, trace(), deltas), /inventory consumed/);
+  }
+  r.strict!.logs.push({ ...transfer(executor, holder, 1), address: addr(6) });
+  assert.throws(() => sourceBlockResult(captured, r, trace()), /unobserved token movement/);
+});
 
 const override = { code: "0x60006000f3", keccak256: keccak256("0x60006000f3") };
 const counterfactualInput = () => buildSourceBlockExecutionInput({ ...input, header, executorRuntimeCode: override });

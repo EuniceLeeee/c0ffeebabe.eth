@@ -75,6 +75,7 @@ export function createBlockScanSimAmountSelector(input: {
               action, propagated!.rawOutputs, session, propagated!.exactHandles, tolerance);
             if (opts.timing) opts.timing.planBuildMs += performance.now() - buildStart;
             const candidate: ResolvedPlan = { root, flashAmount: amount, profitToken: plan.opportunity.profitToken,
+              ...(runtimeLegs ? { simulationTokens: runtimeLegs.flatMap(leg => [leg.tokenIn, leg.tokenOut]) } : {}),
               netProfit: 0n, templateName: plan.templateName };
             const simStart = performance.now();
             let sim: SimulationResult;
