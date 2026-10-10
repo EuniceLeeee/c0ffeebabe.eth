@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "scope": "Update three existing Family refresh tests for the already-committed generic each-block recovery contract; no production code or activation change.",
+  "verdict": "offline refresh-contract coverage only; historical execution and formal latency verdicts unchanged",
+  "cloud": {
+    "vm": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "baseCommit": "cc64a8a4434aff3429a0c3d28bf57f65443bb5ed",
+    "codifyCommit": "826b901d4909d0883489c992b51d038f3cba3dbb",
+    "patchSha256": "44a4ae0afe09499b8c4d177dc0e971a7792b7767928d4e08f6e1ddc8ecff5afb",
+    "unrelatedNonGeneratedDiffSha256": "98c67fbc9b8f33d2311b2d7824e60028e10d1348b6061ce53f0860a799b79776",
+    "workingTree": "Shared dirty checkout. Peer main/Ready/Uniswap V1/generated changes retained and excluded from this patch."
+  },
+  "productionDependency": {
+    "commit": "de74bef77dcd9d41fd44b48919555667381f8c01",
+    "meaning": "The generic coordinator already exempts declared each-block pricing keys from new permanent instance exclusions; failed quotes still withdraw prices and static exclusions remain enforced.",
+    "report": "docs/research/reports/effective-failure-recovery-20261011.json",
+    "noNewProductionFixInThisRound": true
+  },
+  "finding": {
+    "yieldBasisAndAlgebra": "Old tests expected failed each-block directions to stay disabled until a new coordinator. Those assertions contradict the current generic recovery contract. Both tests already forwarded reuse.disabledEdgeIds: this is stale expected behavior, not the earlier InfiniFi forwarding omission.",
+    "compound": "Old test stopped after one failed current-rate block, omitting repeated failure and recovery. It also loaded only active Families, so the default-disabled Compound entry failed setup before the lifecycle ran.",
+    "correction": "Use the same coordinator across valid, consecutive failed, and recovered current-source quotes; run coarse and full runtime entry paths. Compound's test catalog uses existing installed definitions including disabled modules, without changing production defaults or forging production admission."
+  },
+  "evidenceRoot": "logs/dynamic-family-refresh-20261011.5z2gAj",
+  "sourceHashes": {
+    "listener/package.json": { "before": "f2e307958bde2201136ff0af6988728b8264ce82510b9b142616b87bca106f77", "after": "9c7dc6a21e2ad9624ca7ae28d97adb84915a14f483bb100277398782b9c64137" },
+    "listener/src/searcher/venues/protocols/yieldbasis-lt-family/test/refresh.ts": { "before": "15fc066ad9cdc5743da8a420b89792fc49287bfa060dc0c6969452f532fcbe58", "after": "8a4c6582f563c4c70fff98b32044ae471b79b642adb47dc49f325334a2b8ef5f" },
+    "listener/src/searcher/venues/swaps/algebra-integral-family/test/refresh.ts": { "before": "93a6aeb136ac02ab934e6277abcaeb6e2aaaf602465853c05160366cd3153a21", "after": "a4bfa48ca41d9b6c1f456bb66e0f032be634d8f88ddd41b1e4eedfa65e11cf8e" },
+    "listener/src/searcher/venues/protocols/compound-ctoken-family/test/refresh.ts": { "before": "04abcc6cc03f497de017babb80c1fa52b3bab511c953e6813d50870d1e2b6cb1", "after": "d105e9829f8acf6960fc456c78175d0ff668defe5a3b4e4b7fe1074d7ddd2626" }
+  },
+  "attempts": [
+    { "file": "baseline-old-expectations.log", "sha256": "e582e5584bd8304ce3a685cb6a842a31fdd97959c3b2f4feee55a053763c738a", "exitCode": 1, "pass": 1, "fail": 4, "meaning": "Direct run of old three test files. Includes parent/subtest counts. Compound is catalog setup failure; YB/Algebra are stale disable/restart expectations." },
+    { "file": "suite-before.log", "sha256": "faf91bed18513a46cfbd417b8b572a314db2d4db36db1683942a2fbad28713be", "exitCode": 0, "pass": 41, "fail": 0, "meaning": "Registered generic/Yearn/InfiniFi suite before adding the three Family refresh files; not old-three-family pass evidence." },
+    { "file": "suite-after.log", "sha256": "9815e99d1520255326f591a2f3560320dc87ca1cbcb766406a9f1db678da9361", "exitCode": 1, "pass": 45, "fail": 6, "meaning": "Initial candidate retained. New Algebra assertion incorrectly required each direction to keep its first-block amount even though current forward effective changes the reverse reference; Compound still failed active-only catalog setup. Both were test errors, not new production failures." },
+    { "file": "suite-candidate-2.log", "sha256": "df0914ca30a6fbc24b14cb7d40ad94f4d0fb51cbd672b6b89f5200af3a170340", "exitCode": 0, "pass": 51, "fail": 0, "meaning": "Corrected Algebra current-amount assertion and Compound installed-definition test catalog." },
+    { "file": "suite-final.log", "sha256": "bf0b9ebeac4ebcfc51dbdaef8f6d7593da15f73087336c016f44665eaaf9cc5a", "exitCode": 0, "pass": 51, "fail": 0, "meaning": "Final source adds explicit each-block policy/static exclusion and snapshot source number/hash/generation assertions. Includes parent/subtest counts." }
+  ],
+  "coverage": {
+    "shared": "Both coordinator entry paths; unchanged coordinator identity throughout failures/recovery; current effective/source provenance; failed rows have quote-failed/null output/null mid/no quotedAt/no resolved coverage; successful new-source quotes restore coverage. Generic permanent-static-exclusion and unpublished-draft safety regressions remain in the same suite.",
+    "yieldBasis": "Declared each-block key; unrelated UniV2 not each-block and carried by object identity; one six-request amount-quote round; timestamp/external-dependency observations; repeated preview failure and mutable-staker rejection then same-run recovery; raw bootstrap unchanged; existing runtime-no-Exact and quoted execution checks retained.",
+    "algebra": "Dynamic plugin key is each-block; static Algebra and UniV2 are not; exactly two four-request rounds refresh dynamic directions, including after failure; four static rows carried; raw bootstrap unchanged; amount builder's positive current inputs retain exact output=input*synthetic multiplier assertions; distinct-origin Quoter request and actual strict runtime caller checks retained.",
+    "compound": "Current accrued-rate read on each quiet block and after consecutive failures; no new stored-rate reads/fallback; same-source same-amount quote cache behavior retained; new current rate/source yields matching recovery output and coverage; default-disabled Family test does not require changing live activation."
+  },
+  "validation": {
+    "buildLive": { "file": "build-live.log", "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933", "exitCode": 0 },
+    "targetedProjectTypeComparison": {
+      "file": "type-compare.json", "sha256": "fdaec96fd0d20e3505d0b6a79a8ff4a38485e26b8029c851772e0be5cd4a885b",
+      "method": "Actual listener tsconfig options/noEmit; only three owned tests substituted from baseCommit in an in-memory compiler host. Peer dirty sources are identical on both sides.",
+      "diagnosticsBefore": 4, "diagnosticsAfter": 4, "newDiagnostics": 0,
+      "unchanged": ["TS4023 curve-lp.production.ts:14", "TS2322 yieldbasis-lt-family/test/fixtures.ts:124", "TS2353 yieldbasis-lt-family/test/fixtures.ts:132", "TS2339 yieldbasis-lt-family/test/fixtures.ts:144"],
+      "status": "Same diagnostics including locations, NOT clean full typecheck; exit0 means comparison equality only."
+    },
+    "toolReconciliation": {
+      "query": ["effective", "failure", "recovery"],
+      "selected": ["listener:searcher:strict-effective-failure-recovery"],
+      "alternatives": "Only the same registered suite matched all requested capabilities.",
+      "manifest": "tools-final.json", "manifestSha256": "9b34eb2b18e92487e6dde5d6063a4b805a952f53118a4e932cac150dacc8189b",
+      "result": "Final selected current descriptor executed with exit0,51/51. Manual old-test diagnosis agrees with preserved baseline failures and candidate recovery assertions.",
+      "earlierManifests": ["tools-before.json", "tools-after.json", "tools-candidate-2.json"]
+    }
+  },
+  "independentReview": {
+    "reviewer": "James / 01a1272c-d7f4-7790-a183-0ec9d094348e",
+    "pass1": "Confirmed stale YB/Algebra expected behavior, Compound missing recovery coverage, existing disabledEdgeIds forwarding, and dynamic/static policy distinction; not a new production regression.",
+    "pass2": "Approved, no blocking findings. Independently executed fresh inventory-selected registered suite,51/51 exit0 with no skips/cancels; four owned file hashes and six bound dependencies unchanged. Confirmed both entry paths, same-coordinator recovery, failure withdrawal/current sources, dynamic/static boundary, Compound no stored-rate fallback and test-only installed catalog. No production behavior changes; no RPC/EVM/Ready/build/performance execution by reviewer.",
+    "suite": "logs/review-dynamic-refresh-pass2-C2Ert7/suite.log",
+    "suiteSha256": "a28bb60647af5bbc805b459e7da3521bdf9162556cb7fe6a67efa57ca9d57b9a",
+    "manifest": "logs/review-dynamic-refresh-pass2-C2Ert7/tools.json",
+    "manifestSha256": "edbcb1420ba58d20de36485a78e9dd335758295ba8b0095e647e05214cc79f04",
+    "fingerprintCheck": "logs/review-dynamic-refresh-pass2-C2Ert7/fingerprint-check.log",
+    "fingerprintCheckSha256": "dfe43d3496d9c8bb55c32d801609558c237740ce25484443e42fd333e0faff21",
+    "closure": "Reviewer technical approval preceded commit; main committed exactly the four reviewed files as826b901 and binds that codify_commit in the exact tooling_defect case."
+  },
+  "limits": [
+    "Synthetic transport through production lifecycle, Graph, coordinator and Exact issuers; no new historical RPC/EVM, strict Ready, same-state execution or full opportunity evidence.",
+    "Updates only refresh-test coverage under the previously committed generic policy. Retained old four-family disable/restart statements are historical and superseded for declared each-block instances by this report.",
+    "Formal timing NOT RUN. Every applicable existing/new IMPL adaptation and repair, DeepSeek and own Families, including Balancer V2/V3 and Curve plain/underlying, still requires single-Ready timing followed by representative combined large-graph timing after correctness work.",
+    "No deployment, live start/stop, signing/broadcast, default activation, original Ready/checkpoint, frozen handoff or peer source edits."
+  ],
+  "implTable": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "unchangedSha256": "e6e033d1350c2e673578fa093b471ced178509d4d405e657bd0b67edc932b35e",
+    "disposition": "Original table and active goal already explicitly include timing for existing/future applicable IMPL adaptations. No protocol acceptance status changed for this synthetic test-only correction."
+  }
+}

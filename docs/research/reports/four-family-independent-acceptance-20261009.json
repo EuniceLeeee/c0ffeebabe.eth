@@ -1,5 +1,10 @@
 {
   "schema": "family-independent-acceptance-progress-v1",
+  "latestDynamicRefreshContractRegression": {
+    "path": "docs/research/reports/dynamic-family-refresh-recovery-20261011.json",
+    "reconciledOn": "2026-10-11",
+    "scope": "The earlier YB/Algebra same-run-disable and restart-only statements below describe the then-current policy, not current behavior. Generic production commit de74bef77dcd9d41fd44b48919555667381f8c01 now respects declared each-block refresh keys. Current tests retain disabledEdgeIds forwarding and prove consecutive failures withdraw prices then valid new-source quotes restore coverage in the same coordinator, for both coarse and full runtime entry paths; Compound recovery coverage is added. Static exclusions and failed-price safety remain. This is synthetic contract coverage, not new historical execution or formal timing. Earlier evidence remains intact."
+  },
   "latestCompoundReferenceAcceptance": "docs/research/reports/compound-reference-acceptance-20261009.json",
   "latestYieldBasisDepositAcceptance": {
     "path": "docs/research/reports/yieldbasis-deposit-integration-20261009.json",

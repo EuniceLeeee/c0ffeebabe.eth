@@ -1026,6 +1026,37 @@
       },
       "created_at": "2026-10-10T19:35:17.000Z",
       "updated_at": "2026-10-10T19:35:17.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261011-dynamic-family-refresh-stale-exclusions",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": ["swap", "protocol"],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "dynamic_family_refresh_tests_expected_obsolete_permanent_exclusion_and_omitted_compound_recovery",
+      "evidence": {
+        "scope": "Synthetic refresh-contract tests only; not a competitor opportunity or historical/performance verdict.",
+        "report": "docs/research/reports/dynamic-family-refresh-recovery-20261011.json",
+        "before": "logs/dynamic-family-refresh-20261011.5z2gAj/baseline-old-expectations.log",
+        "beforeSha256": "e582e5584bd8304ce3a685cb6a842a31fdd97959c3b2f4feee55a053763c738a",
+        "after": "logs/dynamic-family-refresh-20261011.5z2gAj/suite-final.log",
+        "afterSha256": "bf0b9ebeac4ebcfc51dbdaef8f6d7593da15f73087336c016f44665eaaf9cc5a",
+        "finding": "YB/Algebra old restart-only expectations contradict the already-committed generic each-block policy. Compound lacked consecutive failure/recovery coverage and failed active-only catalog setup while disabled by default. All three already forwarded disabledEdgeIds; this is not the prior InfiniFi forwarding omission.",
+        "regression": "Final51/51 registered suite covers coarse and runtime entry paths, same coordinator recovery, current source, failed-price withdrawal, dynamic/static declarations and unchanged static rows; existing policy/atomicity/Yearn/InfiniFi cases retained. Production build passes; targeted project-options typecheck keeps four identical baseline diagnostics and introduces none.",
+        "independentReview": "James pass1 confirmed stale test expectations and coverage/setup gaps; pass2 independently ran registered51/51 with ten unchanged owned/dependency fingerprints, no blocking findings. Technical approval is bound to exact four-file codify_commit826b901 by the main agent; no historical or timing verdict."
+      },
+      "tooling_defect": {
+        "tool": "YB/Algebra/Compound test/refresh.ts and registered strict-effective-failure-recovery coverage",
+        "issue": "Stale expected permanent exclusions and incomplete/default-disabled Compound coverage could not verify the current production each-block recovery contract.",
+        "evidence": "Preserved old-test failures, initial-candidate test mistakes, final source-bound registered suite and fresh non-author review.",
+        "codify_target": "Correct only the three refresh tests and include them in the existing recovery script; preserve production code, forwarding, default activation and safety checks.",
+        "codify_commit": "826b901d4909d0883489c992b51d038f3cba3dbb",
+        "status": "codified"
+      },
+      "created_at": "2026-10-10T20:00:30.000Z",
+      "updated_at": "2026-10-10T20:00:30.000Z"
     }
   ]
 }
