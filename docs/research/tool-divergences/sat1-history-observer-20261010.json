@@ -1,0 +1,71 @@
+{
+  "divergence_id": "sat1-history-observer-20261010",
+  "kind": "tooling_defect",
+  "status": "closed-scoped-test-harness-repair",
+  "codify_commit": "06e0f9cdc2426674b56734c5e4a422a11cee65d5",
+  "realized_disagreement": "New Ready acceptance harness falsely reported zero target edges because it compared bare poolId with production manager+separator+poolId. Existing checkpoint already contained the admitted instance and both graph edges.",
+  "repair": "Use and test the canonical compound instance key. Reuse immutable original checkpoint without rescan, mutation or hash override. Also harden original custom-delta observation with direct take payment and unconsumed input-currency sync/balance-delta evidence.",
+  "regressions": {
+    "observer": "listener/src/searcher/venues/swaps/univ4-family/test/history-evidence.test.ts",
+    "passed": "33 observer + 27 shared; staged60; working dual80/staged79; index17",
+    "sameReadyFailure": "logs/v4-native-historical-20261010.6yy5wf/single-N26029537-1/failure.json",
+    "sameReadyPass": "logs/v4-native-historical-20261010.6yy5wf/prices-resume-2/ready-summary.json"
+  },
+  "independent_review": {
+    "agentId": "01a125f8-38c6-7380-b07f-c6f45beb0922",
+    "passes": 3,
+    "finalVerdict": "no residual finding within bounded observer/key-matching review",
+    "resolved": [
+      "canonical manager+poolId key mismatch",
+      "ERC20 sync currency and actual balance delta binding",
+      "direct selected-take payment only",
+      "take after swap return, not swap entry",
+      "reject consumed sync after settle or settleFor"
+    ],
+    "observerSha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+  },
+  "learning_case": {
+    "learning_case_id": "tooling-sat1-history-observer-20261010",
+    "status": "manual_required",
+    "strategy_kind": "unknown",
+    "edge_kinds": [
+      "swap"
+    ],
+    "trigger": "competitor_not_seen",
+    "competitor_tx": "0x0be85b68578d45e449cf2285b2d331b8e3ed3f68240b3166e67abb2727f30b55",
+    "target_block": 26029537,
+    "comparable": false,
+    "primary_gap": "manual_required",
+    "gap_detail": "Same-N single-leg tooling closure only; not opportunity or full-route classification.",
+    "evidence": {
+      "report": "docs/research/reports/sat1-native-historical-acceptance-20261010.json",
+      "execution_manifests": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v4-native-historical-20261010.6yy5wf/ready-tools.json",
+          "sha256": "e072c373b5adb9d8cbdfca01a88ed3327760e5844507fcb43c88b99c1f78dab7",
+          "bytes": 28966
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v4-native-historical-20261010.6yy5wf/dual-tools.json",
+          "sha256": "6cf0654990a36cd2b18d0862b015e735fca0ab2bc54161957bfff2b15e30225a",
+          "bytes": 29732
+        }
+      ],
+      "preserved_transition": "Same already-published Ready false-negative to correctly observed two edges; historical EVM executes real quoted/runtime legs with independent receipts."
+    },
+    "tooling_defect": {
+      "tool": "Sat1 historical Ready and original-output observer",
+      "issue": "Bare poolId confused with compound instance key; review additionally found settlement-evidence false-positive risks.",
+      "codify_target": "Compound key, direct payout, full actual debit, active currency sync, no intervening settlement, source and failed-ancestor negatives.",
+      "codify_commit": "06e0f9cdc2426674b56734c5e4a422a11cee65d5",
+      "status": "codified"
+    },
+    "created_at": "2026-10-10",
+    "updated_at": "2026-10-10"
+  },
+  "exclusions": [
+    "No production identity/admission/execution/default change.",
+    "Not adapter_fixed, production_gap_fixed, full-route, original-precall, or performance verdict.",
+    "Scoped LearningCase filed here; shared learning store unchanged."
+  ]
+}
