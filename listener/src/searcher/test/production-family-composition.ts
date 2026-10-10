@@ -31,6 +31,7 @@ const defaultDisabledSources = new Set([
   "kyberswap-elastic.production.ts",
   "yieldbasis-lt.production.ts",
   "peapods-debond.production.ts",
+  "psv.production.ts",
 ]);
 for (const activation of PRODUCTION_FAMILY_ACTIVATIONS) {
   assert.equal(activation.envKey, "SEARCHER_FAMILY_" +

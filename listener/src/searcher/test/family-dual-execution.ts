@@ -91,6 +91,10 @@ synthetic("protocol:badger-sett-withdraw", { binding: {
 synthetic("protocol:peapods-debond", { binding: { pod: foreign.toLowerCase(), asset: ADDR.USDC.toLowerCase(),
   staking: "0x1000000000000000000000000000000000000005", codeHash: word(1n), assetCodeHash: word(2n),
   stakingCodeHash: word(3n), decimals: 6, feeBps: 200n } });
+// Synthetic PSV ABI coverage only; production admission is not fabricated.
+synthetic("protocol:psv", { binding: { target: foreign.toLowerCase(), implementation: "0x1000000000000000000000000000000000000005",
+  proxyCodeHash: word(1n), implementationCodeHash: word(2n), gem: ADDR.USDC.toLowerCase(), stable: ADDR.DAI.toLowerCase(),
+  gemCodeHash: word(3n), stableCodeHash: word(4n), gemDecimals: 6, stableDecimals: 18 } });
 // Algebra Integral: static-fee (plugin DYNAMIC_FEE clear) exact-input swap.
 // Synthetic descriptor only: no Ready/admission object is issued here.
 fixtures.push(algebraIntegralFixture());

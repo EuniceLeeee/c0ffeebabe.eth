@@ -1,0 +1,814 @@
+{
+  "schema": "psv-family-correctness/v1",
+  "createdAt": "2026-10-10T02:24:27.872Z",
+  "result": "sample-correctness-passed-performance-pending",
+  "workspace": {
+    "host": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "path": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "baseHead": "08dfd8b401cb4ebdda3a90bcf39077e0806a4436",
+    "code": {
+      "sourceTreeSha256": "5d67c47d86a92a0570fff2e41ef653cda78e052b619bd76663fc75855a947455",
+      "harnessSha256": "370bd90b04b189b8fbd53d56a1540a959cf8a11bb0729416e89c0040d43d0f2b",
+      "evidenceSha256": "f35c3b014728e3fd36e811f5087a97d11bcf92cc3ab4fcdf366c17a23092aff9",
+      "observationHelpers": [
+        {
+          "path": "../three-family/historical-input-observations.ts",
+          "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+        },
+        {
+          "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+          "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+        },
+        {
+          "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+          "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+        },
+        {
+          "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+          "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+        },
+        {
+          "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+          "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+        },
+        {
+          "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+          "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+        }
+      ]
+    },
+    "note": "Historical evidence used actual shared dirty production source. The isolated Git-index export tests the owned commit separately. Peer Ready/main/V1 files and catalog changes remain unstaged; full-tree historical evidence does not claim those edits are included in this commit."
+  },
+  "family": {
+    "id": "protocol:psv",
+    "action": "psv",
+    "defaultEnabled": false,
+    "env": "SEARCHER_FAMILY_PSV_ENABLED",
+    "supported": "source-matched UUPS PSV with exact-input sellGem (GEM to STABLE) and buyGem (STABLE to GEM)",
+    "identity": "full verified compiler runtime with UUPS self-address immutable binding, proxy/storage/token/scale checks and two-direction behavioral proof; no instance allowlist; not a factory-creation claim",
+    "exact": "recipient-aware amount-specific on-chain preview plus source, topology, pause, capacity and reserves; no stale prefix/pending quote fallback",
+    "runtime": "zero/exact-r0/clear input approval with boolean checks, one swap patched from r0; no Family balance reads or external Exact; common flow owns old inventory and received-amount chaining",
+    "refresh": "each-block policy preserves block-cap reset correctness; compiled mutation index filters proved-unrelated Transfers, unknown mutations remain conservative"
+  },
+  "sourceProof": {
+    "block": 26152596,
+    "blockHash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+    "psv": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+    "implementation": "0x8be82303829042f0fba1315096a8f1961907c0dd",
+    "proxyCodeHash": "0x46a010df31eb642b47284650e80051e8f6239a0c995003d230b437810bc4b9b4",
+    "implementationCodeHash": "0x0c940593c322e41b558806fb248ebdd01e38cf2cd5f02e3689824f3469d3c666",
+    "normalizedCodeHash": "0x3143b58f2386be0d6550b83bfc461b0423e4640c64767a57ed5ee85f1112c6eb",
+    "immutables": {
+      "1402": [
+        {
+          "length": 32,
+          "start": 4253
+        },
+        {
+          "length": 32,
+          "start": 4473
+        }
+      ]
+    },
+    "compiler": {
+      "path": "solc-linux-amd64-v0.8.30+commit.73712a01",
+      "version": "0.8.30",
+      "build": "commit.73712a01",
+      "longVersion": "0.8.30+commit.73712a01",
+      "keccak256": "0xc47307cc6d212f7d86af1ad07800f9ed4715454a1c327a7258e62d769ec8bdc1",
+      "sha256": "0xf3e987dc6ecebd4bd350c48edcbc320b46cf9e3109bd3fc3d88f1acaf4c428f7",
+      "urls": [
+        "dweb:/ipfs/QmPsmKxpd5berCgcTBXXPBC4PLHrb56tr3f6ZMxPGEf6vn"
+      ]
+    },
+    "inputSha256": "6b2063969ff1e559920de26750626677fe74233552faa9e5f364f17d28ae63eb",
+    "state": {
+      "GEM": [
+        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+      ],
+      "STABLE": [
+        "0x14913815bCFDE78BAeAd2111F463D038Ac9C2949"
+      ],
+      "gemToWad": [
+        "1000000000000"
+      ],
+      "stableToWad": [
+        "1000000000000"
+      ],
+      "tin": [
+        "0"
+      ],
+      "tout": [
+        "0"
+      ],
+      "treasury": [
+        "0xd623A098E77D484069CF7840205c800a2EF5EA20"
+      ],
+      "paused": [
+        false
+      ],
+      "maxPerTransaction": [
+        "0"
+      ],
+      "maxPerBlock": [
+        "0"
+      ],
+      "getRemainingBlockCapacity": [
+        "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+      ],
+      "getReserves": [
+        "490729776199",
+        "159270223801"
+      ],
+      "getDecimals": [
+        "6",
+        "6"
+      ],
+      "executorWhitelist": [
+        false
+      ],
+      "previewBuyGem": [
+        "7361655916",
+        "0"
+      ],
+      "previewSellGem": [
+        "7361655916",
+        "0"
+      ],
+      "GEM-decimals": [
+        "6"
+      ],
+      "STABLE-decimals": [
+        "6"
+      ]
+    },
+    "rpcCount": 24,
+    "limitations": [
+      "source/state proof only",
+      "no strict or historical execution",
+      "no latency acceptance"
+    ],
+    "artifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/source-state-proof.json",
+      "sha256": "6efd596314489b35578ee4bf5be331438d01d9745794ce7b29a7061d6e028f73"
+    },
+    "proxy": {
+      "codeHash": "0x46a010df31eb642b47284650e80051e8f6239a0c995003d230b437810bc4b9b4",
+      "codeBytes": 76,
+      "compiler": {
+        "path": "solc-linux-amd64-v0.8.28+commit.7893614a",
+        "version": "0.8.28",
+        "build": "commit.7893614a",
+        "longVersion": "0.8.28+commit.7893614a",
+        "keccak256": "0x0d387f5ca7d0f298e79243cec5af7ab42eeb0a414e42f15c66f855d701479c43",
+        "sha256": "0x9a0fb7e0db2c0641dbae1c5cc645dc686820c83af516226abb1c0a2f76636f25",
+        "urls": [
+          "dweb:/ipfs/QmUQHJwVw1f8RCRTBReXEkXdpt4c3A3LEpHZWv4pRixrNW"
+        ]
+      },
+      "inputSha256": "35e6d013f1507ae981ab09e8e3b70453f84b7ce666484eece863da204ebf48eb",
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/proxy-source-proof.json",
+        "sha256": "0758e15ad5620a6aa3f5c7fbf0d2e89dc46e9087ac0725c69927ea4b8f024fc9"
+      }
+    },
+    "caveat": "The original proof artifact is source/state-only; later strict, price and dual execution evidence is listed separately below."
+  },
+  "naturalReady": {
+    "tx": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8",
+    "source": {
+      "number": 26152596,
+      "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+      "generation": 26152596
+    },
+    "checkpoint": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/ready.json",
+      "sha256": "9c27ae170a25c04c32031d0e88cfe4033f676338289215247e4855d8975852ec"
+    },
+    "priorCheckpoint": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-1/ready.json",
+      "sha256": "480b2e31613fac372adeb6eae527896bf18fd738ab7de33c4dee7fb6d9dafc00",
+      "policy": "copy only; production rebuild revalidates changed Family; no fingerprint edits"
+    },
+    "scope": "existing same-block Ready copied and revalidated through standard production rebuild; actual whole single-block logs/trace, no injected pool, edge or admission",
+    "caveat": "prices/input historicalNaturalDiscoveryProven is the current CLI fixed false field; natural discovery evidence is the separately authenticated candidate receipt/log2164 and production rebuild, not that flag. Another PSV candidate remains retryable; only the declared target is accepted.",
+    "candidateAccounting": {
+      "total": 42,
+      "verified": 41,
+      "terminalRejected": 0,
+      "retryable": 1,
+      "remainingUnaccounted": 0
+    },
+    "activeInstances": 41,
+    "graphEdges": 82,
+    "targetEdges": [
+      {
+        "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "executionVariantKey": "a3cb2816e192c26fe52dbbe3b1b57a0e247e56a3401d92845d19651ac92da5cd",
+        "adapterId": "psv",
+        "target": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "slotKind": "protocol",
+        "protocolAction": "convert",
+        "edgeKind": "protocol",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x14913815bcfde78baead2111f463d038ac9c2949\u001fa3cb2816e192c26fe52dbbe3b1b57a0e247e56a3401d92845d19651ac92da5cd"
+      },
+      {
+        "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "executionVariantKey": "922ae3adeb9f64f5ed1ae9394f191382c9d14f4c54c698cae1fbb69a87a0401e",
+        "adapterId": "psv",
+        "target": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "slotKind": "protocol",
+        "protocolAction": "convert",
+        "edgeKind": "protocol",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0x14913815bcfde78baead2111f463d038ac9c2949>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f922ae3adeb9f64f5ed1ae9394f191382c9d14f4c54c698cae1fbb69a87a0401e"
+      }
+    ],
+    "targetMemoFingerprint": "b1e556c4230634960e7f4a6a7faa4ac995eea335f93b125d156d76843ec9f80d",
+    "familyDefinitionHash": "95deedaeef7bdf0b3c86eebe67a76adaf236782d503ff53fc33f2c2870200983",
+    "checkpointFingerprint": "4547fa9ff2dbf11cbf9df75db4403275ec6ba8712f272ed5c965f7fafe0bbae5",
+    "runner": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/psv-ready-refresh.mts",
+      "sha256": "e0812747d9b71ed329ee4da9ee37a1c505893d0ed4cb62cabd1f26c62dc3cc7b"
+    },
+    "provenance": {
+      "TX": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8",
+      "N": 26152596,
+      "HASH": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+      "families": [
+        "protocol:psv",
+        "univ2-standard",
+        "univ3-standard"
+      ],
+      "executor": "0x1000000000000000000000000000000000000002",
+      "owner": "0x1000000000000000000000000000000000000001",
+      "runnerSha256": "e0812747d9b71ed329ee4da9ee37a1c505893d0ed4cb62cabd1f26c62dc3cc7b",
+      "scope": "entire natural single block; target only checks output, no target seed, no manual Graph or price amounts; performance NOT RUN"
+    }
+  },
+  "prices": {
+    "artifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/prices/prices.json",
+      "sha256": "12900cad8cca3d55e7ce8d174b8ea2dc8ace6c0b60e6a3db7bf65e54ba3fc233"
+    },
+    "input": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/prices/input.json",
+      "sha256": "b8691ece692364b09a8e69b0fb1b7b4bf87d5c6aeb0d8b4aa1c1513a80fb0eca"
+    },
+    "rows": [
+      {
+        "key": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x14913815bcfde78baead2111f463d038ac9c2949\u001fa3cb2816e192c26fe52dbbe3b1b57a0e247e56a3401d92845d19651ac92da5cd",
+        "row": {
+          "edgeId": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x14913815bcfde78baead2111f463d038ac9c2949\u001fa3cb2816e192c26fe52dbbe3b1b57a0e247e56a3401d92845d19651ac92da5cd",
+          "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+          "amountIn": "4969763",
+          "status": "quoted",
+          "amountOut": "4969763",
+          "effectiveMid": 1,
+          "quotedAt": {
+            "number": 26152596,
+            "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+            "generation": 1
+          }
+        },
+        "mid": {
+          "kind": "protocol",
+          "pool": "0xc72178D412256a6Dc5f04D749859b4cd95076d61",
+          "edges": [
+            {
+              "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+              "executionVariantKey": "a3cb2816e192c26fe52dbbe3b1b57a0e247e56a3401d92845d19651ac92da5cd",
+              "adapterId": "psv",
+              "target": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+              "slotKind": "protocol",
+              "protocolAction": "convert",
+              "edgeKind": "protocol",
+              "leavesStandingPosition": false,
+              "score": 0,
+              "canonicalEdgeId": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x14913815bcfde78baead2111f463d038ac9c2949\u001fa3cb2816e192c26fe52dbbe3b1b57a0e247e56a3401d92845d19651ac92da5cd"
+            }
+          ],
+          "mid": 1,
+          "feeBps": 0,
+          "reserveA": "10000000000",
+          "reserveB": "10000000000",
+          "depthProxy": 10000000000
+        }
+      },
+      {
+        "key": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0x14913815bcfde78baead2111f463d038ac9c2949>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f922ae3adeb9f64f5ed1ae9394f191382c9d14f4c54c698cae1fbb69a87a0401e",
+        "row": {
+          "edgeId": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0x14913815bcfde78baead2111f463d038ac9c2949>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f922ae3adeb9f64f5ed1ae9394f191382c9d14f4c54c698cae1fbb69a87a0401e",
+          "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+          "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "4969763",
+          "status": "quoted",
+          "amountOut": "4969763",
+          "effectiveMid": 1,
+          "quotedAt": {
+            "number": 26152596,
+            "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+            "generation": 1
+          }
+        },
+        "mid": {
+          "kind": "protocol",
+          "pool": "0xc72178D412256a6Dc5f04D749859b4cd95076d61",
+          "edges": [
+            {
+              "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+              "executionVariantKey": "922ae3adeb9f64f5ed1ae9394f191382c9d14f4c54c698cae1fbb69a87a0401e",
+              "adapterId": "psv",
+              "target": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+              "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "slotKind": "protocol",
+              "protocolAction": "convert",
+              "edgeKind": "protocol",
+              "leavesStandingPosition": false,
+              "score": 0,
+              "canonicalEdgeId": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0x14913815bcfde78baead2111f463d038ac9c2949>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f922ae3adeb9f64f5ed1ae9394f191382c9d14f4c54c698cae1fbb69a87a0401e"
+            }
+          ],
+          "mid": 1,
+          "feeBps": 0,
+          "reserveA": "10000000000",
+          "reserveB": "10000000000",
+          "depthProxy": 10000000000
+        }
+      }
+    ],
+    "productionReferences": [
+      {
+        "direction": "sell-gem",
+        "status": "met",
+        "amountIn": "4969763",
+        "amountOut": "4969763"
+      },
+      {
+        "direction": "buy-gem",
+        "status": "met",
+        "amountIn": "4969763",
+        "amountOut": "4969763"
+      }
+    ],
+    "referenceBorrowed": false,
+    "available": 80,
+    "total": 82,
+    "unavailable": [
+      {
+        "edgeId": "univ3-standard\u001f0xed7ef9a9a05a48858a507c080def0405ad1eaa3e\u001f0xed7ef9a9a05a48858a507c080def0405ad1eaa3e\u001f0x45804880de22913dafe09f4980848ece6ecbaf78>0x68749665ff8d2d112fa859aa293f07a622782f38\u001f79680ba109482bb0dc1a2615085563771ab7ecc7ee2dca5e52137f764c26b831",
+        "instanceKey": "0xed7ef9a9a05a48858a507c080def0405ad1eaa3e",
+        "tokenIn": "0x45804880de22913dafe09f4980848ece6ecbaf78",
+        "tokenOut": "0x68749665ff8d2d112fa859aa293f07a622782f38",
+        "amountIn": null,
+        "status": "missing-valuation",
+        "amountOut": null,
+        "effectiveMid": null
+      },
+      {
+        "edgeId": "univ3-standard\u001f0xed7ef9a9a05a48858a507c080def0405ad1eaa3e\u001f0xed7ef9a9a05a48858a507c080def0405ad1eaa3e\u001f0x68749665ff8d2d112fa859aa293f07a622782f38>0x45804880de22913dafe09f4980848ece6ecbaf78\u001f52fceea748e6499642a8b3a17d3fbea4988d0d43826360089b4510b313581f4f",
+        "instanceKey": "0xed7ef9a9a05a48858a507c080def0405ad1eaa3e",
+        "tokenIn": "0x68749665ff8d2d112fa859aa293f07a622782f38",
+        "tokenOut": "0x45804880de22913dafe09f4980848ece6ecbaf78",
+        "amountIn": null,
+        "status": "missing-valuation",
+        "amountOut": null,
+        "effectiveMid": null
+      }
+    ],
+    "note": "Two unrelated V3 rows lack valuation; not a whole-graph pass. Ready generation 2 and pricing session generation 1 are separate identities, both pinned to N/hash."
+  },
+  "sameStateExecution": {
+    "artifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/dual-2.json",
+      "sha256": "23e49f613ee17b1c055c3e4a43b1e1c51e9a233c1fe1058da116e47e7085ab62"
+    },
+    "source": {
+      "number": 26152596,
+      "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+      "generation": 26152596
+    },
+    "actors": {
+      "executor": "0x1000000000000000000000000000000000000002",
+      "owner": "0x1000000000000000000000000000000000000001"
+    },
+    "executorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+    "executorArtifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "actorOnlyFunding": true,
+    "protocolOverrides": false,
+    "executorProvisioning": {
+      "historicalHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "runtimeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "replacement": false,
+      "historicalRuntimeExecuted": false,
+      "scope": "local eth_call/debug_traceCall code overlay only; same executor/origin; no protocol or permission override"
+    },
+    "scope": "N-end local REVM single-leg execution with current owner-bound BotVM provisioned at a synthetic executor. This is not a historical deployed-executor replay or a full runtime multi-leg flow test.",
+    "inventory": "positive cases retain 101 old input units and amountOut+103 old output units; independent executor/pool token deltas and native delta zero verified",
+    "approval": "independent static allowance assertion appended to both encoded programs requires allowance zero",
+    "samples": [
+      {
+        "direction": "sell-gem",
+        "label": "production-effective",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "amountIn": "4969763",
+        "amountOut": "4969763",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "direction": "sell-gem",
+        "label": "original-size-at-N-end",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "amountIn": "7361655916",
+        "amountOut": "7361655916",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "direction": "sell-gem",
+        "label": "one-token-control",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "amountIn": "1000000",
+        "amountOut": "1000000",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "direction": "sell-gem",
+        "label": "one-raw-control",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "amountIn": "1",
+        "amountOut": "1",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "direction": "buy-gem",
+        "label": "production-effective",
+        "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "4969763",
+        "amountOut": "4969763",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "direction": "buy-gem",
+        "label": "original-size-at-N-end",
+        "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "7361655916",
+        "amountOut": "7361655916",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "direction": "buy-gem",
+        "label": "one-token-control",
+        "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "1000000",
+        "amountOut": "1000000",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      },
+      {
+        "direction": "buy-gem",
+        "label": "one-raw-control",
+        "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "1",
+        "amountOut": "1",
+        "quoted": "pass",
+        "runtime": "pass",
+        "signedDelta": "0"
+      }
+    ],
+    "positiveExecutions": 16,
+    "declaredRevertControls": 8,
+    "negativeScope": "no input or successful program followed by a guaranteed failed assertion; actual declared EVM reverts, not transport errors. Empty negative effects follow transport rollback semantics, not an independent committed-state probe.",
+    "construction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "scope": "production issuer; selector contract separately tested offline"
+    },
+    "invocationCounts": {
+      "exact": 8,
+      "quoted": 8,
+      "forbiddenDuringBuild": 0
+    },
+    "directReads": 131,
+    "drained": true,
+    "originalReceipt": {
+      "amountIn": "7361655916",
+      "amountOut": "7361655916",
+      "fee": "0",
+      "receiver": "0xE08D97e151473A848C3d9CA3f323Cb720472D015",
+      "scope": "receipt evidence; N-end is not the original call prestate. Reverse original-size trial is a numerical control, not an original buy trade."
+    }
+  },
+  "offline": {
+    "family": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/contract-6.log",
+      "sha256": "6b0088fdda02874c5358d3377dea55be839bc73b85a20251b4bf0cced099aef5",
+      "tests": 20,
+      "pass": 20,
+      "fail": 0
+    },
+    "allFamiliesDual": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/searcher-family-dual-execution-final.log",
+      "sha256": "e803a522e8e6cd912528034dbbbe894f745fe410703ade3010c2d4f42c0315e9",
+      "tests": 78,
+      "pass": 78,
+      "fail": 0
+    },
+    "build": {
+      "exitCode": 0,
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/build-4.log",
+        "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      }
+    },
+    "otherChecks": [
+      {
+        "exitCode": 0,
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/searcher-production-family-composition-final.log",
+        "sha256": "105cb5129c1051c6eb555448b09d8a60abcee4e0706a2400c02560e060bb61d4"
+      },
+      {
+        "exitCode": 0,
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/searcher-strict-production-family-declarations-final.log",
+        "sha256": "116c154208b1ee31e557be02138d0c4ac2fb7e5987d8b83ea522880daaca846c"
+      },
+      {
+        "exitCode": 0,
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/searcher-strict-family-lifecycle-runner-final.log",
+        "sha256": "6ef7e8e525f87e9652311bf24bf58e50c0a400fe7ad8ebaccfab3bc1746a73b7"
+      },
+      {
+        "exitCode": 0,
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/searcher-strict-central-adapter-runtime-final.log",
+        "sha256": "55f5cc63133753f7bf2f11b786370516a3bd0f014126d9b920c59e25b071d149"
+      },
+      {
+        "exitCode": 0,
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/searcher-strict-execution-projection-final.log",
+        "sha256": "2fcb18e90f6883ebe96b57862b8591c6193f9cb420543140407c2f160dd8d1b5"
+      }
+    ],
+    "typecheck": {
+      "ownedDiagnostics": 0,
+      "transitiveDiagnostics": 6,
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/typecheck-2.log",
+        "sha256": "529ff1f501df28e6a496f95f973e0df3fa46e0dfceeafeb180d6915c0efc2c97"
+      },
+      "note": "Not a full TypeScript pass: two at-block CLI signatures, three historical bigint/number helper diagnostics and one NodeNext JSON import attribute remain outside PSV."
+    },
+    "stagedSource": {
+      "scope": "Git-index export, not a new branch/worktree; no peer Ready/main/V1 diff included",
+      "generation": {
+        "exitCode": 0,
+        "artifact": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/staged-generation.log",
+          "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+        }
+      },
+      "build": {
+        "exitCode": 0,
+        "artifact": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/staged-build.log",
+          "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+        }
+      },
+      "catalog": {
+        "exitCode": 0,
+        "artifact": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/staged-artifact-check.log",
+          "sha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef"
+        },
+        "nonPsvRecordsEqualParent": true,
+        "psvRecordsEqualActual": true
+      },
+      "composition": {
+        "exitCode": 0,
+        "artifact": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/staged-searcher-production-family-composition.log",
+          "sha256": "105cb5129c1051c6eb555448b09d8a60abcee4e0706a2400c02560e060bb61d4"
+        }
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/staged-searcher-family-dual-execution.log",
+        "sha256": "7f3691ad2a45f3900b5ec7c1601c1fafc5a0f2e2fec7c98d85f2ac09c66823eb",
+        "tests": 77,
+        "pass": 77,
+        "fail": 0
+      },
+      "note": "Staged dual has 77 cases; actual shared dirty source has a peer V1 extra case (78). Both suites ran; neither is a historical full-commit replay."
+    }
+  },
+  "independentReview": {
+    "passes": 3,
+    "finalPassCompleted": true,
+    "reviewer": "Parfit",
+    "agentId": "01a12376-1058-7591-a800-1418f20010c3",
+    "pass1": "P2 fixed-size identity probes rejected legal low-capacity markets; corrected",
+    "pass2": "P2 cleared; P3 cross-decimal lower probe could round to zero despite two legal positive amounts; corrected",
+    "finalPass": "No new reproducible PSV semantic/safety finding; P2 and P3 resolved in the reviewed scope",
+    "formalMergeVerdict": "NOT CLAIMED",
+    "performance": "NOT RUN",
+    "fullResult": "第 3/3 轮完成，无访问或运行阻塞。限定结论：此前 P2、P3 已解除；本轮未发现新增、可复现的 PSV 语义或安全缺陷。无需新增生产代码修复。\n\n### 已执行与核验\n\n- **离线 Family 合同测试：20/20 通过，0 失败。** [identity.ts:34](/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/psv-family/identity.ts:34) 的合法容量约束及 `ceil(outputScale/inputScale)` 下界，与 [contract.ts:33](/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/psv-family/test/contract.ts:33) 的小容量、单金额、耗尽、6↔18 精度及 0/10% 费率回归一致。\n- **源码与严格准入绑定通过。** 当前生产源码树与 natural-2 前后快照、dual-2 完全一致；生产校验函数验证了 Ready 根、活动 memo 指纹和当前 PSV definition。保存的编译产物、代理运行码、实现运行码及两处 UUPS `__self` 绑定一致；当前 BotVM artifact 的四个 Solidity 源文件及 owner 绑定运行码也吻合。\n- **natural-2 主记录独立计数：** 41 活动实例、82 条边、82 个 raw mid；effective 表实际有 **82 行，其中 80 行 quoted、2 行无关 V3 missing-valuation**。PSV 两向均为新鲜的 `4969763 → 4969763`。另一个 PSV 候选仍为 retryable，不能宣称所有候选通过。natural-1 原 Ready 哈希未变，新 PSV memo/definition 已变化。\n- **dual-2 主记录独立核验：** 8 组金额、16 成功执行、8 明确回滚。全部 **24 条请求 calldata 与当前源码离线重新编码逐字节一致**；成功回执的 64 项代币增量及 native 零增量吻合。输入旧库存保留 101 raw，输出旧库存未计入本次实收；16 次授权清零检查及 Approval 日志吻合。\n- **无链外 Exact 的 runtime 构造成立于已核验范围。** 构造 guard 与合同测试支持构造期间 Exact/quoted/RPC 均为零；报告中的 8 次 Exact 属于独立报价分支。\n- **保存的 runtime-audit/status 记录通过认证：** 两项 RC0、当前工具描述、参数哈希和实际 stdout 字节哈希均匹配 manifest。PSV 为 1 实例、2 路由、2 成功构造；status 输出与当前 Ready 一致。\n\n### 必须保留的限制\n\n- dual-2 是 **N=26152596 末状态、当前 BotVM 在合成 executor 上的本地代码覆盖、单腿执行**；不是原交易 precall、历史部署 executor 或完整机会闭环。\n- 单腿旧库存余量有回执支持；完整 runtime flow 的跨腿实收与库存保护，本轮仅静态核对 [RuntimeAmountVM.sol:24](/opt/mev-cloud/family-runtime-20261007/src/RuntimeAmountVM.sol:24)。source/caller/route 绑定由中央边界执行，见 [adapter-family-runtime.ts:2762](/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/adapter-family-runtime.ts:2762) 和 [4410](/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/adapter-family-runtime.ts:4410)。\n- 8 个负例保存的是正确回滚原因和**空 effects**，不是四账户逐项测得零增量。真实历史样本为 6/6 精度、零费率；跨精度及 10% 费率覆盖来自离线合同测试。\n- prices/input 的 `historicalNaturalDiscoveryProven` 实际为 `false`，这是当前 CLI 固定字段；自然发现依据是另行核验的 Ready 来源记录、候选 receipt/log2164 和生产 rebuild runner，不能改述该字段。\n- 已查看保存的 `build:live` 成功日志，本轮未重跑。专项 [typecheck-2.log](/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/typecheck-2.log) 仍有 **6 条传递依赖基线错误**，涉及的四个文件逐字节等于 HEAD；不能称完整类型检查通过。\n- 刚同步的 index 导出 77 / dirty 78 双执行结果，属于主代理新增结果，未计入本轮独立实测。\n- **Performance NOT RUN。** 本轮无源码写入、RPC、Ready/live 重跑；不作 `adapter_merge_ready` 或 opportunity fixed 声明。\n\n### 固定指纹\n\n最终只读复核确认 HEAD 仍为 `08dfd8b401cb4ebdda3a90bcf39077e0806a4436`，12 项关键源码/证据指纹未变化。\n\n生产源码树 SHA-256（1,101 文件，按既有规则排除 test/templates）：\n\n`5d67c47d86a92a0570fff2e41ef653cda78e052b619bd76663fc75855a947455`\n\n严格 memo：`b1e556c4230634960e7f4a6a7faa4ac995eea335f93b125d156d76843ec9f80d`  \nPSV memo definition：`95deedaeef7bdf0b3c86eebe67a76adaf236782d503ff53fc33f2c2870200983`\n\n| 文件 | SHA-256 |\n|---|---|\n| [identity.ts](/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/psv-family/identity.ts) | `07b6197aad6856cef8cad775edc7f0f29995cbae979f37218ca04aa496a019d2` |\n| [contract.ts](/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/psv-family/test/contract.ts) | `8d36e78edfb13040564a85794bec2f01faf0132a8d9810425c3c77b22e964a11` |\n| [historical-dual.ts](/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/psv-family/test/historical-dual.ts) | `09aef1d1e0b80d4ec856fc78bcc6433a23659f52524d636026d686e50c6ae55c` |\n| [psv.production.ts](/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/production-families/psv.production.ts) | `11eac9d5f3daf2b779d6aad8164cb51a79534ed60950dbd79ddb8fcb531d0a65` |\n| [natural-1/ready.json](/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-1/ready.json) | `480b2e31613fac372adeb6eae527896bf18fd738ab7de33c4dee7fb6d9dafc00` |\n| [natural-2/ready.json](/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/ready.json) | `9c27ae170a25c04c32031d0e88cfe4033f676338289215247e4855d8975852ec` |\n| [prices.json](/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/prices/prices.json) | `12900cad8cca3d55e7ce8d174b8ea2dc8ace6c0b60e6a3db7bf65e54ba3fc233` |\n| [prices/input.json](/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/prices/input.json) | `b8691ece692364b09a8e69b0fb1b7b4bf87d5c6aeb0d8b4aa1c1513a80fb0eca` |\n| [source-before.json](/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/source-before.json) / [source-after.json](/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/source-after.json) | `c25fbf369cab9b84942caedacede7988a79931329ee5ed0a5e7a2396a11d1a8e` |\n| [dual-2.json](/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/dual-2.json) | `23e49f613ee17b1c055c3e4a43b1e1c51e9a233c1fe1058da116e47e7085ab62` |\n| [reconciliation-selection.json](/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/reconciliation-selection.json) | `b88163b52045fb0b2ad7f4e339b30a523f75694a03fa3301dc0713a40e7bd6b3` |\n| [source-state-proof.json](/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/source-state-proof.json) | `6efd596314489b35578ee4bf5be331438d01d9745794ce7b29a7061d6e028f73` |\n| [proxy-source-proof.json](/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/proxy-source-proof.json) | `0758e15ad5620a6aa3f5c7fbf0d2e89dc46e9087ac0725c69927ea4b8f024fc9` |"
+  },
+  "reconciliation": {
+    "query": [
+      "family",
+      "runtime",
+      "status"
+    ],
+    "manifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/reconciliation-selection.json",
+      "sha256": "b88163b52045fb0b2ad7f4e339b30a523f75694a03fa3301dc0713a40e7bd6b3"
+    },
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:family-runtime-audit",
+        "descriptor_sha256": "27103edb52549d98e10e8597a4f8a2bf3836df2790b80c18b9c4ba76ac301995",
+        "started_at": "2026-10-10T02:05:02.025Z",
+        "finished_at": "2026-10-10T02:05:03.163Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "8885a45e79e507b0a00ccb778318c676386288008cda81baf68540e882eba748",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:family-runtime-audit",
+          "--",
+          "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/ready.json"
+        ],
+        "stdout_sha256": "02579b7706b351d96745b20232623e3faf73e92ceb6878c075e7c4990800bfc2",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 10022,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-10T02:05:03.449Z",
+        "finished_at": "2026-10-10T02:05:03.715Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "fee15520e75d06ba3d51652ae738468e7e2eda9155476cea08052df54a042893",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/ready.json",
+          "--json"
+        ],
+        "stdout_sha256": "cef3c0d7f568be17f18c290d790250e97ac2a526c1631fab432d4367e79c506e",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1540329,
+        "stderr_bytes": 0
+      }
+    ],
+    "targetRuntimeAudit": {
+      "family": "protocol:psv",
+      "domain": "protocol",
+      "instances": 1,
+      "routes": 2,
+      "constructed": 2,
+      "declined": 0,
+      "failed": 0,
+      "variants": {
+        "sell-gem": 1,
+        "buy-gem": 1
+      },
+      "errors": []
+    },
+    "window": {
+      "from": 26152596,
+      "to": 26152596,
+      "source": "actual immutable Ready contents/hash; tools do not accept --window"
+    },
+    "conclusion": "actual saved Ready/status and runtime construction agree; audit is not new strict, quote or EVM evidence"
+  },
+  "failuresPreserved": [
+    {
+      "cause": "fresh public explorer request HTTP403; existing verified source cache independently compiled and matched; not a live explorer-fetch success"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/build-1.log",
+      "sha256": "78d22e2aaa1da7dd39392e9fc0c38f2b336267d82f1e84e18eca7cc8598318b0"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/contract-1.log",
+      "sha256": "0b3ba4e56fe06262d345f9e9130fbdfa6b894c54cb32634c1c9eabb82f9265a6"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/contract-2.log",
+      "sha256": "bdd8eaf07817ba725fb2993bb243d6a260d42652c505a1a0e171a9101568a9ea"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/contract-3.log",
+      "sha256": "1929bcb298fa4cd70aeaf70e28e50833c257d3373b074708ad37134209a2a918"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/typecheck-1.log",
+      "sha256": "897e0182d610845b31e6aa2cee96edf40bfbba6275ae04a8ab560a5b5f52c3e1"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/typecheck-2.log",
+      "sha256": "529ff1f501df28e6a496f95f973e0df3fa46e0dfceeafeb180d6915c0efc2c97"
+    },
+    {
+      "cause": "initial own TS7023 diagnostics corrected; original contract transport fixture mismatch and asymmetric fixture reserves corrected without weakening production guards"
+    },
+    {
+      "cause": "review P2 fixed low-capacity fixed probes; review P3 fixed cross-decimal low probe rounding to zero while two distinct positive probes exist",
+      "patch": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/final-probe-types.patch",
+        "sha256": "f6af149084917f4f782a803c31f158f0bdd54417a68e14f179e717e35bd99bbf"
+      }
+    },
+    {
+      "cause": "a zero-context patch was refused; no forced overwrite used"
+    },
+    {
+      "cause": "earlier successes retained as old-source evidence, not substituted for current runs",
+      "artifacts": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/dual-1.json",
+          "sha256": "3a817c1cdb0faa35896ac59b8d4d91fd014d8624bf6bf44da3a3f56f6ca23508"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-1/ready.json",
+          "sha256": "480b2e31613fac372adeb6eae527896bf18fd738ab7de33c4dee7fb6d9dafc00"
+        }
+      ]
+    }
+  ],
+  "originalImplTableUpdate": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "beforeSha256": "2aa06c2397e48a345f47905015dbbb1d6c746ec8d5caa2135e3179bd7379458a",
+    "afterSha256": "ab0ab14a4f9e60cbda996b08319543070fe24f614c35f61236b4fc2e58f962dc",
+    "rowBeforeSha256": "53e55392d1e4493f607a8d84e775a04bf93fd879ea4be78c1666410bf0c602fe",
+    "rowAfterSha256": "4b64783d44e6198ae1b49e42756661b4f48646f8830031564ab2a87342ce18bc",
+    "onlyTargetRowChanged": true,
+    "otherRowsPreserved": true,
+    "beforeRow": "| eUSD PSV（Telcoin eUSD 锚定稳定兑换；PSM 变体待适配）<br>**待适配；blockscan／backrun 因果归属尚未验证。**<br>原TX：[0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8](https://etherscan.io/tx/0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8)<br>N=26152596，index=256；B=26152595。<br>PSV：`0xc72178d412256a6dc5f04d749859b4cd95076d61`；`sellGem(address,uint256)`／`0x95991276`。<br>核心本金闭环：USDC → PSV eUSD → Uniswap V4 USDC；Morpho 闪借全额归还。                                                                                  | **暂无最佳枚举参数／自然排名。**<br>本轮只完成原交易与冻结 live 的覆盖诊断，未运行我方自然历史复现。<br>补齐 PSV 变体后须验身份、指定金额报价、交易内实收结算及自然枚举→自主选额→独立 final sim→EV。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | **2026-10-09：冻结 live 版本 `d02f05d3d3351127def40969272253f8afa6ed07`。**<br>首个缺口：PSV 的 USDC→eUSD 边不在已验证 Ready／有效价格表；V4 eUSD→USDC 已入图且有有效报价。<br>现有 PSM discovery 可识别同名 `sellGem`，但 identity 按 Sky LitePSM 要求 `gem()/dai()/pocket()/to18ConversionFactor()` 并限定 USDC／DAI；PSV 提供 `GEM()/STABLE()` 与 `gemToWad()/stableToWad()`，两币均6位。费用方向与 `buyGem` 参数语义也须按 PSV 实际接口核对，不能仅薄注册或放宽身份。<br>本轮检查点没有该地址的 verified／retryable 记录；未取得具体历史提名／拒绝日志，不虚构 strict 曾执行。<br>B 总耗时2.484秒；全体枚举3135、选512、512命中既往revert过滤；该缺边核心闭环未进入下游。<br>[诊断报告](/Users/eunice/src/MEV/logs/tx-d62e-live-gap-20261009.qquzEq/report.txt) · [独立档案](/Users/eunice/src/MEV/logs/replay-history/1/0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8/20261009-live-psv-gap-d62e-qquzeq.json)。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | **我方自主选额／final sim／EV 尚未验收。**<br>原链实际：7361.655916 USDC → 7361.655916 eUSD → 7361.757354 USDC；核心毛利 **0.101438 USDC**。<br>Balancer V2 仅将利润换为0.000041521473774674 WETH，不属于本金核心闭环。<br>原gas成本0.000034052576131710 ETH；直接builder付款0.000000668495727697 ETH；原净收益 **0.000006800401915267 ETH**。<br>未验证我方执行器的费用豁免／费率及限额，未完成同状态报价到账、核心毛利20%匹配或生产EV验收。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |",
+    "afterRow": "| eUSD PSV（Telcoin eUSD 锚定稳定兑换；独立 `protocol:psv`，默认关闭）<br>**2026-10-10：真实单块 strict／自然入图／双向 raw+effective／同状态双执行通过；时效性待验。blockscan／backrun 因果归属尚未验证。**<br>原TX：[0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8](https://etherscan.io/tx/0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8)<br>N=26152596，index=256；B=26152595。<br>PSV：`0xc72178d412256a6dc5f04d749859b4cd95076d61`；`sellGem(address,uint256)`／`0x95991276`。<br>核心本金闭环：USDC → PSV eUSD → Uniswap V4 USDC；Morpho 闪借全额归还。                                                                                  | **暂无最佳枚举参数／自然排名。**<br>本轮只完成原交易与冻结 live 的覆盖诊断，未运行我方自然历史复现。<br>PSV 已补齐身份、指定金额报价及交易内实收；自然枚举→自主选额→独立 final sim→EV 仍未验证。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | **2026-10-10 云端新验收：**源码匹配的 UUPS 代理／实现与资产绑定，非实例白名单；身份探测按实际容量／精度取合法金额。N=26152596 原生产单块发现／rebuild，42候选中41 verified、1 retryable；目标1实例、2方向自然入图，两方向生产参考额均 **4.969763→4.969763**，raw／effective mid=1，未借大图金额。背景有效报价80/82，两条无关V3缺估值，不称全图通过。Family合同20/20、生产build通过；sim实收构造 Exact／quoted／RPC=0，无报价回退。**单块与代表性组合大图时效性均 NOT RUN，按统一最后阶段补验；未启动live。**<br>[本次正确性证据](/Users/eunice/src/MEV/logs/psv-acceptance-20261010.bjwvqD/psv-correctness-20261010.json)。<br>**以下保留旧诊断（不代表新代码当前状态）：2026-10-09 冻结 live 版本 `d02f05d3d3351127def40969272253f8afa6ed07`。**<br>首个缺口：PSV 的 USDC→eUSD 边不在已验证 Ready／有效价格表；V4 eUSD→USDC 已入图且有有效报价。<br>现有 PSM discovery 可识别同名 `sellGem`，但 identity 按 Sky LitePSM 要求 `gem()/dai()/pocket()/to18ConversionFactor()` 并限定 USDC／DAI；PSV 提供 `GEM()/STABLE()` 与 `gemToWad()/stableToWad()`，两币均6位。费用方向与 `buyGem` 参数语义也须按 PSV 实际接口核对，不能仅薄注册或放宽身份。<br>本轮检查点没有该地址的 verified／retryable 记录；未取得具体历史提名／拒绝日志，不虚构 strict 曾执行。<br>B 总耗时2.484秒；全体枚举3135、选512、512命中既往revert过滤；该缺边核心闭环未进入下游。<br>[诊断报告](/Users/eunice/src/MEV/logs/tx-d62e-live-gap-20261009.qquzEq/report.txt) · [独立档案](/Users/eunice/src/MEV/logs/replay-history/1/0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8/20261009-live-psv-gap-d62e-qquzeq.json)。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | **我方自主选额／final sim／EV 尚未验收。**<br>原链实际：7361.655916 USDC → 7361.655916 eUSD → 7361.757354 USDC；核心毛利 **0.101438 USDC**。<br>Balancer V2 仅将利润换为0.000041521473774674 WETH，不属于本金核心闭环。<br>原gas成本0.000034052576131710 ETH；直接builder付款0.000000668495727697 ETH；原净收益 **0.000006800401915267 ETH**。<br>**2026-10-10 同N状态双执行：**2方向×4金额（生产参考额、原TX数值、1 token、1 raw），16次quoted／runtime实际到账与报价差值全为0；另8次缺输入／末尾强制回滚负例通过，旧输入／输出库存不被消费，原生币差额0、授权清零。当前执行器不在豁免名单，N末费率／两项限额均0；非零费用／限额、异精度仅离线覆盖。反向原TX数值只作金额对照，不冒充原买入样本。**没有还原原调用前状态，核心毛利20%匹配、自主选额、完整资金闭环及生产EV仍未验证。**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |"
+  },
+  "notVerified": [
+    "historical nonzero-fee/cap/exempt-recipient/asymmetric-decimal PSV samples (offline fixtures only)",
+    "other PSV implementations",
+    "original call prestate parity or original route causal blockscan/backrun attribution",
+    "full production sim sizing, financing, repayment and EV loop",
+    "single-Ready stage latency",
+    "representative combined-graph stage latency",
+    "adapter_fixed/adapter_merge_ready/production_gap_fixed formal replay gates",
+    "real live"
+  ],
+  "latencyPlan": "All applicable protocols adapted/repaired from IMPL including future additions: correctness first; then individual real single-Ready production-stage checks, followed by representative combined background-graph 3x3 median acceptance and negative controls. Preparation separate, original failures retained. Includes PSV, Balancer V2/V3, Curve plain/underlying, DeepSeek and own Families.",
+  "safety": {
+    "signing": false,
+    "broadcast": false,
+    "liveStarted": false,
+    "deployed": false,
+    "originalReadyModified": false,
+    "privateKeysRead": false
+  }
+}

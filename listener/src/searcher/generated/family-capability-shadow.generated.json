@@ -9505,6 +9505,343 @@
     {
       "precision": "capability-exact",
       "identity": {
+        "familyId": "protocol:psv",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "1630931e57a173a983c685ef435f8a5c007804526935dc20e2a1634347182219",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/psv-family/codec.ts",
+          "src/searcher/venues/protocols/psv-family/discovery.ts",
+          "src/searcher/venues/protocols/psv-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/protocols/psv-family/capture.ts",
+        "entryExport": "capture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/psv-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:psv",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:psv",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "223bf6a8a419286707908e601793c8310ad3459508b2da03beb2556c47dcf196",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/psv-family/codec.ts",
+          "src/searcher/venues/protocols/psv-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/protocols/psv-family/discovery.ts",
+        "entryExport": "discovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/psv-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:psv",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "3b7f461fa5e42b3030cdceae363a8de8e7618bdc4cb269fd83ec4fc0ef6b92fc",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/psv-family/codec.ts",
+          "src/searcher/venues/protocols/psv-family/instance.ts",
+          "src/searcher/venues/protocols/psv-family/manifest.ts",
+          "src/searcher/venues/protocols/psv-family/routes.ts",
+          "src/searcher/venues/protocols/psv-family/runtime-shape.ts",
+          "src/searcher/venues/protocols/psv-family/state.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/protocols/psv-family/exact.ts",
+        "entryExport": "exact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/psv-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:psv",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "053c2911f302ced0a49b3fef491c822367f65d24d714932d35f8d459ef3f1ffa",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/psv-family/action.ts",
+          "src/searcher/venues/protocols/psv-family/codec.ts",
+          "src/searcher/venues/protocols/psv-family/instance.ts",
+          "src/searcher/venues/protocols/psv-family/manifest.ts",
+          "src/searcher/venues/protocols/psv-family/routes.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/protocols/psv-family/execution.ts",
+        "entryExport": "execution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/psv-family/action.ts",
+          "src/searcher/venues/protocols/psv-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:psv",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:psv",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "022b6900b4502c16bffa923b35006f9ff150bac644d419324ba09985a873a4a7",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/psv-family/codec.ts",
+          "src/searcher/venues/protocols/psv-family/manifest.ts",
+          "src/searcher/venues/protocols/psv-family/runtime-shape.ts",
+          "src/searcher/venues/protocols/psv-family/state.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/protocols/psv-family/identity.ts",
+        "entryExport": "identity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/psv-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:psv",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "6474418887dc4aa1b0a8f54821f993f62166f39b4b7921faaa52c2feef1fc2e2",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/protocols/psv-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/protocols/psv-family/instance.ts",
+        "entryExport": "instance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/psv-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:psv",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "b0e6d64205fa3a288f08b8813743b9fe295c2350687ca0db20990a85c02b6a94",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/psv-family/codec.ts",
+          "src/searcher/venues/protocols/psv-family/instance.ts",
+          "src/searcher/venues/protocols/psv-family/manifest.ts",
+          "src/searcher/venues/protocols/psv-family/routes.ts",
+          "src/searcher/venues/protocols/psv-family/runtime-shape.ts",
+          "src/searcher/venues/protocols/psv-family/state.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/protocols/psv-family/pricing.ts",
+        "entryExport": "pricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/psv-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:psv",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "411f2e59aca304329be5b9dd22c87c8d0e28badc59377b0176acbc7a5f4c4d14",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/protocols/psv-family/instance.ts",
+          "src/searcher/venues/protocols/psv-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/protocols/psv-family/routes.ts",
+        "entryExport": "routes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/psv-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:psv",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "abfd24bb4384bfcb32fd9c525b3cf9deb4bcbdea9f31b8e5a08d9dbc72c69718",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
         "familyId": "protocol:rocksolid",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
@@ -13730,5 +14067,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "7a363a4e9f9640099a924b5905e375a928d792aa45b823536326be848df2f14d"
+  "artifactHash": "f8bf86f6bf97faf4b8378116622572ae417ff238be716c68ffec2f31bce5b2b6"
 }
