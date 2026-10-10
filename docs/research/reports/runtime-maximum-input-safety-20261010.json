@@ -1,0 +1,197 @@
+{
+  "schema": "runtime-maximum-input-safety/v1",
+  "createdAt": "2026-10-10T03:03:19.919Z",
+  "result": "implemented-and-local-safety-verified",
+  "workspace": {
+    "host": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "path": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "baseHead": "e83ef1d585198d99dcab412243f727166d541a3d"
+  },
+  "purpose": "Protocol-independent per-leg input budget semantics required by output-sized operations. Not a global rounding relaxation.",
+  "contract": {
+    "optIn": "RuntimeAmountLeg.inputMode=maximum; omission preserves exact-input",
+    "header": "bit 7 remains 0/1 rounding; bit 6 adds one nonzero count-bounded policy mask; count 1..6; reserved bits rejected",
+    "safety": [
+      "positive debit bounded by current working amount",
+      "per-token residual protected with pre-existing inventory",
+      "repeated tokens exclude protected residual from next receipt",
+      "final return does not count budget residual as output",
+      "route-token and native-inventory conservation unchanged",
+      "old executor rejects new flag, old exact-input encoding unchanged"
+    ],
+    "propagation": "Family issuer -> generic native boundary -> production amount selector -> encoded flow; no off-chain Exact or quoted fallback",
+    "installedFamilyOptIn": "none in this commit; Yearn Family remains to implement"
+  },
+  "tests": {
+    "runtimeEvm": {
+      "passed": 37,
+      "failed": 0,
+      "fuzz": true
+    },
+    "encoderAndProductionSelector": {
+      "passed": 5,
+      "failed": 0
+    },
+    "nativeBoundary": {
+      "passed": 3,
+      "failed": 0
+    },
+    "assetBoundary": {
+      "passed": 4,
+      "failed": 0
+    },
+    "productionBuild": "PASS",
+    "issuer": "PASS",
+    "strictLifecycle": "PASS",
+    "strictCentralRuntime": "PASS",
+    "strictExecutionProjection": "PASS",
+    "sharedDirtyDual": {
+      "passed": 78,
+      "failed": 0
+    },
+    "isolatedOwnedSource": {
+      "build": "PASS",
+      "encoderAndSelector": 5,
+      "issuer": "PASS",
+      "dual": 77,
+      "note": "One additional dirty V1 fixture belongs to peer and is excluded from this commit."
+    },
+    "catalog": "isolated source generated and checked; composition/declarations passed"
+  },
+  "source": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/src/RuntimeAmountVM.sol",
+      "sha256": "241d644b7d27f58f07a76e1c48f40fb80c71ef2689c785f516b2345004b3eac6"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/test/BotVMRuntimeAmount.t.sol",
+      "sha256": "172fa727f576f1bf702bf468fb9507df5f6457ea2b8af2c608387216f86b0933"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/package.json",
+      "sha256": "4aed2df106da94eb17de5cc6f71d9ece488a2d0f4e16844d8937182ab07a026a"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "5ab89da1040c55ffa7ecd74eafe781b9aa83c24f7b06987ffe0d8fbc91322ce6"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/execution-asset-boundary.ts",
+      "sha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/adapter-family-runtime.ts",
+      "sha256": "97e1548761bda16aab2ba4e1319e785dec7cd7dfb07fb1473bb28fd4a3975a15"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/runtime-maximum-input.ts",
+      "sha256": "535cacd8e93c01aefe8a01f4cd46c07d3319098805345d452f6a7d5bfc91c4dd"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "e8aa9084cecd3881d7957813b8b9594199c06a76e2e347d5671c2e826e644f8b"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/maximum-input-test-2.log",
+      "sha256": "2e70e42626ca7dcb5f93c158570bb1f17dee2394975fe817f32847e607e2574f"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/forge-maximum-input-2.log",
+      "sha256": "71448e5542b56a7fd483d0db7c170b1935785dc6d24f379a38509d7de889156d"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/issuer-test-1.log",
+      "sha256": "df404e6a99aa195d4798fecfdb33507a1ff8cafe62dd3b8bfaf2a81326110c31"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/asset-boundary-test-1.log",
+      "sha256": "016cd22e2dd8b7d3583ce2f26ea4b8a3facd8ccba2e5310824f7d30f09fc85ae"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/build-live-maximum-1.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/searcher-family-dual-execution-maximum-1.log",
+      "sha256": "838890e2cb871638c5e6c586e1ce16b85ad5370d5c0024136d8da7481d6e7217"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/searcher-strict-family-lifecycle-runner-maximum-1.log",
+      "sha256": "6ef7e8e525f87e9652311bf24bf58e50c0a400fe7ad8ebaccfab3bc1746a73b7"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/searcher-strict-central-adapter-runtime-maximum-1.log",
+      "sha256": "391d46a4cdc070f886ecc1592e79c0da331f9c638645340464d04e83f0e8d61f"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/searcher-strict-execution-projection-maximum-1.log",
+      "sha256": "2fcb18e90f6883ebe96b57862b8591c6193f9cb420543140407c2f160dd8d1b5"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/searcher-runtime-native-boundary-maximum-1.log",
+      "sha256": "32e9daa02224045a42aac2104186e8f13919731bb9a09e418b5940fbcf0054be"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/isolated-maximum-1.log",
+      "sha256": "ba9f0182abe83384130a2b9d1d3d0950de9ec5723228e57b55f2f79d00bd35dc"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/isolated-catalog-maximum-1.log",
+      "sha256": "41a7f6d94b1bfe78d5bfa5f915b985847966a95b5cd1ef3d1e128ebd5775b848"
+    }
+  ],
+  "retainedFailures": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/forge-maximum-input-1.log",
+      "sha256": "2739457809d68474327477936e02715ea8ae132f169d660a1a7b7b8913a9d716",
+      "reason": "Initial new Solidity test declaration syntax failed compilation; corrected, separate second run retained."
+    }
+  ],
+  "review": {
+    "agent": "01a12376-1058-7591-a800-1418f20010c3",
+    "pass": 1,
+    "verdict": "no reproducible blocking finding in static/offline scope",
+    "independentlyExecuted": "encoder4/native4/issuer/production-selector20; 248 in-memory mask cases, four max-mode trial constructions",
+    "caveat": "Reviewer read the saved 37-test EVM log, did not independently rerun forge. Main later persisted selector-mask coverage."
+  },
+  "executorArtifacts": {
+    "unchangedProduction": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/out/BotVM.sol/BotVM.json",
+      "sha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3"
+    },
+    "newTestArtifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/forge-out/BotVM.sol/BotVM.json",
+      "sha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437"
+    },
+    "caveat": "No deployment. Historical execution using the new code is not yet run; old historical source/executor proofs cannot be relabeled as current."
+  },
+  "protection": {
+    "peerNonCatalogDiff": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/peer-noncatalog-before-commit.patch",
+      "sha256": "f03ee885ce43fc0d06561fbf819973501612ed10c2b8db56517bf0ba911bee2a"
+    },
+    "note": "Shared catalog generated separately in the owned-index export; actual peer V1/Ready/main changes remain outside commit. Original Ready and snapshots unchanged."
+  },
+  "remaining": [
+    "Yearn/Curve LP Family implementation and historical correctness",
+    "single-Ready latency for every applicable adapted IMPL protocol",
+    "representative combined production-graph latency, including Balancer V2/V3 and Curve plain/underlying",
+    "historical opportunity replay where requested"
+  ],
+  "latency": {
+    "singleReady": "NOT RUN",
+    "representativeCombined": "NOT RUN",
+    "policy": "Correctness first; all applicable protocols from IMPL, including later additions, require both local and representative production-stage timing before completed delivery."
+  },
+  "authorization": {
+    "liveStarted": false,
+    "deploy": false,
+    "sign": false,
+    "broadcast": false,
+    "privateKeyRead": false
+  }
+}

@@ -157,6 +157,7 @@
     "searcher:curve-plain-historical-ready": "node --import tsx src/searcher/venues/swaps/curve-plain-family/test/historical-ready.ts",
     "searcher:curve-plain-native-contract": "node --import tsx --test src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
     "searcher:runtime-native-boundary": "node --import tsx --test src/searcher/test/runtime-native-boundary.ts",
+    "searcher:runtime-maximum-input": "node --import tsx --test src/searcher/test/runtime-maximum-input.ts",
     "searcher:execution-asset-boundary": "node --import tsx --test src/searcher/test/execution-asset-boundary.ts",
     "searcher:identity-asset-metadata": "node --import tsx --test src/searcher/test/identity-asset-metadata.ts",
     "searcher:execution-asset-boundary-evm": "node --import tsx src/searcher/test/execution-asset-boundary-evm.ts",

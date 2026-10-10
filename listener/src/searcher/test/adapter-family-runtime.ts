@@ -184,6 +184,7 @@ interface FixtureControls {
   readonly executionRequirements?: PlanFragment["requirements"];
   readonly routeAssets?: (pool: string) => Pick<FamilyRouteDescriptor, "tokenIn" | "tokenOut" | "executionAssets">;
   readonly runtimeProgram?: string;
+  runtimeInputMode?: "maximum";
   runtimeBuildCalls?: number;
   readonly omitClassifyUnavailable?: boolean;
   readonly sharedBindingKey?: "pool" | "token0";
@@ -724,7 +725,8 @@ function defineFixture(name: string, controls: FixtureControls) {
         buildRuntimeLeg: () => {
           controls.runtimeBuildCalls = (controls.runtimeBuildCalls ?? 0) + 1;
           return { actionAdapterId: controls.executionAdapterId ?? actionId,
-            program: controls.runtimeProgram! };
+            program: controls.runtimeProgram!,
+            ...(controls.runtimeInputMode === undefined ? {} : { inputMode: controls.runtimeInputMode }) };
         },
       }),
       runtimeProjection: () => ({
@@ -1954,6 +1956,16 @@ async function testCentralExecutionAssetBoundaryIssuers(): Promise<void> {
     const wrongOwner = { ownerOfAction: () => familyId("protocol:not-the-owner") };
     assert.throws(() => buildFamilyRuntimeAmountLeg({ ...invocation, actionOwnership: wrongOwner }), /ownership/);
     assert.deepEqual(scheduler.requestIds, requestsBeforeRuntime);
+
+    controls.runtimeInputMode = "maximum";
+    const maximum = buildFamilyRuntimeAmountLeg(invocation);
+    assert.equal(maximum?.inputMode, "maximum", "issuer and native wrapper must retain the explicit policy");
+    assert.equal(maximum?.program, leg.program, "input policy does not replace the Family program");
+    controls.runtimeInputMode = "invalid" as "maximum";
+    assert.throws(() => buildFamilyRuntimeAmountLeg(invocation), /ownership or bounds/);
+    controls.runtimeInputMode = undefined;
+    assert.equal(buildFamilyRuntimeAmountLeg(invocation)?.inputMode, undefined, "default remains exact-input");
+    assert.deepEqual(scheduler.requestIds, requestsBeforeRuntime, "policy propagation performs no I/O");
 
     controls.onExactInput = undefined;
     controls.onExactDecode = undefined;

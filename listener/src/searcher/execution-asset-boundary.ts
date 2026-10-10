@@ -112,7 +112,7 @@ export function applyRuntimeAssetBoundary(input: {
   if (!executionNativeSides(input.route)) return input.leg;
   const program = envelope({ ...input, script: runtimeProgramScript(ethers.getBytes(input.leg.program)),
     amountPatch: 1, minimum: 1n });
-  return Object.freeze({ actionAdapterId: input.leg.actionAdapterId, program: ethers.hexlify(program.bytes()) });
+  return Object.freeze({ ...input.leg, program: ethers.hexlify(program.bytes()) });
 }
 
 /** Ownership of the raw fragment is checked before the issuer adds its own

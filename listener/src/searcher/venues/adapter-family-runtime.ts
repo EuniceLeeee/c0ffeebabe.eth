@@ -2796,11 +2796,13 @@ export function buildFamilyRuntimeAmountLeg(input: {
   if (leg === null) return null;
   if (!input.family.plugin.manifest.ownedActionAdapterIds.includes(leg.actionAdapterId) ||
       input.actionOwnership.ownerOfAction(leg.actionAdapterId) !== input.family.plugin.manifest.familyId ||
+      (leg.inputMode !== undefined && leg.inputMode !== "maximum") ||
       typeof leg.program !== "string" || !/^0x01(?:[a-fA-F0-9]{2})+$/.test(leg.program) || leg.program.length > 131074) {
     throw new Error("runtime execution program ownership or bounds");
   }
   return applyRuntimeAssetBoundary({ route: record.route, executor: input.executor,
-    leg: Object.freeze({ actionAdapterId: leg.actionAdapterId, program: leg.program }) });
+    leg: Object.freeze({ actionAdapterId: leg.actionAdapterId, program: leg.program,
+      ...(leg.inputMode === undefined ? {} : { inputMode: leg.inputMode }) }) });
 }
 
 interface ResolvedFamilyExecutionInvocation {

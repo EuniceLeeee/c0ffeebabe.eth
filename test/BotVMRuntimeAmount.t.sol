@@ -198,6 +198,76 @@ contract BotVMRuntimeAmountTest is Test {
         vm.expectRevert("runtime input rounding"); bot.execute(dustFlow(2, 0, 1, 120));
         assertEq(a.balanceOf(address(bot)), 1100); assertEq(b.balanceOf(address(bot)), 777);
     }
+    function maximumDustFlow(uint8 mask, uint256 firstDust, uint256 secondDust, uint256 finalOut) internal view returns(bytes memory) {
+        bytes memory data = abi.encodePacked(uint256(100), uint8(0x42), mask,
+            leg(a, b, 1, dustProgram(a, b, 200, firstDust)),
+            leg(b, a, 101, dustProgram(b, a, finalOut, secondDust)));
+        return abi.encodePacked(uint8(12), uint24(data.length), data);
+    }
+    function testMaximumInputRetainsFundingAndIntermediateBudget() public {
+        bot.execute(maximumDustFlow(3, 7, 19, 120));
+        assertEq(pool.received(), 200);
+        assertEq(a.balanceOf(address(bot)), 1127);
+        assertEq(b.balanceOf(address(bot)), 796);
+    }
+    function testMaximumInputIsPerLegNotGlobalRounding() public {
+        vm.expectRevert("runtime input rounding"); bot.execute(maximumDustFlow(1, 7, 2, 120));
+        vm.expectRevert("runtime input rounding"); bot.execute(maximumDustFlow(2, 2, 7, 120));
+        // Legacy 1-unit tolerance still cannot accept 2-unit leftovers.
+        vm.expectRevert("runtime input rounding"); bot.execute(dustFlow(0x82, 2, 0, 120));
+    }
+    function testMaximumInputCannotBeFreeOrSpendInventory() public {
+        vm.expectRevert("runtime input debit"); bot.execute(maximumDustFlow(3, 100, 0, 120));
+        bytes memory data = abi.encodePacked(uint256(100), uint8(0x42), uint8(3),
+            leg(a, b, 1, swapProgram(a, b, 200, 1)),
+            leg(b, a, 101, swapProgram(b, a, 120, 0)));
+        vm.expectRevert("runtime input rounding"); bot.execute(abi.encodePacked(uint8(12), uint24(data.length), data));
+        assertEq(a.balanceOf(address(bot)), 1100); assertEq(b.balanceOf(address(bot)), 777);
+    }
+    function testMaximumInputRefundDoesNotReplaceFinalOutput() public {
+        vm.expectRevert("runtime minimum output"); bot.execute(maximumDustFlow(1, 99, 0, 100));
+        assertEq(a.balanceOf(address(bot)), 1100); assertEq(b.balanceOf(address(bot)), 777);
+    }
+    function testMaximumInputRepeatedTokenDoesNotCountRefundAsReceipt() public {
+        RuntimeTestToken c = new RuntimeTestToken(); c.mint(address(bot), 999);
+        bytes memory data = abi.encodePacked(uint256(100), uint8(0x44), uint8(3),
+            leg(a, b, 1, dustProgram(a, b, 200, 7)),
+            leg(b, c, 1, dustProgram(b, c, 300, 19)),
+            leg(c, b, 1, swapProgram(c, b, 400, 0)),
+            leg(b, a, 101, swapProgram(b, a, 120, 0)));
+        bot.execute(abi.encodePacked(uint8(12), uint24(data.length), data));
+        assertEq(pool.received(), 400, "19 retained units are not the next working receipt");
+        assertEq(a.balanceOf(address(bot)), 1127); assertEq(b.balanceOf(address(bot)), 796);
+        assertEq(c.balanceOf(address(bot)), 999);
+    }
+    function testMaximumInputRefundCannotBeSpentByAnotherLeg() public {
+        RuntimeTestToken c = new RuntimeTestToken();
+        bytes memory last = abi.encodePacked(uint8(1), callOp(address(pool),
+            abi.encodeCall(RuntimeTestSwap.swapWithOtherTokenChange, (c, a, 0, 120, b)),
+            abi.encodePacked(uint24(68), uint8(0)), 0, 0));
+        bytes memory data = abi.encodePacked(uint256(100), uint8(0x43), uint8(2),
+            leg(a, b, 1, swapProgram(a, b, 200, 0)),
+            leg(b, c, 1, dustProgram(b, c, 300, 19)), leg(c, a, 101, last));
+        vm.expectRevert("runtime route inventory");
+        bot.execute(abi.encodePacked(uint8(12), uint24(data.length), data));
+        assertEq(a.balanceOf(address(bot)), 1100); assertEq(b.balanceOf(address(bot)), 777);
+    }
+    function testMaximumInputRejectsUnknownFlagsAndMasks() public {
+        vm.expectRevert("runtime input policy mask"); bot.execute(maximumDustFlow(0, 0, 0, 120));
+        vm.expectRevert("runtime input policy mask"); bot.execute(maximumDustFlow(4, 0, 0, 120));
+        vm.expectRevert("runtime input policy bounds");
+        bot.execute(abi.encodePacked(uint8(12), uint24(33), uint256(100), uint8(0x42)));
+        vm.expectRevert("runtime flow flags");
+        bot.execute(abi.encodePacked(uint8(12), uint24(33), uint256(100), uint8(0x0a)));
+    }
+    function testFuzzMaximumInputRefundsAreIsolated(uint64 first, uint64 second) public {
+        uint256 firstDust = bound(first, 0, 99);
+        uint256 secondDust = bound(second, 0, 199);
+        bot.execute(maximumDustFlow(3, firstDust, secondDust, 120));
+        assertEq(pool.received(), 200);
+        assertEq(a.balanceOf(address(bot)), 1120 + firstDust);
+        assertEq(b.balanceOf(address(bot)), 777 + secondDust);
+    }
     function testRoundingOnRetainsOneUnitNeverChangesNextInput() public {
         bot.execute(dustFlow(0x82, 1, 1, 120));
         assertEq(pool.received(), 200); assertEq(a.balanceOf(address(bot)), 1121);

@@ -111,6 +111,9 @@ export function runtimeCallbackPayment(token: string, recipient: string, debtOff
 export interface RuntimeAmountLeg {
   readonly actionAdapterId: string;
   readonly program: string;
+  /** Explicit budget semantics; omitted retains the live exact-input policy.
+   * Positive actual debit and old inventory/retained-input protection still apply. */
+  readonly inputMode?: "maximum";
 }
 export const runtimeAmountFlowAdapter: ActionAdapter = {
   id: "runtime-amount-flow", isWrapper: false, field2Offset: null,
@@ -122,14 +125,17 @@ export const runtimeAmountFlowAdapter: ActionAdapter = {
     const tolerance = node.params.quoteToleranceRawUnits ?? 0n;
     if (typeof tolerance !== "bigint") throw new Error("runtime flow tolerance type");
     assertExecutionRounding(tolerance);
-    const legs = JSON.parse(node.params.legs) as { tokenIn: string; tokenOut: string; program: string }[];
+    const legs = JSON.parse(node.params.legs) as { tokenIn: string; tokenOut: string; program: string; inputMode?: "maximum" }[];
     if (!Array.isArray(legs) || !legs.length || legs.length > 6) throw new Error("runtime flow length");
     let token = node.tokenIn.toLowerCase();
     const minimumReturn = node.params.minimumReturn;
     if (typeof minimumReturn !== "bigint" || minimumReturn < node.amount || minimumReturn > ethers.MaxUint256) {
       throw new Error("runtime flow return constraint");
     }
+    let maximumInputMask = 0;
     const records = legs.map((leg, index) => {
+      if (leg.inputMode !== undefined && leg.inputMode !== "maximum") throw new Error("runtime input mode");
+      if (leg.inputMode === "maximum") maximumInputMask |= 1 << index;
       if (leg.tokenIn.toLowerCase() !== token || leg.tokenOut.toLowerCase() === token) throw new Error("runtime flow continuity");
       token = leg.tokenOut.toLowerCase();
       const bytes = ethers.getBytes(leg.program);
@@ -140,7 +146,9 @@ export const runtimeAmountFlowAdapter: ActionAdapter = {
     if (token !== node.tokenIn.toLowerCase() || token !== node.tokenOut.toLowerCase()) throw new Error("runtime flow not closed");
     // High bit opts into at most one unit of retained input dust. The legacy
     // zero-tolerance encoding is unchanged; older executors reject the flag.
-    const data = concatBytes(uint256ToBytes(node.amount), new Uint8Array([legs.length | (Number(tolerance) << 7)]), ...records);
+    const data = concatBytes(uint256ToBytes(node.amount),
+      new Uint8Array([legs.length | (Number(tolerance) << 7) | (maximumInputMask ? 0x40 : 0)]),
+      maximumInputMask ? new Uint8Array([maximumInputMask]) : new Uint8Array(), ...records);
     return concatBytes(new Uint8Array([0x0c]), uint24ToBytes(data.length), data);
   },
 };

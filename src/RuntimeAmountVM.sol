@@ -26,16 +26,28 @@ abstract contract RuntimeAmountVM {
         uint256 amount = _word(data, 0);
         // High bit opts into one raw unit of positive input dust. Existing
         // count-only programs retain exact conservation. No deficit is allowed.
-        uint256 tolerance = uint8(data[32]) >> 7;
-        uint256 count = uint8(data[32]) & 0x7f;
+        uint256 flags = uint8(data[32]);
+        uint256 tolerance = flags >> 7;
+        uint256 count = flags & 0x07;
+        require((flags & 0x38) == 0, "runtime flow flags");
         require(amount > 0 && count > 0 && count <= 6, "runtime flow config");
+        // Optional per-leg maximum-input semantics, separate from rounding.
+        // Old executors reject the 0x40 flag; legacy exact-input bytes are unchanged.
+        uint256 start = 33;
+        uint256 maximumInputMask;
+        if ((flags & 0x40) != 0) {
+            require(data.length >= 34, "runtime input policy bounds");
+            maximumInputMask = uint8(data[33]);
+            require(maximumInputMask > 0 && maximumInputMask < (1 << count), "runtime input policy mask");
+            start = 34;
+        }
         // Separate existing inventory from the working amount once. Subsequent
         // legs consume only this flow's receipts, not the executor's inventory.
         // End-of-flow conservation catches changes to earlier route tokens.
         uint256[6] memory routeBalances;
         address[6] memory routeTokens;
         uint256 tokenCount;
-        uint256 scan = 33;
+        uint256 scan = start;
         address previous;
         for (uint256 i; i < count; ++i) {
             require(scan + 75 <= data.length, "runtime flow leg");
@@ -60,7 +72,7 @@ abstract contract RuntimeAmountVM {
         uint256 beforeInput = routeBalances[0];
         routeBalances[0] -= amount;
         uint256 beforeNative = address(this).balance;
-        uint256 ip = 33;
+        uint256 ip = start;
         for (uint256 i; i < count; ++i) {
             address tokenOut = _address(data, ip + 20);
             uint256 floor = _word(data, ip + 40);
@@ -73,7 +85,20 @@ abstract contract RuntimeAmountVM {
             uint256 afterInput = IERC20(_address(data, ip)).balanceOf(address(this));
             require(afterInput < beforeInput, "runtime input debit");
             uint256 spent = beforeInput - afterInput;
-            require(spent <= amount && amount - spent <= tolerance, "runtime input rounding");
+            require(spent <= amount, "runtime input rounding");
+            if ((maximumInputMask & (1 << i)) == 0) {
+                require(amount - spent <= tolerance, "runtime input rounding");
+            } else {
+                // A budget operation may retain input. Protect it alongside
+                // inventory so a later visit cannot mistake it for fresh output.
+                address tokenIn = _address(data, ip);
+                for (uint256 j; j < tokenCount; ++j) {
+                    if (routeTokens[j] == tokenIn) {
+                        routeBalances[j] += amount - spent;
+                        break;
+                    }
+                }
+            }
             uint256 baseline;
             for (uint256 j; j < tokenCount; ++j) {
                 if (routeTokens[j] == tokenOut) { baseline = routeBalances[j]; break; }
