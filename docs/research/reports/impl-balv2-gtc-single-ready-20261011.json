@@ -1,0 +1,587 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "scope": "IMPL row 8; existing Balancer V2 GTC instance; new natural single-block N sample, no production implementation change",
+  "claim": "Natural single-block integration and N end-state/N environment dual single-leg execution; not original-precall, full-route EV or formal merge acceptance",
+  "worktree": {
+    "vm": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "path": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "headAtStart": "3e3a37fcd68ce5050691c4f7bb0f5cb5f3389c98",
+    "sourceTreeSha256": "75b7b59833fce675adc5df8bc8a466af3989b07a8931d33bf3c865bfc5df4c69",
+    "fileCount": 1133,
+    "soliditySha256": "0e63c3e8370521aabccacf2e4286ce23f8ead90d8acd1146b1efeda06f10f1c1",
+    "packageSha256": "b3f2128a35f0d9bb7c73e895367c8246d74200e81647b6f95306475691e7f0e8",
+    "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+    "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+    "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+    "artifactSha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+    "sourceUnchanged": true,
+    "nonGeneratedPeerDiffSha256": "98c67fbc9b8f33d2311b2d7824e60028e10d1348b6061ce53f0860a799b79776"
+  },
+  "sample": {
+    "tx": "0xfe948418576fdf6134dc65c9be9cfebc1b513b56eb0921b41bfaa1d51999d0ee",
+    "blockNumber": 26152962,
+    "blockHash": "0x014fb94560c8797b3ca711c10d34081f31a500213c5784e134f1658e9779da08",
+    "receiptSha256": "6d00c1a581ef792c9dce073ad05f8f71bd3d452af646b88fd75137e0cdf6bba6",
+    "legs": [
+      {
+        "family": "balancer-v2",
+        "instance": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",
+        "pool": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+        "amountIn": "6943670383555723",
+        "amountOut": "86541568230777845160",
+        "directions": 2,
+        "originalPreCallParity": "unverified; executable comparisons use N end-state"
+      }
+    ],
+    "sourceBlock": 26152962,
+    "executionEnvironment": 26152962,
+    "state": "N block end, not original call prestate"
+  },
+  "ready": {
+    "range": [
+      26152962,
+      26152962
+    ],
+    "familyIds": [
+      "balancer-v2",
+      "univ3-standard"
+    ],
+    "generation": 1,
+    "accounting": {
+      "total": 16,
+      "verified": 16,
+      "terminalRejected": 0,
+      "retryable": 0,
+      "remainingUnaccounted": 0
+    },
+    "instances": 16,
+    "edges": 32,
+    "graphHash": "45c64a871f8111f0fce6269fd2b48cef51f08ad923a6237b83eb5fb8a9c0ca1d",
+    "targetDirections": 2,
+    "originalCoffeeReadyModified": false,
+    "defaultFamilyActivationModified": false
+  },
+  "prices": {
+    "effectiveRows": 32,
+    "targetRows": [
+      {
+        "edgeId": "balancer-v2\u001f0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030\u001f0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xde30da39c46104798bb5aa3fe8b9e0e1f348163f\u001f00fdf0b7b29841b5d97e6d3f7be976099b10b30d2f90bd481e500d661d2260c1",
+        "instanceKey": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+        "amountIn": {
+          "$type": "bigint",
+          "value": "2000000000000000"
+        },
+        "status": "quoted",
+        "amountOut": {
+          "$type": "bigint",
+          "value": "24763318738182800760"
+        },
+        "effectiveMid": 12381.6593690914,
+        "quotedAt": {
+          "number": 26152962,
+          "hash": "0x014fb94560c8797b3ca711c10d34081f31a500213c5784e134f1658e9779da08",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v2\u001f0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030\u001f0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88\u001f0xde30da39c46104798bb5aa3fe8b9e0e1f348163f>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f250cc053a9f1fa7ab244a4076e49ca0638467c0df58fecbb6b34b3d7e6e20b3f",
+        "instanceKey": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",
+        "tokenIn": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": {
+          "$type": "bigint",
+          "value": "24763318738182800760"
+        },
+        "status": "quoted",
+        "amountOut": {
+          "$type": "bigint",
+          "value": "1988185406991783"
+        },
+        "effectiveMid": 0.00008028751832548926,
+        "quotedAt": {
+          "number": 26152962,
+          "hash": "0x014fb94560c8797b3ca711c10d34081f31a500213c5784e134f1658e9779da08",
+          "generation": 1
+        }
+      }
+    ]
+  },
+  "dual": {
+    "result": "pass",
+    "runtimeConstruction": {
+      "directions": 2,
+      "rpcCalls": 0,
+      "exactCalls": 0,
+      "constructionAttempts": 0,
+      "quotedFallback": false,
+      "programHashes": [
+        "0x29e9af50097d8d40fe407edd0614b0db6308f832ac30a916bc5f64eea3b50344",
+        "0xb3a8eb054ff27d2a9d3e3ed8c5d2586bb27e0d14bd29e1068908dc05b8b6f826"
+      ]
+    },
+    "actor": {
+      "executor": "0x1000000000000000000000000000000000000002",
+      "owner": "0x1000000000000000000000000000000000000001"
+    },
+    "runtimeCodeHash": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419",
+    "samples": [
+      {
+        "label": "production-P",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+        "amountIn": "2000000000000000",
+        "quoteOut": "24763318738182800760",
+        "status": "pass",
+        "originalComparison": {
+          "originalAmountIn": "6943670383555723",
+          "originalAmountOut": "86541568230777845160",
+          "signedDelta": null,
+          "preCallParity": "unverified; N end-state"
+        },
+        "executions": [
+          {
+            "encoding": "quoted-fragment",
+            "status": "pass",
+            "quoteDelta": "0",
+            "balances": [
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "before": "2000000000000101",
+                "after": "101",
+                "delta": "-2000000000000000"
+              },
+              {
+                "token": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+                "before": "24763318738182800863",
+                "after": "49526637476365601623",
+                "delta": "24763318738182800760"
+              }
+            ],
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "quoteDelta": "0",
+            "balances": [
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "before": "2000000000000101",
+                "after": "101",
+                "delta": "-2000000000000000"
+              },
+              {
+                "token": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+                "before": "24763318738182800863",
+                "after": "49526637476365601623",
+                "delta": "24763318738182800760"
+              }
+            ],
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          }
+        ]
+      },
+      {
+        "label": "historical-amount-at-N",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+        "amountIn": "6943670383555723",
+        "quoteOut": "85664907831742531569",
+        "status": "pass",
+        "originalComparison": {
+          "originalAmountIn": "6943670383555723",
+          "originalAmountOut": "86541568230777845160",
+          "signedDelta": "-876660399035313591",
+          "preCallParity": "unverified; N end-state"
+        },
+        "executions": [
+          {
+            "encoding": "quoted-fragment",
+            "status": "pass",
+            "quoteDelta": "0",
+            "balances": [
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "before": "6943670383555824",
+                "after": "101",
+                "delta": "-6943670383555723"
+              },
+              {
+                "token": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+                "before": "85664907831742531672",
+                "after": "171329815663485063241",
+                "delta": "85664907831742531569"
+              }
+            ],
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "quoteDelta": "0",
+            "balances": [
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "before": "6943670383555824",
+                "after": "101",
+                "delta": "-6943670383555723"
+              },
+              {
+                "token": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+                "before": "85664907831742531672",
+                "after": "171329815663485063241",
+                "delta": "85664907831742531569"
+              }
+            ],
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          }
+        ]
+      },
+      {
+        "label": "production-P",
+        "tokenIn": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "24763318738182800760",
+        "quoteOut": "1988185406991783",
+        "status": "pass",
+        "originalComparison": {
+          "originalAmountIn": null,
+          "originalAmountOut": null,
+          "signedDelta": null,
+          "preCallParity": "unverified; N end-state"
+        },
+        "executions": [
+          {
+            "encoding": "quoted-fragment",
+            "status": "pass",
+            "quoteDelta": "0",
+            "balances": [
+              {
+                "token": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+                "before": "24763318738182800861",
+                "after": "101",
+                "delta": "-24763318738182800760"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "before": "1988185406991886",
+                "after": "3976370813983669",
+                "delta": "1988185406991783"
+              }
+            ],
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "quoteDelta": "0",
+            "balances": [
+              {
+                "token": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+                "before": "24763318738182800861",
+                "after": "101",
+                "delta": "-24763318738182800760"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "before": "1988185406991886",
+                "after": "3976370813983669",
+                "delta": "1988185406991783"
+              }
+            ],
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          }
+        ]
+      },
+      {
+        "label": "half-production-P",
+        "tokenIn": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "12381659369091400380",
+        "quoteOut": "994818269955070",
+        "status": "pass",
+        "originalComparison": {
+          "originalAmountIn": null,
+          "originalAmountOut": null,
+          "signedDelta": null,
+          "preCallParity": "unverified; N end-state"
+        },
+        "executions": [
+          {
+            "encoding": "quoted-fragment",
+            "status": "pass",
+            "quoteDelta": "0",
+            "balances": [
+              {
+                "token": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+                "before": "12381659369091400481",
+                "after": "101",
+                "delta": "-12381659369091400380"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "before": "994818269955173",
+                "after": "1989636539910243",
+                "delta": "994818269955070"
+              }
+            ],
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "quoteDelta": "0",
+            "balances": [
+              {
+                "token": "0xde30da39c46104798bb5aa3fe8b9e0e1f348163f",
+                "before": "12381659369091400481",
+                "after": "101",
+                "delta": "-12381659369091400380"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "before": "994818269955173",
+                "after": "1989636539910243",
+                "delta": "994818269955070"
+              }
+            ],
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          }
+        ]
+      }
+    ],
+    "rpcCalls": 85,
+    "safety": {
+      "signing": false,
+      "broadcast": false,
+      "minedBlocks": 0,
+      "remoteSubmission": false,
+      "executionOverrides": "actor code/gas/balance slots only; no protocol liquidity, registry, totalSupply or eligibility overrides"
+    },
+    "forkStopped": true,
+    "errors": []
+  },
+  "checks": {
+    "productionBuild": {
+      "command": "npm run build:live",
+      "exitCode": 0
+    },
+    "offline": {
+      "command": "node --import tsx --test src/searcher/test/family-integration/three-family/historical-input-observations.test.ts src/searcher/venues/swaps/balancer-v2-family/test/contract.ts src/searcher/venues/swaps/balancer-v2-family/test/codec-equivalence.ts",
+      "tests": 38,
+      "passed": 38,
+      "failed": 0
+    },
+    "independentReview": {
+      "agent": "01a126fc-5586-76e1-9a17-6a4e367c32ee",
+      "verdict": "No blockers for the two-line sample addition and scoped N-end single-leg claim",
+      "readOnlyAssertionGroupsPassed": 25,
+      "checks": [
+        "Exactly two added lines; unchanged harness and safety contracts",
+        "Original receipt, transfer, N/hash, poolId and integer amount bindings",
+        "Natural verified and active Ready; both graph/raw/effective directions",
+        "Eight trace/stateDiff recomputations of spend, receipt, old inventory and cleared approvals",
+        "Source/input/artifact fingerprints and actual runtime calldata program hashes",
+        "Production/dual manifest file, descriptor, argv hashes and successful receipts",
+        "Original IMPL full-file before hash reconstructed from row8-only inverse edit"
+      ],
+      "scopeLimits": "Does not independently rerun the 38 cloud regressions/build or peer diff; no original-precall, whole-loop, original coffee cutoff or performance verdict. No new no-input negative EVM case."
+    }
+  },
+  "reconciliation": [
+    {
+      "manifest": "tools-production.json",
+      "sha256": "414a3405c931d8266f0f726f921e7913842d2cba00713a6e3392811a43564d03",
+      "query": [
+        "universe",
+        "rebuild",
+        "startup",
+        "at",
+        "block"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:universe-rebuild-startup",
+          "descriptor_sha256": "249c113f96ef4042bd974e0e4a26ff0e564edd09db99297f55c6f0c98cf086ef",
+          "started_at": "2026-10-10T17:48:33.227Z",
+          "finished_at": "2026-10-10T17:48:36.799Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "eabd735caa1be499de4f5e42e187b87737e048224da12d9a1d5d5fd3a2ffe859",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:universe-rebuild-startup",
+            "--",
+            "--checkpoint",
+            "/opt/mev-cloud/family-runtime-20261007/logs/impl-balv2-gtc-20261011.wBzXhO/single-N26152962/ready.json",
+            "--run-id",
+            "impl-single-26152962",
+            "--from-block",
+            "26152962",
+            "--to-block",
+            "26152962"
+          ],
+          "stdout_sha256": "b585562a212a6a9b90e3eae4c006f8aef0c23dda65136b293410055acd3242da",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 1641,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:at-block",
+          "descriptor_sha256": "6fe9b1650f257ba529c2e6c55bdc180c8bc292b13710329b76a5fee3f7d50360",
+          "started_at": "2026-10-10T17:54:31.945Z",
+          "finished_at": "2026-10-10T17:54:34.627Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "1a142128383c11e3857c86401065ba381d876fd36a0efce871d53beafcba7999",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:at-block",
+            "--",
+            "--ready",
+            "/opt/mev-cloud/family-runtime-20261007/logs/impl-balv2-gtc-20261011.wBzXhO/single-N26152962/ready.json",
+            "--block",
+            "26152962",
+            "--through",
+            "prices",
+            "--execution-mode",
+            "source-block",
+            "--out",
+            "/opt/mev-cloud/family-runtime-20261007/logs/impl-balv2-gtc-20261011.wBzXhO/single-N26152962/prices",
+            "--executor",
+            "0x1000000000000000000000000000000000000002",
+            "--owner",
+            "0x1000000000000000000000000000000000000001",
+            "--revm-bin",
+            "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/revm-validation-target/debug/revm-sim"
+          ],
+          "stdout_sha256": "4390f0a2b6205157226e020e1d798819ddbdb280980fb140f7b6923b4be08075",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 9865,
+          "stderr_bytes": 0
+        }
+      ]
+    },
+    {
+      "manifest": "tools-dual.json",
+      "sha256": "583535983a70a61cba207e4107c3524430d076940d880e83c5ae1d11bc1f3db2",
+      "query": [
+        "three",
+        "dual",
+        "historical",
+        "fork"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:three-family-runtime-dual-historical-fork",
+          "descriptor_sha256": "585239e3c41d27b6e306413b2dca16f9446027c2f70daf3ec2bde27edd21157c",
+          "started_at": "2026-10-10T18:00:48.736Z",
+          "finished_at": "2026-10-10T18:00:51.409Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "870fc97ad0bd248a9067486397ff28b402dab5d9d227080ec7def320e9863533",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:three-family-runtime-dual-historical-fork",
+            "--",
+            "--ready",
+            "/opt/mev-cloud/family-runtime-20261007/logs/impl-balv2-gtc-20261011.wBzXhO/single-N26152962/ready.json",
+            "--prices",
+            "/opt/mev-cloud/family-runtime-20261007/logs/impl-balv2-gtc-20261011.wBzXhO/single-N26152962/prices/prices.json",
+            "--rpc-file",
+            "/tmp/ds-rpc.json",
+            "--out",
+            "/opt/mev-cloud/family-runtime-20261007/logs/impl-balv2-gtc-20261011.wBzXhO/dual-N26152962-1.json",
+            "--port",
+            "8593",
+            "--block",
+            "26152962"
+          ],
+          "stdout_sha256": "0f49d8c63e5fdfd0abd975a035fcb44255e44878a763144e327880a258993725",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 1450,
+          "stderr_bytes": 0
+        }
+      ]
+    }
+  ],
+  "evidence": {
+    "cloudRoot": "/opt/mev-cloud/family-runtime-20261007/logs/impl-balv2-gtc-20261011.wBzXhO",
+    "localRoot": "/Users/eunice/src/MEV/logs/impl-balv2-gtc-20261011.wBzXhO/",
+    "files": [
+      {
+        "path": "config.json",
+        "sha256": "56f5e052a0be424573ebc12d75e29bb66a8f26b5291b9ada265020a1bc5bb4db"
+      },
+      {
+        "path": "dual-N26152962-1.json",
+        "sha256": "48580d0026d6439150b49de577b17cbd9ceb3936c4cedec94ad97c2a68106f90"
+      },
+      {
+        "path": "single-N26152962/ready.json",
+        "sha256": "f3761bb1302784523cea418a95cb565c8916cf725585d274f093eb74a9d6885d"
+      },
+      {
+        "path": "single-N26152962/prices/prices.json",
+        "sha256": "6b25a7f7a29673d6b5beb97fc0fb0f1e6c63d108e442da72c2e1100a4d38647f"
+      },
+      {
+        "path": "single-N26152962/prices/input.json",
+        "sha256": "de4a0017dddfb13f7ccffc3c429a4a6cac51705da49c4a036b3c7d011221cb6f"
+      },
+      {
+        "path": "tools-production.json",
+        "sha256": "414a3405c931d8266f0f726f921e7913842d2cba00713a6e3392811a43564d03"
+      },
+      {
+        "path": "tools-dual.json",
+        "sha256": "583535983a70a61cba207e4107c3524430d076940d880e83c5ae1d11bc1f3db2"
+      }
+    ]
+  },
+  "limits": [
+    "Original coffee cutoff26088150/429 failure retained; new-N success does not promote the old checkpoint.",
+    "No original call-prestate replay, full-route flash funding, final sim or production EV claim.",
+    "Existing safety/production sim construction contracts retained; this new sample did not add no-input negative EVM cases.",
+    "Only this logical pool, two directions and four amounts are covered, not all V2 variants.",
+    "Formal per-Family single-Ready and representative combined-graph performance are NOT RUN; diagnostic stage timing is not acceptance.",
+    "Every applicable current/future IMPL adaptation remains in stage4A per-Family timing then stage4B combined large-graph timing."
+  ]
+}

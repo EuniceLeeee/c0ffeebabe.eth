@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "32969aae5099c92dd88e44c2a1dcbc9089356be78443ec2de4ddbd7c4c173348",
+  "afterSha256": "f6dd99a606e5de23f38d18160d34af8f02db1247b311c729b6de84320b9993b4",
+  "scope": "Append only to existing row8; all other rows and the all-Family performance requirement remain byte-identical.",
+  "beforeLine": "| 第8笔：Balancer V2实例重验／启用样本；`0xfe948418576fdf6134dc65c9be9cfebc1b513b56eb0921b41bfaa1d51999d0ee` | **用户指定加入；已有适配**。核心 Balancer V2 WETH→GTC→Uniswap V3 WETH。目标Balancer实例曾在26088133提名，身份读取遇RPC 429／compute capacity后仍retryable、未入Ready；本轮live同时关闭Balancer V2。V3父块报价已有。此笔不是第7笔的“扫描窗口未覆盖”结论；需区分实例重验和Family启用。 | **−0.000005804238059958 ETH**；原交易毛利不足gas与直接builder费用，不作为已证正EV机会。 | [报告](/Users/eunice/src/MEV/logs/tx-fe9484-live-gap-20261009.R2vPiJ/report.txt) · [档案](/Users/eunice/src/MEV/logs/replay-history/1/0xfe948418576fdf6134dc65c9be9cfebc1b513b56eb0921b41bfaa1d51999d0ee/20261009-fe9484-live-gap-d02-r2vpij.json) |",
+  "afterLine": "| 第8笔：Balancer V2实例重验／启用样本；`0xfe948418576fdf6134dc65c9be9cfebc1b513b56eb0921b41bfaa1d51999d0ee` | **用户指定加入；已有适配**。核心 Balancer V2 WETH→GTC→Uniswap V3 WETH。目标Balancer实例曾在26088133提名，身份读取遇RPC 429／compute capacity后仍retryable、未入Ready；本轮live同时关闭Balancer V2。V3父块报价已有。此笔不是第7笔的“扫描窗口未覆盖”结论；需区分实例重验和Family启用。<br>**2026-10-11 单块正确性补验：** N=26152962 的新副本自然 Ready 共16实例／32边，16候选全部通过、无retryable；目标同一逻辑池双向 raw/effective 均有报价。使用本块自然生成的双向生产参考金额，另验原TX金额及反向半P，共4组金额、8次 quoted／runtime 实际执行，与同状态报价差0，旧库存不变；实收构造链外Exact／quoted／RPC=0，无回退。生产build及38项相关回归通过。仅新增历史验收样本，未改生产实现、原coffee Ready或默认启用集合；**不等于原coffee旧cutoff补验／原调用前状态／完整套利闭环通过。局部与组合大图时效性仍未测，按全表要求留到最后逐族再批量验收。** | **−0.000005804238059958 ETH**；原交易毛利不足gas与直接builder费用，不作为已证正EV机会。 | [报告](/Users/eunice/src/MEV/logs/tx-fe9484-live-gap-20261009.R2vPiJ/report.txt) · [档案](/Users/eunice/src/MEV/logs/replay-history/1/0xfe948418576fdf6134dc65c9be9cfebc1b513b56eb0921b41bfaa1d51999d0ee/20261009-fe9484-live-gap-d02-r2vpij.json) · [本次单块验收](/Users/eunice/src/MEV/logs/impl-balv2-gtc-20261011.wBzXhO/acceptance.json) |",
+  "evidenceReport": "docs/research/reports/impl-balv2-gtc-single-ready-20261011.json"
+}

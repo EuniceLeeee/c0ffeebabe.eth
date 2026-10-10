@@ -43,6 +43,8 @@ const ERC20 = new ethers.Interface(["function balanceOf(address) view returns(ui
   "function allowance(address,address) view returns(uint256)", "event Transfer(address indexed from,address indexed to,uint256 value)"]);
 type Case = { family:string; instance:string; pool:string; tokenIn:string; tokenOut:string; amountIn:bigint; amountOut:bigint; directions:number };
 export const SAMPLES: Record<number, {tx:string; hash:string; cases:Case[]}> = {
+  26152962: {tx:"0xfe948418576fdf6134dc65c9be9cfebc1b513b56eb0921b41bfaa1d51999d0ee",hash:"0x014fb94560c8797b3ca711c10d34081f31a500213c5784e134f1658e9779da08",cases:[
+    {family:"balancer-v2",instance:"0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",pool:"0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88",tokenIn:WETH,tokenOut:GTC,amountIn:6943670383555723n,amountOut:86541568230777845160n,directions:2}]},
   26138731: {tx:"0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8", hash:"0x696b86358440cc2b7a0a5e80dc87c2542a2e1535cd21502b99b317fef1d4d266", cases:[
     {family:"balancer-v1",instance:"0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",pool:"0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",tokenIn:WETH,tokenOut:NMR,amountIn:8444695829171278n,amountOut:1313743479005274328n,directions:2}]},
   26138724: {tx:"0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",hash:"0xcad9e81827cbe1f29ff77fc163855dfe1647a17b8b4a44b209e900273ac4f70b",cases:[
