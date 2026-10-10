@@ -29,6 +29,7 @@ import { descriptor as algebraIntegralFixture } from "../venues/swaps/algebra-in
 import { descriptor as kyberswapElasticFixture } from "../venues/swaps/kyberswap-elastic-family/test/fixtures.js";
 import { descriptor as yieldBasisLtFixture, answerFor as yieldBasisAnswers } from "../venues/protocols/yieldbasis-lt-family/test/fixtures.js";
 import { setup as yearnAuctionFixture } from "../venues/protocols/yearn-auction-family/test/fixtures.js";
+import { setup as curveLpFixture } from "../venues/protocols/curve-lp-family/test/fixtures.js";
 
 
 const executor = ethers.getAddress("0x1000000000000000000000000000000000000002");
@@ -108,6 +109,8 @@ fixtures.push(kyberswapElasticFixture());
 fixtures.push(yieldBasisLtFixture(), yieldBasisLtFixture(yieldBasisAnswers({ deposit: true })));
 // Synthetic maximum-budget auction; historical debit/receipt proof is separate.
 fixtures.push(yearnAuctionFixture().d);
+// Four synthetic coin/LP directions; historical receipt evidence is separate.
+fixtures.push(curveLpFixture().d);
 const dFor = (id: string) => { const d = fixtures.find(d => d.familyId === id); assert(d, id); return d; };
 // Both Fluid native-token positions also go through the real sim selector's
 // no-Exact/no-quoted-fallback construction contract. Synthetic, never Ready.

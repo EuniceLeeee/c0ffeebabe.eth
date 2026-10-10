@@ -126,6 +126,9 @@ export type AdapterRequest =
         readonly token: string;
         readonly account: CallerRef | string;
       }[];
+      /** Independent totalSupply() observation targets. Undefined preserves the
+       * legacy call.to scope; explicit [] means no supply probes. */
+      readonly observeTotalSupplies?: readonly string[];
       readonly overrideIntent: FundedCallerOverrideIntent;
       readonly observe: readonly EffectObservationKind[];
     };
@@ -162,6 +165,7 @@ export type MaterializedAdapterRequest =
         readonly token: string;
         readonly account: string;
       }[];
+      readonly observeTotalSupplies?: readonly string[];
       readonly overrideIntent: Omit<FundedCallerOverrideIntent, "caller"> & {
         readonly caller: string;
       };
@@ -824,6 +828,9 @@ function freezeAdapterRequest(request: AdapterRequest): AdapterRequest {
                 })
               )),
             }),
+        ...(request.observeTotalSupplies === undefined ? {} : {
+          observeTotalSupplies: Object.freeze([...request.observeTotalSupplies]),
+        }),
         overrideIntent: Object.freeze({
           caller: freezeCallerRef(request.overrideIntent.caller),
           ...(request.overrideIntent.nativeBalanceWei === undefined
@@ -1303,6 +1310,7 @@ function assertRequestShape(request: AdapterRequest): void {
           "overrideIntent",
           "observe",
           "observeTokenBalances",
+          "observeTotalSupplies",
           "executionAssetBoundary",
         ],
         `${request.id} simulation request`,
@@ -1332,6 +1340,25 @@ function assertRequestShape(request: AdapterRequest): void {
               throw new Error(`${request.id} unsupported transaction-origin token-balance observation`);
             }
           }
+        }
+      }
+      if (request.observeTotalSupplies !== undefined) {
+        if (!Array.isArray(request.observeTotalSupplies) || !request.observe.includes("total-supply-delta")) {
+          throw new Error(`${request.id} supply observations require an array and declared total-supply-delta`);
+        }
+        for (const key of Reflect.ownKeys(request.observeTotalSupplies)) {
+          if (key !== "length" && (typeof key !== "string" || !/^(0|[1-9][0-9]*)$/.test(key) ||
+              Number(key) >= request.observeTotalSupplies.length)) {
+            throw new Error(`${request.id} supply observations contain unsupported field ${String(key)}`);
+          }
+        }
+        const tokens = new Set<string>();
+        for (const token of request.observeTotalSupplies) {
+          assertAddress(token, `${request.id} supply observation token`);
+          if (/^0x0{40}$/i.test(token) || tokens.has(token.toLowerCase())) {
+            throw new Error(`${request.id} supply observations contain zero or duplicate token`);
+          }
+          tokens.add(token.toLowerCase());
         }
       }
       if (request.preCalls !== undefined && !Array.isArray(request.preCalls)) {
@@ -1903,6 +1930,9 @@ function physicalRequestCanonicalValue(request: AdapterRequest): CanonicalValue 
                   : callerRefCanonicalValue(item.account),
               })),
             }),
+        ...(request.observeTotalSupplies === undefined ? {} : {
+          observeTotalSupplies: request.observeTotalSupplies.map(token => token.toLowerCase()),
+        }),
         overrideIntent: {
           caller: callerRefCanonicalValue(request.overrideIntent.caller),
           nativeBalanceWei: request.overrideIntent.nativeBalanceWei ?? null,

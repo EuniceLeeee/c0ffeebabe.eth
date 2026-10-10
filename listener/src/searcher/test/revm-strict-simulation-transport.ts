@@ -401,6 +401,43 @@ test("sparse exact pairs never probe poisonous Cartesian cross-pairs", async () 
   const input = invocation(); input.request = { ...input.request, observeTokenBalances: pairs };
   assert.equal((await f.transport.simulate(input)).effects?.tokenDeltas?.length, 2);
 });
+test("independent supply targets preserve default, explicit empty, and detached source-bound scope", async () => {
+  for (const scope of [undefined, [], [TOKEN], [TOKEN, TARGET]]) {
+    const f = fixture(), input = invocation(); input.request = { ...input.request, observeTotalSupplies: scope };
+    const materialized = materializeAdapterRequests([input.request], input.callerAuthority)[0];
+    assert.deepEqual((materialized as any).observeTotalSupplies, scope);
+    if (scope) assert(Object.isFrozen((materialized as any).observeTotalSupplies));
+    const result = await f.transport.simulate(input), expected = scope ?? [TARGET];
+    assert.deepEqual(f.calls[0]?.observeTotalSupply, expected);
+    assert.deepEqual(result.effects?.totalSupplyDeltas?.map(d => d.token), expected);
+  }
+  const wait = deferred<RevmStrictSourceLease>(), f = fixture(), input = invocation(), scope = [TOKEN];
+  const t = createRevmStrictSimulationTransport({ ...f.options, leaseFor: () => wait.promise });
+  input.request = { ...input.request, observeTotalSupplies: scope }; const pending = t.simulate(input);
+  scope[0] = TARGET; wait.resolve(f.lease); await pending;
+  assert.deepEqual(f.calls[0]?.observeTotalSupply, [TOKEN]); assert(Object.isFrozen(f.calls[0]?.observeTotalSupply));
+});
+test("wrong or missing independent supply response fails closed", async () => {
+  for (const fault of ["wrong", "missing", "extra"]) {
+    const f = fixture(async req => { const r = response(req);
+      if (fault === "wrong") r.strict!.totalSupplyDeltas![0]!.token = TARGET;
+      if (fault === "missing") r.strict!.totalSupplyDeltas = [];
+      if (fault === "extra") r.strict!.totalSupplyDeltas!.push({ token: TARGET, delta: "0" });
+      return r;
+    });
+    const input = invocation(); input.request = { ...input.request, observeTotalSupplies: [TOKEN] };
+    await assert.rejects(f.transport.simulate(input), RevmFatalError); assert.equal(f.fatals.length, 1);
+  }
+});
+test("malformed or undeclared supply targets cannot reach a source lease", async () => {
+  for (const scope of [null, "bad", {}, [null], ["0x"], [addr("0")], [TOKEN, TOKEN],
+    [TOKEN, TOKEN.toUpperCase().replace("0X", "0x")], new Array(1), Object.assign([TOKEN], { extra: true })]) {
+    const f = fixture(), input = invocation(); input.request = { ...input.request, observeTotalSupplies: scope } as never;
+    await assert.rejects(f.transport.simulate(input), notEvidence); assert.equal(f.sources.length, 0);
+  }
+  const f = fixture(), input = invocation(); input.request = { ...input.request, observe: [], observeTotalSupplies: [] };
+  await assert.rejects(f.transport.simulate(input), notEvidence); assert.equal(f.sources.length, 0);
+});
 test("explicit empty overrides defaults; undeclared effects perform no probes", async () => {
   const f = fixture(), input = invocation(); input.request = { ...input.request, observeTokenBalances: [] };
   assert.deepEqual((await f.transport.simulate(input)).effects?.tokenDeltas, []); assert.deepEqual(f.calls[0]?.observeTokenBalances, []);

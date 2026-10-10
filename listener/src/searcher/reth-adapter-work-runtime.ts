@@ -1453,6 +1453,9 @@ export function materializeAdapterRequests(
                   })
                 )),
               }),
+          ...(request.observeTotalSupplies === undefined ? {} : {
+            observeTotalSupplies: Object.freeze(request.observeTotalSupplies.map(token => token.toLowerCase())),
+          }),
           overrideIntent: Object.freeze({
             caller: overrideCaller,
             ...(request.overrideIntent.nativeBalanceWei === undefined
@@ -1558,6 +1561,9 @@ function materializedAdapterRequestFingerprint(
                 account: item.account.toLowerCase(),
               })),
             }),
+        ...(request.observeTotalSupplies === undefined ? {} : {
+          observeTotalSupplies: request.observeTotalSupplies.map(token => token.toLowerCase()),
+        }),
         overrideIntent: {
           caller: request.overrideIntent.caller.toLowerCase(),
           nativeBalanceWei: request.overrideIntent.nativeBalanceWei ?? null,

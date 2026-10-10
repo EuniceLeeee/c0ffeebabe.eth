@@ -1,0 +1,15 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { manifest } from "../protocols/curve-lp-family/manifest.js";
+import { discovery } from "../protocols/curve-lp-family/discovery.js";
+import { identity } from "../protocols/curve-lp-family/identity.js";
+import { instance } from "../protocols/curve-lp-family/instance.js";
+import { routes } from "../protocols/curve-lp-family/routes.js";
+import { pricing } from "../protocols/curve-lp-family/pricing.js";
+import { exact } from "../protocols/curve-lp-family/exact.js";
+import { execution } from "../protocols/curve-lp-family/execution.js";
+import { protocol } from "../protocols/curve-lp-family/protocol.js";
+import { capture } from "../protocols/curve-lp-family/capture.js";
+import { action } from "../protocols/curve-lp-family/action.js";
+export const plugin = defineProtocolFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture, actionAdapters: [action] });
+export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_CURVE_LP_ENABLED" });

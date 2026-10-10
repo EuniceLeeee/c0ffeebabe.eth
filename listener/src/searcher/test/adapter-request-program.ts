@@ -872,6 +872,31 @@ console.log("adapter-request-program PASS (declarative source-bound execution)")
 type EffectRequest = Extract<AdapterRequest, {
   kind: "state-override-simulation" | "effect-delta-simulation";
 }>;
+test("supply target declarations are detached, fingerprinted, and validated before execution", () => {
+  const token = `0x${"ab".repeat(20)}`, other = `0x${"cd".repeat(20)}`;
+  const base: EffectRequest = { id: "supply", kind: "effect-delta-simulation",
+    call: { caller: { kind: "executor" }, to: other, data: "0x" }, overrideIntent: { caller: { kind: "executor" } },
+    observe: ["total-supply-delta"] };
+  const declare = (request: EffectRequest) => declareRequestProgram({
+    requirements: () => ({ transports: ["effect-delta-simulation"], caller: "executor", effects: ["total-supply-delta"] }),
+    buildRequests: () => [request], decode: () => true,
+  }, undefined);
+  const scopes = [undefined, [], [token], [other], [token, other]];
+  const declared = scopes.map(observeTotalSupplies => declare({ ...base, observeTotalSupplies }));
+  assert.equal(new Set(declared.map(v => physicalRequestSetFingerprint(v.requests))).size, scopes.length);
+  assert.equal(new Set(declared.map(v => requestSetFingerprint(v.requests))).size, scopes.length);
+  const mutable = [token]; const frozen = declare({ ...base, observeTotalSupplies: mutable }); mutable[0] = other;
+  assert.deepEqual((frozen.requests[0] as EffectRequest).observeTotalSupplies, [token]);
+  assert(Object.isFrozen((frozen.requests[0] as EffectRequest).observeTotalSupplies));
+  assert.equal(physicalRequestSetFingerprint(declare({ ...base, observeTotalSupplies: [token.toUpperCase().replace("0X", "0x")] }).requests),
+    physicalRequestSetFingerprint(frozen.requests));
+  for (const scope of [null, "bad", {}, [null], ["0x"], [ethersZero()], [token, token.toUpperCase().replace("0X", "0x")],
+    new Array(1), Object.assign([token], { extra: true }), Object.assign([token], { [Symbol("extra")]: true })]) {
+    assert.throws(() => declare({ ...base, observeTotalSupplies: scope } as never));
+  }
+  assert.throws(() => declare({ ...base, observe: [], observeTotalSupplies: [token] }));
+});
+function ethersZero() { return `0x${"0".repeat(40)}`; }
 for (const kind of ["state-override-simulation", "effect-delta-simulation"] as const) {
   const fixture = () => ({
     id: "effect-scope", kind,

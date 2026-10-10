@@ -184,7 +184,7 @@ function prefixRequestSnapshot(invocation: Parameters<NonNullable<StrictSimulati
 
 function requestSnapshot(value: unknown, authority: CentralCallerAuthority, gas: number,
   executorRuntimeCode?: ExecutorRuntimeCode): { wire: WireCall; observe: ReadonlySet<string> } {
-  const r = record(value, ["id", "required", "kind", "call", "preCalls", "overrideIntent", "observe", "observeTokenBalances", "executionAssetBoundary"]);
+  const r = record(value, ["id", "required", "kind", "call", "preCalls", "overrideIntent", "observe", "observeTokenBalances", "observeTotalSupplies", "executionAssetBoundary"]);
   if (typeof r.id !== "string" || r.id.length === 0 || (r.required !== undefined && typeof r.required !== "boolean") ||
     typeof r.kind !== "string" || !["state-override-simulation", "effect-delta-simulation"].includes(r.kind)) invalid();
   const call = record(r.call, ["caller", "executionMode", "to", "data"]);
@@ -237,6 +237,13 @@ function requestSnapshot(value: unknown, authority: CentralCallerAuthority, gas:
     // token-delta observation. Explicit [] never falls back to this scope.
     pairs = observe.has("token-delta") ? [...new Set([...tokenDeals.map(d => d.token), to])].map(token => ({ token, account: from })) : [];
   }
+  let supplies: string[];
+  if (r.observeTotalSupplies !== undefined) {
+    if (!observe.has("total-supply-delta")) invalid();
+    supplies = array(r.observeTotalSupplies).map(value => address(value));
+    if (supplies.some(token => /^0x0{40}$/.test(token))) invalid();
+    unique(supplies);
+  } else supplies = observe.has("total-supply-delta") ? [to] : [];
   let executableData = data;
   if (r.executionAssetBoundary !== undefined) {
     if (!program || !observe.has("token-delta") || !observe.has("native-delta")) invalid();
@@ -255,7 +262,7 @@ function requestSnapshot(value: unknown, authority: CentralCallerAuthority, gas:
     ...(override.nativeBalanceWei === undefined ? {} : { nativeBalanceWei: amount(override.nativeBalanceWei) }),
     tokenDeals, preCalls, observeTokenBalances: pairs,
     observeNativeBalances: observe.has("native-delta") ? [from] : [],
-    observeTotalSupply: observe.has("total-supply-delta") ? [to] : [], observeLogs: observe.has("logs") }) };
+    observeTotalSupply: supplies, observeLogs: observe.has("logs") }) };
 }
 
 function callerSnapshot(value: unknown, authority: CentralCallerAuthority): { key: string; kind: string; address: string } {

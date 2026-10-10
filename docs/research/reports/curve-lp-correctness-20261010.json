@@ -1,0 +1,576 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "family": "protocol:curve-lp",
+  "defaultEnabled": false,
+  "workspace": {
+    "vm": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "path": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "base": "251aeb1fda0d13b27da33006d011ee94cc54d15d"
+  },
+  "claim": {
+    "implemented": true,
+    "offlineContracts": "PASS",
+    "sampleStrict": "PASS",
+    "naturalReadyGraph": "PASS",
+    "rawAndEffective": "PASS",
+    "sameStateDualExecution": "PASS",
+    "adapterFixed": "NOT CLAIMED: no route-pinned baseline-to-candidate Adapter Replay",
+    "adapterMergeReady": "NOT CLAIMED: includes authorized generic strict observation capability",
+    "productionGapFixed": "NOT CLAIMED: no natural full-loop replay/selection/final sim/EV"
+  },
+  "supportedScope": "Verified 2-coin StableSwap Vyper0.3.1 Berlin 18/6-decimal class + separate Vyper0.2.16 LP; FRAXBP samples. Single-coin mint and redeem for each coin, fixed A only; no address whitelist.",
+  "pool": "0xdcef968d416a41cdac0ed8702fac8128a64241a2",
+  "lp": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+  "identity": [
+    "source runtimes compiled byte-for-byte",
+    "MetaRegistry pool→LP and LP→pool",
+    "registry coins/handler",
+    "LP minter→pool",
+    "8 isolated positive mint/burn/debit/receipt/supply probes at source N"
+  ],
+  "implementation": {
+    "mint": "Family-local source integer D0/D1, per-coin fee deduction, D2 and supply formula; calc_token_amount is fee-free and not used as Exact output",
+    "redeem": "chain calc_withdraw_one_coin; minter-authorized LP burnFrom without LP approval",
+    "runtime": "r0 patched into selected add_liquidity array element or redemption amount; mint approval 0/amount/0; no off-chain Exact or quoted fallback in production sim construction",
+    "generic": "optional observeTotalSupplies for independent supply targets; immutable declaration, source/caller binding, symbolic/physical/materialized fingerprints and strict transport exact-scope validation; undefined keeps old call.to default",
+    "refresh": "on-touch, full-precision A_precise==future_A branch, explicit pool/LP/coin dependencies; active ramp unsupported; unknown mutations remain conservative"
+  },
+  "sourceProof": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/source-state-proof.json",
+    "sha256": "8bc7435a161982eae64ea84999e5e5b051afdf613a59b22c2b35a950b2cc7de7"
+  },
+  "lpSourceProof": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/lp-source-proof.json",
+    "sha256": "cfb7b59077efe2b34720e275c81e1eac9f224f99fc476205535c83e659243218"
+  },
+  "sourceArtifacts": {
+    "poolRuntime": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/pool-runtime.txt",
+      "sha256": "d55022fd0a11727d23a8a5ca52339857f9a24da3308bc8ecaa4eec981b7cfc38"
+    },
+    "lpRuntime": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/lp-runtime.txt",
+      "sha256": "225bc242ca8b654a2d6d78fa98047a9848d47993655bd6e3b1c50f3f8549598f"
+    },
+    "poolSource": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/pool-Vyper_contract.vy",
+      "sha256": "a36ea2025bfbaf9325d054c1d51a2bd2bc34f38bc963def9eafa2c94ad0a45c7"
+    },
+    "lpSource": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/lp-Vyper_contract.vy",
+      "sha256": "0fd22feed21ed5399b6ec2a46d5c2138e7c87d4c3cbf7cf5c1219952f4846d5e"
+    }
+  },
+  "blocks": [
+    {
+      "number": 26152335,
+      "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+      "tx": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+      "sourceTreeSha256": "b288fe43bc32c97ffadf16e66afb783da4256d4438faec28593c4a1d846169c1",
+      "executorCodeHash": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419",
+      "executorArtifactSha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+      "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+      "originalObservation": {
+        "direction": "redeem",
+        "index": 1,
+        "amountIn": "265363627991310138877",
+        "amountOut": "268256938",
+        "tx": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+        "logIndex": 824,
+        "sameNEndQuote": "268252297",
+        "signedNEndMinusOriginal": "-4641",
+        "scope": "different states; not original pre-call parity"
+      },
+      "natural": {
+        "instances": 20,
+        "edges": 42,
+        "targetInstances": 1,
+        "targetDirections": 4,
+        "rawRows": 4,
+        "effectiveQuoted": 4,
+        "referenceInput": "natural same-block effective-forward; no input splicing"
+      },
+      "amounts": [
+        {
+          "direction": "mint",
+          "index": 0,
+          "label": "natural-production-input",
+          "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "5024135449803684139",
+          "amountOut": "4929732816021071404",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "mint",
+          "index": 0,
+          "label": "two-production-inputs",
+          "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "10048270899607368278",
+          "amountOut": "9859465611780250594",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "mint",
+          "index": 0,
+          "label": "one-token-at-N",
+          "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "1000000000000000000",
+          "amountOut": "981210151283283634",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "mint",
+          "index": 1,
+          "label": "natural-production-input",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "4984436",
+          "amountOut": "4929832692319379216",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "mint",
+          "index": 1,
+          "label": "two-production-inputs",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "9968872",
+          "amountOut": "9859662811289528846",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "mint",
+          "index": 1,
+          "label": "observed-historical-input-at-N",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "36977795",
+          "amountOut": "36572667792450691209",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 0,
+          "label": "natural-production-input",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "amountIn": "4929832692319379216",
+          "amountOut": "5024135449803684139",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 0,
+          "label": "two-production-inputs",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "amountIn": "9859665384638758432",
+          "amountOut": "10048270878962902425",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 0,
+          "label": "one-token-at-N",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "amountIn": "1000000000000000000",
+          "amountOut": "1019128999217281770",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 1,
+          "label": "natural-production-input",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "4929832692319379216",
+          "amountOut": "4983539",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 1,
+          "label": "two-production-inputs",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "9859665384638758432",
+          "amountOut": "9967077",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 1,
+          "label": "observed-historical-input-at-N",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "265363627991310138877",
+          "amountOut": "268252297",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        }
+      ],
+      "successes": 24,
+      "negativeReverts": 16,
+      "directReads": 221,
+      "drained": true,
+      "inputs": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152335-r2/ready.json",
+          "sha256": "7266cc43d9d6f07568cc643cf7d43de1958f004d1506a676cfde87e5e97ce3c6"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152335-r2/result.json",
+          "sha256": "b3ff421a1d036e75ef24045599b94c2fb3cd7e16f450ba6f9a5db8c2bf792faa"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152335-r2/prices/input.json",
+          "sha256": "dbd5aa2040ed4501528b80b6dbb8d4d70ccc1468196bd62a3f3e308d47ff5474"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152335-r2/prices/prices.json",
+          "sha256": "06f6ae8d32a3f232998a7574dd517955ed878017ca48e79379ba4fe3a3c1ab25"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/dual-26152335-1.json",
+          "sha256": "59bef1775d6f314503d0a9ba37faed6b4ee4f10197123d2e38beff03a32b0ce2"
+        }
+      ]
+    },
+    {
+      "number": 26152194,
+      "hash": "0x11408489e6cea134aa9414ba735f99fdcc1c1f78ad8156d04dcbe5f6c6c0cde6",
+      "tx": "0x3090f50f31cb6d02b87a575fb1770418b62f230868c177b2ac81591ed0650539",
+      "sourceTreeSha256": "b288fe43bc32c97ffadf16e66afb783da4256d4438faec28593c4a1d846169c1",
+      "executorCodeHash": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419",
+      "executorArtifactSha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+      "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+      "originalObservation": {
+        "direction": "mint",
+        "index": 1,
+        "amountIn": "36977795",
+        "amountOut": "36572219317765865700",
+        "tx": "0x3090f50f31cb6d02b87a575fb1770418b62f230868c177b2ac81591ed0650539",
+        "logIndex": 838,
+        "sameNEndQuote": "36572132412346378801",
+        "signedNEndMinusOriginal": "-86905419486899",
+        "scope": "different states; not original pre-call parity"
+      },
+      "natural": {
+        "instances": 12,
+        "edges": 26,
+        "targetInstances": 1,
+        "targetDirections": 4,
+        "rawRows": 4,
+        "effectiveQuoted": 4,
+        "referenceInput": "natural same-block effective-forward; no input splicing"
+      },
+      "amounts": [
+        {
+          "direction": "mint",
+          "index": 0,
+          "label": "natural-production-input",
+          "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "5013617564614351786",
+          "amountOut": "4919420690276013171",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "mint",
+          "index": 0,
+          "label": "two-production-inputs",
+          "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "10027235129228703572",
+          "amountOut": "9838841360397278447",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "mint",
+          "index": 0,
+          "label": "one-token-at-N",
+          "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "1000000000000000000",
+          "amountOut": "981211783227584639",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "mint",
+          "index": 1,
+          "label": "natural-production-input",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "4974083",
+          "amountOut": "4919520483521984764",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "mint",
+          "index": 1,
+          "label": "two-production-inputs",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "9948166",
+          "amountOut": "9839039394689120460",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "mint",
+          "index": 1,
+          "label": "observed-historical-input-at-N",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "36977795",
+          "amountOut": "36572132412346378801",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 0,
+          "label": "natural-production-input",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "amountIn": "4919520483521984764",
+          "amountOut": "5013617564614351786",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 0,
+          "label": "two-production-inputs",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "amountIn": "9839040967043969528",
+          "amountOut": "10027235108693440383",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 0,
+          "label": "one-token-at-N",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+          "amountIn": "1000000000000000000",
+          "amountOut": "1019127288846150327",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 1,
+          "label": "natural-production-input",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "4919520483521984764",
+          "amountOut": "4973188",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 1,
+          "label": "two-production-inputs",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "9839040967043969528",
+          "amountOut": "9946374",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        },
+        {
+          "direction": "redeem",
+          "index": 1,
+          "label": "observed-historical-input-at-N",
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "265363627991310138877",
+          "amountOut": "268256244",
+          "quotedReceiptDelta": "0",
+          "runtimeReceiptDelta": "0"
+        }
+      ],
+      "successes": 24,
+      "negativeReverts": 16,
+      "directReads": 221,
+      "drained": true,
+      "inputs": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152194/ready.json",
+          "sha256": "53ce55065d52c7e9262c35e47247e1f1868c5c08104cd10e8122da8fb0f000d9"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152194/result.json",
+          "sha256": "12498d07bde0af478ebcc2b41bb4126e3252861427f9d5beb6a93037acf163f6"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152194/prices/input.json",
+          "sha256": "ac255c66ba9e081c194e719690a20702f2b3a56eaef98f626072b931e3a94339"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152194/prices/prices.json",
+          "sha256": "1f917838a316b4c3cf66fe0d6345171fd2b953fb242d31f2e8af40e0eb87ec56"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/dual-26152194-1.json",
+          "sha256": "c0232bb2f4ba7563e3456273dd8b165ff646a5aca0017ac831f212fe6608c9f2"
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "isolatedOwnedSource": true,
+    "productionBuild": "PASS",
+    "composition": "28 default enabled / 43 installed; new Family off",
+    "familyContracts": 21,
+    "productionLifecycleExact": 1,
+    "dualExecutionContracts": 79,
+    "requestAndTransportContracts": 196,
+    "strictCentralContracts": 167,
+    "lifecycle": "PASS",
+    "executionProjection": "PASS",
+    "materializedRuntime": "PASS",
+    "catalog": "PASS",
+    "logs": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/isolated-validation.log",
+        "sha256": "9476a340a2c5307177ba2a9ea7998adddcf258f6056c5dff286c88afbd5e0fd8"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/isolated-materialized-validation.log",
+        "sha256": "73fe4426a37fe404347429f39370d70e0b3d58f6b44153a3fff754568421aadc"
+      }
+    ],
+    "targetedTypecheck": {
+      "status": "NOT PASS: five byte-identical pre-existing transitive diagnostics; no remaining Curve LP test diagnostics",
+      "configuration": "strict ES2022 Node16 Node16 resolveJsonModule esModuleInterop skipLibCheck",
+      "log": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/targeted-typecheck-final.log",
+        "sha256": "64d5e526cb407dfdd086d53a97ced78406ac2cf5592101f240a9eefa04a0ab18"
+      },
+      "baseline": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/typecheck-transitive-baseline.log",
+        "sha256": "64d5e526cb407dfdd086d53a97ced78406ac2cf5592101f240a9eefa04a0ab18"
+      },
+      "priorConfigurationFailures": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/targeted-typecheck.log",
+          "sha256": "ca21e2369c230b60558da1ed052ed9ec2201fd410d2b50671c266d73d869a250"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/targeted-typecheck-strict.log",
+          "sha256": "900d3d2c19a4eba809b61fdda1116edef0a24767d1baf2ebc30d3f43f4c86e61"
+        }
+      ]
+    },
+    "testOnlyRepair": {
+      "executedHarness": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/historical-dual-executed.ts",
+        "sha256": "c45e90a12b340895b2320c23be36d5d1318d7b39f25b3337859ffa36580ee5d3"
+      },
+      "committedHarness": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts",
+        "sha256": "bacf23c53bb84f1a4836270b8cd8af79b1464b5cd0d1a03feb37c54f5e7e590b"
+      },
+      "change": "explicit TypeScript tuple, byte-array and request-array annotations; emitted JavaScript byte-identical",
+      "emittedJsSha256": "75d2ece3291f8da30dca6be7fa9fe0fd3c6a8fbd5445f374d35a3b40056f0691",
+      "newEvmRun": false
+    }
+  },
+  "failuresPreserved": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/contract-1.log",
+      "sha256": "0e95bd9253868b67842c8761a6dda3acd89b84ea4698777c17077b4e896b0926"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/contract-2.log",
+      "sha256": "79dfe4a7b0923d0c7bd873cc17222bda0da7a0fd1670226ebec8a9e8b76b880c"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/contract-3.log",
+      "sha256": "89ac55fc6db35596039f3328fea2a1b461ec7e40c28e5546920ac1459aee43ae"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/contract-4.log",
+      "sha256": "d5b91dc4beccd7fe07b5cdf4e17f3dac5d2640f888df634b1b2ee051d9e08ca6"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/build-1.log",
+      "sha256": "e1a99f2d4ff50fc2fd4abfd67a6d018db967bdd0380af86f9fb8fc2b8c69f2b3"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/exact-probe-1.log",
+      "sha256": "6496d9df83012a85e504f4ee44874e77b74616c376a03b1d8d0c8d21f7a760ee"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152335/result.json",
+      "sha256": "51ee96b1155e2a8ef737b168b75717c77729b99712b951f2dfe1ba889cc744d0"
+    }
+  ],
+  "failureCauses": [
+    "initial requirements included an unused get-storage transport",
+    "supply target field needed a generic declared observation capability, not silently omitted burn checks",
+    "one launch from repository root failed to find test loader; zero tests ran",
+    "test declaration requirements mistakenly used an object instead of callable",
+    "Exact discriminated union used conditional-spread chainAmountQuote",
+    "stateOnlyReads flag did not allow code/storage guards; flag removed, central gate retained; production lifecycle+Exact regression added"
+  ],
+  "review": {
+    "agent": "01a12376-1058-7591-a800-1418f20010c3",
+    "pass1": "P2 arbitrary 4-LP admission gate; removed, each independent redemption bounded below supply",
+    "pass2": "no blockers; generic observation scope and fingerprint/compatibility checks, 6 targeted tests + 20 assertions independently passed",
+    "pass3": "no blockers in saved-evidence authentication: 80 request/result fingerprints, debit/receipt/supply/native effects, Transfer logs, explicit EVM reverts, source/input/executor bindings and 9 classes of in-memory tampering rejection; no new RPC/EVM/build/performance run"
+  },
+  "latency": {
+    "singleReady": "NOT RUN",
+    "representativeCombinedGraph": "NOT RUN",
+    "live": "NOT RUN",
+    "requirement": "All adapted/repaired applicable Families, including additions to IMPL, require single-Ready then combined representative-load latency acceptance after correctness. No latency acceptance inferred from correctness harness timings."
+  },
+  "limitations": [
+    "not arbitrary Curve pools/NG/meta/crypto/ramp variants",
+    "initial multi-coin bootstrap unsupported",
+    "source-only Exact prefix model unsupported; full trial uses in-transaction runtime execution",
+    "same N-end quote/receipt is not original per-call state parity",
+    "no full-loop opportunity replay, final sim or EV claim",
+    "negative evidence is explicit EVM Revert with empty effect observations, not independent post-revert storage sampling",
+    "historical runs use dirty source fingerprint including peer Ready/V1 changes; isolated owned export checks do not claim a new historical run under clean commit"
+  ],
+  "safety": {
+    "signing": false,
+    "broadcast": false,
+    "deployment": false,
+    "liveStarted": false,
+    "protocolStateOverrides": false,
+    "actorOnlyFunding": true,
+    "originalReadyMutated": false,
+    "newGitWorktree": false,
+    "peerChangesPreserved": true
+  }
+}
