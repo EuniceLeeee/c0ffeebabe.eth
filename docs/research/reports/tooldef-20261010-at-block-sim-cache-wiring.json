@@ -1,0 +1,40 @@
+{
+  "learning_case_id": "tooldef-20261010-at-block-sim-cache-wiring",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [
+    "swap"
+  ],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "Historical diagnostic caller wiring, not a protocol or economic failure.",
+  "evidence": {
+    "report": "docs/research/reports/at-block-wiring-20261010.json",
+    "baseline": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/baseline-tests.log",
+      "sha256": "f66010ced39f799df92440b09c9bdae1372e651538ae66dccfe30dea3d1da3c4"
+    },
+    "candidate": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/candidate-tests.log",
+      "sha256": "f6b8940cccf3879104b633d260ef68bd8386e74746727d1ecab1ee9e0b4c1fd3"
+    },
+    "independent_review": {
+      "agent": "01a12457-e677-7d61-beb0-daa25ad40cc9",
+      "pass": 1,
+      "result": "no P1/P2 blocker",
+      "checks": "independent candidate-vs-HEAD AST check, 26 metadata negatives, three isolated test callbacks; route identity stub used, no production execution"
+    },
+    "scope": "non-author verified source wiring and negative metadata checks; neither historical TX replay nor performance proven"
+  },
+  "tooling_defect": {
+    "tool": "listener:searcher:at-block",
+    "issue": "at-block online sim sizing omitted the mandatory per-run rejection cache passed to the live selector factory",
+    "evidence": "new wiring contract rejects fixed HEAD and passes candidate; code path and non-author review agree",
+    "codify_target": "blockscan-at-block-cli.ts and test/blockscan-at-block-cli.ts",
+    "codify_commit": "b6ad2dd66ff8898c62d77ee894fd60c5e1fc2222",
+    "status": "codified"
+  },
+  "created_at": "2026-10-10T05:57:32.709Z",
+  "updated_at": "2026-10-10T05:57:32.709Z"
+}

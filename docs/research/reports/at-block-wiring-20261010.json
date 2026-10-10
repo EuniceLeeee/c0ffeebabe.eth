@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "scope": "historical CLI correctness prerequisites for IMPL single-Ready replay, not a performance or opportunity acceptance",
+  "workspace": {
+    "vm": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "path": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "base": "622461e7714a69c8651d2ed5a740ea94d2f93db1",
+    "codifyCommit": "b6ad2dd66ff8898c62d77ee894fd60c5e1fc2222",
+    "isolatedSource": "/tmp/mev-atblock-owned.mb4KE5/source",
+    "peerDiffSha256": "2724bdd438b02ca9e4b28f1b7fade03a7dec9ed35f05d00845df91bbed526ca2",
+    "owned": [
+      {
+        "path": "listener/src/searcher/blockscan-at-block-cli.ts",
+        "sha256": "5cb00de1068fe9b99f978fa50e7bb2b95b479e0537b8fb6e8fd36566acce13c6"
+      },
+      {
+        "path": "listener/src/searcher/test/blockscan-at-block-cli.ts",
+        "sha256": "34c4228cca81092d5a3a76d5e132cad45a5c0a922af1419f3a5ec13d46eb8344"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "issue": "at-block online sim sizing omitted the mandatory per-run rejection cache passed to the live selector factory",
+      "consequence": "a fully rejected route with explicit EVM revert could mask the original typed rejection by accessing undefined.record",
+      "change": "pass the same per-run cache used by independent final simulation; no new cache, persistence, eligibility policy or scheduler"
+    },
+    {
+      "issue": "historical rank callback accepted a narrower TypeScript outcome than the real diagnostic callback and dereferenced missing provenance",
+      "change": "accept the real base outcome, require explicit natural producer metadata, preserve production-only / zero-forced-selection checks and existing downstream cap; no asserted cast or route injection"
+    }
+  ],
+  "validation": {
+    "baseline": {
+      "tests": 15,
+      "pass": 13,
+      "fail": 2,
+      "log": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/baseline-tests.log",
+        "sha256": "f66010ced39f799df92440b09c9bdae1372e651538ae66dccfe30dea3d1da3c4"
+      }
+    },
+    "candidate": {
+      "tests": 15,
+      "pass": 15,
+      "fail": 0,
+      "log": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/candidate-tests.log",
+        "sha256": "f6b8940cccf3879104b633d260ef68bd8386e74746727d1ecab1ee9e0b4c1fd3"
+      }
+    },
+    "isolated": {
+      "productionBuild": "PASS",
+      "contracts": 36,
+      "log": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/isolated-validation.log",
+        "sha256": "de6c48e97df1f6a040794ba9aab7eaad90a475c07ac7882f836a63f12116054c"
+      }
+    },
+    "productionRuntimeContracts": {
+      "tests": 56,
+      "pass": 56,
+      "fail": 0,
+      "log": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/isolated-runtime-wiring.log",
+        "sha256": "bef0c0e2f4a1a022aaac2971c6699b5714075bb0b9d56fcd395b1fb98ed2b6bb"
+      },
+      "scope": "synthetic production-runtime/direct-anvil/factory tests; no real EVM/RPC or latency claim"
+    },
+    "targetedTypecheck": {
+      "status": "PASS",
+      "flags": "strict ES2022 Node16 Node16 resolveJsonModule esModuleInterop skipLibCheck",
+      "entrypoints": [
+        "listener/src/searcher/blockscan-at-block-cli.ts",
+        "listener/src/searcher/test/blockscan-at-block-cli.ts"
+      ],
+      "log": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/targeted-final.log",
+        "sha256": "0a4b5dea7872311838a9f7a7f40b803cbb74b1bccefb15abd5912c5b9550ce96"
+      }
+    },
+    "review": {
+      "agent": "01a12457-e677-7d61-beb0-daa25ad40cc9",
+      "pass": 1,
+      "result": "no P1/P2 blocker",
+      "checks": "independent candidate-vs-HEAD AST check, 26 metadata negatives, three isolated test callbacks; route identity stub used, no production execution"
+    },
+    "canonical": {
+      "query": [
+        "at",
+        "block"
+      ],
+      "manifest": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/tool-index.json",
+        "sha256": "4ba9d9db0983d1fd14e0baaf63c0c128e1a6ece6dd5525373214ffa98a6ea475"
+      },
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:at-block",
+          "descriptor_sha256": "6fe9b1650f257ba529c2e6c55bdc180c8bc292b13710329b76a5fee3f7d50360",
+          "started_at": "2026-10-10T05:52:49.414Z",
+          "finished_at": "2026-10-10T05:52:50.500Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "b902564fa5cd6997b2d561fd478a3e8d39fa15a679afa0b9289e9a7064f439a8",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:at-block",
+            "--",
+            "--prices",
+            "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152335-r2/prices/prices.json",
+            "--block",
+            "26152335",
+            "--offline",
+            "--through",
+            "enumerate",
+            "--out",
+            "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/offline-smoke"
+          ],
+          "stdout_sha256": "a787fb127b05063098193339831f5dd3e1d45e04568832510229e59d5cce6aa1",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 596,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:at-block-test",
+          "descriptor_sha256": "c26b287336ff422f5a4291b8ee63965373c0f6ef763cd966f8182885972b71d4",
+          "started_at": "2026-10-10T05:52:50.757Z",
+          "finished_at": "2026-10-10T05:52:52.346Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "5a7eff91b09965f17f321c8d4eb6519b41edff07989d5a0f01b1e09a472ce15c",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:at-block-test",
+            "--"
+          ],
+          "stdout_sha256": "12f567ed1b77497bba61a7c287fd03dc9a6f9bcaf70c78910cab388aaf1e52a5",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 2166,
+          "stderr_bytes": 0
+        }
+      ],
+      "offlineSmoke": {
+        "block": 26152335,
+        "stage": "offline-enumerate",
+        "input": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152335-r2/prices/prices.json",
+          "sha256": "06f6ae8d32a3f232998a7574dd517955ed878017ca48e79379ba4fe3a3c1ab25"
+        },
+        "candidates": 0,
+        "log": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/tool-run-offline.log",
+          "sha256": "3cbbec1c385f47bea12b116ca1f2896e751cf22364d0478de9473ec5ef09e5c8"
+        },
+        "scope": "saved same-block price parsing and production enumeration only; unrelated to requested UNI/BAT replay, not a timing sample"
+      },
+      "contracts": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/tool-run-tests.log",
+        "sha256": "6181c725a204a190ea88b9739557847e098a722a2691e634a61a9af3136c22e7"
+      }
+    }
+  },
+  "failuresPreserved": {
+    "zeroTestsDuringIncompleteUpload": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/incomplete-transfer-zero-tests.log",
+      "sha256": "c2ed66ab7209ebd79dee722d678e273b250b2ac2989b632eb7e5fb4314cc9b12"
+    },
+    "fixtureTypecheck": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/at-block-wiring-20261010.k3vusO/targeted-typecheck.log",
+      "sha256": "5aed11ea8f98270f9c3ffe7017f5cdceb19989f3097ea9bd04c52079eae66f83"
+    },
+    "handling": "original test file backed up, incomplete-transfer patch reversed, completed upload SHA checked before reapplication; original failed baseline retained; fixture supplied required swap metadata"
+  },
+  "claim": {
+    "implementedAndLocalRegression": "PASS",
+    "adapterFixed": "NOT CLAIMED",
+    "adapterMergeReady": "NOT CLAIMED",
+    "productionGapFixed": "NOT CLAIMED",
+    "implUNIReplay": "NOT RUN",
+    "implBATReplay": "NOT RUN",
+    "pRevertPreEnumerationBackfillAcceptance": "NOT CLAIMED"
+  },
+  "latency": {
+    "singleReady": "NOT RUN",
+    "representativeCombinedGraph": "NOT RUN",
+    "live": "NOT RUN",
+    "requirement": "Every applicable Family adapted/repaired from IMPL, including later additions, must complete single-Ready then representative combined-graph latency acceptance after correctness. These contract/smoke timings do not count."
+  },
+  "safety": {
+    "rpcCalls": 0,
+    "evmRuns": 0,
+    "signing": false,
+    "broadcast": false,
+    "deployment": false,
+    "liveStarted": false,
+    "originalReadyMutated": false,
+    "peerChangesPreserved": true,
+    "newGitWorktree": false
+  }
+}
