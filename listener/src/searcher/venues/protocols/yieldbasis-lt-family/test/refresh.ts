@@ -66,7 +66,7 @@ function testCatalog() {
   });
 }
 
-test("production each-block refresh requotes quiet YB changes and keeps failed directions disabled for the run", async () => {
+for (const path of ["coarse", "runtime"] as const) test(`${path}: YB each-block refresh withdraws failed prices and recovers in the same run`, async () => {
   const catalog = testCatalog(), family = catalog.forFamily(familyId), start = source();
   assert(isPricedFamily(family));
   let state: AnswerOptions = {};
@@ -171,10 +171,10 @@ test("production each-block refresh requotes quiet YB changes and keeps failed d
       },
     });
   });
-  let coordinator = makeCoordinator();
+  const coordinator = makeCoordinator();
 
   let previous = source(99);
-  async function step(address?: string, freshRun = false) {
+  async function step(address?: string) {
     const at = source(previous.number + 1);
     const touched = new Set(address === undefined ? [] : root.resolveBlockTouchedStateKeys({
       kind: "log", address, topics: [], data: "0x",
@@ -182,21 +182,27 @@ test("production each-block refresh requotes quiet YB changes and keeps failed d
     // External observations need not map to an LT mutation: time also moves.
     assert.equal(touched.size, 0);
     currentReads.length = 0; exactReads.length = 0;
-    await coordinator.prepareCoarsePricing({ graph: graph(at), deadlineAtMs: Date.now() + 10_000,
-      ...(at.number === start.number || freshRun ? {} : { touchedPools: touched,
-        canonicalActivity: { source: at, parentHash: previous.hash, touchedStateKeys: touched, complete: true } }),
-    });
+    const input = { graph: graph(at), deadlineAtMs: Date.now() + 10_000,
+      ...(at.number === start.number ? {} : { touchedPools: touched,
+        canonicalActivity: { source: at, parentHash: previous.hash, touchedStateKeys: touched, complete: true as const } }),
+    };
+    if (path === "coarse") await coordinator.prepareCoarsePricing(input);
+    else await coordinator.prepare({ ...input, fundingTokens: [] });
     previous = at;
     const snapshot = coordinator.latestPricingSnapshot(); assert(snapshot?.effectiveMids);
+    assert.deepEqual(snapshot.effectiveMids.source, at);
+    assert.equal(snapshot.sourceBlock, at.number); assert.equal(snapshot.sourceBlockHash, at.hash); assert.equal(snapshot.generation, at.generation);
     return snapshot;
   }
   const first = await step();
   const ybEdge = edges.find(edge => edge.instanceKey === admitted.publication!.instances[0]!.instanceKey)!;
+  assert(first.perBlockRefreshStateKeys?.includes(ybEdge.instanceKey!));
+  for (const instance of unrelated.instances) assert(!first.perBlockRefreshStateKeys?.includes(instance.instanceKey));
   const row = (snapshot: typeof first) => snapshot.effectiveMids!.rows.get(ybEdge.canonicalEdgeId)!;
   assert.equal(row(first).status, "quoted");
   assert(row(first).amountIn! > 0n);
-  let reference = first;
-  let otherRows = [...first.effectiveMids!.rows.values()].filter(r => r.edgeId !== ybEdge.canonicalEdgeId);
+  const reference = first;
+  const otherRows = [...first.effectiveMids!.rows.values()].filter(r => r.edgeId !== ybEdge.canonicalEdgeId);
   assert.equal(otherRows.length, 2);
   assert(otherRows.every(r => r.status === "quoted"));
 
@@ -225,32 +231,6 @@ test("production each-block refresh requotes quiet YB changes and keeps failed d
     return snapshot;
   }
 
-  async function checkDisabled() {
-    const snapshot = await step(), stopped = row(snapshot);
-    assert.equal(stopped.status, "disabled-for-run");
-    assert.equal(stopped.amountOut, null);
-    assert.equal(stopped.effectiveMid, null);
-    assert.equal(stopped.quotedAt, undefined);
-    assert(!snapshot.coverage.resolvedEdgeKeys.includes(ybEdge.canonicalEdgeId));
-    assert.deepEqual(exactReads, [], "production does not retry a disabled direction in the same run");
-    assert.deepEqual(currentReads, []);
-    for (const other of otherRows) {
-      assert.strictEqual(snapshot.effectiveMids!.rows.get(other.edgeId), other);
-    }
-  }
-  async function restart() {
-    // A new production coordinator is a NEW run; never silently clear the
-    // live run's failure blacklist or claim next-block automatic recovery.
-    coordinator = makeCoordinator();
-    const snapshot = await step(undefined, true);
-    assert.equal(row(snapshot).status, "quoted");
-    assert.deepEqual(row(snapshot).quotedAt, previous);
-    reference = snapshot;
-    otherRows = [...snapshot.effectiveMids!.rows.values()].filter(r => r.edgeId !== ybEdge.canonicalEdgeId);
-    assert(otherRows.every(r => r.status === "quoted"));
-    return snapshot;
-  }
-
   let previewOutput = row(first).amountOut! + 1n;
   state = { previewAmountFor: () => previewOutput };
   await check(previewOutput); // Timestamp-only change; no observations at all.
@@ -261,15 +241,14 @@ test("production each-block refresh requotes quiet YB changes and keeps failed d
     await check(previewOutput, dependency);
   }
   state = { ...state, previewReplies: false };
-  await check(null); await checkDisabled();
+  await check(null); await check(null);
   state = { ...state, previewReplies: true };
-  await checkDisabled(); // Backend recovery does not clear this run's blacklist.
-  assert.equal(row(await restart()).amountOut, previewOutput);
+  // Keep the same coordinator: only a valid new-source quote restores coverage.
+  await check(previewOutput);
   state = { ...state, currentStaker: EXECUTOR };
-  await check(null);
+  await check(null); await check(null);
   state = { ...state, currentStaker: ethers.ZeroAddress };
-  await checkDisabled();
-  assert.equal(row(await restart()).amountOut, previewOutput);
+  await check(previewOutput);
 
   const reads: string[][] = [];
   const session = await root.createSession({ source: previous, runtime: runtime(previous, reads), kind: "exact", fundingAssets: [] });

@@ -33,7 +33,7 @@ const pool = { pool: "0x" + "41".repeat(20), factory: "0x" + "42".repeat(20),
   token0: DYNAMIC_FACTS.token0, token1: "0x" + "43".repeat(20),
   reserves: { reserve0: 10n ** 24n, reserve1: 2n * 10n ** 24n, blockTimestampLast: 1 } };
 
-test("production dynamic Algebra refresh and distinct-origin caller boundary", async t => {
+for (const path of ["coarse", "runtime"] as const) test(`${path}: production dynamic Algebra refresh and distinct-origin caller boundary`, async t => {
   const plugins = [plugin, univ2], familyId = plugin.manifest.familyId, start = source(100);
   // Test-only capability labels: never saved Ready/manifest authority.
   const entries = plugins.flatMap(p => FAMILY_CAPABILITY_NAMES.map(capability => ({
@@ -137,23 +137,28 @@ test("production dynamic Algebra refresh and distinct-origin caller boundary", a
       },
     });
   });
-  let coordinator = makeCoordinator(), previous = source(99);
-  async function step(freshRun = false) {
+  const coordinator = makeCoordinator();
+  let previous = source(99);
+  async function step() {
     const at = source(previous.number + 1), touched = new Set<string>();
     currentReads.length = 0; exactReads.length = 0;
     // Empty complete canonical activity drives production preparePricingInputs.
-    await coordinator.prepareCoarsePricing({ graph: graph(at), deadlineAtMs: Date.now() + 10_000,
-      ...(at.number === start.number || freshRun ? {} : { touchedPools: touched,
-        canonicalActivity: { source: at, parentHash: previous.hash, touchedStateKeys: touched, complete: true } }),
-    });
+    const input = { graph: graph(at), deadlineAtMs: Date.now() + 10_000,
+      ...(at.number === start.number ? {} : { touchedPools: touched,
+        canonicalActivity: { source: at, parentHash: previous.hash, touchedStateKeys: touched, complete: true as const } }),
+    };
+    if (path === "coarse") await coordinator.prepareCoarsePricing(input);
+    else await coordinator.prepare({ ...input, fundingTokens: [] });
     previous = at;
     const snapshot = coordinator.latestPricingSnapshot(); assert(snapshot?.effectiveMids);
     assert.deepEqual(snapshot.effectiveMids.source, at);
     assert.equal(snapshot.sourceBlock, at.number); assert.equal(snapshot.sourceBlockHash, at.hash); assert.equal(snapshot.generation, at.generation);
     return snapshot;
   }
-  await t.test("quiet refresh, static/V2 carry, failure withdrawal, same-run disable and new-run recovery", async () => {
+  await t.test("quiet refresh, static/V2 carry, repeated failure withdrawal and same-run recovery", async () => {
     const first = await step(), dynamicInstance = ready[0]!.instanceKey;
+    assert(first.perBlockRefreshStateKeys?.includes(dynamicInstance));
+    for (const instance of ready.slice(1)) assert(!first.perBlockRefreshStateKeys?.includes(instance.instanceKey));
     const dynamicRows = (snapshot: typeof first) => [...snapshot.effectiveMids!.rows.values()].filter(r => r.instanceKey === dynamicInstance);
     const carried = [...first.effectiveMids!.rows.values()].filter(r => r.instanceKey !== dynamicInstance);
     assert.equal(dynamicRows(first).length, 2); assert.equal(carried.length, 4);
@@ -161,13 +166,14 @@ test("production dynamic Algebra refresh and distinct-origin caller boundary", a
       assert.equal(row.status, "quoted", JSON.stringify(row, (_key, value) => typeof value === "bigint" ? String(value) : value)); assert(row.amountIn! > 0n);
     }
     const round = ["exact-quoter", "pool-plugin", "plugin-code", "quoter-code"];
-    async function check(status: "quoted" | "quote-failed" | "disabled-for-run") {
+    async function check(status: "quoted" | "quote-failed") {
       const snapshot = await step();
       assert.strictEqual(snapshot.mids, first.mids, "raw mids remain bootstrap references");
       assert.deepEqual(currentReads, [], "quiet heads do not rebuild raw mids");
-      assert.deepEqual(exactReads, status === "disabled-for-run" ? [] : [round, round], "only two dynamic directions refresh");
+      assert.deepEqual(exactReads, [round, round], "only two dynamic directions refresh, including after failure");
       for (const row of carried) assert.strictEqual(snapshot.effectiveMids!.rows.get(row.edgeId), row, "static Algebra and UniV2 carry");
       for (const row of dynamicRows(snapshot)) {
+        assert(row.amountIn! > 0n, "the production amount builder supplies each direction's current reference");
         assert.equal(row.status, status);
         if (status === "quoted") {
           assert.deepEqual(row.quotedAt, previous); assert.equal(row.amountOut, row.amountIn! * multiplier);
@@ -180,15 +186,8 @@ test("production dynamic Algebra refresh and distinct-origin caller boundary", a
       }
     }
     multiplier = 3n; await check("quoted"); // No pool touch/log, only changed Quoter output at the next source.
-    fail = true; await check("quote-failed"); await check("disabled-for-run");
-    fail = false; await check("disabled-for-run"); // Backend recovery MUST NOT clear run-local exclusions.
-    coordinator = makeCoordinator(); // Explicit NEW run, no disabled-set reset on the existing coordinator.
-    const recovered = await step(true);
-    assert([...recovered.effectiveMids!.rows.values()].every(r => r.status === "quoted"));
-    for (const row of dynamicRows(recovered)) {
-      assert.deepEqual(row.quotedAt, previous); assert.equal(row.amountOut, row.amountIn! * multiplier);
-      assert(recovered.coverage.resolvedEdgeKeys.includes(row.edgeId));
-    }
+    fail = true; await check("quote-failed"); await check("quote-failed");
+    fail = false; await check("quoted"); // Same coordinator; no reset or prior-quote fallback.
   });
   await t.test("current strict runtime sends Quoter calls from origin, not executor", async () => {
     assert(quoterRequests.length > 0);

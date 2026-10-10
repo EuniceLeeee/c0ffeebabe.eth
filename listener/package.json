@@ -212,7 +212,7 @@
     "searcher:strict-ready-runtime": "node --import tsx src/searcher/test/strict-ready-runtime.ts",
     "searcher:strict-ready-graph-view": "node --import tsx src/searcher/test/strict-ready-graph-view.ts",
     "searcher:strict-production-runtime-session": "node --import tsx src/searcher/test/strict-production-runtime-session.ts",
-    "searcher:strict-effective-failure-recovery": "node --import tsx --test src/searcher/test/strict-effective-failure-recovery.ts src/searcher/venues/protocols/yearn-auction-family/test/refresh.ts src/searcher/venues/protocols/erc4626-family/test/infinifi-contract.ts",
+    "searcher:strict-effective-failure-recovery": "node --import tsx --test src/searcher/test/strict-effective-failure-recovery.ts src/searcher/venues/protocols/yearn-auction-family/test/refresh.ts src/searcher/venues/protocols/erc4626-family/test/infinifi-contract.ts src/searcher/venues/protocols/yieldbasis-lt-family/test/refresh.ts src/searcher/venues/swaps/algebra-integral-family/test/refresh.ts src/searcher/venues/protocols/compound-ctoken-family/test/refresh.ts",
     "searcher:strict-production-family-declarations": "node --import tsx src/searcher/test/strict-production-family-declarations.ts",
     "searcher:strict-receipt-authority": "node --import tsx src/searcher/test/strict-receipt-authority.ts",
     "searcher:ready-receipt-binding": "node --import tsx src/searcher/test/ready-receipt-binding.ts",

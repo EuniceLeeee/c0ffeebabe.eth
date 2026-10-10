@@ -7,14 +7,21 @@ import { createAdapterFamilyExactQuoteCache } from "../../../../adapter-family-e
 import { buildEffectiveMids } from "../../../../blockscan-effective-mid.js";
 import { createVerifiedGraphView } from "../../../blockscan-state-capability.js";
 import { executeAdapterFamilyLifecycleBatch } from "../../../adapter-family-runtime.js";
-import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
-import { isPricedFamily } from "../../../family-capability-catalog.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_LOAD as load } from "../../../production-family-composition.js";
+import { FamilyCapabilityCatalog, isPricedFamily } from "../../../family-capability-catalog.js";
+import { generatedCapabilityManifestFromShadowArtifact } from "../../../family-capability-shadow.js";
+import artifact from "../../../../generated/family-capability-shadow.generated.json";
 import { CTOKEN_FAMILY_ID } from "../manifest.js";
 import { CTOKEN_INTERFACE, CTOKEN_REDEEM_CALL_PATTERN_ID } from "../abi.js";
 import { EXECUTOR, MARKET } from "./fixtures.js";
 import { fixture, source, state } from "./runtime-fixture.js";
 
-test("production coordinator refreshes quiet-block accrual; raw bootstrap is static; no failed-current fallback", async () => {
+// Test installed definitions without enabling a default-disabled production Family.
+const modules = [...load.plugins, ...load.disabledPlugins];
+const catalog = new FamilyCapabilityCatalog({ modules, requireCapture: true,
+  generatedManifest: generatedCapabilityManifestFromShadowArtifact({ artifact, strictFamilyIds: modules.map(m => m.familyId) }) });
+
+for (const path of ["coarse", "runtime"] as const) test(`${path}: Compound accrual refresh withdraws failed quotes and recovers without stored-rate fallback`, async () => {
   const s = state(), at = source(), family = catalog.forFamily(CTOKEN_FAMILY_ID);
   assert(isPricedFamily(family));
   const life = await executeAdapterFamilyLifecycleBatch({ family, source: at, generation: at.generation,
@@ -54,11 +61,15 @@ test("production coordinator refreshes quiet-block accrual; raw bootstrap is sta
   let previous = source(99);
   async function step(n: number) {
     const now = source(n);
-    await coordinator.prepareCoarsePricing({ graph: graph(now), deadlineAtMs: Date.now() + 10000,
+    const input = { graph: graph(now), deadlineAtMs: Date.now() + 10000,
       ...(n === at.number ? {} : { touchedPools: new Set<string>(), canonicalActivity: { source: now,
-        parentHash: previous.hash, touchedStateKeys: new Set<string>(), complete: true as const } }) });
+        parentHash: previous.hash, touchedStateKeys: new Set<string>(), complete: true as const } }) };
+    if (path === "coarse") await coordinator.prepareCoarsePricing(input);
+    else await coordinator.prepare({ ...input, fundingTokens: [] });
     previous = now;
     const p = coordinator.latestPricingSnapshot(); assert(p?.effectiveMids);
+    assert.deepEqual(p.effectiveMids.source, now);
+    assert.equal(p.sourceBlock, now.number); assert.equal(p.sourceBlockHash, now.hash); assert.equal(p.generation, now.generation);
     return p;
   }
   const first = await step(100), firstRow = [...first.effectiveMids!.rows.values()][0];
@@ -85,6 +96,23 @@ test("production coordinator refreshes quiet-block accrual; raw bootstrap is sta
   await issue(200000000n);
   assert.equal(f.reads.length, count + 2, "without stateOnlyReads a different amount retains no amount-free rate evidence");
   s.failCurrent = true;
-  const failed = await step(102);
-  assert([...failed.effectiveMids!.rows.values()].every(r => r.status !== "quoted"), "no stored/previous successful rate fallback");
+  for (const n of [102, 103]) {
+    const readsBefore = currentReads();
+    const failed = await step(n), row = [...failed.effectiveMids!.rows.values()][0]!;
+    assert(currentReads() > readsBefore, "a new block retries the failed current rate");
+    assert.equal(row.status, "quote-failed");
+    assert.equal(row.amountOut, null); assert.equal(row.effectiveMid, null);
+    assert.equal(row.quotedAt, undefined, "no stored/previous successful rate fallback");
+    assert(!failed.coverage.resolvedEdgeKeys.includes(row.edgeId));
+    assert.equal(storedReads(), 1, "failure never causes stored-rate fallback reads");
+  }
+  s.failCurrent = false; s.current *= 2n;
+  const readsBeforeRecovery = currentReads();
+  const recovered = await step(104), recoveredRow = [...recovered.effectiveMids!.rows.values()][0]!;
+  assert(currentReads() > readsBeforeRecovery, "recovery requires a fresh current-rate read");
+  assert.equal(recoveredRow.status, "quoted"); assert.deepEqual(recoveredRow.quotedAt, source(104));
+  assert.equal(recoveredRow.amountIn, firstRow.amountIn);
+  assert.equal(recoveredRow.amountOut, secondRow.amountOut! * 2n);
+  assert(recovered.coverage.resolvedEdgeKeys.includes(recoveredRow.edgeId));
+  assert.equal(storedReads(), 1); assert.equal(recovered.rawMidSource?.number, 100);
 });
