@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "8947430a9d8e1fe06fb4dab74085076df4f7ef5c",
+  "codeCommit": "822d24af3362e27cc7001ee429db11fa9010e18b",
+  "status": "sampled-same-N-no-hook-native-dual-and-natural-production-reference-verified; performance-not-run",
+  "claim": "Supplement existing common native-asset boundary using one no-hook V4 ETH/APE pool. Reused natural single-block Ready and fresh same-N quote/quoted/runtime receipts; not original pre-call, full opportunity, formal merge or performance acceptance.",
+  "family": "univ4",
+  "anchor": {
+    "transaction": "0x2068e9fc151ad0ea2cf273e50a8a0153cc1d0303deb9cf660f13dbbf8571548c",
+    "N": 26029537,
+    "transactionIndex": 214,
+    "blockHash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+    "stateRoot": "0x61913a7754c69363ff55d44d2ccfbc9c95d2a496a38fb80ba7e854124528f772",
+    "manager": "0x000000000004444c5dc75cb358380d2e3de08a90",
+    "poolId": "0x9ecc2b9b4171c12e89ea93ed63eb2b0b18048c51be2846e94be3d7c478354441",
+    "instance": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x9ecc2b9b4171c12e89ea93ed63eb2b0b18048c51be2846e94be3d7c478354441",
+    "currency0": "0x0000000000000000000000000000000000000000",
+    "currency1": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+    "hook": "0x0000000000000000000000000000000000000000",
+    "fee": 3000,
+    "tickSpacing": 60,
+    "wrappedNative": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    "owner": "0x1000000000000000000000000000000000000001",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "environment": "Canonical N end-state and N execution environment on task-owned local Anvil, with disposable actor/executor overlays. Historical protocol state/code; not the original swap pre-call state."
+  },
+  "evidenceRoot": "logs/v4-nohook-native-20261010.NLQTyZ",
+  "naturalIntegration": {
+    "reusedWithoutModification": true,
+    "producer": "Existing natural N-only discovery/strict Ready and runAtBlock production prices from the Sat1/V4 acceptance. No rebuild, target candidate injection, admitted flag injection, graph edge injection or borrowed input.",
+    "ready": {
+      "path": "logs/v4-native-historical-20261010.6yy5wf/single-N26029537-1/ready.json",
+      "sha256": "aecef833d4dc0a6edd4aba570ea7f610945cef11d7386664285e3baf545b4284"
+    },
+    "prices": {
+      "path": "logs/v4-native-historical-20261010.6yy5wf/prices-resume-2/prices/prices.json",
+      "sha256": "a7749612950dfb47cac1788f7bd0b749b102a15086c64d6f661b92ea1c443c24"
+    },
+    "priceInput": {
+      "path": "logs/v4-native-historical-20261010.6yy5wf/prices-resume-2/prices/input.json",
+      "sha256": "9bc75fadba7e114c75816428ce0a182cd21b3d1767e80dbe0973f91e332cd9d7"
+    },
+    "candidates": 43,
+    "verified": 40,
+    "terminalRejected": 3,
+    "retryable": 0,
+    "unaccounted": 0,
+    "instances": 40,
+    "graphEdges": 80,
+    "rawRows": 78,
+    "effective": {
+      "quoted": 74,
+      "quoteFailed": 3,
+      "missingValuation": 3
+    },
+    "target": {
+      "strict": "admitted",
+      "graphDirections": 2,
+      "rawDirections": 2,
+      "freshEffectiveDirections": 2,
+      "amountProvenance": "Same-N natural production effective rows; no donor amount or production-P adjustment."
+    },
+    "graphHash": "3a4ab38356a4b73c10cbd30c48d7a43f5903a64fb9a5d2bec257cba4e9bb4a0a",
+    "coverageLimit": "Target rows pass; retained background quote failures/missing valuations and rejected candidates mean this is not whole-graph success."
+  },
+  "originalObservation": {
+    "artifact": "ape/inspection.json",
+    "sha256": "9a79836597409c146a3137fad4cd947ef1d78f725fc08291175d63dc30066a29",
+    "receipt": {
+      "path": "ape/receipt.json",
+      "sha256": "f00e2160f98ee714cb5251a24c60d3cb5b330857805e4dcc7d8c09d68edeb8ef"
+    },
+    "trace": {
+      "path": "ape/trace.json",
+      "sha256": "8f0edb688e8a76fb402342a9e0b5dfdd1a3f36ab4c08debaf5fc7bc00f39e7ff"
+    },
+    "header": {
+      "path": "ape/header.json",
+      "sha256": "e4c4ccd4a5d2a92b8c3f2f73830457a5129580b399297870c4e2685698aebe51"
+    },
+    "rawEthInput": "52441220376341570",
+    "actualApePayment": "982538460759647166664",
+    "callerAndRecipient": "0x278d858f05b94576c1e6f73285886876ff6ef8d2",
+    "method": "PoolManager.swap + settle + take; actual recipient payment independently observed",
+    "reverseOriginalLeg": "absent; reverse test uses admitted production direction, not an invented original leg",
+    "stateLimit": "N-end same-input output differs from original landed leg; no claim of original pre-call parity."
+  },
+  "execution": {
+    "artifact": "same-N-dual-1.json",
+    "sha256": "3f230388753731ef628b325cf6364bf818a2b72373a3516be932d6c2926e9d65",
+    "result": "pass",
+    "sourceTreeSha256": "25354d3b8f0a6cf5fccac6c89bf02861387ed32d396924260d36b42ab7bca201",
+    "sourceBindingLimit": "Fresh historical execution used actual cloud working sources, including preserved peer dirty production changes, not a pristine codeCommit checkout. Source hash was checked before/after. Exact staged-source build/contracts are separate evidence.",
+    "harnessSha256": "7bedee2d3a531a21de32aed370c70b1e90fbba8957ce3627b5d130d85729e831",
+    "sharedEvidenceSha256": "7df2aa781c12dfb41ce67c3ea8e02fb13d4cccb564f99cbaab2419a5ac0880c4",
+    "observerSha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1",
+    "executorCodeKeccak256": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419",
+    "executorArtifactSha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+    "positiveGroups": [
+      {
+        "direction": "WETH/native ETH -> APE",
+        "basis": "production effective",
+        "input": "2000000000000000",
+        "quoteAndObservedOutput": "37443106560200851680"
+      },
+      {
+        "direction": "WETH/native ETH -> APE",
+        "basis": "original input at N-end, not original pre-call",
+        "input": "52441220376341570",
+        "quoteAndObservedOutput": "981080429269070309259"
+      },
+      {
+        "direction": "APE -> native ETH/WETH",
+        "basis": "production effective",
+        "input": "37443106560200851680",
+        "quoteAndObservedOutput": "1985916207305835"
+      },
+      {
+        "direction": "APE -> native ETH/WETH",
+        "basis": "twice production effective",
+        "input": "74886213120401703360",
+        "quoteAndObservedOutput": "3971720342190229"
+      }
+    ],
+    "successfulExecutions": 16,
+    "interfaces": [
+      "quoted",
+      "runtime"
+    ],
+    "allSignedOutputDeltas": "0",
+    "actualInputDebit": "exact requested input in each successful execution",
+    "controls": "Each amount uses both interfaces with normal and abundant-old-output inventory. Output measured independently; raw PoolManager native settlement and executor WETH/native boundary checked.",
+    "nativeInventory": {
+      "before": "17",
+      "after": "17",
+      "delta": "0"
+    },
+    "outputInventoryControl": "1000000000000000000000000",
+    "inputInventoryLimit": "Existing executor input balance was zero; no new claim of positive old-input inventory preservation.",
+    "missingInputWithAbundantOutput": {
+      "cases": 8,
+      "result": "all reverted",
+      "observationLimit": "Failing traces observe zero input then panic 0x11 before reading output inventory. Abundant-output override is bound by harness and override hash; it is not independently read in the failing traces."
+    },
+    "runtimeConstruction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "programHashes": [
+        "0x2cc46732a6fecd19934f3e8e7d4965f56205bd300cf0683164646b34e9ed7689",
+        "0x47986ab80c411cb5a12c19516a1a3472043ec21524b8c0caa2d92e0d3b74132d"
+      ],
+      "scope": "Single-leg construction with throwing Exact/quoted/RPC entrances; separate shared dual contracts cover production selector wiring."
+    },
+    "explicitInterfaceInvocations": {
+      "exact": 4,
+      "quoted": 4
+    },
+    "diagnostics": {
+      "elapsedMs": 1974.281135,
+      "directLogicalRpcCalls": 124,
+      "forkInternalRpcCalls": "not counted",
+      "isPerformanceAcceptance": false
+    }
+  },
+  "codeChange": {
+    "productionSemanticsChanged": false,
+    "scope": [
+      "Add fixed v4-native-nohook sample and route observation to existing V4 observer.",
+      "Enable reverse admitted direction and physical PoolManager balance protection in historical dual harness.",
+      "Regress sample/canonical-instance observer dispatch.",
+      "Reconcile stale remaining Yield Basis deposit wording with already completed report; no new YB EVM claimed."
+    ]
+  },
+  "regression": {
+    "workingBuild": {
+      "result": "build:live exit0",
+      "log": "build-live-final.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    "observers": {
+      "passed": 61,
+      "failed": 0,
+      "shared": 28,
+      "v4": 33,
+      "log": "observer-tests.log",
+      "sha256": "1719f1b2179021cfde9050188c377796e749b75cb78139ff3605ba2467f1796d"
+    },
+    "v4Family": {
+      "result": "official searcher:univ4-family-plugin exit0",
+      "log": "v4-family-contracts.log",
+      "sha256": "9e9dfe7a7e002519eb0a2604c5963fcaa79595988a3b04ec3bbbc9376fb8da93"
+    },
+    "v4FeeHook": {
+      "result": "official searcher:univ4-fee-hook-family-plugin exit0",
+      "log": "v4-fee-hook-contracts.log",
+      "sha256": "55c49516cea3d581f15f001af7c8cce0d5548090018ce3b7ef7cce873092f0d5"
+    },
+    "workingDual": {
+      "passed": 80,
+      "failed": 0,
+      "includesPeerFixture": true,
+      "log": "shared-dual.log",
+      "sha256": "9f5e2bc1b788608df737e5801828cea5f5dc6935acedd09d86f5820ae0692918"
+    },
+    "stagedSource": {
+      "directory": "/tmp/mev-nohook-staged.TCJNyQ",
+      "notGitWorktree": true,
+      "build": "exit0",
+      "observers": "61/61",
+      "dual": "79/79; peer fixture is outside committed source",
+      "buildLog": "staged-build.log",
+      "buildSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "observerLog": "staged-observers.log",
+      "observerSha256": "73c7f352844f2fdb835d435a159ec1d18a7613bff0956caf24fb96c09008a23a",
+      "dualLog": "staged-shared-dual.log",
+      "dualSha256": "0169ac9a5dc7334f7815e38184d2b07ec85b8bee6584b471cb46d31166a1d1ec"
+    },
+    "fullTypecheck": "NOT RUN; build:live is not full-repository typecheck"
+  },
+  "reconciliation": {
+    "initialInventoryQuery": {
+      "query": [
+        "v4",
+        "dual"
+      ],
+      "manifest": "tools-selection.json",
+      "use": "inspected only; not an executed coverage claim"
+    },
+    "executedQuery": [
+      "dual"
+    ],
+    "executedTools": [
+      "listener:searcher:kyber-yb-compound-dual-historical-fork",
+      "listener:searcher:family-dual-execution"
+    ],
+    "eachExit": 0,
+    "manifest": "tools-dual.json",
+    "manifestSha256": "82816ea56219c4e15594b1d152e1b0ba260cfded1a77941e25b41b2a21b5d499",
+    "result": "Original settlement manual inspection reconciled with indexed dual harness; same-N outputs and all interfaces verified."
+  },
+  "retainedFailures": [
+    {
+      "transaction": "0x1354effeabb1727c6396422eafc234ec079f350dc7402fa0465f26469ba86b0c",
+      "N": 26029537,
+      "transactionIndex": 226,
+      "poolId": "0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7",
+      "artifacts": [
+        "inspection.json",
+        "receipt.json",
+        "trace.json"
+      ],
+      "reason": "ETH/USDC candidate had two same-caller swaps in one unlock; observer cannot independently assign aggregate settlement to one leg.",
+      "classification": "measurement/attribution refusal, not protocol/EVM rejection; no guard weakened"
+    },
+    {
+      "log": "v4-contracts.log",
+      "sha256": "d93a7e05d8c54bb0bbc745ec994e6061838e8941131db8b67940187418c35856",
+      "exit": 1,
+      "reason": "Initial nonexistent test paths; official package scripts subsequently passed. Invocation failure retained."
+    },
+    {
+      "reason": "First scratch-file SHA check occurred during incomplete upload. No file applied/executed until complete transfer SHA matched; no source corruption."
+    }
+  ],
+  "independentReview": {
+    "agentId": "01a1264d-5cb5-7260-81dd-e30cbc2c8880",
+    "verdict": "No blocking finding in narrow three-test-file increment; not whole-Family or performance approval.",
+    "executedOfflineTests": 61,
+    "verified": "Patch/Ready/price/source/executor hashes and actual tool receipts; independently recomputed all 16 raw storage/native deltas and manager settlement, checked original receipt/header/trace and both directions.",
+    "reviewerFreshRpcOrEvm": false,
+    "limits": "Missing-input traces do not read abundant output; original manually annotated trace's call tree matches dual trace and annotations match receipt."
+  },
+  "aggregateReconciliation": {
+    "report": "docs/research/reports/four-family-independent-acceptance-20261009.json",
+    "sha256": "0406f4e7f8991a3cee10a936161d3b809700594a2415e6e4d312fa594f614d02",
+    "completedDepositReport": "docs/research/reports/yieldbasis-deposit-integration-20261009.json",
+    "completedDepositReportSha256": "893535e44f65fb957a7a67f9e155612ba2d523529cc4028961c97687643fb9f9",
+    "change": "Only stale remaining yieldBasisLt wording and pointer updated; old historical evidence preserved."
+  },
+  "limits": [
+    "One pool, two admitted directions, four amounts only; no inference to other no-hook pools or hook implementations.",
+    "Historical EVM tied to preserved working source, not clean codeCommit EVM replay.",
+    "No original pre-call/full route repayment/final sim/EV acceptance and no formal adapter_fixed/adapter_merge_ready/production_gap_fixed verdict.",
+    "Set missing reference directions, siUSD reference gap, remaining IMPL replays and all timing phases remain open."
+  ],
+  "performance": {
+    "singleReady": "NOT RUN",
+    "representativeCombinedGraph": "NOT RUN",
+    "scope": "All present/future applicable IMPL adaptations and all task adaptations/repairs require 4A single-block Ready timing then 4B combined representative large-graph timing. Includes Balancer V2, Balancer V3, Curve plain and Curve underlying. Diagnostic execution elapsed time is not acceptance."
+  },
+  "implTableUpdate": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "row": "Append only existing Curve plain + Fluid native/common migration row38",
+    "archive": "docs/research/reports/impl-v4-nohook-native-20261010.json",
+    "beforeSha256": "44dd1deac261812efeae8a8973058844d28c43464dc9015580d3a447dca6ccb4",
+    "afterSha256": "fedc3956f24f6e8b434f55a46e9f3951e4e0c9ae55d1937457756d110351a756",
+    "inverseVerified": true
+  },
+  "safety": {
+    "productionChanged": false,
+    "defaultActivationChanged": false,
+    "liveStarted": false,
+    "deployed": false,
+    "signed": false,
+    "broadcast": false,
+    "privateKeysRead": false,
+    "originalReadyChanged": false,
+    "newBranchOrWorktree": false,
+    "peerNonGeneratedDiffSha256": "98c67fbc9b8f33d2311b2d7824e60028e10d1348b6061ce53f0860a799b79776"
+  }
+}
