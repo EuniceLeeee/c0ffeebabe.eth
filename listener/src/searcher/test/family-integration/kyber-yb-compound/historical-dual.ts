@@ -58,6 +58,7 @@ export function sourcePin() {
       "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
       "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
       "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+      "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
       "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts"]
       .map(path => ({ path, sha256: sha(readFileSync(new URL(path, import.meta.url))) })) };
 }
@@ -303,7 +304,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       if (original) trials.push(["historical-input-at-N", original.amountIn]);
       else if (p.status === "met") trials.push(["twice-production-effective", p.amountIn * 2n]);
       else if (splice) trials.push(["twice-spliced-production-input-at-N", splice.amountIn * 2n]);
-      if (original && p.status === "unmet" && !splice && (args.family === "xwin-mint" || args.family === "xwin-redeem"))
+      if (original && p.status === "unmet" && !splice && (args.family === "xwin-mint" || args.family === "xwin-redeem" || args.family === "ethertoken-native"))
         trials.push(["twice-historical-input-at-N-not-production-reference", original.amountIn * 2n]);
       report.preparationMs ??= performance.now() - started;
       for (const [label, amountIn] of trials) {

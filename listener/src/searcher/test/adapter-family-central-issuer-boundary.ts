@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -141,8 +142,12 @@ function tsFiles(directory: string): readonly string[] {
   const files: string[] = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...tsFiles(path));
-    else if (entry.isFile() && [".ts", ".tsx"].includes(extname(path))) {
+    // This selects runtime roots, not their dependency closure. A production
+    // import into a test directory is still followed by scanRuntimeClosure.
+    if (entry.isDirectory() && !["test", "tests", "__tests__"].includes(entry.name)) {
+      files.push(...tsFiles(path));
+    } else if (entry.isFile() && [".ts", ".tsx"].includes(extname(path)) &&
+        !/\.(test|spec)\.tsx?$/.test(entry.name)) {
       files.push(path);
     }
   }
@@ -241,6 +246,25 @@ try {
     "a helper in the Family runtime closure must not hide the central issuer",
   );
   assert(transitive.files.includes(resolve(helper)));
+
+  const testDirectory = join(syntheticRoot, "test");
+  mkdirSync(testDirectory);
+  const testHelper = join(testDirectory, "central-probe.ts");
+  const unitTest = join(syntheticRoot, "contract.test.ts");
+  const centralImport = `import { createBoundedRequestExecutor } from "../adapter-request-program.js";\n`;
+  writeFileSync(testHelper, centralImport);
+  writeFileSync(unitTest, centralImport);
+  writeFileSync(entry, `export const plugin = {};\n`);
+  writeFileSync(helper, `export const fixture = {};\n`);
+  const runtimeRoots = tsFiles(syntheticRoot);
+  assert.deepEqual([...runtimeRoots].sort(), [entry, helper].sort(),
+    "standalone Family tests must not become runtime roots");
+  assert.deepEqual(scanRuntimeClosure(runtimeRoots).findings, []);
+  writeFileSync(entry, `import "./test/central-probe.js";\nexport const plugin = {};\n`);
+  const hiddenInTest = scanRuntimeClosure(runtimeRoots);
+  assert.equal(hiddenInTest.findings.length, 1,
+    "production code cannot hide a central issuer behind a test path");
+  assert(hiddenInTest.files.includes(resolve(testHelper)));
 } finally {
   rmSync(syntheticRoot, { recursive: true, force: true });
 }

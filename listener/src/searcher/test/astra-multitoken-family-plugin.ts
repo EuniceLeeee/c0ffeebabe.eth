@@ -514,6 +514,11 @@ async function runIdentity(
     assert.deepEqual(variant.decide(input), { status: "continue" });
     const requests = variant.buildRequests(input);
     assert(requests.length > 0);
+    for (const request of requests) if (request.kind === "effect-delta-simulation") {
+      await assert.rejects(backend.simulate({ ...request,
+        preCalls: request.preCalls!.slice(1) }), /strict probe must clear/,
+      "removing the reset must fail the historical-allowance regression");
+    }
     evidence = variant.decode({
       step: input,
       results: await adapterResults(requests, backend),
@@ -967,6 +972,11 @@ class AstraBackend {
     const actor = ethers.getAddress(ACTOR);
     const inputToken = ethers.getAddress(String(tokenIn));
     const outputToken = ethers.getAddress(String(tokenOut));
+    assert.deepEqual(request.preCalls?.map(call => ({ caller: call.caller,
+      to: ethers.getAddress(call.to), data: call.data })), [0n, input].map(amount => ({
+        caller: { kind: "observed-sender" }, to: inputToken,
+        data: ASTRA_ERC20_INTERFACE.encodeFunctionData("approve", [target, amount]),
+      })), "strict probe must clear historical allowance before the exact grant");
     const log = ASTRA_MULTITOKEN_INTERFACE.encodeEventLog(
       ASTRA_MULTITOKEN_INTERFACE.getEvent("Change")!,
       [inputToken, outputToken, actor, input, output],

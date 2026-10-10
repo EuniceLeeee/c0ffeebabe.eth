@@ -39,18 +39,29 @@ export function createTxEvidenceNomination(input: {
         const txHash = opaqueTxHash(nomination.opaque);
         if (txHash === null) continue;
         try {
+          // Empty/zero-address TX seeds discover naturally. A concrete address
+          // instead binds the evidence; malformed claims must not become seeds.
+          const address = nomination.address?.trim();
+          const boundAddress = !address || address === ethers.ZeroAddress
+            ? undefined : ethers.getAddress(address).toLowerCase();
+          const poolId = (nomination.opaque as Readonly<Record<string, unknown>>).poolId;
           const receipt = await provider.getTransactionReceipt(txHash);
           if (receipt === null) continue;
-          const logObservation = await matchLogs(logs, receipt.logs, source);
+          const logObservation = await matchLogs(logs, receipt.logs, source, boundAddress, poolId);
           if (logObservation !== null) {
             results.push(logObservation);
             continue;
           }
           if (input.traceTransaction !== false &&
               provider.traceTransaction !== undefined &&
-              calls.length > 0) {
+              calls.length > 0 &&
+              // CallPattern projects an address, not an opaque bytes32 id.
+              // Do not replace missing instance-bound log evidence with a
+              // different instance's call through the same entrypoint.
+              !((boundAddress !== undefined || poolId !== undefined) && logs.some(pattern =>
+                pattern.emitter?.mode === "singleton-indexed-bytes32"))) {
             const trace = await provider.traceTransaction(txHash);
-            const call = matchCalls(calls, trace);
+            const call = matchCalls(calls, trace, boundAddress);
             if (call !== null) {
               results.push(Object.freeze({
                 kind: "call" as const,
@@ -123,11 +134,32 @@ async function matchLogs(
     readonly transactionHash?: string;
   }[],
   source: CanonicalSource,
+  boundAddress?: string,
+  poolId?: unknown,
 ): Promise<UnifiedObservation | null> {
-  const topics = new Set(patterns.map((pattern) => pattern.topic.toLowerCase()));
   for (const log of receiptLogs) {
     const topic = log.topics[0]?.toLowerCase();
-    if (topic === undefined || !topics.has(topic)) continue;
+    if (!patterns.some(pattern => {
+      if (pattern.topic.toLowerCase() !== topic) return false;
+      const emitter = pattern.emitter;
+      if (emitter === undefined || emitter.mode === "address") {
+        return boundAddress === undefined || log.address.toLowerCase() === boundAddress;
+      }
+      if (log.address.toLowerCase() !== emitter.address.toLowerCase() ||
+          source.number < emitter.fromBlock) return false;
+      const indexed = log.topics[emitter.topicIndex];
+      if (!ethers.isHexString(indexed, 32)) return false;
+      if (emitter.mode === "singleton-indexed-address") {
+        return /^0x0{24}/i.test(indexed) && (boundAddress === undefined ||
+          "0x" + indexed.slice(-40).toLowerCase() === boundAddress);
+      }
+      // A concrete shared entrypoint without its logical id cannot prove
+      // which instance was nominated. Only an unbound TX seed may discover.
+      if (boundAddress !== undefined && poolId === undefined) return false;
+      return (boundAddress === undefined || log.address.toLowerCase() === boundAddress) &&
+        (poolId === undefined || (typeof poolId === "string" &&
+          ethers.isHexString(poolId, 32) && indexed.toLowerCase() === poolId.toLowerCase()));
+    })) continue;
     return Object.freeze({
       kind: "log" as const,
       source,
@@ -145,6 +177,7 @@ async function matchLogs(
 export function matchCalls(
   patterns: readonly CallPattern[],
   raw: unknown,
+  boundAddress?: string,
 ): { readonly target: string; readonly sender: string | null; readonly data: string } | null {
   if (raw === null || typeof raw !== "object") return null;
   const frame = raw as {
@@ -152,26 +185,48 @@ export function matchCalls(
     readonly from?: unknown;
     readonly input?: unknown;
     readonly calls?: unknown;
+    readonly error?: unknown;
+    readonly revertReason?: unknown;
   };
+  // Reverted ancestors invalidate their whole subtree as successful evidence.
+  if (frame.error || frame.revertReason) return null;
   if (
     typeof frame.to === "string" && ethers.isAddress(frame.to) &&
     typeof frame.input === "string" && ethers.isHexString(frame.input) &&
     frame.input.length >= 10
   ) {
-    const selector = frame.input.slice(0, 10).toLowerCase();
-    if (patterns.some((pattern) => pattern.selector.toLowerCase() === selector)) {
+    const target = ethers.getAddress(frame.to);
+    const data = frame.input;
+    const selector = data.slice(0, 10).toLowerCase();
+    if (patterns.some((pattern) => {
+      if (pattern.selector.toLowerCase() !== selector) return false;
+      if (boundAddress === undefined) return true;
+      if (pattern.candidateAddress.from === "call-target") {
+        return target.toLowerCase() === boundAddress.toLowerCase();
+      }
+      // Public entrypoints may carry the logical candidate in calldata.
+      // Use the declared ABI projection, never equate entrypoint and instance.
+      try {
+        const abi = new ethers.Interface([`function ${pattern.signature}`]);
+        const candidate = abi.decodeFunctionData(pattern.selector, data)[pattern.candidateAddress.index];
+        return typeof candidate === "string" && ethers.isAddress(candidate) &&
+          candidate.toLowerCase() === boundAddress.toLowerCase();
+      } catch {
+        return false;
+      }
+    })) {
       return {
-        target: ethers.getAddress(frame.to),
+        target,
         sender: typeof frame.from === "string" && ethers.isAddress(frame.from)
           ? ethers.getAddress(frame.from)
           : null,
-        data: frame.input,
+        data,
       };
     }
   }
   if (Array.isArray(frame.calls)) {
     for (const call of frame.calls) {
-      const found = matchCalls(patterns, call);
+      const found = matchCalls(patterns, call, boundAddress);
       if (found !== null) return found;
     }
   }

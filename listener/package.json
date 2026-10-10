@@ -186,6 +186,7 @@
     "searcher:serial-systemic-live-evidence": "node --import tsx src/searcher/test/serial-systemic-live-evidence.ts",
     "searcher:strict-execution-projection": "node --import tsx src/searcher/test/strict-execution-projection.ts",
     "searcher:capture-nomination-framework": "node --import tsx src/searcher/test/capture-nomination-framework.ts",
+    "searcher:tx-evidence-nomination": "node --import tsx --test src/searcher/test/tx-evidence-nomination.ts",
     "searcher:strict-family-lifecycle-runner": "node --import tsx src/searcher/test/strict-family-lifecycle-runner.ts",
     "searcher:strict-central-adapter-runtime": "node --import tsx src/searcher/test/strict-central-adapter-runtime.ts",
     "searcher:revm-strict-simulation-transport": "node --import tsx src/searcher/test/revm-strict-simulation-transport.ts",

@@ -200,7 +200,10 @@ export function createStrictCentralAdapterRuntime(input: {
         },
         assertCallerBinding() {},
         assertWithinBudget: (_familyId, requests) => {
-          if (!Array.isArray(requests) || requests.length === 0) {
+          // A declared Exact program may need no reads. It still traverses
+          // central admission, execution/source fences and trusted decode;
+          // only physical transport is empty. Never require a dummy RPC.
+          if (!Array.isArray(requests)) {
             throw new Error("strict central runtime requires a request batch");
           }
         },

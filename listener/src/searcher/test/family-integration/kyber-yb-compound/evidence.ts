@@ -11,10 +11,14 @@ import { assertHistoricalPriceDirection } from "../three-family/historical-input
 import { originalEkuboLeg } from "../../../venues/swaps/ekubo-family/test/history-evidence.js";
 import { originalXwinLeg } from "../../../venues/protocols/token-conversion-family/test/history-evidence.js";
 import { originalStandardErc4626Leg } from "../../../venues/protocols/erc4626-family/test/history-evidence.js";
+import { originalEtherTokenLeg } from "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 export { json, sha, word, observeBalance } from "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.js";
 
 export const SAMPLES = {
+  "ethertoken-native": { family: "protocol:ethertoken-native-redeem", number: 25648967,
+    tx: "0xdf54ad38d4b812c4ab23ba6225543caaa433897f9454414c70bf7fda1290694e",
+    instances: ["0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315"] },
   "erc4626-fluid": { family: "protocol:erc4626", number: 26030897,
     tx: "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
     instances: ["0x90551c1795392094fe6d29b758eccd233cfaa260",
@@ -245,6 +249,7 @@ function successfulCalls(trace: any, target: string, selector: string): any[] {
 /** Extract only one unambiguous real successful call + event per instance. */
 export function originalLeg(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any) {
   assert(!trace.error && !trace.revertReason, "original transaction reverted");
+  if (key === "ethertoken-native") return originalEtherTokenLeg(instance, descriptor, receipt, trace);
   if (key === "erc4626-fluid")
     return originalStandardErc4626Leg(instance, descriptor, receipt, trace);
   if (key === "xwin-mint" || key === "xwin-redeem")
