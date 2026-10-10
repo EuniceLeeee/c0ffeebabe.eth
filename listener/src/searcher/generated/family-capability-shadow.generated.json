@@ -11892,6 +11892,355 @@
     {
       "precision": "capability-exact",
       "identity": {
+        "familyId": "protocol:yearn-auction",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "af3c80581a3c051f572e9138d808b70f2264d4b23feec317d3552d70daab7566",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/codec.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/discovery.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/runtime-shape.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/protocols/yearn-auction-family/capture.ts",
+        "entryExport": "capture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yearn-auction",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yearn-auction",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "d5b2d9cfb0950091328cecb0cb43d9544585f030edec8ba602dcf562482ddd2f",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/codec.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/runtime-shape.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/protocols/yearn-auction-family/discovery.ts",
+        "entryExport": "discovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yearn-auction",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "a74f356eddd4a93641b6d7f52b88806ccd98fab72d2f6fb5228173599f569e06",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/codec.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/instance.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/routes.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/runtime-shape.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/state.ts",
+          "src/searcher/venues/runtime-execution.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/protocols/yearn-auction-family/exact.ts",
+        "entryExport": "exact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yearn-auction",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "311e108dda1ae88246ec9fb7f1e05b2890da0d8c1f1fa9a7b9489a7442c85b71",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/action.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/codec.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/instance.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/routes.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/runtime-shape.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/state.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/protocols/yearn-auction-family/execution.ts",
+        "entryExport": "execution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yearn-auction-family/action.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yearn-auction",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yearn-auction",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "c586edecc051a33cc39c1e46ffd0028937e472d5980a2e4e3fe9f5133a39eb53",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/codec.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/execution.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/instance.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/pricing.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/routes.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/runtime-shape.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/state.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/shared/executor/amount-rounding.ts",
+          "src/shared/executor/botvm-program-entry.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/protocols/yearn-auction-family/identity.ts",
+        "entryExport": "identity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yearn-auction",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "95cd7cd3393b66ae5f9d8156af49144380e9b57c5a1e9a5d169fdf788abe245c",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/protocols/yearn-auction-family/instance.ts",
+        "entryExport": "instance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yearn-auction",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "3765a83ef102b6db77a8e98e90f41ed2735f3d0937dde899dbf44b6a4d6d51db",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/codec.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/instance.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/routes.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/runtime-shape.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/state.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/protocols/yearn-auction-family/pricing.ts",
+        "entryExport": "pricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yearn-auction",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "7a9ed37f07c6cf0934bb24500f0315778a92205f8fdf42d64645949953b92cfe",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/instance.ts",
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/protocols/yearn-auction-family/routes.ts",
+        "entryExport": "routes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/yearn-auction-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:yearn-auction",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "abfd24bb4384bfcb32fd9c525b3cf9deb4bcbdea9f31b8e5a08d9dbc72c69718",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
         "familyId": "protocol:yieldbasis-lt",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
@@ -14067,5 +14416,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "c148bacd9a51725ae2b31f5bf409ad68082f3597809093aa1c39c4eefc009d0d"
+  "artifactHash": "c20b65f8de8218bfc009a034aa0e33a1ea7f7516e950adfda96b86bff9aef599"
 }

@@ -1,0 +1,585 @@
+{
+  "schema": "yearn-auction-correctness/v1",
+  "createdAt": "2026-10-10T04:10:24.123Z",
+  "result": "implemented; one natural strict/Graph/raw sample and same-state dual execution verified; natural effective, opportunity and latency incomplete",
+  "workspace": {
+    "host": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "path": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "baseHead": "a7bb7d2339de367238892798475028eba3d494e9",
+    "integrationSourceTreeSha256": "504f7dd00acef0f546ef1e00b6414e2189b913c273e65369568500841ac8c4be",
+    "scope": "historical integration used actual shared dirty source; isolated owned-index export separately built/tested without peer edits"
+  },
+  "family": {
+    "id": "protocol:yearn-auction",
+    "action": "yearn-auction",
+    "lineage": "yearn-auction:clone-1.0.4",
+    "defaultEnabled": false,
+    "instanceUnit": "auction address + registered sold token",
+    "identity": "EIP1167 clone -> exact compiled implementation runtime -> registered sold scaler/decimals -> source-bound direct and executor-program effects; no instance address allowlist or factory creation claim",
+    "support": [
+      "payment-token budget -> auction sold-token, immediate take",
+      "quoted amount-specific local floor inversion from pinned current state",
+      "runtime current on-chain price and received-input budget; take clamps inventory; boolean-checked exact budget approval and zero cleanup"
+    ],
+    "exclusions": [
+      "other implementation bytecodes/versions",
+      "kick/keeper/callback strategies",
+      "reverse conversion",
+      "unsupported decimal/probe-overflow domains",
+      "protocols with non-exact token effects"
+    ],
+    "maximumInput": "First Family opt-in to a7bb7d23 generic inputMode=maximum. Positive debit <= working budget; unspent input is not a rounding allowance. Full-flow residual/inventory/final-floor gates retain their separate EVM evidence."
+  },
+  "sample": {
+    "tx": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+    "N": 26152335,
+    "blockHash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+    "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+    "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+    "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+    "executionEnvironment": "N state + N environment; synthetic public owner/current source-bound BotVM local override; actor-only funding, no protocol overrides"
+  },
+  "integration": {
+    "naturalDiscovery": true,
+    "strict": "admitted by production rebuild",
+    "targetInstances": 1,
+    "targetGraphEdges": 1,
+    "targetRawRows": 1,
+    "backgroundInstances": 20,
+    "backgroundGraphEdges": 39,
+    "definitionHash": "9ca68a441afb6880e29b3d270544f880c381c77ec7cd7356b8e79e8c30abed37",
+    "effective": "missing-valuation: natural small graph has no crvUSD input valuation; not claimed passed",
+    "raw": {
+      "kind": "protocol",
+      "pool": "0xA00E6b35C23442fa9D5149Cba5dd94623fFE6693",
+      "edges": [
+        {
+          "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "executionVariantKey": "900617634d7d9cfc76f0c8fa0b95065d298e69b5a2296b389e0908961010f1ca",
+          "adapterId": "yearn-auction",
+          "target": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "slotKind": "protocol",
+          "protocolAction": "convert",
+          "edgeKind": "protocol",
+          "leavesStandingPosition": false,
+          "score": 0,
+          "canonicalEdgeId": "protocol:yearn-auction\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f900617634d7d9cfc76f0c8fa0b95065d298e69b5a2296b389e0908961010f1ca"
+        }
+      ],
+      "mid": 0.39729213362799176,
+      "feeBps": 0,
+      "reserveA": "25170395166604518740000",
+      "reserveB": "10000000000000000000000",
+      "depthProxy": 1e+22
+    },
+    "refresh": "target instance is present in actual production perBlockRefreshStateKeys; generic each-block coordinator contract passed; frozen startup raw and current effective semantics preserved"
+  },
+  "borrowedReference": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+    "sha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378",
+    "edgeId": "custom-swap:ekubo-router-v1\u001f0xe85c9c02437498875821f6bafd923ce81a67defc29e8b2c42927f9bfc640a0f1\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f83d2158099287a762cbb353e4c521784b39a6af4a27af746e8f549d5333522b1",
+    "row": {
+      "edgeId": "custom-swap:ekubo-router-v1\u001f0xe85c9c02437498875821f6bafd923ce81a67defc29e8b2c42927f9bfc640a0f1\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f83d2158099287a762cbb353e4c521784b39a6af4a27af746e8f549d5333522b1",
+      "instanceKey": "0xe85c9c02437498875821f6bafd923ce81a67defc29e8b2c42927f9bfc640a0f1",
+      "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "5137296582894235185",
+      "status": "quoted",
+      "amountOut": "5134367",
+      "effectiveMid": 9.994297423076585e-13,
+      "quotedAt": {
+        "number": 26146969,
+        "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+        "generation": 2
+      }
+    },
+    "cfg": {
+      "maxHops": 6,
+      "deduplicateRotations": true,
+      "allowRepeatedPools": true,
+      "allowRepeatedTokens": false,
+      "prefixPruningEnabled": true,
+      "maxPrefixDrawdownBps": 0,
+      "enumerationMethod": "joint-dfs",
+      "enumerationBackend": "typescript",
+      "rustEnumerationThreads": 1,
+      "rustEnumerationScratchMb": 512,
+      "ethSignalPairsPerToken": 50,
+      "hopTokensPerStep": 3,
+      "hopPoolsPerPair": 3,
+      "minSpreadBps": 0,
+      "requireDislocatedPair": true,
+      "exactAdmissionSpreadBps": 0,
+      "minCapitalFraction": 0.001,
+      "maxCandidates": 100,
+      "budgetMs": 2000,
+      "pricedTokens": {}
+    },
+    "publishedAt": {
+      "number": 26146969,
+      "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+      "generation": 2
+    },
+    "scope": "borrow input amount only from saved production large graph; retain original token, row, source/hash/config; quote and EVM executions remain at target N. No borrowed outputs/admission/valuation.",
+    "donorReadyDiskBindingCheckedByMain": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/ready-candidate.json",
+      "sha256": "b6a7a579f7fd4cc9a7241c729410f8f85ff42357247ba7ed5a795256353b2b40"
+    },
+    "freshness": "fresh-at-original-publication"
+  },
+  "dualExecution": {
+    "result": "pass-with-spliced-production-input",
+    "samples": [
+      {
+        "label": "borrowed-production-input-at-N",
+        "amountIn": "5137296582894235185",
+        "amountOut": "2041007520497841855",
+        "chainCost": "5137296582894235183",
+        "residual": "2",
+        "available": "772943155644044667101",
+        "executions": [
+          {
+            "encoding": "quoted",
+            "negative": "none",
+            "status": "pass",
+            "quoteDelta": "0",
+            "debitDelta": "0"
+          },
+          {
+            "encoding": "quoted",
+            "negative": "no-input",
+            "status": "pass"
+          },
+          {
+            "encoding": "quoted",
+            "negative": "post-execution-revert",
+            "status": "pass"
+          },
+          {
+            "encoding": "runtime",
+            "negative": "none",
+            "status": "pass",
+            "quoteDelta": "0",
+            "debitDelta": "0"
+          },
+          {
+            "encoding": "runtime",
+            "negative": "no-input",
+            "status": "pass"
+          },
+          {
+            "encoding": "runtime",
+            "negative": "post-execution-revert",
+            "status": "pass"
+          }
+        ]
+      },
+      {
+        "label": "original-budget-at-N",
+        "amountIn": "267759246788654353808",
+        "amountOut": "106378642455288485048",
+        "chainCost": "267759246788654353808",
+        "residual": "0",
+        "available": "772943155644044667101",
+        "executions": [
+          {
+            "encoding": "quoted",
+            "negative": "none",
+            "status": "pass",
+            "quoteDelta": "0",
+            "debitDelta": "0"
+          },
+          {
+            "encoding": "runtime",
+            "negative": "none",
+            "status": "pass",
+            "quoteDelta": "0",
+            "debitDelta": "0"
+          }
+        ]
+      },
+      {
+        "label": "original-budget-plus-two-wei",
+        "amountIn": "267759246788654353810",
+        "amountOut": "106378642455288485048",
+        "chainCost": "267759246788654353808",
+        "residual": "2",
+        "available": "772943155644044667101",
+        "executions": [
+          {
+            "encoding": "quoted",
+            "negative": "none",
+            "status": "pass",
+            "quoteDelta": "0",
+            "debitDelta": "0"
+          },
+          {
+            "encoding": "runtime",
+            "negative": "none",
+            "status": "pass",
+            "quoteDelta": "0",
+            "debitDelta": "0"
+          }
+        ]
+      },
+      {
+        "label": "capacity-capped-budget",
+        "amountIn": "1945528466888290612819",
+        "amountOut": "772943155644044667101",
+        "chainCost": "1945528466888290612802",
+        "residual": "17",
+        "available": "772943155644044667101",
+        "executions": [
+          {
+            "encoding": "quoted",
+            "negative": "none",
+            "status": "pass",
+            "quoteDelta": "0",
+            "debitDelta": "0"
+          },
+          {
+            "encoding": "runtime",
+            "negative": "none",
+            "status": "pass",
+            "quoteDelta": "0",
+            "debitDelta": "0"
+          }
+        ]
+      }
+    ],
+    "successfulEvmExecutions": 8,
+    "negativeEvmExecutions": 4,
+    "quoteReceiptDeltaRaw": "0 for every successful sample",
+    "checks": [
+      "input debit and payment receiver increase independently observed",
+      "sold-token executor receipt and auction debit independently observed",
+      "preexisting input/output and native inventory retained",
+      "approval zero checked inside both program modes",
+      "no-input and post-execution-failure atomic revert"
+    ],
+    "negativeEvidence": "Explicit EVM reverted-as-declared and empty effects; no separately captured post-revert balance snapshots.",
+    "originalObservation": {
+      "amountIn": "267759246788654353808",
+      "amountOut": "106378642455288485048",
+      "actor": "0xE08D97e151473A848C3d9CA3f323Cb720472D015",
+      "receiver": "0xb911Fcce8D5AFCEc73E072653107260bb23C1eE8",
+      "scope": "receipt observation, not reconstructed original pre-call state"
+    },
+    "runtimeConstruction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "scope": "production issuer; maximum mask/selector and generic flow inventory safety have separate offline/EVM contracts; this historical run executes single-leg programs"
+    },
+    "invocationCounts": {
+      "exact": 4,
+      "quoted": 4,
+      "forbiddenDuringBuild": 0
+    },
+    "drained": true
+  },
+  "executor": {
+    "artifactTransition": {
+      "previousSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+      "currentSha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+      "sourceFiles": [
+        {
+          "name": "src/BotVM.sol",
+          "keccak256": "0x56b2c959bba3574e408f9c0eb7dfb7f889cda7298142a6a8affef7f106d24126"
+        },
+        {
+          "name": "src/Constants.sol",
+          "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+        },
+        {
+          "name": "src/RuntimeAmountVM.sol",
+          "keccak256": "0x7da208ed582d0b82f542265d0b06c47486f9ab0c9f2a7d3d6760e94d502a26d4"
+        },
+        {
+          "name": "src/interfaces/IERC20.sol",
+          "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+        }
+      ],
+      "activePeerProcessCount": 0,
+      "operation": "promote current source-matching locally compiled artifact; previous generated artifact preserved",
+      "deployment": false
+    },
+    "codeHash": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419",
+    "artifactSha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+    "provisioning": {
+      "historicalHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "runtimeHash": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419",
+      "replacement": false,
+      "historicalRuntimeExecuted": false,
+      "scope": "local eth_call/debug_traceCall code overlay only; same executor/origin; no protocol or permission override"
+    },
+    "priorSafetyReport": "docs/research/reports/runtime-maximum-input-safety-20261010.json",
+    "deployment": false
+  },
+  "tests": {
+    "productionBuild": "PASS",
+    "familyContract": {
+      "passed": 18,
+      "failed": 0
+    },
+    "sharedDual": {
+      "passed": 79,
+      "failed": 0
+    },
+    "isolatedOwnedDual": {
+      "passed": 78,
+      "failed": 0
+    },
+    "sharedNote": "Extra peer V1 fixture is excluded from owned commit; no peer edits staged.",
+    "strictLifecycle": "PASS",
+    "strictCentralRuntime": "PASS (167 tests)",
+    "strictProjection": "PASS",
+    "compositionAndDeclarations": "PASS; 42 installed, 28 default active, new Family off",
+    "catalog": "generate/check PASS on shared and isolated owned source",
+    "eachBlockPolicy": "generic production root/coordinator regression PASS; not Yearn expiry/restart acceptance",
+    "naturalReadyRuntimeConstruction": "1 target instance, 1 route constructed, 0 declined/failed; construction-only, separate from the EVM evidence",
+    "targetTypecheck": "Yearn diagnostics corrected; 5 unchanged transitive diagnostics remain, byte-identical to PSV baseline under same compiler invocation; not full typecheck PASS",
+    "historicalRunnerBinding": {
+      "executed": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/historical-dual-run1.ts",
+        "sha256": "4098473e87a7658d8d4e195448e3b104c9a619451beff2733f7ceb60aedfaf07"
+      },
+      "current": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/test/historical-dual.ts",
+        "sha256": "d4bfd97f64931d63cc29f4f515b99e938df27d8fc0ea11511d49252a2bcd2ea3"
+      },
+      "change": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/yearn-tests-typefix.patch",
+        "sha256": "e12fc4458faf34509b2aa3b02fe65a9debdb2c9b410a128d4759b4bc0422e7eb"
+      }
+    },
+    "typeOnlyUpdate": "Only TS annotations/import type changed after historical execution; production source did not change. Historical run not silently relabeled as rerun."
+  },
+  "review": {
+    "agent": "01a12376-1058-7591-a800-1418f20010c3",
+    "pass1": "No reproducible blocker; independent 18-test contract run and 2160 arithmetic-domain checks; source-compile bytecode confirmed",
+    "pass2": {
+      "agent": "01a12376-1058-7591-a800-1418f20010c3",
+      "pass": 2,
+      "verdict": "No newly reproducible blocker in the inspected saved N-end single-leg dual evidence; not full Family or production-opportunity acceptance.",
+      "independentChecks": [
+        "Current production source fingerprint, natural before/after and dual pins agree; strict memo, Family definition, source and caller bindings checked.",
+        "Executed historical script and current type-only revision transpile to identical JavaScript; current encoders reconstruct all 12 saved calldata exactly.",
+        "8 successful executions and 4 explicit EVM revert negatives counted; token deltas and Transfer logs agree; residuals 2/0/2/17 wei; native balance unchanged and allowance cleanup encoded/checked.",
+        "BotVM four Solidity source hashes, owner-patched runtime hash and preserved previous artifact checked.",
+        "Natural target Graph1/raw1/missing-valuation and per-block refresh composite key checked; 20 total instances and 39 edges.",
+        "Borrowed 5137296582894235185 crvUSD amount matches original N26146969 table row and declaration; only input amount borrowed.",
+        "Saved Family18, isolated dual78, shared dual79 logs checked; remaining 5 transitive type diagnostics match baseline byte-for-byte."
+      ],
+      "artifactSha256": {
+        "dual-1.json": "7cfb5daed74ac2e1d5b35174aefde0895819a870d46f564b512356c787bd6ef7",
+        "historical-dual-run1.ts": "4098473e87a7658d8d4e195448e3b104c9a619451beff2733f7ceb60aedfaf07",
+        "currentBotVM": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+        "productionSourceTree": "504f7dd00acef0f546ef1e00b6414e2189b913c273e65369568500841ac8c4be"
+      },
+      "limits": [
+        "Negative evidence is explicit EVM revert plus empty effects, not separately captured post-revert account balance snapshots.",
+        "Donor Ready declaration binding checked; final standalone disk-SHA read was not collected by reviewer, so reviewer did not certify it.",
+        "No fresh EVM, RPC, forge, build or test-suite execution in pass2; no source/catalog edits.",
+        "No natural effective valuation, expiry-to-restart recovery, original pre-call parity, full loop, production opportunity or performance claim."
+      ],
+      "performance": "NOT RUN"
+    }
+  },
+  "source": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/action.ts",
+      "sha256": "775ef272928503a70de4cf6c0940702143bc4cd76ca6a4492490b445b81f3767"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/capture.ts",
+      "sha256": "c83ffd552f019c7136d8aa84ef152fd84e07ad45c8a7cee1feb4be1ec2ddb166"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/codec.ts",
+      "sha256": "685bedb67335eb70c82289ffb27a2acef44559b17ab396fda3c551d34227d7d2"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/discovery.ts",
+      "sha256": "bbbd680cd4246fe5911f15a980dfc566f841df82bab857472bbe2c1f818cd7b1"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/exact.ts",
+      "sha256": "ceeb24b09349e438b5aeb68760cef50f7ea5fa1e13dda367aeb8a9f64f9a90b4"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/execution.ts",
+      "sha256": "bdf6aca89fa3313675df361c4affd2f1dd85e44c339258c69c93f97178c50ccd"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/identity.ts",
+      "sha256": "b985d138b84716a9e69496a6d67d16f0fc20213f0665397770704e63a5e1eda6"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/instance.ts",
+      "sha256": "713b4f78b5eafd9139a95b24d67f249d3a6c75ae27bfcf47554509045067c75c"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/manifest.ts",
+      "sha256": "37e295cf1c9472961fa3887f1492973dd38f942b95f72af86124f6dfbc7462cd"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/pricing.ts",
+      "sha256": "c44e19cf3f5ac0a53387e2f7959f28276ddf0f916c8dd60005637c5bbeb364a5"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/protocol.ts",
+      "sha256": "5b046234cc73a7919ab3ea01cef56dfb14254765b814b1d20366cccf0ac0f92e"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/routes.ts",
+      "sha256": "f0c917d71beff5cdcec6e0bf3d3647c5408f951daa88dba0f99c572fb15a96b4"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/runtime-shape.ts",
+      "sha256": "afb882517420d43589bf45a33b24ecdd2cdbd7ee198cfcb12f4ae5d5edb97fc6"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/state.ts",
+      "sha256": "6be90dca7fa9959d7e66ae0fd7edf6d1653f59e43017c089e6d20808a32c09bd"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/test/contract.ts",
+      "sha256": "35ed52407c67cebbb73fc0c1734c0eaecf8b840726e20a1699fb922848b54b6e"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/test/fixtures.ts",
+      "sha256": "ab5b69fb6c813dc9ce90a7f519488c072a9004dc9815507ea4139b88b3e2049d"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/test/historical-dual.ts",
+      "sha256": "d4bfd97f64931d63cc29f4f515b99e938df27d8fc0ea11511d49252a2bcd2ea3"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/test/source-runtime.json",
+      "sha256": "a3073ae6941aafe59d6473f7cf67670a6dc05a6a8b1ee972961130b47537c797"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/yearn-auction-family/types.ts",
+      "sha256": "a5c0e2a0fbcb51a8e46bb8773c3e86882697e007924436c1bf16fd454cdd0e8d"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/production-families/yearn-auction.production.ts",
+      "sha256": "19cc1243f8d0d4b58993004cab2940d596733ee5e0668b938d1c037f655d234a"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/build-yearn-1.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/shared-regressions-yearn-1.log",
+      "sha256": "da5403019cb0e99b98229ab81bf2c76417a990f77e4ff89b01c48e2a9fa25331"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/final-contract-checks-1.log",
+      "sha256": "461f9adab6443dc039f55d9689c622100c19acc9b16458014d6022943e3853b1"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/isolated-catalog-yearn-1.log",
+      "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/isolated-validation-yearn-1.log",
+      "sha256": "40781ddfcaae5b3f50f5b52c30753ab01982fa2ef8ad06ecc63c693fbd00cd19"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/typecheck-yearn-1.log",
+      "sha256": "0798f3336a184e3644fd4cc011b30f13a5b591ed46b263f0ca6f0d091fee7efa"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/typecheck-yearn-2.log",
+      "sha256": "64d5e526cb407dfdd086d53a97ced78406ac2cf5592101f240a9eefa04a0ab18"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/typecheck-transitive-baseline.log",
+      "sha256": "64d5e526cb407dfdd086d53a97ced78406ac2cf5592101f240a9eefa04a0ab18"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/natural-1.log",
+      "sha256": "8dce5009b37a78eb8453b0c88e5586c06105dd0c54e9f78e1e294e9cb06121c9"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/dual-1.log",
+      "sha256": "0b218db786491c7d6cb7f991defb454cb9581a07d3fb35f06a6645d22d2c06e7"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/natural-runtime-audit-1.log",
+      "sha256": "d8109fb821257695a68858b87d3d11f896d5787bc999c36a66f22782d440ad1a"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/source-state-proof.json",
+      "sha256": "53469c59a5f0ff9cb1ae0c00494cfe50fca0bb55289fddde50319adb36fc1d9c"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/compiler-input.json",
+      "sha256": "e502bed298f4de910a08d8f03a60a30bea247f7d726d7430a49b19fbbc1e7354"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/natural-1/ready.json",
+      "sha256": "0fe5c134fdb12ec80d793f7cdc210d1ab2de12101f7ed08aa3547c738e6db107"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/natural-1/ready-summary.json",
+      "sha256": "cb563d8b10bc776fae51ae55770e05a0c786526074dacba7960bf857ec9028e5"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/natural-1/result.json",
+      "sha256": "5962129e4e108fef7d4310678484a34446047e22c3dcffb66365de9a7e568159"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/dual-1.json",
+      "sha256": "7cfb5daed74ac2e1d5b35174aefde0895819a870d46f564b512356c787bd6ef7"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/executor-artifact-transition.json",
+      "sha256": "091fefd8283199a9359d5178d75fe7cc37ab81ddf202c33b22442d630af8c0f9"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/yearn-tests-typefix.patch",
+      "sha256": "e12fc4458faf34509b2aa3b02fe65a9debdb2c9b410a128d4759b4bc0422e7eb"
+    }
+  ],
+  "retainedFailures": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/typecheck-yearn-1.log",
+      "reason": "initial Yearn test typing defects corrected; full diagnostics preserved; unchanged transitive baseline remains"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-auction-20261010.xx1fIE/natural-1/result.json",
+      "reason": "target natural effective remains missing-valuation; borrowed reference did not overwrite this outcome"
+    }
+  ],
+  "limitations": [
+    "Only one historical auction:sold instance/18-decimal pair; unequal decimals are offline-tested, not historical EVM samples.",
+    "Single-leg runtime historical execution plus separate generic maximum-flow EVM tests, not a historical full-loop or end-to-end sim amount-selection success.",
+    "Current coordinator permanently disables an instance within that run after all positive-amount directions end in quote-failed/unsupported/no-output; each-block alone does not prove expiry/exhaustion -> later kick recovery.",
+    "Natural effective remains missing-valuation; original pre-call parity, Adapter Replay failure-to-pass and natural opportunity/EV are NOT RUN.",
+    "Curve FRAXBP LP redemption on this same opportunity remains unimplemented in this commit."
+  ],
+  "latency": {
+    "singleReady": "NOT RUN",
+    "representativeCombined": "NOT RUN",
+    "policy": "Every applicable protocol adapted/repaired from IMPL, including new additions, requires single-Ready production-stage timing followed by representative combined production-graph timing after correctness work. Includes Balancer V2/V3 and Curve plain/underlying. No formal timing run here."
+  },
+  "authorization": {
+    "liveStarted": false,
+    "deployed": false,
+    "signed": false,
+    "broadcast": false,
+    "privateKeyRead": false,
+    "originalCoffeeReadyModified": false,
+    "newBranchOrWorktree": false
+  }
+}

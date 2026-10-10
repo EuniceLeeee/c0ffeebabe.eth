@@ -144,6 +144,7 @@
     "searcher:blockscan-sim-reject-cache": "node --import tsx src/searcher/test/blockscan-sim-reject-cache.ts",
     "searcher:reth-adapter-work-runtime": "node --import tsx src/searcher/test/reth-adapter-work-runtime.ts",
     "searcher:family-dual-execution": "node --import tsx src/searcher/test/family-dual-execution.ts",
+    "searcher:yearn-auction-family": "node --import tsx --test src/searcher/venues/protocols/yearn-auction-family/test/contract.ts",
     "searcher:algebra-integral-family": "node --import tsx --test src/searcher/venues/swaps/algebra-integral-family/test/contract.ts src/searcher/venues/swaps/algebra-integral-family/test/dynamic-quoter.ts src/searcher/venues/swaps/algebra-integral-family/test/central-quoter.ts src/searcher/venues/swaps/algebra-integral-family/test/execution-evidence.ts src/searcher/venues/swaps/algebra-integral-family/test/refresh.ts",
     "searcher:algebra-quoter-historical": "node --import tsx src/searcher/venues/swaps/algebra-integral-family/test/historical-quoter.ts",
     "searcher:kyber-yb-compound-dual-contract": "node --import tsx --test src/searcher/test/family-integration/kyber-yb-compound/evidence.test.ts src/searcher/test/family-integration/kyber-yb-compound/nomination-address-binding.test.ts src/searcher/test/family-integration/kyber-yb-compound/historical-input-origin.test.ts",

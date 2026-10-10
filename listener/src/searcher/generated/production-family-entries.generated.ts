@@ -39,7 +39,8 @@ import * as entry36 from "../venues/production-families/univ3-standard.productio
 import * as entry37 from "../venues/production-families/univ4-fee-hook.production.js";
 import * as entry38 from "../venues/production-families/univ4.production.js";
 import * as entry39 from "../venues/production-families/wsteth.production.js";
-import * as entry40 from "../venues/production-families/yieldbasis-lt.production.js";
+import * as entry40 from "../venues/production-families/yearn-auction.production.js";
+import * as entry41 from "../venues/production-families/yieldbasis-lt.production.js";
 
 export const GENERATED_PRODUCTION_FAMILY_ENTRIES = Object.freeze([
   Object.freeze({ sourceFile: "algebra-integral.production.ts", module: entry0 }),
@@ -82,5 +83,6 @@ export const GENERATED_PRODUCTION_FAMILY_ENTRIES = Object.freeze([
   Object.freeze({ sourceFile: "univ4-fee-hook.production.ts", module: entry37 }),
   Object.freeze({ sourceFile: "univ4.production.ts", module: entry38 }),
   Object.freeze({ sourceFile: "wsteth.production.ts", module: entry39 }),
-  Object.freeze({ sourceFile: "yieldbasis-lt.production.ts", module: entry40 }),
+  Object.freeze({ sourceFile: "yearn-auction.production.ts", module: entry40 }),
+  Object.freeze({ sourceFile: "yieldbasis-lt.production.ts", module: entry41 }),
 ]);

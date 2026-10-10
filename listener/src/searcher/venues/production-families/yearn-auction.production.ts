@@ -1,0 +1,15 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { manifest } from "../protocols/yearn-auction-family/manifest.js";
+import { discovery } from "../protocols/yearn-auction-family/discovery.js";
+import { identity } from "../protocols/yearn-auction-family/identity.js";
+import { instance } from "../protocols/yearn-auction-family/instance.js";
+import { routes } from "../protocols/yearn-auction-family/routes.js";
+import { pricing } from "../protocols/yearn-auction-family/pricing.js";
+import { exact } from "../protocols/yearn-auction-family/exact.js";
+import { execution } from "../protocols/yearn-auction-family/execution.js";
+import { protocol } from "../protocols/yearn-auction-family/protocol.js";
+import { capture } from "../protocols/yearn-auction-family/capture.js";
+import { action } from "../protocols/yearn-auction-family/action.js";
+export const plugin = defineProtocolFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture, actionAdapters: [action] });
+export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_YEARN_AUCTION_ENABLED" });
