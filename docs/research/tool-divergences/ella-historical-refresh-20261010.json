@@ -1,0 +1,63 @@
+{
+  "divergence_id": "ella-historical-refresh-20261010",
+  "kind": "tooling_defect",
+  "status": "closed-scoped-test-and-evidence-repair",
+  "tool": "listener/src/searcher/venues/swaps/ella-exchange-family/test/refresh.ts",
+  "codify_commit": "06191642c9991c87b5b2baf141939ff0270c2064",
+  "realized_false_positive": "The old fixture used the wrong production session scope, omitted requiredEdgeIds, canonical ancestry and disabled-edge forwarding, and expected startup raw deletion and same-run recovery. These expectations conflicted with current source-bound production behavior; failure was not proof of a production regression.",
+  "repair": "Test only: forward current session and ancestry data, keep startup raw identity, verify touched Exact refresh and unrelated carry, create independent warmed failure/binding-change scenarios, and assert failed rows are excluded by production effectiveEnumerationMids. Production source manifest is unchanged.",
+  "regressions": {
+    "path": "listener/src/searcher/venues/swaps/ella-exchange-family/test/refresh.ts",
+    "sha256": "a39e8b4cd565d73f68cb1fe0ba34d30a2f9de6ed2d7b241926f4dd7d9e1799d9",
+    "before": "logs/ella-native-acceptance-20261010.Tzy9vf/build-contracts-1.log",
+    "intermediateFailures": ["logs/ella-native-acceptance-20261010.Tzy9vf/contracts-2.log", "logs/ella-native-acceptance-20261010.Tzy9vf/contracts-3.log"],
+    "after": "logs/ella-native-acceptance-20261010.Tzy9vf/contracts-4.log",
+    "afterSha256": "582cef63b5ccf0a4eca3cf60ce0724d425c4b03159ca1d0096d61a12a5c41d74",
+    "result": "19/19 Ella tests passed; shared dual contracts 80/80; tool-index 15/15. Production build succeeded. Targeted typecheck retains two imported diagnostics, with zero owned diagnostics; no full typecheck PASS claim."
+  },
+  "relatedHarnessRepairs": {
+    "binding": "Ready and prices are required together; bind file hashes, source block/hash, executor/owner, receipt-emitting pool and admitted instance; both production reference rows must be accounted for before completion.",
+    "inventoryRejection": "Do not infer inventory exhaustion from outer runtime external-call error. Validate the actual inner swapBase1 call, actors, input, typed No fund to execute the trade revert and nonexhausted gas; reject unrelated failures.",
+    "metadata": "Curated historical Ready cost is archive-rpc and dual execution cost is fork, not auto-inferred zero-cu. Separate capabilities exclude live/timing claims.",
+    "evidenceHelperSha256": "d936629ee6273a0cb7c098670167c3f94e9a0f8f537337c911418aaa77b63d01",
+    "evidenceHelperTestSha256": "bc680dbebd081a258b80d876c4392dda3eb4f170c8809f418cafbb33e353a77f"
+  },
+  "independent_review": {
+    "agent_id": "01a1258c-0fa0-7da0-bfd7-8cc4318f3b4d",
+    "verdict": "No blocking code errors remain in the scoped repairs.",
+    "executed": ["helper 4/4", "scoped index tests 2/2", "final refresh exit0", "diff check exit0", "saved rejection trace and artifact bindings", "1143 production file hashes unchanged"],
+    "limits": "Inspected main contracts-4.log 19/19. No reviewer RPC/EVM rerun and no performance verdict."
+  },
+  "learning_case": {
+    "learning_case_id": "tooling-ella-historical-refresh-20261010",
+    "status": "manual_required",
+    "strategy_kind": "unknown",
+    "edge_kinds": ["swap"],
+    "trigger": "competitor_not_seen",
+    "competitor_tx": "0xef53c889b7270ffc8556569a9682227c905e32491d55689249a1c4ca7fee74da",
+    "target_block": 26023524,
+    "comparable": false,
+    "primary_gap": "manual_required",
+    "gap_detail": "Scoped tooling closure during same-N native Family acceptance. No opportunity classification or production route verdict.",
+    "evidence": {
+      "report": "docs/research/reports/ella-native-historical-acceptance-20261010.json",
+      "execution_manifest": "logs/ella-native-acceptance-20261010.Tzy9vf/tools-final.json",
+      "preserved_transition": "Original and intermediate refresh failures retained; current fixture and production-consumer assertions pass independently. Fresh dual execution evidence remains separate from refresh fixtures."
+    },
+    "tooling_defect": {
+      "tool": "listener/src/searcher/venues/swaps/ella-exchange-family/test/refresh.ts",
+      "issue": "Fixture drift: incorrect session scope, omitted ancestry/disabled-edge forwarding, obsolete raw-deletion/recovery expectations, and cross-scenario reference identity.",
+      "evidence": "Retained build-contracts-1.log and contracts-2/3.log; final a39e8b4c revision independently passes; contracts-4.log passes 19/19; production source manifest unchanged.",
+      "codify_target": "Refresh regression: independent warmed scenarios, scenario-local raw identity, and production effectiveEnumerationMids exclusion.",
+      "codify_commit": "06191642c9991c87b5b2baf141939ff0270c2064",
+      "status": "codified"
+    },
+    "created_at": "2026-10-10",
+    "updated_at": "2026-10-10"
+  },
+  "exclusions": [
+    "No production guard, native boundary or default activation changed.",
+    "Not adapter_fixed, adapter_merge_ready, production_gap_fixed or latency acceptance.",
+    "Scoped LearningCase is filed here; shared learning store unchanged."
+  ]
+}

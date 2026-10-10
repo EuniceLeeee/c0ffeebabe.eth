@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "1df2f6c457e76dd2583e1248f90d3f062f0836fb",
+  "codeCommit": "06191642c9991c87b5b2baf141939ff0270c2064",
+  "status": "sampled-same-N-native-dual-verified; forward-production-amount-correctly-unavailable; performance-not-run",
+  "claim": "Supplement to the already implemented common native boundary. Natural single-block Ready and production effective inputs are bound to same-N quote/quoted/runtime execution. No production logic changed, no original pre-call replay, full opportunity, formal merge or latency verdict.",
+  "family": "ella-exchange",
+  "anchor": {
+    "transaction": "0xef53c889b7270ffc8556569a9682227c905e32491d55689249a1c4ca7fee74da",
+    "N": 26023524,
+    "blockHash": "0x97c956ae1457521651e3a17b675c16fef5340483d0cf3b710d0d34d5afbb57f9",
+    "stateRoot": "0x3d88f4fd784a9949402389f930fa30da5108f1593b3d88ddcbedb72bb05ca284",
+    "pool": "0x33c577296b0cdece6186ea48cd8fe98bd1a6e3a4",
+    "token": "0xe41d2489571d322189246dafa5ebde1f4699f498",
+    "wrappedNative": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    "owner": "0x1000000000000000000000000000000000000001",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "environment": "Canonical N end-state and N execution environment on task-local Anvil. Not original transaction pre-call state. Only disposable executor code, actor balances and a test-only native balance observer are supplied; protocol state/code is historical."
+  },
+  "evidenceRoot": "logs/ella-native-acceptance-20261010.Tzy9vf",
+  "naturalIntegration": {
+    "scope": ["ella-exchange", "univ2-standard", "univ3-standard"],
+    "discovery": "Production createRebuildWiring/rebuildUniverse from=N/to=N; original receipt emitter checked after natural discovery, never inserted as a candidate or graph edge",
+    "ready": "single-N26023524-1/ready.json",
+    "readySha256": "45b4d2e64b03b28db96c05fd246b8f3adf9b53d130d83f5b1531f420dcd40081",
+    "prices": "single-N26023524-1/prices/prices.json",
+    "pricesSha256": "9df372696b15d34adff314743e801e428a24978ff701dc7e9f8dabb7971931e4",
+    "priceInputSha256": "14c2659fdc5a44904156914ab89961934e5eee8e9ae50f3b9f5fb3850dbbe51f",
+    "instances": 30,
+    "graphEdges": 60,
+    "rawRows": 60,
+    "effective": { "quoted": 57, "missingValuation": 2, "noOutput": 1 },
+    "targetEdges": 2,
+    "targetEffective": { "quoted": 1, "noOutput": 1 },
+    "inputProvenance": {
+      "referenceWethInput": "2000000000000000",
+      "reverseTokenInput": "45502679635909595497",
+      "valuationPool": "0x14424eeecbff345b38187d0b8b749e56faa68539",
+      "mode": "Successful same-N natural UniV3 WETH->ZRX effective quote; fresh, no donor graph, rounding of reference amount or P adjustment"
+    }
+  },
+  "execution": {
+    "artifact": "dual-final.json",
+    "sha256": "c680640e41aa12a4aacab71eb20160130db5e5d2cdd1475e26e0f3c5c0c8d541",
+    "sourceFingerprintManifest": "source-before-dual-2.json",
+    "productionEntrySourceSha256": "1100ea59ded0a71cb59f0d6a60f89d0185b2aaa855762ea614c0258bc6224e62",
+    "independentNonTestSourceFingerprint": "9a4d7c182fcdbbe0fe8a9a2d54020efad7ced819178fdf33d4eb541928c6269c",
+    "fingerprintScope": "1,143 tracked/nonignored TS/Solidity files below listener/src and src, excluding /test/. Different algorithm/scope from the production entry fingerprint. All manifest file hashes were rechecked unchanged; peer dirty production files remain included and uncommitted.",
+    "executorArtifactSha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+    "historicalHarnessSha256": "269f93826e1c0aa7e50d6dde5c7c46cdc9bbd1882187b2fb4ca372644ad99045",
+    "positiveGroups": [
+      { "direction": "WETH->ZRX", "input": "105467303314", "output": "2432517734071853", "purpose": "legal capacity control", "interfaces": ["quoted", "runtime"] },
+      { "direction": "ZRX->WETH", "input": "687127128818912532", "output": "29613465856623", "purpose": "legal reverse capacity control", "interfaces": ["quoted", "runtime"] },
+      { "direction": "ZRX->WETH", "input": "45502679635909595497", "output": "1961052028463860", "purpose": "current production effective input", "interfaces": ["quoted", "runtime"] }
+    ],
+    "outputComparison": "Three amount groups, six quoted/runtime comparisons. Actual output is bounded independently with GTE(old output + quote) success and +1 failure; input debit and native restoration have analogous bounds. No tolerance needed for these samples.",
+    "oldBalances": { "input": "101", "output": "103", "native": "107" },
+    "negativeControls": ["actual output +1", "retained input +1", "native balance +1", "missing new input with existing output inventory", "reverse quoted minimum above actual receipt"],
+    "lowerMinimum": "Reverse quoted minimum reduced by one still returns the full actual receipt, without retaining native ETH",
+    "unavailableInputs": ["2960084006368414", "2000000000000000"],
+    "unavailableInputEvidence": "Original-TX and production-P forward amounts are unavailable at N end-state. Production Exact returns zero; raw deployed swapBase1 and actual runtime inner CALL both return typed Error(No fund to execute the trade). Saved full call traces bind executor, pool, amount and nonexhausted gas. No quoted fragment constructed for these amounts.",
+    "runtimeConstructionRpcAttempts": 0,
+    "runtimeConstructionGuards": "Poisoned amountIn/exact/quotedAmountOut inputs plus throwing RPC guard; no quoted fragment fallback. This is single-leg construction, not a newly executed full production amount-selection run.",
+    "localLogicalRpcCalls": 139,
+    "rpcLimit": 480,
+    "rpcAccountingLimit": "Local logical calls are not measured archive-provider CU or timing evidence; Anvil may fetch historical state upstream."
+  },
+  "regression": {
+    "buildLive": "exit0 in build-contracts-1.log; that combined command later exits1 on the old refresh assertion, not compilation",
+    "familyContracts": { "passed": 19, "failed": 0, "log": "contracts-4.log", "sha256": "582cef63b5ccf0a4eca3cf60ce0724d425c4b03159ca1d0096d61a12a5c41d74" },
+    "sharedDualContracts": { "passed": 80, "failed": 0, "log": "shared-dual.log", "sha256": "35f699a1092812a528daceeadb2fff17d67de2c7ccb1e9b27ccbe579e6096558" },
+    "toolIndexContracts": { "passed": 15, "failed": 0, "log": "index-contracts.log", "sha256": "fdd205bb2c8da00d4ab18970474ec09e5a0f3e066fc1a04cb08769665a72eb1b" },
+    "targetedTypes": { "log": "types-final.json", "ownedDiagnostics": 0, "importedDiagnostics": 2, "fullTypecheckPassed": false },
+    "refreshRepair": "Test only: forward current requiredEdgeIds/session kind, canonical ancestry and disabledEdgeIds. Assert touched Exact refresh, unchanged raw startup basis, unrelated effective carry, and three independent failure/binding-change scenarios. Failed rows remain auditable but production effectiveEnumerationMids excludes them; run-disabled instances do not silently recover in the same run."
+  },
+  "reconciliation": {
+    "capabilityQuery": ["ella"],
+    "executedTools": ["listener:searcher:ella-historical-ready", "listener:searcher:ella-historical-dual"],
+    "readyManifest": "tools.json",
+    "readyManifestSha256": "a5af2f5eb05be92d53828668e9802770521df7fab0157bdff2dab4632b7dddb2",
+    "finalDualManifest": "tools-final.json",
+    "finalDualManifestSha256": "7afb7037e9ee922237c0bdfe04f1c0750743ed306a6feca472943aeda4ef6c7c",
+    "metadataCorrection": "Initial auto-inferred zero-cu costs retained in old manifests; scoped curated metadata now declares Ready archive-rpc and dual fork. No generic cost heuristic changed."
+  },
+  "retainedFailures": [
+    "build-contracts-1.log: original stale refresh fixture, 14/15 tests passed",
+    "dual-1.json/log: new harness wrongly expected inner inventory text at the outer runtime error; failed, not a protocol failure or successful execution receipt",
+    "contracts-2.log: intermediate repair still wrongly expected startup raw entries to disappear",
+    "contracts-3.log: intermediate independent-scenario test compared object identity against another scenario",
+    "types-1.json: new optional instanceKey type diagnostic; corrected and rechecked",
+    "dual-2.json: earlier successful run retained separately; final run adds actor, pool, source and completeness guards"
+  ],
+  "independentReview": {
+    "agentId": "01a1258c-0fa0-7da0-bfd7-8cc4318f3b4d",
+    "verdict": "No blocking code errors remain in the scoped repairs; not a formal all-Family, full-route, profitability or performance verdict.",
+    "executed": ["historical evidence helper 4/4", "scoped tool-index tests 2/2", "final refresh test exit0 at a39e8b4cd565d73f68cb1fe0ba34d30a2f9de6ed2d7b241926f4dd7d9e1799d9", "git diff --check exit0", "saved rejection trace and artifact/actor/source binding checks", "all 1,143 production manifest files unchanged"],
+    "inspected": "Main family contract result 19/19 in contracts-4.log; reviewer did not rerun historical RPC/EVM.",
+    "toolingDefect": "docs/research/tool-divergences/ella-historical-refresh-20261010.json",
+    "codifyCommit": "06191642c9991c87b5b2baf141939ff0270c2064"
+  },
+  "limits": [
+    "Only this historical pool/state and sampled amounts are covered. No fresh historical sell-side over-capacity rejection or alternate oracle/token implementation coverage.",
+    "Forward production amount is correctly unavailable, not an executable price. Legal small controls do not substitute for production-P success.",
+    "No original transaction pre-call/full opportunity/final route sim/EV or formal adapter_merge_ready verdict.",
+    "Single-leg balance assertions do not newly prove temporary allowance cleanup, multi-leg repayment or all failure rollback semantics; separate existing contracts retain their own scope.",
+    "SelfBurn and V4 migration historical gaps, remaining other Family/IMPL correctness and all final performance gates remain open."
+  ],
+  "performance": {
+    "singleReady": "NOT RUN",
+    "representativeCombinedGraph": "NOT RUN",
+    "scope": "Every applicable IMPL adaptation/repair, including future additions, must complete per-Family single-Ready checks then combined representative large-graph timing. Balancer V2/V3 and Curve plain/underlying remain in this final phase after correctness. Ordinary diagnostic elapsed fields are not performance acceptance."
+  },
+  "implTableUpdate": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "row": "Existing Curve plain + Fluid native-ETH/common-native-migration row; appended Ella supplement only, no new primary table",
+    "archive": "docs/research/reports/impl-ella-native-20261010.patch",
+    "beforeSha256": "edf06afc75447ebfd4ca629da1a61a0a606e9f34c5110ee801d05da4962ae357",
+    "afterSha256": "e4b09f345fcb7ad92ac8784e5dc620a368fdbbf022e7843fdea51a8b5d54e39f",
+    "verification": "Reversing only this appended row supplement restores the original whole-file SHA256; all other bytes preserved."
+  },
+  "safety": { "productionCodeChanged": false, "defaultActivationChanged": false, "liveStarted": false, "deployed": false, "signed": false, "broadcast": false, "privateKeysRead": false, "originalReadyChanged": false, "newBranchOrWorktree": false }
+}
