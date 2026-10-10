@@ -143,8 +143,9 @@ export class StrictCurrentRuntimeCoordinator
   implements CurrentSourceRuntimeCoordinator {
   private publishedPricing: BlockScanStateSnapshot | null = null;
   private bootstrapRawPricing: BlockScanStateSnapshot | null = null;
-  /** Policy-only exclusions for this live run. Never written into Ready or
-   * cleared by a new block, touched event, raw refresh or reorg. */
+  /** Policy-only exclusions for this live run, excluding instances whose
+   * pricing must refresh each block. Never written into Ready or cleared by
+   * a new block, touched event, raw refresh or reorg. */
   private readonly disabledEffectiveInstances = new Set<string>();
   private pricingEpoch = 0;
   private fundingEpoch = 0;
@@ -520,6 +521,7 @@ export class StrictCurrentRuntimeCoordinator
     const effective = pricing.effectiveMids;
     if (!effective?.complete) return;
     const allFailed = new Map<string, boolean>();
+    const perBlockRefresh = new Set(pricing.perBlockRefreshStateKeys ?? []);
     for (const edge of pricing.graph.edges) {
       const edgeId = blockScanEdgeKey(edge);
       const familyId = pricing.pricingFamilyIdByEdgeKey?.get(edgeId);
@@ -527,10 +529,16 @@ export class StrictCurrentRuntimeCoordinator
       const key = JSON.stringify([familyId, edgeInstanceKey(edge)]);
       if (this.disabledEffectiveInstances.has(key)) continue;
       const row = effective.rows.get(edgeId);
+      const stateKey = pricing.pricingStateKeyByEdgeKey?.get(edgeId);
+      // Source-environment-sensitive pricing must be retried under its existing
+      // each-block contract. Failure still withdraws the current price; only a
+      // successful fresh quote may restore it. Do not permanently retire such
+      // an instance based on one source's state or transport failure.
+      const eachBlock = stateKey !== undefined && perBlockRefresh.has(stateKey);
       // No protocol/revert-reason interpretation. Missing valuation/rows and
       // cancelled work are not completed amount-quote failures. A successful
       // direction keeps the instance eligible, even if its reverse failed.
-      const failed = row !== undefined && row.amountIn !== null && row.amountIn > 0n &&
+      const failed = !eachBlock && row !== undefined && row.amountIn !== null && row.amountIn > 0n &&
         (row.status === "quote-failed" || row.status === "unsupported" || row.status === "no-output");
       allFailed.set(key, (allFailed.get(key) ?? true) && failed);
     }

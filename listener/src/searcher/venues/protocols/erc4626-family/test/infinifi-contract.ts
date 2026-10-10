@@ -417,7 +417,8 @@ test("production coordinator refreshes InfiniFi without pool activity, withdraws
     const requested = { number: current.sourceBlock, hash: current.sourceBlockHash, generation: current.generation };
     let exact: StrictProductionRuntimeSession | undefined;
     return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, previous: reuse?.previous,
-      touchedStateKeys: reuse?.touchedStateKeys, control, weth: ADDR.WETH, gasCostWei: null, enumerationSpreadBps: 50, concurrency: 2,
+      touchedStateKeys: reuse?.touchedStateKeys, disabledEdgeIds: reuse?.disabledEdgeIds,
+      control, weth: ADDR.WETH, gasCostWei: null, enumerationSpreadBps: 50, concurrency: 2,
       prepareQuote: async requiredEdgeIds => { exact = await root.createSession({ source: requested,
         runtime: runtime(requested.number - source.number, "exact"), fundingAssets: [], kind: "exact", requiredEdgeIds, control }); },
       quote: async request => { assert(exact); const quoted = await exact.issueExact({ ...request, executor, runtimeEvidence: [] });
