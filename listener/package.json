@@ -29,7 +29,7 @@
     "route-gap-watcher": "node --import tsx src/searcher/route-gap-watcher.ts",
     "searcher:pooluniverse": "tsx src/searcher/test/pool-universe.ts",
     "searcher:pooluniversev4": "tsx src/searcher/test/build-active-pool-universe-v4.ts",
-    "searcher:balancer-v3": "node --import tsx src/searcher/test/balancer-v3.ts",
+    "searcher:balancer-v3": "node --import tsx --test src/searcher/test/balancer-v3.ts src/searcher/venues/swaps/balancer-v3-family/test/contract.ts",
     "searcher:dodo-v2": "node --import tsx src/searcher/test/dodo-v2.ts",
     "searcher:dodo-pmm": "node --import tsx src/searcher/test/dodo-pmm-math.ts",
     "searcher:dodo-pmm-parity": "node --import tsx src/searcher/test/dodo-pmm-onchain-parity.ts",
