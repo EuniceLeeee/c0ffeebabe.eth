@@ -1,6 +1,12 @@
 {
   "schema": "family-independent-acceptance-progress-v1",
   "latestCompoundReferenceAcceptance": "docs/research/reports/compound-reference-acceptance-20261009.json",
+  "latestYieldBasisDepositAcceptance": {
+    "path": "docs/research/reports/yieldbasis-deposit-integration-20261009.json",
+    "sha256": "893535e44f65fb957a7a67f9e155612ba2d523529cc4028961c97687643fb9f9",
+    "reconciledOn": "2026-10-10",
+    "scope": "Retained source-bound deposit/withdraw single-block integration and production-reference dual execution. This corrects the stale remaining-work sentence below; it is not a fresh EVM run under the latest workspace source. Earlier sections remain historical records."
+  },
   "date": "2026-10-09",
   "workspace": "/opt/mev-cloud/family-runtime-20261007",
   "branch": "codex/family-runtime-actual-20261007",
@@ -98,7 +104,7 @@
   },
   "remaining": {
     "kyber": "representative instance/amount/tick coverage and production-stage performance; the historical two-direction sample below is not full-family acceptance",
-    "yieldBasisLt": "implement and validate the missing deposit direction: observed stablecoin debt is paid by the protocol AMM, not a second user input; the previous two-input exclusion was incorrect. Do not fabricate a valuation edge. Then production-reference amounts, additional coverage and representative performance; prior original-amount withdraw receipts remain valid for their pinned source",
+    "yieldBasisLt": "Deposit implementation, two-direction natural strict/Graph/raw/effective and production-reference quote/quoted/runtime receipts were completed for the pinned N26003536 sample; see latestYieldBasisDepositAcceptance. Broader supported instance/asset/state coverage, original call-prestate/full opportunity and per-Family single-Ready followed by representative combined-graph performance remain unverified. Retained source-bound success is not a fresh rerun on later source.",
     "compoundCToken": "Direct cUSDC/cDAI production-reference amounts now pass via user-authorized input-only splice from the saved 28,040-edge production graph; see latestCompoundReferenceAcceptance. Natural family-only valuation remains missing. The selected TX redeems outer wrapper shares and invokes cTokens internally: direct cToken receipt parity does not prove that outer route. Broader variant coverage and representative performance remain unverified.",
     "algebraIntegral": "all six named handoff instances have current-source single-block Ready/Graph/effective and real dual execution receipts; untested plugin/security/tick states and representative performance remain pending. See algebraHistoricalIntegration and algebraSixSampleCoverage",
     "allFour": "full coverage and representative-load effective/sim timing remain incomplete; no live or adapter_merge_ready verdict"

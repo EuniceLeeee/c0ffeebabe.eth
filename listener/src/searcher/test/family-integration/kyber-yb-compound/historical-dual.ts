@@ -261,7 +261,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assertHistoricalDiscoveryReceipt(await rpc("eth_getTransactionReceipt", [candidate.transactionHash]), candidate, source);
       const original = originalLeg(args.family, entry.instanceKey, entry.instance.descriptor, receipt, trace);
       directions.push({ entry, original, tokenIn: original.tokenIn, tokenOut: original.tokenOut });
-      if (sample.family === "kyberswap-elastic" || sample.family === "swap:algebra-integral" || sample.family === "custom-swap:ekubo-router-v1" || sample.family === "protocol:erc4626" || sample.family === "univ4-fee-hook") {
+      if (sample.family === "kyberswap-elastic" || sample.family === "swap:algebra-integral" || sample.family === "custom-swap:ekubo-router-v1" || sample.family === "protocol:erc4626" || sample.family === "univ4" || sample.family === "univ4-fee-hook") {
         assert.equal(entry.instance.routes.length, 2, "fixed swap instance must project both directions");
         directions.push({ entry, original: null, tokenIn: original.tokenOut, tokenOut: original.tokenIn });
       }
@@ -298,7 +298,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       // Singleton protocols hold assets at the Core, not at their bytes32 key.
       // This is test-only observation, not production identity or dispatch.
       const protectedAccount = sample.family === "custom-swap:ekubo-router-v1" ? EKUBO_CORE
-        : sample.family === "univ4-fee-hook" ? (entry.instance.descriptor as any).managerBinding.manager : entry.instanceKey;
+        : sample.family === "univ4" || sample.family === "univ4-fee-hook" ? (entry.instance.descriptor as any).managerBinding.manager : entry.instanceKey;
       const pair = [tokenIn, tokenOut], keys = await Promise.all(pair.map(t => slotFor(t, protectedAccount)));
       const base = await Promise.all(pair.map(t => balance(t, executor)));
       assert(pair.every(t => ![executor, owner].includes(t)) && ![executor, owner].includes(entry.instanceKey));

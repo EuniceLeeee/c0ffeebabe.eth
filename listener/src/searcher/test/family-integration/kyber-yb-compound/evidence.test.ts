@@ -36,6 +36,21 @@ const event = (abi: ethers.Interface, name: string, args: unknown[], address: st
   ({ address, ...abi.encodeEventLog(abi.getEvent(name)!, args), logIndex: "0x1" });
 const transfer = (instance: string, value: bigint) => event(ERC20, "Transfer", [instance, actor, value], asset);
 
+test("no-hook native sample is distinct from Sat1 and uses the bound V4 observer", () => {
+  const sample = SAMPLES["v4-native-nohook"];
+  assert.equal(sample.family, "univ4");
+  assert.equal(sample.number, 26029537);
+  assert.notEqual(sample.tx, SAMPLES["v4-sat1"].tx);
+  const [manager, poolId] = sample.instances[0].split("\u001f");
+  assert(ethers.isAddress(manager) && ethers.isHexString(poolId, 32));
+  assert.equal(options(["--family", "v4-native-nohook", "--ready", "ready.json", "--prices", "prices.json",
+    "--port", "18593", "--out", "new.json"]).family, "v4-native-nohook");
+  // A bare pool id must not be accepted as this manager's canonical instance.
+  assert.throws(() => originalLeg("v4-native-nohook", poolId!,
+    { poolId, managerBinding: { manager }, poolKey: {} }, { status: "0x1" }, {}),
+    /V4 instance is manager plus poolId/);
+});
+
 test("native observation detects one-unit residual, old-inventory debit and deleted actor", () => {
   const state = (n: bigint) => ({ pre: { [actor]: { balance: "0x11" } }, post: { [actor]: { balance: ethers.toQuantity(n) } } });
   assert.deepEqual(assertNativeInventory(state(17n), actor, 17n), { before: 17n, after: 17n, delta: 0n });

@@ -18,6 +18,9 @@ import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js"
 export { json, sha, word, observeBalance } from "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.js";
 
 export const SAMPLES = {
+  "v4-native-nohook": { family: "univ4", number: 26029537,
+    tx: "0x2068e9fc151ad0ea2cf273e50a8a0153cc1d0303deb9cf660f13dbbf8571548c",
+    instances: ["0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x9ecc2b9b4171c12e89ea93ed63eb2b0b18048c51be2846e94be3d7c478354441"] },
   "v4-sat1": { family: "univ4-fee-hook", number: SAT1_SAMPLE.block, tx: SAT1_SAMPLE.tx, instances: [SAT1_INSTANCE] },
   "self-burn-native": { family: "protocol:self-burn-native", number: 25619948,
     tx: "0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7",
@@ -255,7 +258,7 @@ function successfulCalls(trace: any, target: string, selector: string): any[] {
 /** Extract only one unambiguous real successful call + event per instance. */
 export function originalLeg(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any) {
   assert(!trace.error && !trace.revertReason, "original transaction reverted");
-  if (key === "v4-sat1") return originalV4Leg(instance, descriptor, receipt, trace, true);
+  if (key === "v4-sat1" || key === "v4-native-nohook") return originalV4Leg(instance, descriptor, receipt, trace, true);
   if (key === "ethertoken-native") return originalEtherTokenLeg(instance, descriptor, receipt, trace);
   if (key === "self-burn-native") return originalSelfBurnLeg(instance, descriptor, receipt, trace);
   if (key === "erc4626-fluid")
