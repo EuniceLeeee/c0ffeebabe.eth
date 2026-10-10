@@ -1,0 +1,46 @@
+{
+  "learning_case_id": "tooldef-20261011-source-block-runtime-tokens",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [
+    "swap"
+  ],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "Historical source-block simulator observation gap, not a protocol or economic failure. Closure below is restricted to this tooling defect.",
+  "evidence": {
+    "report": "docs/research/reports/source-block-runtime-observation-20261011.json",
+    "baseline": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/impl-uni-bat-single-20261010.yo1AGk/observation-baseline-test-v2.log",
+      "sha256": "051b565cb5261f07a448e78b138374dfcb54e1d748fa94ce1d23126bcc84389f",
+      "result": "Regression using production selector, actual runtime adapter and compiler fails on baseline: captured token list contains only outer flash token A, missing runtime intermediate B and C."
+    },
+    "candidate": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/impl-uni-bat-single-20261010.yo1AGk/observation-candidate-tests.log",
+      "sha256": "604d4aa77bbe06a021032c27e37a9fad091ada5daaabed7829aa225de93ec6ab",
+      "result": "77 passed, 0 failed, 0 skipped; build:live exit 0; scoped diff check passed."
+    },
+    "independent_review": {
+      "agent": "01a126a5-8132-7072-b53e-a093056ea9b0",
+      "pass": 1,
+      "result": "Structural defect independently confirmed; scoped repair approved with no blocking findings.",
+      "checks": "Independent execution of 77 offline tests and scoped diff check.",
+      "patch_sha256": "6734aac6ec2ee2958ba9d9ed62aba7d14bc0992326efb48ee95c30b7e716f60e",
+      "limitation": "Reviewer did not independently execute historical RPC, build or EV."
+    },
+    "historical_results": "UNI and BAT natural single-N Ready parent-B production runs complete final simulations after repair; UNI target net EV negative and BAT original-gross match fails. Full production gap and performance acceptance remain unproven.",
+    "missing_original_effects": "Original failed UNI raw execution effects were not persisted; exact old offending token movements are not independently established."
+  },
+  "tooling_defect": {
+    "tool": "listener:searcher:at-block / SourceBlockSimulator",
+    "issue": "Runtime sizing flattens hops into one runtime-amount-flow node. Historical capture traversed only outer tree endpoints, so intermediate runtime tokens were absent from the independent observer snapshot and failed unknown-token conservation checks.",
+    "evidence": "Production-selector/compiler regression fails on baseline and passes candidate; independent reviewer confirms the structural omission; both new historical runs progress through final simulation without this observation failure.",
+    "codify_target": "solver/solver.ts, simulator/blockscan-sim-amount-selector.ts, simulator/source-block.ts and their related regression tests",
+    "codify_commit": "4e41a4f695a7ff242df1b180806360436fb21c80",
+    "status": "codified",
+    "safety": "Additive observation metadata only. Tokens remain normalized, deduplicated and frozen; optional precompiled script must match current compilation. Existing independent effects, unknown-token, inventory, native, repayment and source/code checks retained. No protocol branch or execution-program change."
+  },
+  "created_at": "2026-10-10T17:16:03.620Z",
+  "updated_at": "2026-10-10T17:16:03.620Z"
+}
