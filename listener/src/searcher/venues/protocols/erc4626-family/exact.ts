@@ -12,6 +12,7 @@ import {
 } from "../standard-family/common.js";
 import { ERC4626_INTERFACE } from "./abi.js";
 import { assertErc4626Invocation } from "./binding.js";
+import { infinifiGuardRequests, checkInfiniFiGuard, infinifiQuoteRequest, decodeInfiniFiQuote } from "./infinifi.js";
 import { checkCustodianGuard, custodianGuardRequests } from "./custodian.js";
 import { custodianProgram } from "./custodian-execution.js";
 import { runtimeExecutor } from "../../runtime-execution.js";
@@ -28,6 +29,7 @@ const erc4626RequestProgram: ExactRequestProgram<
 > = {
   requirements: ({ descriptor, route }) => {
     assertErc4626Invocation(descriptor, route);
+    if (descriptor.infinifi !== undefined) return { transports: ["eth-call", "get-code", "get-storage"] };
     return descriptor.custodian === undefined ? { transports: ["eth-call"] } :
       { transports: ["eth-call", "get-code", "get-storage"], caller: "executor" };
   },
@@ -37,6 +39,12 @@ const erc4626RequestProgram: ExactRequestProgram<
       throw new Error("ERC4626 exact input cannot be negative");
     }
     if (input.amountIn === 0n) return [];
+    if (input.descriptor.infinifi !== undefined) {
+      if (input.prefix?.length || input.runtimeEvidence.length) throw new Error("InfiniFi sequential/pending quote unsupported");
+      runtimeExecutor(input.executor, input.descriptor.vault, input.descriptor.infinifi.gateway);
+      return [...infinifiGuardRequests("exact-infinifi", input.descriptor.infinifi),
+        infinifiQuoteRequest("exact-preview", input.descriptor.infinifi, input.route.direction, input.amountIn)];
+    }
     if (input.descriptor.custodian !== undefined) {
       // No chain baseline may masquerade as an updated inventory after a
       // preceding state-changing trial leg. Sequential quoting is not claimed.
@@ -68,7 +76,7 @@ const erc4626RequestProgram: ExactRequestProgram<
     }
     const result = returnedResult(results, "exact-preview");
     assertSource(result.source, programInput.source);
-    const amountOut = BigInt(ERC4626_INTERFACE.decodeFunctionResult(
+    const amountOut = programInput.descriptor.infinifi !== undefined ? decodeInfiniFiQuote(result.data) : BigInt(ERC4626_INTERFACE.decodeFunctionResult(
       programInput.route.direction === "deposit"
         ? "previewDeposit"
         : "previewRedeem",
@@ -77,6 +85,8 @@ const erc4626RequestProgram: ExactRequestProgram<
     if (amountOut <= 0n) {
       throw new Error("ERC4626 exact quote returned no output");
     }
+    if (programInput.descriptor.infinifi !== undefined) checkInfiniFiGuard(results, "exact-infinifi",
+      programInput.descriptor.infinifi, programInput.route.direction === "redeem", programInput.source);
     if (programInput.descriptor.custodian !== undefined) {
       const s = checkCustodianGuard(results, "exact-custodian", programInput.descriptor.vault,
         programInput.descriptor.custodian, true, programInput.source);
@@ -133,8 +143,8 @@ function exactEvidence(
   amountOut: bigint,
 ): Erc4626ExactEvidence {
   return Object.freeze({
-    kind: input.descriptor.custodian === undefined ? "erc4626-preview" : "frax-custodian-preview",
-    ...(input.descriptor.custodian === undefined ? {} : { executor: input.executor }),
+    kind: input.descriptor.infinifi !== undefined ? "infinifi-gateway-preview" : input.descriptor.custodian === undefined ? "erc4626-preview" : "frax-custodian-preview",
+    ...(input.descriptor.custodian === undefined && input.descriptor.infinifi === undefined ? {} : { executor: input.executor }),
     source: input.source,
     vault: input.descriptor.vault,
     direction: input.route.direction,

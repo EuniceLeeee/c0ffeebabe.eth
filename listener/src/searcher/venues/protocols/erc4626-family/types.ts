@@ -11,6 +11,7 @@ import type {
 } from "../../adapter-family-identifiers.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import type { CustodianBinding } from "./custodian.js";
+import type { InfiniFiBinding } from "./infinifi.js";
 
 export interface Erc4626Candidate extends FamilyCandidate {
   readonly candidateKind: "erc4626-vault";
@@ -55,6 +56,7 @@ export type Erc4626IdentityEvidence =
   | Erc4626ActiveEvidence;
 
 export interface Erc4626Identity extends VerifiedIdentity {
+  readonly infinifi?: InfiniFiBinding;
   readonly custodian?: CustodianBinding;
   readonly familyId: FamilyId;
   readonly lineageId: LineageId;
@@ -66,6 +68,7 @@ export interface Erc4626Identity extends VerifiedIdentity {
 }
 
 export interface Erc4626Descriptor extends CompiledInstanceDescriptor {
+  readonly infinifi?: InfiniFiBinding;
   readonly custodian?: CustodianBinding;
   readonly vault: string;
   readonly asset: string;
@@ -80,6 +83,7 @@ export interface Erc4626Route extends FamilyRouteDescriptor {
 }
 
 export interface Erc4626PricingDraft {
+  readonly infinifi?: InfiniFiBinding;
   readonly custodian?: CustodianBinding;
   readonly instanceKey: InstanceKey;
   readonly vault: string;
@@ -92,7 +96,7 @@ export interface Erc4626PricingDescriptor extends Erc4626PricingDraft {
 }
 
 export interface Erc4626ExactEvidence {
-  readonly kind: "erc4626-preview" | "frax-custodian-preview";
+  readonly kind: "erc4626-preview" | "frax-custodian-preview" | "infinifi-gateway-preview";
   readonly executor?: string;
   readonly source: CanonicalSource;
   readonly vault: string;

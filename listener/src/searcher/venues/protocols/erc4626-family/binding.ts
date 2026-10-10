@@ -5,10 +5,12 @@ import {
   sameAddress,
 } from "../standard-family/common.js";
 import type { Erc4626Descriptor, Erc4626Route } from "./types.js";
-import { CUSTODIAN_LINEAGE_ID, ERC4626_LINEAGE_ID } from "./manifest.js";
+import { infinifiProjection, INFINIFI_GATEWAY } from "./infinifi.js";
+import { CUSTODIAN_LINEAGE_ID, ERC4626_LINEAGE_ID, INFINIFI_LINEAGE_ID } from "./manifest.js";
 
 export function erc4626StaticProjection(descriptor: Erc4626Descriptor) {
   return {
+    ...(descriptor.infinifi === undefined ? {} : { infinifi: infinifiProjection(descriptor.infinifi) }),
     ...(descriptor.custodian === undefined ? {} : { custodian: { ...descriptor.custodian, proofSource: { ...descriptor.custodian.proofSource } } }),
     vault: lowerAddress(descriptor.vault),
     asset: lowerAddress(descriptor.asset),
@@ -22,7 +24,13 @@ export function assertErc4626Invocation(
   descriptor: Erc4626Descriptor,
   route: Erc4626Route,
 ): void {
-  if (descriptor.custodian !== undefined) {
+  if (descriptor.infinifi !== undefined) {
+    const b = descriptor.infinifi;
+    if (descriptor.custodian !== undefined || descriptor.lineageId !== INFINIFI_LINEAGE_ID || route.lineageId !== INFINIFI_LINEAGE_ID ||
+        !sameAddress(b.gateway, INFINIFI_GATEWAY) || !sameAddress(b.vault, descriptor.vault) ||
+        !sameAddress(b.vault, descriptor.share) || !sameAddress(b.asset, descriptor.asset) || sameAddress(b.vault, b.asset))
+      throw new Error("InfiniFi route binding mismatch");
+  } else if (descriptor.custodian !== undefined) {
     const binding = descriptor.custodian;
     if (descriptor.lineageId !== CUSTODIAN_LINEAGE_ID || route.lineageId !== CUSTODIAN_LINEAGE_ID ||
         !sameAddress(binding.share, descriptor.share) || !sameAddress(binding.asset, descriptor.asset) ||

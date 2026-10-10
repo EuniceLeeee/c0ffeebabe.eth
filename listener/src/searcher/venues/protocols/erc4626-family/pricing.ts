@@ -23,6 +23,7 @@ import type {
   Erc4626PricingDraft,
   Erc4626Route,
 } from "./types.js";
+import { infinifiProjection, infinifiGuardRequests, checkInfiniFiGuard, infinifiQuoteRequest, decodeInfiniFiQuote } from "./infinifi.js";
 import { checkCustodianGuard, custodianGuardRequests } from "./custodian.js";
 
 export const erc4626Pricing: PricingSemantics<
@@ -35,11 +36,12 @@ export const erc4626Pricing: PricingSemantics<
 > = {
   // Fees have no setter event; proxy and external permissions may change
   // without a vault trade. Only this variant opts out of on-touch reuse.
-  refreshPolicyForInstance: ({ descriptor }) => descriptor.custodian === undefined ? "on-touch" : "each-block",
+  refreshPolicyForInstance: ({ descriptor }) => descriptor.custodian === undefined && descriptor.infinifi === undefined ? "on-touch" : "each-block",
   stateKey: (route) => route.instanceKey,
   staticBindingProjection: ({ descriptor }) =>
     erc4626StaticProjection(descriptor),
   snapshotCompatibilityProjection: ({ descriptor, routes }) => ({
+    ...(descriptor.infinifi === undefined ? {} : { infinifi: infinifiProjection(descriptor.infinifi) }),
     ...(descriptor.custodian === undefined ? {} : { custodian: { ...descriptor.custodian, proofSource: { ...descriptor.custodian.proofSource } } }),
     vault: lowerAddress(descriptor.vault),
     asset: lowerAddress(descriptor.asset),
@@ -54,6 +56,7 @@ export const erc4626Pricing: PricingSemantics<
     return Object.freeze({
       instanceKey: descriptor.instanceKey,
       vault: descriptor.vault,
+      ...(descriptor.infinifi === undefined ? {} : { infinifi: descriptor.infinifi }),
       ...(descriptor.custodian === undefined ? {} : { custodian: descriptor.custodian }),
       routes: Object.freeze([...routes]),
     });
@@ -119,17 +122,22 @@ export const erc4626Pricing: PricingSemantics<
     if (draft.custodian !== undefined && (staticEvidence.oneAsset !== 10n ** BigInt(draft.custodian.assetDecimals) ||
         staticEvidence.oneShare !== 10n ** BigInt(draft.custodian.shareDecimals)))
       throw new Error("Custodian pricing decimals binding mismatch");
+    if (draft.infinifi !== undefined && (staticEvidence.oneAsset !== 10n ** BigInt(draft.infinifi.assetDecimals) ||
+        staticEvidence.oneShare !== 10n ** BigInt(draft.infinifi.shareDecimals))) throw new Error("InfiniFi pricing decimals binding");
     return Object.freeze({ ...draft, ...staticEvidence });
   },
   current: {
-    requirements: ({ descriptor }) => descriptor.custodian === undefined ? { transports: ["eth-call"] } :
-      { transports: ["eth-call", "get-code", "get-storage"], caller: "executor" },
+    requirements: ({ descriptor }) => descriptor.infinifi !== undefined ? { transports: ["eth-call", "get-code", "get-storage"] } :
+      descriptor.custodian === undefined ? { transports: ["eth-call"] } :
+        { transports: ["eth-call", "get-code", "get-storage"], caller: "executor" },
     buildRequests: ({ descriptor }) => Object.freeze([
+      ...(descriptor.infinifi === undefined ? [] : infinifiGuardRequests("current-infinifi", descriptor.infinifi)),
       ...(descriptor.custodian === undefined ? [] : custodianGuardRequests("current-custodian", descriptor.vault, descriptor.custodian)),
       ...descriptor.routes.map((route) => {
         const amountIn = route.direction === "deposit"
           ? descriptor.oneAsset
           : descriptor.oneShare;
+        if (descriptor.infinifi !== undefined) return infinifiQuoteRequest(`current:${route.direction}`, descriptor.infinifi, route.direction, amountIn);
         return callRequest(
           `current:${route.direction}`,
           descriptor.vault,
@@ -144,6 +152,8 @@ export const erc4626Pricing: PricingSemantics<
     ]),
     decodeSnapshot({ descriptor, initialResults }) {
       const results = initialResults;
+      if (descriptor.infinifi !== undefined) checkInfiniFiGuard(results, "current-infinifi", descriptor.infinifi,
+        descriptor.routes.some(route => route.direction === "redeem"));
       if (descriptor.custodian !== undefined)
         checkCustodianGuard(results, "current-custodian", descriptor.vault, descriptor.custodian);
       return quoteResultMap(results, descriptor.routes.map((route) => ({
@@ -152,7 +162,7 @@ export const erc4626Pricing: PricingSemantics<
         amountIn: route.direction === "deposit"
           ? descriptor.oneAsset
           : descriptor.oneShare,
-        decodeAmountOut: (data) => BigInt(
+        decodeAmountOut: (data) => descriptor.infinifi !== undefined ? decodeInfiniFiQuote(data) : BigInt(
           ERC4626_INTERFACE.decodeFunctionResult(
             route.direction === "deposit"
               ? "previewDeposit"
@@ -183,6 +193,7 @@ export const erc4626Pricing: PricingSemantics<
   dependencies: ({ descriptor }) => Object.freeze(
     [...new Set([
       lowerAddress(descriptor.vault),
+      ...(descriptor.infinifi === undefined ? [] : [descriptor.infinifi.gateway, descriptor.infinifi.yieldSharing, descriptor.infinifi.core, descriptor.infinifi.gatewayImplementation, descriptor.infinifi.yieldSharingImplementation].map(lowerAddress)),
       ...descriptor.routes.flatMap((route) => [
         lowerAddress(route.tokenIn),
         lowerAddress(route.tokenOut),
@@ -191,11 +202,11 @@ export const erc4626Pricing: PricingSemantics<
   ),
   mutation: {
     compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
-      addresses: [descriptor.vault], keys: [descriptor.instanceKey],
+      addresses: [descriptor.vault, ...(descriptor.infinifi === undefined ? [] : [descriptor.infinifi.gateway, descriptor.infinifi.yieldSharing, descriptor.infinifi.core])], keys: [descriptor.instanceKey],
     }), { kinds: ["log"] }),
     affectedStateKeys: ({ descriptor, observation }) =>
       observation.kind === "log" &&
-        observation.address.toLowerCase() === descriptor.vault.toLowerCase()
+        [descriptor.vault, ...(descriptor.infinifi === undefined ? [] : [descriptor.infinifi.gateway, descriptor.infinifi.yieldSharing, descriptor.infinifi.core])].some(address => address.toLowerCase() === observation.address.toLowerCase())
         ? [descriptor.instanceKey]
         : [],
   },

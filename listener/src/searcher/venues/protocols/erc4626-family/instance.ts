@@ -25,6 +25,7 @@ export const erc4626Instance: InstanceSemantics<
     asset: canonicalAddress(identity.asset),
     share: canonicalAddress(identity.custodian?.share ?? identity.subject),
     ...(identity.custodian === undefined ? {} : { custodian: identity.custodian }),
+    ...(identity.infinifi === undefined ? {} : { infinifi: identity.infinifi }),
     verifiedDirections: Object.freeze({ ...identity.verifiedDirections }),
   }),
   finalizeDescriptor: ({ draft }) => draft,

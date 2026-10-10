@@ -41,6 +41,7 @@ import type {
   Erc4626Identity,
   Erc4626IdentityEvidence,
 } from "./types.js";
+import { infinifiIdentity } from "./infinifi-identity.js";
 import { custodianIdentity } from "./custodian-identity.js";
 import { CUSTODIAN_IMPLEMENTATION_HASH, proveCustodianProxy, custodianImplementationWord, custodianSlot } from "./custodian.js";
 
@@ -192,7 +193,7 @@ export const erc4626Identity: IdentitySemantics<
         }),
       };
     },
-  }, custodianIdentity],
+  }, custodianIdentity, infinifiIdentity],
   identityKey: (identity) => identity.subject.toLowerCase(),
 };
 

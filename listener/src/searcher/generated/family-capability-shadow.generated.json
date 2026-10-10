@@ -6754,7 +6754,7 @@
         "familyId": "protocol:erc4626",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "755426d60daa354a8db56a7ddecb17711555b5b8abb8892e1433fd2cb96bc93a",
+        "contentHash": "02989615676580912b52f25e20b7bb6aedb7b52a07ac41c96b3ec9a934fb6f56",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6810,7 +6810,7 @@
         "familyId": "protocol:erc4626",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "137e6beca0b5e92845ce678d78f1d48fc3417b4341d7bb0a46d053a57b5c5082",
+        "contentHash": "30f70e456f6cf5a4409451fbf5a5d1012e33937e406906b33135bf97979d4305",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -6844,7 +6844,7 @@
         "familyId": "protocol:erc4626",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "4aabdac93fa29f02e8b16bf940ec6e993ff47b724bcdd797b4f48fd0179afd11",
+        "contentHash": "a45b355c43f11fdb23764e610d13d9d912067de37d9456f0b7bc39e6f8ee3bb5",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -6860,6 +6860,7 @@
           "src/searcher/venues/protocols/erc4626-family/binding.ts",
           "src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
           "src/searcher/venues/protocols/erc4626-family/custodian.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
           "src/searcher/venues/runtime-execution.ts",
@@ -6883,7 +6884,7 @@
         "familyId": "protocol:erc4626",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "0d1297f2d5574073fc1ce978c23d5d19c38fd01620ca7c90422b0a861bd2966d",
+        "contentHash": "b8cf02d1f7683a1effc6da4d115f5b01da7545e8e2d3216d98dba5c230ee0cc5",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -6900,6 +6901,8 @@
           "src/searcher/venues/protocols/erc4626-family/binding.ts",
           "src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
           "src/searcher/venues/protocols/erc4626-family/custodian.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
           "src/searcher/venues/runtime-execution.ts",
@@ -6944,7 +6947,7 @@
         "familyId": "protocol:erc4626",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "b7f5cd631476c8eae49e5863dbd00907b224490b3188ef292795fc4908ef44ea",
+        "contentHash": "71f05145ce5c0ef14eeb9c4bb3c4d158d93aefd1a344509052361ba1393daffe",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -6958,6 +6961,8 @@
           "src/searcher/venues/protocols/erc4626-family/abi.ts",
           "src/searcher/venues/protocols/erc4626-family/custodian-identity.ts",
           "src/searcher/venues/protocols/erc4626-family/custodian.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi-identity.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts"
         ],
@@ -6979,7 +6984,7 @@
         "familyId": "protocol:erc4626",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "844711675b98d41623336c50d5c636044743d8ced747c16b9597c0801ee149bf",
+        "contentHash": "0debe28b19a153862cebb543b0a10148eb1b254be30269292562dfb680793c2a",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
@@ -6990,6 +6995,7 @@
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/protocols/erc4626-family/binding.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts"
         ],
@@ -7011,7 +7017,7 @@
         "familyId": "protocol:erc4626",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "49e9436297fda5f449247f8b9bd0fa8d45e770c30afe1380eae11d0cefc731e7",
+        "contentHash": "789ff45a6f23c14af6f114e0cf3e1a67a2af2a7423904dd574fad008c8a99951",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -7025,6 +7031,7 @@
           "src/searcher/venues/protocols/erc4626-family/abi.ts",
           "src/searcher/venues/protocols/erc4626-family/binding.ts",
           "src/searcher/venues/protocols/erc4626-family/custodian.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts"
         ],
@@ -7046,7 +7053,7 @@
         "familyId": "protocol:erc4626",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "06b124f4501d54cdebfac9f0c775f28ac54be4f9d852196f47d991669f273338",
+        "contentHash": "52a8d9618352e5d1de678ba1b6e2856beeede7b6e2b129bf984175f71b58636a",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
@@ -7057,6 +7064,7 @@
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/protocols/erc4626-family/binding.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts"
         ],
@@ -13370,5 +13378,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "39281c26862dc293a9b404c178a836920bdbf46eb4d44f87cfc5d90bddf7492a"
+  "artifactHash": "7cbdaec41aad6b646c3c7ca09499fec9c4d932a407efa2091b208e41ed8101f2"
 }

@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "claim": "implemented-with-partial-correctness-evidence; not adapter_merge_ready or performance acceptance",
+  "workspace": {
+    "vm": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "root": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "baseHead": "e93eb1d59119d5c6297c222b6a2dbc343e9c5c1f",
+    "historicalRunProductionSourceSha256": "85546d105030100a0e65a70fb66d8fa86833679d8ef83606cf7ff85c6c28f9e5",
+    "historicalRunsUsedCurrentDirtyProductionTree": true,
+    "peerChangesExcludedFromCommit": true
+  },
+  "tx": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+  "family": "protocol:erc4626",
+  "variant": "infinifi-gateway-staking",
+  "vault": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+  "asset": "0x48f9e38f3070ad8945dfeae3fa70987722e3d89c",
+  "gateway": "0x3f04b65ddbd87f9ce0a2e7eb24d80e7fb87625b5",
+  "implementation": {
+    "boundary": "existing ERC4626 Family, generated capability manifest and Family-owned tests only",
+    "identity": "Infrastructure registry selects the current stakedToken; reverse-verifies asset/YieldSharing/Core, ENTRY_POINT role, proxy implementation and dependency code. No vault allowlist or permission override.",
+    "quote": "Actual amount in one discarded aggregate3 eth_call: public distributeInterpolationRewards then previewDeposit/previewRedeem. Does not open the transient gate or impersonate Gateway.",
+    "execution": "Both quoted and runtime call public stake/unstake. Runtime uses r0, exact temporary allowance, independent spend/receipt, return/supply/leftover constraints and allowance cleanup.",
+    "refresh": "Instance opts into existing each-block policy; current-source guards reject changed code/binding/role, pause or pending losses. Historical effective refresh/failure/recovery for this variant remains unverified.",
+    "sequentialQuotes": "explicitly unsupported; no prefix approximation",
+    "defaultsChanged": false,
+    "centralProtocolBranchAdded": false
+  },
+  "naturalIntegration": {
+    "source": { "number": 25944594, "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e", "generation": 25944594 },
+    "observation": "Original receipt Withdraw logIndex 33 through normal production discovery; no injected pool/admission/edge",
+    "targetStrictInstances": 1,
+    "targetGraphDirections": 2,
+    "targetRawRows": 2,
+    "targetEffective": "both missing-valuation; expanded same-block UniV3/ERC4626/Balancer V3 graph did not establish WETH valuation",
+    "backgroundGraphEdges": 16,
+    "readySha256": "860c3372519e1bccd5cf9e9ee4d4811600f972c62e4da6b2a297ad209fabea22",
+    "memoFingerprint": "6553ca6d8ba000122e03f01419c37d4a0a8257b522050c5441b35fa28ca64080",
+    "familyDefinitionHash": "f79089c869ffc65df4fdfdce86bcf2f7bb5a15c54e19e0de79823981095a7a76"
+  },
+  "sameStateExecution": {
+    "executor": "0x1000000000000000000000000000000000000002",
+    "origin": "0x1000000000000000000000000000000000000001",
+    "executorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+    "executorArtifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "method": "Production Exact and issuer plus source-verified BotVM, production executor-program strict REVM transport. Local test actor code/input balances only; no protocol code/storage/permission overrides.",
+    "stateN": {
+      "report": "infinifi-dual-reference-1.json",
+      "groups": 5,
+      "positiveQuotedAndRuntimeExecutions": 10,
+      "negativeExecutions": 20,
+      "quoteMinusReceiptDelta": "0 for every positive",
+      "productionReferenceDeposit": {
+        "amountIn": "5131980894925000000",
+        "amountOut": "4715253459959721041",
+        "source": "borrowed input only from saved production-stage large graph; not natural target valuation",
+        "donorTableBlock": 26146969,
+        "donorQuotedAtBlock": 26146968,
+        "donorQuotedAtHash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+        "freshness": "carried",
+        "donorInputSha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378",
+        "donorDeclarationSha256": "6536fa18b3c2c18accc342a3941c907825914e4e531887c76a51916b2f968f8f",
+        "validation": "existing splicedProductionAmount validates exact edge, token, config, Ready/source hashes and freshness; donor output never substitutes for target quote/receipt"
+      },
+      "productionReferenceRedeem": "unmet; selected saved table has no siUSD tokenIn row",
+      "otherAmounts": "one token in each direction and original receipt shares/assets as amount anchors; no original pre-call-state claim"
+    },
+    "nextAccruedState": {
+      "source": { "number": 25944595, "hash": "0x51a7fb91a39d3dac70e86ee6e13e186522ad4cee2addc7bfe44a718a47c9b10e", "generation": 25944595 },
+      "report": "infinifi-dual-accrued-1.json",
+      "pendingRewardRaw": "675478145931876864",
+      "groups": 4,
+      "positiveQuotedAndRuntimeExecutions": 8,
+      "negativeExecutions": 16,
+      "quoteMinusReceiptDelta": "0 for every positive",
+      "oneTokenDeposit": { "barePreview": "918797937190806881", "adjustedQuoteAndReceipt": "918797915062047803", "adjustedMinusBare": "-22128759078" },
+      "oneTokenRedeem": { "barePreview": "1088378586327115224", "adjustedQuoteAndReceipt": "1088378612540134570", "adjustedMinusBare": "26213019346" },
+      "scope": "Reuse N natural admission with production source authority reissue and current guards at actual N+1 header/state. Not N+1 natural discovery or an effective publication test. N prices are not treated as N+1 reference amounts."
+    },
+    "inventory": "Positive executions independently check exact input deduction/output receipt, Gateway both-token deltas zero and executor native delta zero from 17 wei. Old input/output balances remain protected.",
+    "negativeScope": "No-input with old output inventory and appended forced failure both require resolved transport, ok=true and reverted-as-declared. Root revert is proved; empty transport effects are not independent post-rollback storage measurements.",
+    "runtimeConstruction": "Production issuer no Exact/quoted/RPC or fallback. Additional synthetic full production selector contract traps all three and asserts runtime-actual with nonempty events/multiple amounts; not a full historical closed-loop sim/EV result.",
+    "allRunsDrained": true
+  },
+  "checks": {
+    "isolatedSourceSnapshot": "logs/infinifi-commitcheck-20261010.ABzTKx",
+    "isolatedChecks": "PASS: generated manifest write/check, build:live, 43 InfiniFi/Custodian contracts, standard ERC4626, strict lifecycle/execution projection, 74 shared dual-interface contracts and generic each-block refresh/failure/recovery",
+    "finalOwnContracts": "11/11 after type-only harness corrections; same production code",
+    "newTestTypecheck": "0 diagnostics in the two new test files. Imported graph retains 5 diagnostics in unchanged blockscan-at-block CLI and prior historical helpers; this is not an all-repository typecheck pass.",
+    "snapshotBinding": "All 14 owned Family/test files and all 11 ERC4626 capability entries match current tree. Isolated generated manifest excludes peer UniV1 changes; production historical evidence still pins the actual dirty runtime tree, not this isolated whole-tree build.",
+    "isolatedGeneratedSha256": "5d5aefe4e9e1d1702f47b2127f46e0a259cd01508cba9d7ca5051c279e1aa16f",
+    "familyOwnSelectorAndObserverTests": "11/11 in infinifi-selector-gates-1.log",
+    "review": "Three read-only non-author passes complete, no new narrow blocking finding. Pass2 independently checked N evidence/24 executions, source and executor bindings. Final incremental review confirmed latest harness type-only edits do not change source/amount/encoding/observations or negative semantics. Reviewer did not rerun RPC/EVM/build/typecheck.",
+    "harnessRevisionCaveat": "Stored real executions bind their exact earlier harness hashes. Current harness received only reviewed type annotations after the last execution. Cite real prior-harness execution plus current-source incremental review, not an EVM rerun under the final harness hash."
+  },
+  "remaining": [
+    "Natural target effective valuation and redeem production-reference amount.",
+    "Variant-specific production coordinator dependency/time refresh, failure withdrawal and recovery evidence; local guard and generic policy tests are not the complete variant historical publication test.",
+    "Formal route-pinned baseline-to-candidate Adapter Replay/conformance boundary receipts and any separately requested complete opportunity replay.",
+    "Performance NOT RUN: after correctness, per-protocol single Ready, then representative combined graph. Includes this variant, every applicable IMPL addition/repair and Balancer V2/V3, Curve plain/underlying."
+  ],
+  "priorCoverageNotInflated": { "balancerV3MeasuredDirections": 36, "balancerV3ProductionReferenceDirections": 33, "total": 36 },
+  "retainedFailures": [
+    "infinifi-regression-2.log: completion enum compile typo; corrected and build rerun separately.",
+    "infinifi-current-lifecycle-1.log: diagnostic import resolution failed before protocol result.",
+    "infinifi-current-lifecycle-2.json: unused caller requirement caused genuine production declaration rejection; fixed and new lifecycle3 retained separately.",
+    "infinifi-dual-1.json: harness wrongly required price-only executor provisioning; corrected by authentic code checks.",
+    "infinifi-dual-2.json: first quoted execution succeeded; negative actually reverted but harness used wrong completion enum. Original result retained.",
+    "infinifi-owned-test-typecheck-1.log: 8 new-test type diagnostics, subsequently fixed with unchanged production logic; typecheck2 retains 5 imported, unchanged-file diagnostics.",
+    "Prior standard direct-vault reverts and earlier Gateway diagnostics remain unchanged; current successes do not replace them."
+  ],
+  "canonicalReconciliation": {
+    "query": ["universe", "rebuild", "status"],
+    "manifest": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-tool-selection.json",
+    "manifestSha256": "a3da45ed6fdd2b68a5814d26dd32cf69c1856dc955f5ee16e5f4d2c7c2d6935a",
+    "executed": "listener:searcher:universe-rebuild-status",
+    "exitCode": 0,
+    "conclusion": "Production checkpoint status agrees with completed natural single-block publication. New Family-owned thin dual runner adds execution evidence; not a canonical full opportunity verdict."
+  },
+  "evidenceRoot": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-bridge-diagnosis-20261010.WDNb9H",
+  "evidence": [
+    { "path": "infinifi-current-lifecycle-3.json", "sha256": "632743e40831da7d1dbf6b14c9afdf9757f06d8680f5432ce9b89514272e64db" },
+    { "path": "infinifi-natural-ready-1/ready.json", "sha256": "860c3372519e1bccd5cf9e9ee4d4811600f972c62e4da6b2a297ad209fabea22" },
+    { "path": "infinifi-natural-ready-1/prices/prices.json", "sha256": "b039f7ae7400e841c27d360f3e2493704fa02199c7ad1661db9d66f5b42d2c2c" },
+    { "path": "infinifi-natural-ready-1/prices/input.json", "sha256": "b2b661d9000986d204b4d7e76481d7ae23782982519ba405b524f18d677b2f37" },
+    { "path": "infinifi-dual-3.json", "sha256": "be77f1cb6cc968623ea910fa24e10a4c8596d5f580979c331c57b64d1ffccd59" },
+    { "path": "infinifi-dual-accrued-1.json", "sha256": "6e309f95ec1674316b3d540e2e1239852c38a46f06933e05387f810ba770708d" },
+    { "path": "infinifi-dual-reference-1.json", "sha256": "2312a7f8c829aca7c143572d3e70acc9c2ae18d2103a4bd19656e0eacac3d665" },
+    { "path": "infinifi-canonical-status-1.log", "sha256": "22acf1cc7dbc7530ef4a03ef12e56a372c05cdfb30a1d391e5a00085f135be61" },
+    { "path": "infinifi-isolated-checks-1.log", "sha256": "f9088edb2be1adc25f29d7278313f26641638ff75a0e8dbe48edf26869b7b198" },
+    { "path": "infinifi-owned-test-typecheck-1.log", "sha256": "5b4a12bceafff95986a76d2f2357f11950859c37ef33f91187fafc0aa745ae1a" },
+    { "path": "infinifi-owned-test-typecheck-2.log", "sha256": "6ce1e57aa0cd76efbfb1694ab209249514aaec7dd9590c046798ab448441d987" },
+    { "path": "infinifi-final-family-contracts.log", "sha256": "6c3d181262ee39aa0f5077adcdcf96a9aa3b254c2d8aa640855a85c50a41f311" }
+  ],
+  "posture": { "signing": false, "broadcast": false, "deployment": false, "live": false, "originalReadyChanged": false, "performanceExperiment": false }
+}

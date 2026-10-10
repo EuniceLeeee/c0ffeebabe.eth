@@ -7,6 +7,8 @@ import {
 } from "../../adapter-family-plugin.js";
 import { MAX_UINT256 } from "../standard-family/common.js";
 import { assertErc4626Invocation } from "./binding.js";
+import { INFINIFI_VARIANT } from "./infinifi.js";
+import { infinifiProgram } from "./infinifi-execution.js";
 import { CUSTODIAN_VARIANT } from "./custodian.js";
 import { assertCustodianExecutionSource, custodianProgram } from "./custodian-execution.js";
 import { sameAddress } from "../standard-family/common.js";
@@ -24,6 +26,11 @@ export const erc4626Execution: ExecutionSemantics<
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertErc4626Invocation(d, r); runtimeExecutor(executor, d.vault);
+    if (d.infinifi !== undefined) {
+      assertCustodianExecutionSource(input.source);
+      if (input.runtimeEvidence.length) throw new Error("InfiniFi pending runtime evidence unsupported");
+      return runtimeLeg(r.adapterId, infinifiProgram(d.infinifi, executor, r.direction));
+    }
     if (d.custodian !== undefined) {
       assertCustodianExecutionSource(input.source);
       runtimeExecutor(executor, d.custodian.proxyAdmin);
@@ -43,13 +50,24 @@ export const erc4626Execution: ExecutionSemantics<
     const evidence = input.exactEvidence;
     if (
       input.amountIn <= 0n || input.quotedAmountOut <= 0n ||
-      evidence.kind !== (input.descriptor.custodian === undefined ? "erc4626-preview" : "frax-custodian-preview") ||
+      evidence.kind !== (input.descriptor.infinifi !== undefined ? "infinifi-gateway-preview" : input.descriptor.custodian === undefined ? "erc4626-preview" : "frax-custodian-preview") ||
       evidence.direction !== input.route.direction ||
       evidence.amountIn !== input.amountIn ||
       evidence.amountOut !== input.quotedAmountOut ||
       evidence.bindingFingerprint !== input.route.bindingRef.fingerprint
     ) {
       throw new Error("ERC4626 execution received incompatible exact evidence");
+    }
+    if (input.descriptor.infinifi !== undefined) {
+      const b = input.descriptor.infinifi;
+      assertCustodianExecutionSource(evidence.source);
+      if (!evidence.executor || !sameAddress(evidence.executor, input.executor) ||
+          !sameAddress(evidence.vault, input.descriptor.vault) || input.runtimeEvidence.length)
+        throw new Error("InfiniFi execution actor/evidence mismatch");
+      infinifiProgram(b, input.executor, input.route.direction, input.minAmountOut);
+      return { requirements: [], nodes: [{ adapterId: input.route.adapterId, target: input.descriptor.vault,
+        tokenIn: input.route.tokenIn, tokenOut: input.route.tokenOut, amount: input.amountIn,
+        params: { variant: INFINIFI_VARIANT, minimumOut: input.minAmountOut, gateway: b.gateway, core: b.core, yieldSharing: b.yieldSharing }, children: [] }] };
     }
     if (input.descriptor.custodian !== undefined) {
       assertCustodianExecutionSource(evidence.source);
