@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "parentCommit": "202c4fd7032030e30a350015acae964a46c530a4",
+  "family": "protocol:set-redemption",
+  "claim": "Current single-block natural WBTC reference is now checked against legacy unary issuance Exact and runtime. It is correctly rejected under the full-input-spend contract; this is not executable production-P, full Set, opportunity or performance acceptance.",
+  "productionCodeChanged": false,
+  "testChanges": {
+    "historical-runtime-dual.ts": "Consume the bound current-price legacy issuance reference, including quote-failed rows, rather than testing only fixed legal amounts or an explicit external donor. Check edge, tokens, amount and source; do not synthesize missing valuation, round amounts or let a donor replace an available natural input. A quoted reference requires current Exact/receipt parity; successful execution of a previously failed price row remains explicitly unquoted.",
+    "historical-runtime-dual-offline.ts": "Add natural reference positive/negative contracts and explicitly narrow an existing nested-call test fixture before mutating its burn input. No protocol, executor, admission, amount policy or safety gate changed."
+  },
+  "sourceBinding": {
+    "productionSourceTreeSha256": "a226dcc2fd5082cfa1938e667fe9da07ae661e88fff3397383bac27b27251671",
+    "familyDefinitionHash": "d7e9c6514564750d62e766c8b58d26ccf6d3c1955973341f93d1a7210650fb16",
+    "familyMemoDefinitionHash": "c16e0a0d6b95dd1093beea3d017d756fce4a90af7f5bc76da183ac60084684b3",
+    "historicalHarnessSha256": "e376484abcd69dbc3494532616f8437f735aafb4aae671bb48541a9726a5d531",
+    "finalOfflineTestSha256": "e9c897e30ab698ba1229c413ae04aab27436ba6743c236c66ff888652de9ad12",
+    "botvmRuntimeKeccak256": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "beforeAfter": "Source, packages, Solidity, historical harness, executor artifact and Ready/price inputs remained unchanged during the historical run. Only the separate offline test received a final assertion narrowing afterward; the executed harness is unchanged.",
+    "dirtyScope": "Actual working source includes preserved peer Ready/TX/Uniswap V1 changes. This report does not claim that the whole working tree is a clean export of the parent commit. Only the two named test files and this report belong to this increment."
+  },
+  "anchor": {
+    "transaction": "0x00f865180dc1ffacd181f69a99db506d08766a5086a4f57a886f9611669f4375",
+    "N": 26132613,
+    "blockHash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+    "stateAndEnvironment": "Canonical N end-state and N execution environment; not original transaction pre-call state",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "origin": "0x1000000000000000000000000000000000000001",
+    "baseSet": "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+    "rebalancingSet": "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e"
+  },
+  "evidenceRoot": "logs/set-reference-natural-20261010.ReyApV",
+  "naturalSingleBlock": {
+    "scope": ["protocol:set-redemption", "univ2-standard", "univ3-standard"],
+    "runner": "listener/src/searcher/venues/protocols/set-redemption-family/test/historical-legacy-ready.ts",
+    "discovery": "Same-block production discovery, strict and publication; expected Set addresses are output assertions, not injected candidates or graph edges",
+    "ready": "single-N26132613/ready.json",
+    "readySha256": "73dce2013f25e776d54620dd863839e929869f1cf41fcc80b66e0f7978f842b1",
+    "prices": "single-N26132613/prices/prices.json",
+    "pricesSha256": "43ec756bfa1a9c973c320b8557253feb3b29dd29f8b61ca2479fedc6e494da09",
+    "inputSha256": "15c0f594244d4e414e370a836892b55cc48a71d4535909b0a2d287882a8ad567",
+    "graphHash": "333695eba9aa8e1bd55a71dad53f7238c04dd35c1a53472f9afae85c829467cc",
+    "totalAdmittedInstances": 8,
+    "totalGraphEdges": 16,
+    "totalRawRows": 16,
+    "totalEffectiveQuoted": 12,
+    "targetSetInstances": 2,
+    "targetSetEdges": 4,
+    "targetSetRawRows": 4,
+    "targetSetEffective": { "quoted": 0, "quoteFailed": 1, "missingValuation": 3 },
+    "referenceWethInput": "2000000000000000",
+    "naturalWbtcInput": "6312",
+    "referenceSource": "Same-N successful forward effective WETH->WBTC quote at UniV3 0xe6ff8b9a37b0fab776134636d9981aa778c4e718. No donor table, source override, hand conversion or P change."
+  },
+  "sameStateExecution": {
+    "artifact": "dual-natural-reference-1.json",
+    "sha256": "0e12099699b45b466383d1b052ae3c1a924e3bf9e60227130c66c1059cb07cbb",
+    "naturalReference": {
+      "input": "6312",
+      "componentUnit": "400",
+      "remainder": "312",
+      "status": "correct-rejection-not-executable",
+      "exact": "exact-decode:set-legacy input must be an exact component-unit multiple",
+      "runtime": "semantic EVM revert: runtime amount mismatch; nonexhausted gas",
+      "nativeSemantics": "Core.issue accepts Set output quantity, not exact component input. No native output multiple fully consumes this input under the current contract. This is not a claim that a native exact-input entrypoint was called or reverted.",
+      "amountChanged": false,
+      "quotedExecutionForRejectedAmount": "Not constructed because production Exact rejects this input",
+      "naturalTargetValuation": "unmet"
+    },
+    "legalControls": [
+      { "amountIn": "400", "amountOut": "1000000000000", "quotedAndRuntimeExecutions": 2, "signedOutputDeltas": ["0", "0"] },
+      { "amountIn": "400000", "amountOut": "1000000000000000", "quotedAndRuntimeExecutions": 2, "signedOutputDeltas": ["0", "0"] }
+    ],
+    "missingInputWithOldOutputInventoryReverts": 4,
+    "additionalQuantizationControl": "401 raw input also rejects; 6312 is tested separately without replacing the real reference",
+    "runtimeConstructionAttempts": { "offChainExact": 0, "rpc": 0, "presetAmountAccess": 0 },
+    "directLogicalRpcCalls": 128,
+    "forkStopped": true,
+    "limits": "Legal controls validate the current encoders, but cannot replace the rejected production input. Diagnostic RPC and elapsed fields are not a latency result."
+  },
+  "verification": {
+    "buildLive": { "exitCode": 0, "log": "build-live-1.log", "note": "Silent successful build; no claim of full repository typecheck" },
+    "offlineContracts": { "passed": 10, "failed": 0, "log": "offline-contracts-2.log", "sha256": "da42587a360f8bb80fd61af34f871d5e12a83da1fe5e8fd96ecb9a0efdfc0f2d" },
+    "targetedTypes": {
+      "config": "listener/tsconfig.json",
+      "log": "targeted-types-2.json",
+      "sha256": "5cb1e04e4c15fae81aa902914b191d3c213336217c1ca9e6315477788a25b887",
+      "baselineDiagnostics": 4,
+      "candidateDiagnostics": 3,
+      "ownedDiagnostics": 0,
+      "newDiagnostics": 0,
+      "remaining": "Three byte-identical imported diagnostics: Curve LP exported private Snapshot type and two Ekubo observation bigint/number comparisons. Full targeted typecheck is not claimed passed.",
+      "retainedInitialCheck": "targeted-types-1.json: retained the pre-existing owned burn-trace narrowing error; it is now corrected and offline tests rerun"
+    },
+    "review": {
+      "agent": "01a12480-7853-7500-a8db-760671bb5177",
+      "scope": "Non-author narrow review of the two test changes and the new immutable historical result, not re-review of all Set production code",
+      "initialResult": "No confirmed blocking finding; independently ran 10/10 offline tests and diff check, verified source/input hashes, rejected six corrupt timeout/OOG/invalid-instruction/gas/nested-error variants of saved rejection traces",
+      "finalFollowUp": "No new finding after the explicit calls-property narrowing. Reviewer confirmed final two-file hashes, diff check, 10/10 final offline log, and unchanged historical harness binding; no additional RPC/EVM executed.",
+      "historicalExecutionByReviewer": false,
+      "limits": "Natural quoted-reference success branch has only offline contract coverage in this increment; the historical row is quote-failed. No full Family, formal merge or performance verdict."
+    }
+  },
+  "reconciliation": {
+    "queries": ["set-legacy", "set-dual"],
+    "tools": ["listener:searcher:set-legacy-historical-ready", "listener:searcher:set-dual-historical"],
+    "manifests": [
+      { "path": "tools.json", "sha256": "f83c0edc6ef5e9554b3a3f1ed5706aad187bb396322273a40e43b92ab0a3c835", "exitCode": 0 },
+      { "path": "tools-dual.json", "sha256": "fe9a98433d3b3099de73df31cae8d03e985a4a763e21e88bbe309b758f68b183", "exitCode": 0 }
+    ],
+    "result": "Natural production input is available for WBTC issuance but cannot satisfy its exact component-unit constraint; graph membership and raw mids do not imply an executable effective row. Prior borrowed 6184 input evidence is preserved, not replaced."
+  },
+  "preserved": {
+    "oldReady": "logs/set-legacy-issuance-20261009.kO1BRc/single-N26132613-reviewed/ready.json",
+    "oldReadySha256": "f21fd196f68614c957f1533b492507a51f2f00f1bfc4afd935b26988355264bb",
+    "oldPricesSha256": "bbbf2bbebb1cfb5b6fbf7fe802ca4e00b161f01a31c8602a17e7c84547ce9708",
+    "priorReport": "docs/research/reports/set-legacy-issuance-acceptance-20261009.json",
+    "oldArtifactsUnchanged": true,
+    "peerChangesPreserved": true
+  },
+  "remaining": [
+    "Other three legacy directions still lack checked production reference inputs; natural effective is not accepted for the four Set directions.",
+    "Historical nonzero entry fee, original transaction pre-call/complete opportunity and formal Replay verdicts are not established by this increment.",
+    "All applicable IMPL and other task Families still require final-stage per-Family single-Ready performance followed by representative combined-graph acceptance. Balancer V2/V3 and Curve plain/underlying remain in that final phase."
+  ],
+  "performance": { "singleReady": "NOT RUN", "representativeCombinedGraph": "NOT RUN" },
+  "safety": { "liveStarted": false, "deployed": false, "signed": false, "broadcast": false, "privateKeysRead": false, "defaultActivationChanged": false, "newBranchOrWorktree": false, "originalCoffeeReadyChanged": false }
+}

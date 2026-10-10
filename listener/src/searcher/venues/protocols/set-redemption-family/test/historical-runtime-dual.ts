@@ -99,6 +99,37 @@ export function options(argv: string[]) {
     referencePrices: values.has("--reference-prices") ? resolve(values.get("--reference-prices")!) : undefined, referenceEdges };
 }
 
+type NaturalReferenceRow = {
+  edgeId: string; tokenIn: string; tokenOut: string;
+  amountIn: bigint | null; amountOut: bigint | null; status: string;
+  quotedAt?: { number: number; hash: string; generation: number };
+};
+
+// A failed production quote still has a real reference input to check. Missing
+// valuation does not. This reads the bound producer row; it never recomputes P.
+export function naturalLegacyIssuanceReference(row: NaturalReferenceRow | undefined,
+  edge: { edgeId: string; tokenIn: string; tokenOut: string },
+  source: { number: number; hash: string; generation: number }) {
+  assert(row && row.edgeId === edge.edgeId, "natural reference edge mismatch");
+  assert(same(row.tokenIn, edge.tokenIn) && same(row.tokenOut, edge.tokenOut), "natural reference token mismatch");
+  if (row.status === "missing-valuation") {
+    assert.equal(row.amountIn, null); assert.equal(row.amountOut, null);
+    assert.equal(row.quotedAt, undefined);
+    return undefined;
+  }
+  assert(row.status === "quoted" || row.status === "quote-failed", "unsupported natural reference status");
+  assert(typeof row.amountIn === "bigint" && row.amountIn > 0n && row.amountIn < MAX,
+    "invalid natural reference amount");
+  if (row.status === "quoted") {
+    assert(typeof row.amountOut === "bigint" && row.amountOut > 0n && row.amountOut < MAX);
+    assert(row.quotedAt && row.quotedAt.number === source.number && same(row.quotedAt.hash, source.hash)
+      && row.quotedAt.generation === source.generation, "natural reference quote source mismatch");
+  } else {
+    assert.equal(row.amountOut, null); assert.equal(row.quotedAt, undefined);
+  }
+  return { kind: "natural-current-prices" as const, amountIn: row.amountIn, row, source };
+}
+
 function currentBotVm() {
   const a = JSON.parse(readFileSync(resolve(ROOT, "out/BotVM.sol/BotVM.json"), "utf8"));
   const m = typeof a.metadata === "string" ? JSON.parse(a.metadata) : a.metadata;
@@ -170,6 +201,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     for (const s of [provenance.topologySource, provenance.stateSource]) sameBlock(s.number, s.hash);
     sameBlock(saved.runtime.sourceBlock, saved.runtime.sourceBlockHash);
     sameBlock(saved.runtime.pricing.sourceBlock, saved.runtime.pricing.sourceBlockHash);
+    sameBlock(saved.runtime.pricing.effectiveMids.source.number, saved.runtime.pricing.effectiveMids.source.hash);
+    assert.equal(saved.runtime.pricing.effectiveMids.source.generation, saved.runtime.generation);
     const header = provenance.sourceHeader;
     sameBlock(Number(BigInt(header.number)), header.hash);
     const family = asPricedFamily(catalog.forStrictFamily(FAMILY));
@@ -197,8 +230,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const inputToken = args.issue ? d.components[0] : d.set;
     const donor = referencePath ? { prices: parseAtBlockJson(inputs[3].bytes.toString()),
       declaration: parseAtBlockJson(inputs[4].bytes.toString()) } : undefined;
-    const reference = donor ? splicedProductionAmount(donor.prices, donor.declaration, args.referenceEdges, inputToken) : undefined;
-    if (reference) report.referenceInputSource = { ...reference, prices: referencePath, declaration: referenceDeclarationPath,
+    const borrowedReference = donor ? splicedProductionAmount(donor.prices, donor.declaration, args.referenceEdges, inputToken) : undefined;
+    if (borrowedReference) report.referenceInputSource = { ...borrowedReference, prices: referencePath, declaration: referenceDeclarationPath,
       sourceCommit: donor!.declaration.head, cfg: JSON.parse(atBlockJson(donor!.prices.cfg)), graphEdges: donor!.prices.runtime.graph.edges.length,
       inputOnly: true, actualLiveEvidence: false };
     const outputTokens = args.issue ? [d.set] : [...d.components];
@@ -233,8 +266,17 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       return { row, raw, edgeId: id, tokenOut: edge.tokenOut, route: handles[0] };
     });
     assert.deepEqual(rows.map(r => lower(r.tokenOut)).sort(), outputTokens.map(lower).sort());
+    const naturalReference = legacy && args.issue ? naturalLegacyIssuanceReference(rows[0].row,
+      { edgeId: rows[0].edgeId, tokenIn: inputToken, tokenOut: rows[0].tokenOut },
+      { number: source.number, hash: source.hash, generation: saved.runtime.generation }) : undefined;
+    assert(!(naturalReference && borrowedReference), "do not replace available natural reference with a donor input; rerun without donor");
+    const reference = naturalReference ?? borrowedReference;
+    const referenceLabel = naturalReference ? "production-reference" : "spliced-production-reference";
+    if (naturalReference) report.referenceInputSource = { ...naturalReference, prices: pricePath,
+      pricesSha256: sha(priceInput.bytes), provenance: provenancePath, provenanceSha256: sha(provenanceInput.bytes),
+      inputOnly: true, actualLiveEvidence: false };
     if (legacy) report.productionReferenceAcceptance = { status: "not-verified",
-      reason: "isolated graph lacks valuation; legal unit/multi-unit trials below do not replace actual production P" };
+      reason: reference ? "reference execution not yet checked" : "graph lacks a checked reference; legal unit/multi-unit trials do not replace actual production P" };
     report.inputs = { source, graphHash: ready.graphHash, priceGeneration: saved.runtime.generation,
       memoFingerprint: memo.memoFingerprint, familyDefinitionHash: memo.familyDefinitionHash, validity: memo.validity,
       candidate, descriptor: d, edges: rows.map(r => ({ routeKey: r.route.routeKey, rawMid: r.raw, effective: r.row })),
@@ -401,7 +443,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         ? [["legal-unit-N-not-production-P", args.issue ? unit : legacy.amounts[0]], ["legal-multi-unit-N-not-production-P", args.issue ? unit * 1000n : legacy.amounts[1]]]
         : [["production-P", row!.amountIn], ["historical-amount-at-N", second]];
       if (reference && reference.amountIn % unit === 0n) {
-        amounts.push(["spliced-production-reference", reference.amountIn]); report.expectedSamples++;
+        amounts.push([referenceLabel, reference.amountIn]); report.expectedSamples++;
       }
       for (const [label, amountIn] of amounts) {
         const sample: Record<string, any> = { routeKey: route.routeKey, edgeId, label, amountIn,
@@ -425,6 +467,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           sample.quote = { model: "Family local state model", outputs, selectedAmountOut: quote.amountOut,
             reads: queryReads.slice(before), cacheBefore, cacheAfter: cache.snapshot(), evidenceRefs: quotes.map(q => q.evidenceRefs) };
           if (label === "production-P") assert.equal(quote.amountOut, row!.amountOut, "P quote differs from production price");
+          if (label === "production-reference" && naturalReference?.row.status === "quoted")
+            assert.equal(quote.amountOut, naturalReference.row.amountOut, "natural reference quote differs from production price");
           sample.originalTxComparison = args.issue ? { preCallParity: "unverified; original redemption receipt is provenance, not an issuance comparison" } : { originalAmountIn: SAMPLE.amountIn, originalOutputs: SAMPLE.outputs,
             sameAmount: amountIn === SAMPLE.amountIn, signedDeltas: amountIn === SAMPLE.amountIn ? outputs.map((v, n) => v - SAMPLE.outputs[n]) : null,
             preCallParity: "unverified; source is N end-state" };
@@ -478,8 +522,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           assert(sample.executions.every((e: any) => e.status === "pass"), "one or both encoders failed; evidence retained");
           assert.deepEqual(sample.executions[0].balances, sample.executions[1].balances, "old/runtime basket differs");
           sample.status = "pass";
-          if (label === "spliced-production-reference") report.productionReferenceAcceptance = {
-            status: "pass-with-spliced-input", amountIn, naturalTargetValuation: "unmet" };
+          if (label === referenceLabel) report.productionReferenceAcceptance = {
+            status: naturalReference ? (naturalReference.row.status === "quoted" ? "pass-natural-reference" : "input-execution-pass-price-unquoted")
+              : "pass-with-spliced-input", amountIn,
+            naturalTargetValuation: naturalReference?.row.status === "quoted" ? "verified" : "unmet" };
         } catch (e) { sample.error = failure(e); }
         abort.signal.throwIfAborted();
       }
@@ -517,7 +563,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const unit = BigInt(LEGACY_SET.decodeFunctionResult("getUnits", await call(d.set, LEGACY_SET.encodeFunctionData("getUnits")))[0][0]);
       assert(unit > 1n, "sample must have a nontrivial component unit");
       const invalid: (readonly [string, bigint])[] = [["non-component-multiple", unit + 1n]];
-      if (reference && reference.amountIn % unit !== 0n) invalid.push(["spliced-production-reference", reference.amountIn]);
+      if (reference && reference.amountIn % unit !== 0n) {
+        assert(!naturalReference || naturalReference.row.status === "quote-failed",
+          "producer quoted a non-component-multiple; rejection cannot pass as price agreement");
+        invalid.push([referenceLabel, reference.amountIn]);
+      }
       report.invalidAmountControls = [];
       for (const [label, amountIn] of invalid) {
         const quote = await exact(rows[0].route, amountIn);
@@ -536,11 +586,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         assert.equal(trace.output.slice(0, 10), "0x08c379a0");
         assert.equal(ethers.AbiCoder.defaultAbiCoder().decode(["string"], "0x" + trace.output.slice(10))[0], "runtime amount mismatch");
         control.status = "pass";
-        if (label === "spliced-production-reference") report.productionReferenceAcceptance = {
+        if (label === referenceLabel) report.productionReferenceAcceptance = {
           status: "correct-rejection-not-executable", amountIn, unit, remainder: amountIn % unit,
           exact: "failed: non-component-multiple", runtime: "reverted: runtime amount mismatch",
           protocolSemantics: "Core.issue takes output quantity, not component amountIn; no exact-full-spend output multiple exists for this input",
-          amountChanged: false, naturalTargetValuation: "unmet" };
+          amountChanged: false, inputSource: naturalReference ? "natural-current-prices" : "spliced-production-input",
+          naturalReferenceAmount: !!naturalReference, naturalTargetValuation: "unmet" };
       }
     }
     report.exactCache = cache.snapshot();

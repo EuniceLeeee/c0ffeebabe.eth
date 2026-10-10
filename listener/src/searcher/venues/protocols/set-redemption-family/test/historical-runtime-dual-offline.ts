@@ -10,7 +10,7 @@ import { MODULE } from "../codec.js";
 import { SAMPLE, ERC20, word, observeBalance, assertBasket, historicalReceipt } from "./historical-runtime-observations.js";
 import { CORE } from "../legacy.js";
 import { LEGACY_SAMPLES, legacyHistoricalReceipt, assertExecutionRevert, assertLegacyInvalidAmountEvidence } from "./historical-legacy-observations.js";
-import { options } from "./historical-runtime-dual.js";
+import { naturalLegacyIssuanceReference, options } from "./historical-runtime-dual.js";
 
 const components = [11, 12, 13, 14].map(n => ethers.toBeHex(n, 20));
 const recipient = ethers.toBeHex(91, 20), next = ethers.toBeHex(92, 20);
@@ -130,7 +130,9 @@ test("invalid amount controls reject unrelated Exact errors, OOG and wrong burn 
     const exhausted = structuredClone(native); exhausted.gasUsed = exhausted.gas;
     assert.throws(() => assertExecutionRevert(exhausted), /remaining gas/);
     if (!quantization) {
-      const wrongBurn = structuredClone(data); wrongBurn.results[0].trace.calls![0].input = "0x";
+      const wrongBurn = structuredClone(data);
+      assert("calls" in wrongBurn.results[0].trace);
+      wrongBurn.results[0].trace.calls![0].input = "0x";
       assert.throws(() => assertLegacyInvalidAmountEvidence(wrongBurn), /authenticated Set burn/);
     }
   }
@@ -148,6 +150,40 @@ test("reference inputs require explicit paired selection and a legacy unary issu
   assert.throws(() => options([...issue, ...donor.slice(2)]), /requires prices/);
   assert.throws(() => options([...base, ...donor]), /unary issuance/);
   assert.throws(() => options([...issue, ...donor.slice(0, 2), "--reference-edges", '["a","b"]']), /unary issuance/);
+});
+
+test("natural legacy reference retains failed production P without rounding or inventing a missing input", () => {
+  const edge = { edgeId: "set-issue", tokenIn: components[0], tokenOut: SAMPLE.set };
+  const source = { number: SAMPLE.number, hash: SAMPLE.hash, generation: 1 };
+  const failed = { ...edge, amountIn: 6312n, amountOut: null, status: "quote-failed" };
+  const reference = naturalLegacyIssuanceReference(failed, edge, source)!;
+  assert.equal(reference.amountIn, 6312n);
+  assert.equal(reference.amountIn % 400n, 312n, "not silently changed to 6000");
+  assert.equal(reference.row.status, "quote-failed");
+  assert.equal(reference.kind, "natural-current-prices");
+  assert.equal(naturalLegacyIssuanceReference({ ...failed, status: "missing-valuation", amountIn: null }, edge, source), undefined);
+  assert.throws(() => naturalLegacyIssuanceReference({ ...failed, status: "missing-valuation" }, edge, source));
+  for (const amountIn of [0n, -1n, (1n << 256n) - 1n])
+    assert.throws(() => naturalLegacyIssuanceReference({ ...failed, amountIn }, edge, source), /invalid natural reference amount/);
+  assert.throws(() => naturalLegacyIssuanceReference({ ...failed, amountOut: 1n }, edge, source));
+  assert.throws(() => naturalLegacyIssuanceReference({ ...failed, quotedAt: source }, edge, source));
+  assert.throws(() => naturalLegacyIssuanceReference({ ...failed, status: "carried" }, edge, source), /unsupported/);
+});
+
+test("natural legacy reference binds edge, tokens, quote status and current source", () => {
+  const edge = { edgeId: "set-issue", tokenIn: components[0], tokenOut: SAMPLE.set };
+  const source = { number: SAMPLE.number, hash: SAMPLE.hash, generation: 1 };
+  const row = { ...edge, amountIn: 6400n, amountOut: 16_000_000_000_000n, status: "quoted", quotedAt: source };
+  assert.equal(naturalLegacyIssuanceReference(row, edge, source)!.row.amountOut, row.amountOut);
+  assert.throws(() => naturalLegacyIssuanceReference(undefined, edge, source), /edge mismatch/);
+  assert.throws(() => naturalLegacyIssuanceReference({ ...row, edgeId: "other" }, edge, source), /edge mismatch/);
+  for (const changed of [{ ...row, tokenIn: components[1] }, { ...row, tokenOut: components[1] }])
+    assert.throws(() => naturalLegacyIssuanceReference(changed, edge, source), /token mismatch/);
+  for (const quotedAt of [undefined, { ...source, number: source.number - 1 },
+    { ...source, hash: ethers.ZeroHash }, { ...source, generation: 2 }])
+    assert.throws(() => naturalLegacyIssuanceReference({ ...row, quotedAt }, edge, source), /quote source mismatch/);
+  for (const amountOut of [null, 0n, -1n])
+    assert.throws(() => naturalLegacyIssuanceReference({ ...row, amountOut }, edge, source));
 });
 
 test("offline input failure retains a private receipt; an existing receipt is never overwritten", () => {
