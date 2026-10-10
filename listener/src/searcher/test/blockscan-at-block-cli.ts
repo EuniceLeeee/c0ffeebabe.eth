@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { historicalCandidateSelection } from "../blockscan-at-block-cli.js";
 import { blockScanRouteId } from "../blockscan-route-identity.js";
 import { test } from "node:test";
@@ -10,6 +12,26 @@ import { DEFAULT_PROFIT_TOKEN_VALUATION } from "../profit-token-valuation.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
 
 const base = ["--ready", "ready.json", "--block", "123", "--out", "logs/new-run"];
+test("historical sizing and final simulation share the same per-run rejection cache", () => {
+  const file = ts.createSourceFile("at-block.ts", readFileSync(new URL("../blockscan-at-block-cli.ts", import.meta.url), "utf8"), ts.ScriptTarget.ES2022, true);
+  const calls: ts.CallExpression[] = [], allocations: ts.VariableDeclaration[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ["createBlockScanLiveAmountSelectorFactory", "maybeSubmitBlockScanAtomic"].includes(node.expression.getText(file))) calls.push(node);
+    if (ts.isVariableDeclaration(node) && node.initializer && ts.isNewExpression(node.initializer) && node.initializer.expression.getText(file) === "BlockScanSimRejectCache") allocations.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.equal(allocations.length, 1, "cache must be scoped to this run, not recreated per consumer");
+  assert.equal(calls.length, 2);
+  for (const call of calls) {
+    const input = call.arguments[0]; assert(input && ts.isObjectLiteralExpression(input));
+    const field = input.properties.find(p => p.name?.getText(file) === "simRejects");
+    assert(field, `${call.expression.getText(file)} must receive simRejects`);
+    const value = ts.isShorthandPropertyAssignment(field) ? field.name : ts.isPropertyAssignment(field) ? field.initializer : undefined;
+    assert(value && ts.isIdentifier(value));
+    assert.equal(value.text, allocations[0]!.name.getText(file));
+  }
+});
 test("historical sim sizing is an explicit opt-in and never an offline or target-route shortcut", () => {
   assert.equal(parseAtBlockArgs(base)?.amountSelector, "solver");
   assert.equal(parseAtBlockArgs([...base, "--amount-selector", "sim"])?.amountSelector, "sim");
@@ -25,7 +47,8 @@ test("historical target selection only filters actual natural outputs and preser
     assert.throws(() => parseAtBlockArgs([...base, "--only-enumerated-rank", rank]));
   assert.throws(() => parseAtBlockArgs([...base, "--only-enumerated-rank", "1", "--through", "enumerate"]));
   const make = (digit: string) => ({ seedEdges: [{ adapterId: "fixture", target: `0x${digit.repeat(40)}`,
-    tokenIn: `0x${"a".repeat(40)}`, tokenOut: `0x${"b".repeat(40)}` }] });
+    tokenIn: `0x${"a".repeat(40)}`, tokenOut: `0x${"b".repeat(40)}`,
+    slotKind: "swap" as const, edgeKind: "swap" as const, leavesStandingPosition: false }] });
   const opportunities = [make("1"), make("2")], called: any[] = [];
   const planner: any = { async planBlockScanFromSeedEdges(...input: any[]) { called.push(input); return ["original plan"]; } };
   assert.throws(() => historicalCandidateSelection(planner, 101, 100));
@@ -33,6 +56,9 @@ test("historical target selection only filters actual natural outputs and preser
   await assert.rejects(planner.planBlockScanFromSeedEdges(opportunities[1], []), /enumeration must finish/);
   const natural: any = { opportunities, selectionProvenance: { kind: "natural_coarse_ranked" },
     forcedSelectionCount: 0, selectionMode: "production" };
+  for (const selectionProvenance of [undefined, null, {}, "natural_coarse_ranked"])
+    assert.throws(() => select({ ...natural, selectionProvenance }), /natural producer metadata/);
+  assert.throws(() => select({ ...natural, selectionMode: "diagnostic" }));
   assert.throws(() => select({ ...natural, forcedSelectionCount: 1 }));
   assert.throws(() => select({ ...natural, opportunities: [] }));
   const before = atBlockJson(natural);

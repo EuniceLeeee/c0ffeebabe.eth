@@ -34,6 +34,7 @@ import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { DEFAULT_PROFIT_TOKEN_VALUATION } from "./profit-token-valuation.js";
 import { createBlockScanExecutionAvailability } from "./blockscan-pending-evidence.js";
 import { detectProductionBlockScanOpportunities, assertAtomicBlockScanRuntime } from "./detector/blockscan-scanner-production.js";
+import type { BlockScanOutcome } from "./detector/blockscan-scanner-core.js";
 import type { AdapterRuntimeSnapshot } from "./adapter-runtime-coordinator.js";
 
 const HELP = `Usage: npm run searcher:at-block -- --ready CHECKPOINT --block NUMBER --out NEW_DIRECTORY
@@ -126,7 +127,12 @@ export function historicalCandidateSelection(planner: TemplatePlanner, rank: num
     assert(selectedRouteId !== undefined, "natural enumeration must finish before historical planning");
     return blockScanRouteId(input[0].seedEdges) === selectedRouteId ? plan(...input) : [];
   };
-  return (result: ReturnType<typeof detectProductionBlockScanOpportunities>) => {
+  return (result: BlockScanOutcome) => {
+    assert("selectionProvenance" in result && result.selectionProvenance !== null &&
+      typeof result.selectionProvenance === "object" && "kind" in result.selectionProvenance,
+      "historical rank selection requires natural producer metadata");
+    assert("forcedSelectionCount" in result && "selectionMode" in result,
+      "historical rank selection requires natural producer metadata");
     assert.equal(result.selectionProvenance.kind, "natural_coarse_ranked");
     assert.equal(result.forcedSelectionCount, 0);
     assert.equal(result.selectionMode, "production");
@@ -381,7 +387,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
         simulator: new BotVMSimulator(state, executor, owner) }], finalSimulationWorkers: [],
       directFinalSimulation: directSimulator,
       ...(args.amountSelector === "sim" ? { amountSelectorFactory: createBlockScanLiveAmountSelectorFactory({
-        executor, quoteConcurrency: simTrialConcurrency,
+        executor, quoteConcurrency: simTrialConcurrency, simRejects,
         record: event => save(`amount-event-${++amountEventSequence}.json`, event),
       }) } : {}),
       rpcUrl, strictSession: prices.strictSessionFor, runtimeAbort: abort, rethTransportScheduler: scheduler,
