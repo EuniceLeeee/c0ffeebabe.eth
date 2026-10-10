@@ -1,0 +1,1197 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "33df299ec202c868f4182baf42d70800939f9470",
+  "claim": "Two additional Balancer V3 directions have natural N-state production-reference inputs and same-N quote/quoted/runtime execution parity. This is a scoped correctness supplement, not full opportunity, formal merge, or latency acceptance.",
+  "productionCodeChanged": false,
+  "code": {
+    "headAtStart": "33df299ec202c868f4182baf42d70800939f9470",
+    "sourceSha256": "9a4d7c182fcdbbe0fe8a9a2d54020efad7ced819178fdf33d4eb541928c6269c",
+    "sourceTreeSha256": "1100ea59ded0a71cb59f0d6a60f89d0185b2aaa855762ea614c0258bc6224e62",
+    "fileCount": 1143,
+    "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+    "artifactSha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+    "familyDefinitionHash": "e515ffc67c8020c03125fc903784b9bc25787e48faef76af072d7569946ff84d",
+    "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+  },
+  "sourceBinding": "Historical results bind the actual working source (including preserved peer changes); not a clean release/deployment claim.",
+  "naturalIntegration": [
+    {
+      "directory": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1",
+      "tx": "0x1b474eb9c6da5bd400c4a20c0d029a039cb6d509df756140b3e09e42374845e3",
+      "block": 25936827,
+      "blockHash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+      "stateRoot": "0x206522f4280330a6988b84a43dd415c0c8f66735c754fb8f872751b4e1082b77",
+      "scope": [
+        "balancer-v3",
+        "univ3-standard",
+        "univ4",
+        "univ4-fee-hook"
+      ],
+      "originalReady": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/ready.json",
+      "originalReadySha256": "0df73b8b1cb1c19139540b17bdff7c4caf237d02c04e4c1e30deaca38918e1ec",
+      "graphHash": "df3fd3b5ec57384e93d7d191b31f01033bb013a5f7279202f917928723903888",
+      "instances": 21,
+      "edges": 42,
+      "rawRows": 42,
+      "effectiveCounts": {
+        "quoted": 36,
+        "missing-valuation": 6
+      },
+      "candidateAccounting": {
+        "total": 26,
+        "verified": 21,
+        "terminalRejected": 4,
+        "retryable": 1,
+        "remainingUnaccounted": 0
+      },
+      "targetRows": [
+        {
+          "instanceKey": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+          "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+          "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "amountIn": "871641832876",
+          "status": "quoted",
+          "amountOut": "90539586",
+          "effectiveMid": 0.00010387246525475124,
+          "quotedAt": {
+            "number": 25936827,
+            "hash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+            "generation": 1
+          }
+        },
+        {
+          "instanceKey": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+          "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+          "amountIn": "99278215",
+          "status": "quoted",
+          "amountOut": "871641832876",
+          "effectiveMid": 8779.789532638153,
+          "quotedAt": {
+            "number": 25936827,
+            "hash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+            "generation": 1
+          }
+        }
+      ],
+      "sourceTreeSha256": "1100ea59ded0a71cb59f0d6a60f89d0185b2aaa855762ea614c0258bc6224e62",
+      "sourceUnchanged": true,
+      "artifacts": [
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/ready.json",
+          "sha256": "e9906fcddd7218f65f6caa32bdb525a7569437da1dda7e124beee6560609a945"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/receipt.json",
+          "sha256": "cb76e32d93298cdadb4db1b0cc5d7df982f611c86e39aaa11bf037996f2b6dd0"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/header.json",
+          "sha256": "25230adf15ed525585030e942600cf8df7f4d8ea63fe0c5653df667f941c01d8"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/ready-summary.json",
+          "sha256": "a4a52161fcc4ba68fb345323d7b1fe657f59925163f3fb852812ec36a94e8f76"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/prices/prices.json",
+          "sha256": "760b5889b66a31c8de2b476c056283b445c7cfe2c59ea29409f80b70db79a685"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/prices/input.json",
+          "sha256": "53422dbb2f95b81be3d659fbede974797fa43717e29e53bcd18da5b075703e34"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/source-before.json",
+          "sha256": "39345a6735ef227ade40f707e9e5c17c2de26b29e3372aba91a7d65354ea0f03"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/source-after.json",
+          "sha256": "39345a6735ef227ade40f707e9e5c17c2de26b29e3372aba91a7d65354ea0f03"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/input-provenance.json",
+          "sha256": "ec870647ce0eaa40d945adc4b8c05d087f916c60b382765ea00c5803dd91f296"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/result.json",
+          "sha256": "abd8389526b5c05c16201ccf6605aaf3ec25acc13cb51bdac2938b8c060bbed9"
+        }
+      ]
+    },
+    {
+      "directory": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1",
+      "tx": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+      "block": 25944594,
+      "blockHash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+      "stateRoot": "0xa972b7e644213d956d7090c4ffccb0820ebc7da793a5801543f688ab95beab3e",
+      "scope": [
+        "balancer-v3",
+        "univ3-standard",
+        "protocol:erc4626",
+        "curve-plain",
+        "protocol:wsteth",
+        "fluid-dex",
+        "univ2-standard",
+        "univ4",
+        "univ4-fee-hook"
+      ],
+      "originalReady": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/ready.json",
+      "originalReadySha256": "cd8c69adb1c25cd007b3b45e6fa7e5d11ecac45b6d57e721fa2c720f65aa3a5a",
+      "graphHash": "f99259c24fdfd757f9f18825346a8d5be7bfb29cf7f5aae2f93c5b1131a49f6b",
+      "instances": 13,
+      "edges": 30,
+      "rawRows": 30,
+      "effectiveCounts": {
+        "quoted": 24,
+        "missing-valuation": 6
+      },
+      "candidateAccounting": {
+        "total": 14,
+        "verified": 13,
+        "terminalRejected": 0,
+        "retryable": 1,
+        "remainingUnaccounted": 0
+      },
+      "targetRows": [
+        {
+          "instanceKey": "0x071828acc755314e687448703775f22194f56867",
+          "tokenIn": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+          "tokenOut": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+          "amountIn": "3969838393931800405",
+          "status": "quoted",
+          "amountOut": "4549931237571597530",
+          "effectiveMid": 1.1461250524773283,
+          "quotedAt": {
+            "number": 25944594,
+            "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+            "generation": 1
+          }
+        },
+        {
+          "instanceKey": "0x071828acc755314e687448703775f22194f56867",
+          "tokenIn": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+          "tokenOut": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+          "amountIn": null,
+          "status": "missing-valuation",
+          "amountOut": null,
+          "effectiveMid": null
+        }
+      ],
+      "sourceTreeSha256": "1100ea59ded0a71cb59f0d6a60f89d0185b2aaa855762ea614c0258bc6224e62",
+      "sourceUnchanged": true,
+      "artifacts": [
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/ready.json",
+          "sha256": "bcf2f68513d70de8784f461c1940b0fd78c900179ef0a53031dd6e10deb85643"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/receipt.json",
+          "sha256": "c5c1995946639f37ef2716af64033a30359e7ec4f1fb5e75d8c55f56c9d0fdc6"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/header.json",
+          "sha256": "08eef866eb48fe888a33480e6d87d8c71472f31d84daedf375ead7334fa65ed5"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/ready-summary.json",
+          "sha256": "bd6dfb269c318119cb7d662f256a9748cf923e2e53c5138fb82e709c5538b546"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/prices/prices.json",
+          "sha256": "4bdfb0044998fa3cdb64c2b114396491570f0c6a684c34acda1244ea1ebea563"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/prices/input.json",
+          "sha256": "ebc6000e6c6b62a05cea8be528ad2088f1c2baeccd6afcc92840cb9efc741ef6"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/source-before.json",
+          "sha256": "39345a6735ef227ade40f707e9e5c17c2de26b29e3372aba91a7d65354ea0f03"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/source-after.json",
+          "sha256": "39345a6735ef227ade40f707e9e5c17c2de26b29e3372aba91a7d65354ea0f03"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/input-provenance.json",
+          "sha256": "9bab1c0ea4be32c94211af8cc6b9a1306883b382e610fb208573ba4c9cb9cf5a"
+        },
+        {
+          "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/result.json",
+          "sha256": "08573da4e52e174d866ac5fc54617c5af37347479c8965a0e7d978d561db9a30"
+        }
+      ]
+    }
+  ],
+  "referencePath": {
+    "block": 25936827,
+    "policy": "Existing successful forward effective input policy, max 3 hops; unchanged.",
+    "path": [
+      {
+        "pool": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+        "direction": "WETH->USDT",
+        "amountIn": "2000000000000000",
+        "amountOut": "4993281"
+      },
+      {
+        "pool": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "poolId": "0x6ce7522ac36dd88f82193f031e1f3214c9dff55a8634cdee35d2b163148d9154",
+        "direction": "USDT->xUSD",
+        "amountIn": "4993281",
+        "amountOut": "99278215"
+      },
+      {
+        "pool": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+        "direction": "xUSD->vgUSDC",
+        "amountIn": "99278215",
+        "amountOut": "871641832876"
+      }
+    ],
+    "interpretation": "Prior single-block acceptance scopes omitted the existing V4 Family valuation path. This supplement expands only the historical discovery scope; no central discovery, quote, amount policy, enable-default, or runtime behavior fix is claimed.",
+    "provenance": "Each amount is an actual quoted row at the same N/hash; no carried or external donor inputs used for these two directions. Cold source-N pass records carried=0."
+  },
+  "execution": {
+    "path": "logs/v3-reference-gap-20261010.OrsLv8/dual-N25936827-1.json",
+    "sha256": "0d69f3e1b11f2d4b4b49ccc8f9d6d492370e93c2c1a495b4ebe97173adea56a9",
+    "result": "pass",
+    "code": {
+      "headAtStart": "33df299ec202c868f4182baf42d70800939f9470",
+      "sourceSha256": "9a4d7c182fcdbbe0fe8a9a2d54020efad7ced819178fdf33d4eb541928c6269c",
+      "sourceTreeSha256": "1100ea59ded0a71cb59f0d6a60f89d0185b2aaa855762ea614c0258bc6224e62",
+      "fileCount": 1143,
+      "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+      "artifactSha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+      "familyDefinitionHash": "e515ffc67c8020c03125fc903784b9bc25787e48faef76af072d7569946ff84d",
+      "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+    },
+    "actor": {
+      "executor": "0x1000000000000000000000000000000000000002",
+      "owner": "0x1000000000000000000000000000000000000001"
+    },
+    "safety": {
+      "broadcast": false,
+      "signing": false,
+      "remoteSubmission": false,
+      "minedBlocks": 0,
+      "executionOverrides": "test actor code/native gas and actor ERC20 balances only; no pool/Vault/hook overrides"
+    },
+    "headerBefore": {
+      "number": 25936827,
+      "hash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+      "timestamp": 1788920903,
+      "baseFeePerGas": "0x29a6b0f"
+    },
+    "headerAfter": {
+      "number": 25936827,
+      "hash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+      "timestamp": 1788920903,
+      "baseFeePerGas": "0x29a6b0f"
+    },
+    "productionReferenceComplete": true,
+    "referenceGaps": [],
+    "runtimeConstructionRpcAttempts": 0,
+    "forkStopped": true,
+    "samples": [
+      {
+        "amountKind": "target-production-reference",
+        "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "amountIn": "871641832876",
+        "amountOut": "90539586",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "old-fragment",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "871641832977",
+                "after": "101",
+                "delta": "-871641832876"
+              },
+              "output": {
+                "before": "103",
+                "after": "90539689",
+                "delta": "90539586"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "871641832977",
+                "after": "101",
+                "delta": "-871641832876"
+              },
+              "output": {
+                "before": "103",
+                "after": "90539689",
+                "delta": "90539586"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          }
+        ]
+      },
+      {
+        "amountKind": "target-production-reference-half",
+        "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "amountIn": "435820916438",
+        "amountOut": "45271164",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "old-fragment",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "435820916539",
+                "after": "101",
+                "delta": "-435820916438"
+              },
+              "output": {
+                "before": "103",
+                "after": "45271267",
+                "delta": "45271164"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "435820916539",
+                "after": "101",
+                "delta": "-435820916438"
+              },
+              "output": {
+                "before": "103",
+                "after": "45271267",
+                "delta": "45271164"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          }
+        ]
+      },
+      {
+        "amountKind": "original-leg-amount-at-N-not-original-prestate",
+        "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "amountIn": "132890913",
+        "amountOut": "13804",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "old-fragment",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "132891014",
+                "after": "101",
+                "delta": "-132890913"
+              },
+              "output": {
+                "before": "103",
+                "after": "13907",
+                "delta": "13804"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "132891014",
+                "after": "101",
+                "delta": "-132890913"
+              },
+              "output": {
+                "before": "103",
+                "after": "13907",
+                "delta": "13804"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          }
+        ]
+      },
+      {
+        "amountKind": "original-leg-half",
+        "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "amountIn": "66445456",
+        "amountOut": "6902",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "old-fragment",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "66445557",
+                "after": "101",
+                "delta": "-66445456"
+              },
+              "output": {
+                "before": "103",
+                "after": "7005",
+                "delta": "6902"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "66445557",
+                "after": "101",
+                "delta": "-66445456"
+              },
+              "output": {
+                "before": "103",
+                "after": "7005",
+                "delta": "6902"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          }
+        ]
+      },
+      {
+        "amountKind": "target-production-reference",
+        "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "amountIn": "99278215",
+        "amountOut": "871641832876",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "old-fragment",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "99278316",
+                "after": "101",
+                "delta": "-99278215"
+              },
+              "output": {
+                "before": "103",
+                "after": "871641832979",
+                "delta": "871641832876"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "99278316",
+                "after": "101",
+                "delta": "-99278215"
+              },
+              "output": {
+                "before": "103",
+                "after": "871641832979",
+                "delta": "871641832876"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          }
+        ]
+      },
+      {
+        "amountKind": "target-production-reference-half",
+        "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "amountIn": "49639107",
+        "amountOut": "435835338830",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "old-fragment",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "49639208",
+                "after": "101",
+                "delta": "-49639107"
+              },
+              "output": {
+                "before": "103",
+                "after": "435835338933",
+                "delta": "435835338830"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "49639208",
+                "after": "101",
+                "delta": "-49639107"
+              },
+              "output": {
+                "before": "103",
+                "after": "435835338933",
+                "delta": "435835338830"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          }
+        ]
+      },
+      {
+        "amountKind": "original-leg-amount-at-N-not-original-prestate",
+        "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "amountIn": "15135",
+        "amountOut": "132890911",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "old-fragment",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "15236",
+                "after": "101",
+                "delta": "-15135"
+              },
+              "output": {
+                "before": "103",
+                "after": "132891014",
+                "delta": "132890911"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "15236",
+                "after": "101",
+                "delta": "-15135"
+              },
+              "output": {
+                "before": "103",
+                "after": "132891014",
+                "delta": "132890911"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          }
+        ]
+      },
+      {
+        "amountKind": "original-leg-half",
+        "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "amountIn": "7567",
+        "amountOut": "66441065",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "old-fragment",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "7668",
+                "after": "101",
+                "delta": "-7567"
+              },
+              "output": {
+                "before": "103",
+                "after": "66441168",
+                "delta": "66441065"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "7668",
+                "after": "101",
+                "delta": "-7567"
+              },
+              "output": {
+                "before": "103",
+                "after": "66441168",
+                "delta": "66441065"
+              }
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1788920903",
+                "0"
+              ]
+            ],
+            "oldInventoryConsumed": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "cumulativeRetainedCoverage": {
+    "prior": {
+      "path": "docs/research/reports/siusd-refresh-natural-reference-20261010.json",
+      "sha256": "ceb48fca6879ffc92be15c7d9884468f0229923d8eec07353a202d990546a5c3",
+      "cumulative": {
+        "measuredDirections": 36,
+        "referenceDirections": 33,
+        "totalDirections": 36,
+        "newReferenceDirectionsThisSupplement": 0
+      }
+    },
+    "measuredDirections": 36,
+    "referenceDirections": 35,
+    "totalDirections": 36,
+    "newReferenceDirections": 2,
+    "freshlyExecutedDirections": 2,
+    "note": "Cumulative coverage retains earlier reports under their own source/actor/harness bindings. This is not a new all-pool/current-source execution pass."
+  },
+  "remainingReferenceGap": {
+    "pool": "0x071828acc755314e687448703775f22194f56867",
+    "tokenIn": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+    "direction": "siUSD->sUSDe",
+    "block": 25944594,
+    "status": "missing-valuation",
+    "attempt": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1",
+    "reason": "Expanded whole-single-block scope adds V2/V4 but still provides no <=3-hop successful reference input for siUSD. Existing WETH->wstETH->crvUSD->sUSDe->siUSD path requires 4 hops. sUSDe direction remains quoted; both InfiniFi inputs also remain missing.",
+    "executionRerun": false,
+    "executionReason": "No new missing-direction production input was obtained; existing original-amount execution evidence is retained, not redundantly rerun or credited as production-reference coverage.",
+    "policyChanged": false,
+    "donorInput": "Previously searched saved donor tables lacked a siUSD tokenIn row; the prior borrowed iUSD deposit evidence does not supply a siUSD production-reference input."
+  },
+  "artifacts": [
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-balancer.log",
+      "sha256": "0b37ae2cb6ee5b097c3fe2fe3783586a58071492d86659b0a74e366ad612890a"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-dual.log",
+      "sha256": "53c631bfa1cc79006cd29cf5340dff70aaf7b5892b8e090168a3dc69e309210a"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-ready.log",
+      "sha256": "b1ca12663910f970bc3876916fcd25e9522d4864496f348a7d5682a1984b5035"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-ready-siusd.log",
+      "sha256": "0b2fe0f5f1e6bb215d193cd60ed6fc6099729c571d5ea3396605e4a34fa9d656"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-ready.json",
+      "sha256": "c0079f2288dac8f7de69dad8deb0a8a4337bf23efdf3b06f4c7f0a8308e3513f"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-dual.json",
+      "sha256": "36644ea5916720900ed926c0e1b8ac3d0606b71848f56b62ecac33d7d58ff81d"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-dual.log",
+      "sha256": "7a6714e8d0ff7eff9a6825e397fdb675dacdd94cf5f438600281c2c01260fcf4"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/token-surface.json",
+      "sha256": "f53ba8a4553810b4e5ae52a855b2aee5e39a34e4927209a62aacc489b3df813d"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/token-surface.mts",
+      "sha256": "b01a78a4306b1ed4e796e089402a23ffba5116afb48ce21eadf8b576b601f38e"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/dual-N25936827-1.log",
+      "sha256": "863edd433b2350e34ea22fbbdc6bc0bd00a4b826075360beb69553f98e04cd47"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-dual-corrected.json",
+      "sha256": "dfdb94bea70633db8ea3df6bb8d735a99d4a98cc3f74a9625da0ae9f2f19e44d"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-balancer-corrected.log",
+      "sha256": "63974115a184fb7ab5a7fc514d6165b530c5f134e6b1e5a54733377eecb32998"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-dual-corrected.log",
+      "sha256": "a0af689b80da6138d6df50ab1edb303e7be88e99a6bb6c92c0120f04c18ad56b"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/build-live.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/verify-evidence.log",
+      "sha256": "66fe36e5d0cb217388b68d9ef6cd62b5c9c43aa89c8a586d44b0867875fee490"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/verify-supplement.mjs",
+      "sha256": "31bfb8185b3e0a88bc8fcf2734bfc29c7bdb0d7923575e9758e1bc9ee68b9f4d"
+    },
+    {
+      "path": "logs/v3-reference-gap-20261010.OrsLv8/tool-test.patch",
+      "sha256": "f7f39ff7e26c9b2c5d151542f41aefe9b7ad9fa757dff90574145641195e8b20"
+    }
+  ],
+  "correctnessBoundaries": {
+    "noHandInjectedCandidatesOrEdges": true,
+    "originalReadyUnchanged": true,
+    "sourceUnchangedDuringEachRun": true,
+    "quoteVersusObservedDelta": "0 for all 16 executions",
+    "runtimeConstructionRpcAttempts": 0,
+    "missingInputNegativeControls": "Not newly run by this V3 historical harness; prior offline safety tests are separate evidence.",
+    "wholeGraphPricing": "Both runs retain 6 missing-valuation background/target rows; READY/complete does not mean all rows priced.",
+    "originalTransactionPrecall": "NOT RUN; original amounts were executed at N block-end, not original transaction pre-call state.",
+    "fullRouteSimSizingFinalEv": "NOT RUN"
+  },
+  "toolReconciliation": {
+    "status": "Legacy invocation defect corrected and independently reviewed; original failure preserved.",
+    "queries": [
+      [
+        "universe",
+        "rebuild",
+        "status"
+      ],
+      [
+        "balancer",
+        "dual"
+      ]
+    ],
+    "unindexedQuery": {
+      "capabilities": [
+        "balancer-v3",
+        "dual"
+      ],
+      "result": "No tool covered literal balancer-v3; failed selection retained in tools-dual.log."
+    },
+    "historicalRunner": "Executed directly using existing Family historical-runtime-dual.ts; no package-index receipt is claimed for that historical call.",
+    "readyStatus": "Two canonical executions exit 0; agree with actual candidate accounting and Graph. No price-completeness inference.",
+    "dualRegression": "80/80 offline contracts passed; not historical EVM or opportunity evidence.",
+    "legacyBalancerFailure": "Original canonical exit 1 retained. Obsolete no-session positive invocation is now a precise rejection test. Canonical entrypoint also executes existing production Family quoted positive/negative contracts and runtime construction-shape checks; these remain fixture-only.",
+    "manifests": [
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-ready.json",
+        "sha256": "c0079f2288dac8f7de69dad8deb0a8a4337bf23efdf3b06f4c7f0a8308e3513f",
+        "query": [
+          "universe",
+          "rebuild",
+          "status"
+        ],
+        "executions": [
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:universe-rebuild-status",
+            "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+            "started_at": "2026-10-10T10:24:00.471Z",
+            "finished_at": "2026-10-10T10:24:00.707Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "f31a45c264cd90933694e92191da24153d85388b745a7da9382d3755bd6b008f",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:universe-rebuild-status",
+              "--",
+              "--checkpoint",
+              "/opt/mev-cloud/family-runtime-20261007/logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/ready.json",
+              "--json"
+            ],
+            "stdout_sha256": "f9a3cfe70a7014b7509e09354c31eb51b359567e371067eb69c4c9215ea61acd",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 935597,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:universe-rebuild-status",
+            "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+            "started_at": "2026-10-10T10:35:23.860Z",
+            "finished_at": "2026-10-10T10:35:24.090Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "b6241ec32f5bafe223fe899293c897b57cf243d0088ffa82570c884fe5cd79df",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:universe-rebuild-status",
+              "--",
+              "--checkpoint",
+              "/opt/mev-cloud/family-runtime-20261007/logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/ready.json",
+              "--json"
+            ],
+            "stdout_sha256": "651c8bb14af3b307fe4281d950891e716cee7d58548e22cc89ceb9e5c4c4593c",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 785541,
+            "stderr_bytes": 0
+          }
+        ]
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-dual.json",
+        "sha256": "36644ea5916720900ed926c0e1b8ac3d0606b71848f56b62ecac33d7d58ff81d",
+        "query": [
+          "balancer",
+          "dual"
+        ],
+        "executions": [
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:balancer-v3",
+            "descriptor_sha256": "8db742bc8df4e26e65a482ff85fa14935fa3aecd22c2d1d9e1eeafe07505c4ec",
+            "started_at": "2026-10-10T10:27:08.277Z",
+            "finished_at": "2026-10-10T10:27:08.711Z",
+            "exit_code": 1,
+            "cwd": "listener",
+            "argv_sha256": "93118b6afef48a607a0346ec27c60c7b935ba3e73b78aaf19962c8e9af67142f",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:balancer-v3",
+              "--"
+            ],
+            "stdout_sha256": "e3f2d34255406c4146c7a2e5b150f77d7d2c0f54cd45402c57925c104d6d898d",
+            "stderr_sha256": "5fc4d3c2c596cadd1134cc00b679fdaaee7bdddf4996b531f24173ea9c2ac479",
+            "stdout_bytes": 97,
+            "stderr_bytes": 594
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:family-dual-execution",
+            "descriptor_sha256": "18a05f45ebf5c24dd895c571415f2842a221754f4b5a8f560fa79336b4f51a6d",
+            "started_at": "2026-10-10T10:27:08.971Z",
+            "finished_at": "2026-10-10T10:27:14.177Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "87c64f0c555bd8d1673f2810e50ff252c46e517a3815f0746d0960878f14f2d9",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:family-dual-execution",
+              "--"
+            ],
+            "stdout_sha256": "189c5a5b6c45cc3e53c582cb0da010e8a78aa7a9a9b7363bfa2e15fdff96e253",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 9849,
+            "stderr_bytes": 0
+          }
+        ]
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-dual-corrected.json",
+        "sha256": "dfdb94bea70633db8ea3df6bb8d735a99d4a98cc3f74a9625da0ae9f2f19e44d",
+        "query": [
+          "balancer",
+          "dual"
+        ],
+        "executions": [
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:balancer-v3",
+            "descriptor_sha256": "8db742bc8df4e26e65a482ff85fa14935fa3aecd22c2d1d9e1eeafe07505c4ec",
+            "started_at": "2026-10-10T10:47:39.551Z",
+            "finished_at": "2026-10-10T10:47:40.679Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "93118b6afef48a607a0346ec27c60c7b935ba3e73b78aaf19962c8e9af67142f",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:balancer-v3",
+              "--"
+            ],
+            "stdout_sha256": "e37861276a8eae83c6551d964018f6d5ced2477d4907426e777d974349e516b9",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 2118,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:family-dual-execution",
+            "descriptor_sha256": "18a05f45ebf5c24dd895c571415f2842a221754f4b5a8f560fa79336b4f51a6d",
+            "started_at": "2026-10-10T10:49:09.201Z",
+            "finished_at": "2026-10-10T10:49:14.435Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "87c64f0c555bd8d1673f2810e50ff252c46e517a3815f0746d0960878f14f2d9",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:family-dual-execution",
+              "--"
+            ],
+            "stdout_sha256": "cbf36889856a92f8e5840caaf76c7d252e2a55c571ee7a05aea067f73602de23",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 9848,
+            "stderr_bytes": 0
+          }
+        ]
+      }
+    ],
+    "correctedResults": {
+      "legacyAndFamilyContractTests": {
+        "pass": 16,
+        "fail": 0,
+        "skipped": 0,
+        "breakdown": "1 legacy file-level test plus 15 Family contracts; no planner/Funding positive or historical claim"
+      },
+      "familyDualExecution": {
+        "pass": 80,
+        "fail": 0,
+        "skipped": 0,
+        "scope": "Existing offline production sim-construction and execution contract tests, not historical EVM sizing"
+      },
+      "buildLive": {
+        "exitCode": 0
+      },
+      "toolSource": [
+        {
+          "path": "listener/src/searcher/test/balancer-v3.ts",
+          "sha256": "6b897a73921c024a834749db46125d2f87c130a2f28db50848d1f746c9e8b8cd"
+        },
+        {
+          "path": "listener/package.json",
+          "sha256": "1e438e9972d25a8e0adec3b7b30ed85a485a82378ad65bc6f7eed64818ee26c1"
+        }
+      ],
+      "productionSourceTreeAfterCorrection": "1100ea59ded0a71cb59f0d6a60f89d0185b2aaa855762ea614c0258bc6224e62",
+      "patchSha256": "e4fea5359d5f2b9cbc9c67b53727370f83a8422ad09d94f1ccfeb5f23c1b894e"
+    }
+  },
+  "performance": {
+    "status": "NOT RUN",
+    "requiredScope": "All applicable existing/future IMPL protocol adaptations and repairs, plus DeepSeek/self-owned families; includes Balancer V2/V3 and Curve plain/underlying.",
+    "order": "After correctness, per-family real single-block Ready first, representative combined large graph second.",
+    "standard": "Default 3 representative changed blocks x3 medians; unchanged/unrelated controls, preparation separate, failures preserved, predeclared budget and production stage/drain boundaries; no automatic live."
+  },
+  "safety": {
+    "liveStarted": false,
+    "deployment": false,
+    "signing": false,
+    "broadcast": false,
+    "newBranchOrWorktree": false,
+    "originalCoffeeReadyChanged": false,
+    "peerTrackedFilesPreserved": 24,
+    "forkStopped": true
+  },
+  "review": {
+    "status": "passed-narrow-scope",
+    "agent": "01a1255f-fe75-7432-abb0-41ce7fccc732",
+    "rounds": 2,
+    "historicalChecks": [
+      "Recomputed all 16 input/output balances directly from raw stateDiff actor slots; exact spend and quote/output equality",
+      "Decoded all 16 Router calls and transfers; verified pool, tokens, amount, receiver and no recorded call errors",
+      "Verified N/hash/environment and Ready/prices/input/receipt hashes; target pricing provenance refreshed"
+    ],
+    "toolChecks": [
+      "Reviewed only two-file test/package correction; production plan-builder unchanged",
+      "Recomputed output hashes and byte counts for new canonical and dual receipts",
+      "Original exit-1 receipt and log remain unchanged"
+    ],
+    "remainingBlockingFindings": [],
+    "notReviewed": [
+      "This reviewer did not re-run historical EVM or authenticate the entire 1143-file/executor build closure",
+      "Main agent's saved-output +/-1 mutation check is separate from the independent review",
+      "No performance or complete planner/Funding/route verdict"
+    ]
+  },
+  "limitations": [
+    "No representative performance, 3x3 timing, live tail-latency or complete adaptation verdict.",
+    "Token surface probe is diagnostic only, not new identity/admission evidence.",
+    "Current source has not rerun all retained historical Family results.",
+    "No formal adapter_merge_ready or production_gap_fixed verdict."
+  ],
+  "toolingCorrectionCommit": "d5a1759cbcb609fc0a4d845dccc89b14bee40248",
+  "savedEvidenceVerification": {
+    "result": "pass",
+    "independentStorageDeltaChecks": 16,
+    "wrongExpectedOutputNegativeControls": [
+      "plus-one-rejected",
+      "minus-one-rejected"
+    ],
+    "artifactHashChecks": 1,
+    "claim": "Saved evidence verification only, not new EVM or production negative-control execution"
+  },
+  "executionLimitations": [
+    "Historical runtime minimum output was 1; success alone does not prove repayment or full route safety. Acceptance here requires independently measured output equal to quote.",
+    "Runtime construction RPC count 0 does not alone prove every Exact entry is poisoned. Offline 80-test evidence is separate.",
+    "Missing-input/atomic failure negative cases were not newly run by this V3 historical harness."
+  ]
+}

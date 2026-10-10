@@ -1,0 +1,70 @@
+{
+  "divergence_id": "balancer-v3-legacy-strict-test-20261010",
+  "kind": "tooling_defect",
+  "status": "closed-scoped-legacy-invocation",
+  "tool": "listener:searcher:balancer-v3",
+  "capability": "balancer",
+  "codify_commit": "d5a1759cbcb609fc0a4d845dccc89b14bee40248",
+  "realized_false_positive": "The indexed legacy test invoked current buildResolvedPlanFromPath without a strictSession or Exact handles and expected the retired unlock tree. The current strict gate correctly rejected it; this failure is not evidence that the production Family is broken.",
+  "repair": "Keep the legal-length no-session invocation as an awaited exact-error rejection; label manually authored Graph/stub quote checks as legacy compatibility only. Run the existing current Family contract suite in the same fail-closed node --test package entrypoint. No production gate or runtime behavior changed.",
+  "regressions": {
+    "sources": [
+      {
+        "path": "listener/src/searcher/test/balancer-v3.ts",
+        "sha256": "6b897a73921c024a834749db46125d2f87c130a2f28db50848d1f746c9e8b8cd"
+      },
+      {
+        "path": "listener/package.json",
+        "sha256": "1e438e9972d25a8e0adec3b7b30ed85a485a82378ad65bc6f7eed64818ee26c1"
+      }
+    ],
+    "before": "logs/v3-reference-gap-20261010.OrsLv8/canonical-balancer.log",
+    "after": "logs/v3-reference-gap-20261010.OrsLv8/canonical-balancer-corrected.log",
+    "result": "16 passed, 0 failed, 0 skipped (1 legacy file plus 15 Family contracts); common family-dual 80/80 and production build passed",
+    "controls": [
+      "Missing session rejects with exact required error and must be awaited",
+      "Normal return or unrelated throw fails that assertion",
+      "Node test runner fails overall if either test file fails"
+    ],
+    "boundaries": "Family contract runtime checks are construction shape, not runtime-specific failure/EVM or no-Exact proof. No successful strict planner/Funding claim."
+  },
+  "independent_review": {
+    "agent_id": "01a1255f-fe75-7432-abb0-41ce7fccc732",
+    "verdict": "No blocking finding on scoped two-file correction and preserved execution receipts",
+    "reviewed_diff_sha256": "e4fea5359d5f2b9cbc9c67b53727370f83a8422ad09d94f1ccfeb5f23c1b894e"
+  },
+  "learning_case": {
+    "learning_case_id": "tooling-balancer-v3-legacy-strict-test-20261010",
+    "status": "manual_required",
+    "strategy_kind": "unknown",
+    "edge_kinds": [
+      "swap"
+    ],
+    "trigger": "competitor_not_seen",
+    "competitor_tx": "0x1b474eb9c6da5bd400c4a20c0d029a039cb6d509df756140b3e09e42374845e3",
+    "target_block": 25936827,
+    "comparable": false,
+    "primary_gap": "manual_required",
+    "gap_detail": "Tooling-only closure during same-state Family acceptance; opportunity classification and production route outcome remain unverified.",
+    "evidence": {
+      "report": "docs/research/reports/balancer-v3-v4-natural-reference-20261010.json",
+      "execution_manifest": "logs/v3-reference-gap-20261010.OrsLv8/tools-dual-corrected.json",
+      "preserved_transition": "Legacy canonical exit1 retained; corrected explicit compatibility/strict rejection plus current Family contracts exit0"
+    },
+    "tooling_defect": {
+      "tool": "listener:searcher:balancer-v3",
+      "issue": "Legacy test wrongly expected successful planning without mandatory current strict evidence.",
+      "evidence": "Preserved failure, current gate source and fresh non-author review agree; corrected test and canonical receipt passed.",
+      "codify_target": "listener/src/searcher/test/balancer-v3.ts and listener/package.json",
+      "codify_commit": "d5a1759cbcb609fc0a4d845dccc89b14bee40248",
+      "status": "codified"
+    },
+    "created_at": "2026-10-10",
+    "updated_at": "2026-10-10"
+  },
+  "exclusions": [
+    "No change to or bypass of strict session/Exact/Funding guards.",
+    "No adapter_fixed/adapter_merge_ready/production_gap_fixed/performance verdict.",
+    "Scoped LearningCase is filed here; shared learning store unchanged."
+  ]
+}
