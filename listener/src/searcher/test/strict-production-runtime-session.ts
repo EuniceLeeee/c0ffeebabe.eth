@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
+import { identityAssetRequestId } from "../identity-asset-metadata.js";
 import {
   buildFamilyRouteGraphView,
 } from "../adapter-family-graph-runtime.js";
@@ -524,7 +525,73 @@ async function awaitPreparationGate(promise: Promise<unknown>, label: string) {
 // A single physical Fluid DEX instance owns one pricing state per direction.
 // The strict session must preserve those route-local state identities instead
 // of rejecting the instance as internally contradictory.
-const fluidPublication = await runFluidDexLifecycle(STARTUP);
+const fluidIdentityRuntime = fluidDexFixtureRuntime();
+const fluidIdentityRounds: (readonly AdapterRequest[])[] = [];
+const issueFluidIdentityExecutor = fluidIdentityRuntime.scheduler.issueExecutor.bind(
+  fluidIdentityRuntime.scheduler,
+);
+const fluidPublication = await runFluidDexLifecycle(STARTUP, undefined, {
+  ...fluidIdentityRuntime,
+  scheduler: {
+    issueExecutor(input) {
+      assert.deepEqual(input.source, STARTUP, "Fluid metadata stays source-bound");
+      fluidIdentityRounds.push(input.requests);
+      return issueFluidIdentityExecutor(input);
+    },
+  },
+});
+assert.deepEqual(
+  fluidIdentityRounds
+    .find((round) => round.some((request) => request.id === "factory-reverse-dex"))!
+    .map((request) => request.id),
+  [
+    "factory-reverse-dex",
+    identityAssetRequestId("token0", "code"),
+    identityAssetRequestId("token0", "decimals"),
+    identityAssetRequestId("token1", "code"),
+    identityAssetRequestId("token1", "decimals"),
+  ],
+  "Fluid lifecycle consumes common metadata in the reverse-binding round",
+);
+assert.equal(fluidPublication.instances.length, 1);
+assert.equal(fluidPublication.instances[0]!.routes.length, 2);
+for (const fault of ["missing", "malformed", "wrong-source"] as const) {
+  const fixture = fluidDexFixtureRuntime();
+  let corrupted = 0;
+  const badMetadataRuntime: CentralAdapterRuntime = {
+    ...fixture,
+    scheduler: {
+      issueExecutor(input) {
+        const issued = fixture.scheduler.issueExecutor(input);
+        return {
+          ...issued,
+          executor: createBoundedRequestExecutor({
+            ...issued.executor,
+            async execute(execution) {
+              const results = await issued.executor.execute(execution);
+              return results.flatMap((result): AdapterRequestResult[] => {
+                if (result.id !== identityAssetRequestId("token1", "decimals")) {
+                  return [result];
+                }
+                assert(result.ok, "negative control corrupts successful metadata");
+                corrupted++;
+                if (fault === "missing") return [];
+                if (fault === "malformed") return [{ ...result, data: "0x" }];
+                return [{ ...result, source: { ...STARTUP, hash: WRONG_HASH.hash } }];
+              });
+            },
+          }),
+        };
+      },
+    },
+  };
+  await assert.rejects(
+    () => runFluidDexLifecycle(STARTUP, undefined, badMetadataRuntime),
+    { name: "AssertionError", message: /result\.publication/ },
+    `Fluid cannot publish with ${fault} asset metadata`,
+  );
+  assert.equal(corrupted, 1, `${fault} control must reach the real metadata request`);
+}
 const fluidFamily = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
   fluidPublication.familyId,
 );
