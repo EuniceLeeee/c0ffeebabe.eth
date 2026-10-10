@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-11",
+  "scope": "Existing each-block pricing policy versus permanent effective failure exclusions; generic shared coordinator correctness and test wiring only.",
+  "verdict": "implemented; bounded offline production-wiring regressions passed; not systemic-live, adapter_fixed, family_local or latency acceptance",
+  "cloud": {
+    "vm": "mev-impl-c4d-20261002",
+    "zone": "us-east1-b",
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "baseCommit": "ddda576f09b22c8517c08c218b4397456e6d277d",
+    "codifyCommit": "de74bef77dcd9d41fd44b48919555667381f8c01",
+    "workingTree": "Shared dirty checkout. Existing main/Ready/Univ1/generated changes excluded from this change; not a clean-HEAD test baseline.",
+    "unrelatedNonGeneratedDiffSha256": "98c67fbc9b8f33d2311b2d7824e60028e10d1348b6061ce53f0860a799b79776"
+  },
+  "finding": {
+    "production": "A complete all-directions amount failure permanently excluded even instances declared each-block. The effective builder then skipped them before quoting, so later source-state recovery could not restore a valid price.",
+    "harness": "InfiniFi recovery test forwarded previous/touched/quoteGraph but omitted production reuse.disabledEdgeIds. Its earlier recovery PASS did not exercise production exclusion policy and is superseded for that claim.",
+    "change": "A state key declared each-block vetoes new permanent exclusion for its entire instance. Current failed prices remain unavailable. Other instances retain existing all-direction failure exclusions across touched events, reset and reorg. No family-ID/revert-reason branches or new scheduling/budget/default policies.",
+    "affectedExamples": ["InfiniFi Gateway variant of ERC4626", "Yearn auction (default disabled)"],
+    "notChanged": ["Family quote/execution math", "Ready identity/admission", "final simulation/repayment/conservation", "concurrency/deadlines", "activation defaults"]
+  },
+  "evidenceRoot": "logs/effective-recovery-20261011.kMOklL",
+  "before": [
+    { "file": "infinifi-wired-baseline.log", "sha256": "7dfae815ed3eb1317eb7aa8ad99c4ae76e378f69dd03ca87fef9d2ebf562308b", "exitCode": 1, "passed": 11, "failed": 1, "failure": "Second failing source had 0 aggregate3 calls instead of 4 centrally bounded retry attempts." },
+    { "file": "recovery-baseline-v3.log", "sha256": "353e07428efafd2148009ac3f595bb908c798dc6d4fafe4ac80583602eafb229", "exitCode": 1, "passed": 15, "failed": 14, "failure": "12 generic dynamic/mixed-key cases and 2 Yearn coarse/runtime cases stop at permanent exclusion; 15 atomicity cases pass." }
+  ],
+  "regressions": {
+    "script": "listener:searcher:strict-effective-failure-recovery",
+    "initialCandidate": { "file": "recovery-candidate-1.log", "sha256": "afef88ace8cd8d952729c8a09bf676f52ca15db09e81368f5403f568841abe54", "exitCode": 0, "passed": 41, "failed": 0 },
+    "generic": "27 cases: coarse and full runtime; both edge orders; actual lifecycle-issued dynamic, mixed dynamic/static pricing-key and static instances; quote-failed/unsupported/no-output; repeated failures then one/both-direction recovery; static exclusions survive touched/reset; failed/incomplete/wrong number/hash/generation/aborted/canonical-recheck/superseded/reset drafts cannot commit exclusions or stale tables.",
+    "yearn": "2 cases through real lifecycle, root, Exact, coordinator and effective builder: active -> empty -> repeated empty -> re-kick -> expired -> repeated expired -> re-kick. Synthetic chain/effect responses; unrelated valuation pools carry. Default disabled remains unchanged.",
+    "infinifi": "12 existing tests including corrected production disabledEdgeIds forwarding; repeated transport failure, pause/role/loss/binding-change withdrawal and valid recovery; unrelated pools carry.",
+    "fixtureSourceChange": "After red/green runs, new test providers gained throwing getCode/getStorage stubs to satisfy StrictProvider typing. They add no successful read behavior; final rerun/review binds the updated files.",
+    "initialSetupFailures": "recovery-old-coordinator.log and recovery-baseline-v2.log retained: no-output legitimately records amountOut=0; Yearn needed the full installed test catalog and declared synthetic executor-program hash. These setup failures are not claimed as production defects."
+  },
+  "validation": {
+    "buildLive": { "file": "build-live.log", "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933", "exitCode": 0 },
+    "targetedTypecheck": { "file": "typecheck-2.log", "sha256": "ddfd06c2b8fa8c105b276861144f7a5641984308cc1eb84ffded62ffd2e7165f", "exitCode": 2, "newDiagnostics": 0, "preexisting": "3 transitive bigint diagnostics: kyber-yb-compound/historical-dual.ts:326 and ekubo-family/test/history-evidence.ts:53,59; byte-identical to typecheck-existing-entry.log using unchanged existing InfiniFi historical entrypoint." },
+    "broadSuiteLimitation": { "file": "shared-static-baseline.log", "candidateFile": "shared-static-candidate.log", "bothSha256": "5200bf6c7551072bb46476dbc16c4d06442afdfeb44d3bd35ef9765403a2ac3a", "exitCode": 1, "finding": "Pre/post patch shared-dirty working-tree strict-production-runtime-session fails at the identical Fluid fixture publication (architecture-migration-fixture-replay.ts:9442, test:527), before policy cases. Root cause not diagnosed here. Focused PASS does not replace broad-suite acceptance." },
+    "finalRun": { "file": "tool-run-recovery-final.log", "sha256": "c79ab030475f979712225097309205fdde711883b683c5587a90dff5e4693e5d", "exitCode": 0, "passed": 41, "failed": 0, "executionManifest": "tools-recovery.json", "manifestSha256": "2ad7b4d85fbd08d8d385f3f2ee845c3e2fd286a1fba40088bc48270ccbcbfc23" },
+    "relatedChecks": [
+      { "file": "central-runtime.log", "script": "searcher:strict-central-adapter-runtime", "exitCode": 0 },
+      { "file": "exact-cache.log", "script": "searcher:adapter-family-exact-quote-cache", "exitCode": 0 },
+      { "file": "yearn-contract.log", "fileUnderTest": "yearn-auction-family/test/contract.ts", "exitCode": 0, "passed": 18 }
+    ],
+    "toolReconciliation": { "query": ["strict", "effective", "failure", "recovery"], "selected": ["listener:searcher:strict-effective-failure-recovery"], "manifest": "tools-recovery.json", "manifestSha256AtFirstRun": "b60373aa6804bfa099d8c30092886cccecd6d413544cb91f0ab5e839d11c351f", "receiptLog": "tool-run-recovery.log", "exitCode": 0, "result": "Manual omission/retirement finding agrees with red and green production-wiring contract runs. Related runtime/session/strict tools inspected; broad baseline failure preserved. Tool catalog class replay means offline contract here, not EVM replay." }
+  },
+  "independentReview": {
+    "reviewer": "James / 01a1272c-d7f4-7790-a183-0ec9d094348e",
+    "passes": 2,
+    "verdict": "No blocking finding in bounded shared-coordinator synthetic correctness. Not systemic-live, real-chain recovery, broad-suite or performance acceptance.",
+    "executed": "Registered zero-CU suite 41/41 PASS, no skips; 14 source/tool hashes unchanged before/after.",
+    "run": "review-pass2.6HxXl5/recovery.log",
+    "runSha256": "c1d1be6a5c1222bfc6e438f012ac7b66feb32249089c2f084db2a3bcd5e0d987",
+    "manifest": "review-pass2.6HxXl5/tools.json",
+    "manifestSha256": "50d673dcc628945d6e42c027560b2b8d54a6876cbbbbc0fe1d29dcfdf075610a",
+    "limits": "Reviewer ran no build, RPC, EVM or process control. Production callback inspected is listener/src/searcher/main.ts:1290 (review message file-link omitted searcher; this is the actual path)."
+  },
+  "limits": [
+    "No new historical RPC/EVM, natural Ready/effective publication or real-chain failure/re-kick evidence in this patch.",
+    "Prior same-state historical execution and adjacent-block whole-quote cache evidence remain separate, not invalidated or expanded by this synthetic recovery contract.",
+    "Systemic production/live acceptance and formal Adapter Replay/merge verdict NOT RUN.",
+    "All applicable existing/new IMPL adaptations still require single-Ready timing then representative combined large-graph timing, after remaining correctness work. Balancer V2/V3 and Curve plain/underlying are included. Timing NOT RUN; no speedup claim.",
+    "No live/deployment/default activation/signing/broadcast or original Ready/checkpoint changes."
+  ]
+}

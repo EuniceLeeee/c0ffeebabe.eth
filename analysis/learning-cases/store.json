@@ -964,6 +964,37 @@
       },
       "created_at": "2026-10-09T19:35:00.000Z",
       "updated_at": "2026-10-09T19:35:00.000Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261011-infinifi-effective-disabled-wiring",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": ["protocol"],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "offline_infinifi_recovery_harness_omitted_production_run_exclusions",
+      "evidence": {
+        "scope": "Offline test-wiring defect and bounded shared-coordinator regression, not a competitor loss, historical recovery or systemic-live verdict.",
+        "report": "docs/research/reports/effective-failure-recovery-20261011.json",
+        "before": "logs/effective-recovery-20261011.kMOklL/infinifi-wired-baseline.log",
+        "beforeSha256": "7dfae815ed3eb1317eb7aa8ad99c4ae76e378f69dd03ca87fef9d2ebf562308b",
+        "after": "logs/effective-recovery-20261011.kMOklL/tool-run-recovery-final.log",
+        "afterSha256": "c79ab030475f979712225097309205fdde711883b683c5587a90dff5e4693e5d",
+        "finding": "Production main forwards reuse.disabledEdgeIds, but the InfiniFi test omitted it. Wire-only correction changes old 12/12 to 11/12 with no quote on a repeated failing source; old recovery-PASS claim withdrawn.",
+        "regression": "Corrected InfiniFi production callback, 27 shared policy/atomicity cases and 2 Yearn each-block cases: final 41/41 pass. Generic fix exempts declared each-block pricing keys from new instance-wide permanent exclusion, without weakening failed-price withdrawal or static exclusions.",
+        "independentReview": "James non-author pass2 independently reran registered suite 41/41, checked14 unchanged source/tool fingerprints and confirmed narrow defect. Broad Fluid fixture failure and preexisting3 type diagnostics preserved. Performance NOT RUN."
+      },
+      "tooling_defect": {
+        "tool": "erc4626-family/test/infinifi-contract.ts production coordinator recovery case",
+        "issue": "Omitted reuse.disabledEdgeIds from buildEffectiveMids, allowing false recovery PASS while production permanently excluded each-block instances after completed all-direction failure.",
+        "evidence": "Wire-only failure, prior production callback comparison, shared/Yearn red-to-green tests and independently executed final41/41 suite.",
+        "codify_target": "infinifi-contract.ts complete production forwarding; strict-effective-failure-recovery.ts and yearn-auction-family/test/refresh.ts prevent regression; generic coordinator respects existing each-block contract.",
+        "codify_commit": "de74bef77dcd9d41fd44b48919555667381f8c01",
+        "status": "codified"
+      },
+      "created_at": "2026-10-10T19:18:01.000Z",
+      "updated_at": "2026-10-10T19:18:01.000Z"
     }
   ]
 }

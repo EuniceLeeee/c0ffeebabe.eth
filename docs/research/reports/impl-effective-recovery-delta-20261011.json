@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-11",
+  "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "188048ee92693238132a150ecc84edf744b32370e2fa0ba44a6e12f543b29583",
+  "afterSha256": "e6e033d1350c2e673578fa093b471ced178509d4d405e657bd0b67edc932b35e",
+  "codifyCommit": "de74bef77dcd9d41fd44b48919555667381f8c01",
+  "changes": [
+    {
+      "line": 35,
+      "note": "<br>**2026-10-11 恢复验收更正（`de74bef7`）：** 前述 `62207b52` 的恢复测试漏传生产停用清单，原恢复PASS撤回。现由通用协调器保留逐块刷新实例的重试资格、失败仍撤价，静态停用不变；InfiniFi／Yearn及共用回归41/41，独立复跑也通过。仅离线生产接线；历史恢复、缺参考额与全部单块Ready／组合大图时效性仍未验。[更正与回归证据](/Users/eunice/src/MEV/logs/effective-recovery-20261011.kMOklL/acceptance.json)。"
+    },
+    {
+      "line": 40,
+      "note": "<br>**2026-10-11 Yearn恢复接线补验（`de74bef7`）：** 修复共用协调器将逐块刷新实例永久停用的问题；真实生产生命周期／Exact／effective接线的合成测试覆盖空仓、过期、连续失败与重新开拍恢复，coarse及完整runtime均通过，无关池复用。仅离线恢复证据，不替代真实链上重新开拍、自然估值或完整闭环；默认仍关闭。**本族及全部IMPL适配／修复协议的单块Ready和组合大图时效性仍未测。** [回归与限制](/Users/eunice/src/MEV/logs/effective-recovery-20261011.kMOklL/acceptance.json)。"
+    }
+  ],
+  "scope": "Only append corrections/progress to existing rows. No new table; prior historical evidence and all other rows preserved. All-Family timing requirement at line3 unchanged."
+}
