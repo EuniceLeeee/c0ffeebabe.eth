@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-10",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "parentCommit": "0299d0b2e0f05cb19721ad0f167e8fded2a68339",
+  "codifyCommit": "7d8c8ce1fb376a7a3d0b911165f25717eb1ee2d9",
+  "family": "protocol:ethertoken-native-redeem",
+  "status": "natural-strict-graph-raw-verified; production-reference-and-migrated-dual-incomplete",
+  "claim": "Fresh same-N production discovery and strict admitted the historical EtherToken; the published graph contains its redemption edge and raw mid. Production effective correctly remains missing-valuation in this snapshot. This does not validate the migrated quoted/runtime programs, original opportunity or latency.",
+  "productionCodeChanged": false,
+  "sourceBinding": {
+    "productionSourceTreeSha256": "a226dcc2fd5082cfa1938e667fe9da07ae661e88fff3397383bac27b27251671",
+    "familyMemoDefinitionHash": "3328cf98029c599fa5404919088a1adb19270bc8f8e82307f0e8b10ea38ffb83",
+    "memoFingerprint": "f26cb9e73a6464026377585ef9a8fcaa9c06d7f7d2bd174ccaf2eab37ae99d79",
+    "executedReady4HarnessSha256": "51bd64ceed27888fdeebf34e657a34bf9a909441db08a13df6c9d97a82effffb",
+    "finalHarnessSha256": "1ff742cc9587319045d6296a056f377810cf60521eaed6c2936df4097350de82",
+    "finalObserverTestsSha256": "24dbf857f580c48cd9ff980166598468159bcf57a3a1cf982608ef50fd932f5e",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "limits": "Production source includes preserved peer Ready/TX/Uniswap V1 changes. Only the opt-in CLI, observer tests and package entry belong to this increment. Final post-run changes add null/TX-subset rejection and TypeScript fixture annotations; they do not change production discovery, strict, graph or prices. Final input guards are checked offline against the saved Ready; no later fresh EVM execution is claimed."
+  },
+  "anchor": {
+    "transaction": "0xdf54ad38d4b812c4ab23ba6225543caaa433897f9454414c70bf7fda1290694e",
+    "N": 25648967,
+    "blockHash": "0x65058fd339c9dbdabc378620f354a7e48b2dfae2df896536c985885f66085c1d",
+    "instance": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+    "originalBurnedAmount": "1056367846106427",
+    "receiptObservation": "Destruction(uint256) with one topic; this is historical event provenance, not original pre-call replay",
+    "stateAndEnvironment": "N end-state and N execution environment",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "origin": "0x1000000000000000000000000000000000000001"
+  },
+  "evidenceRoot": "logs/ethertoken-native-historical-20261010.Njode0",
+  "naturalReady": {
+    "discoveryScope": ["protocol:ethertoken-native-redeem", "protocol:astra-multitoken", "univ2-standard"],
+    "scope": "Full N block through existing discovery and attestation, not TX-only observation; expected token is an output assertion, not a candidate seed",
+    "original": "single-N25648967-2/ready.json",
+    "readOnlyCopy": "single-N25648967-4/ready.json",
+    "bothSha256": "4dd77028f656b8ece33c7ba9ee6080df1ce4e1264cbaf1cb7380c44f31885cd8",
+    "candidates": 13,
+    "admitted": 11,
+    "retryable": 2,
+    "graphEdges": 21,
+    "graphHash": "10632bdfc725985fe9dddf1bc153cb5ff8e43575a8b2e872169db9c126b9b300",
+    "targetInstances": 1,
+    "targetDirections": 1,
+    "direction": "c082 EtherToken -> canonical WETH",
+    "sourceCoverageEntries": 11,
+    "reuse": "Check full-block N/hash, current admitted memo definitions, exact required source-coverage keys, coverage cutoff/hash and current per-Family discovery definitions before copying unchanged bytes. No retry, graph insertion or source hash override.",
+    "retryableDetails": "The two Astra instances 0x35ac7dcba25ba2192c87981bfcf024208070a25f and 0x5150d2869ce26095f4493bce916d9c0292d5d0fe remained identity_unverified/resource-limited at behavior-active-change. The strict simulator did not complete the main call. The exact underlying cause is not established here; neither permanent protocol rejection nor RPC blame is claimed. They remain outside the graph."
+  },
+  "prices": {
+    "artifact": "single-N25648967-4/prices/prices.json",
+    "sha256": "92230e91549bf52c02ed8ec3eb5fc98cb7bdf687ea55254a69d192f808b50d75",
+    "input": "single-N25648967-4/prices/input.json",
+    "inputSha256": "535d91fd99b3b6a520ea8a6baa32eae858cc4e17007dabba3bc92eeb09dc20bb",
+    "receiptSha256": "0879634ee82dd41cadd7b6b09cdcca81ea28918c1b0b4ef4ebde124e206f2c1b",
+    "totalRaw": 21,
+    "totalEffectiveQuoted": 18,
+    "targetRawMid": 1,
+    "targetEffective": "missing-valuation",
+    "targetAmountIn": null,
+    "targetAmountOut": null,
+    "limits": "No hand-selected P, reverse conversion from raw mid or copied output is substituted for the missing reference. Stage counters/times in logs are diagnostic only, not latency acceptance."
+  },
+  "retainedFailures": [
+    {
+      "path": "ready-1.log",
+      "sha256": "a18e63fb894d1003f56f755082949c93eebdad02ca01708dd4efc48f2acf0edc",
+      "exitCode": 1,
+      "cause": "New observer initially assumed Destruction(address,uint256); actual receipt emits Destruction(uint256). It stopped before strict. Fixed and regression tested."
+    },
+    {
+      "path": "ready-2.log",
+      "sha256": "191699aa560618559571c113aa3a4cb81c509c8e22a60a71ede47fff36e88923",
+      "exitCode": 1,
+      "cause": "Production Ready succeeded, but observer filtered nonexistent edge.familyId and falsely reported no target. Actual canonicalEdgeId and memo prove target admission. Corrected and regression tested; exact original Ready reused rather than rescanned."
+    },
+    {
+      "paths": ["targeted-types.json", "targeted-types-final.json", "targeted-types-final2.json"],
+      "cause": "Preliminary observer/fixture typing errors retained; final test file and check recorded separately. Not historical protocol failures."
+    }
+  ],
+  "verification": {
+    "buildLive": { "exitCode": 0, "log": "build-live.log", "scope": "Production build unchanged by later test-only guards/annotations; not full repository typecheck" },
+    "observerContracts": { "passed": 4, "log": "receipt-contracts-final3.log", "sha256": "9ab28c9665cdb0a79e67cecfd317ccc0b953b6b4929a46a45baee0e71757e035" },
+    "targetedTypes": { "log": "targeted-types-final3.json", "sha256": "e7d75ea384d0ca96eee733b9a51a3260b921a484a1eb87170b1ad8e2fa34a19d", "ownedDiagnostics": 0, "unchangedImportedDiagnostics": 1, "result": "Owned errors cleared. Existing Curve LP exported private Snapshot diagnostic remains identical to initial check; full typecheck not passed." },
+    "finalSavedInputGuards": { "log": "saved-guard-final.log", "sha256": "42a73a1322640a28527df3ff5fed02c1735dfea94149a573ab56700c4313a445", "exitCode": 0, "scope": "Current final observer authenticates saved real receipt, all 11 coverage keys, three current discovery definitions and target graph edge; zero RPC, not new historical execution" },
+    "independentReview": { "agent": "01a12480-7853-7500-a8db-760671bb5177", "initialFinding": "P2: validating admitted memos alone does not bind all three declared Family discovery scopes", "disposition": "Closed for this defect: reviewer independently ran final 4/4 observer tests, verified final file hashes and saved full-scope/current-definition Ready and receipt; ready-2/ready-4 byte equality confirmed. No new RPC/EVM/build/typecheck by reviewer.", "scope": "Read-only observer/Ready review, not whole Family, dual or performance acceptance" }
+  },
+  "reconciliation": {
+    "query": "ethertoken",
+    "tool": "listener:searcher:ethertoken-historical-ready",
+    "manifest": "tools-ready-4.json",
+    "manifestSha256": "1b28d23949e91961b31b02bca0257ac64662c502f67506c2ceeef808b84b7b59",
+    "exitCode": 0,
+    "priorManifests": ["tools-ready.json", "tools-ready-2.json", "tools-ready-3.json"],
+    "limits": "This opt-in tool performs historical RPC/strict/pricing work; its non-curated index cost heuristic is not a measured zero-CU claim. No enumeration, sim amount search or EV is run."
+  },
+  "remaining": [
+    "Migrated quoted and actual-received runtime execution against this historical state still NOT RUN; raw strict withdrawal proof is not that test.",
+    "Production amount reference is missing; original/other legal amounts can be separate controls, never fabricated natural valuation.",
+    "Astra residual identity simulation cause and target reference recovery remain unverified here.",
+    "All applicable IMPL current/future adapted protocols require final-phase single-Ready timing then representative combined-graph acceptance. Balancer V2/V3 and Curve plain/underlying remain in that phase.",
+    "Original pre-call parity, complete opportunity, formal Adapter Replay verdict and full goal completion are not established."
+  ],
+  "performance": { "singleReady": "NOT RUN", "representativeCombinedGraph": "NOT RUN" },
+  "safety": { "liveStarted": false, "deployed": false, "signed": false, "broadcast": false, "privateKeysRead": false, "defaultActivationChanged": false, "newBranchOrWorktree": false, "originalCoffeeReadyChanged": false }
+}

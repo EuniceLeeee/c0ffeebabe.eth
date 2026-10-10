@@ -1,0 +1,36 @@
+{
+  "divergence_id": "ethertoken-historical-ready-observer-20261010",
+  "kind": "tooling_defect",
+  "status": "closed-scoped-observer-contract",
+  "tool": "listener:searcher:ethertoken-historical-ready",
+  "capability": "ethertoken",
+  "fixed_by": "7d8c8ce1fb376a7a3d0b911165f25717eb1ee2d9",
+  "codify_commit": "7d8c8ce1fb376a7a3d0b911165f25717eb1ee2d9",
+  "transaction": "0xdf54ad38d4b812c4ab23ba6225543caaa433897f9454414c70bf7fda1290694e",
+  "block": 25648967,
+  "source_hash": "0x65058fd339c9dbdabc378620f354a7e48b2dfae2df896536c985885f66085c1d",
+  "realized_false_negatives": [
+    "Initial observer assumed an address argument in Destruction; deployed receipt has Destruction(uint256). This stopped before strict, not a protocol failure.",
+    "Second observer queried nonexistent graph edge.familyId and reported no target despite genuine admitted memo and canonicalEdgeId. Production Ready itself succeeded."
+  ],
+  "reviewed_latent_defect": "Only checking admitted memo definitions permits a narrower same-N snapshot to be mislabeled with a larger declared scan scope. Current actual snapshot was three-Family, but reuse validation was incomplete.",
+  "repair": "Observe deployed event layout and production canonical edge ID. Bind exact unique required coverage keys, full-block cutoff/hash and each current discovery definition before read-only Ready reuse; reject missing/duplicate/stale/null/TX-subset coverage. No production admission, graph or price logic changed.",
+  "regressions": {
+    "file": "listener/src/searcher/venues/protocols/ethertoken-native-redeem-family/test/historical-ready.test.ts",
+    "passed": 4,
+    "log": "logs/ethertoken-native-historical-20261010.Njode0/receipt-contracts-final3.log",
+    "sha256": "9ab28c9665cdb0a79e67cecfd317ccc0b953b6b4929a46a45baee0e71757e035",
+    "actual_saved_coverage": "Final observer checked all 11 required keys and three current definitions offline on the real Ready; no new chain execution."
+  },
+  "independent_review": {
+    "agent_id": "01a12480-7853-7500-a8db-760671bb5177",
+    "initial": "Confirmed P2 missing reuse scan-scope binding; earlier receipt/edge failures already repaired.",
+    "follow_up": "P2 closed. Independently ran final 4/4 tests, checked final hashes and real saved coverage/partitions/N/hash/full-block scope; no edits, RPC or EVM."
+  },
+  "evidence": "docs/research/reports/ethertoken-native-ready-progress-20261010.json",
+  "exclusions": [
+    "No natural production reference amount: target effective remains missing-valuation.",
+    "Not migrated quoted/runtime execution, original opportunity or performance acceptance.",
+    "Not an Adapter Replay, family_local merge verdict or production_gap_fixed claim."
+  ]
+}
