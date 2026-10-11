@@ -358,6 +358,16 @@ export class AnvilStateBackend implements StateBackend {
     await this.spawnForkAt(blockNumber);
   }
 
+  private async restartHistoricalForkAt(blockNumber: number): Promise<void> {
+    await this.restartForkAt(blockNumber);
+    try {
+      await resetHistoricalForkEnvironment(this.provider, blockNumber);
+    } catch (error) {
+      await this.stopAndWait();
+      throw error;
+    }
+  }
+
   private async spawnForkAt(
     blockNumber: number,
     signal?: AbortSignal,
@@ -543,7 +553,7 @@ export class AnvilStateBackend implements StateBackend {
     if (!Number.isSafeInteger(throughIndex) || throughIndex < -1) {
       throw new Error(`invalid historical prefix index ${throughIndex}`);
     }
-    await this.restartForkAt(blockNumber - 1);
+    await this.restartHistoricalForkAt(blockNumber - 1);
 
     const archive = new ethers.JsonRpcProvider(this.rpcUrl);
     try {
@@ -589,7 +599,7 @@ export class AnvilStateBackend implements StateBackend {
     if (!Number.isSafeInteger(blockNumber) || blockNumber <= 0) {
       throw new Error(`invalid historical block ${blockNumber}`);
     }
-    await this.restartForkAt(blockNumber - 1);
+    await this.restartHistoricalForkAt(blockNumber - 1);
 
     const archive = new ethers.JsonRpcProvider(this.rpcUrl);
     try {
@@ -1158,6 +1168,37 @@ async function ensureAccountGasFloor(
     ]);
   }
   return from;
+}
+
+/** Reset the owned, empty fork before queuing a historical prefix. Anvil 1.7.1
+ * startup (and reset with a URL) copies PREVRANDAO into difficulty. The no-URL
+ * reset restores the real BlockEnv fields from the same parent. This changes
+ * the EVM environment, not an RPC header response or an account balance. */
+export async function resetHistoricalForkEnvironment(
+  provider: Pick<ethers.JsonRpcProvider, "send">,
+  blockNumber: number,
+): Promise<void> {
+  if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) {
+    throw new Error("invalid historical parent block");
+  }
+  const readParent = async () => {
+    const header = await withTimeout(provider.send("eth_getBlockByNumber", ["latest", false]),
+      30_000, "historical parent header");
+    if (typeof header?.number !== "string" || !/^0x(?:0|[1-9a-f][0-9a-f]*)$/i.test(header.number) ||
+        BigInt(header.number) !== BigInt(blockNumber) ||
+        !ethers.isHexString(header.hash, 32) || !ethers.isHexString(header.stateRoot, 32)) {
+      throw new Error("invalid historical parent identity");
+    }
+    return { hash: header.hash.toLowerCase(), stateRoot: header.stateRoot.toLowerCase() };
+  };
+  const before = await readParent();
+  // Omit jsonRpcUrl deliberately: that Anvil branch reuses its startup mapper.
+  await withTimeout(provider.send("anvil_reset", [{ forking: { blockNumber } }]),
+    60_000, "historical parent environment reset");
+  const after = await readParent();
+  if (before.hash !== after.hash || before.stateRoot !== after.stateRoot) {
+    throw new Error("historical parent changed during environment reset");
+  }
 }
 
 async function setNextBlockContext(provider: ethers.JsonRpcProvider, block: any): Promise<void> {

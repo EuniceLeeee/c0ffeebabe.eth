@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "scope": "Backrun production-pipeline validation integrity (not opportunity or performance acceptance)",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseline": "0c9901c37f726c0e11c93f4b78d348fefb248097",
+  "sourceTreeSha256": "2e5871b5e45ced8e6b46f2314787b08bfe4611a38545dbe0ee8e9f32ad3fb7a3",
+  "testedDirtyTree": true,
+  "ownsOnly": [
+    {
+      "path": "listener/src/searcher/main.ts",
+      "sha256": "ef78cf7e36734c4044245dc9547a3175ff95409cf84d59dc398717849a57c5fc"
+    },
+    {
+      "path": "listener/src/shared/state/state-backend.ts",
+      "sha256": "6e5542510343839c78d681c64da8b161da88638722fb6e4931f39cc0f956229a"
+    },
+    {
+      "path": "listener/src/searcher/backrun-candidate-outcome.ts",
+      "sha256": "a3142e4fcce06e894bd4772f55bcf059f906adc1ca9994fd77d4e64a3c3538b0"
+    },
+    {
+      "path": "listener/src/searcher/test/backrun-candidate-outcome.ts",
+      "sha256": "f2c475404159122159e154c36cdbd19ae96e09fcee563d0bb4973465f7453f73"
+    },
+    {
+      "path": "listener/src/searcher/test/state-backend-historical-environment.ts",
+      "sha256": "830b517b8db822381bca7718c628cacf274dacb34f69096b85612d8bbcd4af3a"
+    }
+  ],
+  "fixes": [
+    {
+      "issue": "Anvil 1.7.1 initial historical fork maps parent mixHash into mined difficulty; independent REVM source check correctly refuses it",
+      "change": "Historical prefix entrypoints reset the owned empty fork without a replacement URL; recheck the same parent height/hash/stateRoot before queuing real transactions",
+      "limits": "Only two historical entrypoints change. No header forgery, guard weakening, balance/nonce/permission overrides, or ordinary live-startup changes"
+    },
+    {
+      "issue": "Final simulation/EV infrastructure errors and consumer deadlines recorded as quote failures",
+      "change": "Stage-specific classification and counters; retain recorded consumer failure across scheduler deadline; typed backend faults propagate through final overlay to cancellation/drain"
+    },
+    {
+      "issue": "Historical positive-EV result overwritten by later candidate or aggregate record",
+      "change": "Use production ordered-consumer early-stop/drain semantics after historical submission gate. No signing/submission"
+    }
+  ],
+  "regression": {
+    "productionBuild": "PASS",
+    "focusedTests": {
+      "pass": 21,
+      "fail": 0,
+      "skipped": 0
+    },
+    "relatedTests": {
+      "pass": 281,
+      "fail": 0,
+      "skipped": 0
+    },
+    "headerFixture": {
+      "networkReads": 0,
+      "actualProductionHelper": true,
+      "postMergeDifficulty": "0x0",
+      "parentHashAndRootUnchanged": true,
+      "scope": "Synthetic empty-state header fixture only, not transaction acceptance"
+    },
+    "nonAuthorReview": {
+      "passes": 3,
+      "lastResult": "No new blocker found in scoped static review",
+      "secondPassFindings": [
+        "scheduler deadline overwrote consumer stage",
+        "final overlay swallowed typed fatal"
+      ],
+      "resolved": true,
+      "reviewerRanTests": false
+    }
+  },
+  "priorFailure": {
+    "tx": "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+    "N": 26152607,
+    "B": 26152606,
+    "sourceTreeSha256": "2700ba8ee9e752b1cd509cbdae8892d23385c63c6cdf7ac8e4366196a2662a12",
+    "opportunities": 2,
+    "plans": 40,
+    "solverAttempts": 40,
+    "resolvedObjects": 3,
+    "positiveResolvedNetProfitFields": 0,
+    "finalSourceChecks": 3,
+    "finalSourceFaults": 3,
+    "completedFinalSimulations": 0,
+    "evEvaluations": 0,
+    "reads": 13995,
+    "fullRouteMatches": 0,
+    "coreThreeHopMatches": 0,
+    "record": "20261011-fivehop-backrun-correctness-q81kxu",
+    "preserved": true
+  },
+  "stagedValidation": {
+    "gitTree": "478313bc43c5714506b7a7a2d6b2a365b70ed31e",
+    "directory": "/opt/mev-cloud/family-runtime-20261007/logs/backrun-staged-20261011.qA6SbU",
+    "productionBuild": "PASS",
+    "focusedTests": { "pass": 21, "fail": 0, "skipped": 0 },
+    "buildLogSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+    "testLogSha256": "6b956180f12a27df2f5b6e0aaaa21da57c65d70d9e40ad96e1b587eff130580f",
+    "scope": "Immutable export of only the five intended staged source/test files on baseline; unrelated dirty enumeration/Ready/Uniswap V1 changes are excluded, no new Git branch/worktree"
+  },
+  "nextHistoricalValidation": {
+    "directory": "/opt/mev-cloud/family-runtime-20261007/logs/native-backrun-5b6114-correctness-v2-20261011.kKF39X/production-attempt03",
+    "status": "FAILED IN PREPARATION: resource-blocked, not an EVM revert",
+    "requestedReadLimit": 20000,
+    "requestedWallLimitMs": 1200000,
+    "actualUpstreamRequests": 6,
+    "methods": ["eth_chainId"],
+    "allResponsesHttp429": true,
+    "providerMessage": "Monthly capacity limit exceeded",
+    "materialized": false,
+    "plans": 0,
+    "solverAttempts": 0,
+    "finalSimulationAttempts": 0,
+    "completedFinalSimulations": 0,
+    "evEvaluations": 0,
+    "sourceUnchanged": true,
+    "readyUnchanged": true,
+    "ownedProcessesExited": true,
+    "ownedPortsReleased": true,
+    "retriedAfterQuotaEvidence": false,
+    "verdict": "The real historical source-check failure-to-pass is still NOT VERIFIED; resume only after RPC capacity is available. This quota event does not rewrite the earlier header-fault/no-429 experiment."
+  },
+  "artifacts": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/enum-integration-20261011.dh5pIr/build-backrun-correctness-01.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/enum-integration-20261011.dh5pIr/tests-backrun-correctness-01.log",
+      "sha256": "7f69af42695fe549d2fd58c7e1e669b1be2ace19ef810059f74f71addb95027e"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/enum-integration-20261011.dh5pIr/tests-backrun-broad-01.log",
+      "sha256": "42246ee910b4a0448e939be4d368fe1e3a7226499f1b56ba1578930436b58a2e"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/enum-integration-20261011.dh5pIr/build-backrun-correctness-02.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/enum-integration-20261011.dh5pIr/tests-backrun-correctness-02.log",
+      "sha256": "f03a65e71abcdafad83c78a22a8e11094abb51b28caffb351ad57be7894592a3"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/enum-integration-20261011.dh5pIr/tests-backrun-broad-02.log",
+      "sha256": "55249ed217e60a7aa67551306d0b121c4af78a9dc7112e2a4d85e9b34e495225"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/enum-integration-20261011.dh5pIr/backrun/header-probe-production-01/header-probe.json",
+      "sha256": "dff4fd9bb9fba06d526c574eda8beb884b39c12f6c86869ffcf6e32c51036cbf"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/enum-integration-20261011.dh5pIr/backrun/production-correctness-v2.mjs",
+      "sha256": "065eed637991c6ec6b9f7909eee31439e472e8234c3a60f02974d018c6639271"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/enum-integration-20261011.dh5pIr/backrun/readonly-proxy-v2.mjs",
+      "sha256": "ead731459edbf9c09e1dc18fe44bfaf7e8c7ccbb475d047c230e58c433480aec"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/enum-integration-20261011.dh5pIr/backrun/header-probe-production.mjs",
+      "sha256": "f47d534bafd984c9309556e3a88a18b7e16a64fdf79b59d3e18947798130b71e"
+    }
+  ],
+  "scopedPatchSha256": "19383a4fddb411dd3c085407002ef08f165497922760383b7b5300314f3ca3f2",
+  "limits": [
+    "header fixture uses synthetic empty state, not transaction acceptance",
+    "PREVRANDAO and EIP4788 canonical historical equivalence remain unproven",
+    "N Ready is hindsight topology, not pre-B discovery evidence",
+    "full historical simulation and EV must be independently executed",
+    "Finite Planner is not exhaustive route search",
+    "Pool-filter heuristic/whole-pool policy and imported enumeration changes are not validated by this scoped patch"
+  ],
+  "originalImplTable": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "sha256AfterThisUpdate": "9e9e4add1f35278b3567f426b736bb07371da7c1da387b7224589605734a4476",
+    "scope": "Append only to the existing Curve plain / Fluid native ETH row; retain earlier evidence and all other rows"
+  },
+  "recheckEvidence": [
+    { "path": "/opt/mev-cloud/family-runtime-20261007/logs/native-backrun-5b6114-correctness-v2-20261011.kKF39X/production-attempt03/terminal.json", "sha256": "081c4711f6a04387754233d04bbfc06c065c20c05423ea15863a5272f853c396" },
+    { "path": "/opt/mev-cloud/family-runtime-20261007/logs/native-backrun-5b6114-correctness-v2-20261011.kKF39X/production-attempt03/accounting.json", "sha256": "df20685ecd4629200c39cc44986f4dfb864e51eeb3eb3dd77716c983161cd83e" },
+    { "path": "/opt/mev-cloud/family-runtime-20261007/logs/native-backrun-5b6114-correctness-v2-20261011.kKF39X/drain.json", "sha256": "5a191d208dd22cc7ef15134e01c5efeb108d5a0c1c2f27fd8d7d4d90d5d61150" }
+  ],
+  "performance": "NOT RUN",
+  "liveStarted": false,
+  "deployed": false,
+  "signed": false,
+  "publicBroadcast": false,
+  "privateKeysRead": false
+}

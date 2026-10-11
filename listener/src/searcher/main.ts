@@ -73,6 +73,8 @@ import { TemplatePlanner } from "./planner/planner.js";
 import { resolveBackrunExecutionSource, assertBackrunSourceSimulation,
   type HistoricalBackrunMode } from "./backrun-execution-source.js";
 import { createLiveBackrunPlanner, resolveLiveBackrunSettings } from "./backrun-live-policy.js";
+import { backrunCandidateFailure, backrunConsumerFailureIsTerminal, settleBackrunFinalOverlay,
+  type BackrunCandidateStage } from "./backrun-candidate-outcome.js";
 import { runBackrunCandidatePipeline } from "./backrun-candidate-pipeline.js";
 import {
   buildTokenIndex,
@@ -4363,6 +4365,7 @@ async function processOpportunities(
     let skipPostSolverDrop = false;
     console.log(`[searcher/live] backrun quote pipeline workers=${ctx.config.solverQuoteConcurrency} candidates=${plans.length} cap=${ctx.config.maxCandidatesPerOpp}`);
     let pipelineCompleted = true;
+    let terminalConsumerFailure = false;
     try {
       pipelineCompleted = await runBackrunCandidatePipeline({
         plans,
@@ -4386,8 +4389,11 @@ async function processOpportunities(
         },
         onQuoteStart: () => { ctx.counters.solverEntered++; candidatesTried++; },
         consume: async (candidate, quoted, index, signal) => {
+          terminalConsumerFailure = false;
           signal.throwIfAborted();
           console.log(`[searcher/live] backrun quote ready rank=${index + 1} elapsedMs=${quoted.elapsedMs.toFixed(2)} remainingMs=${oppDeadlineAtMs - Date.now()}`);
+          let failureStage: BackrunCandidateStage = "solver";
+          let failurePath: string | undefined;
           try {
             if (!quoted.ok) throw quoted.error;
             ctx.counters.solverSuccess++;
@@ -4395,6 +4401,8 @@ async function processOpportunities(
             let positiveSimulationSeen = false;
             for (const resolved of quoted.finalists) {
               if (positiveSimulationSeen) break;
+              failureStage = "final_verify";
+              failurePath = resolvedRouteSummary(resolved.root);
               signal.throwIfAborted();
               if (Date.now() >= oppDeadlineAtMs) throw new Error("backrun final simulation deadline elapsed");
         // Quote-only workers never simulate. This single final simulation owns
@@ -4421,7 +4429,7 @@ async function processOpportunities(
 	            deps.recordFinalState(lastTerminalState, lastTerminalError);
 	            continue;
 	          }
-          try {
+          const overlay = await settleBackrunFinalOverlay(async () => {
             if (jitWarmCurrent) {
               const waitStarted = Date.now();
               await jitWarmCurrent;
@@ -4434,7 +4442,10 @@ async function processOpportunities(
             });
             preparedSourceBlockHash = prepared.blockHash ?? null;
             deps.segMark("finalOverlay");
-          } catch (err) {
+            return prepared;
+          });
+          if (!overlay.ok) {
+            const err = overlay.error;
             ctx.counters.revmErrors++;
             const message = err instanceof Error ? err.message : String(err);
             lastTerminalState = "sim-revert";
@@ -4582,6 +4593,7 @@ async function processOpportunities(
         // damps the adverse-selection: we'd otherwise overbribe exactly the bundles
         // we most over-estimated, and win the losers). Calibrate the haircut from
         // the reconciliation of landed txs (real profit vs the logged sim profit).
+        failureStage = "ev";
         const ev = await evaluateEv(
           ctx.historicalExecutionMode ? ctx.state.provider : ctx.provider,
           resolved.profitToken,
@@ -4752,8 +4764,12 @@ async function processOpportunities(
         if (ctx.historicalExecutionMode) {
           deps.recordFinalState(netEvWei > ctx.config.minNetEth ? "would-submit" : "no-profitable-quote",
             "historical read-only: submission disabled", sim);
+          // Match the live successful-consumer stop: do not overwrite a passed
+          // fixture with a later candidate failure or the aggregate default.
+          if (netEvWei > ctx.config.minNetEth) return false;
           continue;
         }
+        failureStage = "submit_gate";
         const latestAtSubmit = await readUncachedLatestBlock(ctx.provider);
         if (
           latestAtSubmit.number !== prepareInput.baseBlock ||
@@ -4865,23 +4881,37 @@ async function processOpportunities(
             }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        lastTerminalState = isTimeoutMessage(message) ? "quote-timeout" : "no-profitable-quote";
-        lastTerminalError = message;
-        if (lastTerminalState === "quote-timeout") ctx.counters.quoteTimeouts++;
+        const failure = backrunCandidateFailure(failureStage, err, isTimeoutMessage(message));
+        terminalConsumerFailure = backrunConsumerFailureIsTerminal(failureStage, signal, oppDeadlineAtMs);
+        lastTerminalState = failure.state;
+        lastTerminalError = `${failure.stage}/${failure.reason}: ${message}`;
+        if (failure.quoteTimeout) ctx.counters.quoteTimeouts++;
+        if (failure.stage === "final_verify") ctx.counters.finalVerifyFailed++;
         if (message.toLowerCase().includes("missing")) ctx.counters.missingState++;
+	        emitPipelineDropped(failure.stage, failure.reason, lastTerminalError, {
+	          pathId: failurePath, templateId: candidate.templateName, plans: plans.length,
+	        });
+        deps.recordFinalState(lastTerminalState, lastTerminalError);
+        skipPostSolverDrop = true;
 	        console.log(
 	          `[searcher/live] candidate failed: ` +
 	            `${message}`.slice(0, 180),
 	        );
+        // A latched source/backend fault cannot be repaired by trying another
+        // candidate. Let the shared pipeline cancel and drain quote workers.
+        if (failure.fatal) throw err;
           }
           return true;
         },
       });
     } catch (error) {
+      if (error instanceof RevmFatalError) throw error;
       ctx.sourceControl.signal.throwIfAborted();
-      lastTerminalError = error instanceof Error ? error.message : String(error);
-      lastTerminalState = isTimeoutMessage(lastTerminalError) ? "quote-timeout" : "no-profitable-quote";
-      if (lastTerminalState === "quote-timeout") ctx.counters.quoteTimeouts++;
+      if (!terminalConsumerFailure) {
+        lastTerminalError = error instanceof Error ? error.message : String(error);
+        lastTerminalState = isTimeoutMessage(lastTerminalError) ? "quote-timeout" : "no-profitable-quote";
+        if (lastTerminalState === "quote-timeout") ctx.counters.quoteTimeouts++;
+      }
     }
     if (!pipelineCompleted) return;
     if (ctx.config.maxCandidatesPerOpp > 0 && plans.length > ctx.config.maxCandidatesPerOpp &&
