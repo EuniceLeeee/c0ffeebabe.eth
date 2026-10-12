@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "impl-curve-anchor-update/v1",
+  "date": "2026-10-13",
+  "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "row": 17,
+  "beforeSha256": "beded11879f6d75c6a59f000c9817bd871c51bfe00e2ce37233b97eed115a208",
+  "afterSha256": "02241492e4ddd798e21ed81e790c174cabaa7aaf290f8335b04e9c9a935e8b0f",
+  "insertedText": "<br>**2026-10-13 后续：7f86／8a4f 两池补齐同块正确性证据。** [7f86·N25969898](https://etherscan.io/tx/0x99ed07d8a915fd2f7d32562af8290caaab322cca8462f818741d097759878807)、[8a4f·N25981246](https://etherscan.io/tx/0x0fa81dfb7a7756eef6df554ab17ba5ce748ee52c3e8262b0f677557f08843495) 均有成功swap日志；每池6方向自然strict→Ready／Graph→raw／effective，WETH参考输入=P=0.002，其他币由同块effective换算，无借用金额。每池P及10倍量共24次quoted／runtime扣款与到账差0、24个缺本次输入负例真实回滚；原生币旧库存不变，runtime构造RPC=0。注意Ready候选仍来自同块旧失败TX的调用观察，仅作提名线索，准入由反向身份及独立strict执行证明；新成功TX的原方法／调用前输出未核对。旧失败receipt保留、不改写为成功。该七池清单累计7池有各自绑定版本的正确性证据，并非七池均在本次源码重跑；完整机会、单块及组合时效性仍未验。[本次证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/a12f692e6c1d35ee22a29e17c7782d8d29045092/docs/research/reports/curve-underlying-anchor-acceptance-20261013.json)。 ",
+  "onlyExactInsertion": true,
+  "preservedOtherRowsAndColumns": true,
+  "evidenceCommit": "a12f692e6c1d35ee22a29e17c7782d8d29045092",
+  "evidenceReport": "docs/research/reports/curve-underlying-anchor-acceptance-20261013.json"
+}
