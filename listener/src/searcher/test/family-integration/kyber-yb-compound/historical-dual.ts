@@ -31,7 +31,7 @@ import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from ".
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 import { EKUBO_CORE } from "../../../venues/swaps/ekubo/abi.js";
 import { assertHistoricalDiscoveryReceipt } from "../three-family/historical-input-observations.js";
-import { SAMPLES, ERC20, options, same, json, sha, word, observeBalance, assertDeltas, originalLeg,
+import { SAMPLES, ERC20, options, same, json, sha, word, observeBalance, assertDeltas, originalLegs, originalDirections, historicalAmountTrials,
   assertReceipt, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, constructionGuard, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory, assertExecutorCode } from "./evidence.js";
 
 const ROOT = fileURLToPath(new URL("../../../../../../", import.meta.url));
@@ -85,7 +85,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   const args = options(argv), sample = SAMPLES[args.family];
   // Exclusive creation happens before work, preserving every previous failure.
   const fd = openSync(resolve(args.out), "wx", 0o600), started = performance.now();
-  const report: any = { schema: "four-family-same-n-dual/v1", result: "failed", family: sample.family,
+  const report: any = { schema: "four-family-same-n-dual/v2", result: "failed", family: sample.family,
     claim: "fixed real instances, both swap directions and original protocol directions, N-end/N environment, independent single-leg quote/quoted/runtime receipts only",
     originalPreCallParity: "NOT RUN", representativePerformance: "NOT RUN", samples: [], errors: [],
     safety: { signing: false, broadcast: false, minedBlocks: 0, protocolOverrides: false,
@@ -210,7 +210,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const quoteReads: any[] = [];
     const runtime = createStrictCentralAdapterRuntime({ executor, transactionOrigin: owner, exactQuoteCache: cache,
       generationFence: { assertCurrent(g, s) { assert.equal(g, source.generation); assert.deepEqual(s, source); } }, provider: {
-        async call(t, b) { assert.equal(b, source.number); quoteReads.push({ kind: "call", to: t.to, selector: t.data.slice(0, 10) }); return rpc("eth_call", [t, pin, quoteOverlay]); },
+        async call(t, b) {
+          assert.equal(b, source.number);
+          const read: any = { kind: "call", to: t.to, selector: t.data.slice(0, 10), data: t.data, block: b };
+          quoteReads.push(read); read.result = await rpc("eth_call", [t, pin, quoteOverlay]); return read.result;
+        },
         async getCode(a, b) { assert.equal(b, source.number); quoteReads.push({ kind: "code", to: a });
           return args.expectedExecutorCodeHash && same(a, executor) ? runtimeCode.code : rpc("eth_getCode", [a, pin]); },
         async getStorage(a, k, b) { assert.equal(b, source.number); quoteReads.push({ kind: "storage", to: a, slot: k }); return rpc("eth_getStorageAt", [a, k, pin]); },
@@ -255,18 +259,18 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     };
     let unmet = false, naturalUnmet = false;
     const usedReferenceEdges = new Set<string>();
-    const directions: { entry: typeof entries[number]; original: ReturnType<typeof originalLeg> | null; tokenIn: string; tokenOut: string }[] = [];
+    const directions: (ReturnType<typeof originalDirections>[number] & { entry: typeof entries[number] })[] = [];
     for (const entry of entries) {
       const candidate = entry.memo.candidateSnapshot as any;
       assertHistoricalDiscoveryReceipt(await rpc("eth_getTransactionReceipt", [candidate.transactionHash]), candidate, source);
-      const original = originalLeg(args.family, entry.instanceKey, entry.instance.descriptor, receipt, trace);
-      directions.push({ entry, original, tokenIn: original.tokenIn, tokenOut: original.tokenOut });
-      if (sample.family === "kyberswap-elastic" || sample.family === "swap:algebra-integral" || sample.family === "custom-swap:ekubo-router-v1" || sample.family === "protocol:erc4626" || sample.family === "univ4" || sample.family === "univ4-fee-hook") {
+      const originals = originalLegs(args.family, entry.instanceKey, entry.instance.descriptor, receipt, trace);
+      const includeReverse = sample.family === "kyberswap-elastic" || sample.family === "swap:algebra-integral" || sample.family === "custom-swap:ekubo-router-v1" || sample.family === "protocol:erc4626" || sample.family === "univ4" || sample.family === "univ4-fee-hook";
+      if (includeReverse) {
         assert.equal(entry.instance.routes.length, 2, "fixed swap instance must project both directions");
-        directions.push({ entry, original: null, tokenIn: original.tokenOut, tokenOut: original.tokenIn });
       }
+      directions.push(...originalDirections(originals, includeReverse).map(d => ({ ...d, entry })));
     }
-    for (const { entry, original, tokenIn, tokenOut } of directions) {
+    for (const { entry, originals, tokenIn, tokenOut } of directions) {
       const routes = entry.instance.routes.filter(r => same(r.tokenIn, tokenIn) && same(r.tokenOut, tokenOut)); assert.equal(routes.length, 1);
       const route = entry.instance.routeHandles.filter(r => r.routeKey === routes[0]!.routeKey); assert.equal(route.length, 1);
       const edges = graph.filter(e => e.instanceKey === entry.instance.instanceKey && same(e.tokenIn, tokenIn) && same(e.tokenOut, tokenOut)); assert.equal(edges.length, 1);
@@ -280,8 +284,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         ? splicedProductionAmount(reference.saved, reference.declaration, args.referenceEdges, tokenIn) : null;
       if (p.status === "unmet") { naturalUnmet = true; if (!splice) unmet = true; }
       if (splice) usedReferenceEdges.add(splice.donorRow.edgeId);
-      const row: any = { instance: entry.instanceKey, edgeId, tokenIn, tokenOut, original,
-        directionEvidence: original ? "original transaction direction" : "opposite production Ready direction; not an original TX leg",
+      const row: any = { instance: entry.instanceKey, edgeId, tokenIn, tokenOut, originals,
+        original: originals.length === 1 ? originals[0] : null,
+        directionEvidence: originals.length ? "original transaction direction" : "opposite production Ready direction; not an original TX leg",
         productionReferenceGate: p, splicedReferenceInput: splice, trials: [] }; report.samples.push(row);
       const beforeBuild = { calls, ...guard.counts };
       const leg = guard.build(() => {
@@ -302,29 +307,31 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const pair = [tokenIn, tokenOut], keys = await Promise.all(pair.map(t => slotFor(t, protectedAccount)));
       const base = await Promise.all(pair.map(t => balance(t, executor)));
       assert(pair.every(t => ![executor, owner].includes(t)) && ![executor, owner].includes(entry.instanceKey));
-      const trials: [string, bigint][] = p.status === "met" ? [["production-effective", p.amountIn]] : [];
-      if (splice) trials.push(["spliced-production-input-at-N", splice.amountIn]);
-      if (original) trials.push(["historical-input-at-N", original.amountIn]);
-      else if (p.status === "met") trials.push(["twice-production-effective", p.amountIn * 2n]);
-      else if (splice) trials.push(["twice-spliced-production-input-at-N", splice.amountIn * 2n]);
-      if (original && p.status === "unmet" && !splice && (args.family === "xwin-mint" || args.family === "xwin-redeem" || args.family === "ethertoken-native"))
-        trials.push(["twice-historical-input-at-N-not-production-reference", original.amountIn * 2n]);
+      const referenceAmount = p.status === "met" ? { label: "production-effective", amountIn: p.amountIn }
+        : splice ? { label: "spliced-production-input-at-N", amountIn: splice.amountIn } : null;
+      const trials = historicalAmountTrials(originals, referenceAmount,
+        args.family === "xwin-mint" || args.family === "xwin-redeem" || args.family === "ethertoken-native");
       report.preparationMs ??= performance.now() - started;
-      for (const [label, amountIn] of trials) {
-        const result: any = { label, amountIn, status: "failed", executions: [] }; row.trials.push(result);
+      for (const { label, amountIn, original } of trials) {
+        const result: any = { label, amountIn, original, status: "failed", executions: [] }; row.trials.push(result);
         try {
           stage = "production-Exact"; const quoteStart = performance.now(), readsBefore = quoteReads.length;
           const quote = await guard.exact(() => executeFamilyExactQuote({ family, route: route[0]!, amountIn, source, generation: source.generation,
             executor, runtimeEvidence: [], runtime, control: { signal: abort.signal, deadlineAtMs: deadline } }));
           result.quoteMs = performance.now() - quoteStart;
+          result.quoteReads = quoteReads.slice(readsBefore);
           if (quote.status !== "resolved") result.unresolvedQuote = quote;
           assert.equal(quote.status, "resolved", "real amount cannot be quoted"); if (quote.status !== "resolved") throw new Error("unresolved quote");
+          // Preserve refused/zero quotes and their state reads before asserting;
+          // a failed trial must retain the same diagnostic evidence as a pass.
+          result.quote = { amountIn: quote.amountIn, amountOut: quote.amountOut, methodId: quote.methodId,
+            outcome: quote.outcome, evidenceRefs: quote.evidenceRefs, reads: result.quoteReads };
           assert.equal(quote.amountIn, amountIn); assert(quote.amountOut > 0n); assert.deepEqual(quote.source, source);
           if (label === "production-effective" && p.status === "met") assert.equal(quote.amountOut, p.amountOut, "current Exact differs from production effective");
-          result.quote = { amountOut: quote.amountOut, evidenceRefs: quote.evidenceRefs, reads: quoteReads.slice(readsBefore) };
           result.originalTxComparison = original ? { originalAmountOut: original.amountOut,
             signedDelta: label === "historical-input-at-N" ? quote.amountOut - original.amountOut : null,
-            verdict: original.comparison } : { verdict: "opposite production direction; no original TX leg comparison" };
+            observationId: original.observationId ?? null, logIndex: original.logIndex,
+            verdict: original.comparison } : { verdict: "non-original amount trial; no original TX leg comparison" };
           const fragment = guard.quoted(() => buildFamilyExecutionFragment({ family, route: route[0]!, exact: quote,
             minAmountOut: quote.amountOut, executor, runtimeEvidence: [], actionOwnership: catalog }));
           assert.equal(fragment.status, "resolved"); if (fragment.status !== "resolved") throw new Error("quoted fragment unresolved");

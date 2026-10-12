@@ -270,14 +270,18 @@ export function splicedProductionAmount(saved: any, declaration: any, edgeKeys: 
     naturalTargetValuation: "unmet; not supplied by this input splice" };
 }
 
-function successfulCalls(trace: any, target: string, selector: string): any[] {
-  const result: any[] = [];
-  const visit = (f: any) => {
+function successfulCallFrames(trace: any, target: string, selector: string, root = "$") {
+  const result: { call: any; path: string }[] = [];
+  const visit = (f: any, path: string) => {
     if (!f || f.error || f.revertReason) return;
-    if (f.type === "CALL" && same(f.to ?? "", target) && f.input?.slice(0, 10) === selector) result.push(f);
-    for (const c of f.calls ?? []) visit(c);
+    if (f.type === "CALL" && same(f.to ?? "", target) && f.input?.slice(0, 10) === selector) result.push({ call: f, path });
+    for (const [i, c] of (f.calls ?? []).entries()) visit(c, `${path}.calls[${i}]`);
   };
-  visit(trace); return result;
+  visit(trace, root); return result;
+}
+
+function successfulCalls(trace: any, target: string, selector: string): any[] {
+  return successfulCallFrames(trace, target, selector).map(f => f.call);
 }
 
 /** Extract only one unambiguous real successful call + event per instance. */
@@ -364,6 +368,95 @@ export function originalLeg(key: SampleKey, instance: string, descriptor: any, r
   assert.equal(received.length, 1, "original output receipt is missing/ambiguous");
   return { tokenIn: tokenIn.toLowerCase(), tokenOut: tokenOut.toLowerCase(), amountIn, amountOut,
     caller: caller.toLowerCase(), recipient: recipient.toLowerCase(), originalInterface, comparison, logIndex: logs[0].logIndex };
+}
+
+export type OriginalLeg = ReturnType<typeof originalLeg> & {
+  observationId?: string; swapCallPath?: string; outputCallPath?: string; outputLogIndex?: string;
+};
+
+/** Observe every settled swap, not an arbitrarily selected first/largest visit.
+ * The caller still authenticates the canonical N header. Here the sample and
+ * receipt/log identities are checked, then each call/event/payment must bind
+ * uniquely. Equal indistinguishable visits remain ambiguous, never order-paired.
+ * Non-swap observers deliberately keep their existing singleton contracts. */
+export function originalLegs(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any): OriginalLeg[] {
+  const family = SAMPLES[key].family;
+  if (family !== "kyberswap-elastic" && family !== "swap:algebra-integral")
+    return [originalLeg(key, instance, descriptor, receipt, trace)];
+  assert(trace && !trace.error && !trace.revertReason, "original transaction reverted");
+  assertReceipt(receipt, SAMPLES[key].tx, { number: ethers.toQuantity(SAMPLES[key].number), hash: receipt.blockHash });
+  assert(ethers.isHexString(receipt.blockHash, 32), "missing receipt block hash");
+  const logIds = receipt.logs.map((l: any) => {
+    assert(typeof l.logIndex === "string" && /^0x[0-9a-f]+$/i.test(l.logIndex), "missing log identity");
+    return BigInt(l.logIndex).toString();
+  });
+  assert.equal(new Set(logIds).size, logIds.length, "duplicate receipt log identity");
+  const abi = family === "kyberswap-elastic" ? KYBER : ALGEBRA;
+  const isEvent = (l: any) => same(l.address, instance) && same(l.topics?.[0] ?? "", abi.getEvent("Swap")!.topicHash);
+  const logs: any[] = receipt.logs.filter(isEvent);
+  const calls = successfulCallFrames(trace, instance, abi.getFunction("swap")!.selector);
+  assert(logs.length > 0, "no settled original swap");
+  assert.equal(calls.length, logs.length, "original swap call/event coverage differs");
+  const usedCalls = new Set<string>(), usedPayments = new Set<string>(), usedPaymentLogs = new Set<string>();
+  const legs = logs.map(log => {
+    // Retain every non-Swap log (including every Transfer). Only the event under
+    // comparison is isolated; the existing singleton checks are not weakened.
+    const observationReceipt = { ...receipt, logs: receipt.logs.filter((l: any) => !isEvent(l) || l === log) };
+    const matches = calls.flatMap(frame => {
+      try { return [{ ...frame, leg: originalLeg(key, instance, descriptor, observationReceipt, frame.call) }]; }
+      catch { return []; } // invalid pair cannot supply evidence for this event
+    });
+    assert.equal(matches.length, 1, "original swap event has missing/ambiguous call binding");
+    const { call, path, leg } = matches[0]!;
+    assert(!usedCalls.has(path), "original swap call reused"); usedCalls.add(path);
+    const payments = successfulCallFrames(call, leg.tokenOut, ERC20.getFunction("transfer")!.selector, path)
+      .filter(f => same(f.call.from ?? "", instance)).filter(f => {
+        const [to, value] = ERC20.decodeFunctionData("transfer", f.call.input);
+        return same(to, leg.recipient) && value === leg.amountOut;
+      });
+    assert.equal(payments.length, 1, "original output call is missing/ambiguous");
+    const paymentPath = payments[0]!.path;
+    assert(!usedPayments.has(paymentPath), "original output call reused"); usedPayments.add(paymentPath);
+    const received = receipt.logs.filter((l: any) => same(l.address, leg.tokenOut)
+      && same(l.topics?.[0] ?? "", ERC20.getEvent("Transfer")!.topicHash)).filter((l: any) => {
+      const t = ERC20.parseLog(l)!.args;
+      return same(t.from, instance) && same(t.to, leg.recipient) && t.value === leg.amountOut;
+    });
+    assert.equal(received.length, 1, "original output receipt is missing/ambiguous");
+    const outputLogIndex = received[0]!.logIndex, outputId = BigInt(outputLogIndex).toString();
+    assert(!usedPaymentLogs.has(outputId), "original output receipt reused"); usedPaymentLogs.add(outputId);
+    return { ...leg, observationId: `${SAMPLES[key].tx}:${instance.toLowerCase()}:${BigInt(log.logIndex)}`,
+      swapCallPath: path, outputCallPath: paymentPath, outputLogIndex };
+  });
+  assert.equal(usedCalls.size, calls.length, "successful original swap omitted");
+  return legs.sort((a, b) => BigInt(a.logIndex) < BigInt(b.logIndex) ? -1 : 1);
+}
+
+/** Observation grouping only; no search, pricing or execution logic. */
+export function originalDirections(originals: readonly OriginalLeg[], includeReverse: boolean) {
+  const directions: { tokenIn: string; tokenOut: string; originals: OriginalLeg[] }[] = [];
+  for (const leg of originals) {
+    let direction = directions.find(d => same(d.tokenIn, leg.tokenIn) && same(d.tokenOut, leg.tokenOut));
+    if (!direction) { direction = { tokenIn: leg.tokenIn, tokenOut: leg.tokenOut, originals: [] }; directions.push(direction); }
+    direction.originals.push(leg);
+  }
+  if (includeReverse) for (const d of [...directions]) {
+    if (!directions.some(r => same(r.tokenIn, d.tokenOut) && same(r.tokenOut, d.tokenIn)))
+      directions.push({ tokenIn: d.tokenOut, tokenOut: d.tokenIn, originals: [] });
+  }
+  return directions;
+}
+
+export function historicalAmountTrials(originals: readonly OriginalLeg[], reference: { label: string; amountIn: bigint } | null,
+  doubleHistoricalFallback = false) {
+  const trials: { label: string; amountIn: bigint; original: OriginalLeg | null }[] = [];
+  if (reference) trials.push({ ...reference, original: null });
+  for (const original of originals) trials.push({ label: "historical-input-at-N", amountIn: original.amountIn, original });
+  if (originals.length === 0 && reference)
+    trials.push({ label: `twice-${reference.label}`, amountIn: reference.amountIn * 2n, original: null });
+  if (!reference && doubleHistoricalFallback) for (const original of originals)
+    trials.push({ label: "twice-historical-input-at-N-not-production-reference", amountIn: original.amountIn * 2n, original: null });
+  return trials;
 }
 
 export function assertReceipt(receipt: any, tx: string, header: any): void {
