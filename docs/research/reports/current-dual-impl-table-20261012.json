@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "kind": "original-IMPL-table-exact-diff-archive",
+  "tablePath": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "codeAndEvidenceCommit": "68a2c182b6b1ca646dee0c31eb5131de327a6994",
+  "beforeSha256": "e926917096cd74b9deedb111bf8cbcf7490b34dc55d75698ac9a0befa4058973",
+  "afterSha256": "a1bdf2c7545681624565c32c474c7c04b067b03337f64dddc3afe827264c1751",
+  "unrelatedLinesSha256": "127e3511d53d6bd0ac92d97fd9d3fadeca8a00386dfe8809ce1c9f3ac4954751",
+  "changedLines": [
+    6,
+    11
+  ],
+  "columns": 4,
+  "patchPath": "docs/research/reports/current-dual-impl-table-20261012.patch",
+  "patchSha256": "13fe5d11cf9707801a088076891dad2e6cdfa2a54165a36ab1b07edcc14b408f",
+  "scope": "Append current V3 Hook sample and Curve native sample evidence to existing rows; preserve earlier failures, incomplete references and all NOT RUN latency status. No new table.",
+  "originalEvidencePreserved": true
+}
