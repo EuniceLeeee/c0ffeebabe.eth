@@ -35,6 +35,7 @@ import { planFragmentNodes } from "../../../../solver/plan-fragment-requirements
 import { lower, same, MAX_UINT, pullsInput } from "../codec.js";
 import type { CurvePlainDescriptor } from "../types.js";
 import type { CurveUnderlyingDescriptor } from "../../curve-underlying-family/types.js";
+import { curveRefreshAddresses } from "../refresh-scope.js";
 const MAX_INPUT = MAX_UINT;
 
 const ROOT = fileURLToPath(new URL("../../../../../../../", import.meta.url));
@@ -59,6 +60,7 @@ function sourcePin(name: string) {
     .split("\0").filter(p => /\.(ts|sol)$/.test(p) && !p.includes("/test/")).sort();
   return { sourceSha256: sha(files.map(p => `${p}\0${sha(readFileSync(resolve(ROOT, p)))}`).join("\n")),
     fileCount: files.length, testSha256: sha(readFileSync(SELF)),
+    testSafetySha256: sha(readFileSync(new URL("./historical-runtime-dual-safety.test.ts", import.meta.url))),
     testInputHelperSha256: sha(readFileSync(new URL("./historical-amounts.ts", import.meta.url))),
     testPriceInputHelperSha256: sha(readFileSync(new URL("./historical-price-input.ts", import.meta.url))),
     artifactSha256: sha(readFileSync(resolve(ROOT, "out/BotVM.sol/BotVM.json"))),
@@ -112,13 +114,58 @@ function storage(diff: any, side: "pre" | "post", address: string): Record<strin
   const account = Object.entries(diff[side]).find(([key]) => same(key, address))?.[1] as any;
   return Object.fromEntries(Object.entries(account?.storage ?? {}).map(([key, value]) => [word(key), word(String(value))]));
 }
-function observed(diff: any, address: string, slot: string, initial: bigint) {
+function observed(diff: any, address: string, slot: string, initial: bigint, requireChange = true) {
   const pre = storage(diff, "pre", address), post = storage(diff, "post", address);
   const before = slot in pre ? BigInt(pre[slot]) : slot in post ? 0n : initial;
   const after = slot in post ? BigInt(post[slot]) : slot in pre ? 0n : initial;
   assert.equal(before, initial, "trace prestate disagrees with independently read balance");
-  assert(slot in pre || slot in post, "actor balance did not change in prestate trace");
+  if (requireChange) assert(slot in pre || slot in post, "actor balance did not change in prestate trace");
   return { before, after, delta: after - before };
+}
+
+export function observedNativeInventory(diff: any, address: string, initial: bigint) {
+  assert(diff?.pre && diff?.post, "independent prestate diff unavailable");
+  const account = (side: "pre" | "post") => Object.entries(diff[side])
+    .find(([key]) => same(key, address))?.[1] as { balance?: string } | undefined;
+  const pre = account("pre"), post = account("post");
+  // diffMode omits unchanged accounts on BOTH sides. An existing post account
+  // may omit an unchanged balance; only a pre-only account proves deletion.
+  const before = pre?.balance !== undefined ? BigInt(pre.balance) : pre ? initial : post ? 0n : initial;
+  const after = post?.balance !== undefined ? BigInt(post.balance) : post ? before : pre ? 0n : initial;
+  assert.equal(before, initial, "native prestate disagrees with actor override");
+  assert.equal(after, initial, "encoded execution consumed or changed native inventory");
+  return { before, after, delta: after - before };
+}
+
+export function assertNoInputRollback(input: {
+  trace: { error?: string }; diff: any; tokenIn: string; inSlot: string;
+  tokenOut: string; outSlot: string; outputBefore: bigint; nativeBefore: bigint;
+  finalAllowances: bigint[][];
+}) {
+  assert.equal(input.trace?.error, "execution reverted", "zero-input control did not revert atomically");
+  assert(input.diff?.pre && input.diff?.post, "negative-control prestate diff unavailable");
+  const spent = observed(input.diff, input.tokenIn, input.inSlot, 0n, false);
+  const received = observed(input.diff, input.tokenOut, input.outSlot, input.outputBefore, false);
+  assert.equal(spent.delta, 0n); assert.equal(received.delta, 0n);
+  const native = observedNativeInventory(input.diff, EXECUTOR, input.nativeBefore);
+  assert.deepEqual(input.finalAllowances, [[0n]], "failed control left ERC20 authorization");
+  // Actual Anvil diffMode rollback evidence may retain sender gas/nonce changes,
+  // but no executor/token/protocol changes or sender code/storage changes.
+  for (const side of ["pre", "post"] as const) {
+    for (const [address, account] of Object.entries(input.diff[side])) {
+      assert(same(address, OWNER), "failed control left non-sender state changes");
+      assert(Object.keys(account as object).every(key => key === "balance" || key === "nonce"),
+        "failed control changed sender code/storage");
+    }
+  }
+  return { input: spent, output: received, native };
+}
+
+export function curveHistoricalQuoteTargets(descriptor: CurvePlainDescriptor | CurveUnderlyingDescriptor): Set<string> {
+  if ("binding" in descriptor) return new Set(curveRefreshAddresses(descriptor).map(lower));
+  const model = descriptor.quoteModel;
+  return new Set([descriptor.pool, ...(model
+    ? [model.basePool, model.baseLPToken, model.implementation, ...model.baseCoins] : [])].map(lower));
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
@@ -307,9 +354,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     };
     // Exact may compose reads of the admitted metapool's proven base, LP and
     // coins. This is a test read boundary, not another quote implementation.
-    const model = "quoteModel" in descriptor ? descriptor.quoteModel : undefined;
-    const quoteTargets = new Set([args.pool, ...(model
-      ? [model.basePool, model.baseLPToken, model.implementation, ...model.baseCoins] : [])].map(lower));
+    const quoteTargets = curveHistoricalQuoteTargets(descriptor);
+    report.quoteReadTargets = [...quoteTargets].sort();
     for (const { row, route, definition } of rows) {
       let overrides: Overrides = {};
       const queryCalls: any[] = [];
@@ -324,7 +370,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
             return rpc("eth_call", [{ ...tx, gas: "0x800000" }, pin, overrides]);
           },
           async getCode(address, block) {
-            assert.equal(block, source.number); assert(quoteTargets.has(lower(address)));
+            assert.equal(block, source.number); assert(quoteTargets.has(lower(address)), "Curve code read outside bound dependencies");
             return rpc("eth_getCode", [address, pin]);
           },
           async getStorage(address, key, block) {
@@ -348,10 +394,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assert.equal(calls - beforeCalls, 0); assert.equal(constructionAttempts, 0);
       for (const point of curveHistoricalAmounts({ source, pool: args.pool, family: args.name, row, reference })) {
         const { multiplier, amountIn, priorActualOut } = point;
-        const inputSentinel = 101n, outputSentinel = 103n;
+        const inputSentinel = 101n, outputSentinel = 103n, nativeSentinel = 17n;
         const tokenIn = lower(row.tokenIn), tokenOut = lower(row.tokenOut);
         const inSlot = slots.get(tokenIn)!, outSlot = slots.get(tokenOut)!;
-        overrides = { [OWNER]: { balance: ethers.toQuantity(100n * 10n ** 18n) }, [EXECUTOR]: { code: botvm.code },
+        overrides = { [OWNER]: { balance: ethers.toQuantity(100n * 10n ** 18n) },
+          [EXECUTOR]: { code: botvm.code, balance: ethers.toQuantity(nativeSentinel) },
           [tokenIn]: { stateDiff: { [inSlot]: word(amountIn + inputSentinel) } },
           [tokenOut]: { stateDiff: { [outSlot]: word(outputSentinel) } } };
         const sample: Record<string, any> = { edgeId: row.edgeId, routeKey: route.routeKey, tokenIn, tokenOut,
@@ -428,6 +475,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               assert.equal(await balance(tokenOut, EXECUTOR, overrides), outputSentinel);
               const tx = { from: OWNER, to: EXECUTOR, data: buildExecuteCalldata(script), gas: "0x800000",
                 gasPrice: ethers.toQuantity(header.baseFeePerGas!) };
+              result.calldataHash = ethers.keccak256(tx.data);
               result.callTrace = await rpc("debug_traceCall", [tx, pin, { tracer: "callTracer", timeout: "30s", stateOverrides: overrides }]);
               result.evmSucceeded = !result.callTrace.error;
               assert(result.evmSucceeded, "encoded BotVM execution reverted");
@@ -437,6 +485,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               const input = observed(diff, tokenIn, inSlot, amountIn + inputSentinel);
               const output = observed(diff, tokenOut, outSlot, outputSentinel);
               result.balances = { input, output }; // Save mismatch evidence before asserting.
+              result.nativeInventory = observedNativeInventory(diff, EXECUTOR, nativeSentinel);
               result.quoteDelta = output.delta - quote.amountOut;
               assert.equal(input.delta, -amountIn); assert(output.delta > 0n);
               assert.equal(input.after, inputSentinel); assert.equal(output.after, outputSentinel + output.delta);
@@ -463,6 +512,39 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               assert(pulls ? finalAllowance === MAX_UINT || finalAllowance === MAX_UINT - amountIn : finalAllowance === 0n,
                 "Family allowance policy mismatch");
               result.allowancePolicy = pulls ? "standing-grant" : "no-grant";
+
+              stage = `${encoding}-no-input-control`;
+              // Preserve enough OLD output for either observed or quoted output,
+              // including successful underlying diagnostics with quote mismatch.
+              const noInputOutput = (quote.amountOut > output.delta ? quote.amountOut : output.delta) + outputSentinel;
+              const noInputOverrides = structuredClone(overrides);
+              noInputOverrides[tokenIn].stateDiff![inSlot] = word(0n);
+              noInputOverrides[tokenOut].stateDiff![outSlot] = word(noInputOutput);
+              const control: Record<string, any> = { status: "failed", calldataHash: result.calldataHash,
+                inputBefore: 0n, outputBefore: noInputOutput, nativeBefore: nativeSentinel };
+              result.noInputControl = control;
+              assert.equal(await balance(tokenIn, EXECUTOR, noInputOverrides), 0n);
+              assert.equal(await balance(tokenOut, EXECUTOR, noInputOverrides), noInputOutput);
+              // Reuse the SAME tx/calldata, source, gas and native override.
+              control.callTrace = await rpc("debug_traceCall", [tx, pin,
+                { tracer: "callTracer", timeout: "30s", stateOverrides: noInputOverrides }]);
+              control.stateDiff = await rpc("debug_traceCall", [tx, pin,
+                { tracer: "prestateTracer", tracerConfig: { diffMode: true }, timeout: "30s", stateOverrides: noInputOverrides }]);
+              const failedPost = structuredClone(noInputOverrides);
+              for (const [token, keys] of allowanceSlots) {
+                const preStorage = storage(control.stateDiff, "pre", token), postStorage = storage(control.stateDiff, "post", token);
+                const changes = failedPost[token] ??= {}; changes.stateDiff ??= {};
+                for (const key of keys) {
+                  if (key in postStorage) changes.stateDiff[key] = postStorage[key];
+                  else if (key in preStorage) changes.stateDiff[key] = word(0n);
+                }
+              }
+              control.finalAllowances = await readAllowances(failedPost);
+              control.balances = assertNoInputRollback({ trace: control.callTrace, diff: control.stateDiff,
+                tokenIn, inSlot, tokenOut, outSlot, outputBefore: noInputOutput,
+                nativeBefore: nativeSentinel, finalAllowances: control.finalAllowances });
+              control.status = "pass";
+              stage = encoding;
               result.oldInventoryConsumed = 0n; result.executionChecks = "pass";
               if (encoding !== "quoted-minimum-1-diagnostic") assert.equal(output.delta, quote.amountOut,
                 "exact quote and independently observed output differ (no tolerance)");
@@ -513,6 +595,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
   console.log(json({ result: report.result, samples: report.samples.length,
     executionsPassed: report.samples.flatMap((s: any) => s.executions).filter((e: any) => e.status === "pass").length,
+    noInputControlsPassed: report.samples.flatMap((s: any) => s.executions).filter((e: any) => e.noInputControl?.status === "pass").length,
     out: args.out, forkStopped: report.forkStopped }));
   if (report.result !== "pass") process.exitCode = 1;
 }
