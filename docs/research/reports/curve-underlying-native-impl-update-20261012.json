@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "sourceCommit": "049c15f628a410a4662f16e99052eae9acf8d02a",
+  "originalFile": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "41e6454d36c842c575c9fabe3327048c2e65b7d3289bfd8f952ad463346be40f",
+  "afterSha256": "ea2e19355c61cec1631f1fadc82a12d107fb4e816e940154bc0f85c42c94296f",
+  "patchSha256": "fa81aebe68457fb318988c8275aac2d3308f237cdee7b81dd3e49d56f05db383",
+  "changedLines": [
+    17
+  ],
+  "archivePatch": "docs/research/reports/curve-underlying-native-impl-table-20261012.patch",
+  "method": "Append to the original Curve Underlying row only; preserve all other rows/columns and TBTC exception. Original Obsidian directory has no Git repository, so archive the exact Markdown delta in this code branch instead of creating a second configuration table.",
+  "scope": "Single native-alias historical sample and guarded dual-execution correctness only. Full opportunity, original call-prestate, remaining Curve coverage and all latency remain unverified."
+}
