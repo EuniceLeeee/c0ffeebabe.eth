@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "kind": "original-IMPL-table-exact-diff-archive",
+  "tablePath": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "codeAndEvidenceCommit": "446a4415ef62231a0ab9cbb779db048b09ff57e0",
+  "beforeSha256": "9d36f6904c4cc5f8e68b5b32e7b34e3d690e9beb4b7c5ccfa851e637bb222489",
+  "afterSha256": "3bbc6035ae02a2327fdeb60896355f97ac7c344f03f14b2d95a30b72fd6e696c",
+  "unrelatedLinesSha256": "f04a6dc0993393dcbd68cf7927ae26f27bc01ab108d0ed5dc054167e028564cd",
+  "changedLines": [
+    11
+  ],
+  "columns": 4,
+  "patchPath": "docs/research/reports/curve-atomic-impl-table-20261012.patch",
+  "patchSha256": "60cd6a5746f64f352ea43f1f0f8558c2408725d8e9fa4c28b4cd6752f6ef2c57",
+  "scope": "Append bounded atomic identity/strict result only; retain missing-valuation, unverified production-reference dual execution, original failed attempts and NOT RUN performance. No live filter or deployment claim.",
+  "originalEvidencePreserved": true
+}
