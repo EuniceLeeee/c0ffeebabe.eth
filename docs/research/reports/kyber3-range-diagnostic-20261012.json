@@ -1,0 +1,69 @@
+{
+  "schema": "kyber3-range-diagnostic/v1",
+  "sourceArtifact": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber3-dual-attempt03.json",
+  "sourceArtifactSha256": "e2c495df308099e76f06e58efe9f3e3126458395adf2d0c7cac48071f5ff9afb",
+  "source": {
+    "number": 26005915,
+    "hash": "0xf4caf43faa7a0c6fe62b6e72b9c4a7e606f15574f5227617dfff6836b7678c3c",
+    "generation": 26005915
+  },
+  "sourceFiles": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+      "sha256": "f723c1456c49cd8bda0a5854ed3dc5a296ffcad7002de797f1d6aeb6b51c0c67"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/kyberswap-elastic-family/state.ts",
+      "sha256": "a4c0a19517cec7da13cdc2d58f7a431ad25051a630168ad4e2b369f76740c33c"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/kyberswap-elastic-family/math.ts",
+      "sha256": "efd4129af568fb6bc8b08cac0a6f24c727109a8385646f51593e67580c8831fe"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/kyberswap-elastic-family/exact.ts",
+      "sha256": "2f1c5114c2897abf48f57fcb506fa273af9130c5dbf7eaa0d92c905479ccec8a"
+    }
+  ],
+  "state": {
+    "source": {
+      "number": 26005915,
+      "hash": "0xf4caf43faa7a0c6fe62b6e72b9c4a7e606f15574f5227617dfff6836b7678c3c",
+      "generation": 26005915
+    },
+    "sqrtP": "79240191510953163618339389278",
+    "currentTick": 3,
+    "nearestCurrentTick": -10,
+    "locked": false,
+    "baseL": "18525946950",
+    "reinvestL": "203680",
+    "feeUnits": "8",
+    "previousTick": -887272,
+    "nextTick": 9
+  },
+  "targetTick": 9,
+  "firstStepReachInput": "5525671",
+  "reference": {
+    "amountIn": "5137921",
+    "result": {
+      "ok": true,
+      "quote": {
+        "amountIn": "5137921",
+        "amountOut": "5134526",
+        "sqrtPAfter": "79262163252198544108112614093",
+        "deltaL": "205",
+        "targetTick": 9
+      }
+    }
+  },
+  "failed": {
+    "amountIn": "10275842",
+    "result": {
+      "ok": false,
+      "refusal": "input-reaches-next-initialized-tick"
+    }
+  },
+  "conclusion": "Current single-range model refuses an amount reaching the next initialized tick. This is model coverage, not evidence the pool rejects this amount.",
+  "limits": "Offline production-code recomputation of saved same-N reads; no fresh EVM/RPC, no original pre-call replay, no across-tick execution proof or performance acceptance.",
+  "rpcCalls": 0
+}

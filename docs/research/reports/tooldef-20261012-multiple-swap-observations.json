@@ -1,0 +1,34 @@
+{
+  "learning_case_id": "tooldef-20261012-multiple-swap-observations",
+  "status": "manual_required",
+  "trigger": "historical_family_acceptance",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "The acceptance observer models one original leg per pool, rejecting two individually observable successful swaps before any production quote or execution. Not a protocol revert.",
+  "evidence": {
+    "tx": "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c",
+    "block": 26005915,
+    "pool": "0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc",
+    "failed_artifact": "logs/four-family-coverage-20261012.zHKuWX/kyber3-dual-attempt01.json",
+    "failed_sha256": "c918884af4c7ff84beb89f5cf4242abb2c7d3ef82d26487ac90957b0fff05e58",
+    "failure": "ambiguous original event count: 2 !== 1; Exact and actual execution not reached",
+    "observations": [
+      {"swap_log": "0x118", "call_path": "$.calls[3]", "amountIn": "1461765", "amountOut": "1462206", "output_log": "0x116"},
+      {"swap_log": "0x121", "call_path": "$.calls[5]", "amountIn": "38", "amountOut": "38", "output_log": "0x11a"}
+    ],
+    "adjudication": "Independent reviewer confirmed a unique one-to-one mapping of both call/event/output triples from saved receipt and trace; no new EVM/RPC was run by the reviewer.",
+    "adjudication_artifact": "kyber3-observation-review.json"
+  },
+  "tooling_defect": {
+    "tool": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+    "issue": "Singleton originalLeg assumption also drops the ability to schedule multiple original input amounts independently in historical-dual.",
+    "planned_fix": "Collect every uniquely authenticated swap call/event/payment with no evidence reuse; group by directed route, run production reference once and all original inputs with own output provenance; preserve singleton and non-swap contracts.",
+    "codify_target": "listener/src/searcher/test/family-integration/kyber-yb-compound/{evidence.ts,evidence.test.ts,historical-dual.ts}",
+    "codify_commit": "6ed303dcca6111498718e7a27cd97c4089f2593a",
+    "status": "codified",
+    "regression": "121 evidence/consumer contracts pass; production dual contracts 80/80 and build:live pass. Independent review plus narrow follow-up resolved the P3 label without changing original artifacts.",
+    "execution": "Both original swaps authenticated in attempts02/03; four amount groups executed (16 successes, 8 missing-input controls each run). Complete dual tool still exits1 on a separately diagnosed cross-range model gap; not marked full Family acceptance.",
+    "report": "docs/research/reports/kyber3-multivisit-acceptance-20261012.json"
+  },
+  "limits": "N-end quote/dual checks are not a pre-call replay or profit reproduction. No performance, natural effective valuation, or family-wide completion claim."
+}

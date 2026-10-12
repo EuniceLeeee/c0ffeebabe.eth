@@ -1,0 +1,941 @@
+{
+  "schema": "kyber3-independent-code-review-pass1/v1",
+  "reviewedAt": "2026-10-12T05:51:50.422Z",
+  "role": "Independent non-author first implementation review; not the earlier observation adjudication",
+  "disposition": "no_blocking_observer_or_consumer_correctness_finding; one nonblocking reporting defect",
+  "scope": "Acceptance-only all-observed-leg collector and historical-dual consumer, including authorized final failure-evidence retention increment. No quote/range-crossing implementation review.",
+  "sourcePins": {
+    "cloudRoot": "/opt/mev-cloud/family-runtime-20261007",
+    "cloudHeadObserved": "0f127f8215ea5c486858fb6718e209373f8059ff",
+    "headIsNotDirtyFileIdentity": true,
+    "evidence": {
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+      "localPath": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/evidence.ts",
+      "sha256": "77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222",
+      "cloudAndLocalVerified": true
+    },
+    "initialConsumer": {
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+      "sha256": "914d93143e67c824461e2159225b8fe09834449e7294e9c2bdf8f53d8a69925a",
+      "cloudAndLocalVerifiedBeforeRevision": true,
+      "actualArtifact": "kyber3-dual-attempt02.json"
+    },
+    "finalConsumer": {
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+      "localPath": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/historical-dual.ts",
+      "sha256": "4dfa817c0381515c4b2a024eddf0191da69ddbd8cd0421fe2074d29f4c16316e",
+      "cloudAndLocalVerified": true,
+      "actualArtifact": "kyber3-dual-attempt03.json"
+    },
+    "frozenTests": {
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.test.ts",
+      "localPath": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/evidence.test.ts",
+      "sha256": "ddc7b23b40ceef8995ffdf54858462687db917a5cf9db2b3915f6c19165c7323",
+      "cloudAndLocalVerified": true,
+      "review": "Read only after user freeze; inspected multi-visit identity/ambiguity/grouping/trial negative cases. Not executed by reviewer."
+    },
+    "savedProductionSourceTreeSha256": "c07c2310160ef72f154587440040b37a6009d5bfa791c47bdb49232c0e23f9fa",
+    "productionSourceScope": "All three saved runs record the same production tree fingerprint. Acceptance-file hashes differ as recorded; no blanket assertion that all dirty peer files are unchanged.",
+    "applicableCloudInstructionSha256": {
+      "AGENTS": "4ab1f6aaed59f8aa31837542a55b5d1c452896e89b568918e0923bd0e420244d",
+      "CLAUDE": "4ab1f6aaed59f8aa31837542a55b5d1c452896e89b568918e0923bd0e420244d"
+    }
+  },
+  "ran_gate": {
+    "staticSourceReview": "completed against exact pinned sources and cloud HEAD diffs",
+    "isolatedCurrentSourceOfflineChecks": {
+      "ran": true,
+      "passed": 46,
+      "failed": 0,
+      "exitCode": 0,
+      "toolChunk": "3ddadc",
+      "method": "AST-selected unmodified function bodies and consumer expressions; in-memory TypeScript erasure, real ethers ABI decoding, saved raw artifact plus in-memory mutations. Not a production build, full-module integration or official suite."
+    },
+    "savedAcceptanceArtifactChecks": {
+      "ran": true,
+      "status": "pass",
+      "exitCode": 0,
+      "toolChunk": "2aac5a",
+      "meaning": "Independent offline consistency assertions on existing actual attempt01/02/03; never a new EVM execution."
+    },
+    "officialExpandedContractSuite": {
+      "ranByReviewer": false,
+      "result": "not independently received; main was running it at cutoff"
+    },
+    "build": false,
+    "chainRpc": false,
+    "newReadyOrDualRunner": false,
+    "newEvmExecution": false,
+    "performance": false,
+    "merge": false,
+    "canonicalReconciliation": "Reconciled manual collector/trial assessment with source-bound actual historical-dual/v2 attempt02 and attempt03 outputs; no new canonical runner invoked under read-only scope."
+  },
+  "findings": [
+    {
+      "id": "K3-P1-R1",
+      "priority": "P3",
+      "blocking": false,
+      "title": "Doubled historical fallback gets a misleading production-reference comparison label",
+      "file": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+      "line": 334,
+      "trigger": "For xwin-mint/xwin-redeem/ethertoken-native with neither a natural nor spliced reference, historicalAmountTrials emits twice-historical-input-at-N-not-production-reference with original:null.",
+      "observed": "The consumer's original:null branch nevertheless reports 'production reference amount; no original TX leg comparison'.",
+      "impact": "Reporting/provenance wording only: no changed trial amount, quote attribution, uniqueness, or pass gate. Not a Kyber3 safety blocker and not a non-swap observer semantic change.",
+      "executableEvidence": "nonblocking-fallback-report-label-reproduced",
+      "recommendation": "Use a neutral no-original-comparison verdict or branch explicitly on the trial label; retain not-production-reference wording. Add a consumer-level fallback reporting assertion. No edit made."
+    }
+  ],
+  "blockers": [],
+  "reviewedInvariants": [
+    {
+      "subject": "All target visits, no arbitrary subset",
+      "evidence": "evidence.ts:382-433; cloud diff leaves originalLeg intact",
+      "assessment": "Target Swap count equals successful CALL count; every event must match exactly one full exact-input signed return/call/output tuple; usedCalls plus final cardinality require a bijection. No first/largest/order selection; sorting only happens after bindings."
+    },
+    {
+      "subject": "Receipt/call/payment identity",
+      "evidence": "evidence.ts:388-430",
+      "assessment": "Fixed sample TX/N and successful receipt, all log transaction/block anchors, no removed logs, unique numeric log indices. IDs bind TX + lowercased instance + numeric Swap log. Successful swap and output paths and unique payment log identity retained."
+    },
+    {
+      "subject": "Identical output ambiguity and call scope",
+      "evidence": "evidence.ts:309-333,365-368,401-428",
+      "assessment": "Old singleton comparison stays strict. Payment must be inside that successful swap subtree, from pool, to recipient, correct token/value, with empty/no-return or exact ABI true. A reverted ancestor invalidates descendants. All Transfer logs remain visible, so identical output receipts fail closed, including attempts to share one receipt across different visits."
+    },
+    {
+      "subject": "Canonical/source gate remains caller-owned",
+      "evidence": "historical-dual.ts:167-178,191-211; evidence.ts:388",
+      "assessment": "Collector uses receipt.blockHash for internal anchoring, not independent canonical authentication. Consumer still authenticates canonical N header, receipt/TX, trace root identity, Ready/prices/source and issuer/memo identity; final file/header/state checks remain. A self-consistent alternate block hash is rejected by caller assertReceipt against authenticated header."
+    },
+    {
+      "subject": "Grouping/trial/output attribution",
+      "evidence": "evidence.ts:436-459; historical-dual.ts:266-289,310-334",
+      "assessment": "One group per observed token direction; both originals retained even for equal inputs. One reference trial per direction has no original. Each historical trial owns its own amount/output/observationId/logIndex. Only an unobserved reverse gets twice-reference. v2 schema prevents silently presenting multi-visit row.original as one selected leg."
+    },
+    {
+      "subject": "Production reference/runtime/inventory guards",
+      "evidence": "historical-dual.ts:274-305,329,347-400; evidence.ts:197-207,471-507",
+      "assessment": "Route/edge uniqueness, missing-natural-valuation unmet gate and explicit donor splice preserved. Runtime construction still forbids Exact/quoted/RPC and amount getters; actual output delta, exact input debit, native inventory and no-input-with-output negative controls remain. All trial statuses must pass for overall success; failure outputs are exclusively created and finally written."
+    },
+    {
+      "subject": "Non-swap observers",
+      "evidence": "Cloud HEAD diff for evidence.ts; new originalLegs non-swap early return",
+      "assessment": "Original non-swap observer branches unchanged; successfulCalls is the same error-pruned DFS projected from path frames. Non-swap uses the prior singleton contract. No independent non-swap execution acceptance claimed."
+    },
+    {
+      "subject": "Final retention increment",
+      "evidence": "historical-dual.ts:213-217,322-329; attempt03",
+      "assessment": "Call data/block/result recorded around the same provider call. Resolved quote metadata, outcome and reads are stored before amount/source assertions; strict positive output remains before fragment construction. Local zero-output branch check still throws and remains failed. Attempt03 retains amountOut=0 and method/outcome; failed fifth trial has quoteReads=[], while earlier forward/reverse trials retain 3/4 state reads. Do not claim a fresh fifth-trial state read or full exception-path evidence retention."
+    }
+  ],
+  "acceptanceToolProof": {
+    "claim": "Observer/consumer integration proof only, from existing actual saved outputs; not full protocol, exact original pre-call parity, or performance acceptance.",
+    "cloudAudit": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX",
+    "sample": {
+      "tx": "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c",
+      "N": 26005915,
+      "instance": "0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc",
+      "direction": "USDC -> USDT",
+      "legs": [
+        {
+          "observationId": "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c:0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc:280",
+          "swap": "$.calls[3]",
+          "payment": "$.calls[3].calls[1]",
+          "swapLog": "0x118",
+          "paymentLog": "0x116",
+          "amountIn": "1461765",
+          "amountOut": "1462206"
+        },
+        {
+          "observationId": "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c:0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc:289",
+          "swap": "$.calls[5]",
+          "payment": "$.calls[5].calls[0]",
+          "swapLog": "0x121",
+          "paymentLog": "0x11a",
+          "amountIn": "38",
+          "amountOut": "38"
+        }
+      ]
+    },
+    "attempt01": "Preserved: singleton ambiguity, samples=[], Exact=0, quoted=0.",
+    "attempt02": "Preserved and still bound to consumer 914d...; observed both legs and 4 successful quote trials / 16 quoted+runtime execution receipts / 8 no-input negative controls. Overall FAILED at fifth quote positive-output assertion; zero value itself was not saved by this revision.",
+    "attempt03": "Preserved and bound to consumer 4dfa...; same Ready/prices, production source, raw transaction evidence and four completed trial results. Fifth trial records amountIn=10275842, amountOut=0, methodId=kyberswap-elastic-single-range and outcome; executions=[] and overall FAILED.",
+    "amounts": [
+      {
+        "direction": "USDC->USDT",
+        "source": "spliced recorded production input, not natural target valuation",
+        "amountIn": "5135191",
+        "quoteOut": "5134916",
+        "executionReceipts": 4
+      },
+      {
+        "direction": "USDC->USDT",
+        "source": "historical log 0x118",
+        "amountIn": "1461765",
+        "originalOut": "1462206",
+        "quoteOut": "1461975",
+        "deltaVsOriginal": "-231",
+        "executionReceipts": 4
+      },
+      {
+        "direction": "USDC->USDT",
+        "source": "historical log 0x121",
+        "amountIn": "38",
+        "originalOut": "38",
+        "quoteOut": "38",
+        "deltaVsOriginal": "0",
+        "executionReceipts": 4
+      },
+      {
+        "direction": "USDT->USDC",
+        "source": "spliced recorded production input, not an original leg",
+        "amountIn": "5137921",
+        "quoteOut": "5134526",
+        "executionReceipts": 4
+      },
+      {
+        "direction": "USDT->USDC",
+        "source": "twice-spliced-production-input-at-N",
+        "amountIn": "10275842",
+        "quoteOut": "0",
+        "executionReceipts": 0,
+        "status": "FAILED before fragment/EVM; classification explicitly out of scope"
+      }
+    ],
+    "naturalValuation": "Both directions remain productionReferenceGate=unmet/missing-valuation. Explicit input-only splice does not satisfy target natural valuation.",
+    "failedQuoteBoundary": "Distinct from observation uniqueness. No attribution to protocol failure, no range-crossing diagnosis or fix here.",
+    "totalCountsPerAttempt02And03": {
+      "exactInvocations": 5,
+      "quotedFragmentInvocations": 4,
+      "successfulExecutionReceipts": 16,
+      "noInputNegativeControls": 8
+    },
+    "originalPreCallParity": "NOT RUN; N-end != original pre-call state",
+    "representativePerformance": "NOT RUN"
+  },
+  "executableCheckOutputs": {
+    "isolatedCurrentSource": {
+      "mode": "local offline AST-extracted exact-source function observations; no full module/typecheck/build or EVM",
+      "versions": {
+        "node": "v26.0.0",
+        "typescript": "5.9.3",
+        "ethers": "6.16.0"
+      },
+      "sourceHashes": {
+        "evidence": "77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222",
+        "consumer": "4dfa817c0381515c4b2a024eddf0191da69ddbd8cd0421fe2074d29f4c16316e"
+      },
+      "extractedHelperSha256": "790be4e7bd06af260c7331da82e84cafc7d73318686c57ea50a66b38695fce19",
+      "extractedConsumerRetentionSha256": "2d286fd957557aae2b89dc7a73d95b47abe642d4427748759ad9363d812218cc",
+      "checks": [
+        {
+          "name": "saved-real-two-visit-bijection",
+          "status": "pass",
+          "detail": [
+            {
+              "observationId": "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c:0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc:280",
+              "swap": "$.calls[3]",
+              "payment": "$.calls[3].calls[1]",
+              "swapLog": "0x118",
+              "paymentLog": "0x116",
+              "amountIn": "1461765",
+              "amountOut": "1462206"
+            },
+            {
+              "observationId": "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c:0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc:289",
+              "swap": "$.calls[5]",
+              "payment": "$.calls[5].calls[0]",
+              "swapLog": "0x121",
+              "paymentLog": "0x11a",
+              "amountIn": "38",
+              "amountOut": "38"
+            }
+          ]
+        },
+        {
+          "name": "legacy-singleton-still-rejects-multivisit",
+          "status": "pass"
+        },
+        {
+          "name": "receipt-order-does-not-choose-or-pair-legs",
+          "status": "pass"
+        },
+        {
+          "name": "reverted-decoy-subtree-ignored",
+          "status": "pass"
+        },
+        {
+          "name": "empty-return-plus-receipt-accepted",
+          "status": "pass"
+        },
+        {
+          "name": "abi-true-return-accepted",
+          "status": "pass"
+        },
+        {
+          "name": "wrong-receipt-tx",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "The expression evaluated to a falsy value:"
+          }
+        },
+        {
+          "name": "wrong-receipt-N",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "Expected values to be strictly equal:"
+          }
+        },
+        {
+          "name": "failed-receipt",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "Expected values to be strictly equal:"
+          }
+        },
+        {
+          "name": "removed-log",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "The expression evaluated to a falsy value:"
+          }
+        },
+        {
+          "name": "wrong-log-block-hash",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "The expression evaluated to a falsy value:"
+          }
+        },
+        {
+          "name": "wrong-log-transaction",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "The expression evaluated to a falsy value:"
+          }
+        },
+        {
+          "name": "missing-log-index",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "missing log identity"
+          }
+        },
+        {
+          "name": "duplicate-numeric-log-identity",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "duplicate receipt log identity"
+          }
+        },
+        {
+          "name": "root-revert",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original transaction reverted"
+          }
+        },
+        {
+          "name": "missing-target-swap-call",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap call/event coverage differs"
+          }
+        },
+        {
+          "name": "extra-successful-target-swap-call",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap call/event coverage differs"
+          }
+        },
+        {
+          "name": "missing-target-swap-event",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap call/event coverage differs"
+          }
+        },
+        {
+          "name": "extra-target-swap-event",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap call/event coverage differs"
+          }
+        },
+        {
+          "name": "target-under-reverted-ancestor",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap call/event coverage differs"
+          }
+        },
+        {
+          "name": "wrong-signed-return",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "partial-input",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "wrong-calldata-direction",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "wrong-event-sender",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "identical-global-output-transfer-ambiguous",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "duplicate-successful-output-call-ambiguous",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "sibling-payment-cannot-supply-output",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "reverted-payment-cannot-supply-output",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "wrong-output-payer",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "wrong-output-token",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "wrong-output-recipient",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "wrong-output-amount",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "abi-false-output-return",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "malformed-output-return",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "identical-visits-remain-ambiguous",
+          "status": "pass",
+          "detail": {
+            "rejected": true,
+            "message": "original swap event has missing/ambiguous call binding"
+          }
+        },
+        {
+          "name": "direction-group-preserves-both-originals-and-one-reverse",
+          "status": "pass",
+          "detail": [
+            {
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "originals": 2
+            },
+            {
+              "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "originals": 0
+            }
+          ]
+        },
+        {
+          "name": "forward-reference-once-plus-every-original",
+          "status": "pass"
+        },
+        {
+          "name": "equal-amounts-not-deduplicated",
+          "status": "pass"
+        },
+        {
+          "name": "reverse-reference-and-double-have-no-original",
+          "status": "pass"
+        },
+        {
+          "name": "canonical-receipt-gate-still-rejects-self-consistent-wrong-header",
+          "status": "pass"
+        },
+        {
+          "name": "runtime-build-Exact-quoted-RPC-read-forbidden",
+          "status": "pass"
+        },
+        {
+          "name": "existing-input-output-native-inventory-gates",
+          "status": "pass"
+        },
+        {
+          "name": "missing-natural-valuation-remains-unmet",
+          "status": "pass"
+        },
+        {
+          "name": "consumer-compares-each-trial-own-observation",
+          "status": "pass"
+        },
+        {
+          "name": "nonblocking-fallback-report-label-reproduced",
+          "status": "pass",
+          "detail": {
+            "trialLabel": "twice-historical-input-at-N-not-production-reference",
+            "original": null,
+            "comparison": "production reference amount; no original TX leg comparison"
+          }
+        },
+        {
+          "name": "new-consumer-retains-zero-result-and-still-rejects",
+          "status": "pass",
+          "detail": {
+            "status": "failed",
+            "executions": [],
+            "quoteReads": [
+              {
+                "kind": "call",
+                "to": "0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc",
+                "data": "0x217ac237",
+                "block": 26005915,
+                "result": "0x"
+              }
+            ],
+            "quote": {
+              "amountIn": "10275842",
+              "amountOut": "0",
+              "methodId": "offline-only",
+              "outcome": {
+                "kind": "diagnostic"
+              },
+              "evidenceRefs": [
+                "offline"
+              ],
+              "reads": [
+                {
+                  "kind": "call",
+                  "to": "0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc",
+                  "data": "0x217ac237",
+                  "block": 26005915,
+                  "result": "0x"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "passed": 46,
+      "failed": 0
+    },
+    "savedArtifacts": {
+      "mode": "offline saved-artifact internal consistency assertions, not new EVM execution",
+      "status": "pass",
+      "rawOriginalHashes": {
+        "receipt": "bd21cb52ff9390fee2a124daf0e78890013c3c6a7ff51fbb1be6f7a85e46142a",
+        "trace": "c0d9c85903139d26451ef80b6af098868deb806cf55535083b6b4d50298b2792"
+      },
+      "artifacts": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber3-dual-attempt01.json",
+          "sha256": "c918884af4c7ff84beb89f5cf4242abb2c7d3ef82d26487ac90957b0fff05e58",
+          "result": "failed",
+          "code": {
+            "sourceTreeSha256": "c07c2310160ef72f154587440040b37a6009d5bfa791c47bdb49232c0e23f9fa",
+            "harnessSha256": "7bedee2d3a531a21de32aed370c70b1e90fbba8957ce3627b5d130d85729e831",
+            "evidenceSha256": "3fd31c3aa92722626e620a1b33dc6fdd1106551d6bee8636bf62c818f165ee6d",
+            "observationHelpers": [
+              {
+                "path": "../three-family/historical-input-observations.ts",
+                "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+              },
+              {
+                "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+                "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+              },
+              {
+                "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+                "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+              },
+              {
+                "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+                "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+              },
+              {
+                "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+                "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+              },
+              {
+                "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+                "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+              },
+              {
+                "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+                "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+              },
+              {
+                "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+                "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+              },
+              {
+                "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+                "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+              }
+            ]
+          },
+          "samples": 0,
+          "counts": {
+            "exact": 0,
+            "quoted": 0,
+            "forbiddenDuringBuild": 0
+          },
+          "errors": [
+            {
+              "stage": "owned-local-fork",
+              "message": "ambiguous original event count\n\n2 !== 1\n"
+            }
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber3-dual-attempt02.json",
+          "sha256": "1a4310bc8d9a5587fc41ba1b261862d238cc18d9c8c80117e9c7168e886e5fbd",
+          "result": "failed",
+          "source": {
+            "number": 26005915,
+            "hash": "0xf4caf43faa7a0c6fe62b6e72b9c4a7e606f15574f5227617dfff6836b7678c3c",
+            "generation": 26005915
+          },
+          "code": {
+            "sourceTreeSha256": "c07c2310160ef72f154587440040b37a6009d5bfa791c47bdb49232c0e23f9fa",
+            "harnessSha256": "914d93143e67c824461e2159225b8fe09834449e7294e9c2bdf8f53d8a69925a",
+            "evidenceSha256": "77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222"
+          },
+          "sameReadyInputHashes": [
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber3-ready-attempt01/ready.json",
+              "sha256": "3392db3017e065d31f98c2a2b3100d6c0339eaa59a2cab18a9bfe5c82dcb22e9"
+            },
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber3-ready-attempt01/prices/prices.json",
+              "sha256": "abdf77d621d32e414f0440f2025f6278fc04ddcd7d05702206cb033fd6d71bd7"
+            },
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber3-ready-attempt01/prices/input.json",
+              "sha256": "14e326d0959271fa490c73c55568a1635bfb653bfe640629075d6764a19ea7f1"
+            }
+          ],
+          "completedTrials": 4,
+          "passedExecutions": 16,
+          "passedNoInputControls": 8,
+          "invocationCounts": {
+            "exact": 5,
+            "quoted": 4,
+            "forbiddenDuringBuild": 0
+          },
+          "trialSummary": [
+            {
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "label": "spliced-production-input-at-N",
+              "amountIn": "5135191",
+              "status": "pass",
+              "quoteOut": "5134916",
+              "originalLog": null,
+              "quoteReads": null,
+              "quoteVsOriginalDelta": null,
+              "executionCount": 4
+            },
+            {
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "label": "historical-input-at-N",
+              "amountIn": "1461765",
+              "status": "pass",
+              "quoteOut": "1461975",
+              "originalLog": "0x118",
+              "quoteReads": null,
+              "quoteVsOriginalDelta": "-231",
+              "executionCount": 4
+            },
+            {
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "label": "historical-input-at-N",
+              "amountIn": "38",
+              "status": "pass",
+              "quoteOut": "38",
+              "originalLog": "0x121",
+              "quoteReads": null,
+              "quoteVsOriginalDelta": "0",
+              "executionCount": 4
+            },
+            {
+              "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "label": "spliced-production-input-at-N",
+              "amountIn": "5137921",
+              "status": "pass",
+              "quoteOut": "5134526",
+              "originalLog": null,
+              "quoteReads": null,
+              "quoteVsOriginalDelta": null,
+              "executionCount": 4
+            },
+            {
+              "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "label": "twice-spliced-production-input-at-N",
+              "amountIn": "10275842",
+              "status": "failed",
+              "quoteOut": null,
+              "originalLog": null,
+              "quoteReads": null,
+              "quoteVsOriginalDelta": null,
+              "executionCount": 0
+            }
+          ],
+          "failedTrial": {
+            "label": "twice-spliced-production-input-at-N",
+            "amountIn": "10275842",
+            "quoteOut": null,
+            "methodId": null,
+            "outcomeStatus": null,
+            "quoteReadCount": null,
+            "error": {
+              "stage": "production-Exact",
+              "message": "The expression evaluated to a falsy value:\n\n  assert(quote.amountOut > 0n)\n"
+            }
+          },
+          "errors": [
+            {
+              "stage": "production-Exact",
+              "message": "at least one real quote/execution failed"
+            }
+          ],
+          "preCallParity": "NOT RUN",
+          "representativePerformance": "NOT RUN"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber3-dual-attempt03.json",
+          "sha256": "e2c495df308099e76f06e58efe9f3e3126458395adf2d0c7cac48071f5ff9afb",
+          "result": "failed",
+          "source": {
+            "number": 26005915,
+            "hash": "0xf4caf43faa7a0c6fe62b6e72b9c4a7e606f15574f5227617dfff6836b7678c3c",
+            "generation": 26005915
+          },
+          "code": {
+            "sourceTreeSha256": "c07c2310160ef72f154587440040b37a6009d5bfa791c47bdb49232c0e23f9fa",
+            "harnessSha256": "4dfa817c0381515c4b2a024eddf0191da69ddbd8cd0421fe2074d29f4c16316e",
+            "evidenceSha256": "77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222"
+          },
+          "sameReadyInputHashes": [
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber3-ready-attempt01/ready.json",
+              "sha256": "3392db3017e065d31f98c2a2b3100d6c0339eaa59a2cab18a9bfe5c82dcb22e9"
+            },
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber3-ready-attempt01/prices/prices.json",
+              "sha256": "abdf77d621d32e414f0440f2025f6278fc04ddcd7d05702206cb033fd6d71bd7"
+            },
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber3-ready-attempt01/prices/input.json",
+              "sha256": "14e326d0959271fa490c73c55568a1635bfb653bfe640629075d6764a19ea7f1"
+            }
+          ],
+          "completedTrials": 4,
+          "passedExecutions": 16,
+          "passedNoInputControls": 8,
+          "invocationCounts": {
+            "exact": 5,
+            "quoted": 4,
+            "forbiddenDuringBuild": 0
+          },
+          "trialSummary": [
+            {
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "label": "spliced-production-input-at-N",
+              "amountIn": "5135191",
+              "status": "pass",
+              "quoteOut": "5134916",
+              "originalLog": null,
+              "quoteReads": 3,
+              "quoteVsOriginalDelta": null,
+              "executionCount": 4
+            },
+            {
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "label": "historical-input-at-N",
+              "amountIn": "1461765",
+              "status": "pass",
+              "quoteOut": "1461975",
+              "originalLog": "0x118",
+              "quoteReads": 0,
+              "quoteVsOriginalDelta": "-231",
+              "executionCount": 4
+            },
+            {
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "label": "historical-input-at-N",
+              "amountIn": "38",
+              "status": "pass",
+              "quoteOut": "38",
+              "originalLog": "0x121",
+              "quoteReads": 0,
+              "quoteVsOriginalDelta": "0",
+              "executionCount": 4
+            },
+            {
+              "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "label": "spliced-production-input-at-N",
+              "amountIn": "5137921",
+              "status": "pass",
+              "quoteOut": "5134526",
+              "originalLog": null,
+              "quoteReads": 4,
+              "quoteVsOriginalDelta": null,
+              "executionCount": 4
+            },
+            {
+              "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "label": "twice-spliced-production-input-at-N",
+              "amountIn": "10275842",
+              "status": "failed",
+              "quoteOut": "0",
+              "originalLog": null,
+              "quoteReads": 0,
+              "quoteVsOriginalDelta": null,
+              "executionCount": 0
+            }
+          ],
+          "failedTrial": {
+            "label": "twice-spliced-production-input-at-N",
+            "amountIn": "10275842",
+            "quoteOut": "0",
+            "methodId": "kyberswap-elastic-single-range",
+            "outcomeStatus": "verified",
+            "quoteReadCount": 0,
+            "error": {
+              "stage": "production-Exact",
+              "message": "The expression evaluated to a falsy value:\n\n  assert(quote.amountOut > 0n)\n"
+            }
+          },
+          "errors": [
+            {
+              "stage": "production-Exact",
+              "message": "at least one real quote/execution failed"
+            }
+          ],
+          "preCallParity": "NOT RUN",
+          "representativePerformance": "NOT RUN"
+        }
+      ]
+    }
+  },
+  "frozenTestsAndRemainingGates": {
+    "inspectedCoverage": "Cardinality/bijection and permutations, missing/duplicate/malformed call/event/payment, signed input/direction, payment provenance/subtrees, false/malformed return, all receipt anchors/numeric IDs, equal-amount observation ownership, reversed direction grouping and reference/fallback trials.",
+    "officialSuite": "Main owns official execution; reviewer did not run cloud tests or claim its result.",
+    "stillOutOfScope": [
+      "Protocol zero-output/range boundary investigation and any fix",
+      "Full Family/protocol acceptance",
+      "Original pre-call replay parity",
+      "Performance/live/benchmark acceptance",
+      "Algebra historical acceptance and non-swap executions"
+    ]
+  },
+  "preservationAndCleanup": {
+    "nextCoverage": {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/next-coverage.json",
+      "sha256": "d1e48f062d0e676905a2842b91c9453b401eec2c89d10a15179f71cb7bfed515",
+      "unchanged": true
+    },
+    "earlierAdjudication": {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber3-observation-review.json",
+      "sha256": "49ed4b494ed6d6724e9c35fa69b6c6dea3749c276ad9cf3875491425643846db",
+      "unchanged": true
+    },
+    "attempts": "01/02/03 read and hashed only; never overwritten or rerun",
+    "mutations": "Only this new review JSON created. No production/IMPL/source/test files changed, no secrets/env read.",
+    "processState": "Read-only SSH commands 42285, 27723, 67874 completed exit 0. No active reviewer SSH handle, runner, fork or EVM process; no peer live process controlled.",
+    "skill": "family-plugin-adaptation kept source/state identities and fixture/actual-execution/performance conclusions separate."
+  }
+}

@@ -1,0 +1,262 @@
+{
+  "schema": "kyber3-independent-code-review-followup/v1",
+  "reviewedAt": "2026-10-12T06:02:19.606Z",
+  "reviewPass": "second/final, non-author",
+  "scope": "Only pass1 finding K3-P1-R1: original:null neutral comparison wording and its added source contract; no cross-range mathematics review.",
+  "conclusion": "pass1 P3 reporting finding resolved in the pinned local scratch consumer; no new findings or blockers in this narrow follow-up",
+  "findings": [],
+  "resolvedFindings": [
+    {
+      "id": "K3-P1-R1",
+      "priorPriority": "P3",
+      "status": "resolved_in_reviewed_local_source",
+      "consumerLocation": {
+        "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/historical-dual.ts",
+        "line": 334
+      },
+      "testLocation": {
+        "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/evidence.test.ts",
+        "line": 23
+      },
+      "observedVerdict": "non-original amount trial; no original TX leg comparison",
+      "justification": "Executed the actual comparison expression and historicalAmountTrials with saved original-leg data. Doubled historical fallback no longer asserts production-reference provenance; original trial attribution is retained."
+    }
+  ],
+  "sourcePins": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/historical-dual.ts",
+      "sha256": "43f43ca6314a9272ddfd6e4cbb277e1e6723de92480227ee97e2dbfd42d0babb"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/evidence.test.ts",
+      "sha256": "7fb30b26a9f1af3038dd8e219221c9dfe600fda107c1f36979f284a7eb07ebd0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/evidence.ts",
+      "sha256": "77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber3-code-review-pass1.json",
+      "sha256": "d2cdce5ec9948226e5c1ef97d772c920f8c8882d8e8d306d69db5d59ffa6389f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber3-dual-attempt03.json",
+      "sha256": "e2c495df308099e76f06e58efe9f3e3126458395adf2d0c7cac48071f5ff9afb"
+    }
+  ],
+  "preservationProof": {
+    "consumer": "Replacing exactly one new verdict string with the prior wording in memory recreates SHA 4dfa817c0381515c4b2a024eddf0191da69ddbd8cd0421fe2074d29f4c16316e. All other consumer bytes, including admission/canonical/source/runtime/inventory/failure assertions, are unchanged from pass1.",
+    "tests": "Removing only the added source-contract test and its node:fs readFileSync import in memory recreates SHA ddc7b23b40ceef8995ffdf54858462687db917a5cf9db2b3915f6c19165c7323. Existing test assertions are unchanged.",
+    "evidence": "evidence.ts remains SHA 77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222; observation/trial helper source is unchanged.",
+    "pass1": "Preserved byte-for-byte at SHA d2cdce5ec9948226e5c1ef97d772c920f8c8882d8e8d306d69db5d59ffa6389f; no earlier report edited."
+  },
+  "ran_gate": {
+    "narrowOfflineChecks": {
+      "ran": true,
+      "passed": 12,
+      "failed": 0,
+      "exitCode": 0,
+      "toolChunk": "b838f9"
+    },
+    "method": "Read pinned local files; extracted the exact source-contract callback, trial function, consumer comparison and quote assertions. Only import.meta.url was bound to the actual scratch test file URL for isolated execution. Used in-memory TypeScript erasure for the trial helper; no complete module import, build or network access.",
+    "regressionCheck": "Added source contract passes on actual current scratch file and rejects an in-memory old-wording regression.",
+    "boundaryChecks": "Zero output, wrong input, wrong source, unresolved quote and production-effective mismatch still throw; zero-result evidence is retained and no fragment/EVM is executed.",
+    "full121Tests": {
+      "ranByReviewer": false,
+      "owner": "main",
+      "result": "not claimed"
+    },
+    "build": {
+      "ran": false,
+      "owner": "main"
+    },
+    "cloudReadOrMutation": false,
+    "rpc": false,
+    "evm": false,
+    "dualOrReadyRerun": false,
+    "benchmarkOrPerformance": false,
+    "installOrCommit": false
+  },
+  "trialLabelAssessment": {
+    "doubledHistorical": "twice-historical-input-at-N-not-production-reference retained, amount = 2 * historical input, original = null, neutral comparison verdict",
+    "splicedReference": "spliced-production-input-at-N retained; distinct from doubled historical and from historical-input-at-N",
+    "reverseDoubleSplice": "twice-spliced-production-input-at-N retained with no original observation",
+    "productionReference": "production-effective / twice-production-effective labels retained; generic comparison wording does not erase the trial's specific source label",
+    "originalLegs": "Historical trials retain their own output, observationId, logIndex and signed delta; reference/fallback trials do not inherit these fields."
+  },
+  "attempt03": {
+    "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber3-dual-attempt03.json",
+    "sha256": "e2c495df308099e76f06e58efe9f3e3126458395adf2d0c7cac48071f5ff9afb",
+    "recordedConsumerSha256": "4dfa817c0381515c4b2a024eddf0191da69ddbd8cd0421fe2074d29f4c16316e",
+    "currentReviewedConsumerSha256": "43f43ca6314a9272ddfd6e4cbb277e1e6723de92480227ee97e2dbfd42d0babb",
+    "result": "failed",
+    "limitation": "Attempt03 remains evidence for the prior consumer hash, not a rerun under this wording-only revision. The fifth quote remains 0 for input 10275842, with zero execution receipts for that failed trial. No new protocol or performance acceptance."
+  },
+  "executableCheckOutput": {
+    "checkedAt": "2026-10-12T06:02:19.606Z",
+    "mode": "isolated local offline AST-source checks, not full suite/module/build",
+    "sourcePins": {
+      "historical-dual.ts": "43f43ca6314a9272ddfd6e4cbb277e1e6723de92480227ee97e2dbfd42d0babb",
+      "evidence.test.ts": "7fb30b26a9f1af3038dd8e219221c9dfe600fda107c1f36979f284a7eb07ebd0",
+      "evidence.ts": "77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222",
+      "kyber3-code-review-pass1.json": "d2cdce5ec9948226e5c1ef97d772c920f8c8882d8e8d306d69db5d59ffa6389f",
+      "kyber3-dual-attempt03.json": "e2c495df308099e76f06e58efe9f3e3126458395adf2d0c7cac48071f5ff9afb"
+    },
+    "versions": {
+      "node": "v26.0.0",
+      "typescript": "5.9.3"
+    },
+    "extractedCodeHashes": {
+      "sourceContractSha256": "9fb2cf5f804c3ab58495f0078085568fc96baed759943e560dbe436365a703b8",
+      "trialFunctionSha256": "2dca6c836e4497b8878d8c9a7af4adad57de34cb7f2cda523394185b5f7da86a",
+      "comparisonSha256": "8527f004ba7c184aae03df26ba46e5e22ab389404b3fbe2aee57ba14008a13f2",
+      "gateSha256": "2d286fd957557aae2b89dc7a73d95b47abe642d4427748759ad9363d812218cc"
+    },
+    "checks": [
+      {
+        "name": "consumer-byte-diff-is-only-neutral-verdict",
+        "status": "pass",
+        "details": {
+          "restoredPriorConsumerSha256": "4dfa817c0381515c4b2a024eddf0191da69ddbd8cd0421fe2074d29f4c16316e",
+          "otherConsumerBytesUnchanged": true
+        }
+      },
+      {
+        "name": "test-byte-diff-is-only-new-source-contract-and-fs-import",
+        "status": "pass",
+        "details": {
+          "restoredFrozenTestsSha256": "ddc7b23b40ceef8995ffdf54858462687db917a5cf9db2b3915f6c19165c7323",
+          "existingAssertionsUnchanged": true
+        }
+      },
+      {
+        "name": "actual-added-source-contract-passes",
+        "status": "pass",
+        "details": {
+          "test": "historical consumer does not relabel every non-original trial as a production reference",
+          "line": 23
+        }
+      },
+      {
+        "name": "added-source-contract-rejects-old-wording-regression",
+        "status": "pass"
+      },
+      {
+        "name": "historical-fallback-label-and-neutral-verdict",
+        "status": "pass",
+        "details": [
+          {
+            "label": "twice-historical-input-at-N-not-production-reference",
+            "amountIn": "2923530",
+            "original": null,
+            "verdict": "non-original amount trial; no original TX leg comparison"
+          },
+          {
+            "label": "twice-historical-input-at-N-not-production-reference",
+            "amountIn": "76",
+            "original": null,
+            "verdict": "non-original amount trial; no original TX leg comparison"
+          }
+        ]
+      },
+      {
+        "name": "spliced-forward-label-and-historical-owners-remain-distinct",
+        "status": "pass",
+        "details": [
+          {
+            "label": "spliced-production-input-at-N",
+            "amountIn": "5135191",
+            "originalLog": null
+          },
+          {
+            "label": "historical-input-at-N",
+            "amountIn": "1461765",
+            "originalLog": "0x118"
+          },
+          {
+            "label": "historical-input-at-N",
+            "amountIn": "38",
+            "originalLog": "0x121"
+          }
+        ]
+      },
+      {
+        "name": "reverse-spliced-and-twice-spliced-labels-retained",
+        "status": "pass",
+        "details": [
+          {
+            "label": "spliced-production-input-at-N",
+            "amountIn": "5137921",
+            "original": null
+          },
+          {
+            "label": "twice-spliced-production-input-at-N",
+            "amountIn": "10275842",
+            "original": null
+          }
+        ]
+      },
+      {
+        "name": "production-effective-labels-not-replaced-by-neutral-verdict",
+        "status": "pass"
+      },
+      {
+        "name": "original-trials-keep-own-output-id-log-and-delta",
+        "status": "pass",
+        "details": [
+          {
+            "originalAmountOut": "1462206",
+            "signedDelta": "-231",
+            "observationId": "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c:0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc:280",
+            "logIndex": "0x118",
+            "verdict": "same interface at N-end; original pre-call state NOT restored"
+          },
+          {
+            "originalAmountOut": "38",
+            "signedDelta": "0",
+            "observationId": "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c:0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc:289",
+            "logIndex": "0x121",
+            "verdict": "same interface at N-end; original pre-call state NOT restored"
+          }
+        ]
+      },
+      {
+        "name": "positive-output-and-source-input-reference-gates-preserved",
+        "status": "pass",
+        "details": {
+          "rejectedCases": [
+            "zero",
+            "wrong-input",
+            "wrong-source",
+            "unresolved",
+            "production-effective-mismatch"
+          ],
+          "zeroQuoteRetained": true,
+          "fragmentOrEvmExecuted": false
+        }
+      },
+      {
+        "name": "attempt03-stays-prior-source-failed-not-rerun",
+        "status": "pass",
+        "details": {
+          "harnessSha256": "4dfa817c0381515c4b2a024eddf0191da69ddbd8cd0421fe2074d29f4c16316e",
+          "result": "failed",
+          "failedAmountIn": "10275842",
+          "failedQuoteOut": "0"
+        }
+      },
+      {
+        "name": "all-pinned-inputs-and-pass1-unchanged-after-checks",
+        "status": "pass"
+      }
+    ],
+    "passed": 12,
+    "failed": 0,
+    "reportAlreadyExists": false
+  },
+  "remainingAuthority": "Main handles the full 121-test suite, build, cloud installation and commit. No blockers from this narrow review; no approval of cross-range functionality, protocol acceptance or performance.",
+  "changesByReviewer": [
+    "Created only kyber3-code-review-followup.json via apply_patch."
+  ],
+  "skill": "family-plugin-adaptation: kept local fixture/source checks separate from actual historical execution and performance evidence."
+}

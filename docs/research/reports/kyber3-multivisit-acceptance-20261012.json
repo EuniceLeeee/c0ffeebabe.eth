@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "0f127f8215ea5c486858fb6718e209373f8059ff",
+  "implementationCommit": "6ed303dcca6111498718e7a27cd97c4089f2593a",
+  "scope": "Acceptance-only multiple-swap observation, per-leg trial attribution, and preserving failed-quote evidence. Production Family math, admission, configuration, gas and scheduling unchanged.",
+  "verdict": "Observation limitation repaired and executed against actual saved/on-chain evidence; four amount trials pass. Complete Kyber3 dual acceptance still FAILS on reverse twice-reference input, which the current single-range quote model cannot cover.",
+  "anchor": {
+    "tx": "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c",
+    "block": 26005915,
+    "blockHash": "0xf4caf43faa7a0c6fe62b6e72b9c4a7e606f15574f5227617dfff6836b7678c3c",
+    "pool": "0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc",
+    "state": "N-end state with N environment; no original transaction pre-call restoration"
+  },
+  "sourceBinding": {
+    "productionSourceTreeSha256": "c07c2310160ef72f154587440040b37a6009d5bfa791c47bdb49232c0e23f9fa",
+    "observerSha256": "77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222",
+    "testsSha256": "7fb30b26a9f1af3038dd8e219221c9dfe600fda107c1f36979f284a7eb07ebd0",
+    "finalHarnessSha256": "43f43ca6314a9272ddfd6e4cbb277e1e6723de92480227ee97e2dbfd42d0babb",
+    "executedAttempt03HarnessSha256": "4dfa817c0381515c4b2a024eddf0191da69ddbd8cd0421fe2074d29f4c16316e",
+    "postRunChange": "Only the non-original comparison verdict was made provenance-neutral after review. Attempt03 is not presented as a new EVM run under the final wording-only source.",
+    "caveat": "The actual cloud source includes preserved peer dirty changes; only the three named acceptance files form this implementation change. Test-only changes do not invalidate the unchanged production Ready/price fingerprints."
+  },
+  "evidenceRoot": "logs/four-family-coverage-20261012.zHKuWX",
+  "naturalIntegrationReused": {
+    "ready": "kyber3-ready-attempt01/ready.json",
+    "readySha256": "3392db3017e065d31f98c2a2b3100d6c0339eaa59a2cab18a9bfe5c82dcb22e9",
+    "prices": "kyber3-ready-attempt01/prices/prices.json",
+    "pricesSha256": "abdf77d621d32e414f0440f2025f6278fc04ddcd7d05702206cb033fd6d71bd7",
+    "priceInputSha256": "14e326d0959271fa490c73c55568a1635bfb653bfe640629075d6764a19ea7f1",
+    "graphHash": "6a163f68fbefd9f80738a48cc77384c86571180c2b5bb7a864156075b4ab67e5",
+    "strictInstances": 1,
+    "graphDirections": 2,
+    "rawMidRows": 2,
+    "naturalEffectiveQuotedRows": 0,
+    "reason": "Family-only graph lacks a WETH valuation entry; input splicing does not establish natural target valuation.",
+    "readyRebuilt": false
+  },
+  "originalObservations": [
+    {"swapLog": "0x118", "callPath": "$.calls[3]", "outputCallPath": "$.calls[3].calls[1]", "outputLog": "0x116", "amountIn": "1461765", "amountOut": "1462206"},
+    {"swapLog": "0x121", "callPath": "$.calls[5]", "outputCallPath": "$.calls[5].calls[0]", "outputLog": "0x11a", "amountIn": "38", "amountOut": "38"}
+  ],
+  "observationContract": "All settled swaps bind one-to-one to successful call/event/pool-payment triples. Unique global numeric log IDs and no call/payment reuse; identical indistinguishable tuples reject. The singleton and non-swap contracts remain. Both originals survive, one production reference per direction, no extra reverse row when already observed.",
+  "borrowedInputOnly": {
+    "donor": "logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+    "sha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378",
+    "declarationSha256": "6536fa18b3c2c18accc342a3941c907825914e4e531887c76a51916b2f968f8f",
+    "rows": [
+      {"token": "USDC", "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "amountIn": "5135191", "block": 26146968, "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417", "freshness": "carried"},
+      {"token": "USDT", "address": "0xdac17f958d2ee523a2206206994597c13d831ec7", "amountIn": "5137921", "block": 26146969, "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500", "freshness": "fresh"}
+    ],
+    "limits": "Same saved donor/config/edge selections as Kyber2; actual edge IDs and declaration remain in each execution artifact. Borrow no outputs, identity or admission. Not current live evidence."
+  },
+  "actualDualAttempts": [
+    {"artifact": "kyber3-dual-attempt01.json", "sha256": "c918884af4c7ff84beb89f5cf4242abb2c7d3ef82d26487ac90957b0fff05e58", "result": "failed", "reason": "old singleton observer rejects two original events", "exactCalls": 0, "executions": 0, "directReads": 18},
+    {"artifact": "kyber3-dual-attempt02.json", "sha256": "1a4310bc8d9a5587fc41ba1b261862d238cc18d9c8c80117e9c7168e886e5fbd", "result": "failed", "reason": "observation passes; reverse twice-reference quote is zero", "exactCalls": 5, "quotedCalls": 4, "executionsPassed": 16, "missingInputControls": 8, "directReads": 126},
+    {"artifact": "kyber3-dual-attempt03.json", "sha256": "e2c495df308099e76f06e58efe9f3e3126458395adf2d0c7cac48071f5ff9afb", "result": "failed", "reason": "same zero quote with added failed-quote/state-read evidence; not a replacement for attempt02", "exactCalls": 5, "quotedCalls": 4, "executionsPassed": 16, "missingInputControls": 8, "directReads": 126}
+  ],
+  "uniqueAmountTrialResults": [
+    {"direction": "USDC to USDT", "inputKind": "spliced-production-reference", "amountIn": "5135191", "amountOut": "5134916", "result": "pass"},
+    {"direction": "USDC to USDT", "inputKind": "original log 0x118", "amountIn": "1461765", "amountOut": "1461975", "originalReceiptOut": "1462206", "originalDeltaAtNEnd": "-231", "result": "pass"},
+    {"direction": "USDC to USDT", "inputKind": "original log 0x121", "amountIn": "38", "amountOut": "38", "originalReceiptOut": "38", "originalDeltaAtNEnd": "0", "result": "pass"},
+    {"direction": "USDT to USDC", "inputKind": "spliced-production-reference", "amountIn": "5137921", "amountOut": "5134526", "result": "pass"},
+    {"direction": "USDT to USDC", "inputKind": "twice-spliced-production-reference", "amountIn": "10275842", "quoteOut": "0", "result": "failed-before-execution"}
+  ],
+  "actualExecutionAssertions": {
+    "perPassingAmount": "quoted/runtime, each without and with old output inventory; separate no-input controls retain abundant output and must revert",
+    "quoteToReceivedDeltaEveryPassingExecution": "0",
+    "inputDebit": "exact requested amount, no old-input debit",
+    "nativeInventory": "17 to 17 wei in every passing execution",
+    "runtimeConstruction": {"exactCalls": 0, "quotedCalls": 0, "rpcCalls": 0, "quotedFallback": false},
+    "noDoubleCounting": "Attempts02 and03 repeat the same four passing amount groups, not eight distinct coverage groups.",
+    "preCallParity": "not run; equality of the 38-unit result alone does not restore original call-prestate"
+  },
+  "remainingProtocolGap": {
+    "kind": "amount-sensitive quote model coverage",
+    "diagnostic": "kyber3-range-diagnostic.json",
+    "sha256": "6c9d152dfcd5cbfd686ef920e7fc0acdd5a4d1bd821d05fbb157e8d2062fa11c",
+    "productionMethod": "kyberswap-elastic-single-range",
+    "firstStepReachInputRawUsdt": "5525671",
+    "failedInputRawUsdt": "10275842",
+    "refusal": "input-reaches-next-initialized-tick",
+    "basis": "Recomputed current production math from actual source-bound state responses retained in attempt03; reference output reproduces exactly. Zero new RPC/EVM.",
+    "notAClaim": "Not proof the pool rejects crossing, not a capacity-based correct rejection, not a gas/RPC failure. No across-tick actual runtime receipt yet.",
+    "next": "Complete and validate the Family's actual cross-range quote capability against the same source and executions; preserve this failed input and all original Ready evidence."
+  },
+  "checks": {
+    "expandedHistoricalContracts": {"passed": 121, "failed": 0, "logSha256": "78880bd855685b8e683672c53a6ebf43caf3f5a9a3b2db1825e81a59fe1c9ce8", "previous120TestRunPreserved": "ae230d7925ccfda1d2877a0ee0b18d2db8148732664f5797761de8ad35d73a17"},
+    "productionDualContracts": {"passed": 80, "failed": 0, "logSha256": "5bfb400b3abf40ab44f7c0ed6e866ca6894f4b5c8e035e46efcec7f36f389955"},
+    "productionBuild": {"result": "build:live passed", "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"},
+    "toolCatalog": "413 tools indexed; check passed after process-local safe.directory was supplied",
+    "toolSelectionLaunchFailures": "Two initial tool-index invocations exited128 before selection because safe.directory was omitted; no EVM/RPC work. Corrected only per-process Git configuration, no global changes.",
+    "diffCheck": "passed"
+  },
+  "canonicalReconciliation": [
+    {"query": "kyber,historical,dual", "manifest": "kyber3-dual-tools-attempt02.json", "sha256": "59c830a42a52a4bcdfa96f5c175f0d70a24e75ae46f1e9dfb6f11c04624bf0a2", "tool": "listener:searcher:kyber-yb-compound-dual-historical-fork", "exit": 1},
+    {"query": "kyber,historical,dual", "manifest": "kyber3-dual-tools-attempt03.json", "sha256": "7cf8c611189eb17befc858d67026d18e2d077fe3f6a3ce0a02e349596e9ccb9b", "tool": "listener:searcher:kyber-yb-compound-dual-historical-fork", "exit": 1}
+  ],
+  "reconciliationVerdict": "Canonical tool now agrees that both original visits exist, retains them and executes four amount groups. Full selected dual capability remains FAILED on the explicitly retained production model boundary; do not relabel failed tool execution as full acceptance.",
+  "independentReview": {"pass1": "docs/research/reports/kyber3-code-review-pass1-20261012.json", "followup": "docs/research/reports/kyber3-code-review-followup-20261012.json", "result": "No blockers; one P3 provenance label corrected. Reviewer executed 46 initial and 12 follow-up offline checks; no new EVM by reviewer."},
+  "performance": "NOT RUN; local and combined representative stage acceptance remain last in the full goal",
+  "safety": {"signing": false, "broadcast": false, "liveStarted": false, "deployment": false, "productionFilesChanged": false, "defaultEnablementChanged": false, "gasChanged": false, "originalReadyPreserved": true, "otherProcessesStopped": false},
+  "goal": "active; four full stages retained, not completed"
+}
