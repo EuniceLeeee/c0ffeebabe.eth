@@ -2,11 +2,13 @@
 // production discovery / strict / Graph / prices only. No pool seeds, no forced
 // admission, no execution submission, no opportunity search.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import { loadBotVmRuntimeCode } from "../../../../../shared/executor/botvm-executor.js";
-import { UniverseRebuildCheckpointStore } from
+import { UniverseRebuildCheckpointStore, type StartupCheckpointEnvelope } from
   "../../../../universe-rebuild-checkpoint.js";
 import { createRebuildWiring } from
   "../../../../universe-rebuild-production.js";
@@ -16,9 +18,20 @@ import { runAtBlock } from
   "../../../../blockscan-at-block-cli.js";
 import { YIELDBASIS_FAMILY_ID } from "../manifest.js";
 
+/** Called only after the production checkpoint reader authenticates the file. */
+export function readyReuseScope(prior: StartupCheckpointEnvelope | null, block: number, hash: string) {
+  assert(prior?.readyGeneration && prior.inProgressRun === null);
+  assert.equal(prior.readyGeneration.cutoff.number, block);
+  assert.equal(prior.readyGeneration.cutoff.hash, hash);
+  assert.deepEqual(prior.readyGeneration.universeRange, { fromBlock: block, toBlock: block });
+  assert.deepEqual(Object.keys(prior.readyGeneration.familyPartitions ?? {}), [YIELDBASIS_FAMILY_ID]);
+  assert.equal(prior.readyGeneration.observationScope, undefined);
+  return { parentCheckpointFingerprint: prior.checkpointFingerprint, familyIds: [YIELDBASIS_FAMILY_ID] };
+}
+
 async function main() {
   const args = new Map<string, string>();
-  const names = ["--tx", "--rpc-file", "--rpc-env", "--out", "--executor", "--owner", "--revm-bin", "--executor-program"];
+  const names = ["--tx", "--rpc-file", "--rpc-env", "--out", "--executor", "--owner", "--revm-bin", "--executor-program", "--reuse-ready"];
   for (let i = 2; i < process.argv.length; i += 2) {
     const key = process.argv[i]!, value = process.argv[i + 1];
     assert(names.includes(key) && !args.has(key) && value && !value.startsWith("--"));
@@ -79,17 +92,32 @@ async function main() {
     save("receipt.json", receipt);
     save("header.json", header);
     const checkpoint = resolve(out, "ready.json");
+    // Keep the original immutable; the production scoped updater decides what
+    // must be rediscovered or reattested. No hand-edited memo/hash/graph fields.
+    const reusePath = args.has("--reuse-ready") ? resolve(args.get("--reuse-ready")!) : null;
+    let familyUpdateScope;
+    let reuseBytes: Buffer | null = null;
+    if (reusePath) {
+      reuseBytes = readFileSync(reusePath);
+      familyUpdateScope = readyReuseScope(await new UniverseRebuildCheckpointStore({ path: reusePath }).load(), block, header.hash);
+      copyFileSync(reusePath, checkpoint, constants.COPYFILE_EXCL);
+      assert(readFileSync(checkpoint).equals(reuseBytes), "source Ready changed while copying");
+      save("reused-ready.json", { path: reusePath,
+        sha256: createHash("sha256").update(reuseBytes).digest("hex"), ...familyUpdateScope });
+    }
     stage = "production-single-block-ready";
     const ready = await rebuildUniverse({
       ...wiring,
       store: new UniverseRebuildCheckpointStore({ path: checkpoint }),
       runId: `yieldbasis-lt-single-${block}`,
       observationRange: { fromBlock: block, toBlock: block },
+      ...(familyUpdateScope ? { familyUpdateScope } : {}),
       attestationConcurrency: 4,
       log: (message) => console.log(message),
     });
     assert.equal(ready.cutoff.number, block);
     assert.equal(ready.cutoff.hash, header.hash);
+    if (reusePath) assert(readFileSync(reusePath).equals(reuseBytes!), "original Ready changed");
     save("ready-summary.json", {
       tx,
       block,
@@ -122,7 +150,7 @@ async function main() {
     provider.destroy();
   }
 }
-main().catch(() => {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(() => {
   console.error("yield basis LT historical-ready invalid input; no input files overwritten");
   process.exitCode = 1;
 });

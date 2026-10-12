@@ -1,0 +1,90 @@
+{
+  "schema": "bounded-independent-offline-review/v1",
+  "subject": "Yield Basis historical-ready --reuse-ready",
+  "verdict": "no_actionable_findings_in_bounded_offline_review",
+  "conclusion": "在本次限定源码及离线检查范围内未发现可行动缺陷。复用入口保持旧文件只读，以独占复制创建新 checkpoint，再交给生产 rebuildUniverse 的 familyUpdateScope 重验；真实 Ready 认证和重验执行仍待主任务完成。",
+  "findings": [],
+  "scope": "一轮非作者只读小审查；只检查指定 YB 两文件，并以指定 Kyber historical-ready 模式作结构参考；未重做 cUNI/YB 历史执行审查。",
+  "hashes": {
+    "yb-source/historical-ready.ts": "c5369550b4140f2df96859fe2f2f211d226d1029c77a49bb5b02dad1e097708e",
+    "yb-source/historical-dual.test.ts": "f1dc87e832db7ebbc0b2f4c689ee3135076ff3be7315eddb1fd781c49d326366",
+    "kyber-source/test/historical-ready.ts": "ef3c3ed11818cfd91fa34e698b58d45476680b32610e2e83b204f54cbd64527c"
+  },
+  "old_historical_ready_sha256_user_supplied": "721dea43192f4f3b570f4abbdd2d8c2623f8103f4db846e9ffe8ae8fe35007e2",
+  "old_version_independently_compared": false,
+  "actual_checks": {
+    "execution": "本地 Node v26.0.0；内联只读断言、内置 TypeScript 类型擦除及隔离 VM；磁盘上只读取指定文件。",
+    "exit_code": 0,
+    "assertions_executed": 72,
+    "assertions_passed": 72,
+    "assertions_failed": 0,
+    "counting_scope": "计数为实际执行的外层审查断言，含模块链接及新增测试断言，不是历史 EVM 交易数量。",
+    "counts_by_group": {
+      "hash_binding": 2,
+      "import_guard": 15,
+      "actual_added_scope_regression": 14,
+      "scope_additional": 6,
+      "reuse_copy_flow_in_memory": 22,
+      "production_wiring_static": 10,
+      "preservation": 3
+    },
+    "details": [
+      {
+        "item": "候选文件绑定",
+        "result": "两个本地 YB 文件 SHA-256 均与用户给定新哈希一致；核验末尾再次检查三个读取文件哈希，均未变化。"
+      },
+      {
+        "item": "新增 readyReuseScope 合同回归",
+        "result": "执行新增回归原始测试体及实际 readyReuseScope；通过正常范围与不修改输入检查，拒绝 null/无 Ready、未完成、错块高/哈希、跨块范围、缺失/错误/额外 family、observationScope/TX-set。补查 inProgressRun=undefined、空 familyPartitions 和显式 transaction-set scope。"
+      },
+      {
+        "item": "复用分支内存检查",
+        "result": "执行候选中实际复用代码片段，注入内存文件系统和 Store 桩。验证先 load 再 scope 再 COPYFILE_EXCL；正确复制传递父 checkpointFingerprint；认证抛错时不复制；目标已存在时拒绝且保留旧目标；复制期间原字节变化时拒绝保存成功复用记录。正常/认证失败/目标已存在场景均保持原字节。"
+      },
+      {
+        "item": "生产重验接线",
+        "result": "检查 rebuildUniverse 使用新 checkpoint Store、N..N observationRange 和 familyUpdateScope；scope 仅含认证后的 parentCheckpointFingerprint 与 YB familyIds。未看到手改 admitted/memo/hash/graph 或向生产 wiring 提供目标池种子；价格入口也使用新 checkpoint。"
+      },
+      {
+        "item": "原件保护",
+        "result": "入口拒绝已有 out；复制采用 COPYFILE_EXCL；复制后比较新副本和最初读取字节；生产 rebuild 返回后比较原文件和最初字节。复用源路径未作为 rebuild 的 Store 写入目标。"
+      },
+      {
+        "item": "CLI 导入守卫",
+        "result": "将完整候选模块类型擦除后作为 ESM 导入隔离 VM，依赖导出使用会拒绝副作用的桩。process.argv[1] 指向其他导入者时 main 未启动，文件/RPC/重验/价格桩调用数为 0，process.env 与 exitCode 未改变。"
+      },
+      {
+        "item": "Kyber 参考模式",
+        "result": "读取指定 Kyber 的 authenticated load→范围检查→独占复制→scoped rebuild→原件字节检查流程，仅用于结构比对；未继承其通过结论，也未运行其 CLI。"
+      }
+    ],
+    "harness_setup_correction": "首次 VM 运行在新增测试的 structuredClone 比较上遇到跨 VM 原型差异；测试容器改为同上下文的等价 JSON fixture 克隆后全部 72 项通过。未修改任何被审源码；该首次失败不归为候选缺陷。",
+    "user_reported_cloud_contracts": "16 项通过为主任务提供的结果，本次未重跑。"
+  },
+  "source_locations": {
+    "additional_scope_checks": "yb-source/historical-ready.ts:21",
+    "authenticated_load_and_exclusive_copy": "yb-source/historical-ready.ts:100",
+    "production_family_update": "yb-source/historical-ready.ts:109",
+    "import_guard": "yb-source/historical-ready.ts:153",
+    "new_contract_test": "yb-source/historical-dual.test.ts:12",
+    "original_readonly_check": "yb-source/historical-ready.ts:120"
+  },
+  "limitations": [
+    "readyReuseScope 的 fixture 只证明附加范围限制，不证明 Ready 认证。实际 UniverseRebuildCheckpointStore.load 的生产认证未在本轮执行，必须先于 helper 调用；源码接线满足这个顺序。",
+    "内存 Store 和文件系统是离线控制流桩；不是实际文件系统竞争条件证明，也不是生产发现、准入、哈希重验或真实 Ready 更新成功的证据。",
+    "导入检查隔离了依赖模块，只证明本 CLI 的顶层 main 守卫；未重新审计或执行全部传递依赖的导入副作用。",
+    "仅有当前本地候选和用户提供的旧哈希，未独立取得旧版本 diff 或查询云端；修改范围按用户陈述限定。",
+    "真实更新尚未跑；无 adapter_fixed、完整集成、盈利或性能结论。"
+  ],
+  "boundaries": {
+    "cloud_commands": false,
+    "RPC": false,
+    "EVM": false,
+    "build": false,
+    "source_modified": false,
+    "markdown_modified": false,
+    "secret_files_read": false,
+    "additional_audit_or_repair": false,
+    "only_written_file": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/yb-ready-reuse-review.json"
+  }
+}

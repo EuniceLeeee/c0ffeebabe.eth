@@ -1,0 +1,112 @@
+{
+  "schema": "family-current-executor-acceptance/v1",
+  "date": "2026-10-12",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "executedHead": "9e781a6351201fe25400ef75fd62ddaf69f38930",
+  "runtimeSourceTreeSha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+  "executorCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+  "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+  "evidenceRoot": "logs/four-family-coverage-20261012.zHKuWX",
+  "claim": "Scoped current-executor same-N quote, quoted and runtime receipt checks; not original call-prestate, opportunity, formal adapter merge gate or performance acceptance.",
+  "referenceAmountClarification": {
+    "wethP": "2000000000000000",
+    "humanUnits": "0.002 WETH",
+    "rule": "WETH input is configured P directly. Other input tokens require a successful forward production effective valuation path, or an explicitly authorized saved production input row. P itself is not missing.",
+    "cUniRemainingGap": "No genuine cUNI production input row was found in the already checked standard donor plus 16 additional saved tables. Original shares and double shares passed local same-N execution, but do not satisfy the production-reference gate. No repeated donor search or raw-mid substitute in this run."
+  },
+  "sourceChanges": [
+    {
+      "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/test/historical-ready.ts",
+      "beforeSha256": "721dea43192f4f3b570f4abbdd2d8c2623f8103f4db846e9ffe8ae8fe35007e2",
+      "afterSha256": "c5369550b4140f2df96859fe2f2f211d226d1029c77a49bb5b02dad1e097708e",
+      "change": "Optional authenticated single-block/single-family Ready reuse into an exclusive new copy, followed by existing production familyUpdateScope; original bytes preserved. No target seeds or manual memo/hash edits."
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/test/historical-dual.test.ts",
+      "afterSha256": "f1dc87e832db7ebbc0b2f4c689ee3135076ff3be7315eddb1fd781c49d326366",
+      "change": "Reuse scope, immutability and invalid shape regression; importing historical-ready does not run its CLI."
+    }
+  ],
+  "offlineVerification": {
+    "productionBuild": { "command": "npm run build:live", "exitCode": 0, "log": "current-executor-build-attempt01.log", "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933", "scope": "Current cloud production noEmit build; no full-repository build claim." },
+    "ybContracts": { "passed": 16, "failed": 0, "log": "yb-weth-reuse-contract-attempt01.log", "sha256": "c5e26f57fa84c14339cd042e349863b7485cd7ef8c7b74b1ab5ae7637f1adc0d" },
+    "independentReview": { "report": "docs/research/reports/yb-ready-reuse-review-20261012.json", "sha256": "33183e6ad174b2306cc81bdaaf91b63d0705e523351881f514431944fff6b5d6", "assertionsPassed": 72, "findings": [], "scope": "Bounded offline copy/scope/import control review, not historical EVM acceptance." },
+    "mainArtifactReadback": "PASS: authenticated WETH and Compound result hashes; checked successful execution counts, zero output deltas, WETH old inventory/native deltas and zero runtime construction calls.",
+    "readbackCorrection": "An initial manual assertion treated oldInventoryConsumed as boolean false. Artifact schema contains numeric string '0'; numeric BigInt assertion passed. This was a readback type error, not a failed simulation, and no EVM rerun was used."
+  },
+  "yieldBasisWeth": {
+    "tx": "0x022a9ff85219675bcf0a0a2b17c76ac72b98d5e2c4177bc104edff56e706ee77",
+    "source": { "number": 26003536, "hash": "0xf913fc4aaaeca0fd9fcd871c1a2b0159e1ecc3679724fff679a061ca7bedeaad", "environment": "N" },
+    "instance": "0x2b9c9f3bdceb5d8e36a4704f08a78fca53343cea",
+    "result": "pass",
+    "revalidation": {
+      "reason": "Old identity memo was stale for shared identity/runtime dependencies; not absence of P and not invalidation merely by unrelated tree changes.",
+      "oldReady": "logs/four-family-integration-20261009.CuNyy3/yb-program-acceptance-20261009/yb-ready-cloud-attempt01/ready.json",
+      "oldReadySha256BeforeAndAfter": "6957aa08370d16b7c1395e4db5dea184831764eecb609a4f9a0c9e62ab8044d9",
+      "newReady": "yb-weth-ready-current-attempt01/ready.json",
+      "newReadySha256": "03a4c423f4037a10f8df418d0ff466864016132f8ed0159edff4347a0706218c",
+      "currentFamilyDefinitionHash": "377e984a23500d280274d88875bbcb055d35d4e39729b4db45dfcde542df754f",
+      "graphHash": "31d9532fa58fdf24622b66d5e62f545828c1e4089e09bbfe5fb3de26c60e2432",
+      "admittedInstances": 1,
+      "graphDirections": 2,
+      "rawRows": 2,
+      "naturalQuotedEffectiveRows": 2,
+      "auditRecommendationCorrection": "The earlier offline reuse audit suggested probe. Actual probe selects retryable outcomes, not this admitted-but-stale memo. Existing production familyUpdateScope on a copy was used instead; no probe execution was claimed."
+    },
+    "samples": [
+      { "direction": "deposit", "kind": "natural-production-reference", "amountIn": "2000000000000000", "quoteAndActualOut": "1989420484410944" },
+      { "direction": "deposit", "kind": "original-input-at-N", "amountIn": "41885594439574942", "quoteAndActualOut": "41664029673314953", "originalTxOut": "41886001261762273" },
+      { "direction": "withdraw", "kind": "natural-production-reference", "amountIn": "1989420484410944", "quoteAndActualOut": "1999917058785725" },
+      { "direction": "withdraw", "kind": "original-input-at-N", "amountIn": "41886001261762273", "quoteAndActualOut": "42106999995685045", "originalTxOut": "42107000017438537" }
+    ],
+    "executionChecks": { "amountGroups": 4, "quotedAndRuntimeExecutions": 16, "zeroOutputDeltas": 16, "oldInventoryConsumed": "0", "noInputNegativeControlsReverted": 8, "nativeAndStableInventory": "preserved" },
+    "runtimeConstruction": { "directions": 2, "exactCalls": 0, "rpcCalls": 0, "quotedFallback": false },
+    "donorInput": "none; both effective reference rows arise naturally in the target single-block graph",
+    "prices": { "path": "yb-weth-ready-current-attempt01/prices/prices.json", "sha256": "88cdc54a465cf67aee46123c055ad8a7f5efe1be57f2afdbaf7f478404512ab1" },
+    "executionArtifact": { "path": "yb-weth-dual-current-attempt01.json", "sha256": "d0b84ab8dbd177c3e185ba03bf44e794098509a782416e0c2065f3e5190f7020" },
+    "indexedExecution": {
+      "query": ["yieldbasis", "historical", "strict", "ready", "graph", "dual", "execution"],
+      "manifest": "yb-weth-current-tools-attempt01.json",
+      "manifestSha256": "e4ab211504920e3dd9ba317c7ab3abdce49d4326d338fc0c7b6222106ef3a0f2",
+      "tools": [
+        { "id": "listener:searcher:yieldbasis-lt-historical-ready", "exitCode": 0, "completedAt": "2026-10-12T09:13:28.813Z" },
+        { "id": "listener:searcher:yieldbasis-lt-dual-historical", "exitCode": 0, "completedAt": "2026-10-12T09:15:10.916Z" }
+      ]
+    }
+  },
+  "compound": {
+    "tx": "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df",
+    "source": { "number": 25944463, "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316", "environment": "N" },
+    "result": "pass-with-spliced-reference",
+    "ready": "logs/four-family-integration-20261009.CuNyy3/compound-current-N25944463-attempt02/ready.json",
+    "readyTreatment": "Authenticated still-current memo reused unchanged; no new identity attestation or whole Ready rebuild.",
+    "instances": 2,
+    "graphDirections": 2,
+    "naturalEffective": "Both rows remain missing-valuation. Saved donor supplies only input amounts, not output, identity or graph admission.",
+    "donor": { "tableBlock": 26146969, "tableHash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500", "quotedBlock": 26146968, "quotedHash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417", "freshness": "carried", "backgroundEdges": 28040 },
+    "samples": [
+      { "instance": "0x39aa39c021dfbae8fac545936693ac917d5e7563", "direction": "cUSDC to USDC", "referenceAmountIn": "20453524572", "referenceQuoteAndActualOut": "5179510", "originalSharesInput": "16895162987", "originalInputQuoteAndActualOut": "4278414", "originalTxOut": "4278415", "signedDeltaToOriginalTx": "-1" },
+      { "instance": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643", "direction": "cDAI to DAI", "referenceAmountIn": "20576236020", "referenceQuoteAndActualOut": "5158309426899040893", "originalSharesInput": "17733672807", "originalInputQuoteAndActualOut": "4445699958193387588", "originalTxOut": "4445699958418430781", "signedDeltaToOriginalTx": "-225043193" }
+    ],
+    "executionChecks": { "amountGroups": 4, "quotedAndRuntimeExecutions": 16, "zeroOutputDeltas": 16, "noInputOldOutputControlsReverted": 8, "nativeInventoryPreserved": 16 },
+    "runtimeConstruction": { "exactCalls": 0, "quotedCalls": 0, "rpcCalls": 0, "quotedFallback": false },
+    "prices": { "path": "compound-current-executor-20261012/prices-source-block/prices.json", "sha256": "e2a408e32422a4989c9eec209c6af648ea9aa921c689a36858e26b7954470b4a" },
+    "executionArtifact": { "path": "compound-current-executor-20261012/dual-source-block.json", "sha256": "9a5196a018a604d98338a0be0fec5d892b025675476de4026626b298dc1be7a3" },
+    "workerSummary": "compound-current-executor-20261012/summary.json",
+    "indexedExecution": { "query": ["compound", "dual", "block"], "manifest": "compound-current-executor-20261012/tools.json", "manifestSha256": "db2b65ea8f56352a10cf4e9f19fd1181ec2fe033b13a147f95abe2899ad4a8a4", "selected": ["listener:searcher:at-block", "listener:searcher:kyber-yb-compound-dual-historical-fork"], "sourceBlockPricesExitCode": 0, "sameNExecutionExitCode": 0, "rpcPhaseEndedAt": "2026-10-12T09:12:44.766Z" },
+    "retainedFailures": [
+      { "artifact": "compound-current-executor-20261012/index.log", "reason": "tsx CLI IPC socket path exceeded UNIX socket length; corrected invocation to node --import tsx. Not a protocol result." },
+      { "artifact": "compound-current-executor-20261012/dual.json", "sha256": "3685fc12034aa935f7d4853bef476537efb1d52530420ba42fdcc3055b338316", "result": "failed-inputs", "reason": "First prices invocation omitted source-block mode. Dual rejected N+1 vs N before RPC/fork. Corrected CLI invocation used new output paths; no checks or source relaxed.", "directRpcCalls": 0 }
+    ],
+    "originalComparisonLimit": "Original calls used redeemUnderlying; observed burned shares here execute redeem(shares) at N-end. Neither original interface/pre-call parity nor outer-wrapper coverage is established."
+  },
+  "limitations": [
+    "Yield Basis cbBTC/WBTC earlier same-N dual results remain valid; their singleton natural valuation gaps are not fixed by WETH success.",
+    "Compound cUNI production-reference gate remains incomplete despite already verified multi-amount local execution.",
+    "No rerun of already-current Kyber or BTC Yield Basis evidence in this scope.",
+    "No original call-prestate, full opportunity, natural search, final EV or formal adapter_fixed/adapter_merge_ready claim.",
+    "All local and representative protocol latency acceptance remains NOT RUN and deferred to final phase. Diagnostic elapsed times are not performance acceptance."
+  ],
+  "safety": { "signing": false, "broadcast": false, "liveStarted": false, "deployment": false, "privateKeyRead": false, "originalReadyModified": false, "peerChangesStaged": false }
+}

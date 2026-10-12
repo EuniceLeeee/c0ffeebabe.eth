@@ -1,0 +1,751 @@
+{
+  "schema": "algebra-current-executor-acceptance/v1",
+  "date": "2026-10-12",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "head": "9e781a6351201fe25400ef75fd62ddaf69f38930",
+  "claim": "Six fixed historical instances, same-N local execution with current source-authenticated executor. Not original call-prestate, opportunity or performance acceptance.",
+  "mainRawEvidenceReadback": { "status": "pass", "readyPriceAndExecutionHashesMatched": true, "sameSourceAndCurrentExecutorMatched": true, "executionsWithExactInputDebitAndQuoteOutput": 96, "noInputControlsReverted": 48, "nativeInventoryDelta": "0", "runtimeConstructionExactQuotedRpc": 0, "rpcUsedByReadback": false, "initialReadbackSetup": "First local-summary read used cloud path before its transfer and returned ENOENT. Transferred the unchanged 34409a9... summary and verified the original cloud artifacts; no historical rerun." },
+  "workerSummary": {
+    "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/algebra-current-executor-20261012/summary.json",
+    "sha256": "34409a9b01ede098e9fd20f856b5b24000060ad588278e380d958fe73fc649ee"
+  },
+  "sourceTreeSha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+  "harnessSha256": "f8c9fa16771986426f5a38addd578c634fafb70840730d93074f61200955e5a5",
+  "evidenceSha256": "e629c11197ec914cf9a6ad42196f02be6068ccbefcb11a01ef0fbabdd06da44a",
+  "runtimeCode": {
+    "keccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+  },
+  "family": "swap:algebra-integral",
+  "familyDefinitionHash": "e1ead04779f57425fbd95273a8719e4de95ae7b8151c9725e2916c0bd0a05634",
+  "sourceFilesUnchanged": true,
+  "sourceChangesByWorker": false,
+  "rpcPhaseEndedAt": "2026-10-12T09:23:15.010Z",
+  "executionMode": "source-block",
+  "donorReference": null,
+  "totals": {
+    "samples": 6,
+    "passed": 6,
+    "directions": 12,
+    "amountTrials": 24,
+    "executions": 96,
+    "quotedExecutions": 48,
+    "runtimeExecutions": 48,
+    "oldInventoryControls": 48,
+    "noInputReverts": 48,
+    "directDualRpcCalls": 758
+  },
+  "checks": {
+    "allQuotedAndRuntimeActualMinusQuoteZero": true,
+    "allInputDebitsEqualAmountIn": true,
+    "allNoInputRevertedWithOldOutput": true,
+    "allNativeInventoryUnchanged": true,
+    "allRuntimeConstructionExactQuotedRpcZero": true,
+    "noQuotedFallback": true,
+    "allReadyBytesUnchanged": true,
+    "allNewPricesSourceBound": true,
+    "allAmountsFromNaturalEffectiveOrExistingSampleTrials": true
+  },
+  "samples": [
+    {
+      "key": "algebra",
+      "tx": "0x02175d2ac2e806bc6e1033cae640cf45509b7ded4a2e64ebcbba9c425afff5b7",
+      "instance": "0x76a278bd71f566ee6ba2fe438f6099c8d8f98f43",
+      "source": {
+        "number": 26018534,
+        "hash": "0xba26a0e4891db23e721b7d434b592622fb7842dc35b2dffc20bc1f7936a65a8a",
+        "generation": 26018534
+      },
+      "result": "pass",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26018534-attempt01/ready.json",
+        "sha256": "e28129c60d00881c0a59c37dedb51138078ae2895c4c8a5b8a4dca4881440ec7",
+        "unchanged": true
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra-prices/prices.json",
+        "sha256": "0ccf6cf981731b976ae0f2f43525e9d0fee102b2612cf3f79b98384d8c67df4a"
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra-dual.json",
+        "sha256": "dfc6b6d429c103e9c33e46e43b504457574fdf5ebdca57f9587f83cba8f10f16"
+      },
+      "counts": {
+        "directions": 2,
+        "amountTrials": 4,
+        "executions": 16,
+        "quotedExecutions": 8,
+        "runtimeExecutions": 8,
+        "oldInventoryControls": 8,
+        "noInputReverts": 8
+      },
+      "naturalProductionReferenceGate": "met",
+      "runtimeConstruction": {
+        "exactCalls": 0,
+        "quotedCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false
+      },
+      "directions": [
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "directionEvidence": "original transaction direction",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "5152811",
+            "amountOut": "6401",
+            "quotedAt": {
+              "number": 26018534,
+              "hash": "0xba26a0e4891db23e721b7d434b592622fb7842dc35b2dffc20bc1f7936a65a8a",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "5152811",
+              "quoteAmountOut": "6401",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "73487699",
+              "quoteAmountOut": "91274",
+              "executions": 4,
+              "allActualMinusQuote": "0",
+              "originalAmountOut": "91305",
+              "nEndMinusOriginal": "-31"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "directionEvidence": "opposite production Ready direction; not an original TX leg",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "6401",
+            "amountOut": "5151357",
+            "quotedAt": {
+              "number": 26018534,
+              "hash": "0xba26a0e4891db23e721b7d434b592622fb7842dc35b2dffc20bc1f7936a65a8a",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "6401",
+              "quoteAmountOut": "5151357",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "twice-production-effective",
+              "amountIn": "12802",
+              "quoteAmountOut": "10303398",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            }
+          ]
+        }
+      ],
+      "gaps": [
+        "Original transaction pre-call state/output parity unverified; N-end execution only."
+      ]
+    },
+    {
+      "key": "algebra2",
+      "tx": "0x006223028f05865619d07584c43cf67cb608705d04ebc732e15bf40869d030b8",
+      "instance": "0x915fd34cadd63907b51eb64dddc2eadd114a0bed",
+      "source": {
+        "number": 26030898,
+        "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+        "generation": 26030898
+      },
+      "result": "pass",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26030898-attempt01/ready.json",
+        "sha256": "0d61db3cb5f7e611271db8a8ce965ca50d0f7e982e577e70ad06d0e2522c8957",
+        "unchanged": true
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra2-prices/prices.json",
+        "sha256": "c10e8a32143d019c3c21f800f909363d0bc91a2c2ad3a5e6f6a5e33e2358a1fd"
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra2-dual.json",
+        "sha256": "9086063f5d9d6ef23e7f4175e01350171900ac95fdb1d046ec931a97547834eb"
+      },
+      "counts": {
+        "directions": 2,
+        "amountTrials": 4,
+        "executions": 16,
+        "quotedExecutions": 8,
+        "runtimeExecutions": 8,
+        "oldInventoryControls": 8,
+        "noInputReverts": 8
+      },
+      "naturalProductionReferenceGate": "met",
+      "runtimeConstruction": {
+        "exactCalls": 0,
+        "quotedCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false
+      },
+      "directions": [
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "directionEvidence": "original transaction direction",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "5437453",
+            "amountOut": "1999351466142250",
+            "quotedAt": {
+              "number": 26030898,
+              "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "5437453",
+              "quoteAmountOut": "1999351466142250",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "215018005",
+              "quoteAmountOut": "79025326889331117",
+              "executions": 4,
+              "allActualMinusQuote": "0",
+              "originalAmountOut": "79176533614383834",
+              "nEndMinusOriginal": "-151206725052717"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "directionEvidence": "opposite production Ready direction; not an original TX leg",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "2000000000000000",
+            "amountOut": "5437453",
+            "quotedAt": {
+              "number": 26030898,
+              "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2000000000000000",
+              "quoteAmountOut": "5437453",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "twice-production-effective",
+              "amountIn": "4000000000000000",
+              "quoteAmountOut": "10874774",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            }
+          ]
+        }
+      ],
+      "gaps": [
+        "Original transaction pre-call state/output parity unverified; N-end execution only."
+      ]
+    },
+    {
+      "key": "algebra3",
+      "tx": "0x1f0e69a9d9be232986b81216ce341e5d3dea9d6241074f2331cf8bb4d7ecaacc",
+      "instance": "0xc0cf00079741ab9db6aceb5f7fe2f69c243c1aae",
+      "source": {
+        "number": 26013785,
+        "hash": "0x673de33446bcd9fdee4371c29d237c46402e2360186a3fb3fc3a2a3a37a33403",
+        "generation": 26013785
+      },
+      "result": "pass",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26013785-attempt01/ready.json",
+        "sha256": "a4b650e98c1a66f18096989b100d3b7c497d6240ee949d7efefafbe6b57f1cf4",
+        "unchanged": true
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra3-prices/prices.json",
+        "sha256": "8641fff938eec6f74c0ccb8340886af1305a7642d30344551524bee78ba48aae"
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra3-dual.json",
+        "sha256": "c94fb01a61b831125a539b5eace77682fd708b1212332ec3677c22df82611be7"
+      },
+      "counts": {
+        "directions": 2,
+        "amountTrials": 4,
+        "executions": 16,
+        "quotedExecutions": 8,
+        "runtimeExecutions": 8,
+        "oldInventoryControls": 8,
+        "noInputReverts": 8
+      },
+      "naturalProductionReferenceGate": "met",
+      "runtimeConstruction": {
+        "exactCalls": 0,
+        "quotedCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false
+      },
+      "directions": [
+        {
+          "tokenIn": "0x514910771af9ca656af840dff83e8264ecf986ca",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "directionEvidence": "original transaction direction",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "420857084075776167",
+            "amountOut": "1995776908212073",
+            "quotedAt": {
+              "number": 26013785,
+              "hash": "0x673de33446bcd9fdee4371c29d237c46402e2360186a3fb3fc3a2a3a37a33403",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "420857084075776167",
+              "quoteAmountOut": "1995776908212073",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "5342364713557870546",
+              "quoteAmountOut": "25317720529474219",
+              "executions": 4,
+              "allActualMinusQuote": "0",
+              "originalAmountOut": "25354018620515664",
+              "nEndMinusOriginal": "-36298091041445"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x514910771af9ca656af840dff83e8264ecf986ca",
+          "directionEvidence": "opposite production Ready direction; not an original TX leg",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "2000000000000000",
+            "amountOut": "420857084075776167",
+            "quotedAt": {
+              "number": 26013785,
+              "hash": "0x673de33446bcd9fdee4371c29d237c46402e2360186a3fb3fc3a2a3a37a33403",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2000000000000000",
+              "quoteAmountOut": "420857084075776167",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "twice-production-effective",
+              "amountIn": "4000000000000000",
+              "quoteAmountOut": "841666704944991854",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            }
+          ]
+        }
+      ],
+      "gaps": [
+        "Original transaction pre-call state/output parity unverified; N-end execution only."
+      ]
+    },
+    {
+      "key": "algebra4",
+      "tx": "0x246160cdd6c0048a58076fc96a49d9ee18f4438a42e8bcb0727c6b42e06b86b8",
+      "instance": "0x65937a5421603612c243300b250f64e58afcdbc4",
+      "source": {
+        "number": 25946003,
+        "hash": "0x5536c70b740995bfa6bcc158673726dc7372a87ddfc534203ef4f4ba02cd97ff",
+        "generation": 25946003
+      },
+      "result": "pass",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25946003-attempt01/ready.json",
+        "sha256": "8ea38feb6dfb6eb3bee2e606d17b1c9f5215f8f11d3afedd5869cb04378bbdcd",
+        "unchanged": true
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra4-prices/prices.json",
+        "sha256": "ed8ed2388f6a1d9c98bbb4ab9cb4951e45d1c42320129b60130645b6280739d8"
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra4-dual.json",
+        "sha256": "f0bc281e068c629b15cd2ce5f31fba1ec81bbcc895cc76b778edc90002e1e4c6"
+      },
+      "counts": {
+        "directions": 2,
+        "amountTrials": 4,
+        "executions": 16,
+        "quotedExecutions": 8,
+        "runtimeExecutions": 8,
+        "oldInventoryControls": 8,
+        "noInputReverts": 8
+      },
+      "naturalProductionReferenceGate": "met",
+      "runtimeConstruction": {
+        "exactCalls": 0,
+        "quotedCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false
+      },
+      "directions": [
+        {
+          "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "directionEvidence": "original transaction direction",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "35949269699068764515",
+            "amountOut": "1985576362633525",
+            "quotedAt": {
+              "number": 25946003,
+              "hash": "0x5536c70b740995bfa6bcc158673726dc7372a87ddfc534203ef4f4ba02cd97ff",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "35949269699068764515",
+              "quoteAmountOut": "1985576362633525",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "339698859092837871530",
+              "quoteAmountOut": "18665727494881904",
+              "executions": 4,
+              "allActualMinusQuote": "0",
+              "originalAmountOut": "18884214226335870",
+              "nEndMinusOriginal": "-218486731453966"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+          "directionEvidence": "opposite production Ready direction; not an original TX leg",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "2000000000000000",
+            "amountOut": "35949269699068764515",
+            "quotedAt": {
+              "number": 25946003,
+              "hash": "0x5536c70b740995bfa6bcc158673726dc7372a87ddfc534203ef4f4ba02cd97ff",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2000000000000000",
+              "quoteAmountOut": "35949269699068764515",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "twice-production-effective",
+              "amountIn": "4000000000000000",
+              "quoteAmountOut": "71854281861020418182",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            }
+          ]
+        }
+      ],
+      "gaps": [
+        "Original transaction pre-call state/output parity unverified; N-end execution only."
+      ]
+    },
+    {
+      "key": "algebra5",
+      "tx": "0x4a12dbe50e89057b07ccfc471d0db0c406be65e9d82d6e29a55284844e30cd85",
+      "instance": "0x177f07c0843776b2a6342ed6c488af64e6f2fd65",
+      "source": {
+        "number": 25930616,
+        "hash": "0x74738d6652e7cf663495912cc71099623b8ee9636aad5e1a8d0f58827f8651d5",
+        "generation": 25930616
+      },
+      "result": "pass",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25930616-attempt01/ready.json",
+        "sha256": "dc8e67ae8d1acb65488d51a39ef805cb715a10debb6eb32071a577fd677c7f5d",
+        "unchanged": true
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra5-prices/prices.json",
+        "sha256": "24d20741600bbfefcd9bab314727673f16d7735c59ea8f9bcd667adb51abfac2"
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra5-dual.json",
+        "sha256": "004bff0950efcfa2a829aee9c3683c777fc00eaaf63301520a97a8946247a289"
+      },
+      "counts": {
+        "directions": 2,
+        "amountTrials": 4,
+        "executions": 16,
+        "quotedExecutions": 8,
+        "runtimeExecutions": 8,
+        "oldInventoryControls": 8,
+        "noInputReverts": 8
+      },
+      "naturalProductionReferenceGate": "met",
+      "runtimeConstruction": {
+        "exactCalls": 0,
+        "quotedCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false
+      },
+      "directions": [
+        {
+          "tokenIn": "0x808507121b80c02388fad14726482e061b8da827",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "directionEvidence": "original transaction direction",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "2231929629131525300",
+            "amountOut": "1987849461477351",
+            "quotedAt": {
+              "number": 25930616,
+              "hash": "0x74738d6652e7cf663495912cc71099623b8ee9636aad5e1a8d0f58827f8651d5",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2231929629131525300",
+              "quoteAmountOut": "1987849461477351",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "16471900193680201496",
+              "quoteAmountOut": "14666583544236469",
+              "executions": 4,
+              "allActualMinusQuote": "0",
+              "originalAmountOut": "14675816076799169",
+              "nEndMinusOriginal": "-9232532562700"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x808507121b80c02388fad14726482e061b8da827",
+          "directionEvidence": "opposite production Ready direction; not an original TX leg",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "2000000000000000",
+            "amountOut": "2231929629131525300",
+            "quotedAt": {
+              "number": 25930616,
+              "hash": "0x74738d6652e7cf663495912cc71099623b8ee9636aad5e1a8d0f58827f8651d5",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2000000000000000",
+              "quoteAmountOut": "2231929629131525300",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "twice-production-effective",
+              "amountIn": "4000000000000000",
+              "quoteAmountOut": "4463669145565465284",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            }
+          ]
+        }
+      ],
+      "gaps": [
+        "Original transaction pre-call state/output parity unverified; N-end execution only."
+      ]
+    },
+    {
+      "key": "algebra6",
+      "tx": "0xacc347b03f7b6fd9efe0f50035f2c63720ac2e2954229ac8fe7465dcc6f23ef0",
+      "instance": "0xf53dcd757f208fb4f3631d16d8c17ddb21a9d98d",
+      "source": {
+        "number": 25975130,
+        "hash": "0x58ac4d102bb4c31b585f078b50b3dbea9b0ffab35149c8659b0227aaec8ea466",
+        "generation": 25975130
+      },
+      "result": "pass",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25975130-attempt01/ready.json",
+        "sha256": "524b58e59de633230d50835a1b38b2bb580f6d79ef0621c7ddf541960cc98ae6",
+        "unchanged": true
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra6-prices/prices.json",
+        "sha256": "c5ad4d0ecbc30d58d66083a9c838821280c7ca89ad82a806d52a4c2bc80c2bc0"
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra6-dual.json",
+        "sha256": "133a8e80202c2bbfe765d23069e2ede8a8cc1ed4191417f72e0626e07f77a791"
+      },
+      "counts": {
+        "directions": 2,
+        "amountTrials": 4,
+        "executions": 16,
+        "quotedExecutions": 8,
+        "runtimeExecutions": 8,
+        "oldInventoryControls": 8,
+        "noInputReverts": 8
+      },
+      "naturalProductionReferenceGate": "met",
+      "runtimeConstruction": {
+        "exactCalls": 0,
+        "quotedCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false
+      },
+      "directions": [
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xe0f63a424a4439cbe457d80e4f4b51ad25b2c56c",
+          "directionEvidence": "original transaction direction",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "2000000000000000",
+            "amountOut": "998123841",
+            "quotedAt": {
+              "number": 25975130,
+              "hash": "0x58ac4d102bb4c31b585f078b50b3dbea9b0ffab35149c8659b0227aaec8ea466",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2000000000000000",
+              "quoteAmountOut": "998123841",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "19865343393680345",
+              "quoteAmountOut": "9882644796",
+              "executions": 4,
+              "allActualMinusQuote": "0",
+              "originalAmountOut": "9953152906",
+              "nEndMinusOriginal": "-70508110"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xe0f63a424a4439cbe457d80e4f4b51ad25b2c56c",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "directionEvidence": "opposite production Ready direction; not an original TX leg",
+          "effective": {
+            "status": "quoted",
+            "amountIn": "998123841",
+            "amountOut": "1974632889900637",
+            "quotedAt": {
+              "number": 25975130,
+              "hash": "0x58ac4d102bb4c31b585f078b50b3dbea9b0ffab35149c8659b0227aaec8ea466",
+              "generation": 1
+            },
+            "freshCarried": "fresh at N; new at-block run, no saved-price input"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "998123841",
+              "quoteAmountOut": "1974632889900637",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            },
+            {
+              "label": "twice-production-effective",
+              "amountIn": "1996247682",
+              "quoteAmountOut": "3947864776029570",
+              "executions": 4,
+              "allActualMinusQuote": "0"
+            }
+          ]
+        }
+      ],
+      "gaps": [
+        "Original transaction pre-call state/output parity unverified; N-end execution only."
+      ]
+    }
+  ],
+  "tooling": {
+    "query": "algebra,dual,block",
+    "selectedIds": [
+      "listener:searcher:at-block",
+      "listener:searcher:algebra-dual-historical-fork"
+    ],
+    "manifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/tools.json",
+      "sha256": "3a4e3cca4800bc40fe85af8686ab299bdd11f3db3f2bea0ebbfb92ca7f54be6c"
+    },
+    "successfulExecutionReceipts": 12
+  },
+  "failures": [],
+  "safety": {
+    "signing": false,
+    "broadcast": false,
+    "minedBlocks": 0,
+    "protocolOverrides": false,
+    "mainExecutionFunding": "actor input only; existing input/output inventory preserved",
+    "inventoryControl": "separate actor-only output inventory; never counted as received output",
+    "build": false,
+    "live": false,
+    "sourceEdits": false,
+    "gitWrites": false,
+    "mdEdits": false,
+    "readyRebuild": false
+  },
+  "limitations": [
+    "Six fixed historical pools only; no extension to arbitrary dynamic plugins or other pool variants.",
+    "Original transaction pre-call state/output parity and original transaction wrapper/funding route not reproduced.",
+    "Current source-authenticated BotVM provisioned as local code overlay at empty historical executor; not deployed/mainnet executor evidence.",
+    "Single-leg N-end/N execution only; no opportunity enumeration, route final-sim/EV, representative performance or live acceptance.",
+    "RPC=0 applies only to runtime construction; the comparison uses RPC, and fork-internal RPC calls are not counted."
+  ]
+}

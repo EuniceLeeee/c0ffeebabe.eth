@@ -3,10 +3,40 @@ import test from "node:test";
 import { ethers } from "ethers";
 import { assertObservedLeg, originalYbAmounts, referenceMintAmount, YB_SAMPLES } from "./historical-dual.js";
 import { LT_INTERFACE } from "../abi.js";
+import { readyReuseScope } from "./historical-ready.js";
 
 const actor = "0x1000000000000000000000000000000000000002";
 const asset = "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf";
 const erc20 = new ethers.Interface(["event Transfer(address indexed from,address indexed to,uint256 value)", "function transfer(address,uint256) returns(bool)"]);
+
+test("YB Ready reuse accepts only an authenticated completed single-family single-block anchor", () => {
+  // The CLI's production Store.load authenticates hashes; this fixture tests
+  // the additional scope checks, never supplies historical admission evidence.
+  const prior: any = { checkpointFingerprint: "fixture-parent", inProgressRun: null,
+    readyGeneration: { cutoff: { number: 17, hash: ethers.ZeroHash },
+      universeRange: { fromBlock: 17, toBlock: 17 }, familyPartitions: { "protocol:yieldbasis-lt": {} } } };
+  const before = structuredClone(prior);
+  assert.deepEqual(readyReuseScope(prior, 17, ethers.ZeroHash),
+    { parentCheckpointFingerprint: "fixture-parent", familyIds: ["protocol:yieldbasis-lt"] });
+  assert.deepEqual(prior, before);
+  assert.throws(() => readyReuseScope(null, 17, ethers.ZeroHash));
+  const changes = [
+    (p: any) => { p.inProgressRun = {}; },
+    (p: any) => { p.readyGeneration = null; },
+    (p: any) => { p.readyGeneration.cutoff.number = 18; },
+    (p: any) => { p.readyGeneration.cutoff.hash = "0x" + "01".repeat(32); },
+    (p: any) => { p.readyGeneration.universeRange.fromBlock = 16; },
+    (p: any) => { p.readyGeneration.universeRange.toBlock = 18; },
+    (p: any) => { delete p.readyGeneration.familyPartitions; },
+    (p: any) => { p.readyGeneration.familyPartitions = { "protocol:compound-ctoken": {} }; },
+    (p: any) => { p.readyGeneration.familyPartitions["protocol:compound-ctoken"] = {}; },
+    (p: any) => { p.readyGeneration.observationScope = {}; },
+  ];
+  for (const change of changes) {
+    const changed = structuredClone(prior); change(changed);
+    assert.throws(() => readyReuseScope(changed, 17, ethers.ZeroHash));
+  }
+});
 
 function originalFixture(withdraw = true) {
   const sample = withdraw ? YB_SAMPLES.cbbtc : YB_SAMPLES.wbtc;
