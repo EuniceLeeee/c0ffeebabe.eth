@@ -1,0 +1,553 @@
+{
+  "schema": "stage2-curve-v3-offline-audit/v1",
+  "startedAt": "2026-10-12T09:29:27Z",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "headAtStart": "9e781a6351201fe25400ef75fd62ddaf69f38930",
+  "headObservedDuringMainCommit": "687ff9dbbacef57a558132fd4560f5c19ab19b94",
+  "scope": "Report-led, bounded offline audit only. Curve Plain/Underlying and seven coffee StableSurge Hook pools; no Set/DODO/Frax/xWin/Ekubo audit.",
+  "reads": "Selected docs/research/reports, explicitly linked raw JSON headers/directions and current semantic source/hash helpers. No global log content scan or coffee checkpoint reparse.",
+  "current": {
+    "families": [
+      {
+        "name": "curve-plain",
+        "full": "532628356f1a802579da9d760e676405d5eb0f35d0ff5a95eaedb172f545ca53",
+        "memo": "ed3bf3843f511e88cf3a63b649aa137efc69b946bd8909801c7c00a1a4a546d5"
+      },
+      {
+        "name": "curve-underlying",
+        "full": "1f631416e8c8dc508c7bdc62f994fbfb3d8d9df97941d1c540a5de9a54f96945",
+        "memo": "b308876330118c102d0d9286b117dbeabe08d78cf39412ee9f0ce9eba20c330b"
+      },
+      {
+        "name": "balancer-v3",
+        "full": "e515ffc67c8020c03125fc903784b9bc25787e48faef76af072d7569946ff84d",
+        "memo": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      }
+    ],
+    "capabilityHashes": [
+      {
+        "family": "balancer-v3",
+        "capability": "exact",
+        "hash": "560423aa7420aac030f6bd36633bdfabdd521b51e1403f6f33c888f4f6b5e44d"
+      },
+      {
+        "family": "balancer-v3",
+        "capability": "execution",
+        "hash": "f7dedda34610248a9093ea99a6671440ef70fb387677dc95798d8d52b7a4ed91"
+      },
+      {
+        "family": "balancer-v3",
+        "capability": "identity",
+        "hash": "66f5bd7d8ee93b8752263a08996a3def738da50d28e9f3e2cc067764403d65aa"
+      },
+      {
+        "family": "balancer-v3",
+        "capability": "pricing",
+        "hash": "b4af560c19eb81a3b5b80450e604645a8c64e58ae8b4aa64b1cf194ee3025951"
+      },
+      {
+        "family": "curve-plain",
+        "capability": "exact",
+        "hash": "c5f27ad8c90507339d4dfa8743faca5a2d87e50e9941c174ab5e0865d42f4c27"
+      },
+      {
+        "family": "curve-plain",
+        "capability": "execution",
+        "hash": "da16a2f2ed583ab60cc737f9e04536f564dfe199c65c69c7fe5091bf5a91e803"
+      },
+      {
+        "family": "curve-plain",
+        "capability": "identity",
+        "hash": "0ec7548ef4ce8285049a230c46a0afb4eafd9df73d9b58606159bf1d522788af"
+      },
+      {
+        "family": "curve-plain",
+        "capability": "pricing",
+        "hash": "ba4603e34755965debdb6f91c90fcef725df3bc2842f4b1b3f8c5dca6a5dc8ae"
+      },
+      {
+        "family": "curve-underlying",
+        "capability": "exact",
+        "hash": "6c03e8b642213dec13c5f8b6446861cb3eb7d5dbde5fb91b202a6d413aaa20e5"
+      },
+      {
+        "family": "curve-underlying",
+        "capability": "execution",
+        "hash": "83e56b95c09e37e6f9ab6278787de3e43faa711aae46c746232913fd40d53663"
+      },
+      {
+        "family": "curve-underlying",
+        "capability": "identity",
+        "hash": "b3a6a4b9a91bdaec901cfac2df80169ae9b0f755b81976fd3833c6ba6ff17061"
+      },
+      {
+        "family": "curve-underlying",
+        "capability": "pricing",
+        "hash": "e465e8639eef9119120cfc89b270bd162f60300eab90dad09174a894d8b7d561"
+      }
+    ],
+    "botvmArtifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/out/BotVM.sol/BotVM.json",
+      "sha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+      "bytesHashedThisAudit": true
+    },
+    "runtimeKeccak": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "runtimeBinding": "Owner 0x1000000000000000000000000000000000000001; current hash also authenticated by immediately preceding six Algebra runs."
+  },
+  "conclusions": [
+    "Do not discard old scoped historical results because HEAD/sourceTree differs.",
+    "Balancer V3 latest full/memo hashes match current exactly; current relevant capabilities equal 33df299. Natural reference topology and successful named historical receipts are reusable as scoped history.",
+    "Current exact-executor execution remains unverified for these samples. Since 33df299, BotVM/RuntimeAmountVM changes are authenticated failed-hop diagnostics (328de49), not a proven quote/settlement regression; no blanket all-pool rerun recommended.",
+    "Curve saved memo hashes genuinely differ from current memo authority. Revalidation is limited to the affected Family on a copy, not full-universe rebuilding.",
+    "Underlying nine historical mismatches were closed by classic-meta parity evidence; do not reopen them merely due later hash changes."
+  ],
+  "curvePlain": {
+    "samples": [
+      {
+        "variant": "exchange",
+        "pool": "0x4dece678ceceb27446b35c672dc7d61f30bad69e",
+        "tx": "0xa8978ea231a8692dfb975f20e702ef21e9ee491b6db8428efe6ea3798232608c",
+        "N": 26138094,
+        "directions": [
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        ],
+        "amountTrials": 4,
+        "executions": 8,
+        "result": "pass",
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-latency-20261007/single-block-26138094/candidate/curve-exchange-dual-attempt2.json",
+          "sha256": "a5422cdc6dba8b4ff58b500d55b80a4b1d29935fc599a34779b4f36b3e3db82f",
+          "bytesHashedThisAudit": true
+        },
+        "ready": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-latency-20261007/single-block-26138094/candidate/checkpoint.json",
+          "sha256": "19d010389a71ac2c006de677f0e6afef2154dc374779d75b8ac0a11c4d9f1eca",
+          "bytesHashedThisAudit": false
+        },
+        "prices": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-latency-20261007/single-block-26138094/candidate/curve-candidate-profile/prices-1-26138094.json",
+          "sha256": "a6a509903022caac99c8fea7fe2960036b41d196a242e0816f68bbb3a2b731f8",
+          "bytesHashedThisAudit": false
+        },
+        "oldMemoHash": "0a69a16e376a104219b2983d1974a3e8be8d55d46b4e892b411fa4a2b35e3c2b",
+        "oldRuntimeKeccak": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+        "reuse": "Authenticated historical P/10P quote and dual receipts remain valid under their saved bindings, not current admission/executor acceptance.",
+        "gaps": [
+          "Current memo differs; saved Ready cannot be used as current admission unchanged.",
+          "No authenticated fresh dual under current BotVM in searched reports.",
+          "Candidate TX comes from saved Ready nomination; this audit did not independently reparse its original receipt."
+        ],
+        "minimalNext": "Selective revalidation on a copy at N, production source-block prices, then existing Curve historical dual --family curve-plain for this pool. Do not edit original Ready."
+      },
+      {
+        "variant": "exchange_received",
+        "pool": "0x5018be882dcce5e3f2f3b0913ae2096b9b3fb61f",
+        "tx": "0x646f27abba5a7709e895caf1d746e23dfaaae44120089ff38e3a28bff7e62f58",
+        "N": 26138094,
+        "directions": [
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x085780639cc2cacd35e474e71f4d000e2405d8f6",
+          "0x085780639cc2cacd35e474e71f4d000e2405d8f6>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        ],
+        "amountTrials": 4,
+        "executions": 8,
+        "result": "pass",
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-latency-20261007/single-block-26138094/candidate/curve-received-dual-attempt1.json",
+          "sha256": "4b2efef90cbdf0953592f5ef3721f4e04f9eb34786d8d30ee325e3b75a4e9a78",
+          "bytesHashedThisAudit": true
+        },
+        "ready": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-latency-20261007/single-block-26138094/candidate/checkpoint.json",
+          "sha256": "19d010389a71ac2c006de677f0e6afef2154dc374779d75b8ac0a11c4d9f1eca",
+          "bytesHashedThisAudit": false
+        },
+        "prices": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-latency-20261007/single-block-26138094/candidate/curve-candidate-profile/prices-1-26138094.json",
+          "sha256": "a6a509903022caac99c8fea7fe2960036b41d196a242e0816f68bbb3a2b731f8",
+          "bytesHashedThisAudit": false
+        },
+        "oldMemoHash": "0a69a16e376a104219b2983d1974a3e8be8d55d46b4e892b411fa4a2b35e3c2b",
+        "oldRuntimeKeccak": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+        "reuse": "Authenticated historical P/10P quote and dual receipts remain valid under their saved bindings, not current admission/executor acceptance.",
+        "gaps": [
+          "Current memo differs; saved Ready cannot be used as current admission unchanged.",
+          "No authenticated fresh dual under current BotVM in searched reports.",
+          "Candidate TX comes from saved Ready nomination; this audit did not independently reparse its original receipt."
+        ],
+        "minimalNext": "Selective revalidation on a copy at N, production source-block prices, then existing Curve historical dual --family curve-plain for this pool. Do not edit original Ready."
+      }
+    ],
+    "nativeSupplement": {
+      "tx": "0x6fc18a5c63f708f6b03b1ccec5e14fcec03c4e7aaf01816814777fab97d6af91",
+      "N": 26139768,
+      "pool": "0xdc24316b9ae028f1497c275eb9192a3ea0f67022",
+      "directions": [
+        "WETH->stETH",
+        "stETH->WETH"
+      ],
+      "amountTrials": 4,
+      "executions": 8,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/rounding-central-20261009.V3Y8qS/curve-dual-attempt02.json",
+        "sha256": "72c7408e4e0b7bac6affe4141133445fd9875655a838021d97ca4224d9570c57",
+        "bytesHashedThisAudit": true
+      },
+      "oldMemoHash": "c15911181bb57ea21f5246a9d93675a6bbe597fb33b93bab2f15a4e049353e05",
+      "oldRuntimeKeccak": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "precision": "Saved native result is NOT exact-zero parity: WETH->stETH output delta -1; reverse actual input debit shortfall 1. Allowed explicit raw-unit policy; no quote/input silently reduced.",
+      "gaps": [
+        "Current memo/VM not covered by that old native result.",
+        "Exact-zero native parity was not achieved and must not be claimed."
+      ],
+      "minimalNext": "Reuse old ±1 evidence honestly; selectively refresh copied Ready, then existing searcher:curve-plain-historical-native-dual with current prices/BotVM and explicit current tolerance if current-executor evidence is required."
+    }
+  },
+  "curveUnderlying": {
+    "tx": "0x73f75256979894103b5bcb045266cf802103e23d0d937c907e50b035663e48e4",
+    "N": 26138094,
+    "pool": "0xc270b3B858c335B6BA5D5b10e2Da8a09976005ad",
+    "model": "classic-meta-base-3pool-v1",
+    "directions": [
+      "0x8e870d67f660d95d5be530380d0ec0bd388289e1>0x6b175474e89094c44da98b954eedeac495271d0f",
+      "0x8e870d67f660d95d5be530380d0ec0bd388289e1>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "0x8e870d67f660d95d5be530380d0ec0bd388289e1>0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "0x6b175474e89094c44da98b954eedeac495271d0f>0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+      "0x6b175474e89094c44da98b954eedeac495271d0f>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "0x6b175474e89094c44da98b954eedeac495271d0f>0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x6b175474e89094c44da98b954eedeac495271d0f",
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "0xdac17f958d2ee523a2206206994597c13d831ec7>0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+      "0xdac17f958d2ee523a2206206994597c13d831ec7>0x6b175474e89094c44da98b954eedeac495271d0f",
+      "0xdac17f958d2ee523a2206206994597c13d831ec7>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+    ],
+    "evidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-model-historical.Lm9tY5/dual-indexed-price-input.json",
+      "sha256": "d3344fe6ee79ecc86bb792c7ace6a4eada7285e27d7da3296cbb2c9d909948a6",
+      "bytesHashedThisAudit": true
+    },
+    "ready": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-model-historical.Lm9tY5/ready.json",
+      "sha256": "2ac1ad568c3ae3bb7c0f021c773def74c90f2d6ac3a6b2b80f9b414238dd34d6",
+      "bytesHashedThisAudit": false
+    },
+    "oldMemoHash": "d71aca7e833f7582cab83c8a6726e20b9fdcfc227956f006c62512500dfcb397",
+    "oldRuntimeKeccak": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+    "historicalCoverage": "12 directions, P/10P current-effective and retained original-reference amount sets: report 96 strict dual successes plus 48 separate diagnostics. This audit hashed/read the current-effective receipt, not all raw traces.",
+    "semantics": "Post-b6412b8 classic-meta quote diff inspected: guards decoded once and reused, no formula replacement. LP Transfer/Approval refresh filtering added; donation/mint/burn/unknown retained.",
+    "gaps": [
+      "Current memo differs and current BotVM execution absent from selected evidence.",
+      "Active amplification ramps are fail-closed in implementation/report; authentic same-N chain rejection receipt was not verified here.",
+      "Other underlying implementations/directions in coffee corpus not exhaustively mapped: unverified."
+    ],
+    "minimalNext": "Selective current-memo revalidation of the N26138094 copy, regenerate source-block prices, use searcher:curve-runtime-dual-historical-fork --family curve-underlying --price-input ... for 12 directions/current amounts; add only an actual ramp rejection if a saved real ramp sample exists."
+  },
+  "balancerV3Hooks": {
+    "report": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/balancer-v3-v4-natural-reference-20261010.json",
+      "sha256": "310479e9f38cf33059299a0460f72c33f2ed182e3568a874f063e5090ee5fa8f",
+      "bytesHashedThisAudit": true
+    },
+    "semanticReuse": {
+      "fullCurrentAndLatest": "e515ffc67c8020c03125fc903784b9bc25787e48faef76af072d7569946ff84d",
+      "memoCurrentAndSaved": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38",
+      "latestSavedRuntimeKeccak": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419",
+      "sourceChange": "33df299..HEAD only src/BotVM.sol and src/RuntimeAmountVM.sol in inspected VM/three-Family production paths; current capability hashes unchanged from 33df299.",
+      "executionLimit": "Saved latest harness minimum output was 1 and asserted independent quote/actual equality; it did not newly run missing-input/atomic-failure negatives. Runtime RPC=0 is not proof of poisoned every Exact entrance."
+    },
+    "samples": [
+      {
+        "pool": "0x6b31a94029fd7840d780191b6d63fa0d269bd883",
+        "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+        "N": 26030897,
+        "variant": "stable-surge-pool-v1",
+        "hook": "stable-surge-v1",
+        "directions": [
+          "0x2411802d8bea09be0af8fd8d08314a63e706b29c>0x90551c1795392094fe6d29b758eccd233cfaa260",
+          "0x90551c1795392094fe6d29b758eccd233cfaa260>0x2411802d8bea09be0af8fd8d08314a63e706b29c"
+        ],
+        "measuredDirections": 2,
+        "referenceDirections": 2,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-bridge-diagnosis-20261010.WDNb9H/26030897-dual-3.json",
+          "sha256": "e9d7e946ec4bdbd7695506d3850a6e019379e8f1e8b820b8a77b81152313ebaa",
+          "bytesHashedThisAudit": false
+        },
+        "earlierEvidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-dual-5.json",
+          "sha256": "4ee25b9853d0706b3d391c8ac0c7c047609b1398045bd09dde29ef6e81dcbaf1",
+          "bytesHashedThisAudit": true
+        },
+        "ready": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/ready.json",
+          "sha256": "eee7ec8c1de2b42a8a6612a2d142069c18f92a03f8486c1242532c16b9a661d6",
+          "bytesHashedThisAudit": false
+        },
+        "result": "pass (latest report; latest raw not yet hashed)",
+        "currentMemoCompatible": true,
+        "currentExecutorExecution": "unverified; saved runtime bytes differ",
+        "naturalEffectiveGap": null
+      },
+      {
+        "pool": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+        "tx": "0x1b474eb9c6da5bd400c4a20c0d029a039cb6d509df756140b3e09e42374845e3",
+        "N": 25936827,
+        "variant": "stable-surge-pool-v2",
+        "hook": "stable-surge-v2",
+        "directions": [
+          "0x8399c8fc273bd165c346af74a02e65f10e4fd78f>0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+          "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94>0x8399c8fc273bd165c346af74a02e65f10e4fd78f"
+        ],
+        "measuredDirections": 2,
+        "referenceDirections": 2,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-reference-gap-20261010.OrsLv8/dual-N25936827-1.json",
+          "sha256": "0d69f3e1b11f2d4b4b49ccc8f9d6d492370e93c2c1a495b4ebe97173adea56a9",
+          "bytesHashedThisAudit": true
+        },
+        "ready": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/ready.json",
+          "sha256": "e9906fcddd7218f65f6caa32bdb525a7569437da1dda7e124beee6560609a945",
+          "bytesHashedThisAudit": false
+        },
+        "result": "pass",
+        "currentMemoCompatible": true,
+        "currentExecutorExecution": "unverified; saved runtime bytes differ",
+        "naturalEffectiveGap": null
+      },
+      {
+        "pool": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+        "tx": "0x1969dedd475168204d782dc62d65efa62d650e60d000ba040fea5cbe979dbd20",
+        "N": 26105714,
+        "variant": "stable-surge-pool-v3",
+        "hook": "stable-surge-v2",
+        "directions": [
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+          "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd>0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd>0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7>0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7>0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+          "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+          "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d>0xdac17f958d2ee523a2206206994597c13d831ec7"
+        ],
+        "measuredDirections": 12,
+        "referenceDirections": 12,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/dual-1.json",
+          "sha256": "e3b8448e42e803ba56eafc894c0b97ec9ccdd184dcbada4a30bf60a4688485ee",
+          "bytesHashedThisAudit": true
+        },
+        "ready": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-four-token-natural-20261010.hNv3LA/ready-2/ready.json",
+          "sha256": "cc5c747128684d5f7ae8c91c68c20fc87db7b71fe323a61dcadbafd9521f71ad",
+          "bytesHashedThisAudit": false
+        },
+        "result": "pass",
+        "currentMemoCompatible": true,
+        "currentExecutorExecution": "unverified; saved runtime bytes differ",
+        "naturalEffectiveGap": null
+      },
+      {
+        "pool": "0xe00e947decfe01692070e113002705bdf77ddbd3",
+        "tx": "0xf244dd0b413f99bb171d698d9b0c4392bdaad674329f70d26d11bf0183ccabd2",
+        "N": 25985457,
+        "variant": "stable-surge-pool-v3",
+        "hook": "stable-surge-v2",
+        "directions": [
+          "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf>0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+          "0xe108fbc04852b5df72f9e44d7c29f47e7a993add>0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf"
+        ],
+        "measuredDirections": 2,
+        "referenceDirections": 2,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25985457-dual-1.json",
+          "sha256": "8877442b3c42a171c54b953e1ea7ea458fd83a08e4b3bc130e1ee2f7f4a4cc41",
+          "bytesHashedThisAudit": true
+        },
+        "ready": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25985457-erc4626-1/ready.json",
+          "sha256": "715ef10eefe90bea24747acf4e76d9f1af5d4f1234697a384f070d48c7e3a387",
+          "bytesHashedThisAudit": false
+        },
+        "result": "pass",
+        "currentMemoCompatible": true,
+        "currentExecutorExecution": "unverified; saved runtime bytes differ",
+        "naturalEffectiveGap": null
+      },
+      {
+        "pool": "0x071828acc755314e687448703775f22194f56867",
+        "tx": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+        "N": 25944594,
+        "variant": "stable-surge-pool-v2",
+        "hook": "stable-surge-v2",
+        "directions": [
+          "0x9d39a5de30e57443bff2a8307a4256c8797a3497>0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+          "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb>0x9d39a5de30e57443bff2a8307a4256c8797a3497"
+        ],
+        "measuredDirections": 2,
+        "referenceDirections": 1,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-bridge-diagnosis-20261010.WDNb9H/v3-natural-reference-dual-1.json",
+          "sha256": "1a2081c06371e62e309a4de58262d5287b8b461a954e9df41d4ee17fb4b9a593",
+          "bytesHashedThisAudit": true
+        },
+        "ready": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-natural-ready-3/ready.json",
+          "sha256": "91a4f8286f1f0cfe60ecd6bb76cd7aeed911edc55d5d9ac7cd41fd4c8a8270c7",
+          "bytesHashedThisAudit": false
+        },
+        "result": "pass",
+        "currentMemoCompatible": true,
+        "currentExecutorExecution": "unverified; saved runtime bytes differ",
+        "naturalEffectiveGap": "siUSD -> sUSDe lacks <=3-hop valuation; original-amount success is not production-reference coverage."
+      },
+      {
+        "pool": "0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566",
+        "tx": "0x663e4452f85b0b91c729cc81122e565b61a76a85319fda2a0742ccdb7b1a0de0",
+        "N": 25978385,
+        "variant": "stable-surge-pool-v2",
+        "hook": "stable-surge-v2",
+        "directions": [
+          "0x6440f144b7e50d6a8439336510312d2f54beb01d>0x99999999999999cc837c997b882957dafdcb1af9",
+          "0x99999999999999cc837c997b882957dafdcb1af9>0x6440f144b7e50d6a8439336510312d2f54beb01d"
+        ],
+        "measuredDirections": 2,
+        "referenceDirections": 2,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25978385-dual-1.json",
+          "sha256": "e991b27f56883fb9767234351b8a642f40353f6f3b67c2795a667c4007fae666",
+          "bytesHashedThisAudit": true
+        },
+        "ready": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/25978385-erc4626-1/ready.json",
+          "sha256": "ee96ed62f794a92102dd1160be2a20031bb4090ba59aac62906b226cfce99549",
+          "bytesHashedThisAudit": false
+        },
+        "result": "pass",
+        "currentMemoCompatible": true,
+        "currentExecutorExecution": "unverified; saved runtime bytes differ",
+        "naturalEffectiveGap": null
+      },
+      {
+        "pool": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
+        "tx": "0x7a068e5feffb98831e18cc0853c33072133ee233d0a215595002f0da71000640",
+        "N": 26073941,
+        "variant": "stable-surge-pool-v2",
+        "hook": "stable-surge-v2",
+        "directions": [
+          "0x936facdf10c8c36294e7b9d28345255539d81bc7>0xae78736cd615f374d3085123a210448e74fc6393",
+          "0xae78736cd615f374d3085123a210448e74fc6393>0x936facdf10c8c36294e7b9d28345255539d81bc7"
+        ],
+        "measuredDirections": 2,
+        "referenceDirections": 2,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/26073941-dual-1.json",
+          "sha256": "6a63d41286cddec9aa21f24cafe64b923b920422cef4ce3dacb7761c8b552b8d",
+          "bytesHashedThisAudit": true
+        },
+        "ready": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/v3-natural-reference-20261010.RCIyYe/26073941-erc4626-1/ready.json",
+          "sha256": "38a7d79472d77633350003ae35455720bd50dbdbf08bac9b96e469bc77cdfbfb",
+          "bytesHashedThisAudit": false
+        },
+        "result": "pass",
+        "currentMemoCompatible": true,
+        "currentExecutorExecution": "unverified; saved runtime bytes differ",
+        "naturalEffectiveGap": null
+      }
+    ],
+    "totals": {
+      "hookPools": 7,
+      "measuredDirections": 24,
+      "productionReferenceDirections": 23,
+      "remainingReferenceDirections": 1,
+      "aggregateReportIncludingExcludedNoHookWeightedPool": "36 measured / 35 reference / 36 graph directions; its 12 no-hook directions are not part of this Hook audit."
+    },
+    "remainingGap": {
+      "pool": "0x071828acc755314e687448703775f22194f56867",
+      "tokenIn": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+      "direction": "siUSD->sUSDe",
+      "block": 25944594,
+      "status": "missing-valuation",
+      "attempt": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1",
+      "reason": "Expanded whole-single-block scope adds V2/V4 but still provides no <=3-hop successful reference input for siUSD. Existing WETH->wstETH->crvUSD->sUSDe->siUSD path requires 4 hops. sUSDe direction remains quoted; both InfiniFi inputs also remain missing.",
+      "executionRerun": false,
+      "executionReason": "No new missing-direction production input was obtained; existing original-amount execution evidence is retained, not redundantly rerun or credited as production-reference coverage.",
+      "policyChanged": false,
+      "donorInput": "Previously searched saved donor tables lacked a siUSD tokenIn row; the prior borrowed iUSD deposit evidence does not supply a siUSD production-reference input."
+    },
+    "stateRejection": "Missing valuation is not a Balancer revert. Peripheral siUSD direct-vault rejection was later explained by Gateway semantics; do not relabel it as permanent Hook incompatibility. No new real-state rejection proof collected.",
+    "minimalNext": "Keep valid V3 Ready/topology and old scoped success evidence. Prioritize authentic <=3-hop siUSD input provenance (or retain gap); do not invent a donor or increase hop policy. If current-executor claim is required, first one representative Hook same-N dual plus no-input/old-inventory failure behavior on current BotVM; expand only for an evidenced semantic difference.",
+    "runner": "Current Family-local listener/src/searcher/venues/swaps/balancer-v3-family/test/historical-runtime-dual.ts; actual parser owns only port 8591 and requires --ready --prices --pool --rpc-file --out --port, optional --receipt and paired reference options. Not the Algebra fixed-sample CLI; inventory-confirm a thin entrypoint before execution."
+  },
+  "references": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/curve-underlying-classic-meta-parity-20261008.json",
+      "sha256": "3f85230552f482ffc606e03bef9305f60f5dc18c1e46dfb6f83abfe21a78b572",
+      "bytesHashedThisAudit": true
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/family-runtime-curve-underlying-nine-20261007.json",
+      "sha256": "d33792c84bbeae25d29a1ac24246c18e52479bc9120bd4b65ff2b0852adf9ff6",
+      "bytesHashedThisAudit": true
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/native-asset-rounding-acceptance-20261010.json",
+      "sha256": "c3c50b95b1b99f1e25df5eaf0ba4227fcd7db7a8e45267564fc482eb8dab502d",
+      "bytesHashedThisAudit": true
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/balancer-v3-stable-surge-acceptance-20261010.json",
+      "sha256": "4b5bae5d33e77234ee4e0ec54aa46bfcca0d9d7db4d463fd71fc4b8dbcfb4e20",
+      "bytesHashedThisAudit": true
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/balancer-v3-four-token-natural-reference-20261010.json"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/balancer-v3-natural-reference-supplement-20261010.json"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/erc4626-deposit-fallback-20261010.json"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/siusd-refresh-natural-reference-20261010.json"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/universe-rebuild-production.ts",
+      "lines": [
+        414,
+        2177,
+        3788
+      ],
+      "use": "memo authority and current hash equality checks"
+    }
+  ],
+  "unverified": [
+    "Complete coffee-checkpoint-to-Curve-instance/TX mapping; no giant checkpoint parsed.",
+    "Full recheck of all historical raw storage/trace balances; this is provenance/reuse audit, not new execution acceptance.",
+    "All real active-ramp/unsupported-Hook rejection states beyond named evidence.",
+    "Fresh current-code same-N acceptance, original pre-call replay, closed-route EV and performance/live."
+  ],
+  "safety": {
+    "rpc": 0,
+    "evm": 0,
+    "build": 0,
+    "benchmark": 0,
+    "live": 0,
+    "sourceEdits": 0,
+    "mdEdits": 0,
+    "gitWrites": 0,
+    "cloudWrites": 0
+  },
+  "auditReadFailure": {
+    "kind": "one read-only hash inspection mistakenly passed loader object to keccak256",
+    "resolution": "used correct loader object shape; no RPC/EVM or source writes, old evidence unaffected."
+  }
+}

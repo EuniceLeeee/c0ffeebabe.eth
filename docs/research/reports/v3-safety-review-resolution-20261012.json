@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "findingId": "V3-SAFETY-01",
+  "result": "resolved_within_offline_review_scope",
+  "scope": "仅复核原生库存观察器缺省 post.balance 的原发现及其回归；未扩大审查范围。",
+  "originalReview": {
+    "file": "v3-safety-review.json",
+    "sha256": "edcf835e3c381270073bea00eccabd5bb119a2c3f08290a0fd923f8e27a8b972",
+    "preserved": true
+  },
+  "reviewedSources": {
+    "directory": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/v3-safety-source",
+    "historical-runtime-dual.ts": "afc56eb3a4514d5db22d9432bf22aa1e0f432d7a92a7a3479b9c0755441eafd0",
+    "contract.ts": "1b7a967cfe2cb85adf6d2b0e6e53cf3397c15934b65028642c1015c1d6ecca2b",
+    "expectedHashesMatched": true
+  },
+  "conclusion": "helper 133–139 行现按账户存在性处理，post 账户存在而 balance 缺省时沿用 before。contract.ts 55–60 行补充 storage-only 与 nonce-only 通过回归，原误拒绝已解决；现有显式归零、减少、增加、账户删除和创建不符断言仍有效。",
+  "verification": {
+    "method": "仅在内存抽取当前 observedNativeInventory 函数体执行定向纯 helper 断言，未导入项目入口。",
+    "checksPassed": 9,
+    "cases": ["双方省略未变账户", "post 仅 storage", "post 仅 nonce", "显式归零拒绝", "余额减少拒绝", "余额增加拒绝", "账户删除拒绝", "账户创建与初始余额不符拒绝", "缺失 diff 拒绝"],
+    "engineeringSuiteRun": false,
+    "rpcOrEvmRun": false,
+    "buildBenchmarkOrLiveRun": false
+  },
+  "externalEvidence": "主线程提供了云端 indexed run 红例信息，本复核未独立读取该产物；云端绿例由主线程执行，不在此报告中预先认定通过。"
+}

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "reviewType": "limited_non_author_offline_review",
+  "result": "actionable_findings",
+  "scope": "仅审查 Balancer V3 历史双执行验收器新增的零输入负例、回滚观察与原生库存检查；不审计未修改中央代码或全仓。",
+  "productionWorkspaceReportedByUser": "/opt/mev-cloud/family-runtime-20261007",
+  "productionWorkspaceAccessed": false,
+  "baselineCommit": "c1d19a8915919a8c64fe115d854dcbd16d7e0aa2",
+  "files": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/v3-safety-source/historical-runtime-dual.ts",
+      "repositoryPath": "listener/src/searcher/venues/swaps/balancer-v3-family/test/historical-runtime-dual.ts",
+      "baselineSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+      "reviewedSha256": "98537b2e34333c5b748434034fa7f31d299baf613890bd47d725b9dc1d638b8c",
+      "baselineMatched": true,
+      "unchangedDuringReview": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/v3-safety-source/contract.ts",
+      "repositoryPath": "listener/src/searcher/venues/swaps/balancer-v3-family/test/contract.ts",
+      "baselineSha256": "1db1fd3a08c09c5c9c43166ad3823e4ed2465d567ec41987c51688a09bb50eab",
+      "reviewedSha256": "77000fc8791896a0ec51bf63e0e9b42e2b689f2cda19499eab54c98e5f456d92",
+      "baselineMatched": true,
+      "unchangedDuringReview": true
+    }
+  ],
+  "findings": [
+    {
+      "id": "V3-SAFETY-01",
+      "priority": "P2",
+      "title": "区分 post 缺省的原生余额与余额归零",
+      "file": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/v3-safety-source/historical-runtime-dual.ts",
+      "lineStart": 133,
+      "lineEnd": 137,
+      "description": "observedNativeInventory 将 pre.balance 存在、post.balance 缺省一律解释成 after=0。Geth 风格 prestateTracer diff 中，发生修改的账户可以在 pre 保留原 balance，而 post 只列出修改字段；当执行器仅有 storage 或 nonce 变化时，post 账户仍存在但没有 balance，原生余额仍为 17。当前逻辑会误报库存被消耗，使成功执行在第 462 行被拒绝。这是账户标量字段的缺省语义问题，不能直接套用 storage slot 创建/删除规则。",
+      "offlineReproduction": {
+        "initialNative": "17",
+        "preExecutor": { "balance": "0x11", "storage": { "slot1": "1" } },
+        "postExecutor": { "storage": { "slot1": "2" } },
+        "notation": "slot1 为同一个 32 字节槽键；实际断言使用完整十六进制键和值。",
+        "expected": "before=17, after=17, delta=0",
+        "actual": "抛出 encoded execution consumed or changed native inventory，actual=0、expected=17"
+      },
+      "recommendation": "按 tracer 的账户及字段缺省语义处理：post 账户存在而 balance 缺省时保留原余额；显式归零和账户删除仍须拒绝。给 contract.ts 新增 pre 带 balance=17、post 账户只含 storage/nonce 修改的通过用例，并保留显式归零、增加、减少和删除账户的拒绝用例。",
+      "evidenceBoundary": "问题在抽取的当前纯 helper 上复现；本轮未运行 EVM，未确认现用 Anvil 或当前 BotVM 路径是否会产生此 diff 形态，不将其宣称为已复现的历史执行失败。"
+    }
+  ],
+  "staticChecks": [
+    {
+      "check": "两套已编译脚本的真实调用接线",
+      "result": "no_additional_finding",
+      "evidence": "419–420 行分别由生产 fragment 编码与 runtimeProgramScript 生成脚本；445 行遍历两者。495–498 行负例复用本轮 452–453 行构造的同一 tx，同时调用 callTracer 与独立 prestateTracer；没有重编译成替代负例脚本。这里只证明接线，未声称本轮已执行两套脚本。"
+    },
+    {
+      "check": "零输入、足量旧输出及原子回滚",
+      "result": "no_additional_finding",
+      "evidence": "487–494 行从原 overrides 独立克隆，将输入置零、旧输出置 quote.amountOut+103，并用余额 getter 核对；保持相同 tx、N pin、owner/executor 与原生 17 override。148 行要求根 error 精确为 execution reverted，子调用失败、根成功或 out of gas 都不能通过。输入/输出余额通过独立 diff 检查零变化。"
+    },
+    {
+      "check": "token 与 Permit2 授权观察",
+      "result": "no_additional_finding",
+      "evidence": "432 行先要求源授权为全零；499–508 行从负例自己的 diff 覆盖 allowance getter 读取的槽，而非复用成功执行的 poststate。154 行要求 ERC20 allowance、Permit2 amount/expiration/nonce 全部回到零，未将成功路径的非零 expiration 清理结果混入负例。"
+    },
+    {
+      "check": "异常传播与报告状态",
+      "result": "no_additional_finding",
+      "evidence": "负例初始 status=failed，只有全部观察断言完成才将 control 和 encoding 设为 pass；catch 记录阶段与错误。516、532–534 行要求两种执行及全部样本通过，负例异常不会被外层观察器改写成成功。"
+    },
+    {
+      "check": "历史状态、旧数据与 fixture 边界",
+      "result": "no_additional_finding",
+      "evidence": "新增调用继续使用既有 source/blockHash pin，未改写 Ready、价格或协议状态；沿用源代码、验收器自身、执行器 artifact 与输入指纹核对。contract.ts 17–18 行明确合成 RPC/state；runner 1–2、163 行限定 N 状态单腿对照，不冒称原交易前状态、完整路线或合入验收。此次离线纯 helper 检查同样不构成历史 EVM 证据。"
+    }
+  ],
+  "verification": {
+    "baselineReadMethod": "只读 git show；未 checkout、fetch 或修改 Git",
+    "pureHelperChecksPassed": 17,
+    "pureHelperMethod": "在内存抽取当前 storage、observed、observedNativeInventory、assertNoInputRollback 函数体，去除类型后执行；只提供地址比较与 32 字节整数格式化依赖，不导入项目入口。",
+    "pureHelperCoverage": "根失败类型、输出库存丢失或增加、输入意外增加、native 丢失或增加、token/Permit2 amount/expiration/nonce 残留、缺失 diff，以及显式不变 native。另复现 V3-SAFETY-01 的误拒绝。",
+    "existingContractSuiteRun": false,
+    "rpcRun": false,
+    "evmRun": false,
+    "buildRun": false,
+    "benchmarkRun": false,
+    "liveRun": false,
+    "sourceOrMarkdownOrGitModified": false,
+    "onlyWrittenFile": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/v3-safety-review.json"
+  },
+  "skillApplied": "family-plugin-adaptation：限定双接口与库存/授权语义，并严格区分合成合同检查、当前离线检查及历史执行证据。",
+  "handoff": "实现修改、现有合同测试、历史执行及最终处理由主线程负责；本报告仅适用于以上两个源码 SHA。"
+}

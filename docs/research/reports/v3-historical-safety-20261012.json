@@ -1,0 +1,72 @@
+{
+  "schema": "family-historical-harness-safety/v1",
+  "date": "2026-10-12",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "baseHead": "c1d19a8915919a8c64fe115d854dcbd16d7e0aa2",
+  "family": "balancer-v3",
+  "status": "implemented-and-offline-contracts-passed; current historical execution NOT RUN",
+  "firstVerifiedGap": "The existing same-N historical harness checked successful quoted/runtime token receipts, old token inventory and allowance cleanup, but had no executed zero-input/abundant-old-output negative control and no explicit nonzero native inventory check.",
+  "productionBugClaim": false,
+  "changes": [
+    {
+      "path": "listener/src/searcher/venues/swaps/balancer-v3-family/test/historical-runtime-dual.ts",
+      "beforeSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+      "afterSha256": "afc56eb3a4514d5db22d9432bf22aa1e0f432d7a92a7a3479b9c0755441eafd0",
+      "scope": "Test harness only; no pricing, identity, execution encoding, live default, pool filter or catalog changes.",
+      "newChecks": [
+        "Success paths set and independently observe 17 raw native units; any gain/loss fails.",
+        "For each existing quoted/runtime script and amount, replay unchanged calldata at same source with zero actor tokenIn and abundant old tokenOut. Require a root execution revert, not an ignored subcall failure or normal zero return.",
+        "A separate prestate-diff trace proves input/output/native balances unchanged after failure; trace-derived allowance state must match original zero token and Permit2 authorizations.",
+        "Negative-control failure is saved inside the execution receipt and prevents the sample/report from passing. CLI reports successful negative-control count separately."
+      ]
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/balancer-v3-family/test/contract.ts",
+      "beforeSha256": "1db1fd3a08c09c5c9c43166ad3823e4ed2465d567ec41987c51688a09bb50eab",
+      "afterSha256": "1b7a967cfe2cb85adf6d2b0e6e53cf3397c15934b65028642c1015c1d6ecca2b",
+      "scope": "Two tests in the existing indexed family contract suite; fixtures only, not historical EVM executions.",
+      "negativeCases": ["successful root", "failed child only", "out-of-gas classification without root revert", "missing prestate diff", "old output loss/gain/deletion", "wrong input prestate", "ERC20 or Permit2 allowance/metadata leak", "native loss/gain/deletion or inconsistent prestate"]
+    }
+  ],
+  "verification": {
+    "manualFirstContractRun": { "command": "npm run searcher:balancer-v3", "tests": 18, "passed": 18, "failed": 0, "log": "logs/four-family-coverage-20261012.zHKuWX/v3-safety-contract-attempt01.log", "sha256": "8c30442e48c1685710e6cca56cdedd44f273a9bcd9907de78d76d64f14c2a0c2" },
+    "indexedReconciliation": {
+      "query": ["balancer"],
+      "manifest": "logs/four-family-coverage-20261012.zHKuWX/v3-safety-tools-attempt01.json",
+      "manifestSha256": "6f9af4c3796e3dec6b8973520d58dcafb5c33f2124714fa08570627188bf8dac",
+      "manifestSha256BeforeRedGreenAddition": "dfb8cef478310bcd48cdb0f18ffda4b66ce6575ad6fb1f964e2dc932fd86c18e",
+      "tool": "listener:searcher:balancer-v3",
+      "descriptorSha256": "8db742bc8df4e26e65a482ff85fa14935fa3aecd22c2d1d9e1eeafe07505c4ec",
+      "exitCode": 0,
+      "startedAt": "2026-10-12T09:47:34.694Z",
+      "finishedAt": "2026-10-12T09:47:36.723Z",
+      "argvSha256": "93118b6afef48a607a0346ec27c60c7b935ba3e73b78aaf19962c8e9af67142f",
+      "stdoutSha256": "042ea51e51c78c17996142107a5453a9163ecc89696114555153afcea9c4a22f",
+      "log": "logs/four-family-coverage-20261012.zHKuWX/v3-safety-indexed-contract-attempt01.log",
+      "logSha256": "9f35ad565960057d20a9b3dcc3c001046d5e106ecad68e07b53d9a69d161b58b",
+      "meaning": "18 offline tests passed; the inventory's generic replay tag does not turn this fixture suite into historical execution evidence."
+    },
+    "diffCheck": "passed",
+    "independentReview": { "report": "docs/research/reports/v3-safety-review-20261012.json", "sha256": "edcf835e3c381270073bea00eccabd5bb119a2c3f08290a0fd923f8e27a8b972", "finding": "V3-SAFETY-01: omitted unchanged native balance on an existing post account was interpreted as zero", "action": "Accepted; fixed account scalar omission vs account deletion and added storage-only/nonce-only post-account passing regressions. Explicit loss/gain/deletion still rejects.", "historicalFailureClaim": false, "resolutionReview": { "report": "docs/research/reports/v3-safety-review-resolution-20261012.json", "sha256": "390326cc3e9d875a20db73b477851d3e73901c5ee404c4b21832da5cb07e8919", "result": "resolved-within-offline-scope", "targetedChecksPassed": 9 } },
+    "redGreen": [
+      { "phase": "red", "exitCode": 1, "passed": 17, "failed": 1, "failure": "unchanged native 17 misread as 0", "harnessSha256": "98537b2e34333c5b748434034fa7f31d299baf613890bd47d725b9dc1d638b8c", "testSha256": "1b7a967cfe2cb85adf6d2b0e6e53cf3397c15934b65028642c1015c1d6ecca2b", "log": "logs/four-family-coverage-20261012.zHKuWX/v3-safety-indexed-contract-attempt02-red.log", "sha256": "9b0a2324d4eaab13c4361d96f0058c0c13e84944e1b18079a3214186d80cc241", "finishedAt": "2026-10-12T09:53:02.692Z" },
+      { "phase": "green", "exitCode": 0, "passed": 18, "failed": 0, "harnessSha256": "afc56eb3a4514d5db22d9432bf22aa1e0f432d7a92a7a3479b9c0755441eafd0", "testSha256": "1b7a967cfe2cb85adf6d2b0e6e53cf3397c15934b65028642c1015c1d6ecca2b", "log": "logs/four-family-coverage-20261012.zHKuWX/v3-safety-indexed-contract-attempt03-green.log", "sha256": "edb397e2e8f47d1c2eec9e28638fd84894c7d5b132bd23afba25383ec239dcff", "finishedAt": "2026-10-12T09:53:51.342Z" }
+    ],
+    "productionBuild": "Not repeated during peer live: runtime production source is unchanged; preceding same-source build passed in current-executor-acceptance-20261012.json. Test entrypoint actually executed via tsx."
+  },
+  "reuseAudit": {
+    "report": "docs/research/reports/stage2-curve-v3-audit-20261012.json",
+    "sha256": "b11b4be15caac6dd9a4b856861c4fa162ac05245d501bbdfd974abc54bdd005d",
+    "v3": "Family/memo hashes remain current. Preserve seven Hook pools' 24 measured/23 production-reference directions; siUSD->sUSDe at N25944594 still lacks a <=3-hop reference. Current-executor historical checks remain distinct from existing successful historical receipts.",
+    "curve": "Old Curve Plain/Underlying Ready memo authority differs. Revalidate only affected Family on copies; do not reopen the nine already-corrected Underlying formula cases just because later hashes differ. Native stETH evidence has explicit one-raw-unit differences, not exact-zero parity."
+  },
+  "nextRequiredEvidence": [
+    "At least representative current-executor Hook same-N execution with these actual controls; use existing Ready and production source-block prices, retain every failure.",
+    "Affected Curve Ready selective revalidation and current same-N dual evidence, without altering original artifacts.",
+    "Remaining real reference/variant coverage gaps stay explicit; do not invent donor inputs or relax hop policy.",
+    "All single-block and representative performance remains deferred to the final goal stage."
+  ],
+  "peerResourceCheck": { "liveWasRunning": true, "run": "live-2026-10-12T09-34-32-190Z-0e71b5c5", "observedPids": [406305, 406318, 406337], "peerStopped": false, "tests": "short zero-RPC offline suite at nice 19; no historical fork or benchmark started" },
+  "safety": { "rpc": 0, "evm": 0, "liveStarted": false, "deployment": false, "signing": false, "broadcast": false, "privateKeyRead": false, "originalReadyWrites": false, "peerSourceChangesStaged": false },
+  "limits": ["No new historical chain result or performance verdict in this report.", "No adapter_fixed, adapter_merge_ready or production_gap_fixed claim.", "Changed only Family-owned test files; actual runtime success/failure behavior remains untouched."]
+}

@@ -117,13 +117,44 @@ function storage(diff: any, side: "pre" | "post", address: string): Record<strin
   const account = Object.entries(diff[side]).find(([key]) => same(key, address))?.[1] as any;
   return Object.fromEntries(Object.entries(account?.storage ?? {}).map(([key, value]) => [word(key), word(String(value))]));
 }
-function observed(diff: any, address: string, slot: string, initial: bigint) {
+function observed(diff: any, address: string, slot: string, initial: bigint, requireChange = true) {
   const pre = storage(diff, "pre", address), post = storage(diff, "post", address);
   const before = slot in pre ? BigInt(pre[slot]) : slot in post ? 0n : initial;
   const after = slot in post ? BigInt(post[slot]) : slot in pre ? 0n : initial;
   assert.equal(before, initial, "trace prestate disagrees with independently read balance");
-  assert(slot in pre || slot in post, "actor balance did not change in prestate trace");
+  if (requireChange) assert(slot in pre || slot in post, "actor balance did not change in prestate trace");
   return { before, after, delta: after - before };
+}
+
+export function observedNativeInventory(diff: any, address: string, initial: bigint) {
+  assert(diff?.pre && diff?.post, "independent prestate diff unavailable");
+  const account = (side: "pre" | "post") => Object.entries(diff[side])
+    .find(([key]) => same(key, address))?.[1] as { balance?: string } | undefined;
+  const pre = account("pre"), post = account("post");
+  // Unlike a deleted storage slot, an omitted scalar on an existing post
+  // account is unchanged. An absent post account instead proves deletion.
+  const before = pre?.balance !== undefined ? BigInt(pre.balance) : pre ? initial : post ? 0n : initial;
+  const after = post?.balance !== undefined ? BigInt(post.balance) : post ? before : pre ? 0n : initial;
+  assert.equal(before, initial, "native prestate disagrees with actor override");
+  assert.equal(after, initial, "encoded execution consumed or changed native inventory");
+  return { before, after, delta: after - before };
+}
+
+export function assertNoInputRollback(input: {
+  trace: { error?: string }; diff: any; tokenIn: string; inSlot: string;
+  tokenOut: string; outSlot: string; outputBefore: bigint; nativeBefore: bigint;
+  finalAllowances: bigint[][];
+}) {
+  // A returned zero amount or a failed subcall inside a successful transaction
+  // is not a negative-control pass. Preserve actual root failure evidence.
+  assert.equal(input.trace?.error, "execution reverted", "zero-input control did not revert atomically");
+  assert(input.diff?.pre && input.diff?.post, "negative-control prestate diff unavailable");
+  const spent = observed(input.diff, input.tokenIn, input.inSlot, 0n, false);
+  const received = observed(input.diff, input.tokenOut, input.outSlot, input.outputBefore, false);
+  assert.equal(spent.delta, 0n); assert.equal(received.delta, 0n);
+  const native = observedNativeInventory(input.diff, EXECUTOR, input.nativeBefore);
+  assert.deepEqual(input.finalAllowances, [[0n], [0n, 0n, 0n]], "failed control left token/Permit2 authorization");
+  return { input: spent, output: received, native };
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
@@ -356,10 +387,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assert(leg, "Family returned null runtime leg");
       assert.equal(calls - beforeCalls, 0); assert.equal(constructionAttempts, 0);
       for (const trial of trials) {
-        const amountIn = trial.amountIn, inputSentinel = 101n, outputSentinel = 103n;
+        const amountIn = trial.amountIn, inputSentinel = 101n, outputSentinel = 103n, nativeSentinel = 17n;
         const tokenIn = lower(row.tokenIn), tokenOut = lower(row.tokenOut);
         const inSlot = slots.get(tokenIn)!, outSlot = slots.get(tokenOut)!;
-        overrides = { [OWNER]: { balance: ethers.toQuantity(100n * 10n ** 18n) }, [EXECUTOR]: { code: botvm.code },
+        overrides = { [OWNER]: { balance: ethers.toQuantity(100n * 10n ** 18n) },
+          [EXECUTOR]: { code: botvm.code, balance: ethers.toQuantity(nativeSentinel) },
           [tokenIn]: { stateDiff: { [inSlot]: word(amountIn + inputSentinel) } },
           [tokenOut]: { stateDiff: { [outSlot]: word(outputSentinel) } } };
         const sample: Record<string, any> = { edgeId: row.edgeId, routeKey: route.routeKey, tokenIn, tokenOut,
@@ -429,6 +461,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               const input = observed(diff, tokenIn, inSlot, amountIn + inputSentinel);
               const output = observed(diff, tokenOut, outSlot, outputSentinel);
               result.balances = { input, output }; // Save mismatch evidence before asserting.
+              result.nativeInventory = observedNativeInventory(diff, EXECUTOR, nativeSentinel);
               assert.equal(input.delta, -amountIn); assert.equal(output.delta, quote.amountOut);
               assert.equal(input.after, inputSentinel); assert.equal(output.after, outputSentinel + quote.amountOut);
               const post: Overrides = structuredClone(overrides);
@@ -450,6 +483,35 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               // Revocation is zero spendable amount, not an all-zero packed slot.
               assert.deepEqual(result.finalAllowances, [[0n], [0n, BigInt(header.timestamp), 0n]],
                 "ERC20/Permit2 spendable allowance or cleanup metadata mismatch");
+
+              stage = `${encoding}-no-input-control`;
+              const noInputOutput = quote.amountOut + outputSentinel;
+              const noInputOverrides = structuredClone(overrides);
+              noInputOverrides[tokenIn].stateDiff![inSlot] = word(0n);
+              noInputOverrides[tokenOut].stateDiff![outSlot] = word(noInputOutput);
+              const control: Record<string, any> = { status: "failed", inputBefore: 0n,
+                outputBefore: noInputOutput, nativeBefore: nativeSentinel };
+              result.noInputControl = control;
+              assert.equal(await balance(tokenIn, EXECUTOR, noInputOverrides), 0n);
+              assert.equal(await balance(tokenOut, EXECUTOR, noInputOverrides), noInputOutput);
+              control.callTrace = await rpc("debug_traceCall", [tx, pin,
+                { tracer: "callTracer", timeout: "30s", stateOverrides: noInputOverrides }]);
+              control.stateDiff = await rpc("debug_traceCall", [tx, pin,
+                { tracer: "prestateTracer", tracerConfig: { diffMode: true }, timeout: "30s", stateOverrides: noInputOverrides }]);
+              const failedPost = structuredClone(noInputOverrides);
+              for (const [token, keys] of allowanceSlots) {
+                const preStorage = storage(control.stateDiff, "pre", token), postStorage = storage(control.stateDiff, "post", token);
+                const changes = failedPost[token] ??= {}; changes.stateDiff ??= {};
+                for (const key of keys) {
+                  if (key in postStorage) changes.stateDiff[key] = postStorage[key];
+                  else if (key in preStorage) changes.stateDiff[key] = word(0n);
+                }
+              }
+              control.finalAllowances = await readAllowances(failedPost);
+              control.balances = assertNoInputRollback({ trace: control.callTrace, diff: control.stateDiff,
+                tokenIn, inSlot, tokenOut, outSlot, outputBefore: noInputOutput,
+                nativeBefore: nativeSentinel, finalAllowances: control.finalAllowances });
+              control.status = "pass";
               result.oldInventoryConsumed = 0n; result.status = "pass";
             } catch (error) { result.error = failure(error); }
           }
@@ -487,6 +549,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
   console.log(json({ result: report.result, samples: report.samples.length,
     executionsPassed: report.samples.flatMap((s: any) => s.executions).filter((e: any) => e.status === "pass").length,
+    noInputControlsPassed: report.samples.flatMap((s: any) => s.executions).filter((e: any) => e.noInputControl?.status === "pass").length,
     unmeasuredDirections: report.unmeasuredDirections.length, productionReferenceComplete: report.productionReferenceComplete,
     out: args.out, forkStopped: report.forkStopped }));
   if (report.result !== "pass") process.exitCode = 1;

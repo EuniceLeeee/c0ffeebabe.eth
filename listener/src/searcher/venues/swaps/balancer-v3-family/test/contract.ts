@@ -12,6 +12,7 @@ import { CALL_ID, LOG_ID, SURFACE_ID, SURFACE, SWAP_TOPIC, decodeSwapLog } from 
 import { reverseBindBalancerV3, nominateBalancerV3 } from "../nomination.js";
 import { balancerV3ReceiptObservation } from "../swap.js";
 import type { BalancerV3Candidate, BalancerV3Identity } from "../types.js";
+import { assertNoInputRollback, observedNativeInventory } from "./historical-runtime-dual.js";
 
 // The sample comes from the existing historical fixture. RPC/state answers in
 // this contract are synthetic; historical provenance is checked separately.
@@ -24,6 +25,47 @@ const EXECUTOR = ethers.getAddress("0x1000000000000000000000000000000000000002")
 const FOREIGN = ethers.getAddress("0x1000000000000000000000000000000000000003");
 const SOURCE: CanonicalSource = { number: historical.executionBlock, hash: `0x${"ab".repeat(32)}`, generation: 1 };
 const word = (value: bigint) => ethers.toBeHex(value, 32);
+
+test("historical no-input control requires root revert, unchanged inventory and rolled-back allowances", () => {
+  const inSlot = word(21n), outSlot = word(22n);
+  const input = { trace: { error: "execution reverted" }, diff: { pre: {}, post: {} },
+    tokenIn: TOKENS[0], inSlot, tokenOut: TOKENS[1], outSlot,
+    outputBefore: 1000000n, nativeBefore: 17n, finalAllowances: [[0n], [0n, 0n, 0n]] };
+  const result = assertNoInputRollback(input);
+  assert.equal(result.input.delta, 0n); assert.equal(result.output.delta, 0n); assert.equal(result.native.delta, 0n);
+  for (const trace of [{}, { calls: [{ error: "execution reverted" }] }, { error: "out of gas" }]) {
+    assert.throws(() => assertNoInputRollback({ ...input, trace }), /did not revert atomically/);
+  }
+  assert.throws(() => assertNoInputRollback({ ...input, diff: null }), /prestate diff unavailable/);
+  for (const after of [999999n, 1000001n, 0n]) {
+    const diff = { pre: { [TOKENS[1]]: { storage: { [outSlot]: word(1000000n) } } },
+      post: { [TOKENS[1]]: { storage: { [outSlot]: word(after) } } } };
+    assert.throws(() => assertNoInputRollback({ ...input, diff }));
+  }
+  assert.throws(() => assertNoInputRollback({ ...input, diff: {
+    pre: { [TOKENS[0]]: { storage: { [inSlot]: word(1n) } } }, post: {} } }), /prestate disagrees/);
+  for (const finalAllowances of [[[1n], [0n, 0n, 0n]], [[0n], [1n, 0n, 0n]], [[0n], [0n, 7n, 0n]]]) {
+    assert.throws(() => assertNoInputRollback({ ...input, finalAllowances }), /left token\/Permit2 authorization/);
+  }
+});
+
+test("historical native inventory observation accepts omitted unchanged fields but rejects loss or gain", () => {
+  assert.deepEqual(observedNativeInventory({ pre: {}, post: {} }, EXECUTOR, 17n),
+    { before: 17n, after: 17n, delta: 0n });
+  // Account scalar fields differ from storage slots: an existing post account
+  // can omit an unchanged native balance while showing storage/nonce changes.
+  for (const postAccount of [{ storage: { [word(7n)]: word(2n) } }, { nonce: 1 }]) {
+    assert.deepEqual(observedNativeInventory({ pre: { [EXECUTOR]: { balance: "0x11", storage: { [word(7n)]: word(1n) } } },
+      post: { [EXECUTOR]: postAccount } }, EXECUTOR, 17n), { before: 17n, after: 17n, delta: 0n });
+  }
+  for (const after of [0n, 16n, 18n]) {
+    assert.throws(() => observedNativeInventory({ pre: { [EXECUTOR]: { balance: "0x11" } },
+      post: { [EXECUTOR]: { balance: ethers.toQuantity(after) } } }, EXECUTOR, 17n), /changed native inventory/);
+  }
+  assert.throws(() => observedNativeInventory({ pre: { [EXECUTOR]: { balance: "0x11" } }, post: {} }, EXECUTOR, 17n));
+  assert.throws(() => observedNativeInventory({ pre: {}, post: { [EXECUTOR]: { balance: "0x11" } } }, EXECUTOR, 17n), /native prestate/);
+  assert.throws(() => observedNativeInventory(null, EXECUTOR, 17n), /prestate diff unavailable/);
+});
 const hooks = (index = -1) => VAULT_ABI.encodeFunctionResult("getHooksConfig", [[
   ...Array.from({ length: 10 }, (_, i) => i === index), index < 0 ? ethers.ZeroAddress : FOREIGN,
 ]]);
