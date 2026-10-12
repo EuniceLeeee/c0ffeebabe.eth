@@ -40,6 +40,9 @@ import { blockScanGrossProfitWeth } from "./blockscan-profit-priority.js";
 import { createScannedProfitTokenValuation } from "./scanned-profit-token-valuation.js";
 import type { ProfitTokenValuation } from "./profit-token-valuation.js";
 import { effectiveEthPricing } from "./blockscan-eth-view.js";
+import { assertHistoricalEffectivePricing, type HistoricalEffectivePricing } from "./blockscan-at-block-history.js";
+import { scanBlockStateFromResolvedMids } from "./detector/blockscan-scanner-core.js";
+import type { EffectivePricingInput } from "./blockscan-effective-mid.js";
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import { emitEvent, makeBlockScanOpportunityId } from "./events.js";
 import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
@@ -861,8 +864,12 @@ export interface BlockScanRuntimeLoopDependencies {
   ): string;
   /** Existing process-local final-sim rejection policy; checked at Solver dispatch. */
   readonly isRouteSimRejected?: (opportunity: Pick<BlockScanOpportunity, "seedEdges">) => boolean;
+  /** Optional run-local pool filter, applied before effective enumeration marks. */
+  readonly isPoolSimRejected?: (edge: TokenEdge) => boolean;
   /** Diagnostics only: match submitAtomic's historical mode; omitted means next-block. */
   readonly historicalExecutionMode?: "source-block";
+  /** Set only by non-submitting historical runners. */
+  readonly historicalReadOnly?: true;
   submitAtomic(input: BlockScanAtomicExecutionInput): Promise<BlockScanAtomicResult>;
 }
 
@@ -1965,6 +1972,9 @@ export class BlockScanRuntimeLoop {
     sourceHead: LatestHeadObservation,
     diagnostic?: {
       readonly through: "prices" | "enumerate" | "solver" | "ev";
+      /** Trusted historical CLI data, not an atomic pricing/Funding runtime.
+       * Only bypasses price preparation; all downstream live stages stay shared. */
+      readonly effectivePricing?: HistoricalEffectivePricing;
       /** Opt-in benchmark only: independent budget starting at planner_solver. */
       readonly sizingBudgetMs?: number;
       readonly onSnapshot: (snapshot: AdapterRuntimeSnapshot) => void;
@@ -1989,6 +1999,11 @@ export class BlockScanRuntimeLoop {
     },
   ): Promise<void> => {
     const sizingBudgetMs = diagnostic?.sizingBudgetMs;
+    const replayPricing = diagnostic?.effectivePricing;
+    if (replayPricing && (this.deps.historicalReadOnly !== true || diagnostic?.through === "prices" || this.deps.blind.enabled ||
+        this.deps.nMinusOneFallbackEnabled || this.startupWarmPending)) {
+      throw new Error("historical effective continuation requires a single non-warm source pass");
+    }
     if (sizingBudgetMs !== undefined && (diagnostic?.through !== "solver" ||
         !Number.isFinite(sizingBudgetMs) || sizingBudgetMs <= 0 || sizingBudgetMs > 3_600_000)) {
       throw new Error("sizingBudgetMs requires a solver diagnostic and must be in (0, 3600000]");
@@ -2632,7 +2647,11 @@ export class BlockScanRuntimeLoop {
         throw new Error("block-scan strict ready graph disappeared");
       }
       const graphEdges = Object.freeze([...currentGraph]);
-      let generation = executionContext === null ? this.nextGeneration() : ++this.pendingGeneration;
+      if (replayPricing) {
+        if (executionContext) throw new Error("historical effective input cannot mix pending execution evidence");
+        assertHistoricalEffectivePricing(replayPricing, { number: blockNumber, hash: sourceBlockHash }, graphEdges);
+      }
+      let generation = replayPricing?.generation ?? (executionContext === null ? this.nextGeneration() : ++this.pendingGeneration);
       let graphView = this.deps.buildGraphView({
         id: `blockscan:${this.topologyKey()}`,
         generation,
@@ -2752,7 +2771,7 @@ export class BlockScanRuntimeLoop {
       const simulationTransport = resumableStartupWarm ? undefined : simulationWork.transportFor({
         number: graphView.sourceBlock, hash: graphView.sourceBlockHash, generation: graphView.generation,
       }, { signal: passSignal, deadlineAtMs: transportDeadlineAtMs(runtimeDeadlineAtMs) });
-      if (!useNMinusOneFallback) {
+      if (!useNMinusOneFallback && !replayPricing) {
         const backend = new PinnedRethQuoteBackend(
           this.deps.rpcUrl,
           graphView.sourceBlockHash,
@@ -2845,11 +2864,45 @@ export class BlockScanRuntimeLoop {
         }
       };
       let coarse: BlockScanOutcome;
-      let amountPricingSnapshot: BlockScanStateSnapshot | null = null;
+      let amountPricingSnapshot: (EffectivePricingInput & Pick<BlockScanStateSnapshot, "effectiveMids">) | null = null;
       let fallbackEnvelopes: readonly NMinusOneCoarseCandidate[] | null = null;
       let exactRefineStarted = false;
       let exactFundingTokens: readonly string[] = [];
-      if (!useNMinusOneFallback) {
+      let enumerationSimRejected = 0;
+      const rankedRouteEligible = (_edges: readonly TokenEdge[], opportunity: BlockScanOpportunity): boolean => {
+        if (!this.deps.isRouteSimRejected?.(opportunity)) return true;
+        enumerationSimRejected++;
+        emitEvent({
+          type: "pipeline_dropped",
+          opportunity_id: makeBlockScanOpportunityId({
+            sourceBlock: blockNumber, cycleId: opportunity.cycleId,
+            startToken: opportunity.flashToken,
+            seedPools: opportunity.seedEdges.map(edge => edge.target),
+          }),
+          route_id: this.deps.formatRouteKey(opportunity), source_block: blockNumber,
+          target_block: blockNumber + (this.deps.historicalExecutionMode === "source-block" ? 0 : 1),
+          opportunity_kind: "block-scan-arb", cycle_id: opportunity.cycleId,
+          cycle_fingerprint: opportunity.cycleFingerprint, strategy_view_used: "blockscan",
+          stage: "enumeration", reason: "sim_revert_seen_this_live", plans: 0,
+        });
+        return false;
+      };
+      if (replayPricing) {
+        // Recompute reference marks, top-K and natural ranks from effective.
+        // Nothing here asserts pricing-state authority or manufactures funding.
+        amountPricingSnapshot = replayPricing;
+        runtimeSourceBlock = blockNumber;
+        exactSourceBlockHash = sourceBlockHash;
+        finishStage("state", "ran"); timing.stateMs = stageBoundaries.state.stage_ms;
+        beginStage("enumeration");
+        const eth = effectiveEthPricing(replayPricing, blockScanCfg.ethSignalPairsPerToken, blockScanCfg.allowRepeatedPools);
+        coarse = scanBlockStateFromResolvedMids({ edges: [...graphEdges], sourceBlock: blockNumber,
+          swapTouched: null, cfg: { ...blockScanCfg, maxCandidates: this.deps.refineCandidates },
+          mids: eth.mids, ethView: eth.view, routeEligible, rankedRouteEligible, edgeEligible,
+          poolRevertExcludedEdge: this.deps.isPoolSimRejected,
+          captureCoarseEnumeration: true });
+        recordEnumeration(coarse.opportunities, coarse.coarseEnumeration, coarse.selection.selectedCount);
+      } else if (!useNMinusOneFallback) {
         this.passStageLabel = "state:prepare";
         if (!startupWarmAttempt) {
           for (const worker of blockScanFinalSimulationWorkers) {
@@ -3117,7 +3170,9 @@ export class BlockScanRuntimeLoop {
             maxCandidates: this.deps.refineCandidates,
           },
           routeEligible,
+          rankedRouteEligible,
           edgeEligible,
+          poolRevertExcludedEdge: this.deps.isPoolSimRejected,
           captureCoarseEnumeration: routeTelemetryPass !== null,
         });
         coarse = productionCoarse;
@@ -3130,6 +3185,7 @@ export class BlockScanRuntimeLoop {
           `[searcher/blockscan-enumeration] ${JSON.stringify({
             block: blockNumber,
             outcome: productionCoarse.outcome,
+            simRejected: enumerationSimRejected,
             enumeratedCount:
               productionCoarse.selection.enumeratedCount,
             admittedCount: productionCoarse.selection.admittedCount,
@@ -3214,7 +3270,9 @@ export class BlockScanRuntimeLoop {
             maxCandidates: this.deps.refineCandidates,
           },
           routeEligible,
+          rankedRouteEligible,
           edgeEligible,
+          poolRevertExcludedEdge: this.deps.isPoolSimRejected,
           captureCoarseEnumeration: routeTelemetryPass !== null,
         });
         fallbackEnvelopes = fallbackCoarse.candidates;
@@ -3231,6 +3289,7 @@ export class BlockScanRuntimeLoop {
           `[searcher/blockscan-nminus1] ${JSON.stringify({
             block: blockNumber,
             status: "coarse-enumerated",
+            simRejected: enumerationSimRejected,
             pricingMode: fallbackCoarse.pricingMode,
             coarseSourceBlock: fallbackCoarse.coarseSourceBlock,
             coarseSourceBlockHash: fallbackCoarse.coarseSourceBlockHash,
@@ -3513,8 +3572,9 @@ export class BlockScanRuntimeLoop {
         effectiveReferences: probeAmountsByOpportunity?.size ?? 0,
         missingReferences: coarse.opportunities.length - (probeAmountsByOpportunity?.size ?? 0),
       })}`);
-      // Reject known failures before the downstream cap, so lower ranked
-      // candidates can fill vacancies. Do not refill after dispatch starts.
+      // Recheck before the downstream cap: in-flight work may have recorded a
+      // revert since enumeration. Earlier reverts were excluded before its cap.
+      // New simulations still respect this pass's candidate and time budgets.
       const candidateOpportunities = coarse.opportunities.filter(opportunity => {
         if (!this.deps.isRouteSimRejected?.(opportunity)) return true;
         const reason = "sim_revert_seen_this_live";
@@ -3541,7 +3601,8 @@ export class BlockScanRuntimeLoop {
       });
       console.log(`[searcher/blockscan-candidate-filter] ${JSON.stringify({
         block: blockNumber, coarseCandidates: coarse.opportunities.length,
-        simRejected: coarse.opportunities.length - candidateOpportunities.length,
+        enumerationSimRejected,
+        simRejected: enumerationSimRejected + coarse.opportunities.length - candidateOpportunities.length,
         eligibleCandidates: candidateOpportunities.length, maxCandidates: blockScanCfg.maxCandidates,
       })}`);
       const onRefinementDiagnostic =
@@ -3685,7 +3746,7 @@ export class BlockScanRuntimeLoop {
       }
       try { diagnostic?.onSizingStart?.(); }
       catch { /* Diagnostics cannot alter the live stage. */ }
-      if (useNMinusOneFallback && exactOpportunities.length > 0) {
+      if ((useNMinusOneFallback || replayPricing) && exactOpportunities.length > 0) {
         if (passSignal.aborted) throw passSignal.reason;
         /*
          * Deferred exact context: probes have already finished. Now prepare
@@ -4194,7 +4255,7 @@ export class BlockScanRuntimeLoop {
                 signal: input.signal,
               });
             }
-            if (useNMinusOneFallback) {
+            if (useNMinusOneFallback || replayPricing) {
               await ensureExecutionWorkerForked(input.resource, input.signal);
             } else {
               const preparation = backgroundFinalSimForks.get(input.resource);

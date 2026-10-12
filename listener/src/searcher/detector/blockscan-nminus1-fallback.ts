@@ -75,7 +75,9 @@ export function enumerateNMinusOneCoarseCandidates(input: {
   readonly exactGraph: VerifiedGraphView;
   readonly cfg: BlockScanCoreConfig;
   readonly routeEligible?: (edges: readonly TokenEdge[]) => boolean;
+  readonly rankedRouteEligible?: Parameters<typeof scanBlockStateFromResolvedMids>[0]["rankedRouteEligible"];
   readonly edgeEligible?: (edge: TokenEdge) => boolean;
+  readonly poolRevertExcludedEdge?: (edge: TokenEdge) => boolean;
   readonly captureCoarseEnumeration?: boolean;
 }): NMinusOneCoarseOutcome {
   const startedAtMs = Date.now();
@@ -117,7 +119,9 @@ export function enumerateNMinusOneCoarseCandidates(input: {
     mids: eth.mids,
     ethView: eth.view,
     routeEligible: input.routeEligible,
+    rankedRouteEligible: input.rankedRouteEligible,
     edgeEligible: input.edgeEligible,
+    poolRevertExcludedEdge: input.poolRevertExcludedEdge,
     captureCoarseEnumeration: input.captureCoarseEnumeration,
     onTiming: (timing) => {
       scanTimingMs = timing;

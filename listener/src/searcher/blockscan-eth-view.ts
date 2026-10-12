@@ -1,7 +1,6 @@
 import { ADDR } from "../shared/constants/addresses.js";
 import { tokenToWethReferencesFromRates, type RawTokenRate } from "./blockscan-amount-reference.js";
-import { effectiveEnumerationMids } from "./blockscan-effective-mid.js";
-import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
+import { effectiveEnumerationMids, type EffectiveEnumerationPricing } from "./blockscan-effective-mid.js";
 import type { ResolvedBlockScanQuote } from "./detector/blockscan-scanner-core.js";
 import { aboveSpread, DEFAULT_ALLOW_REPEATED_POOLS, type DfsQuote, type DirectedPriceSignal } from "./detector/blockscan-paired-dfs.js";
 import type { TokenEdge } from "./planner/token-graph.js";
@@ -137,10 +136,10 @@ export function buildBlockScanEthView(
   return { quotes, signals, signalPairsPerToken, allowRepeatedPools, referenceEthPerRaw: marks, comparableTokens, missingBuyReference, missingSellReference };
 }
 
-const published = new WeakMap<BlockScanStateSnapshot, {
+const published = new WeakMap<EffectiveEnumerationPricing, {
   mids: ReadonlyMap<string, ResolvedBlockScanQuote>; view: BlockScanEthView;
 }>();
-export function effectiveEthPricing(pricing: BlockScanStateSnapshot, signalPairsPerToken = DEFAULT_ETH_SIGNAL_PAIRS_PER_TOKEN,
+export function effectiveEthPricing(pricing: EffectiveEnumerationPricing, signalPairsPerToken = DEFAULT_ETH_SIGNAL_PAIRS_PER_TOKEN,
   allowRepeatedPools = DEFAULT_ALLOW_REPEATED_POOLS) {
   let result = published.get(pricing);
   if (!result || result.view.signalPairsPerToken !== signalPairsPerToken || result.view.allowRepeatedPools !== allowRepeatedPools) {

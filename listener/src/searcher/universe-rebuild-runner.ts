@@ -245,6 +245,10 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
   };
   /** Bounded identity/materialization workers; defaults to 24. */
   readonly attestationConcurrency?: number;
+  /** Same sealed unfinished run only: retain completed negative/retryable
+   * outcomes without another attempt. Verified memos still require reuse
+   * validation, and candidates without an outcome still run strict. */
+  readonly resumeCompletedOutcomes?: boolean;
   /** Optional progress logging. */
   readonly log?: (message: string) => void;
 }
@@ -331,6 +335,9 @@ export async function rebuildUniverse(
   }
   checkpoint = await migrateAlreadyReadyKeptRun(input.store, checkpoint, log);
   const incumbentRun = checkpoint?.inProgressRun ?? null;
+  if (input.resumeCompletedOutcomes && incumbentRun === null) {
+    throw new Error("universe rebuild: completed-outcome resume requires an unfinished run");
+  }
   const retainedCandidates = Object.freeze(
     [
       ...Object.values(checkpoint?.verifiedMemos ?? {}),
@@ -401,6 +408,9 @@ export async function rebuildUniverse(
         .map(([, candidate]) => decodeCandidate(candidate)));
       sourceReceipts = incumbentRun.sourceReceipts;
     } else {
+      if (input.resumeCompletedOutcomes) {
+        throw new Error("universe rebuild: completed-outcome resume source plan changed");
+      }
       // ★ Layer 2 slow path: discovery plan drift — re-run discovery over the
       // SAME fixed range with the current catalog; the run identity
       // (runId/cutoff/fromBlock) stays untouched and verified memos are
@@ -667,7 +677,9 @@ export async function rebuildUniverse(
       hash: cutoff.hash,
     }),
   }));
-  // Every non-verified candidate gets one fresh attempt per rebuild/resume.
+  // By default every non-verified candidate gets a fresh attempt per resume.
+  // Explicit same-run completion may retain their existing outcomes; neither
+  // terminal-rejected nor retryable can supply an admitted Graph instance.
   // Valid verified memos still skip attestation below; a fresh retryable result
   // is accounted once and does not block publishing the verified Graph.
   const attestationCounts: Record<RunOutcome["status"], number> = {
@@ -705,6 +717,10 @@ export async function rebuildUniverse(
   ): Promise<RunOutcome["status"]> => {
     const candidateKey = input.familyCandidateKey(candidate);
     const oldOutcome = run.outcomesByCandidateKey[candidateKey];
+    if (input.resumeCompletedOutcomes && oldOutcome !== undefined &&
+        oldOutcome.status !== "verified") {
+      return oldOutcome.status;
+    }
     let reusableMemo: DurableVerifiedMemo | null = null;
     if (oldOutcome === undefined || oldOutcome.status === "verified") {
       try {

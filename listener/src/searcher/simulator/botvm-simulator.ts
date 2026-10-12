@@ -24,6 +24,11 @@ export interface SimulationResult {
   failure?: SimulationFailure;
   calldata: string;
   scriptHex?: string;
+  /** Original sim response; consuming it performs no RPC or replay. */
+  revertEvidence?: import("./direct-revert-hop.js").DirectRevertEvidence;
+  /** Lazy, bounded diagnosis of this exact execution, never another sizing trial. */
+  traceRevert?: (control: { signal: AbortSignal; deadlineAtMs: number }) =>
+    Promise<import("./revert-hop.js").RevertTraceEvidence | null>;
 }
 
 export interface SimulationFailure {

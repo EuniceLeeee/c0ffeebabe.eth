@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import type { SubmitResult } from "./types.js";
+import { captureBoundedLiveSession, type BoundedLiveSession } from "./shared/bounded-live-session.js";
 
 // ─── Builder Endpoints ─────────────────────────────────────────
 
@@ -53,7 +54,7 @@ export async function submitBundle(params: {
   } = params;
 
   // 1. Build backrun tx
-  const { signedBackrunTx, backrunTxHash, gasLimit, nonce } = await buildSignedBackrunTx({
+  const { signedBackrunTx, backrunTxHash, gasLimit, nonce, liveSession } = await buildSignedBackrunTx({
     calldataHex,
     gasUsed,
     wallet,
@@ -61,6 +62,8 @@ export async function submitBundle(params: {
     provider,
     bribeWei,
     maxBaseFeePerGas,
+    targetBlock,
+    submissionMode: "victim",
   });
 
   const ts = new Date().toISOString();
@@ -78,7 +81,7 @@ export async function submitBundle(params: {
 
   // 3. Submit to all builders in parallel
   const results = await Promise.allSettled(
-    BUILDERS.map((b) => sendToBuilder(b, bundleParams, wallet))
+    BUILDERS.map((b) => sendToBuilder(b, bundleParams, wallet, liveSession))
   );
 
   return results.map((r, i) => {
@@ -125,7 +128,7 @@ export async function submitMevShareBundle(params: {
   } = params;
 
   // Build + sign backrun tx (same logic as submitBundle)
-  const { signedBackrunTx, backrunTxHash } = await buildSignedBackrunTx({
+  const { signedBackrunTx, backrunTxHash, liveSession } = await buildSignedBackrunTx({
     calldataHex,
     gasUsed,
     wallet,
@@ -133,6 +136,8 @@ export async function submitMevShareBundle(params: {
     provider,
     bribeWei,
     maxBaseFeePerGas,
+    targetBlock,
+    submissionMode: "hash-only",
   });
 
   const bundleParams = {
@@ -154,7 +159,9 @@ export async function submitMevShareBundle(params: {
   // Flashbots auth: sign the keccak256 hash of the body as a hex STRING
   // (ethers.id returns the hex string; signMessage signs its UTF-8 bytes).
   // Signing getBytes(hash) instead produces an "invalid flashbots signature".
+  liveSession?.assertActive();
   const sig = await wallet.signMessage(ethers.id(body));
+  liveSession?.assertActive();
 
   const res = await fetch("https://relay.flashbots.net", {
     method: "POST",
@@ -229,7 +236,7 @@ export async function submitStandaloneBundle(params: {
     maxBaseFeePerGas,
   } = params;
 
-  const { signedBackrunTx, backrunTxHash, gasLimit, nonce } = await buildSignedBackrunTx({
+  const { signedBackrunTx, backrunTxHash, gasLimit, nonce, liveSession } = await buildSignedBackrunTx({
     calldataHex,
     gasUsed,
     wallet,
@@ -237,6 +244,8 @@ export async function submitStandaloneBundle(params: {
     provider,
     bribeWei,
     maxBaseFeePerGas,
+    targetBlock,
+    submissionMode: "standalone",
   });
 
   const ts = new Date().toISOString();
@@ -252,7 +261,7 @@ export async function submitStandaloneBundle(params: {
   };
 
   const results = await Promise.allSettled(
-    BUILDERS.map((b) => sendToBuilder(b, bundleParams, wallet))
+    BUILDERS.map((b) => sendToBuilder(b, bundleParams, wallet, liveSession))
   );
 
   return results.map((r, i) => {
@@ -279,7 +288,12 @@ export async function buildSignedBackrunTx(params: {
   bribeWei: bigint;
   /** Exact EIP-1559 base fee for the target child block, computed by the EV gate. */
   maxBaseFeePerGas: bigint;
-}): Promise<{ signedBackrunTx: string; backrunTxHash: string; gasLimit: bigint; nonce: number }> {
+  targetBlock?: number;
+  submissionMode?: "standalone" | "victim" | "hash-only";
+}): Promise<{
+  signedBackrunTx: string; backrunTxHash: string; gasLimit: bigint; nonce: number;
+  liveSession: BoundedLiveSession | null;
+}> {
   const {
     calldataHex,
     gasUsed,
@@ -298,6 +312,13 @@ export async function buildSignedBackrunTx(params: {
   if (maxBaseFeePerGas <= 0n) {
     throw new Error("target block base fee unavailable");
   }
+  const liveSession = captureBoundedLiveSession({
+    wallet: wallet.address,
+    executor: botvmAddress,
+    chainId: 1,
+    targetBlock: params.targetBlock,
+    mode: params.submissionMode,
+  });
   const nonce = await wallet.getNonce("pending");
   const gasLimit = BigInt(Math.ceil(gasUsed * 1.3)); // 30% buffer
 
@@ -329,12 +350,18 @@ export async function buildSignedBackrunTx(params: {
     value: 0,
   };
 
+  liveSession?.assertActive({
+    walletBalanceWei: walletBal,
+    worstGasCostWei: (targetBaseFee + priorityFee) * gasLimit,
+  });
   const signedBackrunTx = await wallet.signTransaction(backrunTx);
+  liveSession?.assertActive();
   return {
     signedBackrunTx,
     backrunTxHash: ethers.keccak256(signedBackrunTx),
     gasLimit,
     nonce,
+    liveSession,
   };
 }
 
@@ -343,7 +370,8 @@ export async function buildSignedBackrunTx(params: {
 async function sendToBuilder(
   builder: BuilderEndpoint,
   bundle: { txs: string[]; blockNumber: string },
-  wallet: ethers.Wallet
+  wallet: ethers.Wallet,
+  liveSession: BoundedLiveSession | null
 ): Promise<SubmitResult> {
   const body = JSON.stringify({
     jsonrpc: "2.0",
@@ -359,10 +387,13 @@ async function sendToBuilder(
   // Flashbots relay requires X-Flashbots-Signature: sign keccak256(body) as a
   // hex STRING (ethers.id), not its raw bytes — see submitMevShareBundle.
   if (builder.authSigner) {
+    liveSession?.assertActive();
     const sig = await wallet.signMessage(ethers.id(body));
     headers["X-Flashbots-Signature"] = `${wallet.address}:${sig}`;
   }
 
+  // Recheck after asynchronous auth signing and separately before every relay.
+  liveSession?.assertActive();
   const res = await fetch(builder.url, {
     method: "POST",
     headers,

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createBlockScanLiveAmountSelectorFactory, resolveBlockScanLiveStageSettings } from "./main.js";
+import { createBlockScanLiveAmountSelectorFactory, resolveBlockScanCoreConfig, resolveBlockScanLiveStageSettings } from "./main.js";
+import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
+import { BlockScanPoolRevertAttributor } from "./blockscan-pool-revert.js";
 import { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import type { CandidatePlan } from "./planner/planner.js";
 import type { SolveOptions, Solver } from "./solver/solver.js";
@@ -10,6 +12,7 @@ import type { CanonicalSource } from "./venues/adapter-request-program.js";
 
 test("live stage defaults include the original budgets, worker counts and 4+16 transport", () => {
   assert.deepEqual(resolveBlockScanLiveStageSettings({}), {
+    singleFunding: false, fixedEffectiveWethInput: undefined,
     passBudgetMs: 11000, largeGraphPassBudgetMs: 30000, largeGraphEdgeThreshold: 20000,
     startupWarmBudgetMs: 300000, hotPricingFamilyBudgetMs: 5000, runtimePublicationReserveMs: 1500,
     solveReserveMs: 8000, solveConcurrency: 4, finalSimulationConcurrency: 1, sourceSimulationTimeoutMs: 60000,
@@ -23,6 +26,7 @@ test("live stage defaults include the original budgets, worker counts and 4+16 t
 
 test("all stage overrides are forwarded without changing the independent core configuration", () => {
   const env = Object.freeze({
+    SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED: "1", SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT: "0.02",
     SEARCHER_BLOCKSCAN_PASS_BUDGET_MS: "12345.9", SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS: "45678.9",
     SEARCHER_BLOCKSCAN_LARGE_GRAPH_EDGE_THRESHOLD: "23456.9", SEARCHER_BLOCKSCAN_STARTUP_PREWARM_BUDGET_MS: "345678",
     SEARCHER_BLOCKSCAN_STATE_HOT_FAMILY_BUDGET_MS: "5678.9", SEARCHER_BLOCKSCAN_RUNTIME_PUBLICATION_RESERVE_MS: "2345.9",
@@ -37,6 +41,7 @@ test("all stage overrides are forwarded without changing the independent core co
     SEARCHER_REVM_TIMEOUT_MS: "1234",
   });
   assert.deepEqual(resolveBlockScanLiveStageSettings(env, 700), {
+    singleFunding: true, fixedEffectiveWethInput: 20_000_000_000_000_000n,
     passBudgetMs: 12345, largeGraphPassBudgetMs: 45678, largeGraphEdgeThreshold: 23456,
     startupWarmBudgetMs: 345678, hotPricingFamilyBudgetMs: 5678, runtimePublicationReserveMs: 2345,
     solveReserveMs: 6789, solveConcurrency: 6, finalSimulationConcurrency: 3, sourceSimulationTimeoutMs: 1234,
@@ -46,6 +51,23 @@ test("all stage overrides are forwarded without changing the independent core co
     solverSearch: { amountGrid: "geometric", gridHalfWidth: 3, gssMaxTries: 12,
       quoteConcurrency: 5, quoteToleranceRawUnits: 1n },
   });
+});
+
+test("single funding and fixed P are explicit while 10/512 keeps all sizing rules", () => {
+  const env = { SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED: "1",
+    SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT: "0.02", SEARCHER_BLOCKSCAN_MAX_CANDIDATES: "10",
+    SEARCHER_BLOCKSCAN_REFINE_CANDIDATES: "512" };
+  const cfg = resolveBlockScanCoreConfig(env), settings = resolveBlockScanLiveStageSettings(env, cfg.maxCandidates);
+  assert.equal(cfg.maxCandidates, 10); assert.equal(settings.refineCandidates, 512);
+  assert.equal(settings.singleFunding, true); assert.equal(settings.fixedEffectiveWethInput, 20_000_000_000_000_000n);
+  assert.deepEqual(settings.solverSearch, resolveBlockScanLiveStageSettings({}).solverSearch);
+  for (const value of ["", "0", "-1", "1e-2", "NaN", "0.0000000000000000001", "9".repeat(80)])
+    assert.throws(() => resolveBlockScanLiveStageSettings({ SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT: value }));
+  for (const value of ["", "2", "true"])
+    assert.throws(() => resolveBlockScanLiveStageSettings({ SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED: value }));
+  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+  assert.match(source, /fixedEffectiveWethInput: blockScanStageSettings\.fixedEffectiveWethInput/);
+  assert.match(source, /singleFunding: blockScanStageSettings\.singleFunding/);
 });
 
 test("source-simulation timeout preserves the live Number parser; validation remains with its owner", () => {
@@ -182,7 +204,7 @@ test("one factory bounds whole trials across source/worker selectors and preserv
   for (const quoteConcurrency of [1, 2]) {
     let active = 0, peak = 0;
     const events: { source: CanonicalSource; workerIndex: number; event: Record<string, unknown> }[] = [];
-    const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency, record: row => events.push(row) });
+    const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency, simRejects: new BlockScanSimRejectCache(), record: row => events.push(row) });
     const fixtures = [fixture(1, enter), fixture(2, enter)];
     function enter() { peak = Math.max(peak, ++active); }
     const workers = fixtures.map((f, workerIndex) => factory({ source: f.source, workerIndex,
@@ -209,11 +231,43 @@ test("one factory bounds whole trials across source/worker selectors and preserv
   }
 });
 
+test("single funding reuses the maximum-borrow token projection for every amount without fallback", async () => {
+  for (const reverts of [false, true]) {
+    const f = fixture(1), session = f.options.strictSession! as any;
+    (f.plan.opportunity as any).seedEdges = f.plan.tokenPath.edges;
+    let projections = 0;
+    session.fundingProjection = () => {
+      projections++;
+      return { sources: new Map([[token, { amount: 10000n, adapterId: "larger-source", fundingId: "larger" }]]) };
+    };
+    session.fundingActionIds = () => { throw new Error("must not expand duplicate funding sources"); };
+    const build = session.buildFundingRoot;
+    session.buildFundingRoot = (input: any) => {
+      assert.equal(input.actionAdapterId, "larger-source"); assert(input.amount <= 10000n);
+      return build(input);
+    };
+    const amounts: bigint[] = [], records: Record<string, unknown>[] = [];
+    const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 3,
+      singleFunding: true, simRejects: new BlockScanSimRejectCache(), record: ({ event }) => records.push(event) });
+    const selector = factory({ source: f.source, workerIndex: 0, async simulate(plan): Promise<SimulationResult> {
+      amounts.push(plan.flashAmount);
+      return reverts ? { ...simulationResult(), success: false, netProfit: 0n, grossProfit: 0n,
+        failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: new Error("selected funding trial reverted") } } : simulationResult();
+    } });
+    if (reverts) await assert.rejects(selector.solve(f.plan, f.state, f.probe, f.options));
+    else await selector.solve(f.plan, f.state, f.probe, f.options);
+    assert.equal(projections, 1);
+    assert.deepEqual(amounts, reverts ? [10n] : [10n, 100n, 1000n, 10000n]);
+    const selection = records.filter(event => event.type === "funding_selected");
+    assert.equal(selection.length, 1); assert.equal(selection[0]!.fundingActionId, "larger-source");
+  }
+});
+
 test("queued selector cancellation does not quote or spend a shared slot and later work can reuse it", async () => {
   let release!: () => void, entered!: () => void, queuedQuotes = 0;
   const held = new Promise<void>(resolve => { release = resolve; });
   const started = new Promise<void>(resolve => { entered = resolve; });
-  const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 1 });
+  const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 1, simRejects: new BlockScanSimRejectCache() });
   const first = fixture(1), queued = fixture(2, () => { queuedQuotes++; });
   const firstWorker = factory({ source: first.source, workerIndex: 0, async simulate() {
     entered(); await held; return simulationResult();
@@ -232,9 +286,9 @@ test("queued selector cancellation does not quote or spend a shared slot and lat
 });
 
 test("factory rejects invalid concurrency and preserves infrastructure-fault identity", async () => {
-  for (const quoteConcurrency of [0, -1, 1.5, NaN]) assert.throws(() => createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency }), /invalid trial concurrency/);
+  for (const quoteConcurrency of [0, -1, 1.5, NaN]) assert.throws(() => createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency, simRejects: new BlockScanSimRejectCache() }), /invalid trial concurrency/);
   const f = fixture(1), fault = new Error("fixture source fault");
-  const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 1 });
+  const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 1, simRejects: new BlockScanSimRejectCache() });
   const failed = factory({ source: f.source, workerIndex: 0, async simulate() { throw fault; } });
   await assert.rejects(failed.solve(f.plan, f.state, f.probe, f.options), error => error === fault);
   const next = factory({ source: f.source, workerIndex: 1, async simulate() { return simulationResult(); } });
@@ -254,4 +308,35 @@ test("main delegates stage parsing and amount dispatch to the shared exports", (
     "EXACT_RPC_BATCH_SIZE", "EXACT_RPC_BATCH_CONCURRENCY", "STATE_RPC_BATCH_CONCURRENCY"])
     assert(!live.includes(`SEARCHER_BLOCKSCAN_${key}`), `main must not retain a second parser for ${key}`);
   assert(!live.includes("createTrialLimiter("));
+});
+
+test("live route memory requires completed P reverts; larger-amount reverts cannot poison P", async () => {
+  for (const pReverts of [true, false]) {
+    const f = fixture(1);
+    Object.assign(f.plan.opportunity, { seedEdges: f.plan.tokenPath.edges });
+    const cache = new BlockScanSimRejectCache();
+    const events: Record<string, unknown>[] = [];
+    const attributed: Parameters<BlockScanPoolRevertAttributor["record"]>[0][] = [];
+    const attributor = new class extends BlockScanPoolRevertAttributor {
+      override async record(input: Parameters<BlockScanPoolRevertAttributor["record"]>[0]) {
+        attributed.push(input); return null;
+      }
+    }(cache);
+    const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 1,
+      simRejects: cache, poolRevertAttributor: attributor, record: row => events.push(row.event) });
+    const worker = factory({ source: f.source, workerIndex: 0, async simulate(plan) {
+      return !pReverts && plan.flashAmount === 10n ? simulationResult() : { ...simulationResult(), success: false,
+        netProfit: 0n, failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: new Error("fixture revert") } };
+    } });
+    if (pReverts) await assert.rejects(worker.solve(f.plan, f.state, f.probe, f.options));
+    else assert.equal((await worker.solve(f.plan, f.state, f.probe, f.options)).flashAmount, 10n);
+    const recorded = events.filter(event => event.type === "p_revert_recorded");
+    assert.equal(recorded.length, pReverts ? 1 : 0);
+    assert.equal(attributed.length, pReverts ? 1 : 0);
+    if (pReverts) {
+      assert(attributed[0]!.trials.every(trial => trial.plan.flashAmount === 10n));
+      assert.deepEqual(attributed[0]!.source, f.source);
+    }
+    if (pReverts) { assert.equal(recorded[0]!.p, 10n); assert(cache.has(String(recorded[0]!.routeId))); }
+  }
 });

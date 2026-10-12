@@ -1,0 +1,9 @@
+{
+  "configuration": "mev-rpc-latency",
+  "instance": "mev-impl-c4d-20261002",
+  "project": "eth-token-480803",
+  "zone": "us-east1-b",
+  "node": "/opt/mev-cloud/node-v26.0.0-linux-x64/bin/node",
+  "launcher": "/opt/mev-cloud/manual-live/current/bounded-live-launcher.mjs",
+  "envFile": "/Users/eunice/src/MEV/.env"
+}

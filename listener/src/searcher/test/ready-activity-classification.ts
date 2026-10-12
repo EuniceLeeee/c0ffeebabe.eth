@@ -94,7 +94,7 @@ for (const method of ["trace_block", "debug_traceBlockByNumber"] as const) {
     assert.deepEqual(cold.observations, [log, { ...baseCall, blockNumber: toBlock }]);
     const logRead = mock.method(ReadyActivityArchive.prototype, "readLogs", async () => { assert.fail("warm cache must skip raw log decode"); });
     const originalRead = ReadyActivityArchive.prototype.readTrace;
-    const traceRead = mock.method(ReadyActivityArchive.prototype, "readTrace", async function (this: ReadyActivityArchive, key) {
+    const traceRead = mock.method(ReadyActivityArchive.prototype, "readTrace", async function (this: ReadyActivityArchive, key: Parameters<ReadyActivityArchive["readTrace"]>[0]) {
       // Method selection may stat a missing alternate transport, but must never
       // decode any populated raw entry on a persistent classification hit.
       if (key.method !== method) return originalRead.call(this, key);
@@ -119,7 +119,8 @@ test("classification survives interruption before source receipt / strict checkp
   const originalWrite = ReadyActivityArchive.prototype.writeClassifiedTrace;
   const completed = new Set<number>();
   const failAt = fromBlock + ARCHIVE_ACTIVITY_CONCURRENCY;
-  const writing = mock.method(ReadyActivityArchive.prototype, "writeClassifiedTrace", async function (this: ReadyActivityArchive, key, classifier, data) {
+  const writing = mock.method(ReadyActivityArchive.prototype, "writeClassifiedTrace", async function (this: ReadyActivityArchive,
+    ...[key, classifier, data]: Parameters<ReadyActivityArchive["writeClassifiedTrace"]>) {
     if (key.blockNumber === failAt) throw new Error("injected interruption before publication");
     await originalWrite.call(this, key, classifier, data);
     completed.add(key.blockNumber);
@@ -129,7 +130,7 @@ test("classification survives interruption before source receipt / strict checkp
   writing.mock.restore();
   const originalRead = ReadyActivityArchive.prototype.readTrace;
   const reread: number[] = [];
-  mock.method(ReadyActivityArchive.prototype, "readTrace", async function (this: ReadyActivityArchive, key) {
+  mock.method(ReadyActivityArchive.prototype, "readTrace", async function (this: ReadyActivityArchive, key: Parameters<ReadyActivityArchive["readTrace"]>[0]) {
     assert(!completed.has(key.blockNumber), "resume must not decode completed blocks again");
     if (key.method === "trace_block") reread.push(key.blockNumber);
     return originalRead.call(this, key);

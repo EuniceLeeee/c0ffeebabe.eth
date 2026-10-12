@@ -87,7 +87,7 @@ interface Fixture {
 // existing refresh fixture, without importing main's runtime or invoking RPC.
 async function startupReadyFromMain(
   wiring: RebuildUniverseInput,
-  flags: { readonly blind: boolean; readonly dryRun: boolean },
+  flags: { readonly blind: boolean; readonly useReadyGeneration: boolean },
   refresh: typeof refreshReadyInstances = refreshReadyInstances,
 ): Promise<{ readyUniverse: ReadyUniverseGeneration; rebuildEnvelope: StartupCheckpointEnvelope }> {
   const source = await readFile(new URL("../main.ts", import.meta.url), "utf8");
@@ -96,12 +96,12 @@ async function startupReadyFromMain(
   assert(start >= 0 && end > start, "main Ready selection/root-check boundary must exist");
   const run = new Function(
     "rebuildStore", "rebuildWiring", "refreshReadyInstances", "rebuildUniverse",
-    "UniverseRunIncomplete", "blindUseIncumbentReady", "dryRunUseReadyGeneration", "console", "process",
+    "UniverseRunIncomplete", "blindUseIncumbentReady", "useReadyGeneration", "console", "process",
     `return (async () => { ${source.slice(start, end)}\nreturn { readyUniverse, rebuildEnvelope }; })();`,
   );
   return run(wiring.store, wiring, refresh,
     async () => { throw new Error("Ready reuse must not start discovery/rebuild"); },
-    UniverseRunIncomplete, flags.blind, flags.dryRun,
+    UniverseRunIncomplete, flags.blind, flags.useReadyGeneration,
     { log(message: string) { wiring.log?.(message); } }, { env: {} });
 }
 
@@ -746,6 +746,68 @@ async function main(): Promise<void> {
     assert.equal(failedResume.attestCalls.get("d"), 1);
     assert.equal(failedResume.scanCalls(), 1);
     assert.deepEqual((await failedResume.store.load())?.retryableAttemptsByCandidateKey, {});
+
+    // Explicit same-run completion preserves handled failures exactly. Only
+    // the missing candidate is attempted; failures never enter the Graph,
+    // even if an older memo for that candidate still exists in the store.
+    const pendingOnly = makeFixture(join(dir, "resume-completed-outcomes"), {
+      scanSwapWindow: async scan => ({
+        observations: ["a", "b", "c", "d"].map(id => ({ id })),
+        sourceReceipts: sourceReceipts(scan.fromBlock),
+      }),
+    });
+    pendingOnly.failKeys.add("b");
+    pendingOnly.terminalKeys.add("c");
+    await assert.rejects(rebuildUniverse({
+      ...pendingOnly.input,
+      attestationConcurrency: 1,
+      attestFamilyInstanceOnce: async input => {
+        if ((input.candidate as { id: string }).id === "d") throw new Error("pending-only fixture stop");
+        return pendingOnly.input.attestFamilyInstanceOnce(input);
+      },
+    }), /pending-only fixture stop/);
+    await pendingOnly.store.casUpsertMemo(pendingOnly.input.sealDurableVerifiedMemo({
+      candidate: { id: "b" }, result: {}, proofSource: SOURCE, familyCandidateKey: "cand:b",
+    }));
+    const pendingBefore = (await pendingOnly.store.load())!;
+    const pendingResume = {
+      ...pendingOnly.input,
+      resumeCompletedOutcomes: true,
+      freezeCanonicalHead: async (): Promise<never> => { throw new Error("completion must not move cutoff"); },
+      scanSwapWindow: async (): Promise<never> => { throw new Error("completion must not re-scan"); },
+    };
+    await assert.rejects(rebuildUniverse({ ...pendingResume,
+      expectedSourcePlanFingerprints: () => ({ startup: "9".repeat(64), activity: "5".repeat(64) }),
+    }), /completed-outcome resume source plan changed/);
+    await assert.rejects(rebuildUniverse({ ...pendingResume,
+      assertCanonicalHead: async () => { throw new Error("completion canonical fence failed"); },
+    }), /completion canonical fence failed/);
+    assert.deepEqual(await pendingOnly.store.load(), pendingBefore, "failed resume gates cannot mutate the checkpoint");
+    const pendingReady = await rebuildUniverse(pendingResume);
+    const pendingAfter = (await pendingOnly.store.load())!;
+    assert.deepEqual(pendingReady.cutoff, SOURCE);
+    assert.deepEqual(pendingReady.activeInstanceKeys, ["inst:a", "inst:d"]);
+    assert.deepEqual(pendingReady.candidateAccounting, {
+      total: 4, verified: 2, terminalRejected: 1, retryable: 1, remainingUnaccounted: 0,
+    });
+    assert.equal(pendingOnly.scanCalls(), 1);
+    for (const id of ["a", "b", "c", "d"]) assert.equal(pendingOnly.attestCalls.get(id), 1);
+    const priorRetry = pendingBefore.inProgressRun!.outcomesByCandidateKey["cand:b"];
+    assert.equal(priorRetry.status, "retryable");
+    assert.deepEqual(pendingAfter.retryableAttemptsByCandidateKey["cand:b"], {
+      ...priorRetry, runId: pendingResume.runId, cutoff: SOURCE,
+    }, "preserving a retryable is not a fresh attempt or a new timestamp");
+    await assert.rejects(rebuildUniverse(pendingResume), /completed-outcome resume requires an unfinished run/);
+    assert.deepEqual(await pendingOnly.store.load(), pendingAfter, "completion mode cannot silently start a new rolling run");
+
+    // Completion still re-attests a verified memo whose binding is no longer
+    // reusable; retaining negative outcomes cannot bypass admission validation.
+    throwFixture.invalidReusableKeys.add("a");
+    const invalidatedCompletion = await rebuildUniverse({ ...throwFixture.input, resumeCompletedOutcomes: true });
+    assert.equal(throwFixture.attestCalls.get("a"), 2);
+    assert.equal(throwFixture.attestCalls.get("b"), 1);
+    assert.equal(throwFixture.attestCalls.get("c"), 1);
+    assert.equal(invalidatedCompletion.candidateAccounting.remainingUnaccounted, 0);
 
     // E: a catalog-shaped but incomplete source set is rejected before the
     // run can attest or mint coverage. A source scan crash likewise leaves no
@@ -1524,7 +1586,7 @@ async function main(): Promise<void> {
     const refreshDir = await mkdtemp(join(tmpdir(), "ready-instance-refresh-"));
     try {
       const refresh = makeFixture(refreshDir);
-      await assert.rejects(startupReadyFromMain(refresh.input, { blind: false, dryRun: true }),
+      await assert.rejects(startupReadyFromMain(refresh.input, { blind: false, useReadyGeneration: true }),
         /requires one complete Ready checkpoint/);
       refresh.terminalKeys.add("c");
       const priorReady = await rebuildUniverse(refresh.input);
@@ -1539,7 +1601,7 @@ async function main(): Promise<void> {
       };
       await assert.rejects(startupReadyFromMain({ ...refreshInput,
         store: { load: async () => ({ ...prior, inProgressRun: {} }) } as unknown as UniverseRebuildCheckpointStore,
-      }, { blind: false, dryRun: true }), /requires one complete Ready checkpoint/);
+      }, { blind: false, useReadyGeneration: true }), /requires one complete Ready checkpoint/);
       let startupRefreshes = 0;
       const countRefresh: typeof refreshReadyInstances = async (input) => {
         startupRefreshes++;
@@ -1548,13 +1610,17 @@ async function main(): Promise<void> {
           "main forwards existing production attestation wiring");
         return refreshReadyInstances(input);
       };
-      for (const dryRun of [false, true]) {
-        const blind = await startupReadyFromMain(refreshInput, { blind: true, dryRun }, countRefresh);
+      for (const useReadyGeneration of [false, true]) {
+        const blind = await startupReadyFromMain(refreshInput, { blind: true, useReadyGeneration }, countRefresh);
         assert.deepEqual(blind.readyUniverse, priorReady, "blind fixed Ready is never refreshed, even with both flags");
       }
       assert.equal(startupRefreshes, 0);
-      const unchangedStartup = await startupReadyFromMain(refreshInput, { blind: false, dryRun: true }, countRefresh);
-      assert.equal(startupRefreshes, 1, "dry-run reuse invokes the existing selective refresh exactly once");
+      await assert.rejects(startupReadyFromMain(refreshInput,
+        { blind: false, useReadyGeneration: false }, countRefresh),
+      /Ready reuse must not start discovery\/rebuild/,
+      "without explicit reuse main keeps its default discovery path");
+      const unchangedStartup = await startupReadyFromMain(refreshInput, { blind: false, useReadyGeneration: true }, countRefresh);
+      assert.equal(startupRefreshes, 1, "explicit reuse invokes the existing selective refresh exactly once");
       const unchanged = unchangedStartup.readyUniverse;
       assert.equal(unchanged.generation, priorReady.generation);
       assert.equal((await refresh.store.load())!.revision, prior.revision);
@@ -1585,7 +1651,7 @@ async function main(): Promise<void> {
           ...seal(input),
           compiledDescriptor: { kind: "descriptor", quoteModel: "pool-owned" },
         }),
-      }, { blind: false, dryRun: true });
+      }, { blind: false, useReadyGeneration: true });
       const revised = revisedStartup.readyUniverse;
       assert.equal(refresh.scanCalls(), scansBefore);
       assert.equal(refresh.attestCalls.get("a"), 3, "invalidated instance retries a transient failure then verifies");
@@ -1631,7 +1697,7 @@ async function main(): Promise<void> {
             ...seal(input), compiledDescriptor: { kind: "must-not-persist" },
           }),
           log: (message) => failureLogs.push(message),
-        }, { blind: false, dryRun: true }),
+        }, { blind: false, useReadyGeneration: true }),
         new RegExp(`ready refresh cand:a: attempt=${expectedAttempts}/3 .*incumbent unchanged`));
         assert.equal(refresh.attestCalls.get("a")! - attemptsBefore, expectedAttempts,
           "only retryable outcomes use the bounded three-attempt budget");
@@ -1656,14 +1722,14 @@ async function main(): Promise<void> {
         }),
       }), /changed identity/);
       assert.deepEqual(await refresh.store.load(), after);
-      await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, dryRun: true },
+      await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, useReadyGeneration: true },
         async () => { throw new Error("fixture source/fatal stop"); }), /fixture source\/fatal stop/);
-      await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, dryRun: true },
+      await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, useReadyGeneration: true },
         async () => ({ ...revised, generation: revised.generation + 1 })), /root verification/);
       let reloads = 0;
       await assert.rejects(startupReadyFromMain({ ...refreshInput,
         store: { load: async () => reloads++ === 0 ? after : null } as unknown as UniverseRebuildCheckpointStore,
-      }, { blind: false, dryRun: true }, async () => revised), /root verification/);
+      }, { blind: false, useReadyGeneration: true }, async () => revised), /root verification/);
       assert.deepEqual(await refresh.store.load(), after, "startup refresh failure never falls back or mutates incumbent");
       let fences = 0;
       await assert.rejects(refreshReadyInstances({

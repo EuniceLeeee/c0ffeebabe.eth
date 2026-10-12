@@ -20,7 +20,7 @@ const instances = ready.catalogSnapshot.instances.filter((v: any) => v.familyId 
 const source: CanonicalSource = { number: 26080328, hash: code.pin.blockHash, generation: 1 };
 const entries: MutationPricingEntry<CurvePlainPricingDescriptor, CurvePlainRoute>[] = instances.flatMap((v: any) =>
   v.staticProjection.pricingInstances.map((p: any) => ({ ...p,
-    descriptor: p.pricingDescriptor, dependencies: curvePlainPricing.dependencies({ descriptor: p.pricingDescriptor }),
+    descriptor: p.pricingDescriptor, dependencies: curvePlainPricing.dependencies({ descriptor: p.pricingDescriptor, routes: p.routes }),
   })));
 const index = curvePlainPricing.mutation.compile({ entries });
 const known = instances.filter((v: any) => curveRefreshGuardRequests(v.compiledDescriptor).length > 0);
@@ -90,7 +90,7 @@ for (const record of code.records) {
   const route = curvePlainRoutes.project({ descriptor: d })[0]!;
   const input = { descriptor: d, route, source, amountIn: 123456789n,
     executor: "0x0000000000000000000000000000000000000001", runtimeEvidence: [] };
-  const method = curvePlainExact.methods(input).find(m => m.kind === "request-program")!;
+  const method = curvePlainExact.methods().find(m => m.kind === "request-program")!;
   assert(method.kind === "request-program");
   const quoted = [...answers, returned("exact-get-dy", word(7654321n))];
   assert.equal(method.program.decode({ programInput: input, initialResults: quoted, dependentEvidence: [] }).amountOut, 7654321n);

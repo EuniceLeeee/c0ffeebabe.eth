@@ -23,6 +23,8 @@ export function createBlockScanSimAmountSelector(input: {
   record?(event: Record<string, unknown>): void;
   /** False is the frozen quoted-construction control for paired benchmarks. */
   runtimeAmounts?: boolean;
+  /** Source-pinned per-token maximum-borrow entry selected once by the caller. */
+  fundingActionId?: string;
 }) {
   return createSimAmountSelector({
     record: input.record,
@@ -56,7 +58,9 @@ export function createBlockScanSimAmountSelector(input: {
             onExactCall: () => { if (opts.timing) opts.timing.hopExactCalls++; },
           });
           if (opts.timing) opts.timing.quoteMs += performance.now() - quoteStart;
-          const actions = session.fundingActionIds(plan.opportunity.flashToken, amount);
+          const actions = input.fundingActionId === undefined
+            ? session.fundingActionIds(plan.opportunity.flashToken, amount)
+            : [input.fundingActionId];
           if (!actions.length) throw new Error("sim amount selector missing verified funding action");
           let best: AmountSimulation<ResolvedPlan> = { success: false, reason: "no positive executable funding action" };
           for (const action of actions) {

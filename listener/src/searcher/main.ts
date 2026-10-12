@@ -39,6 +39,7 @@ import {
 import { blockScanRouteId, blockScanRouteLocator } from "./blockscan-route-identity.js";
 import { createSolverExecutionInputRecorder } from "./solver-execution-input-recorder.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
+import { BlockScanPoolRevertAttributor, poolRevertFilterEnabled } from "./blockscan-pool-revert.js";
 import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
 import { buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried, resolveEffectiveAmountCascade } from "./blockscan-effective-mid.js";
 import { effectiveEthPricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
@@ -736,6 +737,18 @@ export function resolveBlockScanRefineCandidates(env: NodeJS.ProcessEnv = proces
 /** Live stage policy, shared by main and diagnostics. Preserve each setting's
  * existing fallback/clamping rule; core enumeration config remains separate. */
 export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = process.env, maxCandidates = 0) {
+  const singleFundingRaw = env.SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED ?? "0";
+  if (singleFundingRaw !== "0" && singleFundingRaw !== "1")
+    throw new Error("SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED must be 0 or 1");
+  const fixedInputRaw = env.SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT;
+  let fixedEffectiveWethInput: bigint | undefined;
+  if (fixedInputRaw !== undefined) {
+    if (!/^\d+(?:\.\d{1,18})?$/.test(fixedInputRaw))
+      throw new Error("SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT must be a positive WETH amount");
+    fixedEffectiveWethInput = ethers.parseEther(fixedInputRaw);
+    if (fixedEffectiveWethInput <= 0n || fixedEffectiveWethInput > ethers.MaxUint256)
+      throw new Error("SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT must be a positive uint256 WETH amount");
+  }
   const passBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
   const passBudgetMs = Number.isFinite(passBudgetRaw)
     ? Math.max(1, Math.floor(passBudgetRaw)) : 11_000;
@@ -783,7 +796,8 @@ export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = proce
   // Deliberately no rounding/fallback: the live transport constructor owns
   // validation of non-integer/non-finite state concurrency, as before.
   const stateRpcBatchConcurrency = Math.max(1, Number(env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4"));
-  return Object.freeze({ passBudgetMs, largeGraphPassBudgetMs, largeGraphEdgeThreshold,
+  return Object.freeze({ singleFunding: singleFundingRaw === "1", fixedEffectiveWethInput,
+    passBudgetMs, largeGraphPassBudgetMs, largeGraphEdgeThreshold,
     startupWarmBudgetMs, hotPricingFamilyBudgetMs, runtimePublicationReserveMs, solveReserveMs,
     solveConcurrency, solverSearch, finalSimulationConcurrency, refineCandidates,
     sourceSimulationTimeoutMs: Number(env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
@@ -800,7 +814,9 @@ type BlockScanAmountSelectorFactory = NonNullable<BlockScanRuntimeLoopDependenci
 export function createBlockScanLiveAmountSelectorFactory(input: {
   executor: string;
   quoteConcurrency: number;
+  singleFunding?: boolean;
   simRejects: BlockScanSimRejectCache;
+  poolRevertAttributor?: BlockScanPoolRevertAttributor;
   record?(input: {
     source: Parameters<BlockScanAmountSelectorFactory>[0]["source"];
     workerIndex: number;
@@ -812,12 +828,27 @@ export function createBlockScanLiveAmountSelectorFactory(input: {
     let sequence = 0;
     return { async solve(plan, state, probe, opts) {
       const searchId = ++sequence;
-      let revert: SimulationResult | undefined;
+      const p = plan.opportunity.kind === "block-scan-arb" ? plan.opportunity.searchSeed.searchCenter : 0n;
+      const pTrials: { plan: ResolvedPlan; sim: SimulationResult }[] = [];
+      const diagnosticDeadlineAtMs = Math.min(opts?.deadlineAtMs ?? Infinity, Date.now() + (opts?.deadlineMs ?? 3000));
+      // Reuse the source-pinned, per-token maximum-capacity projection once.
+      // All amounts in this solve use that entry; no fallback or re-selection.
+      const fundingToken = plan.opportunity.kind === "block-scan-arb" ? plan.opportunity.flashToken : undefined;
+      const funding = input.singleFunding && fundingToken !== undefined
+        ? opts?.strictSession?.fundingProjection().sources.get(fundingToken.toLowerCase())
+        : undefined;
+      if (input.singleFunding && funding === undefined)
+        throw new Error("single funding selection lacks a verified token source");
+      if (funding !== undefined) input.record?.({ source, workerIndex, event: {
+        type: "funding_selected", searchId, token: fundingToken,
+        fundingActionId: funding.adapterId, maxBorrow: funding.amount, policy: "max-borrow-per-token",
+      } });
       const selector = createBlockScanSimAmountSelector({
         source, executor: input.executor, runTrial,
+        fundingActionId: funding?.adapterId,
         async simulate(candidate, control) {
           const sim = await simulate(candidate, control);
-          if (!sim.success && sim.failure?.kind === "revert" && sim.failure.code === "TRANSACTION_REVERTED") revert = sim;
+          if (p > 0n && candidate.flashAmount === p) pTrials.push({ plan: candidate, sim });
           return sim;
         },
         record: input.record === undefined ? undefined : event => input.record!({
@@ -828,9 +859,17 @@ export function createBlockScanLiveAmountSelectorFactory(input: {
       catch (error) {
         // A failed trial is not a failed route: another amount/funding action
         // may work. Publish only after completed selection rejects the route.
-        if (error instanceof SimAmountNoOpportunityError && error.status !== "deadline" && revert &&
+        if (error instanceof SimAmountNoOpportunityError && error.status !== "deadline" && pTrials.length > 0 &&
+            pTrials.every(({ sim }) => !sim.success && sim.failure?.kind === "revert" && sim.failure.code === "TRANSACTION_REVERTED") &&
             plan.opportunity.kind === "block-scan-arb") {
-          input.simRejects.record(blockScanRouteId(plan.opportunity.seedEdges), revert);
+          const routeId = blockScanRouteId(plan.opportunity.seedEdges);
+          input.simRejects.record(routeId, pTrials[0]!.sim, { amount: p, p });
+          await input.poolRevertAttributor?.record({
+            source, edges: plan.opportunity.seedEdges, p, trials: pTrials,
+            signal: opts?.signal ?? new AbortController().signal, deadlineAtMs: diagnosticDeadlineAtMs,
+          });
+          input.record?.({ source, workerIndex, event: { type: "p_revert_recorded", searchId,
+            routeId, p, pTrials: pTrials.length, edges: plan.opportunity.seedEdges } });
         }
         throw error;
       }
@@ -965,6 +1004,25 @@ function booleanEnvFlag(
   throw new Error(`${name} must be 0 or 1`);
 }
 
+/** Ready reuse changes startup discovery only, never signing/submission posture. */
+export function resolveReadyGenerationReuse(
+  env: Readonly<Record<string, string | undefined>>,
+  dryRun: boolean,
+): boolean {
+  // Always validate the legacy flag, even when the general opt-in is enabled.
+  const legacyDryRunReuse = dryRunOnlyFlag(
+    "SEARCHER_DRY_RUN_USE_READY_GENERATION",
+    env.SEARCHER_DRY_RUN_USE_READY_GENERATION,
+    dryRun,
+  );
+  const reuseReadyGeneration = booleanEnvFlag(
+    "SEARCHER_USE_READY_GENERATION",
+    env.SEARCHER_USE_READY_GENERATION,
+    false,
+  );
+  return reuseReadyGeneration || legacyDryRunReuse;
+}
+
 /** Only terminal shutdown: retain an early fatal until the runtime drain exists. */
 export function createLiveRuntimeStop({ runtimeAbort, emitFatal, exit }: {
   runtimeAbort: AbortController;
@@ -1052,7 +1110,7 @@ export function createLiveSourceSimulationFactory(input: {
 }
 
 export function createBlockScanPriceRuntime(input: {
-  /** Opt-in historical CLI setting; no live default change. */
+  /** Explicit fixed sampling amount shared by live and historical callers. */
   fixedEffectiveWethInput?: bigint;
   provider: ethers.JsonRpcProvider;
   rpcUrl: string;
@@ -1382,11 +1440,7 @@ async function main(): Promise<void> {
     executor: ethers.getAddress(config.botvmAddress).toLowerCase(),
     transactionOrigin: normalizeTransactionOrigin(config.wallet.address),
   });
-  const dryRunUseReadyGeneration = dryRunOnlyFlag(
-    "SEARCHER_DRY_RUN_USE_READY_GENERATION",
-    process.env.SEARCHER_DRY_RUN_USE_READY_GENERATION,
-    config.dryRun,
-  );
+  const useReadyGeneration = resolveReadyGenerationReuse(process.env, config.dryRun);
   const blindForkBotVmFlag = process.env.SEARCHER_BLIND_INSTALL_FORK_BOTVM;
   const blindInstallForkBotVm = forkBotVmInstallationEnabled(
     blindProductionAudit,
@@ -2004,19 +2058,19 @@ async function main(): Promise<void> {
   });
   let rebuildEnvelope = await rebuildStore.load();
   let readyUniverse;
-  if (blindUseIncumbentReady || dryRunUseReadyGeneration) {
+  if (blindUseIncumbentReady || useReadyGeneration) {
     if (
       rebuildEnvelope === null ||
       rebuildEnvelope.readyGeneration === null ||
       rebuildEnvelope.inProgressRun !== null
     ) {
       throw new Error(
-        (blindUseIncumbentReady ? "blind replay" : "dry-run live observation") +
+        (blindUseIncumbentReady ? "blind replay" : "Ready reuse") +
           " requires one complete Ready checkpoint",
       );
     }
     readyUniverse = rebuildEnvelope.readyGeneration;
-    if (dryRunUseReadyGeneration && !blindUseIncumbentReady) {
+    if (useReadyGeneration && !blindUseIncumbentReady) {
       readyUniverse = await refreshReadyInstances({
         ...rebuildWiring,
         store: rebuildStore,
@@ -2029,7 +2083,7 @@ async function main(): Promise<void> {
     }
     console.log(
       "[searcher/startup] " +
-        (blindUseIncumbentReady ? "blind replay" : "dry-run live observation") +
+        (blindUseIncumbentReady ? "blind replay" : "Ready reuse") +
         " uses incumbent readyGeneration=" +
         readyUniverse.generation + " cutoff=" + readyUniverse.cutoff.number +
         " activeInstances=" + readyUniverse.activeInstanceKeys.length +
@@ -2313,6 +2367,7 @@ async function main(): Promise<void> {
   });
   const priceRuntime = createBlockScanPriceRuntime({
     provider, rpcUrl: config.rpcUrl, ...executionIdentity, strictRuntimeRoot,
+    fixedEffectiveWethInput: blockScanStageSettings.fixedEffectiveWethInput,
     blockScanRuntimeAbort, blockScanRethTransportScheduler, blockScanCfg,
     recordPricing: publication => blockScanRouteTelemetry.recordPricing(publication),
   });
@@ -2471,6 +2526,10 @@ async function main(): Promise<void> {
   }
 
   const blockScanSimRejects = new BlockScanSimRejectCache();
+  const blockScanPoolRevertFilter = poolRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_POOL_REVERT_FILTER);
+  const blockScanPoolRevertAttributor = blockScanPoolRevertFilter
+    ? new BlockScanPoolRevertAttributor(blockScanSimRejects) : undefined;
+  console.log(`[searcher/blockscan-pool-revert-filter] ${JSON.stringify({ enabled: blockScanPoolRevertFilter })}`);
   let activeBlindSourceHead: BlindProductionSourceHeadControl | null = null;
   let preparedBlindBase: BlindProductionPrepareControl | null = null;
   let preparedBlindDynamicResetNonce: string | null = null;
@@ -2570,7 +2629,9 @@ async function main(): Promise<void> {
     finalSimulationWorkers: blockScanFinalSimulationWorkers,
     amountSelectorFactory: createBlockScanLiveAmountSelectorFactory({
       executor: executionIdentity.executor, quoteConcurrency: blockScanSolverSearch.quoteConcurrency,
+      singleFunding: blockScanStageSettings.singleFunding,
       simRejects: blockScanSimRejects,
+      poolRevertAttributor: blockScanPoolRevertAttributor,
       record({ source, workerIndex, event }) {
         try {
           console.log(`[searcher/sim-amount] ${JSON.stringify({ ...event,
@@ -2726,6 +2787,9 @@ async function main(): Promise<void> {
     formatRouteKey: formatBlockScanRouteKey,
     formatRing: formatBlockScanRing,
     isRouteSimRejected: (opp) => blockScanSimRejects.has(blockScanRouteId(opp.seedEdges)),
+    ...(blockScanPoolRevertFilter ? {
+      isPoolSimRejected: (edge: TokenEdge) => blockScanSimRejects.hasPool(edge),
+    } : {}),
     submitAtomic(input) {
       return maybeSubmitBlockScanAtomic({
         ...input,
@@ -2734,6 +2798,7 @@ async function main(): Promise<void> {
         bundleRouter,
         submissionCoordinator,
         simRejects: blockScanSimRejects,
+        poolRevertAttributor: blockScanPoolRevertAttributor,
         onSuccessfulSimulation: (sample) => blockScanAmountReference.recordSimulation(sample),
         strategyVersions: {
           strategy_view_version:
@@ -4975,6 +5040,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
   plans: number;
   passDeadlineAtMs: number;
   simRejects: BlockScanSimRejectCache;
+  poolRevertAttributor?: BlockScanPoolRevertAttributor;
   onSuccessfulSimulation?: (sample: Parameters<BlockScanAmountReference["recordSimulation"]>[0]) => void;
   profitTokenValuation: ProfitTokenValuation;
   sourceBlockHash: string;
@@ -5272,7 +5338,12 @@ export async function maybeSubmitBlockScanAtomic(params: {
         decision: "reject",
         reason: "sim_revert",
       });
-      const rememberedRevert = simRejects.record(routeId, sim);
+      const p = opp.searchSeed.searchCenter;
+      const rememberedRevert = simRejects.record(routeId, sim, { amount: resolved.flashAmount, p });
+      if (rememberedRevert) await params.poolRevertAttributor?.record({
+        source: { number: sourceBlock, hash: sourceBlockHash, generation: sourceGeneration },
+        edges: opp.seedEdges, p, trials: [{ plan: resolved, sim }], signal, deadlineAtMs: passDeadlineAtMs,
+      });
       console.log(
         `[searcher/blockscan] block=${sourceBlock} final sim rejected ring=${ring} route=${route} ` +
           `quoteProfit=${resolved.netProfit} finalProfit=${sim.netProfit} reason=${error}`,

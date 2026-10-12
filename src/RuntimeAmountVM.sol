@@ -9,6 +9,11 @@ abstract contract RuntimeAmountVM {
     uint256 private constant CALLBACK_TARGET = uint256(keccak256("BotVM.runtime.callback.target"));
     uint256 private constant CALLBACK_HASH = uint256(keccak256("BotVM.runtime.callback.hash"));
     uint256 private constant VM_STATE = 0x1337;
+    // Dry-run-only state overlay. Never read on a successful execution. A fresh
+    // key per sim authenticates our envelope; external revert bytes stay opaque.
+    uint256 private constant DIAGNOSTIC_KEY = uint256(keccak256("BotVM.runtime.hop.diagnostic.key.v1"));
+    struct HopContext { uint256 index; bytes flow; }
+    error RuntimeHopFailed(uint256 hop, address target, bytes32 flowHash, bytes reason, bytes32 proof);
 
     function _runtimeEnsureAllowance(address token, address spender, uint256 minimum, uint256 grant) internal virtual;
 
@@ -61,7 +66,8 @@ abstract contract RuntimeAmountVM {
             address tokenOut = _address(data, ip + 20);
             uint256 floor = _word(data, ip + 40);
             uint256 size = _u24(data, ip + 72);
-            _runRuntimeProgram(_slice(data, ip + 75, size), amount);
+            HopContext memory context = HopContext(i, data);
+            address lastTarget = _runRuntimeProgram(_slice(data, ip + 75, size), amount, context);
             uint256 baseline;
             for (uint256 j; j < tokenCount; ++j) {
                 if (routeTokens[j] == tokenOut) { baseline = routeBalances[j]; break; }
@@ -69,9 +75,9 @@ abstract contract RuntimeAmountVM {
             // One receipt read per hop. A pool's returned debit need not equal
             // the credited ERC20 amount (for example, transfer-tax outputs).
             uint256 afterOut = IERC20(tokenOut).balanceOf(address(this));
-            require(afterOut >= baseline, "runtime output inventory");
+            if (afterOut < baseline) _runtimeHopGuard(context, lastTarget, "runtime output inventory");
             amount = afterOut - baseline;
-            require(amount > 0 && amount >= floor, "runtime minimum output");
+            if (amount == 0 || amount < floor) _runtimeHopGuard(context, lastTarget, "runtime minimum output");
             ip += 75 + size;
         }
         // The last receipt read already measured the closing token. Check the
@@ -83,6 +89,12 @@ abstract contract RuntimeAmountVM {
     }
 
     function _runRuntimeProgram(bytes memory data, uint256 amount) internal {
+        _runRuntimeProgram(data, amount, HopContext(0, new bytes(0)));
+    }
+
+    function _runRuntimeProgram(bytes memory data, uint256 amount, HopContext memory context)
+        private returns (address lastTarget)
+    {
         require(data.length > 1 && data.length <= 65536 && uint8(data[0]) == 1, "runtime program version");
         uint256[16] memory r;
         r[0] = amount;
@@ -96,7 +108,7 @@ abstract contract RuntimeAmountVM {
                 require(ip + 33 <= data.length, "runtime constant bounds");
                 r[uint8(data[ip])] = _word(data, ip + 1); ip += 33;
             } else if (op == 1) {
-                (ip, returned) = _runtimeCall(data, ip, r);
+                (ip, returned, lastTarget) = _runtimeCall(data, ip, r, context);
             } else if (op == 2) {
                 require(ip + 4 <= data.length, "runtime math bounds");
                 uint8 kind = uint8(data[ip]);
@@ -139,11 +151,11 @@ abstract contract RuntimeAmountVM {
         }
     }
 
-    function _runtimeCall(bytes memory data, uint256 ip, uint256[16] memory r)
-        private returns (uint256, bytes memory result)
+    function _runtimeCall(bytes memory data, uint256 ip, uint256[16] memory r, HopContext memory context)
+        private returns (uint256, bytes memory result, address target)
     {
         require(ip + 29 <= data.length, "runtime call header");
-        address target = _address(data, ip);
+        target = _address(data, ip);
         uint256 mode = uint8(data[ip + 20]);
         uint256 valueReg = uint8(data[ip + 21]);
         uint256 incoming = _u24(data, ip + 22);
@@ -176,12 +188,39 @@ abstract contract RuntimeAmountVM {
         bool ok;
         if (mode == 1) (ok, result) = target.staticcall(payload);
         else (ok, result) = target.call{value: valueReg == 255 ? 0 : r[valueReg]}(payload);
-        require(ok, "runtime external call");
-        if (incoming != 0) require(_getTransient(CALLBACK_TARGET) == 1, "runtime callback missing");
+        if (!ok) _runtimeHopFailure(context, target, result, "runtime external call");
+        if (incoming != 0 && _getTransient(CALLBACK_TARGET) != 1) {
+            _runtimeHopGuard(context, target, "runtime callback missing");
+        }
         _setTransient(CALLBACK_TARGET, oldTarget);
         _setTransient(CALLBACK_HASH, oldHash);
         _setTransient(VM_STATE, oldState);
-        return (ip, result);
+        return (ip, result, target);
+    }
+
+    function _runtimeHopGuard(HopContext memory context, address target, string memory reason) private view {
+        _runtimeHopFailure(context, target, abi.encodeWithSignature("Error(string)", reason), reason);
+    }
+
+    function _runtimeHopFailure(HopContext memory context, address target, bytes memory reason, string memory legacy)
+        private view
+    {
+        uint256 slot = DIAGNOSTIC_KEY;
+        bytes32 key;
+        assembly { key := sload(slot) }
+        if (key == bytes32(0) || context.flow.length == 0) revert(legacy);
+        bytes32 flowHash = keccak256(context.flow);
+        bytes32 proof = keccak256(abi.encode(key, context.index, target, flowHash, keccak256(reason)));
+        revert RuntimeHopFailed(context.index, target, flowHash, reason, proof);
+    }
+
+    // Outer VM/flash-loan calls must not discard our inner failure envelope.
+    // This only transports bytes: the simulator verifies the per-call proof.
+    function _bubbleRuntimeHopFailure(bytes memory result, string memory legacy) internal pure {
+        if (result.length >= 4 && bytes4(result) == RuntimeHopFailed.selector) {
+            assembly { revert(add(result, 32), mload(result)) }
+        }
+        revert(legacy);
     }
     function _getTransient(uint256 slot) private view returns (uint256 value) { assembly { value := tload(slot) } }
     function _setTransient(uint256 slot, uint256 value) private { assembly { tstore(slot, value) } }

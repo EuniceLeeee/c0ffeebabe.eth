@@ -113,8 +113,8 @@ contract BotVM is RuntimeAmountVM {
                 uint24 payloadLen = _readUint24(script, ip + 20);
                 bytes memory payload = _readBytes(script, ip + 23, payloadLen);
 
-                (bool ok,) = target.call(payload);
-                require(ok, "call failed");
+                (bool ok, bytes memory result) = target.call(payload);
+                if (!ok) _bubbleRuntimeHopFailure(result, "call failed");
 
                 ip += 23 + payloadLen;
             }
@@ -126,8 +126,8 @@ contract BotVM is RuntimeAmountVM {
                 uint24 payloadLen = _readUint24(script, ip + 32);
                 bytes memory payload = _readBytes(script, ip + 35, payloadLen);
 
-                (bool ok,) = target.call{value: value}(payload);
-                require(ok, "call+value failed");
+                (bool ok, bytes memory result) = target.call{value: value}(payload);
+                if (!ok) _bubbleRuntimeHopFailure(result, "call+value failed");
 
                 ip += 35 + payloadLen;
             }
@@ -223,9 +223,9 @@ contract BotVM is RuntimeAmountVM {
                 uint256 nativeBefore = address(this).balance;
                 // Contain RETURN/STOP in the child invocation: it must never
                 // bypass wrapping and the post-execution inventory checks.
-                (bool executed,) = address(this).call(abi.encodeWithSelector(
+                (bool executed, bytes memory result) = address(this).call(abi.encodeWithSelector(
                     SUBSCRIPT_SELECTOR, _readBytes(script, ip + 3, size)));
-                require(executed, "native wrap action failed");
+                if (!executed) _bubbleRuntimeHopFailure(result, "native wrap action failed");
                 require(address(this).balance >= nativeBefore, "native inventory consumed");
                 uint256 received = address(this).balance - nativeBefore;
                 if (received != 0) {

@@ -35,10 +35,19 @@ import { DEFAULT_PROFIT_TOKEN_VALUATION } from "./profit-token-valuation.js";
 import { createBlockScanExecutionAvailability } from "./blockscan-pending-evidence.js";
 import { detectProductionBlockScanOpportunities, assertAtomicBlockScanRuntime } from "./detector/blockscan-scanner-production.js";
 import type { AdapterRuntimeSnapshot } from "./adapter-runtime-coordinator.js";
+import { readHistoricalLiveMids, historicalRejectedRoutes, historicalRankedRouteEligibility, historicalExperimentReverts } from "./blockscan-at-block-history.js";
+import { scanBlockStateFromResolvedMids } from "./detector/blockscan-scanner-core.js";
+import { buildBlockScanEthView } from "./blockscan-eth-view.js";
 
 const HELP = `Usage: npm run searcher:at-block -- --ready CHECKPOINT --block NUMBER --out NEW_DIRECTORY
   --prices FILE          Reuse a saved price-table's Ready; refresh at --block.
   --offline              Enumerate saved prices without RPC (requires matching --block).
+  --live-mids MANIFEST    With --ready: restore effective data; offline enumerate, or live runHead continuation.
+                        Online continuation acquires fresh strict/Funding authority; does not reprice.
+  --max-candidates COUNT  Diagnostic coarse and downstream caps; original live defaults are unchanged.
+  --experiment-reverts FILE  Verified P failures from this historical experiment; not prior live knowledge.
+  --rejected-routes FILE  With --live-mids: exclude observed prior complete-route rejections before caps.
+                        Same run/source required; preserves proof records, no live cache mutation.
   --through STAGE        prices | enumerate | solver | ev (default: ev).
   --amount-selector MODE solver (default) | sim (shared live autonomous amount search).
   --only-enumerated-rank NUMBER  Size one naturally emitted candidate within the normal downstream cap.
@@ -54,7 +63,7 @@ const HELP = `Usage: npm run searcher:at-block -- --ready CHECKPOINT --block NUM
   --executor ADDRESS --owner ADDRESS  Public execution identity, required through EV.
   --revm-bin FILE        Existing strict quote-simulation engine.
   --execution-mode MODE next-block (default) | source-block (historical only).
-  --executor-runtime-code FILE  Hash-bound {code, keccak256}; source-block only, no deployment.
+  --executor-runtime-code FILE  Hash-bound {code, keccak256}; online only, no deployment.
 No discovery/rebuild, latest-head subscription, signing or broadcasting.
 --block is the end-state source. source-block executes that block's environment
 using pinned REVM plus debug_traceCall charged gas, and that block's fee in EV.
@@ -74,6 +83,9 @@ export function parseAtBlockArgs(argv: string[]) {
     "executor-runtime-code": { type: "string" },
     "funding-token": { type: "string", multiple: true },
     "effective-weth-input": { type: "string" },
+    "live-mids": { type: "string" }, "rejected-routes": { type: "string" },
+    "max-candidates": { type: "string" },
+    "experiment-reverts": { type: "string" },
   } });
   if (v.help) return null;
   const block = Number(v.block), budgetMs = Number(v["budget-ms"] ?? "120000");
@@ -86,10 +98,15 @@ export function parseAtBlockArgs(argv: string[]) {
   const amountSelector = v["amount-selector"] ?? "solver";
   assert(amountSelector === "solver" || amountSelector === "sim", "invalid --amount-selector");
   assert(executionMode === "next-block" || executionMode === "source-block", "invalid --execution-mode");
-  assert(!v["executor-runtime-code"] || (executionMode === "source-block" && !v.offline),
-    "--executor-runtime-code requires online source-block mode");
+  assert(!v["executor-runtime-code"] || !v.offline, "--executor-runtime-code requires online mode");
   assert(through === "prices" || through === "enumerate" || through === "solver" || through === "ev", "invalid --through");
-  assert(!v.offline || (v.prices && through === "enumerate"), "--offline requires --prices and --through enumerate");
+  assert(!v.offline || ((v.prices || v["live-mids"]) && through === "enumerate"),
+    "--offline requires --prices or --live-mids and --through enumerate");
+  assert(!v["live-mids"] || (v.ready && !v.prices && through !== "prices"),
+    "--live-mids requires --ready and cannot reprice");
+  assert(!v["rejected-routes"] || v["live-mids"], "--rejected-routes requires --live-mids");
+  assert(!v["experiment-reverts"] || (v["live-mids"] && v.offline), "--experiment-reverts requires offline live-mids enumeration");
+  assert(!v["live-mids"] || !v["funding-token"]?.length, "--live-mids has no verified funding snapshot for extra funding tokens");
   assert(!v["amount-selector"] || (!v.offline && (through === "solver" || through === "ev")), "--amount-selector requires online sizing stage");
   const onlyEnumeratedRank = v["only-enumerated-rank"] === undefined ? undefined : Number(v["only-enumerated-rank"]);
   if (onlyEnumeratedRank !== undefined) {
@@ -98,6 +115,9 @@ export function parseAtBlockArgs(argv: string[]) {
     assert(!v.offline && (through === "solver" || through === "ev"), "--only-enumerated-rank requires online sizing stage");
   }
   assert(Number.isSafeInteger(budgetMs) && budgetMs > 0 && budgetMs <= 3_600_000, "invalid --budget-ms");
+  const maxCandidates = v["max-candidates"] === undefined ? undefined : Number(v["max-candidates"]);
+  assert(maxCandidates === undefined || (/^[1-9]\d*$/.test(v["max-candidates"]!) && Number.isSafeInteger(maxCandidates) && maxCandidates <= 10_000),
+    "invalid --max-candidates");
   for (const k of ["spread-bps", "admission-bps"] as const) {
     assert(v[k] === undefined || (/^\d+(?:\.\d+)?$/.test(v[k]!) && Number(v[k]) <= 10_000), `invalid --${k}`);
   }
@@ -107,12 +127,12 @@ export function parseAtBlockArgs(argv: string[]) {
   }))];
   let fixedEffectiveWethInput: bigint | undefined;
   if (v["effective-weth-input"] !== undefined) {
-    assert(!v.offline, "--effective-weth-input requires online repricing, not offline enumeration");
+    assert(!v.offline && !v["live-mids"], "--effective-weth-input requires online repricing, not frozen effective rows");
     assert(/^\d+(?:\.\d{1,18})?$/.test(v["effective-weth-input"]), "invalid --effective-weth-input");
     fixedEffectiveWethInput = ethers.parseEther(v["effective-weth-input"]);
     assert(fixedEffectiveWethInput > 0n && fixedEffectiveWethInput <= ethers.MaxUint256, "invalid --effective-weth-input");
   }
-  return { ...v, fixedEffectiveWethInput, fundingTokens, executionMode, amountSelector, onlyEnumeratedRank, through: through as "prices" | "enumerate" | "solver" | "ev", block, budgetMs, out: resolve(v.out) };
+  return { ...v, maxCandidates, fixedEffectiveWethInput, fundingTokens, executionMode, amountSelector, onlyEnumeratedRank, through: through as "prices" | "enumerate" | "solver" | "ev", block, budgetMs, out: resolve(v.out) };
 }
 
 /** CLI-only post-enumeration selection. The selected object still passes the
@@ -126,10 +146,16 @@ export function historicalCandidateSelection(planner: TemplatePlanner, rank: num
     assert(selectedRouteId !== undefined, "natural enumeration must finish before historical planning");
     return blockScanRouteId(input[0].seedEdges) === selectedRouteId ? plan(...input) : [];
   };
-  return (result: ReturnType<typeof detectProductionBlockScanOpportunities>) => {
-    assert.equal(result.selectionProvenance.kind, "natural_coarse_ranked");
-    assert.equal(result.forcedSelectionCount, 0);
-    assert.equal(result.selectionMode, "production");
+  return (result: ReturnType<typeof scanBlockStateFromResolvedMids>) => {
+    if ("selectionProvenance" in result) {
+      const production = result as ReturnType<typeof detectProductionBlockScanOpportunities>;
+      assert.equal(production.selectionProvenance.kind, "natural_coarse_ranked");
+      assert.equal(production.forcedSelectionCount, 0);
+      assert.equal(production.selectionMode, "production");
+    } else {
+      assert.equal(result.selection.mode, "natural_ranked");
+      assert.equal(result.selection.forcedSelectionCount, 0);
+    }
     const opportunity = result.opportunities[rank - 1];
     assert(opportunity, "requested rank is absent from natural enumeration");
     selectedRouteId = blockScanRouteId(opportunity.seedEdges);
@@ -228,17 +254,53 @@ export async function runAtBlock(argv: string[]): Promise<void> {
   if (executorRuntimeCode) save("executor-runtime-code.json", executorRuntimeCode);
   const inputBytes = readFileSync(args.ready ?? args.prices!);
   const saved = args.prices ? parseAtBlockJson(inputBytes.toString()) : null;
-  const configEnv: NodeJS.ProcessEnv = { ...process.env,
+  const restored = args["live-mids"] ? readHistoricalLiveMids(args["live-mids"], inputBytes, args.block, catalog) : undefined;
+  const rejectBytes = args["rejected-routes"] ? readFileSync(args["rejected-routes"], "utf8") : undefined;
+  const rejects = rejectBytes === undefined ? undefined : historicalRejectedRoutes(rejectBytes, restored!);
+  const experimentRejects = args["experiment-reverts"] ? historicalExperimentReverts(args["experiment-reverts"], restored!) : undefined;
+  await rejects?.verifyEvidence();
+  if (rejectBytes !== undefined) save("rejected-routes-input.json", JSON.parse(rejectBytes));
+  const configEnv: NodeJS.ProcessEnv = { ...(restored?.config ?? process.env),
+    ...(args.maxCandidates === undefined ? {} : { SEARCHER_BLOCKSCAN_MAX_CANDIDATES: String(args.maxCandidates),
+      SEARCHER_BLOCKSCAN_REFINE_CANDIDATES: String(args.maxCandidates) }),
     ...(args["spread-bps"] === undefined ? {} : { SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS: args["spread-bps"] }),
     ...(args["admission-bps"] === undefined ? {} : { SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS: args["admission-bps"] }),
   };
   const cfg = resolveBlockScanCoreConfig(configEnv);
-  const coarseCfg = { ...cfg, maxCandidates: resolveBlockScanRefineCandidates(configEnv, cfg.maxCandidates) };
+  if (args.maxCandidates !== undefined) cfg.maxCandidates = args.maxCandidates;
+  const coarseCfg = { ...cfg, maxCandidates: args.maxCandidates ?? resolveBlockScanRefineCandidates(configEnv, cfg.maxCandidates) };
   const eligibility = createBlockScanExecutionAvailability({ mode: "periodic", evidence: [],
     familyForEdge: id => declarations.currentHeadEvidenceFamilyForEdge(id),
     edgeScopeKey: edge => declarations.currentHeadEvidenceScopeKeyForEdge(edge),
     evidenceScopeKeys: evidence => declarations.currentHeadEvidenceScopeKeys(evidence),
   });
+  if (restored && args.offline) {
+    assertFamilyActivationEnvironment(PRODUCTION_FAMILY_ACTIVATIONS, restored.config);
+    const historicalConfig = configEnv;
+    const historicalCfg = resolveBlockScanCoreConfig(historicalConfig);
+    const historicalCoarseCfg = { ...historicalCfg,
+      maxCandidates: args.maxCandidates ?? resolveBlockScanRefineCandidates(historicalConfig, historicalCfg.maxCandidates) };
+    const prior = rejects || experimentRejects ? historicalRankedRouteEligibility(new Set([
+      ...(rejects?.ids ?? []), ...(experimentRejects?.ids ?? []),
+    ])) : undefined;
+    const start = performance.now();
+    const ethView = buildBlockScanEthView(restored.graph, restored.mids, historicalCoarseCfg.ethSignalPairsPerToken, historicalCoarseCfg.allowRepeatedPools);
+    const result = scanBlockStateFromResolvedMids({ edges: [...restored.edges], sourceBlock: args.block, swapTouched: null,
+      cfg: historicalCoarseCfg, mids: restored.mids, ethView, ...eligibility,
+      ...(prior ? { rankedRouteEligible: prior.rankedRouteEligible } : {}), captureCoarseEnumeration: true });
+    const wallMs = performance.now() - start;
+    save("enumeration.json", result);
+    save("summary.json", { mode: "live-mids-coarse-only", block: args.block, runId: restored.runId, source: restored.source,
+      input: restored.provenance, cfg: historicalCoarseCfg, downstreamMaxCandidates: historicalCfg.maxCandidates,
+      priorRejections: rejects ? { ...rejects.provenance,
+        matchedRouteIds: [...prior!.matched].filter(id => rejects.ids.has(id)).sort() } : null,
+      experimentRejections: experimentRejects ? { ...experimentRejects.provenance,
+        matchedRouteIds: [...prior!.matched].filter(id => experimentRejects.ids.has(id)).sort() } : null,
+      wallMs, selection: result.selection, stages: { enumeration: result.outcome, solver: "not-run", sim: "not-run", ev: "not-run" },
+      atomicRuntimeValidated: false, networkRequests: 0, broadcast: false });
+    console.log(atBlockJson({ block: args.block, stage: "enumerate", mode: "live-mids-coarse-only", wallMs, selection: result.selection }));
+    return;
+  }
   if (args.offline) {
     const snapshot = (saved.runtime ?? saved) as AdapterRuntimeSnapshot;
     assert.equal(snapshot.sourceBlock, args.block, "saved price source differs from --block; reprice online first");
@@ -348,7 +410,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     let evSequence = 0;
     let amountEventSequence = 0;
     const executablePath = args["revm-bin"] ?? env.SEARCHER_REVM_SIM_BIN;
-    const implementation = args.executionMode === "source-block" ? historicalImplementation(executablePath!) : undefined;
+    const implementation = executablePath ? historicalImplementation(executablePath) : undefined;
     const sourceSimulator = args.executionMode === "source-block" ? new SourceBlockSimulator({
       rpcUrl, executor, owner, chainId: Number(chainId), stateRoot: String(rawAnchor!.stateRoot), executablePath: executablePath!,
       ...(executorRuntimeCode ? { executorRuntimeCode } : {}),
@@ -366,7 +428,24 @@ export async function runAtBlock(argv: string[]): Promise<void> {
       },
       onResult: (executionInput, result) => save(`simulation-${++simulationSequence}.json`, { implementation, executionInput, result }),
     }) : undefined;
-    const directSimulator = sourceSimulator ?? Object.assign(new EthSimulateV1Simulator(rpcUrl, executor, owner), { concurrency: 1 });
+    const directSimulator = sourceSimulator ?? Object.assign(new EthSimulateV1Simulator(rpcUrl, executor, owner, executorRuntimeCode), { concurrency: 1 });
+    // Observe the production simulator; do not add a candidate/trial scheduler.
+    const simulate = directSimulator.simulate.bind(directSimulator);
+    let trialSequence = 0;
+    directSimulator.simulate = async (plan, context) => {
+      const trialId = ++trialSequence;
+      save(`trial-${trialId}-input.json`, { source: context.source, header: context.header, plan });
+      try {
+        const result = await simulate(plan, context);
+        save(`trial-${trialId}-result.json`, { result, ...(sourceSimulator || !result.scriptHex ? {} : {
+          executionInput: buildEthSimulateV1ExecutionInput({ ...context, executor, owner,
+            profitToken: plan.profitToken, scriptHex: result.scriptHex, executorRuntimeCode }) }) });
+        return result;
+      } catch (error) {
+        save(`trial-${trialId}-error.json`, { error: String(error).replace(/https?:\/\/[^\s"'`]+/g, "[REDACTED_RPC]") });
+        throw error;
+      }
+    };
     // Historical backends declare their execution capacity independently of hop quotes.
     const simTrialConcurrency = Math.min(search.quoteConcurrency, directSimulator.concurrency);
     const provenance = { readyPath, readySha256: readyHash, topologySource: ready.cutoff, stateSource: anchor,
@@ -374,14 +453,20 @@ export async function runAtBlock(argv: string[]): Promise<void> {
       ...(executorRuntimeCode ? { counterfactualExecutorCode: { address: executor.toLowerCase(), keccak256: executorRuntimeCode.keccak256 } } : {}),
       ...(implementation ? { implementation } : {}),
       topologyContainsFutureDiscovery: ready.cutoff.number > args.block, historicalNaturalDiscoveryProven: false,
+      ...(restored ? { historicalEffective: restored.provenance, atomicRuntimeRestored: false,
+        authority: "fresh production strict execution and Funding session; saved effective is data only" } : {}),
       broadcast: false, fixedEffectiveWethInput: args.fixedEffectiveWethInput, fundingTokens: args.fundingTokens, cfg, coarseCfg, policy, search, executor, owner, through: args.through, budgetMs: args.budgetMs };
     save("input.json", provenance);
     loop = new BlockScanRuntimeLoop({
       enabled: true, blockScanConfig: cfg, executionWorkers: [{ state, solver: new AnvilSolver(),
         simulator: new BotVMSimulator(state, executor, owner) }], finalSimulationWorkers: [],
       directFinalSimulation: directSimulator,
+      historicalReadOnly: true,
+      ...(args.executionMode === "source-block" ? { historicalExecutionMode: "source-block" as const } : {}),
+      isRouteSimRejected: opportunity => rejects?.ids.has(blockScanRouteId(opportunity.seedEdges)) === true ||
+        simRejects.has(blockScanRouteId(opportunity.seedEdges)),
       ...(args.amountSelector === "sim" ? { amountSelectorFactory: createBlockScanLiveAmountSelectorFactory({
-        executor, quoteConcurrency: simTrialConcurrency,
+        executor, quoteConcurrency: simTrialConcurrency, simRejects,
         record: event => save(`amount-event-${++amountEventSequence}.json`, event),
       }) } : {}),
       rpcUrl, strictSession: prices.strictSessionFor, runtimeAbort: abort, rethTransportScheduler: scheduler,
@@ -435,6 +520,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     let finished = false;
     await loop.runHead(args.block, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }, {
       through: args.through,
+      ...(restored ? { effectivePricing: restored.pricing } : {}),
       onSnapshot: runtime => {
         if (args.fundingTokens.length > 0) {
           assertAtomicBlockScanRuntime(runtime);
@@ -451,6 +537,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
         save("enumeration.json", result);
         if (selectCandidate) save("candidate-selection.json", selectCandidate(result));
       },
+      onSolver: result => save(`route-result-${result.solverIndex + 1}.json`, result),
       onComplete: result => { finished = true; save("summary.json", { ...provenance, ...result, solverInputs: sequence }); },
     });
     assert(finished, "single pass did not produce a terminal result");

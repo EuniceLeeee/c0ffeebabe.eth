@@ -90,6 +90,19 @@ assert.deepEqual(
 console.log("[blockscan-production-boundary] published effective/current-N kernel equivalence: PASS");
 
 {
+  const effectiveBefore = [...runtime.pricing.effectiveMids!.rows];
+  const filtered = detectProductionBlockScanOpportunities({
+    runtime, swapTouched: null, cfg, poolRevertExcludedEdge: edge => edge.target.toLowerCase() === pool2,
+  });
+  assert.equal(filtered.opportunities.length, 0);
+  assert.deepEqual([...runtime.pricing.effectiveMids!.rows], effectiveBefore);
+  assert.deepEqual(detectProductionBlockScanOpportunities({
+    runtime, swapTouched: null, cfg, poolRevertExcludedEdge: () => false,
+  }).opportunities, production.opportunities, "empty pool policy preserves production selection");
+}
+console.log("[blockscan-production-boundary] pool filter preserves full effective publication: PASS");
+
+{
   const uncapped = detectProductionBlockScanOpportunities({ runtime, swapTouched: null, cfg });
   const cappedCfg = { ...cfg, maxCandidates: 0 };
   const disabled = detectProductionBlockScanOpportunities({
@@ -464,6 +477,11 @@ console.log("[blockscan-production-boundary] atomic funding coverage: PASS");
     cfg,
   });
   assert(fallback.candidates.length > 0);
+  const excludedFallback = enumerateNMinusOneCoarseCandidates({
+    coarsePricing: runtime.pricing, canonicalPredecessorHash: blockHash, exactGraph, cfg,
+    poolRevertExcludedEdge: e => e.target.toLowerCase() === pool2,
+  });
+  assert.equal(excludedFallback.candidates.length, 0, "N-1 must apply the same pool exclusion");
   assert.equal(fallback.fullCoverage, false);
   assert.equal(fallback.recallMode, "stale-positive-only");
   assert(
