@@ -119,8 +119,16 @@ export interface KyberSwapPoolState {
 
 export interface KyberSwapPricingSnapshot extends KyberSwapPoolState {}
 
+export interface KyberSwapTickState {
+  readonly tick: number;
+  readonly liquidityGross: bigint;
+  readonly liquidityNet: bigint;
+  readonly previous: number;
+  readonly next: number;
+}
+
 export interface KyberSwapExactEvidence {
-  readonly kind: "kyberswap-elastic-single-range";
+  readonly kind: "kyberswap-elastic-exact-input";
   readonly source: CanonicalSource;
   readonly pool: string;
   readonly tokenIn: string;
@@ -135,6 +143,8 @@ export interface KyberSwapExactEvidence {
   readonly liquidity: bigint;
   readonly deltaL: bigint;
   readonly targetTick: number | null;
+  readonly steps: number;
+  readonly crossedTicks: readonly number[];
   /** Non-null when the state-level quote was refused instead of extrapolated. */
   readonly refusal: string | null;
   readonly bindingFingerprint: string;

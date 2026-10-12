@@ -1,4 +1,4 @@
-import { MAX_TICK, MIN_TICK, getSqrtRatioAtTick } from
+import { MAX_TICK, MIN_TICK, MAX_SQRT_RATIO, MIN_SQRT_RATIO, getSqrtRatioAtTick } from
   "../../../solver/v3-math.js";
 import {
   KYSWAP_FEE_UNITS,
@@ -6,7 +6,108 @@ import {
   KYSWAP_TWO_FEE_UNITS,
   KYSWAP_TWO_POW_96,
 } from "./abi.js";
-import type { KyberSwapPoolState } from "./types.js";
+import type { KyberSwapPoolState, KyberSwapTickState } from "./types.js";
+
+const UINT128_MAX = (1n << 128n) - 1n;
+// Local computation bound only; the central request-round/deadline limits still
+// bound missing tick reads. Exhaustion is never a partial successful quote.
+export const KYSWAP_MAX_QUOTE_STEPS = 4096;
+
+export type KyberSwapInputOutcome =
+  | { readonly ok: false; readonly refusal: string; readonly missingTick?: number }
+  | { readonly ok: true; readonly quote: KyberSwapStepQuote & {
+      readonly steps: number; readonly crossedTicks: readonly number[];
+    } };
+
+/** Pool.swap exact-input loop, including its 480-tick temporary boundaries,
+ * per-step reinvestment fees and signed base-liquidity changes. Missing chain
+ * state requests another existing central round, never constant-liquidity
+ * extrapolation. Fee-growth/RTokens bookkeeping does not change reinvestL. */
+export function quoteExactInput(input: {
+  readonly state: KyberSwapPoolState;
+  readonly isToken0: boolean;
+  readonly amountIn: bigint;
+  readonly ticks: ReadonlyMap<number, KyberSwapTickState>;
+}): KyberSwapInputOutcome {
+  const {state, isToken0, amountIn, ticks} = input;
+  const fail = (refusal: string): KyberSwapInputOutcome => ({ok: false, refusal});
+  if (amountIn <= 0n || amountIn >= 1n << 255n) return fail("invalid-exact-input");
+  if (state.locked || state.baseL + state.reinvestL === 0n) return fail("no-active-liquidity");
+  let sqrtP = state.sqrtP, currentTick = state.currentTick;
+  let baseL = state.baseL, reinvestL = state.reinvestL;
+  let nextTick = isToken0 ? state.nearestCurrentTick : state.nextTick;
+  if (nextTick === null) return fail("tick-boundary-unavailable");
+  const limit = isToken0 ? MIN_SQRT_RATIO + 1n : MAX_SQRT_RATIO - 1n;
+  if (isToken0 ? sqrtP <= limit : sqrtP >= limit) return fail("price-limit-not-movable");
+  let remaining = amountIn, returned = 0n, targetTick = nextTick;
+  const crossedTicks: number[] = [];
+  for (let step = 1; step <= KYSWAP_MAX_QUOTE_STEPS; step++) {
+    const liquidity = baseL + reinvestL;
+    if (baseL < 0n || reinvestL < 0n || liquidity > UINT128_MAX) return fail("liquidity-overflow");
+    if (liquidity === 0n) return fail("no-active-liquidity");
+    targetTick = isToken0 ? Math.max(nextTick, currentTick - KYSWAP_MAX_TICK_DISTANCE)
+      : Math.min(nextTick, currentTick + KYSWAP_MAX_TICK_DISTANCE);
+    const nextSqrtP = getSqrtRatioAtTick(targetTick);
+    const target = isToken0 ? (nextSqrtP < limit ? limit : nextSqrtP)
+      : (nextSqrtP > limit ? limit : nextSqrtP);
+    if (isToken0 ? target > sqrtP : target < sqrtP) return fail("tick-list-price-inconsistent");
+    const start = sqrtP;
+    let used = 0n, deltaL = 0n;
+    if (start !== target) {
+      const reach = calcReachAmountExactInput(liquidity, start, target, state.feeUnits, isToken0);
+      used = reach > remaining ? remaining : reach;
+      if (reach > remaining) {
+        deltaL = estimateIncrementalLiquidity(used, start, state.feeUnits, isToken0);
+        sqrtP = calcFinalPrice(used, liquidity, deltaL, start, isToken0);
+      } else {
+        sqrtP = target;
+        deltaL = calcIncrementalLiquidity(used, liquidity, start, target, isToken0);
+      }
+      let output = calcReturnedAmountExactInput(liquidity, start, sqrtP, deltaL, isToken0);
+      if (output === 1n) output = 0n;
+      if (output > 0n) return fail("invalid-output-sign");
+      remaining -= used;
+      returned += output;
+      reinvestL += deltaL;
+      if (reinvestL > UINT128_MAX) return fail("liquidity-overflow");
+    }
+    if (sqrtP === nextSqrtP) {
+      currentTick = isToken0 ? targetTick - 1 : targetTick;
+      if (targetTick === nextTick) {
+        const tick = ticks.get(nextTick);
+        if (!tick) return {ok: false, refusal: "crossing-state-unavailable", missingTick: nextTick};
+        if (tick.tick !== nextTick || (isToken0 ? tick.previous >= nextTick : tick.next <= nextTick)) {
+          return fail("tick-list-inconsistent");
+        }
+        baseL += isToken0 ? -tick.liquidityNet : tick.liquidityNet;
+        if (baseL < 0n || baseL > UINT128_MAX) return fail("liquidity-overflow");
+        crossedTicks.push(nextTick);
+        nextTick = isToken0 ? tick.previous : tick.next;
+      }
+    } else if (remaining !== 0n) {
+      return fail("price-limit-partial-fill");
+    }
+    if (remaining === 0n) {
+      if (returned >= 0n) return fail("no-representable-output");
+      return {ok: true, quote: Object.freeze({amountIn, amountOut: -returned,
+        sqrtPAfter: sqrtP, deltaL: reinvestL - state.reinvestL, targetTick,
+        steps: step, crossedTicks: Object.freeze(crossedTicks)})};
+    }
+    if (sqrtP === limit) return fail("price-limit-partial-fill");
+  }
+  return fail("quote-step-budget-exhausted");
+}
+
+/** SwapMath.calcIncrementalLiquidity for a reached temporary/initialized tick.
+ * Unlike a partial step, the fee comes from rounded reserve conservation. */
+export function calcIncrementalLiquidity(amount: bigint, liquidity: bigint,
+  currentSqrtP: bigint, nextSqrtP: bigint, isToken0: boolean): bigint {
+  const before = isToken0 ? mulDivFloor(liquidity, KYSWAP_TWO_POW_96, currentSqrtP)
+    : mulDivFloor(liquidity, currentSqrtP, KYSWAP_TWO_POW_96);
+  const after = isToken0 ? mulDivFloor(nextSqrtP, before + amount, KYSWAP_TWO_POW_96)
+    : mulDivFloor(before + amount, KYSWAP_TWO_POW_96, nextSqrtP);
+  return after > liquidity ? after - liquidity : 0n;
+}
 
 /**
  * Faithful port of the verified pool's `SwapMath` (`contracts/libraries/

@@ -176,7 +176,7 @@ function assertExecutionEvidence(input: {
   assertKyberSwapInvocation(input.descriptor, input.route);
   const evidence = input.exactEvidence;
   if (
-    evidence.kind !== "kyberswap-elastic-single-range" ||
+    evidence.kind !== "kyberswap-elastic-exact-input" ||
     evidence.refusal !== null ||
     !same(evidence.pool, input.descriptor.pool) ||
     !same(evidence.tokenIn, input.route.tokenIn) ||

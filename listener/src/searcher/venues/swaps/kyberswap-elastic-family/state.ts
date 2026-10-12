@@ -1,4 +1,4 @@
-import { assertSameSource, callRequest } from
+import { assertSameSource, assertSource, callRequest } from
   "../../protocols/standard-family/common.js";
 import type {
   AdapterRequest,
@@ -15,7 +15,7 @@ import {
   MIN_SQRT_RATIO,
   MIN_TICK,
 } from "../../../solver/v3-math.js";
-import type { KyberSwapPoolState } from "./types.js";
+import type { KyberSwapPoolState, KyberSwapTickState } from "./types.js";
 
 export const KYSWAP_STATE_ID = Object.freeze({
   poolState: "kyswap-pool-state",
@@ -150,6 +150,51 @@ export function stateSource(
   results: readonly AdapterRequestResult[],
 ): CanonicalSource {
   return { ...result(results, KYSWAP_STATE_ID.poolState).source };
+}
+
+/** One crossing's state and linked-list continuation, owned by this Family.
+ * IDs bind the actual tick, so additional rounds never repeat a request ID. */
+export function crossingRequests(pool: string, tick: number): readonly AdapterRequest[] {
+  if (!Number.isSafeInteger(tick) || tick < MIN_TICK || tick > MAX_TICK) {
+    throw new Error("kyberswap elastic invalid crossing tick");
+  }
+  return Object.freeze([
+    callRequest(`kyswap-tick:${tick}`, pool,
+      KYSWAP_POOL_INTERFACE.encodeFunctionData("ticks", [tick])),
+    callRequest(`kyswap-tick-neighbours:${tick}`, pool,
+      KYSWAP_POOL_INTERFACE.encodeFunctionData("initializedTicks", [tick])),
+  ]);
+}
+
+export function decodeCrossings(results: readonly AdapterRequestResult[], source: CanonicalSource):
+  ReadonlyMap<number, KyberSwapTickState> {
+  const ticks = new Map<number, KyberSwapTickState>();
+  for (const row of results) {
+    const match = /^kyswap-tick:(-?\d+)$/.exec(row.id);
+    if (!match) continue;
+    const tick = Number(match[1]);
+    if (!Number.isSafeInteger(tick) || tick < MIN_TICK || tick > MAX_TICK || ticks.has(tick)) {
+      throw new Error("kyberswap elastic invalid or duplicate crossing result");
+    }
+    const data = result(results, row.id);
+    const link = result(results, `kyswap-tick-neighbours:${tick}`);
+    assertSource(data.source, source);
+    assertSource(link.source, source);
+    const [gross, net] = KYSWAP_POOL_INTERFACE.decodeFunctionResult("ticks", data.data);
+    const [prev, next] = KYSWAP_POOL_INTERFACE.decodeFunctionResult("initializedTicks", link.data);
+    const liquidityGross = BigInt(gross), liquidityNet = BigInt(net);
+    const previous = Number(prev), nextTick = Number(next);
+    if (!Number.isSafeInteger(previous) || !Number.isSafeInteger(nextTick) ||
+      previous < MIN_TICK || nextTick > MAX_TICK ||
+      (tick === MIN_TICK ? previous !== tick : previous >= tick) ||
+      (tick === MAX_TICK ? nextTick !== tick : nextTick <= tick) ||
+      liquidityGross < (liquidityNet < 0n ? -liquidityNet : liquidityNet) ||
+      (liquidityGross === 0n && tick !== MIN_TICK && tick !== MAX_TICK)) {
+      throw new Error("kyberswap elastic crossing state is inconsistent");
+    }
+    ticks.set(tick, Object.freeze({tick, liquidityGross, liquidityNet, previous, next: nextTick}));
+  }
+  return ticks;
 }
 
 function result(

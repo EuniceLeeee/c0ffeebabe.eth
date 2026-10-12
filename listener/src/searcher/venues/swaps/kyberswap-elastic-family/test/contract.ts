@@ -21,11 +21,14 @@ import {
 } from "../manifest.js";
 import {
   quoteExactInputStep,
+  quoteExactInput,
+  KYSWAP_MAX_QUOTE_STEPS,
   spotQuoteExactInput,
   virtualReserves,
 } from "../math.js";
-import type { KyberSwapDirection, KyberSwapRoute } from "../types.js";
-import { getSqrtRatioAtTick } from "../../../../solver/v3-math.js";
+import type { KyberSwapDirection, KyberSwapRoute, KyberSwapPoolState, KyberSwapTickState } from "../types.js";
+import { crossingRequests, decodeCrossings } from "../state.js";
+import { getSqrtRatioAtTick, MIN_TICK, MAX_TICK } from "../../../../solver/v3-math.js";
 import {
   answerFor,
   BASE_L,
@@ -47,6 +50,9 @@ import {
   swapLogEvent,
   USDT,
   WETH,
+  crossingFixture,
+  CROSSING_BOUNDARIES,
+  result,
 } from "./fixtures.js";
 
 const routesFor = (d: ReturnType<typeof descriptor>) =>
@@ -90,22 +96,23 @@ function quote(
   const program = method.program!;
   const requested = program.buildRequests(input as never);
   const initialResults = requested.map(answerFor(options));
-  let dependentEvidence: unknown[] = [];
+  const dependentEvidence: unknown[] = [];
+  const rounds: (readonly AdapterRequest[])[] = [];
+  const seenIds = new Set(requested.map(request => request.id));
   if (program.buildDependentProgram !== undefined) {
-    const round = program.buildDependentProgram({
-      programInput: input as never,
-      initialResults,
-      completedRound: 0,
-      priorEvidence: [],
-    } as never);
-    if (round !== null && round !== undefined) {
-      dependentEvidence = [
-        round.decode(round.requests.map(answerFor(options))),
-      ];
-      assert.equal(program.buildDependentProgram({
+    for (let completedRound = 0; ; completedRound++) {
+      const round = program.buildDependentProgram({
         programInput: input as never, initialResults,
-        completedRound: 1, priorEvidence: dependentEvidence,
-      } as never), null, "the completed neighbour read must terminate");
+        completedRound, priorEvidence: dependentEvidence,
+      } as never);
+      if (round === null || round === undefined) break;
+      assert(completedRound < 4, "fixture must respect the unchanged central dependent-round budget");
+      for (const request of round.requests) {
+        assert(!seenIds.has(request.id), `repeated dependent request ${request.id}`);
+        seenIds.add(request.id);
+      }
+      rounds.push(round.requests);
+      dependentEvidence.push(round.decode(round.requests.map(answerFor(options))));
     }
   }
   const quoted = program.decode({
@@ -113,7 +120,7 @@ function quote(
     initialResults,
     dependentEvidence,
   } as never);
-  return { descriptor: d, route, input, requested, quoted };
+  return { descriptor: d, route, input, requested, dependentRequests: rounds, quoted };
 }
 
 test("manifest declares the factory-child Elastic swap family", () => {
@@ -356,10 +363,10 @@ test("exact quote is a function of the amount, not a point-price sample", () => 
   const large = quote(10n ** 14n).quoted.amountOut;
   assert.ok(small > 0n && large > small, `${small} -> ${large}`);
   assert.notEqual(small, large);
-  // Same state, same amount, opposite direction: the quote is directional.
+  // Compare valid amount scales for this WETH/USDT fixture in both directions.
   assert.notEqual(
     small,
-    quote(10n ** 12n, {}, "token1-in").quoted.amountOut,
+    quote(10n ** 6n, {}, "token1-in").quoted.amountOut,
   );
 });
 
@@ -381,18 +388,17 @@ test("exact quote for token1-in reads the initialized-tick neighbour round", () 
   assert.notEqual(up.quoted.amountOut, down.quoted.amountOut);
 });
 
-test("exact quote is refused, not extrapolated, when the input reaches the next initialized tick", () => {
-  // The price sits exactly on the next initialized tick, so the step target is
-  // not movable and nothing may be quoted for it.
-  const { quoted } = quote(10n ** 15n, {
-    sqrtP: getSqrtRatioAtTick(CURRENT_TICK),
-    nearestCurrentTick: CURRENT_TICK,
-    previousTick: CURRENT_TICK,
-    nextTick: CURRENT_TICK,
-  });
-  assert.equal(quoted.amountOut, 0n);
-  assert.equal(quoted.evidence.refusal, "price-limit-not-movable");
-  assert.equal(quoted.evidence.amountIn, 10n ** 15n);
+test("exact quote reaches and crosses an initialized boundary only with its tick evidence", () => {
+  for (const direction of ["token0-in", "token1-in"] as const) {
+    const { options } = crossingFixture(), expected = CROSSING_BOUNDARIES.first;
+    const { quoted, dependentRequests } = quote(expected.amountIn, options, direction);
+    assert.equal(quoted.amountOut, expected.amountOut);
+    assert.equal(quoted.evidence.kind, "kyberswap-elastic-exact-input");
+    assert.equal(quoted.evidence.deltaL, expected.deltaL);
+    assert.equal(quoted.evidence.refusal, null);
+    assert.deepEqual(quoted.evidence.crossedTicks, [direction === "token0-in" ? -10 : 10]);
+    assert.equal(dependentRequests.length, direction === "token0-in" ? 1 : 2);
+  }
 });
 
 test("exact quote fails closed on a pool with no active liquidity", () => {
@@ -629,12 +635,9 @@ test("buildFragment needs no approve and rejects incompatible exact evidence", (
     exactEvidence: quoted.evidence,
   } as never));
   // A refused quote can never become an execution fragment.
-  const refused = quote(10n ** 15n, {
-    sqrtP: getSqrtRatioAtTick(CURRENT_TICK),
-    nearestCurrentTick: CURRENT_TICK,
-    previousTick: CURRENT_TICK,
-    nextTick: CURRENT_TICK,
-  });
+  const refused = quote(1n); // WETH input below a representable USDT output.
+  assert.equal(refused.quoted.amountOut, 0n);
+  assert.equal(refused.quoted.evidence.refusal, "no-representable-output");
   assert.throws(() => plugin.execution.buildFragment({
     ...refused.input,
     quotedAmountOut: 1n,
@@ -796,4 +799,165 @@ test("fixture answers cover every declared request id of both rounds", () => {
   assert.ok(ids.includes("factory-get-pool"));
   assert.ok(ids.length >= 9, `expected several evidence rounds, saw ${ids.join(",")}`);
   assert.equal(PREVIOUS_TICK <= NEAREST_CURRENT_TICK, true);
+});
+
+for (const direction of ["token0-in", "token1-in"] as const) {
+  const isToken0 = direction === "token0-in", sign = isToken0 ? -1 : 1;
+  test(`cross-range ${direction}: first-step controls, exact boundary and two initialized crossings`, () => {
+    const { state, ticks, options } = crossingFixture(), expected = CROSSING_BOUNDARIES[direction];
+    for (const amountIn of [100_000_000n, CROSSING_BOUNDARIES.first.amountIn - 1n]) {
+      const old = quoteExactInputStep({ state, isToken0, amountIn });
+      const current = quoteExactInput({ state, isToken0, amountIn, ticks });
+      assert(old.ok && current.ok);
+      assert.equal(current.quote.amountOut, old.quote.amountOut);
+      assert.equal(current.quote.sqrtPAfter, old.quote.sqrtPAfter);
+      assert.equal(current.quote.deltaL, old.quote.deltaL);
+      assert.deepEqual(current.quote.crossedTicks, []);
+      assert.equal(current.quote.steps, 1);
+    }
+    const old = quoteExactInputStep({ state, isToken0, amountIn: expected.amountIn });
+    assert(!old.ok); assert.equal(old.refusal, "input-reaches-next-initialized-tick");
+    const current = quoteExactInput({ state, isToken0, amountIn: expected.amountIn, ticks });
+    assert(current.ok);
+    assert.equal(current.quote.amountIn, expected.amountIn);
+    assert.equal(current.quote.amountOut, expected.amountOut);
+    assert.equal(current.quote.deltaL, expected.deltaL);
+    assert.equal(current.quote.sqrtPAfter, getSqrtRatioAtTick(sign * 20));
+    assert.equal(current.quote.steps, 2);
+    assert.deepEqual(current.quote.crossedTicks, expected.crossedTicks);
+    const issued = quote(expected.amountIn, options, direction);
+    assert.equal(issued.quoted.amountOut, expected.amountOut);
+    assert.equal(issued.quoted.evidence.kind, "kyberswap-elastic-exact-input");
+    assert.equal(issued.quoted.evidence.deltaL, expected.deltaL);
+    assert.deepEqual(issued.quoted.evidence.crossedTicks, expected.crossedTicks);
+    assert.deepEqual(issued.dependentRequests.map(round => round.map(r => r.id)), [
+      ...(!isToken0 ? [["kyswap-initialized-ticks"]] : []),
+      ...expected.crossedTicks.map(tick => [`kyswap-tick:${tick}`, `kyswap-tick-neighbours:${tick}`]),
+    ]);
+  });
+
+  test(`cross-range ${direction}: continuation carries reinvest fees and both signed base changes`, () => {
+    const { state, ticks } = crossingFixture(), boundary = CROSSING_BOUNDARIES[direction];
+    // Verified Pool.swap adds deltaL after EVERY step and subtracts liquidityNet
+    // downward / adds it upward. The two net changes are +1e11 and -2e11.
+    const after: KyberSwapPoolState = { ...state,
+      sqrtP: getSqrtRatioAtTick(sign * 20), currentTick: isToken0 ? -21 : 20,
+      nearestCurrentTick: isToken0 ? -30 : 20, previousTick: isToken0 ? -40 : 10,
+      nextTick: isToken0 ? -20 : 30,
+      baseL: isToken0 ? 1_100_000_000_000n : 900_000_000_000n,
+      reinvestL: state.reinvestL + boundary.deltaL,
+    };
+    for (const tailAmount of [100_000_000n, 200_000_000n]) {
+      const tail = quoteExactInputStep({ state: after, isToken0, amountIn: tailAmount });
+      const whole = quoteExactInput({ state, isToken0, amountIn: boundary.amountIn + tailAmount, ticks });
+      assert(tail.ok && whole.ok);
+      assert.equal(whole.quote.amountOut, boundary.amountOut + tail.quote.amountOut);
+      assert.equal(whole.quote.sqrtPAfter, tail.quote.sqrtPAfter);
+      assert.equal(whole.quote.deltaL, boundary.deltaL + tail.quote.deltaL);
+      assert.equal(whole.quote.steps, 3);
+      assert.deepEqual(whole.quote.crossedTicks, boundary.crossedTicks);
+      const droppedFees = quoteExactInputStep({ state: { ...after, reinvestL: state.reinvestL }, isToken0, amountIn: tailAmount });
+      assert(droppedFees.ok);
+      assert.notEqual(whole.quote.sqrtPAfter, droppedFees.quote.sqrtPAfter, "accumulated fees must participate in the next step");
+    }
+  });
+
+  test(`cross-range ${direction}: zero-distance initial crossing updates signed liquidity before spending input`, () => {
+    for (const net of [100_000_000_000n, -100_000_000_000n]) {
+      const f = crossingFixture();
+      const state = { ...f.state, currentTick: isToken0 ? 0 : -1,
+        nearestCurrentTick: isToken0 ? 0 : -10, nextTick: isToken0 ? 10 : 0 };
+      f.ticks.set(0, { tick: 0, liquidityGross: 200_000_000_000n, liquidityNet: net, previous: -10, next: 10 });
+      const after = { ...f.state, baseL: state.baseL + (isToken0 ? -net : net), currentTick: isToken0 ? -1 : 0 };
+      const tail = quoteExactInputStep({ state: after, isToken0, amountIn: 100_000_000n });
+      const whole = quoteExactInput({ state, isToken0, amountIn: 100_000_000n, ticks: f.ticks });
+      assert(tail.ok && whole.ok);
+      assert.equal(whole.quote.amountOut, tail.quote.amountOut);
+      assert.equal(whole.quote.sqrtPAfter, tail.quote.sqrtPAfter);
+      assert.equal(whole.quote.deltaL, tail.quote.deltaL, "zero-distance crossing charges no step fee");
+      assert.deepEqual(whole.quote.crossedTicks, [0]); assert.equal(whole.quote.steps, 2);
+    }
+  });
+
+  test(`cross-range ${direction}: 480-tick virtual steps require no initialized tick rows`, () => {
+    const f = crossingFixture();
+    const state = { ...f.state, nearestCurrentTick: -10000, previousTick: -20000, nextTick: 10000 };
+    const noTicks = new Map<number, KyberSwapTickState>();
+    for (const amountIn of [30_000_000_000n, 60_000_000_000n]) {
+      const local = quoteExactInput({ state, isToken0, amountIn, ticks: noTicks });
+      assert(local.ok); assert(local.quote.steps >= 2); assert.deepEqual(local.quote.crossedTicks, []);
+      assert.equal(local.quote.amountIn, amountIn); assert(local.quote.amountOut > 0n);
+      const issued = quote(amountIn, { ...state, ticks: noTicks }, direction);
+      assert.equal(issued.quoted.amountOut, local.quote.amountOut);
+      assert.deepEqual(issued.dependentRequests.map(round => round.map(r => r.id)),
+        isToken0 ? [] : [["kyswap-initialized-ticks"]]);
+    }
+  });
+
+  test(`cross-range ${direction}: missing first/second tick never yields a partial successful fill`, () => {
+    const { state, ticks } = crossingFixture(), amountIn = CROSSING_BOUNDARIES[direction].amountIn;
+    for (const missingTick of [sign * 10, sign * 20]) {
+      const incomplete = new Map(ticks); incomplete.delete(missingTick);
+      const outcome = quoteExactInput({ state, isToken0, amountIn, ticks: incomplete });
+      assert(!outcome.ok); assert.equal(outcome.refusal, "crossing-state-unavailable");
+      assert.equal(outcome.missingTick, missingTick); assert(!Object.hasOwn(outcome, "quote"));
+    }
+    for (const change of [{ tick: sign * 30 }, isToken0 ? { previous: sign * 10 } : { next: sign * 10 }]) {
+      const malformed = new Map(ticks); malformed.set(sign * 10, { ...ticks.get(sign * 10)!, ...change });
+      const outcome = quoteExactInput({ state, isToken0, amountIn, ticks: malformed });
+      assert(!outcome.ok); assert.equal(outcome.refusal, "tick-list-inconsistent");
+    }
+    const limitState = { ...state, sqrtP: getSqrtRatioAtTick(isToken0 ? MIN_TICK + 1 : MAX_TICK - 1),
+      currentTick: isToken0 ? MIN_TICK + 1 : MAX_TICK - 1, nearestCurrentTick: isToken0 ? MIN_TICK : MAX_TICK - 1,
+      nextTick: isToken0 ? MIN_TICK + 2 : MAX_TICK };
+    const limited = quoteExactInput({ state: limitState, isToken0, amountIn: 1n << 200n, ticks: new Map() });
+    assert(!limited.ok); assert.equal(limited.refusal, "price-limit-partial-fill");
+    assert(!Object.hasOwn(limited, "quote"));
+  });
+}
+
+test("crossing evidence binds both ABI rows to the exact tick and source", () => {
+  const f = crossingFixture(), requests = crossingRequests(POOL, -10), reply = answerFor(f.options);
+  assert.deepEqual(requests.map(r => r.id), ["kyswap-tick:-10", "kyswap-tick-neighbours:-10"]);
+  const rows = requests.map(reply);
+  assert.deepEqual(decodeCrossings(rows, SOURCE).get(-10), f.ticks.get(-10));
+  assert.throws(() => decodeCrossings([rows[0]!], SOURCE));
+  assert.throws(() => decodeCrossings([...rows, rows[0]!], SOURCE));
+  for (const tick of [MIN_TICK - 1, MAX_TICK + 1, 0.5, NaN]) assert.throws(() => crossingRequests(POOL, tick));
+  for (const i of [0, 1]) {
+    for (const source of [{ ...SOURCE, number: SOURCE.number + 1 }, { ...SOURCE, hash: ethers.ZeroHash },
+      { ...SOURCE, generation: SOURCE.generation + 1 }]) {
+      const stale = [...rows]; stale[i] = { ...rows[i]!, source };
+      assert.throws(() => decodeCrossings(stale, SOURCE));
+    }
+    for (const bad of [result(rows[i]!.id, "0x"), result(rows[i]!.id, "0x", "reverted-as-declared")]) {
+      const broken = [...rows]; broken[i] = bad; assert.throws(() => decodeCrossings(broken, SOURCE));
+    }
+  }
+  for (const patch of [{ liquidityGross: 0n, liquidityNet: 0n }, { liquidityGross: 1n },
+    { previous: -10 }, { next: -10 }, { previous: MIN_TICK - 1 }, { next: MAX_TICK + 1 }]) {
+    const ticks = new Map(f.ticks); ticks.set(-10, { ...ticks.get(-10)!, ...patch });
+    assert.throws(() => decodeCrossings(requests.map(answerFor({ ...f.options, ticks })), SOURCE));
+  }
+});
+
+test("cross-range exhaustion/invalid amounts/liquidity never return a partial quote", () => {
+  const f = crossingFixture();
+  for (const amountIn of [0n, -1n, 1n << 255n]) {
+    const outcome = quoteExactInput({ state: f.state, isToken0: true, amountIn, ticks: f.ticks });
+    assert(!outcome.ok); assert.equal(outcome.refusal, "invalid-exact-input");
+  }
+  const ticks = new Map<number, KyberSwapTickState>();
+  for (let tick = 0; tick >= -KYSWAP_MAX_QUOTE_STEPS; tick--)
+    ticks.set(tick, { tick, liquidityGross: 1n, liquidityNet: 0n, previous: tick - 1, next: tick + 1 });
+  const exhausted = quoteExactInput({ state: { ...f.state, nearestCurrentTick: 0, baseL: 1_000_000n, reinvestL: 0n },
+    isToken0: true, amountIn: 1_000_000_000_000n, ticks });
+  assert(!exhausted.ok); assert.equal(exhausted.refusal, "quote-step-budget-exhausted");
+  assert(!Object.hasOwn(exhausted, "quote"));
+  for (const [baseL, net] of [[10n, 11n], [(1n << 128n) - 1n, -1n]]) {
+    const row = { tick: 0, liquidityGross: 100n, liquidityNet: net!, previous: -10, next: 10 };
+    const outcome = quoteExactInput({ state: { ...f.state, baseL: baseL!, reinvestL: 0n, nearestCurrentTick: 0 },
+      isToken0: true, amountIn: 100n, ticks: new Map([[0, row]]) });
+    assert(!outcome.ok); assert.equal(outcome.refusal, "liquidity-overflow");
+  }
 });

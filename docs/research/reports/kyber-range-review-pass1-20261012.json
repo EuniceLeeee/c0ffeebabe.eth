@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "review": "kyber-across-initialized-ticks-pass1",
+  "date": "2026-10-12",
+  "role": "independent_non_author",
+  "verdict": "no_confirmed_correctness_blockers_in_reviewed_scope",
+  "blockers": [],
+  "findings": [],
+  "source_root": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber-source",
+  "source_sha256": {
+    "abi.ts": "8011b7143f185a048a429a9787e8e5a81ea0ff2c6efce664629aad422cff9786",
+    "types.ts": "3afc7b1dba1c5145782f8746f9eaa66b171256b911ca6c52c0cf1e59fc0264d8",
+    "state.ts": "e9e8a780a1b8017b9f2cc19d5df4b5c1a6d36a703096ea9827d2b8c9f6ff6369",
+    "math.ts": "a7b3e3fa82af527da779cf93b2521b72953a3cec3e3d0f09e2f20a58137fd61a",
+    "exact.ts": "1de0a5d0cb83e1629874038e499bef6497b29e380d84d611ff65c57710b184c3",
+    "execution.ts": "42cc390efc2695e237d6fb16e307ccfec4f50ce4da6b2d7beb59700ee61d2612",
+    "test/historical-ready.ts": "ef3c3ed11818cfd91fa34e698b58d45476680b32610e2e83b204f54cbd64527c"
+  },
+  "source_stability": "All seven hashes matched initial and final reads during the completed review; not re-read when saving this artifact.",
+  "reference": {
+    "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber3-public-metadata.json",
+    "sha256": "7e4c1f1c59a7eb708f175747fa3ea56f45bda1ffcfc746ee3488eac6874f8c71",
+    "fields": ["body.source_code", "body.additional_sources"],
+    "compiler": "0.8.9+commit.e5eed63a",
+    "metadata_flags": {"is_verified": true, "is_fully_verified": false},
+    "source_sections": [
+      "contracts/Pool.sol:328-519",
+      "contracts/PoolTicksState.sol:78-147",
+      "contracts/libraries/SwapMath.sol:28-320",
+      "contracts/PoolStorage.sol:35-46",
+      "contracts/libraries/MathConstants.sol",
+      "contracts/libraries/ReinvestmentMath.sol"
+    ]
+  },
+  "ran_gate": {
+    "kind": "bounded_independent_offline_checks_not_official_acceptance_gate",
+    "artifact_provenance": "Checker programs ran inline/in memory. No checker script or output JSON was saved on disk. Artifact paths and hashes are therefore null; the actual tool-output chunk IDs below identify retained conversation execution evidence, not filesystem artifacts.",
+    "checks": [
+      {
+        "id": "math_integer_reference",
+        "tool": "exec_command",
+        "output_chunk_id": "1227a5",
+        "rc": 0,
+        "checker_path": null,
+        "checker_sha256": null,
+        "output_path": null,
+        "output_sha256": null,
+        "method": "In-memory TypeScript transpilation of pinned math/ABI; integer reference transcribed independently from saved Solidity. No EVM or compiler build.",
+        "runtime": {"node": "v26.0.0", "typescript": "5.9.3", "ethers": "6.16.0"},
+        "tick_math_dependency": {
+          "path": "/Users/eunice/.codex/worktrees/1511/MEV/listener/src/searcher/solver/v3-math.ts",
+          "sha256": null,
+          "limitation": "Loaded from local checkout; dependency SHA was not recorded. This is not an authenticated current-cloud import-closure test."
+        },
+        "output": {
+          "mathSha": "a7b3e3fa82af527da779cf93b2521b72953a3cec3e3d0f09e2f20a58137fd61a",
+          "count": 512,
+          "positive": 512,
+          "crossings": 1286,
+          "virtual": 170,
+          "edge": [
+            "zero-input boundary then signed liquidity",
+            "missing tick refuses",
+            "signed underflow refuses",
+            "min extreme partial refuses",
+            "max extreme partial refuses"
+          ]
+        },
+        "asserted": ["full amountIn", "amountOut", "sqrtPAfter", "cumulative deltaL", "ordered crossedTicks"],
+        "counter_note": "virtual counts quotes using a temporary target, not necessarily completed virtual-boundary crossings; crossings is the aggregate initialized-crossing count across cases."
+      },
+      {
+        "id": "reuse_ready_validation_block",
+        "tool": "exec_command",
+        "output_chunk_id": "6b35c1",
+        "rc": 0,
+        "checker_path": null,
+        "checker_sha256": null,
+        "output_path": null,
+        "output_sha256": null,
+        "method": "AST-selected actual reuse validation block with memory-only filesystem and checkpoint-store mocks; production updater was not executed.",
+        "output": {"checks": 10, "pass": true},
+        "cases": [
+          "valid completed same-N/hash single-family Ready; exclusive-copy flag and parent scope checked",
+          "in-progress rejected",
+          "missing Ready rejected",
+          "wrong N rejected",
+          "wrong hash rejected",
+          "multi-block range rejected",
+          "extra family rejected",
+          "wrong family rejected",
+          "sparse observation scope rejected",
+          "copied-byte drift rejected"
+        ],
+        "also_recorded": "Final hashes of all seven reviewed files."
+      }
+    ],
+    "retained_checker_failures": [
+      {
+        "tool": "node_repl",
+        "output_chunk_id": null,
+        "rc": null,
+        "is_error": true,
+        "error": "Code generation from strings disallowed for this context",
+        "classification": "checker setup limitation; arithmetic checks did not execute"
+      },
+      {
+        "tool": "exec_command",
+        "output_chunk_id": "95a5d5",
+        "rc": 1,
+        "error": "TypeError: Do not know how to serialize a BigInt",
+        "classification": "checker assertion-message serialization error; incomplete run, not a product failure"
+      },
+      {
+        "tool": "exec_command",
+        "output_chunk_id": "7fed04",
+        "rc": 1,
+        "error": "assert(selected?.includes('COPYFILE_EXCL'))",
+        "classification": "checker AST selection chose the later non-block if; validation checks did not execute"
+      }
+    ]
+  },
+  "static_review": [
+    {"file": "math.ts", "lines": "26-110,258-351", "assessment": "No concrete discrepancy found in full-input loop, per-step rounding/reinvestment, zero-distance crossing, signed liquidity, 480-tick temporary targets or extreme-limit partial refusal."},
+    {"file": "state.ts", "lines": "157-219", "assessment": "Tick-specific requests, source checks, ABI signed decoding, linked-list and missing/failed-result rejection inspected."},
+    {"file": "exact.ts", "lines": "62-141,161-187", "assessment": "Missing crossings use existing central dependent requests; no private RPC, quote fallback or central round-limit override found. Cache projection binds pool, route, executor and binding."},
+    {"file": "execution.ts", "lines": "62-109,167-201", "assessment": "Signed-input guard, callback debt/payment binding and execution-evidence checks retained; no new runtime call to off-chain Exact found."},
+    {"file": "test/historical-ready.ts", "lines": "72-109", "assessment": "Same-N/hash completed single-family input, exclusive byte-identical copy and production familyUpdateScope delegation inspected; no custom identity, Graph or quote construction found."}
+  ],
+  "main_reported_not_independently_verified_here": {
+    "report_path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber3-dual-attempt04.json",
+    "report_sha256": null,
+    "report_read": false,
+    "reported_result": "pass-with-spliced-reference",
+    "reported_counts": {"groups": 5, "executions": 20, "missing_input_negative_controls": 10},
+    "reported_cloud_checks": {"build_live_rc": 0, "family_and_central_exact": "61/61", "shared_dual": "80/80", "strict_central": "174/174", "exact_cache": "PASS"},
+    "reported_ready": "Copied same-N Ready revalidated: 1 instance, 2 edges, 2 raw; natural effective remains 0/missing valuation.",
+    "reported_generator": "9 capability rows changed, all Kyber; peer-family rows byte-equivalent; no default-enable change."
+  },
+  "limitations": [
+    "This review is not full Family/protocol acceptance, merge authorization or performance acceptance.",
+    "No network/RPC, EVM, production build, historical runner, cloud test or remote process operation was executed by this reviewer.",
+    "Arithmetic checking used JS bigint and synthetic states, not compiled Solidity/EVM; it is not exhaustive proof of every Solidity overflow or execution behavior.",
+    "Source/cache/central-limit observations were static; this reviewer did not execute actual central runtime or selective Ready rebuild. Existing local central files were not authenticated as current cloud sources.",
+    "Ready guard checks used in-memory mocks, not the real checkpoint loader/updater or filesystem-concurrency tests.",
+    "No saved checker file/output hashes exist; tool-output chunk IDs must not be represented as hash-bound filesystem receipts.",
+    "Attempt04 counters/output and main-reported cloud test results were not independently read or verified in this pass.",
+    "No latency, representative-load or natural-effective-success claim is made."
+  ],
+  "closeout": {
+    "reviewed_files_modified": false,
+    "tests_modified": false,
+    "previous_reports_modified": false,
+    "pending_exec_or_ssh_handles": [],
+    "save_action": "Only this JSON artifact was newly authorized for writing; no checks rerun during save."
+  }
+}

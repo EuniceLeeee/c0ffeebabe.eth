@@ -12,7 +12,7 @@ import {
   lower,
 } from "./codec.js";
 import {
-  quoteExactInputStep,
+  quoteExactInput,
   stepTargetTick,
 } from "./math.js";
 import {
@@ -20,6 +20,8 @@ import {
   decodePoolState,
   neighbourRequests,
   poolStateRequests,
+  crossingRequests,
+  decodeCrossings,
 } from "./state.js";
 import { KYSWAP_SWAP_ACTION } from "./manifest.js";
 import type {
@@ -28,7 +30,7 @@ import type {
   KyberSwapRoute,
 } from "./types.js";
 
-const EXACT_QUOTE_ID = "kyberswap-elastic-single-range";
+const EXACT_QUOTE_ID = "kyberswap-elastic-exact-input";
 
 type QuoteInput = {
   readonly descriptor: KyberSwapDescriptor;
@@ -38,16 +40,10 @@ type QuoteInput = {
 };
 
 /**
- * Specified-amount exact-input quote for the pool's FIRST swap step.
- *
- * The state read is the pool's own `getPoolState()` / `getLiquidityState()` /
- * `swapFeeUnits()` (plus the initialized-tick neighbours when the price moves
- * up), and the arithmetic is the verified `SwapMath` step the pool itself runs.
- * When the caller's amount would reach the next initialized tick the step
- * crosses a range whose post-crossing liquidity is not in this round's
- * evidence, so the quote is refused with `amountOut = 0` — never extrapolated,
- * never replaced by a point-price sample. The caller's amount is preserved
- * exactly; runtime execution takes the previous leg's ACTUAL received amount.
+ * Specified-amount exact-input quote across initialized ticks. Each missing
+ * crossing declares a source-bound round through the existing central issuer.
+ * Smaller amounts reuse the same state reads; larger amounts request only the
+ * additional crossing evidence they need. No private RPC or quote fallback.
  */
 const program: ExactRequestProgram<
   KyberSwapDescriptor,
@@ -64,22 +60,22 @@ const program: ExactRequestProgram<
     return poolStateRequests(input.descriptor.pool);
   },
   buildDependentProgram(input) {
-    // Central invokes this again after decoding every dependent round. This
-    // model has exactly one neighbour read, not an unbounded tick walk.
-    if (input.completedRound > 0) return null;
     if (input.programInput.amountIn <= 0n) return null;
-    // Down-tick swaps take their step target from `nearestCurrentTick`, which
-    // the first round already returned; up-tick swaps need that tick's `next`.
-    if (input.programInput.route.direction === "token0-in") return null;
-    const probe = decodePoolState(input.initialResults, { neighbours: false });
+    assertKyberSwapInvocation(input.programInput.descriptor, input.programInput.route);
+    const results = collectRequestProgramResults(input.initialResults, input.priorEvidence);
+    const neighbours = results.some(result => result.id === KYSWAP_STATE_ID.neighbours);
+    const probe = decodePoolState(results, {neighbours});
+    assertSource(probe.source, input.programInput.source);
     if (probe.locked) return null;
-    return bindRequestResultRound(
-      { transports: ["eth-call"] },
-      neighbourRequests(
-        input.programInput.descriptor.pool,
-        probe.nearestCurrentTick,
-      ),
-    );
+    if (input.programInput.route.direction === "token1-in" && !neighbours) {
+      return bindRequestResultRound({transports: ["eth-call"]},
+        neighbourRequests(input.programInput.descriptor.pool, probe.nearestCurrentTick));
+    }
+    const outcome = quoteExactInput({state: probe, isToken0: input.programInput.route.isToken0,
+      amountIn: input.programInput.amountIn, ticks: decodeCrossings(results, probe.source)});
+    if (outcome.ok || outcome.missingTick === undefined) return null;
+    return bindRequestResultRound({transports: ["eth-call"]},
+      crossingRequests(input.programInput.descriptor.pool, outcome.missingTick));
   },
   decode(input) {
     const { programInput, initialResults } = input;
@@ -106,10 +102,11 @@ const program: ExactRequestProgram<
     const state = decodePoolState(results, { neighbours });
     assertSource(state.source, programInput.source);
     const liquidity = state.baseL + state.reinvestL;
-    const outcome = quoteExactInputStep({
+    const outcome = quoteExactInput({
       state,
       isToken0: programInput.route.isToken0,
       amountIn: programInput.amountIn,
+      ticks: decodeCrossings(results, state.source),
     });
     if (!outcome.ok) {
       return Object.freeze({
@@ -122,6 +119,7 @@ const program: ExactRequestProgram<
           targetTick: stepTargetTick(state, programInput.route.isToken0),
           refusal: outcome.refusal,
           source: state.source,
+          sqrtPBefore: state.sqrtP,
         }),
       });
     }
@@ -135,6 +133,9 @@ const program: ExactRequestProgram<
         targetTick: outcome.quote.targetTick,
         refusal: null,
         source: state.source,
+        sqrtPBefore: state.sqrtP,
+        steps: outcome.quote.steps,
+        crossedTicks: outcome.quote.crossedTicks,
       }),
     });
   },
@@ -163,8 +164,8 @@ export const kyberswapElasticExact = {
       stateOnlyReads: true as const,
       trialState: {
         unsupportedReason:
-          "KyberSwap Elastic step state (baseL + reinvestL with a step-target " +
-          "initialized tick) is not registered as a shared trial-state model",
+          "KyberSwap Elastic linked-tick/reinvestment state is not registered " +
+          "as a shared trial-state model",
       },
       program,
     }),
@@ -180,7 +181,7 @@ export const kyberswapElasticExact = {
     direction: route.direction,
     isToken0: route.isToken0,
     feeUnits: descriptor.feeUnits,
-    quoteMode: "elastic-single-range",
+    quoteMode: "elastic-exact-input",
     bindingFingerprint: route.bindingRef.fingerprint,
     executor: lower(executor),
   }),
@@ -198,12 +199,15 @@ function evidenceFor(
     readonly liquidity: bigint;
     readonly deltaL: bigint;
     readonly targetTick: number | null;
+    readonly sqrtPBefore?: bigint;
+    readonly steps?: number;
+    readonly crossedTicks?: readonly number[];
     readonly refusal: string | null;
     readonly source?: import("../../adapter-request-program.js").CanonicalSource;
   },
 ): KyberSwapExactEvidence {
   return Object.freeze({
-    kind: "kyberswap-elastic-single-range",
+    kind: "kyberswap-elastic-exact-input",
     source: Object.freeze({ ...(quote.source ?? input.source) }),
     pool: input.descriptor.pool,
     tokenIn: input.route.tokenIn,
@@ -213,11 +217,13 @@ function evidenceFor(
     feeUnits: input.descriptor.feeUnits,
     amountIn: input.amountIn,
     amountOut: quote.amountOut,
-    sqrtPBefore: 0n,
+    sqrtPBefore: quote.sqrtPBefore ?? 0n,
     sqrtPAfter: quote.sqrtPAfter,
     liquidity: quote.liquidity,
     deltaL: quote.deltaL,
     targetTick: quote.targetTick,
+    steps: quote.steps ?? 0,
+    crossedTicks: quote.crossedTicks ?? Object.freeze([]),
     refusal: quote.refusal,
     bindingFingerprint: input.route.bindingRef.fingerprint,
   });

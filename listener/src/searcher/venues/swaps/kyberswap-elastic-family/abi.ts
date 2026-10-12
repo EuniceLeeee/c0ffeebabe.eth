@@ -15,6 +15,7 @@ export const KYSWAP_POOL_INTERFACE = new ethers.Interface([
   "function getPoolState() view returns (uint160 sqrtP, int24 currentTick, int24 nearestCurrentTick, bool locked)",
   "function getLiquidityState() view returns (uint128 baseL, uint128 reinvestL, uint128 reinvestLLast)",
   "function initializedTicks(int24) view returns (int24 previous, int24 next)",
+  "function ticks(int24) view returns (uint128 liquidityGross, int128 liquidityNet, uint256 feeGrowthOutside, uint128 secondsPerLiquidityOutside)",
   "function swap(address recipient, int256 swapQty, bool isToken0, uint160 limitSqrtP, bytes data) returns (int256 deltaQty0, int256 deltaQty1)",
   "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtP, uint128 liquidity, int24 tick)",
   "event Mint(address indexed sender, address indexed owner, int24 indexed tickLower, int24 indexed tickUpper, uint128 liquidity, uint256 amount0, uint256 amount1)",

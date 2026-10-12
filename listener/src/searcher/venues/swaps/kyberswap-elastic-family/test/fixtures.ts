@@ -8,7 +8,8 @@ import {
 import { plugin } from
   "../../../production-families/kyberswap-elastic.production.js";
 import { KYSWAP_FACTORY_INTERFACE, KYSWAP_POOL_INTERFACE } from "../abi.js";
-import type { KyberSwapCandidate, KyberSwapIdentity } from "../types.js";
+import type { KyberSwapCandidate, KyberSwapIdentity, KyberSwapPoolState, KyberSwapTickState } from "../types.js";
+import { MAX_TICK, MIN_TICK } from "../../../../solver/v3-math.js";
 
 /**
  * Pinned-block source used by every synthetic fixture answer. The block number
@@ -89,6 +90,7 @@ export interface AnswerOptions {
   readonly locked?: boolean;
   readonly previousTick?: number;
   readonly nextTick?: number;
+  readonly ticks?: ReadonlyMap<number, KyberSwapTickState>;
 }
 
 export function answerFor(
@@ -147,6 +149,15 @@ export function answerFor(
     ),
   };
   return (request: AdapterRequest): AdapterRequestResult => {
+    const crossing = /^kyswap-tick(-neighbours)?:(-?\d+)$/.exec(request.id);
+    if (crossing) {
+      const tick = Number(crossing[2]), row = answered.ticks?.get(tick);
+      assert(row, `missing synthetic initialized tick ${tick}; never invent a row for a virtual boundary`);
+      assert.equal(row.tick, tick);
+      return result(request.id, crossing[1]
+        ? KYSWAP_POOL_INTERFACE.encodeFunctionResult("initializedTicks", [row.previous, row.next])
+        : KYSWAP_POOL_INTERFACE.encodeFunctionResult("ticks", [row.liquidityGross, row.liquidityNet, 0n, 0n]));
+    }
     if (request.id === "factory-get-pool") {
       return answered.reverseReverts
         ? result("factory-get-pool", "0x", "reverted-as-declared")
@@ -164,6 +175,37 @@ export function answerFor(
     return result(request.id, values[request.id]!);
   };
 }
+
+/** Deliberately synthetic, symmetric price with independently addressable ticks.
+ * Signed base changes alternate at the first two crossings; reinvestL is nonzero.
+ * This is not a captured Kyber3 state or historical execution receipt. */
+export function crossingFixture() {
+  const state: KyberSwapPoolState = {
+    source: SOURCE, sqrtP: 1n << 96n, currentTick: 0, nearestCurrentTick: -10,
+    previousTick: -20, nextTick: 10, locked: false, feeUnits: 300n,
+    baseL: 1_000_000_000_000n, reinvestL: 10_000_000_000n,
+  };
+  const indices = [-10000, -60, -50, -40, -30, -20, -10, 10, 20, 30, 40, 50, 60, 10000];
+  const ticks = new Map<number, KyberSwapTickState>(indices.map((tick, i) => [tick, {
+    tick, previous: indices[i - 1] ?? MIN_TICK, next: indices[i + 1] ?? MAX_TICK,
+    liquidityGross: 300_000_000_000n,
+    liquidityNet: Math.abs(tick) === 10 ? 100_000_000_000n : Math.abs(tick) === 20 ? -200_000_000_000n : 0n,
+  }]));
+  const options: AnswerOptions = { ...state, ticks };
+  return { state, ticks, options };
+}
+
+// Fixed arithmetic controls from verified Pool.sol / SwapMath.sol in
+// kyber3-public-metadata.json (solc 0.8.9), not quoteExactInput-generated oracles.
+// At sqrtP=Q96, L=1.01e12, fee=300, the first +/-10 step consumes 505860179,
+// pays 504090125 and adds 758789 reinvestL. The signed first crossing changes
+// baseL to 0.9e12 downward / 1.1e12 upward. The second step then uses that base
+// PLUS the first step's reinvestL, with each mulDiv rounded separately.
+export const CROSSING_BOUNDARIES = {
+  first: { amountIn: 505860179n, amountOut: 504090125n, deltaL: 758789n },
+  "token0-in": { amountIn: 961863505n, amountOut: 958043694n, deltaL: 1442450n, crossedTicks: [-10, -20] },
+  "token1-in": { amountIn: 1062083933n, amountOut: 1057813624n, deltaL: 1592706n, crossedTicks: [10, 20] },
+} as const;
 
 /** Walks the identity variant to a verified identity using fixture answers. */
 export function identityWith(

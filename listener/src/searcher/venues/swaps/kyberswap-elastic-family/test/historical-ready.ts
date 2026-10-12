@@ -2,7 +2,8 @@
 // production discovery / strict / Graph / prices only. No pool seeds, no forced
 // admission, no execution submission, no opportunity search.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { ethers } from "ethers";
 import { UniverseRebuildCheckpointStore } from
@@ -20,10 +21,10 @@ async function main() {
   const names = ["--tx", "--rpc-file", "--out", "--executor", "--owner", "--revm-bin"];
   for (let i = 2; i < process.argv.length; i += 2) {
     const key = process.argv[i]!, value = process.argv[i + 1];
-    assert(names.includes(key) && !args.has(key) && value && !value.startsWith("--"));
+    assert((names.includes(key) || key === "--reuse-ready") && !args.has(key) && value && !value.startsWith("--"));
     args.set(key, value);
   }
-  assert.equal(args.size, names.length);
+  assert(names.every(name => args.has(name)));
   const tx = args.get("--tx")!, out = resolve(args.get("--out")!);
   assert(ethers.isHexString(tx, 32));
   assert(!existsSync(out));
@@ -63,17 +64,39 @@ async function main() {
     save("receipt.json", receipt);
     save("header.json", header);
     const checkpoint = resolve(out, "ready.json");
+    // Revalidate a byte-for-byte copy through the production scoped updater.
+    // Never manufacture admission/hash fields or mutate the original Ready.
+    const reusePath = args.has("--reuse-ready") ? resolve(args.get("--reuse-ready")!) : null;
+    let familyUpdateScope;
+    let reuseBytes: Buffer | null = null;
+    if (reusePath) {
+      reuseBytes = readFileSync(reusePath);
+      const prior = await new UniverseRebuildCheckpointStore({ path: reusePath }).load();
+      assert(prior?.readyGeneration && prior.inProgressRun === null);
+      assert.equal(prior.readyGeneration.cutoff.number, block);
+      assert.equal(prior.readyGeneration.cutoff.hash, header.hash);
+      assert.deepEqual(prior.readyGeneration.universeRange, { fromBlock: block, toBlock: block });
+      assert.deepEqual(Object.keys(prior.readyGeneration.familyPartitions ?? {}), [FAMILY_ID]);
+      assert.equal(prior.readyGeneration.observationScope, undefined);
+      copyFileSync(reusePath, checkpoint, constants.COPYFILE_EXCL);
+      assert(readFileSync(checkpoint).equals(reuseBytes));
+      familyUpdateScope = { parentCheckpointFingerprint: prior.checkpointFingerprint, familyIds: [FAMILY_ID] };
+      save("reused-ready.json", { path: reusePath,
+        sha256: createHash("sha256").update(reuseBytes).digest("hex"), ...familyUpdateScope });
+    }
     stage = "production-single-block-ready";
     const ready = await rebuildUniverse({
       ...wiring,
       store: new UniverseRebuildCheckpointStore({ path: checkpoint }),
       runId: `kyberswap-elastic-single-${block}`,
       observationRange: { fromBlock: block, toBlock: block },
+      ...(familyUpdateScope ? { familyUpdateScope } : {}),
       attestationConcurrency: 4,
       log: (message) => console.log(message),
     });
     assert.equal(ready.cutoff.number, block);
     assert.equal(ready.cutoff.hash, header.hash);
+    if (reusePath) assert(readFileSync(reusePath).equals(reuseBytes!), "original Ready changed");
     save("ready-summary.json", {
       family: FAMILY_ID, tx, block, blockHash: header.hash, graphHash: ready.graphHash,
       instances: ready.activeInstanceKeys, attestationConcurrency: 4, broadcast: false,
