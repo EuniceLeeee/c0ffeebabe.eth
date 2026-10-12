@@ -137,6 +137,16 @@ test("Yield Basis dual execution is archive-RPC acceptance, not zero-CU or repre
     assert.equal(selected[0]?.capabilities.includes(unsupported), false);
 });
 
+test("Kyber natural single-block Ready has its own archive-RPC entry, not an unrelated family or fixture", () => {
+  const selected = selectTools(discoverToolIndex(repoRoot), ["kyber", "historical", "ready"]);
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0]?.id, "listener:searcher:kyberswap-elastic-historical-ready");
+  assert.equal(selected[0]?.cost, "archive-rpc");
+  for (const supported of ["strict", "ready", "graph"]) assert(selected[0]?.capabilities.includes(supported));
+  for (const unsupported of ["dual", "execution", "live-window", "stage-timing", "benchmark"])
+    assert.equal(selected[0]?.capabilities.includes(unsupported), false);
+});
+
 test("InfiniFi historical cache reads declare archive RPC and only quote-cache scope", () => {
   const selected = selectTools(discoverToolIndex(repoRoot), ["infinifi", "historical", "cache"]);
   assert.equal(selected[0]?.id, "listener:searcher:infinifi-historical-cache");

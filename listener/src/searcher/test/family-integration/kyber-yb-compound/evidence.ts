@@ -50,6 +50,30 @@ export const SAMPLES = {
   kyber: { family: "kyberswap-elastic", number: 25953136,
     tx: "0x023fd22564532537a14977836049e12e8df706c4872020a9302fdfbb383230d5",
     instances: ["0xf138462c76568cdfd77c6eb831e973d6963f2006"] },
+  kyber2: { family: "kyberswap-elastic", number: 26030898,
+    tx: "0x10b81a77dc9949d9ab1581a341d539de2ab0fbeae827b2a87d9ea6033c9b7549",
+    instances: ["0x952ffc4c47d66b454a8181f5c68b6248e18b66ec"] },
+  kyber3: { family: "kyberswap-elastic", number: 26005915,
+    tx: "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c",
+    instances: ["0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc"] },
+  kyber4: { family: "kyberswap-elastic", number: 25944594,
+    tx: "0x0cee3de057693e9f0a5d5a560b75a465766828e42661f7bea4ae64a432f97ae5",
+    instances: ["0x7d697d789ee19bc376474e0167bade9535a28cf4"] },
+  kyber5: { family: "kyberswap-elastic", number: 26056774,
+    tx: "0x9ba449c162417df21a12982f6762aa2ff7c52bbb18af4bf45c513a6d38072f1f",
+    instances: ["0xc5d2fcd426a648b2cabf14aabafc9a87801d4b40"] },
+  kyber6: { family: "kyberswap-elastic", number: 26143115,
+    tx: "0xbedbb4ec997899d15e3895e5ce698bc22ad2064d213a339d5a6902ee713c8363",
+    instances: ["0x81df0049443f5d037f92518fbb509e0ee50333ce"] },
+  kyber7: { family: "kyberswap-elastic", number: 26043137,
+    tx: "0x32d2b7740192b1235a0a12975f04cdbb283820ae0f2b967e653787d75cd5d6e8",
+    instances: ["0x0d6154b875df5cc0a1cbb315065b6d2fdb364e8d"] },
+  kyber8: { family: "kyberswap-elastic", number: 26013881,
+    tx: "0x38fff90705c91affd21f8fbca1d0e5861eccdc166a5547400c55402e47293769",
+    instances: ["0xaed94908236484f69ad4f748bfb856b378be21e8"] },
+  kyber9: { family: "kyberswap-elastic", number: 26037069,
+    tx: "0xc30dc9101049767e50f2f56fe6031e8b341d47196a109021cad3d383a3e9ef82",
+    instances: ["0xfe4c6a8b22ee09592c01f801b791af0042ee69c0"] },
   yb: { family: "protocol:yieldbasis-lt", number: 26003536,
     tx: "0x022a9ff85219675bcf0a0a2b17c76ac72b98d5e2c4177bc104edff56e706ee77",
     instances: ["0x2b9c9f3bdceb5d8e36a4704f08a78fca53343cea"] },
@@ -117,6 +141,7 @@ export function isLocalBalanceProbeRevert(error: unknown): boolean {
 }
 
 export const ERC20 = new ethers.Interface(["function balanceOf(address) view returns(uint256)",
+  "function transfer(address,uint256) returns(bool)",
   "function totalSupply() view returns(uint256)", "event Transfer(address indexed from,address indexed to,uint256 value)"]);
 
 export function options(argv: string[]) {
@@ -266,8 +291,9 @@ export function originalLeg(key: SampleKey, instance: string, descriptor: any, r
   if (key === "xwin-mint" || key === "xwin-redeem")
     return originalXwinLeg(instance, descriptor, receipt, trace, key === "xwin-mint" ? "mint" : "redeem");
   if (SAMPLES[key].family === "custom-swap:ekubo-router-v1") return originalEkuboLeg(instance, descriptor, receipt, trace);
-  const isSwap = key === "kyber" || SAMPLES[key].family === "swap:algebra-integral";
-  const abi = key === "kyber" ? KYBER : isSwap ? ALGEBRA : key === "yb" ? LT : key === "frax" ? CUSTODIAN : CT;
+  const isKyber = SAMPLES[key].family === "kyberswap-elastic";
+  const isSwap = isKyber || SAMPLES[key].family === "swap:algebra-integral";
+  const abi = isKyber ? KYBER : isSwap ? ALGEBRA : key === "yb" ? LT : key === "frax" ? CUSTODIAN : CT;
   const event = isSwap ? "Swap" : key === "yb" || key === "frax" ? "Withdraw" : "Redeem";
   const logs = receipt.logs.filter((l: any) => same(l.address, instance) && same(l.topics?.[0] ?? "", abi.getEvent(event)!.topicHash));
   assert.equal(logs.length, 1, "ambiguous original event count");
@@ -282,11 +308,22 @@ export function originalLeg(key: SampleKey, instance: string, descriptor: any, r
     assert(zeroIn || (a.amount1 > 0n && a.amount0 < 0n), "not a settled one-input swap");
     tokenIn = zeroIn ? descriptor.token0 : descriptor.token1; tokenOut = zeroIn ? descriptor.token1 : descriptor.token0;
     amountIn = BigInt(zeroIn ? a.amount0 : a.amount1); amountOut = -BigInt(zeroIn ? a.amount1 : a.amount0);
-    const required = key === "kyber" ? data.swapQty : data.amountRequired;
-    const direction = key === "kyber" ? data.isToken0 : data.zeroToOne;
+    const required = isKyber ? data.swapQty : data.amountRequired;
+    const direction = isKyber ? data.isToken0 : data.zeroToOne;
     assert(required > 0n && required === amountIn && direction === zeroIn, "sample is not full exact-input swap");
     caller = c.from; recipient = data.recipient;
     assert(same(a.sender, caller) && same(a.recipient, recipient)); originalInterface = "swap/exact-input";
+    // A same-value flashloan/sibling payment is not this swap's output. Bind the
+    // pool payer to a successful transfer within the observed swap subtree.
+    const payments = successfulCalls(c, tokenOut, ERC20.getFunction("transfer")!.selector)
+      .filter(p => same(p.from ?? "", instance)).filter(p => {
+        const [to, value] = ERC20.decodeFunctionData("transfer", p.input);
+        return same(to, recipient) && value === amountOut;
+      });
+    assert.equal(payments.length, 1, "swap output transfer call is missing/ambiguous");
+    const returned = payments[0].output ?? "0x";
+    assert(returned === "0x" || (ethers.isHexString(returned, 32) && BigInt(returned) === 1n),
+      "swap output transfer returned false/malformed data");
     comparison = "same interface at N-end; original pre-call state NOT restored";
   } else if (key === "yb") {
     const selector = LT.getFunction("withdraw(uint256,uint256)")!.selector;
@@ -322,7 +359,8 @@ export function originalLeg(key: SampleKey, instance: string, descriptor: any, r
   assert(amountIn > 0n && amountOut > 0n);
   // Independent receipt transfer to the observed recipient, not whole-TX net profit.
   const received = receipt.logs.filter((l: any) => same(l.address, tokenOut) && l.topics?.[0] === ERC20.getEvent("Transfer")!.topicHash)
-    .map((l: any) => ERC20.parseLog(l)!.args).filter((t: any) => same(t.to, recipient) && t.value === amountOut);
+    .map((l: any) => ERC20.parseLog(l)!.args).filter((t: any) => same(t.to, recipient) && t.value === amountOut
+      && (!isSwap || same(t.from, instance)));
   assert.equal(received.length, 1, "original output receipt is missing/ambiguous");
   return { tokenIn: tokenIn.toLowerCase(), tokenOut: tokenOut.toLowerCase(), amountIn, amountOut,
     caller: caller.toLowerCase(), recipient: recipient.toLowerCase(), originalInterface, comparison, logIndex: logs[0].logIndex };

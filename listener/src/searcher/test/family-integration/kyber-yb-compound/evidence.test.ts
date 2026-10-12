@@ -35,6 +35,37 @@ test("executor upgrade is explicit, old-code-pinned, source-trusted and not the 
 const event = (abi: ethers.Interface, name: string, args: unknown[], address: string) =>
   ({ address, ...abi.encodeEventLog(abi.getEvent(name)!, args), logIndex: "0x1" });
 const transfer = (instance: string, value: bigint) => event(ERC20, "Transfer", [instance, actor, value], asset);
+const TRANSFER = new ethers.Interface(["function transfer(address,uint256) returns(bool)"]);
+const swapPayment = (instance: string, token: string) => ({ type: "CALL", from: instance, to: token,
+  input: TRANSFER.encodeFunctionData("transfer", [actor, 19n]), output: word(1n) });
+
+function assertSwapPaymentAttribution(key: Parameters<typeof originalLeg>[0], instance: string,
+  descriptor: any, receipt: any, trace: any, token: string) {
+  const payment = trace.calls[0];
+  const foreign = event(ERC20, "Transfer", [token0, actor, 19n], token);
+  // Same-value flashloan funding is independent of the pool's output receipt.
+  assert.equal(originalLeg(key, instance, descriptor, { logs: [foreign, ...receipt.logs] }, trace).amountOut, 19n);
+  assert.throws(() => originalLeg(key, instance, descriptor, { logs: [receipt.logs[0], foreign] }, trace));
+  assert.throws(() => originalLeg(key, instance, descriptor, { logs: [...receipt.logs, receipt.logs[1]] }, trace));
+  assert.throws(() => originalLeg(key, instance, descriptor, receipt, { ...trace, calls: [] }));
+  assert.throws(() => originalLeg(key, instance, descriptor, receipt,
+    { calls: [{ ...trace, calls: [] }, payment] })); // sibling is not this swap's payment
+  assert.throws(() => originalLeg(key, instance, descriptor, receipt,
+    { ...trace, calls: [payment, payment] }));
+  for (const calls of [
+    [{ ...payment, from: actor }], [{ ...payment, error: "reverted" }],
+    [{ error: "reverted", calls: [payment] }], [{ revertReason: "reverted", calls: [payment] }],
+    [{ ...payment, input: TRANSFER.encodeFunctionData("transfer", [actor, 18n]) }],
+    [{ ...payment, input: TRANSFER.encodeFunctionData("transfer", [token0, 19n]) }],
+    [{ ...payment, to: instance }], [{ ...payment, type: "STATICCALL" }],
+  ]) assert.throws(() => originalLeg(key, instance, descriptor, receipt, { ...trace, calls }));
+  for (const output of [word(0n), word(2n), "0x01", "malformed", word(1n) + "00"])
+    assert.throws(() => originalLeg(key, instance, descriptor, receipt,
+      { ...trace, calls: [{ ...payment, output }] }));
+  // USDT can return no bytes on a successful transfer; receipt remains mandatory.
+  for (const output of ["0x", undefined]) assert.equal(originalLeg(key, instance, descriptor, receipt,
+    { ...trace, calls: [{ ...payment, output }] }).amountOut, 19n);
+}
 
 test("no-hook native sample is distinct from Sat1 and uses the bound V4 observer", () => {
   const sample = SAMPLES["v4-native-nohook"];
@@ -212,17 +243,35 @@ test("receipt anchors reject another transaction, block, failed receipt or remov
   assert.throws(() => assertReceipt({ ...r, logs: [{ removed: true }] }, hash, header));
 });
 
-test("Kyber observed signed amounts select only the real full exact-input direction", () => {
-  const instance = SAMPLES.kyber.instances[0], descriptor = { token0, token1: asset };
-  const log = event(KYBER, "Swap", [actor, actor, 17n, -19n, 2n ** 96n, 100n, 0], instance);
-  const receipt = { logs: [log, transfer(instance, 19n)] };
-  const trace = { type: "CALL", from: actor, to: instance,
-    input: KYBER.encodeFunctionData("swap", [actor, 17n, true, 1n, "0x"]), output: KYBER.encodeFunctionResult("swap", [17n, -19n]) };
-  const leg = originalLeg("kyber", instance, descriptor, receipt, trace);
-  assert.equal(leg.amountIn, 17n); assert.equal(leg.tokenIn, token0);
-  assert.throws(() => originalLeg("kyber", instance, descriptor, receipt, { ...trace, input: KYBER.encodeFunctionData("swap", [actor, -19n, false, 1n, "0x"]) }));
-  assert.throws(() => originalLeg("kyber", instance, descriptor, receipt, { error: "reverted", calls: [trace] }));
-});
+for (const key of ["kyber", "kyber2", "kyber3", "kyber4", "kyber5", "kyber6", "kyber7", "kyber8", "kyber9"] as const) {
+  test(`${key}: its own ABI binds signed amounts, both directions and settled receipts`, () => {
+    const instance = SAMPLES[key].instances[0], descriptor = { token0, token1: asset };
+    assert.equal(options(["--family", key, "--ready", "ready.json", "--prices", "prices.json",
+      "--port", "18593", "--out", "new.json"]).family, key);
+    for (const zeroIn of [true, false]) {
+      const amount0 = zeroIn ? 17n : -19n, amount1 = zeroIn ? -19n : 17n;
+      const outputToken = zeroIn ? asset : token0;
+      const log = event(KYBER, "Swap", [actor, actor, amount0, amount1, 2n ** 96n, 100n, 0], instance);
+      const receipt = { logs: [log, event(ERC20, "Transfer", [instance, actor, 19n], outputToken)] };
+      const trace = { type: "CALL", from: actor, to: instance,
+        input: KYBER.encodeFunctionData("swap", [actor, 17n, zeroIn, 1n, "0x"]),
+        output: KYBER.encodeFunctionResult("swap", [amount0, amount1]), calls: [swapPayment(instance, outputToken)] };
+      const leg = originalLeg(key, instance, descriptor, receipt, trace);
+      assert.equal(leg.amountIn, 17n); assert.equal(leg.amountOut, 19n);
+      assert.equal(leg.tokenIn, zeroIn ? token0 : asset); assert.equal(leg.tokenOut, outputToken);
+      for (const input of [
+        KYBER.encodeFunctionData("swap", [actor, -19n, !zeroIn, 1n, "0x"]),
+        KYBER.encodeFunctionData("swap", [actor, 18n, zeroIn, 1n, "0x"]),
+        KYBER.encodeFunctionData("swap", [actor, 17n, !zeroIn, 1n, "0x"]),
+      ]) assert.throws(() => originalLeg(key, instance, descriptor, receipt, { ...trace, input }));
+      assert.throws(() => originalLeg(key, instance, descriptor, receipt, { error: "reverted", calls: [trace] }));
+      assert.throws(() => originalLeg(key, instance, descriptor, receipt, { calls: [{ error: "reverted", calls: [trace] }] }));
+      assert.throws(() => originalLeg(key, instance, descriptor, { logs: [log] }, trace));
+      assert.throws(() => originalLeg(key, instance, descriptor, { logs: [...receipt.logs, log] }, trace));
+      assertSwapPaymentAttribution(key, instance, descriptor, receipt, trace, outputToken);
+    }
+  });
+}
 
 for (const key of ["algebra", "algebra2", "algebra3", "algebra4", "algebra5", "algebra6"] as const) {
   test(`${key}: observed swap binds its own ABI, direction, full input and settled output`, () => {
@@ -236,7 +285,7 @@ for (const key of ["algebra", "algebra2", "algebra3", "algebra4", "algebra5", "a
       const receipt = { logs: [log, event(ERC20, "Transfer", [instance, actor, 19n], outputToken)] };
       const trace = { type: "CALL", from: actor, to: instance,
         input: ALGEBRA.encodeFunctionData("swap", [actor, zeroToOne, 17n, 1n, "0x"]),
-        output: ALGEBRA.encodeFunctionResult("swap", [amount0, amount1]) };
+        output: ALGEBRA.encodeFunctionResult("swap", [amount0, amount1]), calls: [swapPayment(instance, outputToken)] };
       const original = originalLeg(key, instance, descriptor, receipt, trace);
       assert.equal(original.amountIn, 17n); assert.equal(original.amountOut, 19n);
       assert.equal(original.tokenIn, zeroToOne ? token0 : asset); assert.equal(original.tokenOut, outputToken);
@@ -249,6 +298,7 @@ for (const key of ["algebra", "algebra2", "algebra3", "algebra4", "algebra5", "a
       const univ3Log = { ...log, topics: [ethers.id("Swap(address,address,int256,int256,uint160,uint128,int24)"), ...log.topics.slice(1)] };
       assert.throws(() => originalLeg(key, instance, descriptor, { logs: [univ3Log, receipt.logs[1]] }, trace));
       assert.throws(() => originalLeg(key, instance, descriptor, { logs: [log] }, trace));
+      assertSwapPaymentAttribution(key, instance, descriptor, receipt, trace, outputToken);
     }
   });
 }
