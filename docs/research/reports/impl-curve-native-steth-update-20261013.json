@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-13",
+  "document": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "row": 11,
+  "operation": "Append exact evidence note to existing final cell; no new master table",
+  "beforeSha256": "ea2e19355c61cec1631f1fadc82a12d107fb4e816e940154bc0f85c42c94296f",
+  "afterSha256": "c0d1bffa2b4aac2246854206196cb025f20436954cc90f6a9fdb820af37ab8b7",
+  "onlyExactInsertion": true,
+  "implementationCommit": "f54b7275d551be9f1c2db0882d35c758fcae7abb",
+  "acceptanceReport": "docs/research/reports/curve-plain-native-steth-acceptance-20261013.json",
+  "acceptanceReportSha256": "845999c0dc1ae4c4489201eef8bdfe26e202156189eff4a75f42b26cd4926b68",
+  "addition": "<br>**2026-10-13 Curve 原生 stETH 修正（`f54b7275`）：** N26139768 的 `0x21e27…` 与 `0xdc2431…` 两池，已按当前源码重验自然 strict／Graph／raw／effective 双向。名义 `get_dy` 经 stETH 转移 shares 与余额两次取整，旧 strict 样本实际比名义少2 raw；现改为有链上依据的实收下界，不人为减少输入、不扩大0/1容差，旧样本转成功。**WETH参考输入仍直接用全局P＝0.002 WETH，无借额**；双向参考额与10倍共16次 quoted／runtime成功，输出报价差均0，反向输入欠扣1 raw单列，16次无当前输入负例均主调用回滚。另补单腿正扣款门：1 raw请求不能以零扣款过关；该负例为合同覆盖，完整runtime原已有独立门。生产build、12项native合同、7项共用真实EVM、174项中央回归通过；待提交源码独立生成／编译／双接口回归通过，保留他人改动与旧失败。份额报价是下界，旧shares可使到账多1，不承诺任意旧余额下零容差精确相等。**仅同N单腿正确性；不替代本行五跳／backrun复现，全部单块与组合时效性仍NOT RUN。**[本轮证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f54b7275d551be9f1c2db0882d35c758fcae7abb/docs/research/reports/curve-plain-native-steth-acceptance-20261013.json)。 ",
+  "otherRowsAndColumnsPreserved": true,
+  "scope": "Same-state correctness evidence; original opportunity and all performance remain not verified"
+}
