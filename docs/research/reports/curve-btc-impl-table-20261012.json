@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "evidenceCommit": "41e23217e507f075481faa7042228ef78792356e",
+  "document": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "scope": "Only our latest Curve plain renBTC/WBTC paragraph in the original IMPL table, preserving its existing four columns and all other content.",
+  "line": 11,
+  "beforeSha256": "3bbc6035ae02a2327fdeb60896355f97ac7c344f03f14b2d95a30b72fd6e696c",
+  "afterSha256": "84a8e5293f64e08653f84a330bb8020d14e6caff534fd2cd216f5f49d70bc30e",
+  "unrelatedLinesSha256": "f04a6dc0993393dcbd68cf7927ae26f27bc01ab108d0ed5dc054167e028564cd",
+  "unrelatedLinesUnchanged": true,
+  "patch": "docs/research/reports/curve-btc-impl-table-20261012.patch",
+  "patchSha256": "4c78e3e863ed6fcfbfe979df662818f9ecd32133ea1df2a0263ba1c989e1d172",
+  "claims": {
+    "sameStateQuotedRuntimeExecutions": 8,
+    "allOutputDeltaRaw": "0",
+    "zeroInputAtomicRollbackControls": 8,
+    "amountSource": "User-authorized recorded production input only; carried from N26146937 into N26146938. Actual execution remains at N26139768.",
+    "naturalValuation": "missing-valuation remains",
+    "sbtc": "not admitted",
+    "performance": "single-Ready and combined representative tests NOT RUN",
+    "originalTxPrestateAndFullOpportunity": "not verified",
+    "liveOrDeployment": "none"
+  },
+  "evidence": "docs/research/reports/curve-btc-spliced-reference-20261012.json"
+}
