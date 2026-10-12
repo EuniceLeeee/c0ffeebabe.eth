@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "impl-cohort-table-update/v1",
+  "date": "2026-10-13",
+  "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "row": 17,
+  "beforeSha256": "c0d1bffa2b4aac2246854206196cb025f20436954cc90f6a9fdb820af37ab8b7",
+  "afterSha256": "148d96416c0f646317f8c981cf92e88037eb6d0db3063938f39bf9494e536ce8",
+  "insertedText": "<br>**2026-10-13：补验 coffee uint／原生 alias 七池清单，四池正确性通过，非全族或性能通过。** [4ebdf·N26018980](https://etherscan.io/tx/0x4df016bdf45675f8680769ef3403712c92e76d7466fb0597d2cdb4c02cbe0db3)、[5426·N26019171](https://etherscan.io/tx/0x20cd15f804bf2c420c2058f9d8f85f822c8aa3493758af32c97ab26cb9446e94)、[053d·N26041904](https://etherscan.io/tx/0x45a21b27dc863d356250c863f5f3fa95a54b9552f3dfa3f3d17dcc086b398fe7)、[6ec3·N26024481](https://etherscan.io/tx/0x6a59fd7bfd63127c31a1c488c5a95b7003a135e345d36f17840c693e243f850c)：合计16方向自然 strict／Ready／Graph／raw／effective；**WETH直接用P=0.002，其余金额由同块effective前向取得，无拼接**。生产参考量及10倍量，64次quoted／runtime输入扣款及输出到账差0，64个缺本次输入负例真实回滚，旧原生库存不变。修复验收器写死两方向的问题，支持两币／三币完整方向矩阵；7项合同、生产build通过，三币样本独立复核无阻碍。**失败不抹除：** [7f86·N25969898](https://etherscan.io/tx/0xa520edda7bd95363d3fcabacf2f0d8a96dff473193396d848fc7623967632512)与[8a4f·N25981246](https://etherscan.io/tx/0xdb897a88585c2103e31907744ff509e07b63005c822253dd4d5a69ab9a1bbd7f)的旧锚点receipt.status=0，不能当成功样本，亦不能判池不支持；[3211·N26036250](https://etherscan.io/tx/0x6b02a33297a985d3e3a040d71321e98e5dd6e68d5c0fd99ce6ffc73bf94ed855)交易成功但strict仍retryable，已定位STG／USDC纯ERC20的uint分支被“必须含WETH”身份条件挡住，**待补适配**。原调用前状态／完整机会及全部单块、组合时效性未验；原coffee与历史证据保留。[本次证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/532f6abdc4be3c1ff2577eaff1fc5e735b0c086a/docs/research/reports/curve-underlying-cohort-acceptance-20261013.json)。 ",
+  "onlyExactInsertion": true,
+  "preservedOtherRowsAndColumns": true,
+  "evidenceCommit": "532f6abdc4be3c1ff2577eaff1fc5e735b0c086a",
+  "evidenceReport": "docs/research/reports/curve-underlying-cohort-acceptance-20261013.json"
+}

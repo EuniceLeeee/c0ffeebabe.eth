@@ -1,0 +1,26 @@
+{
+  "learning_case_id": "tooldef-20261013-curve-native-direction-cardinality",
+  "trigger": "historical_family_acceptance",
+  "tooling_defect": {
+    "tool": "listener:searcher:curve-plain-historical-native-dual",
+    "issue": "The runner required exactly two graph/issued directions and four amount samples, rejecting a naturally admitted three-coin pool at inputs before executing any leg.",
+    "status": "codified",
+    "codify_commit": "532f6abdc4be3c1ff2577eaff1fc5e735b0c086a",
+    "fix": "Require exact, nonempty, unique equality between every issued token direction and the Graph. Derive the unchanged positive/negative execution matrix size from all directions.",
+    "regression": "Seven entrypoint contracts passed, including two/three-coin coverage and missing, extra, duplicate, self and empty direction rejection; current production build passed."
+  },
+  "evidence": {
+    "pool": "0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14",
+    "tx": "0x4df016bdf45675f8680769ef3403712c92e76d7466fb0597d2cdb4c02cbe0db3",
+    "N": 26018980,
+    "before": "logs/curve-underlying-cohort-20261013.hES0xa/dual-4ebdf-before01.json",
+    "failure": "stage=inputs, 6 !== 2, no execution attempted",
+    "after": "logs/curve-underlying-cohort-20261013.hES0xa/dual-4ebdf-after01.json",
+    "after_sha256": "6dce3bb799dcbd625440496cff806dc971f393998ae5f55f36d35aa09a35bcab",
+    "result": "Six directions, production reference and 10x, 24 positive executions with zero raw-unit input/output difference and 24 real no-current-input Reverts.",
+    "independent_reviewer": "Mill / 01a130fe-0149-7862-9320-c9f7080f5cef",
+    "adjudication": "Independent non-author reviewed the two-file change and original before/after response evidence; no blocking finding. Did not rerun EVM/build, inspect binary or verify original call-prestate.",
+    "report": "docs/research/reports/curve-underlying-cohort-acceptance-20261013.json"
+  },
+  "limits": "Tool fix and named same-N historical checks only. Not formal adapter_fixed, merge-ready, all-cohort success, original-TX output parity, full opportunity or performance acceptance. Separate pure-ERC20 uint adaptation gap remains open."
+}
