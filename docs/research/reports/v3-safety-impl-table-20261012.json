@@ -1,0 +1,20 @@
+{
+  "schema": "external-impl-exact-patch/v1",
+  "externalFile": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "c5b92bfa8c5a2f91312abc271057970f0484ca6a357f629b086c7f44d1cb204c",
+  "afterSha256": "e926917096cd74b9deedb111bf8cbcf7490b34dc55d75698ac9a0befa4058973",
+  "unchangedOtherRowsSha256": "127e3511d53d6bd0ac92d97fd9d3fadeca8a00386dfe8809ce1c9f3ac4954751",
+  "patchSha256": "457df8919f011054587487e3f3b32411f744c2f49bcea1e4563a1e3c8208c910",
+  "columns": 4,
+  "updatedRows": [
+    "Balancer V3",
+    "Curve plain ＋ Fluid DEX 原生 ETH"
+  ],
+  "addedRows": [],
+  "exactOneLineHunks": [
+    6,
+    11
+  ],
+  "codeAndReportsCommit": "951e61d7fd11b3a9faf625f5ff6248363462aae7",
+  "evidenceClaim": "Balancer V3 historical harness safety controls strengthened; offline 18-test green receipt and preceding red receipt retained. New historical EVM controls NOT RUN. Seven-pool prior scoped correctness evidence retained with siUSD production input reference incomplete. Curve old memo differs from current authority and requires selective copy revalidation; prior stETH one-raw-unit differences are not zero-delta/current-code evidence. All performance remains deferred."
+}
