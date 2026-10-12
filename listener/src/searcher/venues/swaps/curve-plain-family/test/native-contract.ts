@@ -21,7 +21,7 @@ import { executeAdapterFamilyLifecycleBatch } from "../../../adapter-family-runt
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { asPricedFamily } from "../../../family-capability-catalog.js";
 import { executionData } from "../codec.js";
-import { copyReadySnapshot, readyReuseScope } from "./historical-ready.js";
+import { copyReadySnapshot, curveReadyFamilies, readyReuseScope } from "./historical-ready.js";
 import type { StartupCheckpointEnvelope } from "../../../../universe-rebuild-checkpoint.js";
 
 test("Ready snapshot copy preserves source, refuses overwrite and excludes live journal/lock", t => {
@@ -44,7 +44,7 @@ test("Ready snapshot copy preserves source, refuses overwrite and excludes live 
   }
 });
 
-test("historical Ready reuse requires a completed Curve-only single source and preserves evidence", () => {
+test("historical Ready reuse selects authenticated partitions without mutating its single source", () => {
   const block = 123, hash = ethers.id("curve-ready-reuse");
   const prior = { inProgressRun: null, checkpointFingerprint: "ab".repeat(32), readyGeneration: {
     cutoff: { number: block, hash, generation: block },
@@ -66,13 +66,24 @@ test("historical Ready reuse requires a completed Curve-only single source and p
     (p: any) => { p.readyGeneration.universeRange.toBlock++; },
     (p: any) => { delete p.readyGeneration.familyPartitions; },
     (p: any) => { p.readyGeneration.familyPartitions = {}; },
-    (p: any) => { p.readyGeneration.familyPartitions.unrelated = {}; },
     (p: any) => { p.readyGeneration.observationScope = { kind: "transactions" }; },
   ]) {
     const wrong = structuredClone(prior);
     mutate(wrong);
     assert.throws(() => readyReuseScope(wrong, block, hash));
   }
+  const shared = structuredClone(prior);
+  Object.assign(shared.readyGeneration!.familyPartitions!, { "curve-underlying": {}, "univ3-standard": {}, unrelated: {} });
+  const sharedBefore = structuredClone(shared);
+  const families = curveReadyFamilies("univ3-standard,curve-underlying,curve-plain");
+  assert.deepEqual(readyReuseScope(shared, block, hash, families), {
+    parentCheckpointFingerprint: prior.checkpointFingerprint, familyIds: families,
+  });
+  assert.deepEqual(shared, sharedBefore);
+  assert.deepEqual(readyReuseScope(shared, block, hash).familyIds, [CURVE_PLAIN_FAMILY_ID]);
+  assert.throws(() => readyReuseScope(prior, block, hash, families), /selected source partitions/);
+  for (const bad of ["", "univ3-standard", "curve-plain,unrelated", "curve-plain,curve-plain", "curve-plain,"])
+    assert.throws(() => curveReadyFamilies(bad), /scope requires/);
 });
 
 const pool = "0x1111111111111111111111111111111111111111", token = "0x2222222222222222222222222222222222222222";

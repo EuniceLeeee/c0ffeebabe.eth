@@ -16,15 +16,28 @@ import { RevmSimClient } from "../../../../revm-sim-client.js";
 import { CURVE_PLAIN_FAMILY_ID } from "../manifest.js";
 import { SWAP_TOPIC, UINT_SWAP_TOPIC, UINT_NG_SWAP_TOPIC } from "../discovery.js";
 
+// Optional same-block background supplies natural valuation paths; production
+// wiring still owns discovery, identity and graph publication for every family.
+export function curveReadyFamilies(value: string = CURVE_PLAIN_FAMILY_ID): string[] {
+  const ids = value.split(",");
+  assert(ids.includes(CURVE_PLAIN_FAMILY_ID) && new Set(ids).size === ids.length &&
+    ids.every(id => [CURVE_PLAIN_FAMILY_ID, "curve-underlying", "univ3-standard"].includes(id)),
+  "scope requires curve-plain and only optional curve-underlying/univ3-standard");
+  return ids.sort();
+}
+
 /** The production checkpoint reader authenticates prior before this scope check. */
-export function readyReuseScope(prior: StartupCheckpointEnvelope | null, block: number, hash: string) {
+export function readyReuseScope(prior: StartupCheckpointEnvelope | null, block: number, hash: string,
+  familyIds = curveReadyFamilies()) {
   assert(prior?.readyGeneration && prior.inProgressRun === null, "completed Ready required");
   assert.equal(prior.readyGeneration.cutoff.number, block);
   assert.equal(prior.readyGeneration.cutoff.hash, hash);
   assert.deepEqual(prior.readyGeneration.universeRange, { fromBlock: block, toBlock: block });
-  assert.deepEqual(Object.keys(prior.readyGeneration.familyPartitions ?? {}), [CURVE_PLAIN_FAMILY_ID]);
+  const partitions = prior.readyGeneration.familyPartitions;
+  assert(partitions && familyIds.every(id => Object.hasOwn(partitions, id)), "selected source partitions required");
+  const ids = curveReadyFamilies(familyIds.join(","));
   assert.equal(prior.readyGeneration.observationScope, undefined);
-  return { parentCheckpointFingerprint: prior.checkpointFingerprint, familyIds: [CURVE_PLAIN_FAMILY_ID] };
+  return { parentCheckpointFingerprint: prior.checkpointFingerprint, familyIds: ids };
 }
 
 /** Only immutable materialized snapshots: never lock or replay a live source. */
@@ -42,12 +55,13 @@ export function copyReadySnapshot(source: string, destination: string) {
 async function main() {
   const args = new Map<string, string>();
   const required = ["--tx", "--rpc-file", "--out", "--executor", "--owner", "--revm-bin", "--expect-pool"];
-  const names = [...required, "--reuse-ready"];
+  const names = [...required, "--reuse-ready", "--families"];
   for (let i = 2; i < process.argv.length; i += 2) {
     const key = process.argv[i]!, value = process.argv[i + 1];
     assert(names.includes(key) && !args.has(key) && value && !value.startsWith("--")); args.set(key, value);
   }
   assert(required.every(name => args.has(name)));
+  const familyIds = curveReadyFamilies(args.get("--families"));
   const tx = args.get("--tx")!, out = resolve(args.get("--out")!);
   assert(ethers.isHexString(tx, 32)); assert(!existsSync(out));
   const expected = ethers.getAddress(args.get("--expect-pool")!).toLowerCase();
@@ -57,7 +71,7 @@ async function main() {
   Object.assign(process.env, { SEARCHER_DRY_RUN: "1", SEARCHER_BLOCKSCAN_SUBMIT: "0", SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE: "1",
     MAINNET_RPC_URL: rpcUrl, SEARCHER_REVM_SIM_BIN: args.get("--revm-bin")!, BOTVM_ADDRESS: executor, BOTVM_OWNER: owner });
   const provider = new ethers.JsonRpcProvider(rpcUrl, 1, { staticNetwork: true, batchMaxCount: 1 });
-  const wiring = createRebuildWiring({ rpcUrl, familyIds: [CURVE_PLAIN_FAMILY_ID], executionIdentity: { executor, transactionOrigin: owner } });
+  const wiring = createRebuildWiring({ rpcUrl, familyIds, executionIdentity: { executor, transactionOrigin: owner } });
   mkdirSync(out, { recursive: true, mode: 0o700 });
   const redact = (value: string) => value.split(rpcUrl).join("[REDACTED]").replace(/https?:\/\/[^\s"<>]+/g, "[REDACTED_URL]");
   const save = (name: string, value: unknown) => writeFileSync(resolve(out, name),
@@ -94,19 +108,19 @@ async function main() {
     let reuseBytes: Buffer | null = null;
     if (reusePath) {
       reuseBytes = copyReadySnapshot(reusePath, checkpoint);
-      familyUpdateScope = readyReuseScope(await new UniverseRebuildCheckpointStore({ path: checkpoint }).load(), block, header.hash);
+      familyUpdateScope = readyReuseScope(await new UniverseRebuildCheckpointStore({ path: checkpoint }).load(), block, header.hash, familyIds);
       save("reused-ready.json", { path: reusePath,
         sha256: createHash("sha256").update(reuseBytes).digest("hex"), ...familyUpdateScope });
     }
     const ready = await rebuildUniverse({ ...wiring, store: new UniverseRebuildCheckpointStore({ path: checkpoint }),
-      runId: `curve-native-single-${block}`, observationRange: { fromBlock: block, toBlock: block },
+      runId: `curve-historical-single-${block}`, observationRange: { fromBlock: block, toBlock: block },
       ...(familyUpdateScope ? { familyUpdateScope } : {}),
       attestationConcurrency: 1, log: message => console.log(message) });
     assert.equal(ready.cutoff.number, block); assert.equal(ready.cutoff.hash, header.hash);
     if (reusePath) assert(readFileSync(reusePath).equals(reuseBytes!), "original Ready changed");
     const { graph } = resolveStrictReadyRuntime(ready), targetEdges = graph.filter(edge => edge.target.toLowerCase() === expected);
     save("ready-summary.json", { tx, block, blockHash: header.hash, graphHash: ready.graphHash, totalEdges: graph.length,
-      targetEdges, instances: ready.activeInstanceKeys, broadcast: false,
+      targetEdges, instances: ready.activeInstanceKeys, familyIds, broadcast: false,
       claim: "natural single-block strict/Graph; not opportunity or representative performance acceptance" });
     assert(targetEdges.length > 0, "target has no naturally admitted direction");
     stage = "production-prices";
