@@ -497,6 +497,25 @@ test("cUNI missing production reference stays unmet and cannot borrow another to
   assert.equal(trials[0]!.original, originals[0]);
 });
 
+test("cUNI second historical amount is diagnostic, never a production reference or original TX comparison", () => {
+  const f = cuniFixture(), originals = observeCuni(f);
+  const edge = { instanceKey: f.instance, tokenIn: f.instance, tokenOut: cuniUnderlying };
+  const row = { ...edge, status: "missing-valuation", amountIn: null };
+  const gate = productionAmount(row, { mid: 1 }, edge, source, 7);
+  const trials = historicalAmountTrials(originals, null, true);
+  assert.deepEqual(trials, [
+    { label: "historical-input-at-N", amountIn: f.burnedShares, original: originals[0] },
+    { label: "twice-historical-input-at-N-not-production-reference", amountIn: 2n * f.burnedShares, original: null },
+  ]);
+  assert.deepEqual(gate, { status: "unmet", reason: "missing-valuation" });
+  assert.deepEqual(productionAmount(row, { mid: 1 }, edge, source, 7), gate);
+  assert.equal(row.amountIn, null);
+  const reference = { label: "production-effective", amountIn: f.burnedShares + 1n };
+  assert.deepEqual(historicalAmountTrials(originals, reference, true), [
+    { ...reference, original: null }, trials[0],
+  ]);
+});
+
 test("runtime construction guard traps Exact, quoted fallback and service access before executing them", () => {
   const g = constructionGuard(); let executed = false;
   assert.throws(() => g.build(() => g.exact(() => { executed = true; })));

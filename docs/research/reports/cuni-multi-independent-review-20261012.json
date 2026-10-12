@@ -1,0 +1,132 @@
+{
+  "schema": "bounded-independent-offline-review/v1",
+  "subject": "cUNI diagnostic second historical amount",
+  "verdict": "offline_checks_pass_production_reference_still_incomplete",
+  "conclusion": "本次限定范围离线核验通过，未发现可行动缺陷；生产参考验收仍未完成，不能将该结果升级为完整通过。",
+  "findings": [],
+  "scope": "仅核验指定两处改动及 cuni-dual-attempt02 已保存证据；不重复旧 YB 复核、不扩展审计或修复。",
+  "cloud_workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "cloud_head_user_reported": "9b507e04",
+  "cloud_head_independently_queried": false,
+  "reviewed_hashes": {
+    "cuni-dual-attempt02.json": "b4f32fc2d53bfa824440163289c0cca9c68a6890655625eaccf40800ab40a9a0",
+    "cuni-dual-tools-attempt02-selected.json": "2295f99f93ea363cf41c51fc7af26a0b0a19ee1734af551caf73fc31e0f28e92",
+    "historical-dual.ts": "f8c9fa16771986426f5a38addd578c634fafb70840730d93074f61200955e5a5",
+    "cuni-worker/evidence.test.ts": "fee63a66f0ed50765e40e90b1a3ee527318c7a770e8ee0a6315b3399085b275f",
+    "cuni-worker/evidence.ts": "e629c11197ec914cf9a6ad42196f02be6068ccbefcb11a01ef0fbabdd06da44a"
+  },
+  "executed_checks": {
+    "runtime": "本地 Node v26.0.0，内联只读断言；未导入或运行历史执行入口。",
+    "exit_code": 0,
+    "assertions_executed": 283,
+    "assertions_passed": 283,
+    "assertions_failed": 0,
+    "counts_by_group": {
+      "binding": 18,
+      "amounts_and_claims": 19,
+      "execution_and_storage_deltas": 224,
+      "source_wiring_and_actual_regression": 8,
+      "tool_receipt": 9,
+      "immutability": 5
+    },
+    "regression_method": "Executed extracted current historicalAmountTrials, missing-valuation productionAmount, and the actual new regression body using artifact-derived cUNI fixture; not full 128-test suite",
+    "regression_detail": "用 Node 内置 TypeScript 类型擦除执行实际 helper 两个函数及新增回归的原始测试体；cUNI fixture 由此次产物的 instance、burned shares 和 original observation 构造。未执行或冒称复跑完整测试套件。",
+    "full_source_suite": "128/128 为主任务提供的结果，本次没有重跑。",
+    "source_change_checks": [
+      "historicalAmountTrials 的第三参数包含 args.family === \"cuni\"。",
+      "无生产参考时第二档为两倍历史 burned shares，original=null。",
+      "新增回归断言第二档诊断标签、missing-valuation 门不变，以及已有生产参考时不额外生成倍数档。"
+    ]
+  },
+  "evidence": {
+    "execution_artifact": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/cuni-dual-attempt02.json",
+    "tool_receipt": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/cuni-dual-tools-attempt02-selected.json",
+    "artifact_hash_matches_user_pin": true,
+    "harness_and_helper_hashes_match_artifact": true,
+    "original_receipt_and_trace_hashes_recomputed": true,
+    "source": {
+      "number": 26037262,
+      "hash": "0xbb2188010009ec062a4b88eed08ff7d51bf7dc747257a8aa50749304d68b0bc7",
+      "generation": 26037262
+    },
+    "trials": [
+      {
+        "amountIn": "3309303296",
+        "amountOut": "679066135847953170",
+        "label": "historical-input-at-N"
+      },
+      {
+        "amountIn": "6618606592",
+        "amountOut": "1358132271695906341",
+        "label": "twice-historical-input-at-N-not-production-reference"
+      }
+    ],
+    "positive_executions": 8,
+    "positive_variants_per_amount": [
+      "quoted without output inventory",
+      "runtime without output inventory",
+      "quoted with old output inventory",
+      "runtime with old output inventory"
+    ],
+    "execution_signed_deltas": [
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0"
+    ],
+    "independent_balance_check": "从保存的 prestate diff 与已证明的余额槽重新计算前后余额和 delta，核对实际输入扣减、输出到账及原输出库存保留；8 次均与 quote 一致。",
+    "native_inventory": "8 次均 before=17、after=17、delta=0。",
+    "missing_input_controls": 4,
+    "missing_input_control_result": "4 次均为 execution reverted；逐一核对与成功执行的 from/to/input 相同，控制对应旧输出库存 10^24，源码将输入余额覆盖为 0。",
+    "runtime_construction_record": {
+      "Exact": 0,
+      "quoted": 0,
+      "RPC": 0,
+      "quotedFallback": false
+    },
+    "runtime_construction_limit": "核验保存的构造计数及对应断言源码；本次没有重新构造运行时或执行模拟。",
+    "production_reference_gate": {
+      "status": "unmet",
+      "reason": "missing-valuation"
+    },
+    "naturalProductionReferenceGate": "unmet",
+    "spliced_reference_input": null,
+    "result": "incomplete-production-reference",
+    "tool_receipt_exit_code": 2,
+    "tool_receipt_result": "工具 receipt 指向 cuni 和此次输出路径，stderr_bytes=0，退出码 2 与 incomplete-production-reference 一致；未将非零退出改写为完整验收通过。",
+    "second_amount_claim": {
+      "amount_in_raw_shares": "6618606592",
+      "label": "twice-historical-input-at-N-not-production-reference",
+      "original": null,
+      "originalTxComparison": {
+        "verdict": "non-original amount trial; no original TX leg comparison"
+      },
+      "original_tx_parity": false,
+      "production_reference": false
+    },
+    "first_amount_claim": "3309303296 为原 redeemUnderlying 事件的 burned shares；映射到 N-end redeem 的诊断，不证明原接口/调用前状态输出一致。",
+    "originalPreCallParity": "NOT RUN",
+    "representativePerformance": "NOT RUN"
+  },
+  "boundaries": {
+    "RPC_run": false,
+    "EVM_run": false,
+    "simulation_run": false,
+    "build_run": false,
+    "source_or_MD_modified": false,
+    "keys_or_environment_files_read": false,
+    "old_YB_review_repeated": false,
+    "inputs_preserved_by_end_hash_check": true,
+    "only_written_file": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/cuni-multi-independent-review.json"
+  },
+  "limitations": [
+    "保存产物的离线一致性核验，不是重新执行历史 EVM。",
+    "只在本地核对指定 source/test/helper 副本和产物哈希；未重新查询云端 HEAD、重算全运行时源码树或云端 Ready/价格文件。",
+    "工具 receipt 中的 stdout/stderr 哈希未对未提供的原始流重算。",
+    "missing-valuation 仍是明确缺项；无完整生产参考、原 TX parity、盈利或性能结论。"
+  ]
+}

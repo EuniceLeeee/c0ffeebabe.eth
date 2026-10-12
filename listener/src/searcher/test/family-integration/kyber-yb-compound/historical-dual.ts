@@ -310,7 +310,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const referenceAmount = p.status === "met" ? { label: "production-effective", amountIn: p.amountIn }
         : splice ? { label: "spliced-production-input-at-N", amountIn: splice.amountIn } : null;
       const trials = historicalAmountTrials(originals, referenceAmount,
-        args.family === "xwin-mint" || args.family === "xwin-redeem" || args.family === "ethertoken-native");
+        args.family === "xwin-mint" || args.family === "xwin-redeem" || args.family === "ethertoken-native" || args.family === "cuni");
       report.preparationMs ??= performance.now() - started;
       for (const { label, amountIn, original } of trials) {
         const result: any = { label, amountIn, original, status: "failed", executions: [] }; row.trials.push(result);

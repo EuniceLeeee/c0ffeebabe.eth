@@ -1,0 +1,119 @@
+{
+  "schema": "cuni-multi-amount-acceptance/v1",
+  "date": "2026-10-12",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "baselineCommit": "9b507e04b3c449bd081bf4e96a6a78c1a66b1291",
+  "claim": "Test-only extension: two cUNI share-input amounts have same-N quote/quoted/runtime parity. Production-reference acceptance remains incomplete.",
+  "productionChanges": false,
+  "sourceTreeSha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+  "harnessSha256": "f8c9fa16771986426f5a38addd578c634fafb70840730d93074f61200955e5a5",
+  "evidenceHelperSha256": "e629c11197ec914cf9a6ad42196f02be6068ccbefcb11a01ef0fbabdd06da44a",
+  "testSha256": "fee63a66f0ed50765e40e90b1a3ee527318c7a770e8ee0a6315b3399085b275f",
+  "target": {
+    "tx": "0x50f2112fea14632548cfb10268c6f091f0733e5a50fc97e375c54209381d656a",
+    "instance": "0x35a18000230da775cac24873d00ff85bccded550",
+    "tokenIn": "0x35a18000230da775cac24873d00ff85bccded550",
+    "tokenOut": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+    "block": 26037262,
+    "blockHash": "0xbb2188010009ec062a4b88eed08ff7d51bf7dc747257a8aa50749304d68b0bc7",
+    "stateAndEnvironment": "N-end state and N execution environment",
+    "executorCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec"
+  },
+  "referenceDistinction": {
+    "configuredWethPWei": "2000000000000000",
+    "configuredWethP": "0.002 WETH",
+    "savedReferenceMode": "default",
+    "wethReferenceMissing": false,
+    "currentProductionRule": "WETH seeds amountIn at P for this fixed/default-input run. Non-WETH input requires a successful forward effective reference; cUNI->UNI alone does not supply a WETH->cUNI reference.",
+    "cuniNaturalReference": "missing-valuation",
+    "donorInputBorrowed": false,
+    "diagnosticDoubleAmountIsProductionReference": false,
+    "boundedPriorDonorSearch": "No cUNI tokenIn row in the standard saved 28,040-edge table or the 16 additional previously inspected saved price tables; not a global absence claim.",
+    "rawMarginalConversionUsed": false,
+    "productionPChanged": false
+  },
+  "reusedReady": {
+    "path": "logs/four-family-coverage-20261012.zHKuWX/cuni-ready-attempt01/ready.json",
+    "sha256": "9a74a9378da13d66e190e11cc318ecef4260fe66f1eec62d518e162b2f1599c3",
+    "prices": "logs/four-family-coverage-20261012.zHKuWX/cuni-ready-attempt01/prices/prices.json",
+    "pricesSha256": "f45bd96f03d288de6ce867a17249c91b9d6b9c4e3ec057963688784708c672b8",
+    "newReadyBuilt": false,
+    "historicalNaturalIntegration": "One admitted cUNI instance, one cUNI->UNI Graph/raw row; no natural effective input reference. Prior valid evidence retained."
+  },
+  "trials": [
+    {
+      "label": "historical-input-at-N",
+      "amountInRawShares": "3309303296",
+      "quoteAndActualOutRawUNI": "679066135847953170",
+      "quotedExecutions": 2,
+      "runtimeExecutions": 2,
+      "allSignedDeltas": "0",
+      "noInputNegativeControlsReverted": 2,
+      "originalTxOutputRawUNI": "679066136024079596",
+      "originalTxSignedDifferenceRawUNI": "-176126426",
+      "originalComparison": "Original redeemUnderlying burned shares are used in current redeem(shares) at N-end; not original interface/pre-call or outer-wrapper parity."
+    },
+    {
+      "label": "twice-historical-input-at-N-not-production-reference",
+      "amountInRawShares": "6618606592",
+      "quoteAndActualOutRawUNI": "1358132271695906341",
+      "quotedExecutions": 2,
+      "runtimeExecutions": 2,
+      "allSignedDeltas": "0",
+      "noInputNegativeControlsReverted": 2,
+      "originalComparison": "Not an original TX amount; no original-output comparison."
+    }
+  ],
+  "executionSafety": {
+    "runtimeConstructionExactCalls": 0,
+    "runtimeConstructionQuotedCalls": 0,
+    "runtimeConstructionRpcCalls": 0,
+    "quotedFallback": false,
+    "successfulExecutions": 8,
+    "negativeControlsReverted": 4,
+    "oldOutputInventoryPreserved": true,
+    "inputDebitMatchesRequestedShares": true,
+    "nativeInventorySignedDeltaAll": "0",
+    "signing": false,
+    "broadcast": false,
+    "liveStarted": false
+  },
+  "validation": {
+    "contractCommand": "npm --prefix listener run searcher:kyber-yb-compound-dual-contract",
+    "contractTestsPassed": 128,
+    "contractTestsFailed": 0,
+    "contractLog": "logs/four-family-coverage-20261012.zHKuWX/cuni-multi-contract-attempt01.log",
+    "contractLogSha256": "24b54ea193ebe5aed14d6a134db0ed3a7d57b2ba46a67b00e136d41277ba43d0",
+    "result": "incomplete-production-reference",
+    "exitCode": 2,
+    "errors": [],
+    "artifact": "logs/four-family-coverage-20261012.zHKuWX/cuni-dual-attempt02.json",
+    "artifactSha256": "b4f32fc2d53bfa824440163289c0cca9c68a6890655625eaccf40800ab40a9a0",
+    "processReceiptSha256": "1065cff670ee979119eed440ea8d6005d1442326dba346eaf176e88e137ad8ef",
+    "toolQuery": ["compound", "dual", "historical"],
+    "toolId": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+    "manifest": "logs/four-family-coverage-20261012.zHKuWX/cuni-dual-tools-attempt02-selected.json",
+    "manifestSha256": "2295f99f93ea363cf41c51fc7af26a0b0a19ee1734af551caf73fc31e0f28e92",
+    "reconciliation": "The executed canonical harness agrees with manual evidence: same-state executions pass, missing cUNI production reference keeps exit=2. This is not successful full acceptance.",
+    "build": "No production code changed; prior recorded production build retained, not rerun in this test-only increment.",
+    "independentReview": {
+      "path": "docs/research/reports/cuni-multi-independent-review-20261012.json",
+      "sha256": "38e5722ef7fc863a6a6efc4af2adf4d7ddac23e7dcd4f495f885b312117b5001",
+      "assertionsPassed": 283,
+      "actionableFindings": [],
+      "scope": "Non-author offline source/helper and captured trace/storage checks; no new RPC/EVM and no performance or full-reference verdict."
+    }
+  },
+  "limits": [
+    "cUNI production-reference amount is still unverified; multi-amount coverage does not satisfy that gate.",
+    "No original transaction pre-call/interface/wrapper or complete opportunity claim.",
+    "No Adapter Replay fixed/merge-ready verdict or production_gap_fixed verdict.",
+    "Per-Family and representative combined performance are NOT RUN; diagnostic execution duration is not performance acceptance.",
+    "Earlier attempt01 and all earlier incomplete results remain preserved."
+  ],
+  "relatedOfflineAudit": {
+    "path": "docs/research/reports/stage1-evidence-reuse-audit-20261012.json",
+    "sha256": "b71efb45de08e1f3d7141a75bd3325fa7872480dfd6c211f2f0fb9fe8250fdde",
+    "scope": "Authenticated saved scoped evidence only; no new RPC/EVM. Compound and six Algebra memo definitions remain compatible. Old WETH YB identity memo needs copy-only selective revalidation after shared runtime changes; old historical success is retained."
+  }
+}

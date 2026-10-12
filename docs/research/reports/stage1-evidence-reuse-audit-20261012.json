@@ -1,0 +1,452 @@
+{
+  "schema": "stage1-evidence-reuse-audit/v1",
+  "date": "2026-10-12",
+  "scope": "Offline bounded audit of cited WETH Yield Basis, cUSDC/cDAI and six Algebra historical evidence; no new execution.",
+  "baseline": {
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "head": "9b507e04b3c449bd081bf4e96a6a78c1a66b1291",
+    "userSourcePin": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+    "sourcePinRecomputed": false,
+    "cloudHeadVerified": true,
+    "workingFileDrift": {
+      "manifest": {
+        "headSha256": "b0ee7606b3072d7d48f6c6c2d783c7926e037990e854974e2ce9c303c34a19b8",
+        "observedSha256": "caa2a0f825b35f68d37722eedf282b4aa05b45a071f551976bc22cd444840f12"
+      },
+      "readyHelper": {
+        "headSha256": "36f78fee49c79164b27549fdf0998241f1c30a3fd6a408b0eae9c9bbf5fb163f",
+        "observedSha256": "17d2a99d27593de5a8e77f6fd2c7d1c202d934449025871314b2e4d3a465adac"
+      },
+      "note": "Cloud is concurrently edited. All three memo-scope hashes recomputed from the actual cloud manifest equal pinned HEAD below. Read-only git diff shows Ready helper drift adds selected-transaction observation acquisition/coverage; it does not change the definition hash or memo-validity helpers inspected here. No whole-workspace equality claim."
+    }
+  },
+  "reports": [
+    "docs/research/reports/yieldbasis-deposit-integration-20261009.json",
+    "docs/research/reports/compound-reference-acceptance-20261009.json",
+    "docs/research/reports/four-family-independent-acceptance-20261009.json",
+    "docs/research/reports/yb-cuni-additional-acceptance-20261012.json",
+    "docs/research/reports/dynamic-family-refresh-recovery-20261011.json"
+  ],
+  "method": {
+    "artifactAuthentication": "SHA256 of eight actual cloud dual artifacts matches tracked report; SHA256 of eight linked Ready files matches artifact bindings. Parsed headers and memo projections only; no receipt reexecution, full proof reauthentication or price-table rehash.",
+    "definitionCheck": "Offline SHA256 recomputation of family-memo-def-v1 canonical capability set, using current generated exact manifest and source-defined identity,instance,routes,pricing,funding order; absent funding excluded. Historical 8c57ba67 recomputation reproduces all saved memo hashes. Current cloud manifest reproduces current pinned hashes.",
+    "testsRun": [],
+    "rpcCalls": 0,
+    "evmRuns": 0,
+    "builds": 0,
+    "readyWrites": 0
+  },
+  "readyRules": {
+    "source": "listener/src/searcher/universe-rebuild-production.ts",
+    "functions": [
+      "familyDefinitionHash",
+      "familyMemoDefinitionHash",
+      "memoCheapBindingValid",
+      "memoPricingProjectionCompatible",
+      "createRebuildWiring.isReadyMemoDefinitionCurrent"
+    ],
+    "memoCapabilities": [
+      "identity",
+      "instance",
+      "routes",
+      "pricing",
+      "funding"
+    ],
+    "acceptedDefinition": "current full definition OR current memo-scoped definition; exact/execution-only changes do not invalidate scoped identity memos",
+    "otherRequirements": "Family/candidate fingerprint and immutable-code proof, cutoff/chain authority, nonempty routes and pricingInstances; canReuseMemo also requires current authority fingerprint.",
+    "graphIntegrity": "strict-ready-runtime validates cursor/coverage/catalog/publication/graph roots, not current Family memo definition by itself.",
+    "discovery": "capture/discovery source-plan validity is separate from memo validity. YB/Compound nomination helper changed; unchanged memo does not automatically certify a new discovery scan."
+  },
+  "verdicts": {
+    "wethYieldBasis": {
+      "block": 26003536,
+      "historicalClaim": "Retain natural two-direction Ready/Graph/raw/effective and four amounts/eight same-N quoted/runtime executions; all recorded deltas zero.",
+      "savedMemo": "11ce4ae603ed4379f2d0858c4faca8fe46e5dbf064f27f08f33a5d2a68251278",
+      "currentMemo": "377e984a23500d280274d88875bbcb055d35d4e39729b4db45dfcde542df754f",
+      "memoScopeCurrent": false,
+      "reason": "Identity capability changed 88fdef1a... -> 20450daa... through runtime-amount-program.ts, runtime-execution.ts and new amount-rounding.ts, not a changed YB production file or whole-tree fingerprint. Instance/routes/pricing hashes unchanged.",
+      "nextMinimal": "If a current-definition WETH claim is needed, preserve original and run existing searcher:universe-rebuild-probe on a copy for this candidate, followed by original startup publication at N26003536 and searcher:at-block through prices; then searcher:yieldbasis-lt-dual-historical --sample weth with refreshed bindings. No blanket six-family/full-window rerun.",
+      "limits": "Saved WETH execution still binds old executor/runtime; newer BTC YB samples do not establish current WETH historical execution. No original pre-call output parity."
+    },
+    "compound": {
+      "block": 25944463,
+      "historicalClaim": "Retain cUSDC/cDAI direct redemption at saved production-reference input and observed burned-share input: 16 recorded executions, zero deltas. Donor lends only amountIn.",
+      "savedAndCurrentMemo": "42bcea101816e0dbd338b1b3e2348dba43579ca1f5bd9e4937d976dc259f1150",
+      "memoScopeCurrent": true,
+      "nextMinimal": "No identity revalidation solely for sourceTree mismatch. On a genuinely current-executor acceptance request, reuse valid historical topology and existing searcher:kyber-yb-compound-dual-historical-fork with authenticated input bindings; isolate changed runtime behavior first.",
+      "gaps": [
+        "Natural family-only effective remains missing-valuation; splice does not fix topology.",
+        "redeemUnderlying observed burned shares validate redeem(shares), not original-interface/pre-call reproduction.",
+        "Outer wrapper/LP route and full opportunity remain outside direct cToken parity."
+      ]
+    },
+    "algebra": {
+      "blocks": [
+        26018534,
+        26030898,
+        26013785,
+        25946003,
+        25930616,
+        25975130
+      ],
+      "historicalClaim": "Retain six target pools, both directions, two amounts/direction, quoted/runtime plus old-output inventory controls: 96 recorded executions, zero deltas; natural production effective inputs.",
+      "savedAndCurrentMemo": "e1ead04779f57425fbd95273a8719e4de95ae7b8151c9725e2916c0bd0a05634",
+      "memoScopeCurrent": true,
+      "nextMinimal": "No selective identity rerun justified by whole-tree mismatch. Existing searcher:algebra-dual-historical-fork remains the entrypoint only if refreshed runtime-executor evidence is required.",
+      "gaps": [
+        "Untested plugin/security/tick states and other pools are not covered.",
+        "Additional background pools have price evidence, not their own execution acceptance."
+      ]
+    }
+  },
+  "relevantChanges": {
+    "comparisonBase": "8c57ba67 (reproduces saved memo hashes; not asserted to equal every contemporaneous dirty artifact source)",
+    "familyOwnedProduction": "No changed production files within the three Family directories between 8c57ba67 and pinned HEAD; only tests changed.",
+    "capabilityChanges": [
+      {
+        "family": "protocol:yieldbasis-lt",
+        "capability": "capture",
+        "old": "ba8c922e1a4e7581cf3c6cc1baa56ca6e5f612958c47c19903e7240da4848846",
+        "current": "5c4e783163bc914f1d530a602486eca3da085ef4c296280de00e6cabd2ad16da",
+        "changedDependencies": [
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
+        ]
+      },
+      {
+        "family": "protocol:yieldbasis-lt",
+        "capability": "discovery",
+        "old": "13816353aa22e6df918df83384b97e3654e0325ed7c4eba6b69da7b2dfff8bd9",
+        "current": "c9a1fe6031c63ed4e4ff234196de170315972b1abd988f76d510280acc95bf8e",
+        "changedDependencies": [
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
+        ]
+      },
+      {
+        "family": "protocol:yieldbasis-lt",
+        "capability": "exact",
+        "old": "2565a9740e01782e6d46d4dca7d0f90c83c4556f6f74121e13ade475190da875",
+        "current": "1de8e2f1911ac0747f3195fe4c9651b5f4433df147d74156ee7b67f15500733b",
+        "changedDependencies": [
+          "src/adapters/runtime-amount-program.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ]
+      },
+      {
+        "family": "protocol:yieldbasis-lt",
+        "capability": "execution",
+        "old": "f004288a63a2963621de5a292df77e486421975ca0a5f0cb3715f344707e1a31",
+        "current": "63c439cab1c8ab48087a2d4db81613aa4117c1f0a53d926c3dac6f837f93f87f",
+        "changedDependencies": [
+          "src/adapters/runtime-amount-program.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ]
+      },
+      {
+        "family": "protocol:yieldbasis-lt",
+        "capability": "identity",
+        "old": "88fdef1aa9c5b396ac8dd64c19b99be13a56e9757852f61e5bdf3a34699bc181",
+        "current": "20450daa660019abc2bc840839b25363f47e10c5bc16a4a27c49481d5a2e31db",
+        "changedDependencies": [
+          "src/adapters/runtime-amount-program.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ]
+      },
+      {
+        "family": "protocol:compound-ctoken",
+        "capability": "capture",
+        "old": "c83d3304a6ba111eb5a7fe1ee35c5ef41aa8f1a7f1e41596c15a5a38a7ff7d1e",
+        "current": "6c105f98a3fbd6582431f3f3d5e96252689cba99e683ea3de48114cacdf51367",
+        "changedDependencies": [
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
+        ]
+      },
+      {
+        "family": "protocol:compound-ctoken",
+        "capability": "discovery",
+        "old": "3fba06132c53cf5bf733ed75e3e8570d5591f18124cf0e6df10f4eedd7ef8027",
+        "current": "37c39d6db231380158d092cf0ddf90e4e0d5d863c1087b5ca064a44b51466c7f",
+        "changedDependencies": [
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/tx-evidence-nomination.ts"
+        ]
+      },
+      {
+        "family": "protocol:compound-ctoken",
+        "capability": "exact",
+        "old": "914acc8c294217d32f966194acc238cfa09d2db12103eeed07b3ce54ae02b5e4",
+        "current": "d997b8cbb855058eb5287fae27bd8a551ee0e05623b2c11632d8815c7297ed29",
+        "changedDependencies": [
+          "src/searcher/venues/adapter-family-plugin.ts"
+        ]
+      },
+      {
+        "family": "protocol:compound-ctoken",
+        "capability": "execution",
+        "old": "49d0cbaa4afd90bb7c5b997d860d809367eecf3bf4fd8f0640f3e39a9712e06d",
+        "current": "6fa6c46b8926c456781e4f4687673d710be2bd7d5577aa682672a2e41a9714ca",
+        "changedDependencies": [
+          "src/adapters/runtime-amount-program.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ]
+      },
+      {
+        "family": "swap:algebra-integral",
+        "capability": "exact",
+        "old": "43b7fb7a6445373a12e92f576369d21fd4880184f582c50452b961b7cef134f4",
+        "current": "2a404e08b411a7d2d068ef68084896fd84a7b3ac6e18a575476c4f4ce613224b",
+        "changedDependencies": [
+          "src/searcher/venues/adapter-family-plugin.ts"
+        ]
+      },
+      {
+        "family": "swap:algebra-integral",
+        "capability": "execution",
+        "old": "a0a6d471b686978d9e49da90d76b125a3cc85faf8d136246d078da91fd0c5d88",
+        "current": "c53c5e38f8d388a6fa33bfb0341d3f30f053710cd4e2865856bc8c7dfb3fd2eb",
+        "changedDependencies": [
+          "src/adapters/runtime-amount-program.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ]
+      }
+    ],
+    "runtime": "2f1f3da7 adds native asset/raw-unit rounding guards; runtime amount encoder adds explicit tolerance/maximum-input flags while retaining legacy zero-tolerance bytes. RuntimeAmountVM adds per-hop debit/retained-input protection and maximum budget support; BotVM changes failure bubbling. Old successful receipts are not fresh verification of these branches. The latest tracked YB report binds executor 0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec, versus old evidence 0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6; both YB reports bind revm SHA256 36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d. These are recorded bindings, not a new active-binary measurement.",
+    "refresh": "de74bef7 preserves each-block retry eligibility. Tracked 20261011 recovery report records 51/51 synthetic recovery tests; supersedes old disable-until-restart language, not historical EVM or latency evidence.",
+    "runtimeSourceHashes": [
+      {
+        "path": "listener/src/searcher/strict-central-adapter-runtime.ts",
+        "currentSha256": "383b074a3ed40976ac4fba2ecc4345bd7bfe183357e4bc9de4e3e1e7c412589e",
+        "baselineSha256": "d97b0511ce39f0a07708838b220b1a9142efc1f462f9c7cf6c9fc12b8fd831a8"
+      },
+      {
+        "path": "listener/src/searcher/strict-current-runtime-coordinator.ts",
+        "currentSha256": "5836e3e2f872bf11ef4e980b1911520095a9aab04be83e6f93cc5daa2c2c4db3",
+        "baselineSha256": "b03736450c01a5ab588165dfa9818aa6cd696d46d315baf2af53e197a2392838"
+      },
+      {
+        "path": "listener/src/searcher/strict-production-runtime-session.ts",
+        "currentSha256": "8ccaa0084655f92697c9a848faf648fba308a1c40693c0775c9ec388db888c08",
+        "baselineSha256": "55c1b401fe75fdd0d59e4f9fb4becc0ed3fe5c2ebee10df459c99281f4ed22f7"
+      },
+      {
+        "path": "listener/src/searcher/revm-strict-simulation-transport.ts",
+        "currentSha256": "ebe81bf28cbb79e481f3b402f437c6f5e4ff2aa492a4307fd5dc1b7290b22506",
+        "baselineSha256": "ab016f78bc6a4517304f2df1b9e1d5d234d3cb6240ff589dd4489d047f7e1ab0"
+      },
+      {
+        "path": "listener/src/searcher/universe-rebuild-production.ts",
+        "currentSha256": "36f78fee49c79164b27549fdf0998241f1c30a3fd6a408b0eae9c9bbf5fb163f",
+        "baselineSha256": "36f78fee49c79164b27549fdf0998241f1c30a3fd6a408b0eae9c9bbf5fb163f"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+        "currentSha256": "43f43ca6314a9272ddfd6e4cbb277e1e6723de92480227ee97e2dbfd42d0babb",
+        "baselineSha256": "268052265a3a8291f6de1372985690d1eae6536364de66feb05910f28c5e620c"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/three-family/historical-input-observations.ts",
+        "currentSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "baselineSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "currentSha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5",
+        "baselineSha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+      },
+      {
+        "path": "src/BotVM.sol",
+        "currentSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+        "baselineSha256": "5cc05fe179c3c39ffae2eadd4ae066c8498948f5fcdb42b705acbe44658b6c66"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/yb-program-acceptance-20261009/yb-dual-cloud-attempt03.json",
+      "sha256": "d0467603f611e102dcafb0d054248b3ed583f3b7ea74558fba5f60155b22a4f7",
+      "result": "pass",
+      "source": {
+        "number": 26003536,
+        "hash": "0xf913fc4aaaeca0fd9fcd871c1a2b0159e1ecc3679724fff679a061ca7bedeaad"
+      },
+      "sourceTreeSha256": "a5d73e5badacfff5dffbcc901b1eea4d5a404a0a3dcd1f65ba52aefafccc6f73",
+      "harnessSha256": "75d88d0952bf73fe904379fc93c3a4e5f497719995b8b716e01c06481ce43e95",
+      "executorCodeHash": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/yb-program-acceptance-20261009/yb-ready-cloud-attempt01/ready.json",
+        "sha256": "6957aa08370d16b7c1395e4db5dea184831764eecb609a4f9a0c9e62ab8044d9",
+        "hashMatches": true,
+        "memoDefinition": [
+          "11ce4ae603ed4379f2d0858c4faca8fe46e5dbf064f27f08f33a5d2a68251278"
+        ]
+      }
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/compound-reference-20261009-attempt01/dual-reviewed.json",
+      "sha256": "2f8ace3e27c378fdde8b6c1dd4b8c312285352f0067417ec123e469f2bcd71d8",
+      "result": "pass-with-spliced-reference",
+      "source": {
+        "number": 25944463,
+        "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316",
+        "generation": 25944463
+      },
+      "sourceTreeSha256": "0490bfea6189fc523062841eb0119a8d2bfabc8b0c2b84b1f2cad3f23dce28d6",
+      "harnessSha256": "a051e7ec0ee720395f4ad9c7fb05737fcb6b5792e3067fb0b6eeb0e24991ee8b",
+      "executorCodeHash": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/compound-current-N25944463-attempt02/ready.json",
+        "sha256": "714ab27733892a3f9030b557932955293145427eacbea07e434a3174aff2008b",
+        "hashMatches": true,
+        "memoDefinition": [
+          "42bcea101816e0dbd338b1b3e2348dba43579ca1f5bd9e4937d976dc259f1150"
+        ]
+      }
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26018534-attempt01/dual-attempt01.json",
+      "sha256": "45d78fb5ce3deb4d118d18bcd6b1c15834334a166b1d9ce4c3b08a661d59bda3",
+      "result": "pass",
+      "source": {
+        "number": 26018534,
+        "hash": "0xba26a0e4891db23e721b7d434b592622fb7842dc35b2dffc20bc1f7936a65a8a",
+        "generation": 26018534
+      },
+      "sourceTreeSha256": "3ce6c391ad6c957b3da137ea1d444411ddb7f1d7b5a491d257c1bf1ed7499512",
+      "harnessSha256": "1cd9e7893dd15d6a2acdcca4a93cf0cf36e7bab9316482a7443baa95d264c9d0",
+      "executorCodeHash": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26018534-attempt01/ready.json",
+        "sha256": "e28129c60d00881c0a59c37dedb51138078ae2895c4c8a5b8a4dca4881440ec7",
+        "hashMatches": true,
+        "memoDefinition": [
+          "e1ead04779f57425fbd95273a8719e4de95ae7b8151c9725e2916c0bd0a05634"
+        ]
+      }
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26030898-attempt01/dual-attempt01.json",
+      "sha256": "a82260191b26b91ddbbb01bc6f77faab95480835278b12b8b45ef7e267a35c27",
+      "result": "pass",
+      "source": {
+        "number": 26030898,
+        "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+        "generation": 26030898
+      },
+      "sourceTreeSha256": "3ce6c391ad6c957b3da137ea1d444411ddb7f1d7b5a491d257c1bf1ed7499512",
+      "harnessSha256": "1cd9e7893dd15d6a2acdcca4a93cf0cf36e7bab9316482a7443baa95d264c9d0",
+      "executorCodeHash": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26030898-attempt01/ready.json",
+        "sha256": "0d61db3cb5f7e611271db8a8ce965ca50d0f7e982e577e70ad06d0e2522c8957",
+        "hashMatches": true,
+        "memoDefinition": [
+          "e1ead04779f57425fbd95273a8719e4de95ae7b8151c9725e2916c0bd0a05634"
+        ]
+      }
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26013785-attempt01/dual-attempt01.json",
+      "sha256": "6ce4040a2b59d857b39a67f3ac6eab7a5bc237d802a36d92f31f31b7aada959a",
+      "result": "pass",
+      "source": {
+        "number": 26013785,
+        "hash": "0x673de33446bcd9fdee4371c29d237c46402e2360186a3fb3fc3a2a3a37a33403",
+        "generation": 26013785
+      },
+      "sourceTreeSha256": "3ce6c391ad6c957b3da137ea1d444411ddb7f1d7b5a491d257c1bf1ed7499512",
+      "harnessSha256": "268052265a3a8291f6de1372985690d1eae6536364de66feb05910f28c5e620c",
+      "executorCodeHash": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26013785-attempt01/ready.json",
+        "sha256": "a4b650e98c1a66f18096989b100d3b7c497d6240ee949d7efefafbe6b57f1cf4",
+        "hashMatches": true,
+        "memoDefinition": [
+          "e1ead04779f57425fbd95273a8719e4de95ae7b8151c9725e2916c0bd0a05634"
+        ]
+      }
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25946003-attempt01/dual-attempt01.json",
+      "sha256": "ecac151181ef752dc182d30e1c58fe4bbcde4e3ecd78f343bf82a3eca6552757",
+      "result": "pass",
+      "source": {
+        "number": 25946003,
+        "hash": "0x5536c70b740995bfa6bcc158673726dc7372a87ddfc534203ef4f4ba02cd97ff",
+        "generation": 25946003
+      },
+      "sourceTreeSha256": "3ce6c391ad6c957b3da137ea1d444411ddb7f1d7b5a491d257c1bf1ed7499512",
+      "harnessSha256": "268052265a3a8291f6de1372985690d1eae6536364de66feb05910f28c5e620c",
+      "executorCodeHash": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25946003-attempt01/ready.json",
+        "sha256": "8ea38feb6dfb6eb3bee2e606d17b1c9f5215f8f11d3afedd5869cb04378bbdcd",
+        "hashMatches": true,
+        "memoDefinition": [
+          "e1ead04779f57425fbd95273a8719e4de95ae7b8151c9725e2916c0bd0a05634"
+        ]
+      }
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25930616-attempt01/dual-attempt01.json",
+      "sha256": "95df818d23f23c797713c49f8e257584db1de9967dc5b988648fd73e2b49305e",
+      "result": "pass",
+      "source": {
+        "number": 25930616,
+        "hash": "0x74738d6652e7cf663495912cc71099623b8ee9636aad5e1a8d0f58827f8651d5",
+        "generation": 25930616
+      },
+      "sourceTreeSha256": "3ce6c391ad6c957b3da137ea1d444411ddb7f1d7b5a491d257c1bf1ed7499512",
+      "harnessSha256": "268052265a3a8291f6de1372985690d1eae6536364de66feb05910f28c5e620c",
+      "executorCodeHash": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25930616-attempt01/ready.json",
+        "sha256": "dc8e67ae8d1acb65488d51a39ef805cb715a10debb6eb32071a577fd677c7f5d",
+        "hashMatches": true,
+        "memoDefinition": [
+          "e1ead04779f57425fbd95273a8719e4de95ae7b8151c9725e2916c0bd0a05634"
+        ]
+      }
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25975130-attempt01/dual-attempt01.json",
+      "sha256": "c1e80e5ff51ff9d6d6299d4fcc5ca9a7942e57d9a862a10d91b5682974cc5067",
+      "result": "pass",
+      "source": {
+        "number": 25975130,
+        "hash": "0x58ac4d102bb4c31b585f078b50b3dbea9b0ffab35149c8659b0227aaec8ea466",
+        "generation": 25975130
+      },
+      "sourceTreeSha256": "3ce6c391ad6c957b3da137ea1d444411ddb7f1d7b5a491d257c1bf1ed7499512",
+      "harnessSha256": "268052265a3a8291f6de1372985690d1eae6536364de66feb05910f28c5e620c",
+      "executorCodeHash": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25975130-attempt01/ready.json",
+        "sha256": "524b58e59de633230d50835a1b38b2bb580f6d79ef0621c7ddf541960cc98ae6",
+        "hashMatches": true,
+        "memoDefinition": [
+          "e1ead04779f57425fbd95273a8719e4de95ae7b8151c9725e2916c0bd0a05634"
+        ]
+      }
+    }
+  ],
+  "remainingCorrectnessGaps": [
+    "WETH current-definition identity/publication gap is specific; saved historical success remains intact.",
+    "Current executor/new shared runtime branches need scoped validation before claiming current-source execution; no blanket rerun inferred from sourceTree mismatch.",
+    "Compound natural valuation and original wrapper/pre-call parity remain unproven.",
+    "Algebra coverage is limited to six historical states; new dynamic recovery is synthetic evidence.",
+    "Original transaction pre-call parity, route-pinned Adapter Replay/merge gates and natural profitable opportunity are not established by these artifacts."
+  ],
+  "excluded": "cUNI multi-amount/reference topology and donor search remain main-owned. No original patch touched. Performance/live acceptance not performed.",
+  "writes": [
+    "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/stage1-evidence-reuse-audit.json"
+  ]
+}
