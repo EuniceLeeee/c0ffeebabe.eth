@@ -1,0 +1,1235 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "family": "kyberswap-elastic",
+  "claim": "Four additional finite samples: real natural same-N strict/Graph/raw/effective and same-state specified-amount quoted/runtime receipt parity. Fifth target remains unresolved after identity; no whole-family/whole-route or timing verdict.",
+  "workspace": {
+    "root": "/opt/mev-cloud/family-runtime-20261007",
+    "head": "5297ec16be68fc6eb906a3db32ed0dcd3ef4c100",
+    "context": "Actual cloud working tree with peer dirty changes preserved; production source hashes remain those in da1356d evidence, not a claim of isolated HEAD-only acceptance."
+  },
+  "codeChangesThisSupplement": false,
+  "priorCodeAndChecks": {
+    "commit": "da1356db5c25e42b20bf4e9d6192b3a08c1ee3df",
+    "report": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber-range-acceptance-20261012.json",
+      "sha256": "c8010a40d44700d0867fced2f02c245997d006f906c65ec0cc275ec31738ea81"
+    },
+    "sourceFilesSha256": {
+      "abi.ts": "8011b7143f185a048a429a9787e8e5a81ea0ff2c6efce664629aad422cff9786",
+      "types.ts": "3afc7b1dba1c5145782f8746f9eaa66b171256b911ca6c52c0cf1e59fc0264d8",
+      "state.ts": "e9e8a780a1b8017b9f2cc19d5df4b5c1a6d36a703096ea9827d2b8c9f6ff6369",
+      "math.ts": "a7b3e3fa82af527da779cf93b2521b72953a3cec3e3d0f09e2f20a58137fd61a",
+      "exact.ts": "1de0a5d0cb83e1629874038e499bef6497b29e380d84d611ff65c57710b184c3",
+      "execution.ts": "42cc390efc2695e237d6fb16e307ccfec4f50ce4da6b2d7beb59700ee61d2612",
+      "test/fixtures.ts": "3c5f71f09c9a40b393f36b87f2570cbaff642629af92d2c6b30b6facffc59e20",
+      "test/contract.ts": "f539318c265b22cfb5ab370fabb3c8d9bcb70841acdf26deb220bff182e3dab2",
+      "test/central-exact.ts": "3a1537aac78d7f5770df8761753af088cca5281b82777bc13dc254ea9a3d43c0",
+      "test/historical-ready.ts": "ef3c3ed11818cfd91fa34e698b58d45476680b32610e2e83b204f54cbd64527c"
+    },
+    "build": "Prior current-cloud build:live and relevant regressions retained; no source changes or repeated build in this supplement."
+  },
+  "samples": [
+    {
+      "key": "kyber5",
+      "transactionHash": "0x9ba449c162417df21a12982f6762aa2ff7c52bbb18af4bf45c513a6d38072f1f",
+      "source": {
+        "number": 26056774,
+        "hash": "0xe0dcbdd7d2032694612cdef6b22969475f21e194e5a2f8a754ec9ce1aaf10125",
+        "generation": 26056774
+      },
+      "result": "pass",
+      "artifacts": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber5-dual-attempt01.json",
+          "sha256": "3c3aabd8ea3c4d5e223da12924995e4baef44e8bf57e13bd5ed04b5a77dc2972"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber5-ready-attempt01/ready-summary.json",
+          "sha256": "92aaded0f4ac4f50ecdd31fa265788dcd81b45eee168bc4294d07457e2dff8b7"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber5-ready-attempt01/ready.json",
+          "sha256": "9c9bf9f5f7b1db4e7ca99aaac3a690a44754b4d6ed284278d1061cddac212008"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber5-ready-attempt01/prices/prices.json",
+          "sha256": "5bcff0d035a7b681a7ab1e71f7532f964f8f07571b8cf5b496a0824eb88904d4"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber5-ready-attempt01/prices/input.json",
+          "sha256": "d342b407c8f01eed353659a5dac2aa1f8701347dcd2a17f129ef727ff555bd5b"
+        }
+      ],
+      "graphHash": "a126d4688255b356f473a55e72a45a6702b84a0f22e594bce7405af08ebca494",
+      "admission": [
+        {
+          "instanceKey": "0xc5d2fcd426a648b2cabf14aabafc9a87801d4b40",
+          "memoFingerprint": "aac708db6fac35ab0ecd3b7f4701eb34a04489868354e2390ba68643e9eaad77",
+          "familyDefinitionHash": "9ea4fa9e765fe30d7c9fa3c1f7bc350463344d57a0f3fe2f5b80f436b25233d3",
+          "candidate": {
+            "adapter": "kyberswap-elastic",
+            "address": "0xc5d2fcd426a648b2cabf14aabafc9a87801d4b40",
+            "blockHash": "0xe0dcbdd7d2032694612cdef6b22969475f21e194e5a2f8a754ec9ce1aaf10125",
+            "blockNumber": 26056774,
+            "candidateKind": "kyberswap-elastic-pool",
+            "familyId": "kyberswap-elastic",
+            "hintedFactory": null,
+            "logIndex": 250,
+            "pluginCandidateKey": "0xc5d2fcd426a648b2cabf14aabafc9a87801d4b40",
+            "pool": "0xc5d2FCd426A648b2caBF14AaBaFc9a87801D4B40",
+            "sourceKind": "pool-swap-log",
+            "transactionHash": "0x9ba449c162417df21a12982f6762aa2ff7c52bbb18af4bf45c513a6d38072f1f"
+          }
+        }
+      ],
+      "natural": {
+        "instances": 1,
+        "graphEdges": 2,
+        "rawMids": 2,
+        "effectiveQuoted": 2
+      },
+      "counters": {
+        "trials": 4,
+        "executions": 16,
+        "missingInputRevertingControls": 8
+      },
+      "sourceCode": {
+        "sourceTreeSha256": "dd4557049b46d9c6c33354ec542fb04435143a00e138701ae57254379a74063b",
+        "harnessSha256": "43f43ca6314a9272ddfd6e4cbb277e1e6723de92480227ee97e2dbfd42d0babb",
+        "evidenceSha256": "77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222",
+        "observationHelpers": [
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+          },
+          {
+            "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+            "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+          },
+          {
+            "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+            "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+          },
+          {
+            "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+            "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+            "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+          },
+          {
+            "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+            "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "runtimeCode": {
+        "keccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+        "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+      },
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "originalReceiptSha256": "01a51918e3498a23e1b3cd1708f06bc5063a4c46036443b37eaecac6b96b9247",
+      "originalTraceSha256": "57a7747497a365d0576de4a1ce24784af09b9cf15b62a4db6833cdb7a98340f1",
+      "directions": [
+        {
+          "instance": "0xc5d2fcd426a648b2cabf14aabafc9a87801d4b40",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+          "productionReferenceGate": {
+            "status": "met",
+            "amountIn": "2000000000000000",
+            "amountOut": "3386811813483"
+          },
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0x8da6fb1e361edb3e4d96c818704edd63afb2235150c560f7016831d7b971f385"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2000000000000000",
+              "amountOut": "3386811813483",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "280353031",
+              "amountOut": "255612273",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "originalAmountOut": "255650798",
+                "signedDelta": "-38525",
+                "observationId": "0x9ba449c162417df21a12982f6762aa2ff7c52bbb18af4bf45c513a6d38072f1f:0xc5d2fcd426a648b2cabf14aabafc9a87801d4b40:250",
+                "logIndex": "0xfa",
+                "verdict": "same interface at N-end; original pre-call state NOT restored"
+              }
+            }
+          ]
+        },
+        {
+          "instance": "0xc5d2fcd426a648b2cabf14aabafc9a87801d4b40",
+          "tokenIn": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "productionReferenceGate": {
+            "status": "met",
+            "amountIn": "3386811813483",
+            "amountOut": "3693926593085"
+          },
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0xe5f914abe6a2b86afd877c0cd277f850d32417c0c3402c7ec4e6404691d40136"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "3386811813483",
+              "amountOut": "3693926593085",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            },
+            {
+              "label": "twice-production-effective",
+              "amountIn": "6773623626966",
+              "amountOut": "7387831461739",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            }
+          ]
+        }
+      ],
+      "safety": {
+        "signing": false,
+        "broadcast": false,
+        "minedBlocks": 0,
+        "protocolOverrides": false,
+        "mainExecutionFunding": "actor input only; existing input/output inventory preserved",
+        "inventoryControl": "separate actor-only output inventory; never counted as received output"
+      },
+      "nativeInventory": "17 -> 17 wei in all trials",
+      "diagnostics": {
+        "elapsedMs": 2129.449487,
+        "directRpcCalls": 125,
+        "forkInternalRpcCalls": "not counted",
+        "invocationCounts": {
+          "exact": 4,
+          "quoted": 4,
+          "forbiddenDuringBuild": 0
+        },
+        "timingClaim": "diagnostic wall time only; not production scheduling/performance acceptance"
+      }
+    },
+    {
+      "key": "kyber6",
+      "transactionHash": "0xbedbb4ec997899d15e3895e5ce698bc22ad2064d213a339d5a6902ee713c8363",
+      "source": {
+        "number": 26143115,
+        "hash": "0x4872a838c097f5d2f1e19aecd85ac30a982ed6d2b5f27e73130f13b5ccf6614a",
+        "generation": 26143115
+      },
+      "result": "pass",
+      "artifacts": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber6-dual-attempt01.json",
+          "sha256": "836efbe72ca416b61527a3390b667ad34bb39db88d4c104285e5b77170e8eb2b"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber6-ready-attempt01/ready-summary.json",
+          "sha256": "54ee8d241e160838b9450cc34146fd2d62f96a23756dff3fa2ff000c9aa0f154"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber6-ready-attempt01/ready.json",
+          "sha256": "b0a19ad4ddd0bd0bd94877b3f0c6edee77aca40c8b678b32f351195c025768e6"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber6-ready-attempt01/prices/prices.json",
+          "sha256": "157c0b6df53eac947a7f0fce1060d00e9297d8af04abc35eb49f4b46ca5b3425"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber6-ready-attempt01/prices/input.json",
+          "sha256": "8aff836e7f194910ef5e9744ca96f5ad33bfdcfd78883c2b3c1a2a9ed728e820"
+        }
+      ],
+      "graphHash": "49f0fb57c022bce3b826f998c86ee76a276d26d5c2c2319d3fb998d93f9c91cb",
+      "admission": [
+        {
+          "instanceKey": "0x81df0049443f5d037f92518fbb509e0ee50333ce",
+          "memoFingerprint": "06445e17c788c92cb5905a7f186c603283fc75480dd89c9256898ca57c2ecca7",
+          "familyDefinitionHash": "9ea4fa9e765fe30d7c9fa3c1f7bc350463344d57a0f3fe2f5b80f436b25233d3",
+          "candidate": {
+            "adapter": "kyberswap-elastic",
+            "address": "0x81df0049443f5d037f92518fbb509e0ee50333ce",
+            "blockHash": "0x4872a838c097f5d2f1e19aecd85ac30a982ed6d2b5f27e73130f13b5ccf6614a",
+            "blockNumber": 26143115,
+            "candidateKind": "kyberswap-elastic-pool",
+            "familyId": "kyberswap-elastic",
+            "hintedFactory": null,
+            "logIndex": 505,
+            "pluginCandidateKey": "0x81df0049443f5d037f92518fbb509e0ee50333ce",
+            "pool": "0x81dF0049443f5D037f92518fbb509e0ee50333CE",
+            "sourceKind": "pool-swap-log",
+            "transactionHash": "0xbedbb4ec997899d15e3895e5ce698bc22ad2064d213a339d5a6902ee713c8363"
+          }
+        }
+      ],
+      "natural": {
+        "instances": 1,
+        "graphEdges": 2,
+        "rawMids": 2,
+        "effectiveQuoted": 2
+      },
+      "counters": {
+        "trials": 4,
+        "executions": 16,
+        "missingInputRevertingControls": 8
+      },
+      "sourceCode": {
+        "sourceTreeSha256": "dd4557049b46d9c6c33354ec542fb04435143a00e138701ae57254379a74063b",
+        "harnessSha256": "43f43ca6314a9272ddfd6e4cbb277e1e6723de92480227ee97e2dbfd42d0babb",
+        "evidenceSha256": "77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222",
+        "observationHelpers": [
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+          },
+          {
+            "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+            "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+          },
+          {
+            "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+            "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+          },
+          {
+            "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+            "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+            "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+          },
+          {
+            "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+            "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "runtimeCode": {
+        "keccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+        "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+      },
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "originalReceiptSha256": "1bb751b92f28e83f2c46876b3bee8a95696660de061bca6d7f0ae1b7d279e69d",
+      "originalTraceSha256": "1fe3ced99ff017f828b3e3c004fe05384336404f14a08bd28dfe1582e984e6ca",
+      "directions": [
+        {
+          "instance": "0x81df0049443f5d037f92518fbb509e0ee50333ce",
+          "tokenIn": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "productionReferenceGate": {
+            "status": "met",
+            "amountIn": "2053372066712640470",
+            "amountOut": "1514115823500354"
+          },
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0x5e78d420b52061e952fb9912ca91dafe3787a8f54e2ae3678121499cb269de3f"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2053372066712640470",
+              "amountOut": "1514115823500354",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "35292400395838747",
+              "amountOut": "29282146384438",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "originalAmountOut": "29410843067682",
+                "signedDelta": "-128696683244",
+                "observationId": "0xbedbb4ec997899d15e3895e5ce698bc22ad2064d213a339d5a6902ee713c8363:0x81df0049443f5d037f92518fbb509e0ee50333ce:505",
+                "logIndex": "0x1f9",
+                "verdict": "same interface at N-end; original pre-call state NOT restored"
+              }
+            }
+          ]
+        },
+        {
+          "instance": "0x81df0049443f5d037f92518fbb509e0ee50333ce",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "productionReferenceGate": {
+            "status": "met",
+            "amountIn": "2000000000000000",
+            "amountOut": "2053372066712640470"
+          },
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0x6660429616d0b5555bb1f169edd2350824ff85edd91ca8507f3b178b9b02a849"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2000000000000000",
+              "amountOut": "2053372066712640470",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            },
+            {
+              "label": "twice-production-effective",
+              "amountIn": "4000000000000000",
+              "amountOut": "3698717731358590417",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            }
+          ]
+        }
+      ],
+      "safety": {
+        "signing": false,
+        "broadcast": false,
+        "minedBlocks": 0,
+        "protocolOverrides": false,
+        "mainExecutionFunding": "actor input only; existing input/output inventory preserved",
+        "inventoryControl": "separate actor-only output inventory; never counted as received output"
+      },
+      "nativeInventory": "17 -> 17 wei in all trials",
+      "diagnostics": {
+        "elapsedMs": 2585.0020160000004,
+        "directRpcCalls": 125,
+        "forkInternalRpcCalls": "not counted",
+        "invocationCounts": {
+          "exact": 4,
+          "quoted": 4,
+          "forbiddenDuringBuild": 0
+        },
+        "timingClaim": "diagnostic wall time only; not production scheduling/performance acceptance"
+      }
+    },
+    {
+      "key": "kyber7",
+      "transactionHash": "0x32d2b7740192b1235a0a12975f04cdbb283820ae0f2b967e653787d75cd5d6e8",
+      "source": {
+        "number": 26043137,
+        "hash": "0x4467ae30bbef9de8bb212af230e977d5ee2018350bd0007efa82d8956836fa8b",
+        "generation": 26043137
+      },
+      "result": "pass",
+      "artifacts": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber7-dual-attempt01.json",
+          "sha256": "7ad385e354e0ec7fbf1952f08efb4cb7d7b7f253946c6b39f3330009454c9ebb"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber7-ready-attempt01/ready-summary.json",
+          "sha256": "8fd1a1e903ec23ac4c177b52daa538fe4e8ab9093d6349fccc94b373c57adb89"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber7-ready-attempt01/ready.json",
+          "sha256": "5d1dd403672a4153213acbf675a89c9ee68994bb63ead880e0f2c36f17cc7378"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber7-ready-attempt01/prices/prices.json",
+          "sha256": "d35fa7a8fd3c61be67f021a6fd91e57823d0b7b9998491ac65a977c0fedb16ad"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber7-ready-attempt01/prices/input.json",
+          "sha256": "6d57cdd0d29011e376cd298c211914a42b1ed02e912d63144e5bd8d4a3af3f5c"
+        }
+      ],
+      "graphHash": "af81ecf3c00f9a70373c697f1a8c597a6f6a86c6f16d85d5a777a2b59fe879e5",
+      "admission": [
+        {
+          "instanceKey": "0x0d6154b875df5cc0a1cbb315065b6d2fdb364e8d",
+          "memoFingerprint": "fe0fd4ae4ed80ea23185db89b7e600772d5cd8f123bb89840d088ab47bcbcca7",
+          "familyDefinitionHash": "9ea4fa9e765fe30d7c9fa3c1f7bc350463344d57a0f3fe2f5b80f436b25233d3",
+          "candidate": {
+            "adapter": "kyberswap-elastic",
+            "address": "0x0d6154b875df5cc0a1cbb315065b6d2fdb364e8d",
+            "blockHash": "0x4467ae30bbef9de8bb212af230e977d5ee2018350bd0007efa82d8956836fa8b",
+            "blockNumber": 26043137,
+            "candidateKind": "kyberswap-elastic-pool",
+            "familyId": "kyberswap-elastic",
+            "hintedFactory": null,
+            "logIndex": 2244,
+            "pluginCandidateKey": "0x0d6154b875df5cc0a1cbb315065b6d2fdb364e8d",
+            "pool": "0x0D6154b875Df5cC0a1cbB315065b6d2fdB364E8D",
+            "sourceKind": "pool-swap-log",
+            "transactionHash": "0x32d2b7740192b1235a0a12975f04cdbb283820ae0f2b967e653787d75cd5d6e8"
+          }
+        }
+      ],
+      "natural": {
+        "instances": 1,
+        "graphEdges": 2,
+        "rawMids": 2,
+        "effectiveQuoted": 2
+      },
+      "counters": {
+        "trials": 4,
+        "executions": 16,
+        "missingInputRevertingControls": 8
+      },
+      "sourceCode": {
+        "sourceTreeSha256": "dd4557049b46d9c6c33354ec542fb04435143a00e138701ae57254379a74063b",
+        "harnessSha256": "43f43ca6314a9272ddfd6e4cbb277e1e6723de92480227ee97e2dbfd42d0babb",
+        "evidenceSha256": "77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222",
+        "observationHelpers": [
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+          },
+          {
+            "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+            "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+          },
+          {
+            "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+            "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+          },
+          {
+            "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+            "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+            "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+          },
+          {
+            "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+            "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "runtimeCode": {
+        "keccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+        "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+      },
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "originalReceiptSha256": "c36538d73f2632ea71d15e220d3286bb73b50c944b2552c94fe353d145c80634",
+      "originalTraceSha256": "ae37d5774f686a6d263a7d1c03ec5f62878c1447b66725c97a5ee5e6ef121dc4",
+      "directions": [
+        {
+          "instance": "0x0d6154b875df5cc0a1cbb315065b6d2fdb364e8d",
+          "tokenIn": "0xdefa4e8a7bcba345f687a2f1456f5edd9ce97202",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "productionReferenceGate": {
+            "status": "met",
+            "amountIn": "849432125644805303",
+            "amountOut": "25187951750851"
+          },
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0xc9cda91951305d32e2acf4c7ed0e0ab6c1998aa3ae30d998aa40beabdf5319d4"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "849432125644805303",
+              "amountOut": "25187951750851",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "339534538965735460",
+              "amountOut": "14259002537379",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "originalAmountOut": "32128125274722",
+                "signedDelta": "-17869122737343",
+                "observationId": "0x32d2b7740192b1235a0a12975f04cdbb283820ae0f2b967e653787d75cd5d6e8:0x0d6154b875df5cc0a1cbb315065b6d2fdb364e8d:2244",
+                "logIndex": "0x8c4",
+                "verdict": "same interface at N-end; original pre-call state NOT restored"
+              }
+            }
+          ]
+        },
+        {
+          "instance": "0x0d6154b875df5cc0a1cbb315065b6d2fdb364e8d",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xdefa4e8a7bcba345f687a2f1456f5edd9ce97202",
+          "productionReferenceGate": {
+            "status": "met",
+            "amountIn": "2000000000000000",
+            "amountOut": "849432125644805303"
+          },
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0x6a5ede55f3ebdf50d59c0143a48440cf061c0eb6ad932f93825f6c57ba0c29bf"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2000000000000000",
+              "amountOut": "849432125644805303",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            },
+            {
+              "label": "twice-production-effective",
+              "amountIn": "4000000000000000",
+              "amountOut": "860991823342553098",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            }
+          ]
+        }
+      ],
+      "safety": {
+        "signing": false,
+        "broadcast": false,
+        "minedBlocks": 0,
+        "protocolOverrides": false,
+        "mainExecutionFunding": "actor input only; existing input/output inventory preserved",
+        "inventoryControl": "separate actor-only output inventory; never counted as received output"
+      },
+      "nativeInventory": "17 -> 17 wei in all trials",
+      "diagnostics": {
+        "elapsedMs": 2554.001311,
+        "directRpcCalls": 125,
+        "forkInternalRpcCalls": "not counted",
+        "invocationCounts": {
+          "exact": 4,
+          "quoted": 4,
+          "forbiddenDuringBuild": 0
+        },
+        "timingClaim": "diagnostic wall time only; not production scheduling/performance acceptance"
+      }
+    },
+    {
+      "key": "kyber8",
+      "transactionHash": "0x38fff90705c91affd21f8fbca1d0e5861eccdc166a5547400c55402e47293769",
+      "source": {
+        "number": 26013881,
+        "hash": "0xa310c7b1f99e8e8d969284661953a157640ea0c17d489f1bb2ddfd7c32148cfa",
+        "generation": 26013881
+      },
+      "result": "pass",
+      "artifacts": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber8-dual-attempt01.json",
+          "sha256": "48b67af311f7e9d1158c12a1969b730d747f0def6f78988c00475f1cdda2790c"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber8-ready-attempt01/ready-summary.json",
+          "sha256": "eb81b43ab5a9925a754764804e9bb2cf7099709674e3ffc7e16ee6aadcbaec14"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber8-ready-attempt01/ready.json",
+          "sha256": "43fd5d9297e390526762046ced34d1b697c7bd0946b2e27bb1b8e2d213e8efdd"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber8-ready-attempt01/prices/prices.json",
+          "sha256": "39fccc1a28eda61e5f723022e7d2cf74fc8b91f33f39f1853a140e65eeb5db0d"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber8-ready-attempt01/prices/input.json",
+          "sha256": "3eb1d6fb4f1544c38a6e3f0769606afbe0f54d3600116e136b0ea27ddc92a904"
+        }
+      ],
+      "graphHash": "83a806ee04dc1c0515e2fd11be24c2dc7ec59b41e239e5db3c686a221945864b",
+      "admission": [
+        {
+          "instanceKey": "0xaed94908236484f69ad4f748bfb856b378be21e8",
+          "memoFingerprint": "2b923ebff379190d813ec1108aeafc5bf52e3a1965a23ae019ff047f4bebf5d2",
+          "familyDefinitionHash": "9ea4fa9e765fe30d7c9fa3c1f7bc350463344d57a0f3fe2f5b80f436b25233d3",
+          "candidate": {
+            "adapter": "kyberswap-elastic",
+            "address": "0xaed94908236484f69ad4f748bfb856b378be21e8",
+            "blockHash": "0xa310c7b1f99e8e8d969284661953a157640ea0c17d489f1bb2ddfd7c32148cfa",
+            "blockNumber": 26013881,
+            "candidateKind": "kyberswap-elastic-pool",
+            "familyId": "kyberswap-elastic",
+            "hintedFactory": null,
+            "logIndex": 714,
+            "pluginCandidateKey": "0xaed94908236484f69ad4f748bfb856b378be21e8",
+            "pool": "0xaed94908236484f69ad4f748BfB856B378BE21E8",
+            "sourceKind": "pool-swap-log",
+            "transactionHash": "0x38fff90705c91affd21f8fbca1d0e5861eccdc166a5547400c55402e47293769"
+          }
+        }
+      ],
+      "natural": {
+        "instances": 1,
+        "graphEdges": 2,
+        "rawMids": 2,
+        "effectiveQuoted": 2
+      },
+      "counters": {
+        "trials": 4,
+        "executions": 16,
+        "missingInputRevertingControls": 8
+      },
+      "sourceCode": {
+        "sourceTreeSha256": "dd4557049b46d9c6c33354ec542fb04435143a00e138701ae57254379a74063b",
+        "harnessSha256": "43f43ca6314a9272ddfd6e4cbb277e1e6723de92480227ee97e2dbfd42d0babb",
+        "evidenceSha256": "77a0fe23c97c55caf60ba0459c5ddc986a81a1a40157327e6b350272a01dd222",
+        "observationHelpers": [
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+          },
+          {
+            "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+            "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+          },
+          {
+            "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+            "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+          },
+          {
+            "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+            "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+            "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+          },
+          {
+            "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+            "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "runtimeCode": {
+        "keccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+        "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+      },
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "originalReceiptSha256": "52806811f3505d17058f1ffb52141749e39de04101d121dae4a037e1ab6c03dc",
+      "originalTraceSha256": "117002d62ba6fd35eb80d183b188d40fc74cbaf7dc2ed91619907c91ee022a93",
+      "directions": [
+        {
+          "instance": "0xaed94908236484f69ad4f748bfb856b378be21e8",
+          "tokenIn": "0x808507121b80c02388fad14726482e061b8da827",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "productionReferenceGate": {
+            "status": "met",
+            "amountIn": "1920705952768767949",
+            "amountOut": "1913335372361846"
+          },
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0x2334404537f350d921cafbb42a5b62251e2c612c29a4e7952301f1dfc1f894b4"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "1920705952768767949",
+              "amountOut": "1913335372361846",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            },
+            {
+              "label": "historical-input-at-N",
+              "amountIn": "1118761483116011258",
+              "amountOut": "1120030429104784",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "originalAmountOut": "1135766512945495",
+                "signedDelta": "-15736083840711",
+                "observationId": "0x38fff90705c91affd21f8fbca1d0e5861eccdc166a5547400c55402e47293769:0xaed94908236484f69ad4f748bfb856b378be21e8:714",
+                "logIndex": "0x2ca",
+                "verdict": "same interface at N-end; original pre-call state NOT restored"
+              }
+            }
+          ]
+        },
+        {
+          "instance": "0xaed94908236484f69ad4f748bfb856b378be21e8",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x808507121b80c02388fad14726482e061b8da827",
+          "productionReferenceGate": {
+            "status": "met",
+            "amountIn": "2000000000000000",
+            "amountOut": "1920705952768767949"
+          },
+          "runtimeConstruction": {
+            "exactCalls": 0,
+            "quotedCalls": 0,
+            "rpcCalls": 0,
+            "quotedFallback": false,
+            "programHash": "0x65005812d03d62a17f4c29f576b9e2ef06545dc2d1a2b2133b9537d539805e1b"
+          },
+          "trials": [
+            {
+              "label": "production-effective",
+              "amountIn": "2000000000000000",
+              "amountOut": "1920705952768767949",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            },
+            {
+              "label": "twice-production-effective",
+              "amountIn": "4000000000000000",
+              "amountOut": "3795275063665372958",
+              "quoteMethod": "kyberswap-elastic-exact-input",
+              "executions": 4,
+              "negativeControls": 2,
+              "signedDelta": "0",
+              "originalTxComparison": {
+                "verdict": "non-original amount trial; no original TX leg comparison"
+              }
+            }
+          ]
+        }
+      ],
+      "safety": {
+        "signing": false,
+        "broadcast": false,
+        "minedBlocks": 0,
+        "protocolOverrides": false,
+        "mainExecutionFunding": "actor input only; existing input/output inventory preserved",
+        "inventoryControl": "separate actor-only output inventory; never counted as received output"
+      },
+      "nativeInventory": "17 -> 17 wei in all trials",
+      "diagnostics": {
+        "elapsedMs": 2357.499386,
+        "directRpcCalls": 123,
+        "forkInternalRpcCalls": "not counted",
+        "invocationCounts": {
+          "exact": 4,
+          "quoted": 4,
+          "forbiddenDuringBuild": 0
+        },
+        "timingClaim": "diagnostic wall time only; not production scheduling/performance acceptance"
+      }
+    }
+  ],
+  "aggregate": {
+    "additionalInstances": 4,
+    "directions": 8,
+    "amountGroups": 16,
+    "executions": 64,
+    "missingInputRevertingControls": 32,
+    "allQuoteToReceiptDeltas": "0"
+  },
+  "unresolved": {
+    "key": "kyber9",
+    "transactionHash": "0xc30dc9101049767e50f2f56fe6031e8b341d47196a109021cad3d383a3e9ef82",
+    "source": {
+      "number": 26037069,
+      "hash": "0x4f8c0a000c63ed28a878eb22dc6802b2317cd032c43d1a2f134f66d079dba55a"
+    },
+    "target": "0xfe4c6a8b22ee09592c01f801b791af0042ee69c0",
+    "ready": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber9-ready-attempt01/ready.json",
+      "sha256": "b7c714638f0dfb5ac13cb4b8665e6e650eefaf5cfcd9f3866046ca5ba18a0002"
+    },
+    "receipt": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber9-ready-attempt01/receipt.json",
+      "sha256": "0f25510f9505f7573ed7578eebe846b49409c978f2bbe040406ca00b74dc3b5c"
+    },
+    "log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber9-ready-attempt01.log",
+      "sha256": "f6493d7c06251f28ac1c2f7ea5bc529c279e6c72b44a2ee46bcfe2aa3eae7149"
+    },
+    "outcome": {
+      "status": "retryable",
+      "stage": "materialization",
+      "reason": "strict lifecycle produced no materialized instance",
+      "candidateSnapshot": {
+        "adapter": "kyberswap-elastic",
+        "address": "0xfe4c6a8b22ee09592c01f801b791af0042ee69c0",
+        "blockHash": "0x4f8c0a000c63ed28a878eb22dc6802b2317cd032c43d1a2f134f66d079dba55a",
+        "blockNumber": 26037069,
+        "candidateKind": "kyberswap-elastic-pool",
+        "familyId": "kyberswap-elastic",
+        "hintedFactory": null,
+        "logIndex": 919,
+        "pluginCandidateKey": "0xfe4c6a8b22ee09592c01f801b791af0042ee69c0",
+        "pool": "0xFe4C6a8B22ee09592c01f801B791Af0042EE69c0",
+        "sourceKind": "pool-swap-log",
+        "transactionHash": "0xc30dc9101049767e50f2f56fe6031e8b341d47196a109021cad3d383a3e9ef82"
+      }
+    },
+    "receiptTargetLogIndices": [
+      "0x397"
+    ],
+    "actuallyAdmittedInstances": [
+      "0x952ffc4c47d66b454a8181f5c68b6248e18b66ec"
+    ],
+    "interpretation": "Target was nominated. Current production path reaches this materialization retry only after an accepted identity. No materialized publication; not a missed discovery, terminal chain-proven rejection, RPC-rate-limit finding or accepted target.",
+    "rootCause": "NOT YET PROVEN; continue from actual lifecycle outcomes before changing code.",
+    "dualExecution": "NOT RUN: target absent from Ready. No injected descriptor/admission/Graph edge."
+  },
+  "tools": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber5-ready-tools-attempt01.json",
+      "sha256": "a711e3524ddf18fc73b51783c371ee7e1919a281b643e470c620b8e748d27c02",
+      "capabilities": [
+        "kyber",
+        "historical",
+        "strict",
+        "ready",
+        "graph"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:kyberswap-elastic-historical-ready",
+          "descriptor_sha256": "3ef2a48043b760bb664bf2c2877956b0b45414a3c933785de19851e1c4c90c63",
+          "started_at": "2026-10-12T06:50:30.760Z",
+          "finished_at": "2026-10-12T06:50:34.399Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "afb946c126e0b938fa7d549d383a066d1468c94e5c3009f502d0309b19ba442f",
+          "stdout_sha256": "a10d32da31829614a70a28343ffc9be5262244f13b4e45f9218981f535059084",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 10026,
+          "stderr_bytes": 0
+        }
+      ]
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber5-dual-tools-attempt01.json",
+      "sha256": "4f1391b8d46ea574e8f4fab7e2f9de0337bb327b4388afc8b0c0e84835c3208e",
+      "capabilities": [
+        "kyber",
+        "historical",
+        "dual"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+          "descriptor_sha256": "be49b52e9cd477b396d8aeced305700f21dd9c83fa82b0839dab601d0d78a0fb",
+          "started_at": "2026-10-12T06:52:14.629Z",
+          "finished_at": "2026-10-12T06:52:17.897Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "cd9b1a606b28df1bf331ef51fd800d95f53db64fde58953cf08561bcb1fcf472",
+          "stdout_sha256": "84c23f650d2ce59ea5a440a4d7f0363c47c18c2e26f016c40e92d9a56ce7b829",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 755,
+          "stderr_bytes": 0
+        }
+      ]
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber6-ready-tools-attempt01.json",
+      "sha256": "bcc103bb43393c1e306beb09c28ca7bc1965155015b3c1a36768525ffdad615f",
+      "capabilities": [
+        "kyber",
+        "historical",
+        "strict",
+        "ready",
+        "graph"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:kyberswap-elastic-historical-ready",
+          "descriptor_sha256": "3ef2a48043b760bb664bf2c2877956b0b45414a3c933785de19851e1c4c90c63",
+          "started_at": "2026-10-12T06:53:25.909Z",
+          "finished_at": "2026-10-12T06:53:30.026Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "a1ce7451c0dc51a173053232a4d7746ef1358cff3051526078ab4476b41c8d32",
+          "stdout_sha256": "1efe764b801825c4a97d0031de9b0d080ab0db336030c4b286307eade65d8c1d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 10037,
+          "stderr_bytes": 0
+        }
+      ]
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber6-dual-tools-attempt01.json",
+      "sha256": "57c33939a2e806311270e98b20ae95936a128ede2bd58ee5f1f055ef95b95510",
+      "capabilities": [
+        "kyber",
+        "historical",
+        "dual"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+          "descriptor_sha256": "be49b52e9cd477b396d8aeced305700f21dd9c83fa82b0839dab601d0d78a0fb",
+          "started_at": "2026-10-12T06:55:00.064Z",
+          "finished_at": "2026-10-12T06:55:03.796Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "30afa7ac0a239d72d9e7dee71d1feeb044e4b69c0359a997dbc0fe7a6f78083a",
+          "stdout_sha256": "b51d2dcb5baf2b163c48e49989b9d667bc334bc06882478549772e5df43a6eee",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 755,
+          "stderr_bytes": 0
+        }
+      ]
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber7-9-ready-tools-attempt01.json",
+      "sha256": "cbe235e4ea83474c98fea5f2ae1cdd12a95b840871fb5006f45731eeafecfd1d",
+      "capabilities": [
+        "kyber",
+        "historical",
+        "strict",
+        "ready",
+        "graph"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:kyberswap-elastic-historical-ready",
+          "descriptor_sha256": "3ef2a48043b760bb664bf2c2877956b0b45414a3c933785de19851e1c4c90c63",
+          "started_at": "2026-10-12T06:55:28.198Z",
+          "finished_at": "2026-10-12T06:55:33.906Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "c7c14a8fa716cb9ca0a815e15ca7f2cbb5085a84a23976ef1303f42ae9087f15",
+          "stdout_sha256": "b77d0461bbc6757a5d8fe062c2fe05ed2006f1c5e5d440870db3834685dd06ff",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 10067,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:kyberswap-elastic-historical-ready",
+          "descriptor_sha256": "3ef2a48043b760bb664bf2c2877956b0b45414a3c933785de19851e1c4c90c63",
+          "started_at": "2026-10-12T06:55:34.190Z",
+          "finished_at": "2026-10-12T06:55:39.185Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "06f1d1e31690683cac0f16238fbbb115d323e3f65bc59927a0cb725f9b4f4e7f",
+          "stdout_sha256": "acff44e4925b2a57dadde520672f13f9afdf025d29b8e8fdae3256442d9a6b3a",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 10069,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:kyberswap-elastic-historical-ready",
+          "descriptor_sha256": "3ef2a48043b760bb664bf2c2877956b0b45414a3c933785de19851e1c4c90c63",
+          "started_at": "2026-10-12T06:55:39.468Z",
+          "finished_at": "2026-10-12T06:55:44.972Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "0cfb6847eaa11ce086474c97945eb9350b1e45b569b826c2da1a7cf4578cef23",
+          "stdout_sha256": "c2c62bf21331037eea66505ee644e165fb5d065eee414c0c598cb5ebab06571b",
+          "stderr_sha256": "ade36d81d2f527091b46c7ecee2f387187ca06743ebebe7ba26fc3aa5cd7c00c",
+          "stdout_bytes": 9429,
+          "stderr_bytes": 90
+        }
+      ]
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber7-dual-tools-attempt01.json",
+      "sha256": "0dc313e0cef3303fafaeb143b41750b9efaa31a29a3d39e7a9439faba64f1ba6",
+      "capabilities": [
+        "kyber",
+        "historical",
+        "dual"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+          "descriptor_sha256": "be49b52e9cd477b396d8aeced305700f21dd9c83fa82b0839dab601d0d78a0fb",
+          "started_at": "2026-10-12T06:57:29.990Z",
+          "finished_at": "2026-10-12T06:57:33.679Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "6fc76535f0454acee5c2fd42392dc7637986274430f6916cd205d74f7e2ab75a",
+          "stdout_sha256": "cf3605717859193e979d7af6bbc6a79d394969296261e994e57cc5afe6c551dd",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 755,
+          "stderr_bytes": 0
+        }
+      ]
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber8-dual-tools-attempt01.json",
+      "sha256": "cb41eade35bf79f6fb314d5f7ccb316f8cbe5c568c4a388b8623f37dac88b412",
+      "capabilities": [
+        "kyber",
+        "historical",
+        "dual"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+          "descriptor_sha256": "be49b52e9cd477b396d8aeced305700f21dd9c83fa82b0839dab601d0d78a0fb",
+          "started_at": "2026-10-12T06:58:07.692Z",
+          "finished_at": "2026-10-12T06:58:11.179Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "1045bf5bf70cc4c72b8d378b438313dd9e4621d73736081d02474bdba67b8eeb",
+          "stdout_sha256": "d82e600dab3d3853879c6e39a9dc93a2d64f3cbd9da4d2438c89f001bf00d05b",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 755,
+          "stderr_bytes": 0
+        }
+      ]
+    }
+  ],
+  "performance": {
+    "localSingleReady": "NOT RUN",
+    "representativeCombinedGraph": "NOT RUN",
+    "reason": "User requires all correctness first; existing diagnostic wall times are not performance acceptance."
+  },
+  "limitations": [
+    "Only sample directions and declared amounts are covered; this is not exhaustive family acceptance.",
+    "N-end state plus N environment, not original leg pre-call state. Original-output differences retained explicitly.",
+    "No opportunity enumeration, amount-selection/final route sim, repayment/EV or profitability claim.",
+    "Kyber9 materialization, remaining Yield Basis/Compound samples and all later goal stages remain unfinished.",
+    "Kyber2/3 borrowed-input evidence remains separate from natural effective acceptance.",
+    "No default-activation changes, live, deployment, signing, broadcast or private-key access."
+  ]
+}
