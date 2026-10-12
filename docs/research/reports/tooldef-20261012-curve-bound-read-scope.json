@@ -1,0 +1,53 @@
+{
+  "learning_case_id": "tooldef-20261012-curve-bound-read-scope",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [
+    "swap"
+  ],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "Historical canonical test-consumer read boundary stale against current Family quote guards; not a production protocol gap.",
+  "tooling_defect": {
+    "tool": "listener:searcher:curve-runtime-dual-historical-fork",
+    "issue": "Stale test-provider pool-only read boundary excluded required implementation get-code. Actual bound implementation 0x67fe41a94e779ccfa22cff02cc2957dc9c0e4286. Raw failure only says transport:rpc; exact cause is supported by source and same-input failure-to-pass, not a recorded rejected-address field.",
+    "codify_commit": "ba4d50b0f503e6d20f5e30cf679e047958474b15",
+    "status": "codified",
+    "fix": "Use current Family curveRefreshAddresses for plain quote read boundary; retain underlying bound dependencies, code/ramp/source/amount checks and unknown-target refusal."
+  },
+  "evidence": {
+    "failedReceipt": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-exchange-dual-current-attempt01.json",
+      "sha256": "6abe46b2a72ec508c532dc0e988f5c367fb61bd33e8db13a12eb637db49dc880",
+      "samples": 4,
+      "executions": 0,
+      "reason": "Stale test-provider pool-only read boundary excluded required implementation get-code. Actual bound implementation 0x67fe41a94e779ccfa22cff02cc2957dc9c0e4286. Raw failure only says transport:rpc; exact cause is supported by source and same-input failure-to-pass, not a recorded rejected-address field.",
+      "status": "retained; fixed harness defect, not protocol failure or provider throttling"
+    },
+    "report": "docs/research/reports/curve-variants-current-execution-20261012.json",
+    "successfulReceipts": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-exchange-dual-current-attempt02.json",
+        "sha256": "fdc9a064bec438e5ce3e2772bc2f7a95281c233cc30e7a72cfc3c0f343c81f39"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-received-dual-current-attempt01.json",
+        "sha256": "7c86786fa51c3029c4ee9d48513dae5009645bb55a8a03f791ee5cdda8cf5541"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-underlying-dual-current-attempt01.json",
+        "sha256": "d35f6f0efb84d2a160a92ace00fa4080d12ad2f064913da3a2055b0ab2eb79e8"
+      }
+    ],
+    "regression": "3/3 pass on cloud, including dependency read boundary, native diff and atomic negative controls",
+    "independentReviewer": {
+      "name": "Maxwell",
+      "agent": "01a12fcc-aadc-74c2-9869-907e4db63c98",
+      "scope": "Independent offline comparison of failed/successful exchange receipts and Family dependencies; three pure-logic checks; no RPC or cloud execution.",
+      "result": "Evidence agrees; no safety-bypass found. Underlying dependencies retained; unknown targets rejected. Original failure receipt lacks exact rejected-address field.",
+      "remainingAtReview": "Reviewer inspected exchange only; subsequent received/underlying runs and raw checks are main-agent evidence."
+    }
+  }
+}
+

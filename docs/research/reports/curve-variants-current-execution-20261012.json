@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "claim": "Three named Curve variants: current historical single-block integration and same-state dual execution. Not complete Family, opportunity, merge or performance acceptance.",
+  "commits": {
+    "readyHarness": "303e942ec1ce1f11d5a6d6d2e2c52d44fd541fdd",
+    "dualHarness": "ba4d50b0f503e6d20f5e30cf679e047958474b15",
+    "headAtExecutions": "303e942ec1ce1f11d5a6d6d2e2c52d44fd541fdd"
+  },
+  "source": {
+    "number": 26138094,
+    "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+    "stateAndExecution": "N end / N environment; no prefix or original leg prestate claim"
+  },
+  "bindings": {
+    "productionSourceSha256": "0a8f0e3358dfe7dbc5bf25ed5b6975128947dd4a2f5c94adb8346e31905bc102",
+    "runtimeKeccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "botVmArtifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+  },
+  "ready": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-variants-ready-attempt01/ready.json",
+    "sha256": "4d6091b0425fe3f2eceada239e39901a56b9988c83fd6d52d0888a5cb5472647",
+    "generation": 2,
+    "families": [
+      "curve-plain",
+      "curve-underlying",
+      "univ3-standard"
+    ],
+    "candidates": 26,
+    "verified": 24,
+    "retryable": 2,
+    "terminalRejected": 0,
+    "instances": 24,
+    "graphAndRawDirections": 78,
+    "quoted": 74,
+    "backgroundMissingValuation": 4,
+    "targetQuoted": 16,
+    "donorAmounts": false,
+    "method": "Exclusive copy of materialized inactive parent; production checkpoint authentication on copy; existing familyUpdateScope/rebuildUniverse and runAtBlock prices; no manual memo/graph/hash injection.",
+    "original": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-latency-20261007/single-block-26138094/candidate/checkpoint.json",
+      "sha256BeforeAndAfter": "19d010389a71ac2c006de677f0e6afef2154dc374779d75b8ac0a11c4d9f1eca",
+      "unchanged": true
+    },
+    "residual": "Two univ3-standard identity-unresolved pool-factory responses remain outside Graph. Coarse failureCode=rpc is not proof of provider failure or permanent rejection."
+  },
+  "prices": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-variants-ready-attempt01/prices/prices.json",
+    "sha256": "b584a08550d4349e3b6fb70238d03f116d22dc4fdc810447ff3c66410528672f",
+    "inputPath": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-variants-ready-attempt01/prices/input.json",
+    "inputSha256": "e796ecb1b13d9f00a17414d1d4ca91e127c88b2700bdfac95526a9922c03e6b8",
+    "referenceWethInputRaw": "2000000000000000",
+    "referenceWeth": "0.002",
+    "freshness": "Fresh same-N rows. All WETH input rows equal configured P; other assets derive via production effective-forward valuation on this scoped graph."
+  },
+  "variants": [
+    {
+      "family": "curve-plain",
+      "variant": "exchange",
+      "pool": "0x4dece678ceceb27446b35c672dc7d61f30bad69e",
+      "tx": "0xa8978ea231a8692dfb975f20e702ef21e9ee491b6db8428efe6ea3798232608c",
+      "directions": 2,
+      "amountTrials": 4,
+      "formalDualExecutions": 8,
+      "formalZeroInputControls": 8,
+      "diagnosticExecutions": 0,
+      "raw": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-exchange-dual-current-attempt02.json",
+      "sha256": "fdc9a064bec438e5ce3e2772bc2f7a95281c233cc30e7a72cfc3c0f343c81f39",
+      "rpcCalls": 159,
+      "allowances": "standing grant: MAX_UINT or MAX_UINT-amountIn, matching token semantics"
+    },
+    {
+      "family": "curve-plain",
+      "variant": "exchange_received",
+      "pool": "0x5018be882dcce5e3f2f3b0913ae2096b9b3fb61f",
+      "tx": "0x646f27abba5a7709e895caf1d746e23dfaaae44120089ff38e3a28bff7e62f58",
+      "directions": 2,
+      "amountTrials": 4,
+      "formalDualExecutions": 8,
+      "formalZeroInputControls": 8,
+      "diagnosticExecutions": 0,
+      "raw": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-received-dual-current-attempt01.json",
+      "sha256": "7c86786fa51c3029c4ee9d48513dae5009645bb55a8a03f791ee5cdda8cf5541",
+      "rpcCalls": 149,
+      "allowances": "no grant; final allowance zero"
+    },
+    {
+      "family": "curve-underlying",
+      "variant": "classic-meta-base-3pool-v1",
+      "pool": "0xc270b3b858c335b6ba5d5b10e2da8a09976005ad",
+      "tx": "0x73f75256979894103b5bcb045266cf802103e23d0d937c907e50b035663e48e4",
+      "directions": 12,
+      "amountTrials": 24,
+      "formalDualExecutions": 48,
+      "formalZeroInputControls": 48,
+      "diagnosticExecutions": 24,
+      "diagnosticZeroInputControls": 24,
+      "raw": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-underlying-dual-current-attempt01.json",
+      "sha256": "d35f6f0efb84d2a160a92ace00fa4080d12ad2f064913da3a2055b0ab2eb79e8",
+      "rpcCalls": 1358,
+      "allowances": "standing grant: MAX_UINT or MAX_UINT-amountIn; not temporary-cleanup semantics"
+    }
+  ],
+  "independentMainChecks": {
+    "result": "pass",
+    "method": "Re-read all three raw receipts, independently derive ERC20 balance deltas from prestate storage at proven actor slots; match same calldata in failure controls; inspect allowed rollback accounts, amounts, quoted values, native fields and input hashes.",
+    "formalExecutions": 64,
+    "formalZeroInputControls": 64,
+    "extraDiagnostics": 24,
+    "extraDiagnosticControls": 24,
+    "quoteActualSignedDelta": "0 in every formal and diagnostic execution",
+    "inputInventory": "101 raw retained",
+    "outputInventory": "103 raw retained",
+    "nativeInventory": "17 raw retained",
+    "runtimeConstructionRpcAttempts": 0,
+    "constructionScope": "Local builder guard only, not a new historical production sim-selector zero-Exact receipt",
+    "amounts": "Each direction uses fresh production effective amountIn and 10x; no original transaction amount claim"
+  },
+  "regressions": {
+    "readyAndNativeContracts": "8/8 pass on cloud",
+    "dualSafetyHelpers": "3/3 pass on cloud, including dependency read boundary, native diff and atomic negative controls",
+    "productionBuild": "Not rerun: only test/harness changes this tranche; do not infer a new production build receipt",
+    "diffCheck": "pass"
+  },
+  "toolReconciliation": {
+    "ready": {
+      "query": [
+        "curve-plain-ready",
+        "curve-plain-native"
+      ],
+      "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-variants-ready-tools-attempt01.json",
+      "sha256": "a9c53b1cfc1c43201c7fd10b6baa6f99e33a466de48ddd28ebecc39c56792dfb",
+      "executed": [
+        "listener:searcher:curve-plain-native-contract",
+        "listener:searcher:curve-plain-historical-ready"
+      ],
+      "exitCodes": [
+        0,
+        0
+      ]
+    },
+    "dual": {
+      "query": [
+        "curve",
+        "dual",
+        "fork"
+      ],
+      "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-variants-dual-tools-attempt01.json",
+      "sha256": "fa567962f2a3e76e43adcb2f12b0f43c9f4b8887f49d6c213384956005d7ef70",
+      "executed": "listener:searcher:curve-runtime-dual-historical-fork",
+      "exitCodes": [
+        1,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "preservedFailure": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-exchange-dual-current-attempt01.json",
+    "sha256": "6abe46b2a72ec508c532dc0e988f5c367fb61bd33e8db13a12eb637db49dc880",
+    "samples": 4,
+    "executions": 0,
+    "reason": "Stale test-provider pool-only read boundary excluded required implementation get-code. Actual bound implementation 0x67fe41a94e779ccfa22cff02cc2957dc9c0e4286. Raw failure only says transport:rpc; exact cause is supported by source and same-input failure-to-pass, not a recorded rejected-address field.",
+    "status": "retained; fixed harness defect, not protocol failure or provider throttling"
+  },
+  "reviewer": {
+    "name": "Maxwell",
+    "agent": "01a12fcc-aadc-74c2-9869-907e4db63c98",
+    "scope": "Independent offline comparison of failed/successful exchange receipts and Family dependencies; three pure-logic checks; no RPC or cloud execution.",
+    "result": "Evidence agrees; no safety-bypass found. Underlying dependencies retained; unknown targets rejected. Original failure receipt lacks exact rejected-address field.",
+    "remainingAtReview": "Reviewer inspected exchange only; subsequent received/underlying runs and raw checks are main-agent evidence."
+  },
+  "limitations": [
+    "Not all coffee Curve instances/implementations covered; no blanket Family acceptance.",
+    "Active-ramp historical rejection and unresolved native-admission sample remain unverified.",
+    "Original-TX pre-call outputs, full route/funding/EV not replayed.",
+    "All individual and representative performance remains NOT RUN; no timing claim from these correctness runs.",
+    "Background live was left untouched; no deployment, signing or broadcast."
+  ],
+  "toolingDefect": "docs/research/reports/tooldef-20261012-curve-bound-read-scope.json"
+}
+
