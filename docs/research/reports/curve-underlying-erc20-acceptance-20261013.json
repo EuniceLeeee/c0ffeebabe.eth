@@ -1,0 +1,552 @@
+{
+  "schemaVersion": "curve-underlying-erc20-acceptance/v1",
+  "date": "2026-10-13",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "claim": "One named pure-ERC20 uint alias passed current natural single-block strict/Graph/raw/effective and same-N quote/quoted/runtime checks. Not all-Family, original-prestate, route, formal merge or performance acceptance.",
+  "implementation": {
+    "boundary": "family_local",
+    "changed": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/curve-underlying-family/types.ts",
+        "sha256": "77eb5534c4ca7e2b039dc7af007632d7c17f7df5d09e058c5e9f75ae4d9de179",
+        "bytes": 4973
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
+        "sha256": "f7a80a177c42ee2d2187f6afee498921a3464290cda0b29e75fd148e0947ee30",
+        "bytes": 5830
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+        "sha256": "56d89e4d1db9609b8f230b110d8d09fc20e440b52ac77a57d18827889b32f643",
+        "bytes": 12191
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/curve-underlying-family/test/native-alias-contract.ts",
+        "sha256": "1094b33e953cf67ed92873a9964813af15c0fa466be9881801668967f9a7db33",
+        "bytes": 69874
+      }
+    ],
+    "semanticChange": "Permit nativeIndex=null only for registry-proven identical direct/underlying ERC20 topology with no WETH. Retain code binding, getters, per-direction execution proof, observed-direction guard and existing uint quote/emitter. No central/ABI/math/allowlist changes.",
+    "preserved": [
+      "legacy int128",
+      "native two/three-coin variants",
+      "selected raw-unit policy",
+      "input/output/native old inventory",
+      "approval cleanup",
+      "source and executor binding"
+    ]
+  },
+  "executedSource": {
+    "claim": "Correctness-only serial production entrypoints; performance NOT RUN",
+    "startedAt": "2026-10-12T17:18:43.442Z",
+    "head": "056ca5ab3a9782850dae96dcfba8ed64542f294d",
+    "dirtyDiffSha256": "3d11ec0582f96b01ba43fec028b776c07ed26d926ee6722669c91425345d8438",
+    "ownedFiles": [
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/types.ts",
+        "sha256": "77eb5534c4ca7e2b039dc7af007632d7c17f7df5d09e058c5e9f75ae4d9de179"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
+        "sha256": "f7a80a177c42ee2d2187f6afee498921a3464290cda0b29e75fd148e0947ee30"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+        "sha256": "56d89e4d1db9609b8f230b110d8d09fc20e440b52ac77a57d18827889b32f643"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/native-alias-contract.ts",
+        "sha256": "c1cf7819d54e4111bf83efb0f34ba9280f69f0850e9dd0fcc7415cea114ca4b0"
+      }
+    ],
+    "untrackedSource": [
+      {
+        "path": "listener/src/searcher/ready-transaction-input.ts",
+        "sha256": "413ce646cb757444e369aaa3408611a85a17c591589b958ebd197c6f48488273"
+      },
+      {
+        "path": "listener/src/searcher/test/ready-transaction-input.ts",
+        "sha256": "5eef53f090ef4ec396f842b789561b227eea00cad16346249d4222efe71ec7d3"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/historical-dual.ts",
+        "sha256": "d543cc0ef0403f14d1924e316d9cfb4bcaccd5bbb50156377e0d63a2ec7f3ae6"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/historical-ready.ts",
+        "sha256": "cccf015d9a3bd5a179746edeff4d8016fa6dc7556f7497f3289b5153d8d6a950"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/implementation-bytecode.json",
+        "sha256": "73d6b8058303119a0b9b08df28a0d01f9274c8273819bd9ca4886d90779e1134"
+      }
+    ],
+    "manifest": {
+      "path": "listener/src/searcher/generated/family-capability-shadow.generated.json",
+      "sha256": "d453cb3b17d8bfa0d83305633875c87db18149c0f5bff64a06626e3ba09869c8"
+    },
+    "generatedChangedCapabilities": [
+      "exact",
+      "execution",
+      "identity",
+      "pricing",
+      "routes"
+    ],
+    "peerGeneratedEntriesPreserved": true,
+    "steps": [
+      {
+        "label": "build-live01",
+        "startedAt": "2026-10-12T17:18:43.473Z",
+        "status": "passed",
+        "exit": 0,
+        "signal": null,
+        "finishedAt": "2026-10-12T17:18:53.012Z",
+        "output": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/build-live01.log",
+        "outputSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      },
+      {
+        "label": "manifest-check01",
+        "startedAt": "2026-10-12T17:18:53.012Z",
+        "status": "passed",
+        "exit": 0,
+        "signal": null,
+        "finishedAt": "2026-10-12T17:19:36.940Z",
+        "output": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/manifest-check01.log",
+        "outputSha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef"
+      },
+      {
+        "label": "searcher-family-dual-execution01",
+        "startedAt": "2026-10-12T17:19:36.941Z",
+        "status": "passed",
+        "exit": 0,
+        "signal": null,
+        "finishedAt": "2026-10-12T17:19:44.407Z",
+        "output": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/searcher-family-dual-execution01.log",
+        "outputSha256": "5401368dc1bc237d4cadac953517ac7c57354424d45423957bc3e51ffc91df8f"
+      },
+      {
+        "label": "searcher-strict-central-adapter-runtime01",
+        "startedAt": "2026-10-12T17:19:44.407Z",
+        "status": "passed",
+        "exit": 0,
+        "signal": null,
+        "finishedAt": "2026-10-12T17:19:47.114Z",
+        "output": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/searcher-strict-central-adapter-runtime01.log",
+        "outputSha256": "1d227246a29362339e22865ccef5bdb89414a4a9c7767ca406851e00ac58c581"
+      },
+      {
+        "label": "searcher-strict-execution-projection01",
+        "startedAt": "2026-10-12T17:19:47.114Z",
+        "status": "passed",
+        "exit": 0,
+        "signal": null,
+        "finishedAt": "2026-10-12T17:19:47.656Z",
+        "output": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/searcher-strict-execution-projection01.log",
+        "outputSha256": "de9fa035e82018a0110d98b89273a6bcc5094c2ac0a1dec7d252ffa3c400007e"
+      },
+      {
+        "label": "ready-321101",
+        "startedAt": "2026-10-12T17:19:47.656Z",
+        "status": "passed",
+        "exit": 0,
+        "signal": null,
+        "finishedAt": "2026-10-12T17:19:59.909Z",
+        "output": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/ready-321101.log",
+        "outputSha256": "832b0a907e50e39de7bbc09040b23887a511b88d5dd8db2b1335e9dc40997d9b"
+      },
+      {
+        "label": "dual-321101",
+        "startedAt": "2026-10-12T17:19:59.909Z",
+        "status": "passed",
+        "exit": 0,
+        "signal": null,
+        "finishedAt": "2026-10-12T17:20:04.507Z",
+        "output": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/dual-321101.log",
+        "outputSha256": "e3ed6f16da89c09931b4f9953041ea9ca2b434a8ec7ee50d61f1fcb55fd8e728"
+      }
+    ],
+    "finishedAt": "2026-10-12T17:20:04.508Z",
+    "ownedSourceUnchangedDuringRuns": true
+  },
+  "baseline": {
+    "report": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/curve-underlying-cohort-acceptance-20261013.json",
+      "sha256": "c9738ff4762ad16510da8d60206811a71a02d35517807a32a51cbe8e00eba2d1",
+      "bytes": 64970
+    },
+    "evidence": {
+      "pool": "0x3211c6cbef1429da3d0d58494938299c92ad5860",
+      "transactionHash": "0x6b02a33297a985d3e3a040d71321e98e5dd6e68d5c0fd99ce6ffc73bf94ed855",
+      "N": 26036250,
+      "blockHash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee",
+      "receipt": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-321101/receipt.json",
+        "sha256": "0c790ce3805bdba2f1e429363677064854a04a028a72694f27bb690143031e68",
+        "bytes": 20713
+      },
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-321101/ready.json",
+        "sha256": "1a68b6d1b570d831b5ef64defba3956214cf5eedff123b23dbd28120c6fc619c",
+        "bytes": 8007
+      },
+      "readyResult": "retryable identity, zero target graph directions",
+      "registryEvidence": [
+        {
+          "method": "get_underlying_coins",
+          "pool": "0x3211c6cbef1429da3d0d58494938299c92ad5860",
+          "pin": {
+            "blockHash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee",
+            "requireCanonical": true
+          },
+          "request": {
+            "to": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC",
+            "data": "0xa77576ef0000000000000000000000003211c6cbef1429da3d0d58494938299c92ad5860"
+          },
+          "data": "0x000000000000000000000000af5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "addresses": [
+            "0xAf5191B0De278C7286d6C7CC6ab6BB8A73bA2Cd6",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000"
+          ]
+        },
+        {
+          "method": "get_coins",
+          "pool": "0x3211c6cbef1429da3d0d58494938299c92ad5860",
+          "pin": {
+            "blockHash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee",
+            "requireCanonical": true
+          },
+          "request": {
+            "to": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC",
+            "data": "0x9ac90d3d0000000000000000000000003211c6cbef1429da3d0d58494938299c92ad5860"
+          },
+          "data": "0x000000000000000000000000af5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "addresses": [
+            "0xAf5191B0De278C7286d6C7CC6ab6BB8A73bA2Cd6",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000"
+          ]
+        },
+        {
+          "method": "get_registry_handlers_from_pool",
+          "pool": "0x3211c6cbef1429da3d0d58494938299c92ad5860",
+          "pin": {
+            "blockHash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee",
+            "requireCanonical": true
+          },
+          "request": {
+            "to": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC",
+            "data": "0x308d1b6d0000000000000000000000003211c6cbef1429da3d0d58494938299c92ad5860"
+          },
+          "data": "0x000000000000000000000000c4f389020002396143b863f6325aa6ae481d19ce000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "addresses": [
+            "0xC4F389020002396143B863F6325aA6ae481D19CE",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000"
+          ]
+        }
+      ],
+      "cachedTrace": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/coffee-tx-ready-20261008/checkpoint.json.transactions/trace-0x6b02a33297a985d3e3a040d71321e98e5dd6e68d5c0fd99ce6ffc73bf94ed855-0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee.json.gz",
+        "sha256": "19dc2c49bd7532a68e7ebb9fe4ece2e7da8113e831aebb2a3190a7a5f84e9b4c",
+        "bytes": 3141
+      },
+      "successfulCall": {
+        "traceAddress": [
+          0,
+          3,
+          4
+        ],
+        "selector": "0x65b2489b",
+        "value": "0x0",
+        "amountIn": "175056088253548130293",
+        "returnedAmountOut": "22552984",
+        "ancestorErrors": []
+      },
+      "firstGap": "Successful uint exchange_underlying on identical direct/underlying STG/USDC registry topology; get_dy_underlying int128 returns empty, while the current alternative identity requires WETH. New pure-ERC20 uint-alias coverage is not implemented or accepted by this report.",
+      "nextAction": "Add separately proven ERC20-only uint semantics inside Curve Underlying without weakening reverse identity, per-direction execution proofs or shared inventory safety; then rerun this retained single-block copy."
+    },
+    "regressionBefore": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/native-before.tap",
+      "sha256": "9a738367121a471acfc0d3c50d1d60c324b00ece0e5b173916678805e8ef4196",
+      "bytes": 17993
+    },
+    "regressionAfter": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/native-after.tap",
+      "sha256": "79e074ee56cef9a747f712a5c80a2d5ea232c2ec68dca2dadfca4bd9ebae0fb5",
+      "bytes": 3241
+    },
+    "before": "13/26 failed",
+    "after": "26/26 passed"
+  },
+  "realSessionRegression": {
+    "result": "27/27 passed",
+    "artifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/native-after03.tap",
+      "sha256": "066e4ef0aa3486f5e21c66eb6e9ddf71b6324d8c724b06ad1c9fbf6414a161cc",
+      "bytes": 3390
+    },
+    "retainedFirstAttempt": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/native-after02.tap",
+      "sha256": "4875060fc55416e35f966b17094a1a1b141888d005ce21e5b7fd0fdc62d1449f",
+      "bytes": 4221
+    },
+    "firstAttemptFailure": "Test expected two runtime leg builds total; actual selector builds two legs for each amount trial. Assertion corrected to simulatedTrials * pathLength. Production code unchanged.",
+    "coverage": "Lifecycle-issued handles and Graph -> real exact-execution session -> real runtime issuer -> production sim selector, both rotations and 0/1 policy; mutated edge rejected; Exact/quoted/RPC=0. Synthetic funding methods and external execution remain explicit; not funding acceptance."
+  },
+  "target": {
+    "pool": "0x3211C6cBeF1429da3D0d58494938299C92Ad5860",
+    "transactionHash": "0x6b02a33297a985d3e3a040d71321e98e5dd6e68d5c0fd99ce6ffc73bf94ed855",
+    "source": {
+      "number": 26036250,
+      "hash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee",
+      "generation": 26036250
+    },
+    "directions": 2,
+    "ready": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/ready-321101/ready.json",
+      "sha256": "989997f77dc9f9f2022a2e264ffee78b8d8e7a7dcbbd4f04e151827454a63256",
+      "bytes": 776025
+    },
+    "prices": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/ready-321101/prices/prices.json",
+      "sha256": "66d838bc977a76a9b633e3a7247230d9d5edf59b3ce2e2319440f102e7398e33",
+      "bytes": 486857
+    },
+    "receipt": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/ready-321101/receipt.json",
+      "sha256": "0c790ce3805bdba2f1e429363677064854a04a028a72694f27bb690143031e68",
+      "bytes": 20713
+    },
+    "dual": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/dual-321101.json",
+      "sha256": "fa91a1ac8437569b9e50ad0a305ade16988e87778386a5e724735c31609265b7",
+      "bytes": 740183
+    },
+    "sourceFingerprint": "4e39f8ba22dcbd07ec4e8e34bf5d798f1cece510190acd19ce0a162875e617cb",
+    "familyDefinitionHash": "62cec7669d1364d07a113c5c11f2b5f2e77f9d9d693405f5309d42e5eeae3f15",
+    "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+    "backgroundFamilies": [
+      "curve-underlying",
+      "univ3-standard"
+    ],
+    "totalNaturalGraphEdges": 62,
+    "naturalEffective": [
+      {
+        "edgeId": "curve-underlying\u001f0x3211c6cbef1429da3d0d58494938299c92ad5860\u001f0x3211c6cbef1429da3d0d58494938299c92ad5860\u001f0xaf5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f5a13770c47a3255d4f5b8ad4bbc56b21b36e2b8e505573a3c2b2d1e83486dc0f",
+        "instanceKey": "0x3211c6cbef1429da3d0d58494938299c92ad5860",
+        "tokenIn": "0xaf5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "42755115598334462450",
+        "status": "quoted",
+        "amountOut": "5487301",
+        "effectiveMid": 1.2834256025760247e-13,
+        "quotedAt": {
+          "number": 26036250,
+          "hash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0x3211c6cbef1429da3d0d58494938299c92ad5860\u001f0x3211c6cbef1429da3d0d58494938299c92ad5860\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xaf5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6\u001f072d24e1cbf37b1b41b49213bc8badee79a6e4d41a56bfd5527a635b6cbbd48c",
+        "instanceKey": "0x3211c6cbef1429da3d0d58494938299c92ad5860",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xaf5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6",
+        "amountIn": "5532427",
+        "status": "quoted",
+        "amountOut": "42755115598334462450",
+        "effectiveMid": 7728093944725.246,
+        "quotedAt": {
+          "number": 26036250,
+          "hash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee",
+          "generation": 1
+        }
+      }
+    ],
+    "reference": {
+      "mode": "default",
+      "wethInput": "2000000000000000",
+      "donor": false
+    },
+    "amounts": [
+      {
+        "tokenIn": "0xaf5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "42755115598334462450",
+        "multiplier": "1",
+        "quoteAmountOut": "5487301",
+        "runtimeConstructionRpc": 0,
+        "executions": [
+          {
+            "mode": "quoted",
+            "actualAmountIn": "42755115598334462450",
+            "actualAmountOut": "5487301",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "noCurrentInput": "passed"
+          },
+          {
+            "mode": "runtime",
+            "actualAmountIn": "42755115598334462450",
+            "actualAmountOut": "5487301",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "noCurrentInput": "passed"
+          }
+        ]
+      },
+      {
+        "tokenIn": "0xaf5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "427551155983344624500",
+        "multiplier": "10",
+        "quoteAmountOut": "54629420",
+        "runtimeConstructionRpc": 0,
+        "executions": [
+          {
+            "mode": "quoted",
+            "actualAmountIn": "427551155983344624500",
+            "actualAmountOut": "54629420",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "noCurrentInput": "passed"
+          },
+          {
+            "mode": "runtime",
+            "actualAmountIn": "427551155983344624500",
+            "actualAmountOut": "54629420",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "noCurrentInput": "passed"
+          }
+        ]
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xaf5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6",
+        "amountIn": "5532427",
+        "multiplier": "1",
+        "quoteAmountOut": "42755115598334462450",
+        "runtimeConstructionRpc": 0,
+        "executions": [
+          {
+            "mode": "quoted",
+            "actualAmountIn": "5532427",
+            "actualAmountOut": "42755115598334462450",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "noCurrentInput": "passed"
+          },
+          {
+            "mode": "runtime",
+            "actualAmountIn": "5532427",
+            "actualAmountOut": "42755115598334462450",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "noCurrentInput": "passed"
+          }
+        ]
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xaf5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6",
+        "amountIn": "55324270",
+        "multiplier": "10",
+        "quoteAmountOut": "424294213493979732005",
+        "runtimeConstructionRpc": 0,
+        "executions": [
+          {
+            "mode": "quoted",
+            "actualAmountIn": "55324270",
+            "actualAmountOut": "424294213493979732005",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "noCurrentInput": "passed"
+          },
+          {
+            "mode": "runtime",
+            "actualAmountIn": "55324270",
+            "actualAmountOut": "424294213493979732005",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "noCurrentInput": "passed"
+          }
+        ]
+      }
+    ],
+    "successfulExecutions": 8,
+    "noCurrentInputReverts": 8
+  },
+  "tools": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/tools01.json",
+      "sha256": "a8ffcd1a2fd598dd7bd5f5639560e98764b51a6a6dcf734947323eef2f32cfed",
+      "bytes": 6061
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/tools02.json",
+      "sha256": "332bfa1ef2873e3c671a6f2964a01edf206b90a7b337941aa41a45df7a14e2fd",
+      "bytes": 22169
+    }
+  ],
+  "limitations": [
+    "All local/representative performance NOT RUN; the other window live remains untouched.",
+    "Original TX pre-call state/output not replayed; same N end-state checks are separate.",
+    "No full profitable route, route-pinned Adapter Replay or formal merge-ready verdict.",
+    "Working source includes preserved peer edits, recorded separately from HEAD.",
+    "Prior 7f86/8a4f failed-TX anchors remain unresolved; this report does not validate those pools."
+  ],
+  "safety": {
+    "broadcast": false,
+    "signing": false,
+    "deployment": false,
+    "liveStarted": false,
+    "performanceRuns": 0,
+    "originalCoffeeReadyModified": false
+  },
+  "independentReview": {
+    "agent": "Schrodinger",
+    "id": "01a1311b-a876-7501-a052-e19307905234",
+    "passes": 2,
+    "result": "no blocking findings after closing the production-session test gap",
+    "checked": [
+      "Family-local diff and all nativeAlias/nativeIndex consumers",
+      "27/27 final raw regression results; real production route issuer through selector, synthetic funding/external execution explicitly scoped",
+      "8 positive and 8 no-current-input historical records with source/amount/delta binding",
+      "Production fingerprints unchanged; final appended test fingerprint separated from historical execution snapshot"
+    ],
+    "limitations": "Read-only source and saved-evidence review, no independent fresh EVM/build or formal merge-ready verdict"
+  },
+  "commitPreparation": {
+    "sourceTreeBeforeRegeneration": "3e1a5ac800db651d4ea486936033e6895f001253",
+    "snapshot": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-index.fU6W35",
+    "officialGeneratedCandidateSha256": "504b7b28e8f76f779236028f356e042400a852f63533995f7d1453f060dae1ad",
+    "nonTargetEntriesEqualHead": true,
+    "targetEntriesEqualTestedWorkingArtifact": true,
+    "stagedSourceBuild": {
+      "exit": 0,
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-erc20-20261013.7OI7T0/index-build-live01.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    "peerWorkingGeneratedFileNotReplaced": true
+  }
+}

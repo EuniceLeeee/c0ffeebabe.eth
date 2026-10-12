@@ -121,10 +121,11 @@ export interface CurveUnderlyingExactEvidence {
   readonly nativeAlias?: CurveUnderlyingNativeAlias;
 }
 
-/** Registry direct/underlying topology plus same-state native execution proof.
+/** Registry direct/underlying topology plus same-state uint execution proof.
  * This is an ABI/asset variant, never a pool-address admission list. */
 export interface CurveUnderlyingNativeAlias {
-  readonly nativeIndex: number;
+  /** Null is an ERC20-only pool; it must not conceal a WETH/native index. */
+  readonly nativeIndex: number | null;
   readonly poolCodeHash: string;
 }
 

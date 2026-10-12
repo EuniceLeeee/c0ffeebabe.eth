@@ -18,8 +18,14 @@ export function underlyingNativeAssets(descriptor: Pick<CurveUnderlyingDescripto
   direction: { i: number; j: number }) {
   const alias = descriptor.nativeAlias;
   if (!alias) return undefined;
+  if (!ethers.isHexString(alias.poolCodeHash, 32)) throw new Error("curve-underlying invalid uint alias code binding");
+  if (alias.nativeIndex === null) {
+    if (descriptor.coins.some(coin => sameAddress(coin, ADDR.WETH)))
+      throw new Error("curve-underlying ERC20 alias cannot hide a native WETH index");
+    return undefined;
+  }
   if (!Number.isInteger(alias.nativeIndex) || alias.nativeIndex < 0 || alias.nativeIndex >= descriptor.coins.length ||
-      !sameAddress(descriptor.coins[alias.nativeIndex], ADDR.WETH) || !ethers.isHexString(alias.poolCodeHash, 32))
+      !sameAddress(descriptor.coins[alias.nativeIndex], ADDR.WETH))
     throw new Error("curve-underlying invalid native alias binding");
   if (direction.i !== alias.nativeIndex && direction.j !== alias.nativeIndex) return undefined;
   return { input: direction.i === alias.nativeIndex ? "native" as const : "erc20" as const,

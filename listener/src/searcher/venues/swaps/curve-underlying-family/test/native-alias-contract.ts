@@ -25,7 +25,7 @@ import {
 } from "../codec.js";
 import {
   CURVE_UNDERLYING_NATIVE_ACTION, CURVE_UNDERLYING_NATIVE_QUOTE as QUOTE,
-  underlyingNativeAliasProbe, underlyingNativeAliasProgram,
+  underlyingNativeAssets, underlyingNativeAliasProbe, underlyingNativeAliasProgram,
 } from "../native.js";
 import type { CurveUnderlyingDescriptor, CurveUnderlyingIdentity, CurveUnderlyingRoute } from "../types.js";
 
@@ -41,6 +41,7 @@ const OTHER = "0x5555555555555555555555555555555555555555";
 const SOURCE: CanonicalSource = { number: 123, hash: ethers.id("underlying-native-offline-contract"), generation: 7 };
 const CODE = "0x6000", BALANCE = 10n ** 24n, INVENTORY = 12345n;
 const COINS = [ethers.getAddress(ADDR.WETH), TOKEN];
+const ERC20_COINS = [TOKEN, OTHER];
 const AMOUNTS = [19n, 2_000_000_000_000_000n, 20_000_000_000_000_000n, 10n ** 18n + 23n];
 const DIRECT = new ethers.Interface(["function get_coins(address) view returns(address[8])"]);
 const GETTERS = new ethers.Interface(["function coins(uint256) view returns(address)", "function balances(uint256) view returns(uint256)"]);
@@ -172,6 +173,13 @@ interface LifecycleFixture {
   foreign?: Partial<CanonicalSource>;
   receiptLoss?: bigint;
 }
+
+const UINT_FIXTURES = [
+  { name: "three-coin", options: { coins: [COINS[0], TOKEN, OTHER], hintedI: 1, hintedJ: 2 },
+    nativeIndex: 0, routeCount: 6 },
+  { name: "two-coin pure ERC20", options: { coins: ERC20_COINS, hintedI: 0, hintedJ: 1 },
+    nativeIndex: null, routeCount: 2 },
+] as const;
 
 async function lifecycle(options: LifecycleFixture = {}) {
   const coins = options.coins ?? COINS, rounds: AdapterRequest[][] = [];
@@ -338,43 +346,67 @@ test("production catalog/lifecycle continues after legacy int128 returned 0x and
 });
 
 test("production identity publishes only execution-proven directions and preserves the observed-direction guard", async () => {
-  for (const i of [0, 1]) {
-    const run = await lifecycle({ provenInputs: [i], hintedI: i }), instance = assertVerified(run);
+  for (const coins of [COINS, ERC20_COINS]) for (const i of [0, 1]) {
+    const run = await lifecycle({ coins, provenInputs: [i], hintedI: i }), instance = assertVerified(run);
     assert.deepEqual((instance.descriptor as CurveUnderlyingDescriptor).verifiedDirections.map(d => [d.i, d.j]), [[i, 1 - i]]);
     assert.equal(instance.routes.length, 1);
     const reverted = run.answers.find(r => r.id === `native-execution:${1 - i}:${i}`);
     assert(reverted?.ok && reverted.completion === "reverted-as-declared");
     assert.deepEqual(reverted.effects, { tokenDeltas: [], nativeDeltas: [], logs: [] });
-    const unproven = await lifecycle({ provenInputs: [i], hintedI: 1 - i });
+    const unproven = await lifecycle({ coins, provenInputs: [i], hintedI: 1 - i });
     assertNotVerified(unproven);
     assert(!unproven.result.outcomes.some(o => o.reasonCode.includes("scheduler-failure")),
       "unproven observed direction must fail identity, not the transport result contract");
   }
-  const noDirections = await lifecycle({ provenInputs: [] });
-  assertNotVerified(noDirections);
-  assert(!noDirections.result.outcomes.some(o => o.reasonCode.includes("scheduler-failure")));
-  const legacyRevert = await lifecycle({ legacy: "revert" }); assertVerified(legacyRevert);
-  const legacyAnswers = legacyRevert.answers.filter(r => r.id.startsWith("behavior-get-dy:"));
-  assert(legacyAnswers.length > 0);
-  assert(legacyAnswers.every(r => r.ok && r.completion === "reverted-as-declared" && r.effects === undefined));
+  for (const coins of [COINS, ERC20_COINS]) {
+    const noDirections = await lifecycle({ coins, provenInputs: [] });
+    assertNotVerified(noDirections);
+    assert(!noDirections.result.outcomes.some(o => o.reasonCode.includes("scheduler-failure")));
+    const legacyRevert = await lifecycle({ coins, legacy: "revert" }); assertVerified(legacyRevert);
+    const legacyAnswers = legacyRevert.answers.filter(r => r.id.startsWith("behavior-get-dy:"));
+    assert(legacyAnswers.length > 0);
+    assert(legacyAnswers.every(r => r.ok && r.completion === "reverted-as-declared" && r.effects === undefined));
+  }
   const reversed = assertVerified(await lifecycle({ coins: [TOKEN, COINS[0]] }));
   assert.equal((reversed.descriptor as CurveUnderlyingDescriptor).nativeAlias!.nativeIndex, 1);
 });
 
-test("three-coin production lifecycle admits all six directions and declaration validation accepts raw ERC20 probes", async () => {
-  const run = await lifecycle({ coins: [COINS[0], TOKEN, OTHER], hintedI: 1, hintedJ: 2 });
+for (const fixture of UINT_FIXTURES) test(`${fixture.name} production lifecycle publishes uint identity/Graph and declares raw ERC20 probes`, async () => {
+  const run = await lifecycle(fixture.options);
   const instance = assertVerified(run), d = instance.descriptor as CurveUnderlyingDescriptor;
-  assert.equal(d.coins.length, 3); assert.equal(instance.routes.length, 6);
-  assert.equal(run.rounds.flat().filter(r => r.id.startsWith("native-execution:")).length, 6);
+  assert.deepEqual(d.coins.map(lower), fixture.options.coins.map(lower));
+  assert.deepEqual(d.nativeAlias, { nativeIndex: fixture.nativeIndex, poolCodeHash: ethers.keccak256(CODE) });
+  assert.deepEqual(d.registryBinding.handlers.map(lower), [HANDLER]);
+  assert(d.provenance.some(p => p.kind === "curve-underlying-native-alias-registry-execution"));
+  assert.equal(instance.routes.length, fixture.routeCount);
+  const directions = d.coins.flatMap((_, i) => d.coins.flatMap((__, j) => i === j ? [] : [[i, j]]));
+  assert.deepEqual(d.verifiedDirections.map(q => [q.i, q.j]), directions);
+  assert.deepEqual(run.rounds.flat().filter(r => r.id.startsWith("native-execution:")).map(r => r.id),
+    directions.map(([i, j]) => `native-execution:${i}:${j}`));
+  const ids = run.rounds.map(round => round.map(r => r.id));
+  const legacyRound = ids.findIndex(round => round.some(id => id.startsWith("behavior-get-dy:")));
+  assert(legacyRound >= 0 && ids.findIndex(round => round.includes("registry-direct")) > legacyRound);
+  const legacyAnswers = run.answers.filter(r => r.id.startsWith("behavior-get-dy:"));
+  assert(legacyAnswers.length > 0 && legacyAnswers.every(r => r.ok && r.completion === "returned" && r.data === "0x"));
+  const edges = buildFamilyRouteGraphView({ routes: instance.routes.map((route, i) => ({
+    family: catalog.forFamily(instance.familyId), descriptor: instance.descriptor,
+    route, handle: instance.routeHandles[i],
+  })) }).edges;
+  assert.equal(edges.length, fixture.routeCount);
+  assert.deepEqual(edges.map(edge => [lower(edge.tokenIn), lower(edge.tokenOut)]).sort(),
+    directions.map(([i, j]) => [lower(d.coins[i]), lower(d.coins[j])]).sort());
+  assert(edges.every(edge => edge.adapterId === CURVE_UNDERLYING_NATIVE_ACTION));
   const variant = plugin.identity.variants.find(v => v.id === "metaregistry-uint-native-alias"); assert(variant);
   const step = nativeProbeStep(d, 1n);
   const declare = (requests: readonly AdapterRequest[]) => declareRequestProgram({
     requirements: () => variant.requirements(step), buildRequests: () => requests, decode: ({ results }) => results,
   }, undefined);
   const declared = declare(variant.buildRequests(step));
-  assert.equal(declared.requests.length, 6);
-  assert.equal(declared.requests.filter(r => r.kind === "effect-delta-simulation" && r.executionAssetBoundary).length, 4);
-  for (const [i, j] of [[1, 2], [2, 1]]) {
+  assert.equal(declared.requests.length, fixture.routeCount);
+  assert.equal(declared.requests.filter(r => r.kind === "effect-delta-simulation" && r.executionAssetBoundary).length,
+    fixture.nativeIndex === null ? 0 : 4);
+  const a = d.coins.indexOf(TOKEN), b = d.coins.indexOf(OTHER);
+  for (const [i, j] of [[a, b], [b, a]]) {
     const request = declared.requests.find(r => r.id === `native-execution:${i}:${j}`);
     assert(request?.kind === "effect-delta-simulation");
     assert(!Object.hasOwn(request, "executionAssetBoundary"));
@@ -398,12 +430,17 @@ test("three-coin production lifecycle admits all six directions and declaration 
   }
 });
 
-test("three-coin ERC20-only uint directions execute both quoted and runtime emitters with temporary approvals", async () => {
-  const d = assertVerified(await lifecycle({ coins: [COINS[0], TOKEN, OTHER], hintedI: 2, hintedJ: 1 })).descriptor as CurveUnderlyingDescriptor;
-  const routes = plugin.routes.project({ descriptor: d }).filter(r => r.i !== 0 && r.j !== 0);
-  assert.deepEqual(routes.map(r => [r.i, r.j]), [[1, 2], [2, 1]]);
+for (const fixture of UINT_FIXTURES) test(`${fixture.name} ERC20-only uint directions execute both quoted and runtime emitters with temporary approvals`, async () => {
+  const d = assertVerified(await lifecycle({ ...fixture.options,
+    hintedI: fixture.options.hintedJ, hintedJ: fixture.options.hintedI })).descriptor as CurveUnderlyingDescriptor;
+  const routes = plugin.routes.project({ descriptor: d }).filter(r => !r.executionAssets);
+  const a = d.coins.indexOf(TOKEN), b = d.coins.indexOf(OTHER);
+  assert.deepEqual(routes.map(r => [r.i, r.j]), [[a, b], [b, a]]);
   for (const route of routes) for (const amount of AMOUNTS) {
     const output = fixtureOutput(amount), input = invocation(d, route, amount), quoted = fragment(input);
+    assert.equal(quoted.quote.amountOut, output);
+    assert.equal(quoted.quote.evidence.amountIn, amount); assert.equal(quoted.quote.evidence.amountOut, output);
+    assert.deepEqual(quoted.quote.evidence.source, SOURCE);
     assert.deepEqual(quoted.quote.evidence.nativeAlias, d.nativeAlias, "uint variant binding survives without a native asset boundary");
     assert.deepEqual(quoted.value.requirements, []);
     const node = quoted.value.nodes[0];
@@ -429,41 +466,63 @@ test("three-coin ERC20-only uint directions execute both quoted and runtime emit
       assert.deepEqual(simulated.trace.allowances, [], "no standing allowance instruction");
       assert(!simulated.trace.calls.some(c => lower(c.target) === lower(ADDR.WETH) || lower(c.target) === ACTOR));
       assert.throws(() => interpret(program, route, amount, minimum - 1n, minimum), /checked uint256/);
+      assert.throws(() => interpret(program, route, amount, output, minimum, { insufficient: true }), /checked uint256/);
       assert.throws(() => interpret(program, route, amount, output, minimum, { extraDebit: 1n }), /checked uint256/);
+      assert.throws(() => interpret(program, route, amount, output, minimum, { unspent: amount }), /checked uint256/);
       assert.throws(() => interpret(program, route, amount, output, minimum, { noCleanup: true }), /mismatch/);
     }
     assert.throws(() => interpret(raw.program, route, 1n, 7n, 1n, { unspent: 1n }), /checked uint256/);
   }
 });
 
-test("registry membership, direct/underlying/WETH topology and direct getters are mandatory", async () => {
-  for (const options of [
-    { handlers: [] }, { code: "0x" }, { coins: [TOKEN, OTHER] },
-    { direct: [COINS[0], OTHER] }, { direct: [TOKEN, COINS[0]] }, { direct: [COINS[0]] },
-    { poolCoins: [COINS[0], OTHER] }, { coins: [COINS[0], COINS[0]] },
+test("registry membership, direct/underlying topology and direct getters remain mandatory for native and pure ERC20 aliases", async () => {
+  for (const coins of [COINS, ERC20_COINS]) for (const options of [
+    { coins, handlers: [] }, { coins, code: "0x" }, { coins: [coins[0]] },
+    { coins, direct: [coins[0], HANDLER] }, { coins, direct: [coins[1], coins[0]] }, { coins, direct: [coins[0]] },
+    { coins, poolCoins: [coins[0], HANDLER] }, { coins: [coins[0], coins[0]] },
   ] satisfies LifecycleFixture[]) {
     const run = await lifecycle(options); assertNotVerified(run);
     assert(!run.rounds.flat().some(r => r.id.startsWith("native-execution:")), "invalid topology must not reach execution proof");
   }
 });
 
-test("foreign source, unresolved transport and malformed executor effects never certify native identity", async () => {
+for (const coins of [COINS, ERC20_COINS]) test(`${coins === COINS ? "native" : "pure ERC20"} identity rejects foreign source, unresolved transport and malformed executor effects`, async () => {
   for (const foreign of [{ number: SOURCE.number + 1 }, { generation: SOURCE.generation + 1 }, { hash: ethers.id("foreign-source") }]) {
-    const run = await lifecycle({ foreign }); assertNotVerified(run);
+    const run = await lifecycle({ coins, foreign }); assertNotVerified(run);
     assert(run.rounds.flat().some(r => r.id.startsWith("quote:")), "negative must reach the affected round");
   }
   for (const fault of ["short-output", "unspent-input", "overdebit", "native", "recipient", "duplicate", "missing", "authority", "deadline"] as const) {
-    const run = await lifecycle({ fault }); assertNotVerified(run);
+    const run = await lifecycle({ coins, fault }); assertNotVerified(run);
     assert(run.rounds.flat().some(r => r.id === (fault === "authority" ? "probe-executor" : "native-execution:0:1")), fault);
   }
   // Production identity supplies the shared one-raw-unit ceiling. Two units
   // still fail the emitted minimum check; a native residue is never tolerance.
-  assertVerified(await lifecycle({ receiptLoss: 1n }));
-  const shortReceipt = await lifecycle({ receiptLoss: 2n });
+  assertVerified(await lifecycle({ coins, receiptLoss: 1n }));
+  const shortReceipt = await lifecycle({ coins, receiptLoss: 2n });
   assertNotVerified(shortReceipt);
   assert(shortReceipt.simulatorFailures.length > 0, "negative receipt must reach the emitted program's minimum guard");
   assert(!shortReceipt.result.outcomes.some(o => o.reasonCode.includes("scheduler-failure")),
     "an emitted-program revert must remain execution evidence, not malformed transport output");
+});
+
+test("null uint aliases cannot hide WETH; invalid native indices and malformed code bindings fail before probes", () => {
+  const alias = { nativeIndex: null, poolCodeHash: ethers.keccak256(CODE) };
+  assert.equal(underlyingNativeAssets({ coins: ERC20_COINS, nativeAlias: alias }, { i: 0, j: 1 }), undefined);
+  const reject = (coins: readonly string[], nativeAlias: NonNullable<CurveUnderlyingDescriptor["nativeAlias"]>, i = 0, j = 1) => {
+    const quote = { i, j, tokenIn: coins[i], tokenOut: coins[j],
+      behaviorProbeAmountIn: 19n, behaviorProbeAmountOut: fixtureOutput(19n) };
+    assert.throws(() => underlyingNativeAssets({ coins, nativeAlias }, quote), /alias|WETH|binding/);
+    assert.throws(() => underlyingNativeAliasProbe(POOL, coins, nativeAlias, quote, ACTOR, 1n), /alias|WETH|binding/);
+  };
+  reject(COINS, alias);
+  reject([TOKEN, COINS[0]], alias);
+  reject([COINS[0], TOKEN, OTHER], alias, 1, 2); // WETH is outside the selected ERC20 direction.
+  for (const nativeIndex of [-1, 0.5, 1, 2, Number.NaN]) reject(COINS, { ...alias, nativeIndex });
+  for (const nativeIndex of [0, 1]) reject(ERC20_COINS, { ...alias, nativeIndex });
+  for (const poolCodeHash of ["0x", "0x01", "not-a-code-hash"]) {
+    reject(ERC20_COINS, { ...alias, poolCodeHash });
+    reject(COINS, { nativeIndex: 0, poolCodeHash });
+  }
 });
 
 // Unit descriptors are synthetic, never inserted into Ready or the catalog.
@@ -508,6 +567,28 @@ function fragment(input: ReturnType<typeof invocation>, minimum = fixtureOutput(
     ...(quoteToleranceRawUnits === undefined ? {} : { quoteToleranceRawUnits }) }) };
 }
 
+test("pure ERC20 uint quoted evidence retains its alias and exact code binding", async () => {
+  const d = assertVerified(await lifecycle({ coins: ERC20_COINS })).descriptor as CurveUnderlyingDescriptor;
+  assert.deepEqual(d.nativeAlias, { nativeIndex: null, poolCodeHash: ethers.keccak256(CODE) });
+  for (const route of plugin.routes.project({ descriptor: d })) {
+    const input = invocation(d, route, 19n), { result } = exact(input);
+    const build = (patch: object) => plugin.execution.buildFragment({ ...input, exactEvidence: result.evidence,
+      quotedAmountOut: result.amountOut, minAmountOut: result.amountOut, ...patch });
+    assert.equal(build({}).nodes[0].adapterId, CURVE_UNDERLYING_NATIVE_ACTION);
+    for (const nativeAlias of [
+      undefined,
+      { ...d.nativeAlias!, nativeIndex: 0 },
+      { ...d.nativeAlias!, poolCodeHash: ethers.id("wrong-erc20-implementation") },
+      { ...d.nativeAlias!, poolCodeHash: "0x" },
+    ]) {
+      assert.throws(() => build({ exactEvidence: { ...result.evidence, nativeAlias } }), /incompatible/);
+      assert.throws(() => build({ descriptor: { ...d, nativeAlias } }));
+    }
+    assert.throws(() => build({ descriptor: descriptor(false) }), /incompatible/,
+      "the same two ERC20 coins cannot erase the uint binding and select legacy int128 execution");
+  }
+});
+
 // Encode only the actual fragment's nodes with their registered production
 // encoders. In issuer tests the boundary and its policy already came from the
 // production issuer; this helper never reconstructs either of them.
@@ -545,9 +626,9 @@ function assertSelectedInputTolerance(program: string, route: VmRoute, amount: b
     assert.throws(() => interpret(program, route, amount, output, minimum, faults), /checked uint256|mismatch/);
 }
 
-test("quoted Family action obeys selected 0/1 on all three-coin directions without hiding behind the native boundary", async () => {
-  const d = assertVerified(await lifecycle({ coins: [COINS[0], TOKEN, OTHER], hintedI: 1, hintedJ: 2 })).descriptor as CurveUnderlyingDescriptor;
-  const routes = plugin.routes.project({ descriptor: d }); assert.equal(routes.length, 6);
+for (const fixture of UINT_FIXTURES) test(`${fixture.name} quoted Family action obeys selected 0/1 without hiding behind the native boundary`, async () => {
+  const d = assertVerified(await lifecycle(fixture.options)).descriptor as CurveUnderlyingDescriptor;
+  const routes = plugin.routes.project({ descriptor: d }); assert.equal(routes.length, fixture.routeCount);
   for (const route of routes) {
     for (const amount of [1n, ...AMOUNTS]) for (const selected of [undefined, 0n, 1n]) {
       const output = fixtureOutput(amount), quoted = fragment(invocation(d, route, amount), output, selected);
@@ -577,8 +658,8 @@ test("quoted Family action obeys selected 0/1 on all three-coin directions witho
   }
 });
 
-test("strict probes forward admission tolerance to the actual uint emitter, including ERC20 A<->B", async () => {
-  const d = assertVerified(await lifecycle({ coins: [COINS[0], TOKEN, OTHER], hintedI: 1, hintedJ: 2 })).descriptor as CurveUnderlyingDescriptor;
+for (const fixture of UINT_FIXTURES) test(`${fixture.name} strict probes forward admission tolerance to the actual uint emitter, including ERC20 A<->B`, async () => {
+  const d = assertVerified(await lifecycle(fixture.options)).descriptor as CurveUnderlyingDescriptor;
   const variant = plugin.identity.variants.find(v => v.id === "metaregistry-uint-native-alias"); assert(variant);
   for (const route of plugin.routes.project({ descriptor: d })) {
     for (const amount of [1n, ...AMOUNTS]) for (const selected of [0n, 1n]) {
@@ -609,9 +690,9 @@ test("strict probes forward admission tolerance to the actual uint emitter, incl
   }
 });
 
-test("production issuer carries selected 0/1 from real lifecycle and Exact handles into native and ERC20 quoted actions", async () => {
-  const run = await lifecycle({ coins: [COINS[0], TOKEN, OTHER], hintedI: 1, hintedJ: 2 });
-  const instance = assertVerified(run); assert.equal(instance.routes.length, 6);
+for (const fixture of UINT_FIXTURES) test(`${fixture.name} production issuer carries selected 0/1 from real lifecycle and Exact handles into quoted actions`, async () => {
+  const run = await lifecycle(fixture.options);
+  const instance = assertVerified(run); assert.equal(instance.routes.length, fixture.routeCount);
   // No fake issuer, manually issued handles or mutations to the loaded box.
   // Only the existing lifecycle transport's ABI results are synthetic.
   for (const [index, storedRoute] of instance.routes.entries()) for (const amount of [1n, ...AMOUNTS]) {
@@ -651,8 +732,8 @@ test("production issuer carries selected 0/1 from real lifecycle and Exact handl
   }
 });
 
-test("Exact preserves specified uint get_dy amounts, source and native evidence binding", () => {
-  const d = descriptor();
+for (const pureERC20 of [false, true]) test(`${pureERC20 ? "pure ERC20" : "native"} Exact preserves specified uint get_dy amounts, source and alias evidence binding`, async () => {
+  const d = pureERC20 ? assertVerified(await lifecycle({ coins: ERC20_COINS })).descriptor as CurveUnderlyingDescriptor : descriptor();
   for (const route of plugin.routes.project({ descriptor: d })) {
     for (const amount of AMOUNTS) {
       const input = invocation(d, route, amount), { result, method, initialResults } = exact(input);
@@ -670,7 +751,7 @@ test("Exact preserves specified uint get_dy amounts, source and native evidence 
     const input = invocation(d, route, 1n), { method } = exact(input);
     for (const amountIn of [-1n, ethers.MaxUint256 + 1n]) assert.throws(() => method.program.buildRequests({ ...input, amountIn }), /uint256/);
     assert.equal(method.program.buildRequests({ ...input, amountIn: ethers.MaxUint256 }).length, 1);
-    assert.throws(() => method.program.buildRequests({ ...input, route: { ...route, tokenOut: OTHER } }), /descriptor/);
+    assert.throws(() => method.program.buildRequests({ ...input, route: { ...route, tokenOut: HANDLER } }), /descriptor/);
   }
 });
 
@@ -758,8 +839,8 @@ test("quoted evidence cannot cross variants, bindings or amounts; invalid raw ac
     quoteModel: { kind: "classic-meta-base-3pool-v1" } as NonNullable<CurveUnderlyingDescriptor["quoteModel"]> } }));
 });
 
-test("runtime raw default remains one unit on all three-coin directions but never permits zero actual input debit", async () => {
-  const d = assertVerified(await lifecycle({ coins: [COINS[0], TOKEN, OTHER], hintedI: 1, hintedJ: 2 })).descriptor as CurveUnderlyingDescriptor;
+for (const fixture of UINT_FIXTURES) test(`${fixture.name} runtime raw default remains one unit but never permits zero actual input debit`, async () => {
+  const d = assertVerified(await lifecycle(fixture.options)).descriptor as CurveUnderlyingDescriptor;
   for (const route of plugin.routes.project({ descriptor: d })) {
     const raw = plugin.execution.buildRuntimeLeg!({ descriptor: d, route, executor: ACTOR, runtimeEvidence: [] }); assert(raw);
     const leg = applyRuntimeAssetBoundary({ route, executor: ACTOR, leg: raw });
@@ -789,15 +870,17 @@ test("legacy int128 remains discoverable, quotable and executable when native to
   }
 });
 
-test("native pricing is each-block, legacy stays on-touch, and the production pricing index consumes both policies", async () => {
-  for (const native of [true, false]) {
-    const run = await lifecycle(native ? {} : { legacy: "positive", coins: [TOKEN, OTHER] });
+test("uint alias pricing is each-block, legacy stays on-touch, and the production pricing index consumes both policies", async () => {
+  for (const options of [{}, { coins: ERC20_COINS }, { legacy: "positive", coins: ERC20_COINS }] satisfies LifecycleFixture[]) {
+    const run = await lifecycle(options);
     const instance = assertVerified(run), d = instance.descriptor as CurveUnderlyingDescriptor;
+    const uintAlias = !Object.hasOwn(options, "legacy");
+    assert.equal(d.nativeAlias !== undefined, uintAlias);
     for (const route of plugin.routes.project({ descriptor: d })) {
       const pricing = plugin.pricing.finalizePricingDescriptor({ sharedBindings: [],
         draft: plugin.pricing.compileDraft({ descriptor: d, routes: [route], stateKey: route.routeKey }) });
       assert.equal(plugin.pricing.refreshPolicyForInstance!({ descriptor: pricing, routes: [route] }),
-        native ? "each-block" : "on-touch");
+        uintAlias ? "each-block" : "on-touch");
     }
     // Exercise the existing production consumer with issued lifecycle handles;
     // no manually admitted instances, injected edges or alternate scheduler.
@@ -810,7 +893,7 @@ test("native pricing is each-block, legacy stays on-touch, and the production pr
       readyInstances: [instance], readyFundingAssets: [] });
     const index = root.pricingIndex(), allStateKeys = [...new Set(index.stateKeyByEdgeKey.values())].sort();
     assert.equal(allStateKeys.length, 2);
-    assert.deepEqual([...index.perBlockRefreshStateKeys].sort(), native ? allStateKeys : []);
+    assert.deepEqual([...index.perBlockRefreshStateKeys].sort(), uintAlias ? allStateKeys : []);
     // This checks production registration of quiet-block refresh work, not a
     // historical timed refresh or a separate reimplementation of the scheduler.
   }
@@ -818,7 +901,9 @@ test("native pricing is each-block, legacy stays on-touch, and the production pr
 
 test("production sim amount selector forwards selected 0/1 with zero Exact, quoted fallback and RPC calls", async () => {
   const threeCoin = assertVerified(await lifecycle({ coins: [COINS[0], TOKEN, OTHER], hintedI: 1, hintedJ: 2 })).descriptor as CurveUnderlyingDescriptor;
-  for (const d of [descriptor(true), descriptor(false), threeCoin]) {
+  const pureERC20 = assertVerified(await lifecycle({ coins: ERC20_COINS })).descriptor as CurveUnderlyingDescriptor;
+  assert.deepEqual(pureERC20.nativeAlias, { nativeIndex: null, poolCodeHash: ethers.keccak256(CODE) });
+  for (const d of [descriptor(true), descriptor(false), threeCoin, pureERC20]) {
     for (const route of plugin.routes.project({ descriptor: d })) for (const selected of [0n, 1n]) {
       const raw = plugin.execution.buildRuntimeLeg!({ descriptor: d, route, executor: ACTOR, runtimeEvidence: [] }); assert(raw);
       const leg = applyRuntimeAssetBoundary({ route, executor: ACTOR, leg: raw });
@@ -853,5 +938,77 @@ test("production sim amount selector forwards selected 0/1 with zero Exact, quot
       const construction = events.filter(event => event.type === "sim_amount_construction");
       assert(construction.length > 0); assert(construction.every(event => event.mode === "runtime-actual"));
     }
+  }
+});
+
+test("pure ERC20 lifecycle -> real production session -> sim selector uses actual route issuers; only funding and external execution are synthetic", async () => {
+  const run = await lifecycle({ coins: ERC20_COINS }), instance = assertVerified(run);
+  const edges = buildFamilyRouteGraphView({ routes: instance.routes.map((route, i) => ({
+    family: catalog.forFamily(instance.familyId), descriptor: instance.descriptor,
+    route, handle: instance.routeHandles[i],
+  })) }).edges;
+  assert.equal(edges.length, 2);
+  const root = new StrictProductionRuntimeRoot({ catalog, readySource: SOURCE, readyGraph: edges,
+    readyInstances: [instance], readyFundingAssets: [] });
+  const beforeSession = run.rounds.length;
+  const session = await root.createSession({ source: SOURCE, runtime: run.runtime,
+    fundingAssets: [], kind: "exact-execution" });
+  assert.equal(run.rounds.length, beforeSession, "runtime session preparation must not quote");
+  assert.throws(() => session.buildRuntimeAmountLeg({ edge: { ...edges[0], tokenIn: HANDLER },
+    executor: ACTOR, runtimeEvidence: [] }), "real session must reject a modified Graph edge");
+  for (const first of [0, 1]) for (const selected of [0n, 1n]) {
+    const path = [edges[first], edges[1 - first]];
+    let runtimeCalls = 0, exactCalls = 0, quotedCalls = 0, rpcCalls = 0, simulated = 0;
+    const events: any[] = [];
+    // Financing is not this Family's capability. Only these two funding
+    // methods are fixtures; edge resolution, source/handle checks and runtime
+    // issuance execute the actual session method with its private authority.
+    const selectorSession = new Proxy(session, { get(target, name) {
+      if (name === "fundingActionIds") return () => ["fixture-funding"];
+      if (name === "buildFundingRoot") return (input: any) => ({ adapterId: "fixture-funding",
+        target: ACTOR, tokenIn: path[0].tokenIn, tokenOut: path[0].tokenIn,
+        amount: input.amount, params: {}, children: input.children });
+      if (name === "issueExact") return () => { exactCalls++; throw Error("unexpected Exact"); };
+      if (name === "buildExecution") return () => { quotedCalls++; throw Error("unexpected quoted fallback"); };
+      if (name === "buildRuntimeAmountLeg") return (input: Parameters<typeof session.buildRuntimeAmountLeg>[0]) => {
+        runtimeCalls++; return target.buildRuntimeAmountLeg(input);
+      };
+      const value = Reflect.get(target, name, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    } });
+    const selector = createBlockScanSimAmountSelector({ source: SOURCE, executor: ACTOR,
+      record: event => events.push(event), async simulate(plan) {
+        simulated++;
+        const flow = plan.root.children[0]; assert(flow);
+        assert.equal(flow.adapterId, "runtime-amount-flow");
+        assert.equal(flow.params.quoteToleranceRawUnits, selected);
+        const legs = JSON.parse(flow.params.legs as string); assert.equal(legs.length, 2);
+        let amount = plan.root.amount as bigint;
+        for (const [i, leg] of legs.entries()) {
+          const route = instance.routes.find(route => lower(route.tokenIn) === lower(path[i].tokenIn) &&
+            lower(route.tokenOut) === lower(path[i].tokenOut)) as CurveUnderlyingRoute;
+          assert(route); assert.equal(route.executionAssets, undefined);
+          const output = fixtureOutput(amount);
+          const execution = interpret(leg.program, route, amount, output, 1n);
+          assert.equal(execution.balances.get(lower(route.tokenIn)), INVENTORY);
+          assert.equal(execution.balances.get(lower(route.tokenOut)), INVENTORY + output);
+          assert.equal(execution.allowance, 0n); assert.equal(execution.native, INVENTORY);
+          amount = output;
+        }
+        return { success: true, netProfit: 1n, grossProfit: 1n, gasUsed: 1n,
+          profitToken: path[0].tokenIn, calldata: "0x" };
+      } });
+    await selector.solve({ opportunity: { kind: "block-scan-arb", searchSeed: { searchCenter: 10n },
+      flashToken: path[0].tokenIn, profitToken: path[0].tokenIn }, tokenPath: { edges: path }, maxFlashAmount: 10000n,
+      templateName: "offline-underlying-real-session-contract" } as any,
+    { call() { rpcCalls++; throw Error("unexpected RPC"); } } as any, { executor: ACTOR } as any,
+    { strictSession: selectorSession, quoteToleranceRawUnits: selected, deferPhase2Sim: true,
+      gssMaxTries: 2, deadlineAtMs: Date.now() + 30000 });
+    assert(simulated >= 4);
+    assert.equal(runtimeCalls, simulated * path.length, "each amount trial issues both real route legs");
+    assert.deepEqual([exactCalls, quotedCalls, rpcCalls], [0, 0, 0]);
+    assert.equal(run.rounds.length, beforeSession, "real runtime issuer must not issue transport requests");
+    const construction = events.filter(event => event.type === "sim_amount_construction");
+    assert(construction.length > 0 && construction.every(event => event.mode === "runtime-actual"));
   }
 });

@@ -32,9 +32,10 @@ interface Evidence {
 const pairs = (n: number) => Array.from({ length: n }, (_, i) =>
   Array.from({ length: n }, (_, j) => [i, j] as const).filter(([, j]) => i !== j)).flat();
 
-/** Some registry members expose underlying as the native-ETH alias of their
- * direct uint256 exchange. Topology alone does not prove that interpretation:
- * every published direction must execute with these raw assets at the source. */
+/** Some registry members expose underlying through their direct uint256
+ * exchange, optionally aliasing WETH to native ETH. Topology alone does not
+ * prove either interpretation: every published direction must execute with
+ * its declared raw assets at the source. Keep the existing variant ID. */
 export const curveUnderlyingNativeIdentity: IdentitySemantics<CurveUnderlyingCandidate, CurveUnderlyingIdentity>["variants"][number] = {
   id: "metaregistry-uint-native-alias", kind: "registry-member", lineageId: CURVE_UNDERLYING_REGISTRY_LINEAGE_ID,
   applies: candidate => candidate.candidateKind === "curve-underlying-pool",
@@ -80,11 +81,12 @@ export const curveUnderlyingNativeIdentity: IdentitySemantics<CurveUnderlyingCan
       const handlers = handlersRead.completion === "returned" ? addressArray(handlersRead.data, 10) : [];
       const coins = underlying.completion === "returned" ? addressArray(underlying.data, 8) : [];
       const directCoins = direct.completion === "returned" ? addressArray(direct.data, 8) : [];
-      const nativeIndex = coins.findIndex(c => sameAddress(c, ADDR.WETH));
+      const nativePosition = coins.findIndex(c => sameAddress(c, ADDR.WETH));
+      const nativeIndex = nativePosition < 0 ? null : nativePosition;
       const rejection = code === "0x" ? "no-pool-code" : handlers.length === 0 ? "no-registry-membership" :
-        coins.length < 2 || coins.length > 8 || nativeIndex < 0 || new Set(coins.map(c => c.toLowerCase())).size !== coins.length ||
+        coins.length < 2 || coins.length > 8 || new Set(coins.map(c => c.toLowerCase())).size !== coins.length ||
         directCoins.length !== coins.length || coins.some((coin, i) => !sameAddress(coin, directCoins[i]))
-          ? "not-a-registry-native-alias-topology" : undefined;
+          ? "not-a-registry-uint-alias-topology" : undefined;
       return { phase: "registry", source, pool: ethers.getAddress(step.candidate.pool), coins, handlers,
         alias: { nativeIndex, poolCodeHash: ethers.keccak256(code) }, decimals: [], balances: [], quotes: [], directions: [], requestIds,
         ...(rejection ? { rejection } : {}) } satisfies Evidence;
