@@ -27,7 +27,7 @@ import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../../../production-infra-actions.js";
 import { sourcePin } from "../../../../test/family-integration/kyber-yb-compound/historical-dual.js";
-import { assertPriceInput, productionAmount, splicedProductionAmount, constructionGuard, assertExecutorCode, assertOriginAccountCode, json, sha, same } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
+import { assertPriceInput, productionAmount, splicedProductionAmount, splicedMissingProductionAmount, constructionGuard, assertExecutorCode, assertOriginAccountCode, json, sha, same } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 import { assertHistoricalDiscoveryReceipt } from "../../../../test/family-integration/three-family/historical-input-observations.js";
 import { ERC4626_FAMILY_ID, INFINIFI_LINEAGE_ID } from "../manifest.js";
 import { ERC4626_INTERFACE } from "../abi.js";
@@ -41,6 +41,18 @@ const VAULT = "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb";
 const ROOT = fileURLToPath(new URL("../../../../../../../", import.meta.url));
 const effects = ["return-data", "revert-data", "token-delta", "native-delta", "logs"] as const;
 const requirements = { transports: ["effect-delta-simulation"] as const, caller: "executor" as const, effects };
+
+export function infiniFiHistoricalBorrowedInput(nextState: boolean, p: { status: "met" | "unmet" },
+  effective: any, tokenIn: string, reference?: { saved: any; declaration: any; edge: string }) {
+  const donorRow = reference?.saved.runtime.pricing.effectiveMids.rows.get(reference.edge);
+  if (reference) assert(donorRow, "selected donor row missing");
+  if (!donorRow || !same(donorRow.tokenIn, tokenIn)) return undefined;
+  // N+1 controls and supplemental trials keep their explicit diagnostic role.
+  // Only filling an unmet N-state reference requires a true valuation gap.
+  if (!nextState && p.status !== "met") return splicedMissingProductionAmount(effective,
+    tokenIn, reference!.saved, reference!.declaration, [reference!.edge]);
+  return splicedProductionAmount(reference!.saved, reference!.declaration, [reference!.edge], tokenIn);
+}
 
 export function assertInfiniFiEffects(actual: ObservedEffects | undefined, executor: string,
   tokenIn: string, tokenOut: string, amountIn: bigint, amountOut: bigint): void {
@@ -167,10 +179,7 @@ async function main(argv = process.argv.slice(2)) {
       const edgeId = blockScanEdgeKey(edge[0]!), effective = prices.runtime.pricing.effectiveMids.rows.get(edgeId);
       const p = nextState ? { status: "unmet" as const, reason: "saved price reference belongs to discovery N, not N+1" } :
         productionAmount(effective, prices.runtime.pricing.mids.get(edgeId), edge[0], source, prices.runtime.generation);
-      const donorRow = reference?.saved.runtime.pricing.effectiveMids.rows.get(reference.edge);
-      if (reference) assert(donorRow, "selected donor row missing");
-      const borrowed = donorRow && same(donorRow.tokenIn, route.tokenIn) ?
-        splicedProductionAmount(reference!.saved, reference!.declaration, [reference!.edge], route.tokenIn) : undefined;
+      const borrowed = infiniFiHistoricalBorrowedInput(nextState, p, effective, route.tokenIn, reference);
       if (p.status !== "met" && borrowed === undefined) referenceComplete = false;
       const leg = guard.build(() => buildFamilyRuntimeAmountLeg({ family, route: handle, source, executor, runtime: guard.runtime(runtime), runtimeEvidence: [], actionOwnership: catalog })); assert(leg, "no runtime fallback");
       const originalAmount = same(route.tokenIn, VAULT) ? original.shares : original.assets;

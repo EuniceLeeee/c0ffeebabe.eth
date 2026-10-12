@@ -210,6 +210,17 @@ export function productionAmount(row: any, raw: any, edge: any, source: { number
   return { status: "met" as const, amountIn: row.amountIn as bigint, amountOut: row.amountOut as bigint };
 }
 
+/** Fill a missing target input without replacing a failed or already quoted
+ * production amount. Keep the lower-level donor reader for explicit amount
+ * comparisons (including separately recorded correct rejections). */
+export function splicedMissingProductionAmount(row: any, tokenIn: string,
+  saved: any, declaration: any, edgeKeys: readonly string[]) {
+  assert(row?.status === "missing-valuation" && row.amountIn == null && row.amountOut == null,
+    "donor may fill only a missing valuation input, not a failed target quote");
+  assert(typeof row.tokenIn === "string" && same(row.tokenIn, tokenIn), "donor target input token mismatch");
+  return splicedProductionAmount(saved, declaration, edgeKeys, tokenIn);
+}
+
 /** Explicitly borrow only amountIn from a saved production-stage graph. The
  * donor can be carried and from another block; its output/identity/valuation
  * never substitutes for the target's same-N quote, Ready or execution. */

@@ -29,7 +29,7 @@ import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../../../production-infra-acti
 import { lower, same, PERMIT2, ROUTER, VAULT, MAX_INPUT, ROUTER_ABI, hasSwapHooks } from "../codec.js";
 import type { BalancerV3Descriptor } from "../types.js";
 import { decodeSwapLog } from "../discovery.js";
-import { productionAmount, splicedProductionAmount, assertPriceInput } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
+import { productionAmount, splicedMissingProductionAmount, assertPriceInput } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 import { sourcePin as productionSourcePin } from "../../../../test/family-integration/kyber-yb-compound/historical-dual.js";
 import { proveActorBalanceSlot } from "./balance-slot-proof.js";
 import { supportsLocalPricing } from "../local-state.js";
@@ -157,6 +157,22 @@ export function assertNoInputRollback(input: {
   return { input: spent, output: received, native };
 }
 
+/** Borrow only a missing input, never a replacement for a failed target quote. */
+export function balancerHistoricalReferenceInput(row: any, gate: ReturnType<typeof productionAmount>, donor?: {
+  saved: any; declaration: any; edgeKeys: readonly string[];
+}) {
+  if (gate.status === "met") return {
+    reference: { kind: "target-production-reference", amountIn: gate.amountIn }, splice: null,
+  };
+  const hasDonorInput = donor?.edgeKeys.some(key => {
+    const candidate = donor.saved.runtime.pricing.effectiveMids.rows.get(key);
+    return candidate && same(candidate.tokenIn, row.tokenIn);
+  });
+  if (!donor || !hasDonorInput) return { reference: null, splice: null };
+  const splice = splicedMissingProductionAmount(row, row.tokenIn, donor.saved, donor.declaration, donor.edgeKeys);
+  return { reference: { kind: "donor-input-only", amountIn: splice.amountIn }, splice };
+}
+
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const args = options(argv);
   // Reserve before any fork; write once in finally, including failed attempts.
@@ -232,16 +248,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assert(row && row.edgeId === key, "production effective row required, even if unquoted");
       assert(same(row.tokenIn, edge.tokenIn) && same(row.tokenOut, edge.tokenOut));
       const gate = productionAmount(row, saved.runtime.pricing.mids.get(key), edge, source, saved.runtime.generation);
-      const hasDonorInput = donor && args.referenceEdges.some(key => {
-        const candidate = donor.saved.runtime.pricing.effectiveMids.rows.get(key);
-        return candidate && same(candidate.tokenIn, edge.tokenIn);
-      });
-      const splice = gate.status !== "met" && hasDonorInput ? splicedProductionAmount(donor!.saved, donor!.declaration, args.referenceEdges, edge.tokenIn) : null;
+      const { reference, splice } = balancerHistoricalReferenceInput(row, gate,
+        donor ? { ...donor, edgeKeys: args.referenceEdges } : undefined);
       const originalIn = original.find((swap: any) => same(swap.tokenIn, edge.tokenIn));
       const originalOut = original.find((swap: any) => same(swap.tokenOut, edge.tokenIn));
       const txAmount: bigint | undefined = originalIn?.amountIn ?? originalOut?.amountOut;
-      const reference = gate.status === "met" ? { kind: "target-production-reference", amountIn: gate.amountIn }
-        : splice ? { kind: "donor-input-only", amountIn: splice.amountIn } : null;
       if (gate.status !== "met") report.referenceGaps.push({ edgeId: key, status: gate.reason, donorInput: splice });
       const trials: { label: string; amountIn: bigint }[] = [];
       const add = (label: string, amountIn: bigint) => { assert(amountIn > 0n && amountIn <= MAX_INPUT);

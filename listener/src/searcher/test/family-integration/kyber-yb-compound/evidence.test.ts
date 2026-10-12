@@ -8,9 +8,10 @@ import { ALGEBRA_POOL_INTERFACE as ALGEBRA } from "../../../venues/swaps/algebra
 import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-family/abi.js";
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
 import { ERC4626_INTERFACE as VAULT } from "../../../venues/protocols/erc4626-family/abi.js";
-import { options, SAMPLES, ERC20, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, originalLeg, originalLegs, originalDirections, historicalAmountTrials,
+import { options, SAMPLES, ERC20, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, splicedMissingProductionAmount, originalLeg, originalLegs, originalDirections, historicalAmountTrials,
   assertReceipt, observeBalance, assertDeltas, constructionGuard, word, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory, assertExecutorCode } from "./evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
+import { infiniFiHistoricalBorrowedInput } from "../../../venues/protocols/erc4626-family/test/infinifi-historical-dual.js";
 
 const actor = "0x1000000000000000000000000000000000000001";
 const asset = "0x1000000000000000000000000000000000000002";
@@ -209,6 +210,78 @@ test("explicit donor takes only recorded input; carried provenance cannot become
   assert.equal(productionAmount({ status: "missing-valuation" }, undefined, {}, source, 7).status, "unmet");
   d.row.quotedAt = { ...source };
   assert.equal(splicedProductionAmount(d.saved, d.declaration, [d.edgeId], token0).freshness, "fresh");
+});
+
+test("missing-input donor preserves the target gap and validates the expected input token", () => {
+  const d = donorFixture(), target = { status: "missing-valuation", tokenIn: token0, amountIn: null, amountOut: null };
+  const before = structuredClone(target);
+  const result = splicedMissingProductionAmount(target, token0, d.saved, d.declaration, [d.edgeId]);
+  assert.equal(result.amountIn, 17n); assert.equal(result.freshness, "carried");
+  assert(!Object.hasOwn(result, "amountOut")); assert.deepEqual(target, before);
+  assert.throws(() => splicedMissingProductionAmount({ ...target, tokenIn: asset }, token0,
+    d.saved, d.declaration, [d.edgeId]), /input token mismatch/);
+});
+
+test("missing-input donor cannot turn target quote failures or existing amounts into a passed reference", () => {
+  const d = donorFixture(), target = { status: "missing-valuation", tokenIn: token0, amountIn: null, amountOut: null };
+  for (const row of [undefined, { ...target, status: "quote-failed" }, { ...target, status: "quote-failed", amountIn: 21n },
+    { ...target, status: "disabled-for-run" }, { ...target, status: "cancelled" }, { ...target, status: "unreachable" },
+    { ...target, status: "quoted", amountIn: 21n, amountOut: 23n }, { ...target, amountIn: 0n },
+    { ...target, amountIn: 21n }, { ...target, amountOut: 23n }]) {
+    assert.throws(() => splicedMissingProductionAmount(row, token0, d.saved, d.declaration, [d.edgeId]), /missing valuation/);
+  }
+});
+
+test("InfiniFi donor fills only the missing N-state input and preserves the target", () => {
+  const d = donorFixture(), reference = { ...d, edge: d.edgeId };
+  const target = { status: "missing-valuation", tokenIn: token0, amountIn: null, amountOut: null };
+  const before = structuredClone(target);
+  const borrowed = infiniFiHistoricalBorrowedInput(false, { status: "unmet" }, target, token0, reference);
+  assert.equal(borrowed?.amountIn, 17n); assert.deepEqual(target, before);
+  assert.match(borrowed!.naturalTargetValuation, /unmet/);
+});
+
+for (const status of ["quote-failed", "missing-raw-mid", "disabled", "disabled-for-run", "cancelled"]) {
+  test("InfiniFi donor cannot replace N-state " + status, () => {
+    const d = donorFixture(), target = { status, tokenIn: token0, amountIn: 21n, amountOut: null };
+    assert.throws(() => infiniFiHistoricalBorrowedInput(false, { status: "unmet" }, target,
+      token0, { ...d, edge: d.edgeId }), /missing valuation/);
+  });
+}
+
+test("InfiniFi donor rejects recorded amounts in a claimed N-state valuation gap", () => {
+  const d = donorFixture(), target = { status: "missing-valuation", tokenIn: token0, amountIn: null, amountOut: null };
+  for (const row of [{ ...target, amountIn: 0n }, { ...target, amountIn: 21n }, { ...target, amountOut: 23n }]) {
+    assert.throws(() => infiniFiHistoricalBorrowedInput(false, { status: "unmet" }, row,
+      token0, { ...d, edge: d.edgeId }), /missing valuation/);
+  }
+});
+
+test("InfiniFi donor keeps deliberate N+1 same-input controls without claiming natural valuation", () => {
+  const d = donorFixture();
+  const borrowed = infiniFiHistoricalBorrowedInput(true, { status: "unmet" }, undefined,
+    token0, { ...d, edge: d.edgeId });
+  assert.equal(borrowed?.amountIn, 17n); assert.match(borrowed!.naturalTargetValuation, /unmet/);
+  d.saved.cfg = { minCapitalFraction: 0.1 };
+  assert.throws(() => infiniFiHistoricalBorrowedInput(true, { status: "unmet" }, undefined,
+    token0, { ...d, edge: d.edgeId }), /configuration mismatch/);
+});
+
+test("InfiniFi donor keeps supplementary amounts after a valid N-state production input", () => {
+  const d = donorFixture(), target = { status: "quoted", tokenIn: token0, amountIn: 21n, amountOut: 23n };
+  const before = structuredClone(target);
+  assert.equal(infiniFiHistoricalBorrowedInput(false, { status: "met" }, target,
+    token0, { ...d, edge: d.edgeId })?.amountIn, 17n);
+  assert.deepEqual(target, before);
+});
+
+test("InfiniFi donor absence or different token does not supply a reference", () => {
+  const d = donorFixture(), target = { status: "missing-valuation", tokenIn: token0, amountIn: null, amountOut: null };
+  assert.equal(infiniFiHistoricalBorrowedInput(false, { status: "unmet" }, target, token0), undefined);
+  assert.equal(infiniFiHistoricalBorrowedInput(false, { status: "unmet" }, target,
+    asset, { ...d, edge: d.edgeId }), undefined);
+  assert.throws(() => infiniFiHistoricalBorrowedInput(false, { status: "unmet" }, target,
+    token0, { ...d, edge: "absent" }), /donor row missing/);
 });
 
 test("donor bridge rejects mismatched tokens, source/graph/config, future rows and invalid amounts", () => {

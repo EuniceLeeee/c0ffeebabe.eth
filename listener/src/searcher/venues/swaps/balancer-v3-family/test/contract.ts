@@ -12,7 +12,9 @@ import { CALL_ID, LOG_ID, SURFACE_ID, SURFACE, SWAP_TOPIC, decodeSwapLog } from 
 import { reverseBindBalancerV3, nominateBalancerV3 } from "../nomination.js";
 import { balancerV3ReceiptObservation } from "../swap.js";
 import type { BalancerV3Candidate, BalancerV3Identity } from "../types.js";
-import { assertNoInputRollback, observedNativeInventory } from "./historical-runtime-dual.js";
+import { assertNoInputRollback, balancerHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
+import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
+import { productionAmount } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 
 // The sample comes from the existing historical fixture. RPC/state answers in
 // this contract are synthetic; historical provenance is checked separately.
@@ -25,6 +27,64 @@ const EXECUTOR = ethers.getAddress("0x1000000000000000000000000000000000000002")
 const FOREIGN = ethers.getAddress("0x1000000000000000000000000000000000000003");
 const SOURCE: CanonicalSource = { number: historical.executionBlock, hash: `0x${"ab".repeat(32)}`, generation: 1 };
 const word = (value: bigint) => ethers.toBeHex(value, 32);
+
+function historicalAmountDonor() {
+  const source = { number: 123, hash: "0x" + "ab".repeat(32), generation: 2 }, parent = "0x" + "cd".repeat(32);
+  const edge = { canonicalEdgeId: "donor-fixture", adapterId: "univ2-standard", target: FOREIGN,
+    instanceKey: FOREIGN, tokenIn: TOKENS[0], tokenOut: TOKENS[1], slotKind: "swap" };
+  const edgeId = blockScanEdgeKey(edge as any);
+  const row = { ...edge, edgeId, status: "quoted", amountIn: 17n, amountOut: 900n,
+    quotedAt: { number: 122, hash: parent, generation: 1 } };
+  const cfg = { minCapitalFraction: 0.001 }, readyPath = "/fixture/ready.json", readySha256 = "33".repeat(32);
+  const saved = { cfg, readyPath, readySha256, header: { ...source, parentHash: parent }, runtime: {
+    sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
+    graph: { edges: [edge] }, pricing: { sourceBlock: source.number, sourceBlockHash: source.hash,
+      generation: source.generation, effectiveMids: { source, rows: new Map([[edgeId, row]]) } } } };
+  const declaration = { benchmark: "effective-update", liveStarted: false, broadcast: false, signing: false,
+    head: "44".repeat(20), cfg, graphEdges: 1, notifications: [source], bindings: [readyPath,
+      "/fixture/listener/benchmarks/effective-update.ts", "/fixture/listener/src/searcher/blockscan-runtime-loop.ts",
+      "/fixture/listener/src/searcher/main.ts"].map(path => ({ path, sha256: readySha256 })) };
+  return { saved, declaration, edgeKeys: [edgeId] };
+}
+function historicalMissingRow(status = "missing-valuation") {
+  return { status, tokenIn: TOKENS[0], tokenOut: TOKENS[1], amountIn: null, amountOut: null };
+}
+const historicalGate = (row: any) => productionAmount(row, null, {}, SOURCE, SOURCE.generation);
+
+test("historical donor only supplies input for an unchanged missing-valuation target", () => {
+  const row = historicalMissingRow(), before = structuredClone(row);
+  const result = balancerHistoricalReferenceInput(row, historicalGate(row), historicalAmountDonor());
+  assert.deepEqual(result.reference, { kind: "donor-input-only", amountIn: 17n });
+  assert.equal(result.splice!.donorRow.amountOut, 900n, "old output is provenance, not a target expectation");
+  assert.equal(result.splice!.freshness, "carried");
+  assert.match(result.splice!.naturalTargetValuation, /unmet/);
+  assert.deepEqual(row, before);
+  assert.deepEqual(balancerHistoricalReferenceInput(row, historicalGate(row)), { reference: null, splice: null });
+});
+
+for (const status of ["quote-failed", "missing-raw-mid", "disabled"]) {
+  test(`historical donor cannot mask target ${status}`, () => {
+    const row = historicalMissingRow(status);
+    assert.throws(() => balancerHistoricalReferenceInput(row, historicalGate(row), historicalAmountDonor()), /missing valuation/);
+  });
+}
+
+test("historical donor rejects a missing-valuation row with an already recorded amount", () => {
+  for (const amounts of [{ amountIn: 21n }, { amountOut: 23n }]) {
+    const row = { ...historicalMissingRow(), ...amounts };
+    assert.throws(() => balancerHistoricalReferenceInput(row, historicalGate(row), historicalAmountDonor()), /missing valuation/);
+  }
+});
+
+test("historical target reference is preferred and donor binding guards are retained", () => {
+  const row = historicalMissingRow(), gate = { status: "met" as const, amountIn: 21n, amountOut: 23n };
+  assert.deepEqual(balancerHistoricalReferenceInput(row, gate, historicalAmountDonor()),
+    { reference: { kind: "target-production-reference", amountIn: 21n }, splice: null });
+  const wrongGraph = historicalAmountDonor(); wrongGraph.saved.runtime.graph.edges = [];
+  assert.throws(() => balancerHistoricalReferenceInput(row, historicalGate(row), wrongGraph));
+  const wrongConfig = historicalAmountDonor(); wrongConfig.saved.cfg = { minCapitalFraction: 1 };
+  assert.throws(() => balancerHistoricalReferenceInput(row, historicalGate(row), wrongConfig));
+});
 
 test("historical no-input control requires root revert, unchanged inventory and rolled-back allowances", () => {
   const inSlot = word(21n), outSlot = word(22n);

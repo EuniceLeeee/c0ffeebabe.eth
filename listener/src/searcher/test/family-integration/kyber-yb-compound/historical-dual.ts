@@ -32,7 +32,7 @@ import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js"
 import { EKUBO_CORE } from "../../../venues/swaps/ekubo/abi.js";
 import { assertHistoricalDiscoveryReceipt } from "../three-family/historical-input-observations.js";
 import { SAMPLES, ERC20, options, same, json, sha, word, observeBalance, assertDeltas, originalLegs, originalDirections, historicalAmountTrials,
-  assertReceipt, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, constructionGuard, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory, assertExecutorCode } from "./evidence.js";
+  assertReceipt, assertHeader, assertPriceInput, productionAmount, splicedMissingProductionAmount, constructionGuard, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory, assertExecutorCode } from "./evidence.js";
 
 const ROOT = fileURLToPath(new URL("../../../../../../", import.meta.url));
 type Overrides = Record<string, { code?: string; balance?: string; stateDiff?: Record<string, string> }>;
@@ -281,7 +281,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       if (effective) assert.equal(effective.edgeId, edgeId);
       const p = productionAmount(effective, saved.runtime.pricing.mids.get(edgeId), edges[0], source, saved.runtime.generation);
       const splice = p.status === "unmet" && reference
-        ? splicedProductionAmount(reference.saved, reference.declaration, args.referenceEdges, tokenIn) : null;
+        ? splicedMissingProductionAmount(effective, tokenIn, reference.saved, reference.declaration, args.referenceEdges) : null;
       if (p.status === "unmet") { naturalUnmet = true; if (!splice) unmet = true; }
       if (splice) usedReferenceEdges.add(splice.donorRow.edgeId);
       const row: any = { instance: entry.instanceKey, edgeId, tokenIn, tokenOut, originals,
