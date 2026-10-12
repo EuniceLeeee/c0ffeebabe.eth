@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "impl-erc20-table-update/v1",
+  "date": "2026-10-13",
+  "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "row": 17,
+  "beforeSha256": "148d96416c0f646317f8c981cf92e88037eb6d0db3063938f39bf9494e536ce8",
+  "afterSha256": "beded11879f6d75c6a59f000c9817bd871c51bfe00e2ce37233b97eed115a208",
+  "insertedText": "<br>**2026-10-13 后续：上项3211纯ERC20 uint缺口已补齐并通过该池历史正确性验收。** [STG／USDC·N26036250](https://etherscan.io/tx/0x6b02a33297a985d3e3a040d71321e98e5dd6e68d5c0fd99ce6ffc73bf94ed855)：Family内允许经注册表＋同状态执行证明的纯ERC20变体，不再误要求WETH；保留legacy int128、原生两币／三币及身份安全门。两个方向自然strict→Ready／Graph→raw／effective，WETH起始P=0.002，同块自然V3估值背景共62边，无外借金额。P及10倍量共8次quoted／runtime扣款与到账差0、8个缺本次输入负例真实回滚，旧原生库存不变。27项合同、生产build及双接口／strict共用回归通过；补真实session→选额器接线，链外Exact／quoted fallback／RPC=0（离线资金及执行响应为fixture，不作融资验收）。该七池清单累计5池正确性通过，7f86／8a4f失败TX仍待有效成功样本；原调用前状态、完整机会、全部单块及组合时效性未验。旧失败证据保留。[本次证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/6e76c16354977a7f1826ead839233f048c26905f/docs/research/reports/curve-underlying-erc20-acceptance-20261013.json)。 ",
+  "onlyExactInsertion": true,
+  "preservedOtherRowsAndColumns": true,
+  "evidenceCommit": "6e76c16354977a7f1826ead839233f048c26905f",
+  "evidenceReport": "docs/research/reports/curve-underlying-erc20-acceptance-20261013.json"
+}
