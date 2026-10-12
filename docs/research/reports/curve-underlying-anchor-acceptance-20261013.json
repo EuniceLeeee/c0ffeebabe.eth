@@ -1,0 +1,1270 @@
+{
+  "schemaVersion": "curve-underlying-anchor-acceptance/v1",
+  "date": "2026-10-13",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "claim": "Two additional named pools passed natural historical single-block strict/Graph/raw/effective and same-N quote/quoted/runtime at production P and 10P. Not original-TX/full-route/formal-merge/performance acceptance.",
+  "executedHead": "bfd7bbffc52a2c93c0a296201fb432aedafa570e",
+  "dirtyDiffSha256": "2776910e5aeb29d5467103d67141cded583a6da8a3e293946318b05ed030a4cb",
+  "sourceFingerprint": "4e39f8ba22dcbd07ec4e8e34bf5d798f1cece510190acd19ce0a162875e617cb",
+  "productionCodeChangedThisRun": false,
+  "peerDirtyPreserved": true,
+  "executedStatus": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/acceptance-status01.json",
+    "sha256": "073891e82e1d047da0e25a05876d18079afd3e93d06ac60d1483efdf6c1a0932",
+    "bytes": 2533
+  },
+  "harness": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/curve-plain-family/test/historical-native-dual.ts",
+    "sha256": "905e97771aa88b2cbe3922b549d4d1f18cae1dab1665fb206d3a01572548f598",
+    "bytes": 21314
+  },
+  "successfulAnchorLookup": {
+    "evidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/anchors01.json",
+      "sha256": "5611473096348f42a5751f355ecba1cbc07cf6c1f75e07244256ce8bc54fc3a4",
+      "bytes": 6594
+    },
+    "rpcReads": 5,
+    "outsideOriginalBlocks": false
+  },
+  "pools": [
+    {
+      "pool": "0x7f86bf177dd4f3494b841a37e810a34dd56c829b",
+      "transactionHash": "0x99ed07d8a915fd2f7d32562af8290caaab322cca8462f818741d097759878807",
+      "source": {
+        "number": 25969898,
+        "hash": "0x6a265e486c9958553b11adb3b15fae60f7ecf38a7e3304fdea9b3a369d80dfad",
+        "generation": 25969898
+      },
+      "claim": "Natural single-block strict/Graph/raw/effective and same-N single-leg dual execution; successful anchor swap is not a proven original exchange_underlying call.",
+      "receipt": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-7f8601/receipt.json",
+        "sha256": "a382b59ff3b575002a69667703b3402df4e35bcbf27cfd5767f23b235c32ed87",
+        "bytes": 118341
+      },
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-7f8601/ready.json",
+        "sha256": "d16f54ff68526d586b58ad180fc8ef04a6f5c95518f744208371aecda959e23a",
+        "bytes": 96559
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-7f8601/prices/prices.json",
+        "sha256": "d82648bc12e53576283df4aff7b711a71a3c928821631b0c219e33aee281f41a",
+        "bytes": 57704
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/dual-7f8601.json",
+        "sha256": "20bc648ba0f6f0736dcd0fc52b81daa53b8f77deb3ba703f157d50d86738a984",
+        "bytes": 2167161
+      },
+      "nomination": {
+        "adapter": "curve-underlying",
+        "address": "0x7f86bf177dd4f3494b841a37e810a34dd56c829b",
+        "blockHash": "0x6a265e486c9958553b11adb3b15fae60f7ecf38a7e3304fdea9b3a369d80dfad",
+        "blockNumber": 25969898,
+        "candidateKind": "curve-underlying-pool",
+        "familyId": "curve-underlying",
+        "hintedI": 0,
+        "hintedJ": 2,
+        "pluginCandidateKey": "0x7f86bf177dd4f3494b841a37e810a34dd56c829b",
+        "pool": "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B",
+        "sourceKind": "exchange-underlying-call",
+        "transactionHash": "0xa520edda7bd95363d3fcabacf2f0d8a96dff473193396d848fc7623967632512",
+        "originalReceiptStatus": "0x0",
+        "interpretation": "The unchanged production discovery nominated an observed attempted call from a different failed TX in the same block. This is only a candidate hint; registry reverse identity and current strict execution independently supply admission. The new successful receipt is a swap/block anchor, not that nomination or original method proof."
+      },
+      "graph": {
+        "targetDirections": 6,
+        "totalEdges": 6,
+        "graphHash": "62b78d5b6d5ec78f4bef070df73e7207707b270e974e39b9127dd6fa7584f14f",
+        "selectedFamilies": [
+          "curve-underlying"
+        ],
+        "issuedDirections": [
+          {
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            "executionAssets": null
+          },
+          {
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "executionAssets": {
+              "input": "erc20",
+              "output": "native"
+            }
+          },
+          {
+            "tokenIn": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "executionAssets": null
+          },
+          {
+            "tokenIn": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "executionAssets": {
+              "input": "erc20",
+              "output": "native"
+            }
+          },
+          {
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "executionAssets": {
+              "input": "native",
+              "output": "erc20"
+            }
+          },
+          {
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            "executionAssets": {
+              "input": "native",
+              "output": "erc20"
+            }
+          }
+        ]
+      },
+      "sourceFingerprint": "4e39f8ba22dcbd07ec4e8e34bf5d798f1cece510190acd19ce0a162875e617cb",
+      "familyDefinitionHash": "62cec7669d1364d07a113c5c11f2b5f2e77f9d9d693405f5309d42e5eeae3f15",
+      "memoFingerprint": "fc5206641712edbf62a0a0eba9fbec6d8132ad9670970a68e923dadc642bd116",
+      "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+      "productionReference": {
+        "mode": "default",
+        "wethInput": "2000000000000000",
+        "donor": false
+      },
+      "naturalPrices": [
+        {
+          "edgeId": "curve-underlying\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x2260fac5e5542a773aa44fbcfedf7c193bc2c599\u001f33c66641870ff8208f770589e985c7fbdd4638b6cac8cb116016d8e622d181a0",
+          "instanceKey": "0x7f86bf177dd4f3494b841a37e810a34dd56c829b",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "amountIn": "5008101",
+          "status": "quoted",
+          "amountOut": "6476",
+          "effectiveMid": 0.0012931049114225132,
+          "quotedAt": {
+            "number": 25969898,
+            "hash": "0x6a265e486c9958553b11adb3b15fae60f7ecf38a7e3304fdea9b3a369d80dfad",
+            "generation": 1
+          },
+          "rawMid": 0.001293
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f3f0f5298c9185d85e8917384613d2f8a5b2587f924cba657d5f8457c5022244e",
+          "instanceKey": "0x7f86bf177dd4f3494b841a37e810a34dd56c829b",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "5008101",
+          "status": "quoted",
+          "amountOut": "1998056176002610",
+          "effectiveMid": 398964832.3791014,
+          "quotedAt": {
+            "number": 25969898,
+            "hash": "0x6a265e486c9958553b11adb3b15fae60f7ecf38a7e3304fdea9b3a369d80dfad",
+            "generation": 1
+          },
+          "rawMid": 398965329.563452
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f10822be835689f82283fc6f2a6b607bb24970299b61859dc44766aec44faea0e",
+          "instanceKey": "0x7f86bf177dd4f3494b841a37e810a34dd56c829b",
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "6479",
+          "status": "quoted",
+          "amountOut": "5005446",
+          "effectiveMid": 772.5645933014354,
+          "quotedAt": {
+            "number": 25969898,
+            "hash": "0x6a265e486c9958553b11adb3b15fae60f7ecf38a7e3304fdea9b3a369d80dfad",
+            "generation": 1
+          },
+          "rawMid": 743.8556023
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f7bb13ef69d704873f7cfa5f915bed77ba0b55a5f0a8418fd2053de225f343f3f",
+          "instanceKey": "0x7f86bf177dd4f3494b841a37e810a34dd56c829b",
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "6479",
+          "status": "quoted",
+          "amountOut": "1997971020065158",
+          "effectiveMid": 308376450079.51196,
+          "quotedAt": {
+            "number": 25969898,
+            "hash": "0x6a265e486c9958553b11adb3b15fae60f7ecf38a7e3304fdea9b3a369d80dfad",
+            "generation": 1
+          },
+          "rawMid": 295907312083.64026
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fcd98d79d273bca1a2f419c36402560c03e1c26b96723ea0fb027b89c0908ae50",
+          "instanceKey": "0x7f86bf177dd4f3494b841a37e810a34dd56c829b",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "2000000000000000",
+          "status": "quoted",
+          "amountOut": "5008101",
+          "effectiveMid": 2.5040505e-9,
+          "quotedAt": {
+            "number": 25969898,
+            "hash": "0x6a265e486c9958553b11adb3b15fae60f7ecf38a7e3304fdea9b3a369d80dfad",
+            "generation": 1
+          },
+          "rawMid": 2.502501816e-9
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0x7f86bf177dd4f3494b841a37e810a34dd56c829b\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x2260fac5e5542a773aa44fbcfedf7c193bc2c599\u001f4c3375401f48b4240ea98912b89583ac6b5ea19ed39551bb04e8b2c170abc6a1",
+          "instanceKey": "0x7f86bf177dd4f3494b841a37e810a34dd56c829b",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "amountIn": "2000000000000000",
+          "status": "quoted",
+          "amountOut": "6479",
+          "effectiveMid": 3.2395e-12,
+          "quotedAt": {
+            "number": 25969898,
+            "hash": "0x6a265e486c9958553b11adb3b15fae60f7ecf38a7e3304fdea9b3a369d80dfad",
+            "generation": 1
+          },
+          "rawMid": 3.236417e-12
+        }
+      ],
+      "amounts": [
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "amountIn": "5008101",
+          "multiplier": "1",
+          "quoteAmountOut": "6476",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "5008101",
+              "actualAmountOut": "6476",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "5008101",
+              "actualAmountOut": "6476",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "amountIn": "50081010",
+          "multiplier": "10",
+          "quoteAmountOut": "64759",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "50081010",
+              "actualAmountOut": "64759",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "50081010",
+              "actualAmountOut": "64759",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "5008101",
+          "multiplier": "1",
+          "quoteAmountOut": "1998056176002610",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "5008101",
+              "actualAmountOut": "1998056176002610",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "5008101",
+              "actualAmountOut": "1998056176002610",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "50081010",
+          "multiplier": "10",
+          "quoteAmountOut": "19980280990010755",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "50081010",
+              "actualAmountOut": "19980280990010755",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "50081010",
+              "actualAmountOut": "19980280990010755",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "6479",
+          "multiplier": "1",
+          "quoteAmountOut": "5005446",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "6479",
+              "actualAmountOut": "5005446",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "6479",
+              "actualAmountOut": "5005446",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "64790",
+          "multiplier": "10",
+          "quoteAmountOut": "50053234",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "64790",
+              "actualAmountOut": "50053234",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "64790",
+              "actualAmountOut": "50053234",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "6479",
+          "multiplier": "1",
+          "quoteAmountOut": "1997971020065158",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "6479",
+              "actualAmountOut": "1997971020065158",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "6479",
+              "actualAmountOut": "1997971020065158",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "64790",
+          "multiplier": "10",
+          "quoteAmountOut": "19979431894060958",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "64790",
+              "actualAmountOut": "19979431894060958",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "64790",
+              "actualAmountOut": "19979431894060958",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "2000000000000000",
+          "multiplier": "1",
+          "quoteAmountOut": "5008101",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "5008101",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "5008101",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "20000000000000000",
+          "multiplier": "10",
+          "quoteAmountOut": "50080379",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "50080379",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "50080379",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "amountIn": "2000000000000000",
+          "multiplier": "1",
+          "quoteAmountOut": "6479",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "6479",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "6479",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "amountIn": "20000000000000000",
+          "multiplier": "10",
+          "quoteAmountOut": "64792",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "64792",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "64792",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        }
+      ],
+      "successfulExecutions": 24,
+      "noCurrentInputReverts": 24,
+      "toleranceRawUnits": "1"
+    },
+    {
+      "pool": "0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f",
+      "transactionHash": "0x0fa81dfb7a7756eef6df554ab17ba5ce748ee52c3e8262b0f677557f08843495",
+      "source": {
+        "number": 25981246,
+        "hash": "0x9ce03120a9f18ee5e2d22596e0f86f24718049d728d01d42d35afd200480871a",
+        "generation": 25981246
+      },
+      "claim": "Natural single-block strict/Graph/raw/effective and same-N single-leg dual execution; successful anchor swap is not a proven original exchange_underlying call.",
+      "receipt": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-8a4f01/receipt.json",
+        "sha256": "53f9a7e0292b263ac2bdd4d8f5374962afe8e669a005361123ad1b7a3abdedaa",
+        "bytes": 32877
+      },
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-8a4f01/ready.json",
+        "sha256": "beedc792c1a931cc4f0c10965732679df94aabd3427b1e4e807f394f1faf32c6",
+        "bytes": 96943
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-8a4f01/prices/prices.json",
+        "sha256": "a45595950cfe351034517ee83380cc6eaa3f1aaa3f8530da73514a5244b7a045",
+        "bytes": 57828
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/dual-8a4f01.json",
+        "sha256": "7fc913bb9cc6879a66b056650fd4e9aa3409e8f3b2cd078c0339470438d57345",
+        "bytes": 2145265
+      },
+      "nomination": {
+        "adapter": "curve-underlying",
+        "address": "0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f",
+        "blockHash": "0x9ce03120a9f18ee5e2d22596e0f86f24718049d728d01d42d35afd200480871a",
+        "blockNumber": 25981246,
+        "candidateKind": "curve-underlying-pool",
+        "familyId": "curve-underlying",
+        "hintedI": 2,
+        "hintedJ": 0,
+        "pluginCandidateKey": "0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f",
+        "pool": "0x8a4f252812dFF2A8636E4F7EB249d8FC2E3bd77f",
+        "sourceKind": "exchange-underlying-call",
+        "transactionHash": "0xdb897a88585c2103e31907744ff509e07b63005c822253dd4d5a69ab9a1bbd7f",
+        "originalReceiptStatus": "0x0",
+        "interpretation": "The unchanged production discovery nominated an observed attempted call from a different failed TX in the same block. This is only a candidate hint; registry reverse identity and current strict execution independently supply admission. The new successful receipt is a swap/block anchor, not that nomination or original method proof."
+      },
+      "graph": {
+        "targetDirections": 6,
+        "totalEdges": 6,
+        "graphHash": "d48879846e304059b4d25bdb7b3d85cb97d8248b1c931b8fbb14486b75fafba7",
+        "selectedFamilies": [
+          "curve-underlying"
+        ],
+        "issuedDirections": [
+          {
+            "tokenIn": "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
+            "tokenOut": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+            "executionAssets": null
+          },
+          {
+            "tokenIn": "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "executionAssets": {
+              "input": "erc20",
+              "output": "native"
+            }
+          },
+          {
+            "tokenIn": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+            "tokenOut": "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
+            "executionAssets": null
+          },
+          {
+            "tokenIn": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "executionAssets": {
+              "input": "erc20",
+              "output": "native"
+            }
+          },
+          {
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
+            "executionAssets": {
+              "input": "native",
+              "output": "erc20"
+            }
+          },
+          {
+            "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "tokenOut": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+            "executionAssets": {
+              "input": "native",
+              "output": "erc20"
+            }
+          }
+        ]
+      },
+      "sourceFingerprint": "4e39f8ba22dcbd07ec4e8e34bf5d798f1cece510190acd19ce0a162875e617cb",
+      "familyDefinitionHash": "62cec7669d1364d07a113c5c11f2b5f2e77f9d9d693405f5309d42e5eeae3f15",
+      "memoFingerprint": "4dc6e6ea54f5f099b5f64a0f04c14fb40d0e3238f19f5733f06dc8648d726afc",
+      "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+      "productionReference": {
+        "mode": "default",
+        "wethInput": "2000000000000000",
+        "donor": false
+      },
+      "naturalPrices": [
+        {
+          "edgeId": "curve-underlying\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f>0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf\u001fc644b4f214132df95faa3bd6f613cfecb5db0e83e5018bc67441a89f243b67f7",
+          "instanceKey": "0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f",
+          "tokenIn": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "tokenOut": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "amountIn": "4971388722877635975",
+          "status": "quoted",
+          "amountOut": "6400",
+          "effectiveMid": 1.2873666407432786e-15,
+          "quotedAt": {
+            "number": 25981246,
+            "hash": "0x9ce03120a9f18ee5e2d22596e0f86f24718049d728d01d42d35afd200480871a",
+            "generation": 1
+          },
+          "rawMid": 1.287e-15
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f5d4a67ff4fe61de8467d6b5e993c526ab549375a08af62ed88ebdf235615687e",
+          "instanceKey": "0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f",
+          "tokenIn": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "4971388722877635975",
+          "status": "quoted",
+          "amountOut": "1983048718053900",
+          "effectiveMid": 0.00039889230727989286,
+          "quotedAt": {
+            "number": 25981246,
+            "hash": "0x9ce03120a9f18ee5e2d22596e0f86f24718049d728d01d42d35afd200480871a",
+            "generation": 1
+          },
+          "rawMid": 0.000398895214027585
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf>0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f\u001f0cb9f7a1d541b3a5304a8b21083853e50e21583f479d94faf1b85c533e4f64ed",
+          "instanceKey": "0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f",
+          "tokenIn": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "tokenOut": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "amountIn": "6427",
+          "status": "quoted",
+          "amountOut": "4949859989942955754",
+          "effectiveMid": 770166483576000.6,
+          "quotedAt": {
+            "number": 25981246,
+            "hash": "0x9ce03120a9f18ee5e2d22596e0f86f24718049d728d01d42d35afd200480871a",
+            "generation": 1
+          },
+          "rawMid": 558653399952846.4
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fcc5a7116a7a042043e5b9c5a362c1cfe25fd9a57698ff485dee0d0e89fcaf466",
+          "instanceKey": "0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f",
+          "tokenIn": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "6427",
+          "status": "quoted",
+          "amountOut": "1982903172774089",
+          "effectiveMid": 308527022370.3266,
+          "quotedAt": {
+            "number": 25981246,
+            "hash": "0x9ce03120a9f18ee5e2d22596e0f86f24718049d728d01d42d35afd200480871a",
+            "generation": 1
+          },
+          "rawMid": 226091549845.9559
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f\u001fc637f7eb50c5639174eba0672653abb9f30c80b0b33f10f759661e357bc85ab9",
+          "instanceKey": "0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "amountIn": "2000000000000000",
+          "status": "quoted",
+          "amountOut": "4971388722877635975",
+          "effectiveMid": 2485.694361438818,
+          "quotedAt": {
+            "number": 25981246,
+            "hash": "0x9ce03120a9f18ee5e2d22596e0f86f24718049d728d01d42d35afd200480871a",
+            "generation": 1
+          },
+          "rawMid": 2451.6423951509105
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf\u001fbfb9b723f38c0301f74e353f80ecfda9df4079337804566b51ea1af0ebc0ed4c",
+          "instanceKey": "0x8a4f252812dff2a8636e4f7eb249d8fc2e3bd77f",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "amountIn": "2000000000000000",
+          "status": "quoted",
+          "amountOut": "6427",
+          "effectiveMid": 3.2135e-12,
+          "quotedAt": {
+            "number": 25981246,
+            "hash": "0x9ce03120a9f18ee5e2d22596e0f86f24718049d728d01d42d35afd200480871a",
+            "generation": 1
+          },
+          "rawMid": 3.194143e-12
+        }
+      ],
+      "amounts": [
+        {
+          "tokenIn": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "tokenOut": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "amountIn": "4971388722877635975",
+          "multiplier": "1",
+          "quoteAmountOut": "6400",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "4971388722877635975",
+              "actualAmountOut": "6400",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "4971388722877635975",
+              "actualAmountOut": "6400",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "tokenOut": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "amountIn": "49713887228776359750",
+          "multiplier": "10",
+          "quoteAmountOut": "63995",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "49713887228776359750",
+              "actualAmountOut": "63995",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "49713887228776359750",
+              "actualAmountOut": "63995",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "4971388722877635975",
+          "multiplier": "1",
+          "quoteAmountOut": "1983048718053900",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "4971388722877635975",
+              "actualAmountOut": "1983048718053900",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "4971388722877635975",
+              "actualAmountOut": "1983048718053900",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "49713887228776359750",
+          "multiplier": "10",
+          "quoteAmountOut": "19828871609242814",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "49713887228776359750",
+              "actualAmountOut": "19828871609242814",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "49713887228776359750",
+              "actualAmountOut": "19828871609242814",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "tokenOut": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "amountIn": "6427",
+          "multiplier": "1",
+          "quoteAmountOut": "4949859989942955754",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "6427",
+              "actualAmountOut": "4949859989942955754",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "6427",
+              "actualAmountOut": "4949859989942955754",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "tokenOut": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "amountIn": "64270",
+          "multiplier": "10",
+          "quoteAmountOut": "49484555629776819864",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "64270",
+              "actualAmountOut": "49484555629776819864",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "64270",
+              "actualAmountOut": "49484555629776819864",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "6427",
+          "multiplier": "1",
+          "quoteAmountOut": "1982903172774089",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "6427",
+              "actualAmountOut": "1982903172774089",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "6427",
+              "actualAmountOut": "1982903172774089",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "64270",
+          "multiplier": "10",
+          "quoteAmountOut": "19826617498580680",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "64270",
+              "actualAmountOut": "19826617498580680",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "64270",
+              "actualAmountOut": "19826617498580680",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "amountIn": "2000000000000000",
+          "multiplier": "1",
+          "quoteAmountOut": "4971388722877635975",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "4971388722877635975",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "4971388722877635975",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+          "amountIn": "20000000000000000",
+          "multiplier": "10",
+          "quoteAmountOut": "49703114812460505296",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "49703114812460505296",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "49703114812460505296",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "amountIn": "2000000000000000",
+          "multiplier": "1",
+          "quoteAmountOut": "6427",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "6427",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "6427",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "amountIn": "20000000000000000",
+          "multiplier": "10",
+          "quoteAmountOut": "64271",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "64271",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "64271",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "nativeInventoryDelta": "0",
+              "noCurrentInputRevert": true
+            }
+          ]
+        }
+      ],
+      "successfulExecutions": 24,
+      "noCurrentInputReverts": 24,
+      "toleranceRawUnits": "1"
+    }
+  ],
+  "totals": {
+    "additionalPools": 2,
+    "directions": 12,
+    "positiveExecutions": 48,
+    "negativeReverts": 48
+  },
+  "retainedFailedAnchors": {
+    "report": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/curve-underlying-cohort-acceptance-20261013.json",
+      "sha256": "c9738ff4762ad16510da8d60206811a71a02d35517807a32a51cbe8e00eba2d1",
+      "bytes": 64970
+    },
+    "records": [
+      {
+        "tx": "0xa520edda7bd95363d3fcabacf2f0d8a96dff473193396d848fc7623967632512",
+        "N": 25969898,
+        "blockHash": "0x6a265e486c9958553b11adb3b15fae60f7ecf38a7e3304fdea9b3a369d80dfad",
+        "status": "0x0",
+        "conclusion": "Landed transaction failed. Not a successful underlying-call witness or proof this pool is unsupported."
+      },
+      {
+        "tx": "0xdb897a88585c2103e31907744ff509e07b63005c822253dd4d5a69ab9a1bbd7f",
+        "N": 25981246,
+        "blockHash": "0x9ce03120a9f18ee5e2d22596e0f86f24718049d728d01d42d35afd200480871a",
+        "status": "0x0",
+        "conclusion": "Landed transaction failed. Not a successful underlying-call witness or proof this pool is unsupported."
+      }
+    ],
+    "overwrittenOrReclassified": false
+  },
+  "cumulativeScope": {
+    "namedCohortCasesWithCorrectnessEvidence": 7,
+    "previouslyReportedFour": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/curve-underlying-cohort-acceptance-20261013.json",
+      "sha256": "c9738ff4762ad16510da8d60206811a71a02d35517807a32a51cbe8e00eba2d1",
+      "bytes": 64970
+    },
+    "previousPureERC20": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/curve-underlying-erc20-acceptance-20261013.json",
+      "sha256": "b345abb24d5c66fbc4a21c29b59a7a2b146c036a1aac291f2a2e02f6e9de224e",
+      "bytes": 26543
+    },
+    "notAllRerunOnCurrentSource": true,
+    "note": "Only these two pools were executed in this batch. Prior four retain their own recorded source, and the STG/USDC evidence is a separate current-code run."
+  },
+  "toolReconciliation": {
+    "manifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/tools02.json",
+      "sha256": "cafd2aed120290f82dd393f7e96711e235f04714b39c176487503cc3dcf16f48",
+      "bytes": 10132
+    },
+    "query": [
+      "curve-plain-ready",
+      "curve-native-dual"
+    ],
+    "executed": [
+      {
+        "toolId": "listener:searcher:curve-plain-historical-ready",
+        "descriptorSha256": "80372ae40fc75ee65ff980bc1b7133cbdb87872139cc13250cc93ff30c4fd6ec",
+        "exitCode": 0,
+        "startedAt": "2026-10-12T17:43:13.179Z",
+        "finishedAt": "2026-10-12T17:43:19.771Z",
+        "argvSha256": "6946e6fbe18230af3c3ac1827e1099508cd83e54164117b0fa6c90e67667f7eb",
+        "stdoutSha256": "75691b16ba23b93f4127c37e833b44a17a20c607c85a5a238c94d72d4ae01534",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "toolId": "listener:searcher:curve-plain-historical-native-dual",
+        "descriptorSha256": "4e2ab7b87b7821637512faa6e28c64547eee53567ff9e7630b930e746d97a4bc",
+        "exitCode": 0,
+        "startedAt": "2026-10-12T17:43:20.069Z",
+        "finishedAt": "2026-10-12T17:43:25.709Z",
+        "argvSha256": "0442ab4e465d35eb905d6b11126e7e46254e09f102d1f4e3a2a00744d4cea32c",
+        "stdoutSha256": "6209d81c7000fd881398e0f88b34a94d2b39fc8cf67da26ad4a9e57fc7e30248",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "toolId": "listener:searcher:curve-plain-historical-ready",
+        "descriptorSha256": "80372ae40fc75ee65ff980bc1b7133cbdb87872139cc13250cc93ff30c4fd6ec",
+        "exitCode": 0,
+        "startedAt": "2026-10-12T17:43:26.091Z",
+        "finishedAt": "2026-10-12T17:43:31.706Z",
+        "argvSha256": "5530bab43077a105164cf7f5646769036a3e20fea9cd3bfc991bfa63fb73c080",
+        "stdoutSha256": "873a7550bb40bcee40d71e4b7f0c5668a161d88e1929528c71976985119ae089",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "toolId": "listener:searcher:curve-plain-historical-native-dual",
+        "descriptorSha256": "4e2ab7b87b7821637512faa6e28c64547eee53567ff9e7630b930e746d97a4bc",
+        "exitCode": 0,
+        "startedAt": "2026-10-12T17:43:32.006Z",
+        "finishedAt": "2026-10-12T17:43:37.566Z",
+        "argvSha256": "f00b903b8b5db730110816cbacdca1b8bf766338a411fb32f3a03148dda95662",
+        "stdoutSha256": "1ada10ba17d2cd878b3f03805f03294fbcb5cc5059e1b2e4a699f0dbf31eca96",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "result": "Current indexed production-backed single-block and dual tools agree with independently checked immutable artifacts. No rerun substituted for a failed attempt."
+  },
+  "independentReview": {
+    "schemaVersion": "curve-anchor-dual-independent-review/v1",
+    "reviewer": "Gauss",
+    "agentId": "01a13131-9cc7-7641-959d-3077412bd4ad",
+    "result": "no-blocking-findings-for-narrow-claim",
+    "artifactSha256": [
+      "20bc648ba0f6f0736dcd0fc52b81daa53b8f77deb3ba703f157d50d86738a984",
+      "7fc913bb9cc6879a66b056650fd4e9aa3409e8f3b2cd078c0339470438d57345"
+    ],
+    "scope": "Independent read-only review of both immutable raw dual artifacts; no new RPC/EVM/build and no edits. Main agent separately authenticates Ready, prices, receipts and source bindings.",
+    "checked": {
+      "wireRecords": 96,
+      "positiveExecutions": 48,
+      "negativeReverts": 48,
+      "perPoolMatrix": "6 directions x 2 amounts (P,10P) x quoted/runtime",
+      "sourceAndCaller": "All request/response block number, block hash, stateRoot, parentHash, caller and origin matched. Executor code/program hashes recomputed.",
+      "actualTokenEffects": "Raw deltas and Transfer/Deposit/Withdrawal/Swap logs agree. All input/output differences are zero.",
+      "positiveInventory": "Input old inventory 101 and output old inventory 103 retained; native balance 107 -> 107 wei.",
+      "approvalLogs": "32 applicable ERC20-input successes show zero -> exact amount -> zero authorization.",
+      "negativeOutcome": "48 paired negatives change only input funding; all ok=true, success=false, main/Revert, Panic(0x11), not transport timeout or Halt.",
+      "runtimeCounters": "Each artifact has 12/12 runtimeConstructionRpc=0 samples. Quote wire has 24 default-caller/executor parity reads per artifact."
+    },
+    "limitations": [
+      "No-current-input negatives have only 101 old input units, below every requested input. They do not prove rejection when pre-existing input inventory alone is sufficient to pay.",
+      "Single-leg execution is not actual previous-hop -> next-hop chaining, final repayment or profit acceptance. Zero construction RPC is a counter record, not a standalone complete construction call audit.",
+      "No 0/1 raw-unit boundary, malicious overdebit/underpayment or unauthorized-caller matrix in these historical artifacts. Approval cleanup is observed through logs, without a separate final allowance read. Negative responses have no post-revert balance snapshot.",
+      "Injected executor and impersonated call frame are test machinery. Timestamp/basefee are not independently echoed in the raw response; the production source/environment path must be checked separately.",
+      "Neither original TX exchange_underlying method nor original pre-call output, complete opportunity or performance is proven."
+    ]
+  },
+  "limitations": [
+    "Original TX method, full call ancestry and original pre-call amountOut parity are not established by receipt logs.",
+    "Local authenticated executor override with synthetic isolated test balances is not a deployed executor or funding/full-route acceptance.",
+    "No new formal Adapter Replay, merge-ready or natural profitable-opportunity verdict.",
+    "All local and representative performance NOT RUN; the other window live remains untouched.",
+    "Quote-free runtime construction here is single-leg; production selector integration is separately covered by retained earlier contract evidence."
+  ],
+  "safety": {
+    "signing": false,
+    "broadcast": false,
+    "deployment": false,
+    "liveStarted": false,
+    "originalCoffeeReadyModified": false,
+    "performanceRuns": 0
+  }
+}
