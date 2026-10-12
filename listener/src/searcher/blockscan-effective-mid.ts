@@ -7,6 +7,7 @@ import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
 import type { ResolvedBlockScanQuote } from "./detector/blockscan-scanner-core.js";
 import { deltaMap, scannerConsumesEdge } from "./blockscan-pricing-delta.js";
+import type { TokenEdge } from "./planner/token-graph.js";
 
 export type EffectivePricingInput = Pick<BlockScanStateSnapshot,
   "sourceBlock" | "sourceBlockHash" | "generation" | "pricingStateKeyByEdgeKey"> & {
@@ -85,7 +86,12 @@ export function effectiveMidRowCarried(snapshot: EffectiveMidSnapshot, row: Effe
 
 /** Consumer-only projection of current effective amounts and graph identity.
  * Raw mids provide neither amount sizing nor enumeration fallback. */
-export function effectiveEnumerationMids(pricing: BlockScanStateSnapshot): ReadonlyMap<string, ResolvedBlockScanQuote> {
+export type EffectiveEnumerationPricing = Pick<BlockScanStateSnapshot,
+  "sourceBlock" | "sourceBlockHash" | "generation" | "effectiveMids"> & {
+  readonly graph: { readonly edges: readonly TokenEdge[] };
+  readonly mids?: EffectivePricingInput["mids"];
+};
+export function effectiveEnumerationMids(pricing: EffectiveEnumerationPricing): ReadonlyMap<string, ResolvedBlockScanQuote> {
   const effective = pricing.effectiveMids;
   if (effective === undefined) throw new Error("enumeration effective pricing missing");
   if (!effective.complete || effective.source.number !== pricing.sourceBlock ||

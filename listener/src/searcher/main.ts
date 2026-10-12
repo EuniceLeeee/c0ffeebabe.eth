@@ -39,6 +39,7 @@ import {
 import { blockScanRouteId, blockScanRouteLocator } from "./blockscan-route-identity.js";
 import { createSolverExecutionInputRecorder } from "./solver-execution-input-recorder.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
+import { BlockScanPoolRevertAttributor, poolRevertFilterEnabled, assertPoolRevertBackendSupport } from "./blockscan-pool-revert.js";
 import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
 import { buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried, resolveEffectiveAmountCascade } from "./blockscan-effective-mid.js";
 import { effectiveEthPricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
@@ -803,6 +804,7 @@ export function createBlockScanLiveAmountSelectorFactory(input: {
   executor: string;
   quoteConcurrency: number;
   simRejects: BlockScanSimRejectCache;
+  poolRevertAttributor?: BlockScanPoolRevertAttributor;
   record?(input: {
     source: Parameters<BlockScanAmountSelectorFactory>[0]["source"];
     workerIndex: number;
@@ -814,12 +816,14 @@ export function createBlockScanLiveAmountSelectorFactory(input: {
     let sequence = 0;
     return { async solve(plan, state, probe, opts) {
       const searchId = ++sequence;
-      let revert: SimulationResult | undefined;
+      const p = plan.opportunity.kind === "block-scan-arb" ? plan.opportunity.searchSeed.searchCenter : 0n;
+      const pTrials: { plan: ResolvedPlan; sim: SimulationResult }[] = [];
+      const diagnosticDeadlineAtMs = Math.min(opts?.deadlineAtMs ?? Infinity, Date.now() + (opts?.deadlineMs ?? 3000));
       const selector = createBlockScanSimAmountSelector({
         source, executor: input.executor, runTrial,
         async simulate(candidate, control) {
           const sim = await simulate(candidate, control);
-          if (!sim.success && sim.failure?.kind === "revert" && sim.failure.code === "TRANSACTION_REVERTED") revert = sim;
+          if (p > 0n && candidate.flashAmount === p) pTrials.push({ plan: candidate, sim });
           return sim;
         },
         record: input.record === undefined ? undefined : event => input.record!({
@@ -830,9 +834,17 @@ export function createBlockScanLiveAmountSelectorFactory(input: {
       catch (error) {
         // A failed trial is not a failed route: another amount/funding action
         // may work. Publish only after completed selection rejects the route.
-        if (error instanceof SimAmountNoOpportunityError && error.status !== "deadline" && revert &&
+        if (error instanceof SimAmountNoOpportunityError && error.status !== "deadline" && pTrials.length > 0 &&
+            pTrials.every(({ sim }) => !sim.success && sim.failure?.kind === "revert" && sim.failure.code === "TRANSACTION_REVERTED") &&
             plan.opportunity.kind === "block-scan-arb") {
-          input.simRejects.record(blockScanRouteId(plan.opportunity.seedEdges), revert);
+          const routeId = blockScanRouteId(plan.opportunity.seedEdges);
+          input.simRejects.record(routeId, pTrials[0]!.sim, { amount: p, p });
+          await input.poolRevertAttributor?.record({
+            source, edges: plan.opportunity.seedEdges, p, trials: pTrials,
+            signal: opts?.signal ?? new AbortController().signal, deadlineAtMs: diagnosticDeadlineAtMs,
+          });
+          input.record?.({ source, workerIndex, event: { type: "p_revert_recorded", searchId,
+            routeId, p, pTrials: pTrials.length, edges: plan.opportunity.seedEdges } });
         }
         throw error;
       }
@@ -1565,6 +1577,8 @@ async function main(): Promise<void> {
     throw new Error("block-scan sim amount selection requires the P/10P/100P/1000P multiples grid");
   }
   const blockScanFinalSimulationMethod = resolveBlockScanFinalSimulationMethod();
+  const blockScanPoolRevertFilter = poolRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_POOL_REVERT_FILTER);
+  assertPoolRevertBackendSupport(enableBlockScan && blockScanPoolRevertFilter, blockScanFinalSimulationMethod);
   if (enableBlockScan && blindInstallForkBotVm && blockScanFinalSimulationMethod !== "anvil") {
     throw new Error("fork-only executor installation requires the anvil final simulation method");
   }
@@ -2466,6 +2480,9 @@ async function main(): Promise<void> {
   }
 
   const blockScanSimRejects = new BlockScanSimRejectCache();
+  const blockScanPoolRevertAttributor = blockScanPoolRevertFilter
+    ? new BlockScanPoolRevertAttributor(blockScanSimRejects) : undefined;
+  console.log(`[searcher/blockscan-pool-revert-filter] ${JSON.stringify({ enabled: blockScanPoolRevertFilter })}`);
   let activeBlindSourceHead: BlindProductionSourceHeadControl | null = null;
   let preparedBlindBase: BlindProductionPrepareControl | null = null;
   let preparedBlindDynamicResetNonce: string | null = null;
@@ -2565,6 +2582,7 @@ async function main(): Promise<void> {
     amountSelectorFactory: createBlockScanLiveAmountSelectorFactory({
       executor: executionIdentity.executor, quoteConcurrency: blockScanSolverSearch.quoteConcurrency,
       simRejects: blockScanSimRejects,
+      poolRevertAttributor: blockScanPoolRevertAttributor,
       record({ source, workerIndex, event }) {
         try {
           console.log(`[searcher/sim-amount] ${JSON.stringify({ ...event,
@@ -2719,6 +2737,9 @@ async function main(): Promise<void> {
     formatRouteKey: formatBlockScanRouteKey,
     formatRing: formatBlockScanRing,
     isRouteSimRejected: (opp) => blockScanSimRejects.has(blockScanRouteId(opp.seedEdges)),
+    ...(blockScanPoolRevertFilter ? {
+      isPoolSimRejected: (edge: TokenEdge) => blockScanSimRejects.hasPool(edge),
+    } : {}),
     submitAtomic(input) {
       return maybeSubmitBlockScanAtomic({
         ...input,
@@ -2727,6 +2748,7 @@ async function main(): Promise<void> {
         bundleRouter,
         submissionCoordinator,
         simRejects: blockScanSimRejects,
+        poolRevertAttributor: blockScanPoolRevertAttributor,
         onSuccessfulSimulation: (sample) => blockScanAmountReference.recordSimulation(sample),
         strategyVersions: {
           strategy_view_version:
@@ -4996,6 +5018,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
   plans: number;
   passDeadlineAtMs: number;
   simRejects: BlockScanSimRejectCache;
+  poolRevertAttributor?: BlockScanPoolRevertAttributor;
   onSuccessfulSimulation?: (sample: Parameters<BlockScanAmountReference["recordSimulation"]>[0]) => void;
   profitTokenValuation: ProfitTokenValuation;
   sourceBlockHash: string;
@@ -5293,7 +5316,12 @@ export async function maybeSubmitBlockScanAtomic(params: {
         decision: "reject",
         reason: "sim_revert",
       });
-      const rememberedRevert = simRejects.record(routeId, sim);
+      const p = opp.searchSeed.searchCenter;
+      const rememberedRevert = simRejects.record(routeId, sim, { amount: resolved.flashAmount, p });
+      if (rememberedRevert) await params.poolRevertAttributor?.record({
+        source: { number: sourceBlock, hash: sourceBlockHash, generation: sourceGeneration },
+        edges: opp.seedEdges, p, trials: [{ plan: resolved, sim }], signal, deadlineAtMs: passDeadlineAtMs,
+      });
       console.log(
         `[searcher/blockscan] block=${sourceBlock} final sim rejected ring=${ring} route=${route} ` +
           `quoteProfit=${resolved.netProfit} finalProfit=${sim.netProfit} reason=${error}`,

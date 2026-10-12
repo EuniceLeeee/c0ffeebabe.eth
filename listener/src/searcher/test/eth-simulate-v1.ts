@@ -8,11 +8,14 @@ import { join } from "node:path";
 import { inspect } from "node:util";
 import { getCreateAddress, keccak256, toUtf8Bytes } from "ethers";
 import { erc20TransferAdapter } from "../../adapters/erc20.js";
+import { RuntimeAmountProgram, runtimeAmountFlowAdapter } from "../../adapters/runtime-amount-program.js";
 import { register } from "../../adapters/registry.js";
 import { compilePlan } from "../../shared/compiler/compiler.js";
 import { bytesToHex } from "../../shared/compiler/encoder.js";
 import { buildExecuteCalldata, dryRunBotVmCodeOverrideEnabled, loadBotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
+import { HOP_DIAGNOSTIC_SLOT, directRevertedRuntimeHop } from "../simulator/direct-revert-hop.js";
+import type { TokenEdge } from "../planner/token-graph.js";
 import type { BlockScanObservedHeader } from "../blockscan-observed-header.js";
 import { isRpcThrottleError } from "../rpc-throttle-guard.js";
 import { buildEthSimulateV1ExecutionInput, EthSimulateV1Simulator,
@@ -128,6 +131,7 @@ const rpcError = (request: RpcRequest, code: unknown, message = "fixture-secret"
   ({ jsonrpc: "2.0", id: request.id, error: { code, message, data: "fixture-secret" } });
 const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 const requests: RpcRequest[] = [];
+const diagnosticRequests = new Set<RpcRequest>();
 let interrupted = 0;
 let reply: (request: RpcRequest, response: ServerResponse) => void;
 const reset = (value: unknown = result()): void => {
@@ -236,7 +240,13 @@ try {
   reset();
   let codeStart = requests.length;
   const codeResult = await codeSimulator.simulate(plan, context());
-  assert.deepEqual(requests.slice(codeStart), codeWire);
+  const diagnosticWire = structuredClone(codeWire);
+  const diagnosticOverrides = (requests[codeStart]!.params[0] as any).blockStateCalls[0].stateOverrides;
+  assert.match(diagnosticOverrides[executor].stateDiff[HOP_DIAGNOSTIC_SLOT], /^0x[0-9a-f]{64}$/);
+  Object.assign((diagnosticWire[0]!.params[0] as any).blockStateCalls[0].stateOverrides[executor], {
+    stateDiff: { [HOP_DIAGNOSTIC_SLOT]: diagnosticOverrides[executor].stateDiff[HOP_DIAGNOSTIC_SLOT] },
+  });
+  assert.deepEqual(requests.slice(codeStart), diagnosticWire, "original sim adds only its reserved diagnostic slot");
   assert.deepEqual(codeResult, { success: true, profitToken: token, grossProfit: 25n,
     gasUsed: 0x12345n, netProfit: 25n, calldata, scriptHex, counterfactualExecutorCode: counterfactualEvidence });
   codeStart = requests.length;
@@ -320,7 +330,10 @@ try {
     assert(!text.includes(secret)); assert(!text.includes(url));
     const records = text.trim().split("\n").map(line => JSON.parse(line));
     assert.equal(records.length, 64, "diagnostic capture is bounded");
-    assert.deepEqual(records[0].executionInput, codePrepared);
+    assert.deepEqual(records[0].executionInput, buildEthSimulateV1ExecutionInput({ source, header, executor, owner,
+      profitToken: token, scriptHex, executorRuntimeCode: loadedRuntime, diagnosticKey: records[0].executionInput.diagnosticKey }));
+    assert.equal(records[0].executionInput.schemaVersion, 4);
+    assert.equal(new Set(records.map(row => row.executionInput.diagnosticKey)).size, 64, "each sim has a fresh diagnostic scope");
     assert.deepEqual(records[0].failure, { code: 3, gasUsed: "74565",
       returnData: { data: "0x1234", truncated: false }, errorData: { data: "0xabcd", truncated: false } });
     process.env.SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH = diagnosticsDir;
@@ -456,6 +469,51 @@ try {
   assert.equal(failure.netProfit, 0n); assert.equal(failure.calldata, calldata);
   assert.equal(failure.scriptHex, scriptHex);
 
+  // Lazy diagnosis must use the exact saved N+1 call, source hash and overlays.
+  const tracedRevert = result();
+  Object.assign(tracedRevert[0]!.calls[1]!, { status: "0x0", error: { code: 3, message: "revert", data: "0x" } });
+  reset(tracedRevert);
+  const tracedSimulator = new EthSimulateV1Simulator(url, executor, owner, loadedRuntime);
+  const beforeTrace = requests.length;
+  const tracedFailure = await tracedSimulator.simulate(plan, context());
+  assert.equal(requests.length, beforeTrace + 1, "disabled diagnostics introduce no trace request");
+  assert(tracedFailure.traceRevert);
+  const savedInput = tracedFailure.revertEvidence!.executionInput;
+  assert.equal(savedInput.schemaVersion, 4);
+  const trace = { type: "CALL", from: owner, to: executor, input: calldata,
+    output: "0x", error: "execution reverted", gasUsed: "0x12345" };
+  reply = (request, response) => response.end(JSON.stringify(envelope(request, trace)));
+  const evidence = await tracedFailure.traceRevert(context());
+  assert(evidence);
+  assert.deepEqual(evidence.executionInput, savedInput);
+  assert.deepEqual(evidence.trace, trace);
+  const savedBlock = savedInput.simulateParams[0].blockStateCalls[0];
+  assert.deepEqual(requests.at(-1)!.params, [savedBlock.calls[1], savedInput.simulateParams[1], {
+    tracer: "callTracer", timeout: "3s",
+    stateOverrides: savedBlock.stateOverrides, blockOverrides: savedBlock.blockOverrides,
+  }]);
+  for (const mismatch of [
+    { error: undefined }, { error: "out of gas" }, { from: addr("4") }, { to: addr("4") },
+    { input: "0x" }, { output: "0x01" }, { gasUsed: "0x12346" }, { gasUsed: undefined },
+  ]) {
+    reply = (request, response) => response.end(JSON.stringify(envelope(request, { ...trace, ...mismatch })));
+    assert.equal(await tracedFailure.traceRevert(context()), null);
+  }
+  for (const patch of [{ jsonrpc: "1.0" }, { jsonrpc: undefined }, { id: 2 }, { id: "1" },
+    { id: undefined }, { error: null }, { error: { code: -32000, message: "ambiguous" } }, { result: undefined }]) {
+    reply = (request, response) => response.end(JSON.stringify({ ...envelope(request, trace), ...patch }));
+    assert.equal(await tracedFailure.traceRevert(context()), null, "invalid trace envelope cannot create pool policy");
+  }
+  reply = (request, response) => response.end(JSON.stringify(rpcError(request, -32601)));
+  assert.equal(await tracedFailure.traceRevert(context()), null, "unsupported trace keeps the route verdict");
+  const stoppedRequests = requests.length;
+  assert.equal(await tracedFailure.traceRevert({ ...context(), signal: AbortSignal.abort() }), null);
+  assert.equal(await tracedFailure.traceRevert({ ...context(), deadlineAtMs: 0 }), null);
+  assert.equal(requests.length, stoppedRequests);
+  for (const request of requests.slice(beforeTrace + 1)) {
+    assert.equal(request.method, "debug_traceCall"); diagnosticRequests.add(request);
+  }
+
   const malformed: unknown[] = [null, [], [...result(), ...result()]];
   for (const patch of [{ parentHash: hash("c") }, { parentHash: hash("0") }, { parentHash: undefined },
     { number: "0x66" }, { timestamp: "0x1" },
@@ -467,6 +525,7 @@ try {
       { gasUsed: undefined }, { gasUsed: "0x00" }, { gasUsed: "0x0" }, { gasUsed: "0x100000000" },
       { returnData: "0xz" }, { returnData: "0x1" }, { error: null },
       { status: "0x0", error: undefined }, { status: "0x0", error: { code: "3", message: secret } },
+      { status: "0x0", error: { code: -3200, message: secret } },
       { status: "0x0", error: { code: -32000, message: secret } },
       { status: "0x0", error: { code: -32005, message: `rate limit ${secret}` } }]) {
       const raw = result(); Object.assign(raw[0]!.calls[index]!, patch); malformed.push(raw);
@@ -590,7 +649,7 @@ try {
   const count = requests.length;
   await delay(100);
   assert.equal(requests.length, count, "no delayed retry or fallback");
-  assert(requests.every(req => req.method === "eth_call" || req.method === "eth_simulateV1"));
+  assert(requests.every(req => req.method === "eth_call" || req.method === "eth_simulateV1" || diagnosticRequests.has(req)));
   await assert.rejects(new EthSimulateV1Simulator(`invalid:${secret}`, executor, owner).simulate(plan, context()), sanitized);
   console.log("eth-simulate-v1: PASS (local HTTP, exact wire/results, pure frozen JSON replay, tamper rejection, fees, reverts, malformed data, cancellation, no fallback)");
 } finally {
@@ -717,7 +776,7 @@ async function localEvmRegression(): Promise<void> {
         calls: [simBlock.calls[1], { ...direct, gas: hex(localHeader.gasLimit - 0x1000000n) }] }] }, snapshot.simulateParams[1]],
     } as unknown as EthSimulateV1ExecutionInput;
     const savedLegacy = validateEthSimulateV1ExecutionInput(legacy);
-    assert(savedLegacy.schemaVersion !== 3);
+    assert("preBalanceParams" in savedLegacy);
     const legacyPre = await rpc("eth_call", [...savedLegacy.preBalanceParams]);
     const legacyPost = await rpc("eth_simulateV1", [...savedLegacy.simulateParams]);
     assert.equal(BigInt(legacyPost[0].calls[1].returnData) - BigInt(legacyPre), 26n,
@@ -760,6 +819,55 @@ async function localEvmRegression(): Promise<void> {
     const mainFailure = await rpc("eth_simulateV1", [...snapshot.simulateParams]);
     assert.equal(mainFailure[0].calls[1].status, "0x0");
     assert.equal(delta(mainFailure[0].calls), 0n);
+
+    // End-to-end: real compiled VM envelope -> original RPC bytes -> production
+    // decoder. This must not pass only because a TS fixture copied the formula.
+    register(runtimeAmountFlowAdapter);
+    const otherToken = addr("8"), failedTarget = addr("9");
+    await rpc("anvil_setCode", [otherToken, "0x600160005260206000f3"]);
+    await rpc("anvil_setCode", [failedTarget, "0x63deadbeef6000526004601cfd"]);
+    const failedProgram = bytesToHex(new RuntimeAmountProgram().call(failedTarget, "0x").bytes());
+    const hopEdges: TokenEdge[] = [
+      { adapterId: "fixture", target: failedTarget, tokenIn: token, tokenOut: otherToken,
+        slotKind: "swap", edgeKind: "swap", leavesStandingPosition: false },
+      { adapterId: "fixture", target: addr("7"), tokenIn: otherToken, tokenOut: token,
+        slotKind: "swap", edgeKind: "swap", leavesStandingPosition: false },
+    ];
+    const hopPlan: ResolvedPlan = { ...plan, root: { adapterId: "runtime-amount-flow", target: executor,
+      tokenIn: token, tokenOut: token, amount: plan.flashAmount, children: [], params: { minimumReturn: 18n,
+        legs: JSON.stringify(hopEdges.map(e => ({ tokenIn: e.tokenIn, tokenOut: e.tokenOut, program: failedProgram }))) } } };
+    const hopInput = buildEthSimulateV1ExecutionInput({ source: localSource, header: localHeader,
+      executor, owner, profitToken: token, scriptHex: bytesToHex(compilePlan(hopPlan.root, executor)),
+      executorRuntimeCode: loadedRuntime, diagnosticKey: hash("4") });
+    const failedHopBlock = await rpc("eth_simulateV1", [...hopInput.simulateParams]);
+    const failedHop = failedHopBlock[0].calls[1];
+    assert.equal(failedHop.status, "0x0");
+    // Anvil 1.4.4 reports real EVM reverts as -3200. This section checks the
+    // authenticated VM bytes only; the production transport still requires 3.
+    assert([3, -3200].includes(failedHop.error.code), JSON.stringify(failedHop));
+    assert.equal(delta(failedHopBlock[0].calls), 0n, "failure remains atomic");
+    assert.deepEqual(directRevertedRuntimeHop(hopPlan, hopEdges, {
+      executionInput: hopInput, returnData: failedHop.returnData, errorData: failedHop.error.data,
+      gasUsed: BigInt(failedHop.gasUsed).toString(),
+    }), { hopIndex: 0, callTarget: failedTarget, rawReason: "0xdeadbeef" });
+    for (const [kind, code] of [["empty revert", "0x60006000fd"], ["invalid", "0xfe"],
+      ["out of gas", "0x5b600056"]] as const) {
+      await rpc("anvil_setCode", [failedTarget, code]);
+      const exceptionalBlock = await rpc("eth_simulateV1", [...hopInput.simulateParams]);
+      const exceptional = exceptionalBlock[0].calls[1];
+      assert.equal(exceptional.status, "0x0", kind);
+      assert.equal(delta(exceptionalBlock[0].calls), 0n, `${kind} keeps atomic rollback`);
+      // Each cause yields the same authentic envelope with empty child bytes.
+      // Pool policy excludes the failed hop without claiming to know the cause.
+      assert.equal(exceptional.returnData.slice(0, 10), failedHop.returnData.slice(0, 10), kind);
+      assert.deepEqual(directRevertedRuntimeHop(hopPlan, hopEdges, {
+        executionInput: hopInput, returnData: exceptional.returnData, errorData: exceptional.error.data,
+        gasUsed: BigInt(exceptional.gasUsed).toString(),
+      }), { hopIndex: 0, callTarget: failedTarget, rawReason: "0x" },
+      `${kind} remains eligible under the process-local failed-hop policy`);
+    }
+    assert.equal(await rpc("eth_getStorageAt", [executor, HOP_DIAGNOSTIC_SLOT, "latest"]), word(0n),
+      "diagnostic key is simulation-only");
     assert.equal(await rpc("eth_getCode", [observerAddress, "latest"]), "0x", "helper overlay is simulation-only");
     assert.equal(await rpc("eth_getStorageAt", [observerAddress, word(0n), "latest"]), word(77n));
     assert.equal(await rpc("eth_getStorageAt", [token, word(0n), "latest"]), word(100n));

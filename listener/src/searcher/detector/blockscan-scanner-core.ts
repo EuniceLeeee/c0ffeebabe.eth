@@ -190,16 +190,34 @@ export function scanBlockStateFromResolvedMids(input: {
   /** Optional precomputed view of these same edges and effective amounts. */
   ethView?: BlockScanEthView;
   routeEligible?: (edges: readonly TokenEdge[]) => boolean;
+  /** Optional complete-route exclusion after choosing the ordinary funding
+   * representative, before candidate caps. Rejected routes cannot switch to a
+   * different funded rotation merely to refill their own ranked slot. */
+  rankedRouteEligible?: (edges: readonly TokenEdge[], opportunity: BlockScanOpportunity) => boolean;
   edgeEligible?: (edge: TokenEdge) => boolean;
+  /** Excludes run-local reverted instances from both effective marks and routes. */
+  poolRevertExcludedEdge?: (edge: TokenEdge) => boolean;
   captureCoarseEnumeration?: boolean;
   onTiming?: (timing: BlockScanScanTiming) => void;
 }): BlockScanOutcome {
   const started = Date.now(), deadlineAtMs = started + input.cfg.budgetMs;
-  const eligibleEdges = input.edges.filter(edge => isBlockScanConversionEdge(edge) &&
-    (!input.edgeEligible || input.edgeEligible(edge)));
+  const eligibleEdges: TokenEdge[] = [];
+  const poolViewEdges: TokenEdge[] = [];
+  let poolRevertExcluded = false;
+  for (const edge of input.edges) {
+    if (!isBlockScanConversionEdge(edge)) continue;
+    if (input.poolRevertExcludedEdge?.(edge)) {
+      poolRevertExcluded = true;
+      continue;
+    }
+    poolViewEdges.push(edge);
+    if (!input.edgeEligible || input.edgeEligible(edge)) eligibleEdges.push(edge);
+  }
   const edgesById = new Map(eligibleEdges.map(edge => [blockScanEdgeKey(edge), edge]));
   const allowRepeatedPools = input.cfg.allowRepeatedPools ?? DEFAULT_ALLOW_REPEATED_POOLS;
-  const view = input.ethView?.allowRepeatedPools === allowRepeatedPools ? input.ethView
+  const view = poolRevertExcluded
+    ? buildBlockScanEthView(poolViewEdges, input.mids, input.cfg.ethSignalPairsPerToken, allowRepeatedPools)
+    : input.ethView?.allowRepeatedPools === allowRepeatedPools ? input.ethView
     : buildBlockScanEthView(eligibleEdges, input.mids, input.cfg.ethSignalPairsPerToken, allowRepeatedPools);
   const quotes = view.quotes.filter(q => edgesById.has(q.id));
   const ranked = new Map<string, RankedOpportunity>();
@@ -251,8 +269,10 @@ export function scanBlockStateFromResolvedMids(input: {
     },
   }, method, backend);
   const finalizing = Date.now();
-  const ordered = [...ranked.values()].sort((a, b) => b.estSpreadBps - a.estSpreadBps ||
+  let ordered = [...ranked.values()].sort((a, b) => b.estSpreadBps - a.estSpreadBps ||
     a.key.localeCompare(b.key));
+  if (input.rankedRouteEligible) ordered = ordered.filter(entry =>
+    input.rankedRouteEligible!(entry.opportunity.seedEdges, entry.opportunity));
   const opportunities = ordered.slice(0, input.cfg.maxCandidates).map(entry => entry.opportunity);
   const result: BlockScanOutcome = {
     outcome: dfs.deadlineHit ? "budget_exceeded" : "ran", stateBlock: input.sourceBlock,

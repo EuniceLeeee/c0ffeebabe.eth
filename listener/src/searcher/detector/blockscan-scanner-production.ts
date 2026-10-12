@@ -26,7 +26,9 @@ export interface ProductionBlockScanInput {
   readonly swapTouched: Set<string> | null;
   readonly cfg: BlockScanCoreConfig;
   readonly routeEligible?: (edges: readonly TokenEdge[]) => boolean;
+  readonly rankedRouteEligible?: Parameters<typeof scanBlockStateFromResolvedMids>[0]["rankedRouteEligible"];
   readonly edgeEligible?: (edge: TokenEdge) => boolean;
+  readonly poolRevertExcludedEdge?: (edge: TokenEdge) => boolean;
   readonly captureCoarseEnumeration?: boolean;
 }
 
@@ -70,7 +72,9 @@ export function detectProductionBlockScanOpportunities(
     mids: eth.mids,
     ethView: eth.view,
     routeEligible: input.routeEligible,
+    rankedRouteEligible: input.rankedRouteEligible,
     edgeEligible: input.edgeEligible,
+    poolRevertExcludedEdge: input.poolRevertExcludedEdge,
     captureCoarseEnumeration: input.captureCoarseEnumeration,
   });
   return Object.freeze({

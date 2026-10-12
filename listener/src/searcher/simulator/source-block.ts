@@ -231,8 +231,15 @@ export function sourceBlockResult(input: SourceBlockExecutionInput, response: Da
     assert(s.outcome.kind === "Revert" && t.error === "execution reverted" && t.output === s.outcome.output,
       "source-block execution failed without a matching EVM revert");
     const cause = Object.assign(new Error("source-block final transaction reverted"), { code: "TRANSACTION_REVERTED", kind: "revert" });
-    return { ...base, success: false, grossProfit: 0n, netProfit: 0n, gasUsed: 0n,
+    const result: SourceBlockSimulationResult = { ...base, success: false, grossProfit: 0n, netProfit: 0n, gasUsed: 0n,
       revertReason: cause.message, failure: { cause, kind: "revert", code: cause.code } };
+    Object.defineProperty(result, "sourceBlockRevertEvidence", { value: frozen({
+      executionInput: input, trace: rawTrace,
+    }) });
+    Object.defineProperty(result, "traceRevert", { value: async () => ({
+      executionInput: input, trace: rawTrace,
+    }) });
+    return result;
   }
   assert(t.error === undefined && (t.output ?? "0x") === s.outcome.output, "source-block executions disagree");
   assert(typeof t.gasUsed === "string" && /^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(t.gasUsed));

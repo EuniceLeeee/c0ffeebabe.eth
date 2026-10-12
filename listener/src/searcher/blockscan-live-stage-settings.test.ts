@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createBlockScanLiveAmountSelectorFactory, resolveBlockScanLiveStageSettings } from "./main.js";
+import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
+import { BlockScanPoolRevertAttributor } from "./blockscan-pool-revert.js";
 import { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import type { CandidatePlan } from "./planner/planner.js";
 import type { SolveOptions, Solver } from "./solver/solver.js";
@@ -17,7 +19,7 @@ test("live stage defaults include the original budgets, worker counts and 4+16 t
     exactProbeTimeoutMs: 4000, exactRpcBatchSize: 64, exactRpcBatchConcurrency: 16,
     stateRpcBatchConcurrency: 4, transport: { capacity: 20, producerReserved: 4 },
     solverSearch: { amountGrid: "multiples", gridHalfWidth: 2, gssMaxTries: 8,
-      quoteConcurrency: 16, quoteToleranceRawUnits: 0n },
+      quoteConcurrency: 16, quoteToleranceRawUnits: 1n },
   });
 });
 
@@ -182,7 +184,7 @@ test("one factory bounds whole trials across source/worker selectors and preserv
   for (const quoteConcurrency of [1, 2]) {
     let active = 0, peak = 0;
     const events: { source: CanonicalSource; workerIndex: number; event: Record<string, unknown> }[] = [];
-    const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency, record: row => events.push(row) });
+    const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency, simRejects: new BlockScanSimRejectCache(), record: row => events.push(row) });
     const fixtures = [fixture(1, enter), fixture(2, enter)];
     function enter() { peak = Math.max(peak, ++active); }
     const workers = fixtures.map((f, workerIndex) => factory({ source: f.source, workerIndex,
@@ -213,7 +215,7 @@ test("queued selector cancellation does not quote or spend a shared slot and lat
   let release!: () => void, entered!: () => void, queuedQuotes = 0;
   const held = new Promise<void>(resolve => { release = resolve; });
   const started = new Promise<void>(resolve => { entered = resolve; });
-  const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 1 });
+  const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 1, simRejects: new BlockScanSimRejectCache() });
   const first = fixture(1), queued = fixture(2, () => { queuedQuotes++; });
   const firstWorker = factory({ source: first.source, workerIndex: 0, async simulate() {
     entered(); await held; return simulationResult();
@@ -232,9 +234,9 @@ test("queued selector cancellation does not quote or spend a shared slot and lat
 });
 
 test("factory rejects invalid concurrency and preserves infrastructure-fault identity", async () => {
-  for (const quoteConcurrency of [0, -1, 1.5, NaN]) assert.throws(() => createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency }), /invalid trial concurrency/);
+  for (const quoteConcurrency of [0, -1, 1.5, NaN]) assert.throws(() => createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency, simRejects: new BlockScanSimRejectCache() }), /invalid trial concurrency/);
   const f = fixture(1), fault = new Error("fixture source fault");
-  const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 1 });
+  const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 1, simRejects: new BlockScanSimRejectCache() });
   const failed = factory({ source: f.source, workerIndex: 0, async simulate() { throw fault; } });
   await assert.rejects(failed.solve(f.plan, f.state, f.probe, f.options), error => error === fault);
   const next = factory({ source: f.source, workerIndex: 1, async simulate() { return simulationResult(); } });
@@ -254,4 +256,35 @@ test("main delegates stage parsing and amount dispatch to the shared exports", (
     "EXACT_RPC_BATCH_SIZE", "EXACT_RPC_BATCH_CONCURRENCY", "STATE_RPC_BATCH_CONCURRENCY"])
     assert(!live.includes(`SEARCHER_BLOCKSCAN_${key}`), `main must not retain a second parser for ${key}`);
   assert(!live.includes("createTrialLimiter("));
+});
+
+test("live route memory requires completed P reverts; larger-amount reverts cannot poison P", async () => {
+  for (const pReverts of [true, false]) {
+    const f = fixture(1);
+    Object.assign(f.plan.opportunity, { seedEdges: f.plan.tokenPath.edges });
+    const cache = new BlockScanSimRejectCache();
+    const events: Record<string, unknown>[] = [];
+    const attributed: Parameters<BlockScanPoolRevertAttributor["record"]>[0][] = [];
+    const attributor = new class extends BlockScanPoolRevertAttributor {
+      override async record(input: Parameters<BlockScanPoolRevertAttributor["record"]>[0]) {
+        attributed.push(input); return null;
+      }
+    }(cache);
+    const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 1,
+      simRejects: cache, poolRevertAttributor: attributor, record: row => events.push(row.event) });
+    const worker = factory({ source: f.source, workerIndex: 0, async simulate(plan) {
+      return !pReverts && plan.flashAmount === 10n ? simulationResult() : { ...simulationResult(), success: false,
+        netProfit: 0n, failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: new Error("fixture revert") } };
+    } });
+    if (pReverts) await assert.rejects(worker.solve(f.plan, f.state, f.probe, f.options));
+    else assert.equal((await worker.solve(f.plan, f.state, f.probe, f.options)).flashAmount, 10n);
+    const recorded = events.filter(event => event.type === "p_revert_recorded");
+    assert.equal(recorded.length, pReverts ? 1 : 0);
+    assert.equal(attributed.length, pReverts ? 1 : 0);
+    if (pReverts) {
+      assert(attributed[0]!.trials.every(trial => trial.plan.flashAmount === 10n));
+      assert.deepEqual(attributed[0]!.source, f.source);
+    }
+    if (pReverts) { assert.equal(recorded[0]!.p, 10n); assert(cache.has(String(recorded[0]!.routeId))); }
+  }
 });

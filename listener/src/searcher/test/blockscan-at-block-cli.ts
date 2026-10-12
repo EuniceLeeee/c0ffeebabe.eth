@@ -10,8 +10,73 @@ import { maybeSubmitBlockScanAtomic, resolveBlockScanAtomicPolicy, resolveBlockS
 import { BlockScanSimRejectCache } from "../blockscan-sim-reject-cache.js";
 import { DEFAULT_PROFIT_TOKEN_VALUATION } from "../profit-token-valuation.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
+import { createHash } from "node:crypto";
+import { historicalLiveConfig, historicalRejectedRoutes, historicalRankedRouteEligibility, historicalExperimentReverts } from "../blockscan-at-block-history.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { scanBlockStateFromResolvedMids as scan, type ResolvedBlockScanQuote } from "../detector/blockscan-scanner-core.js";
+import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import type { TokenEdge } from "../planner/token-graph.js";
+import { runInNewContext } from "node:vm";
+import { resolveBlockScanSolverSearchConfig } from "../blockscan-solver-search-config.js";
+import { RuntimeAmountProgram, runtimeAmountFlowAdapter } from "../../adapters/runtime-amount-program.js";
+import { executionInputMatches } from "../../shared/executor/amount-rounding.js";
 
 const base = ["--ready", "ready.json", "--block", "123", "--out", "logs/new-run"];
+test("restored live tolerance reaches actual runtime options and encoding in both simulation modes", () => {
+  const cli = ts.createSourceFile("at-block.ts", readFileSync(new URL("../blockscan-at-block-cli.ts", import.meta.url), "utf8"), ts.ScriptTarget.ES2022, true);
+  const loop = ts.createSourceFile("loop.ts", readFileSync(new URL("../blockscan-runtime-loop.ts", import.meta.url), "utf8"), ts.ScriptTarget.ES2022, true);
+  const constructors: ts.NewExpression[] = [], consumers: ts.PropertyAssignment[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isNewExpression(node) && node.expression.getText(cli) === "BlockScanRuntimeLoop") constructors.push(node);
+    ts.forEachChild(node, visit);
+  };
+  const findConsumer = (node: ts.Node) => {
+    if (ts.isPropertyAssignment(node) && node.name.getText(loop) === "quoteToleranceRawUnits" &&
+      node.initializer.getText(loop).includes("this.deps.solverQuoteToleranceRawUnits")) consumers.push(node);
+    ts.forEachChild(node, findConsumer);
+  };
+  visit(cli); findConsumer(loop);
+  assert.equal(constructors.length, 1); assert.equal(consumers.length, 1);
+  const options = constructors[0]!.arguments![0]!;
+  assert(ts.isObjectLiteralExpression(options));
+  const spreads = options.properties.filter((node): node is ts.SpreadAssignment =>
+    ts.isSpreadAssignment(node) && node.getText(cli).includes("solverQuoteToleranceRawUnits"));
+  assert.equal(spreads.length, 1);
+  const consume = runInNewContext(`(function () { return ${consumers[0]!.initializer.getText(loop)}; })`);
+  const address = (n: number) => `0x${n.toString(16).padStart(40, "0")}`;
+  const tokenIn = address(1), tokenOut = address(2), executor = address(3);
+  const abi = new ethers.Interface(["function swap(uint256)"]);
+  const program = ethers.hexlify(new RuntimeAmountProgram().call(address(4), abi.encodeFunctionData("swap", [0n]),
+    { patches: [{ offset: 4, reg: 0 }] }).bytes());
+  for (const mode of ["next-block", "source-block"] as const) {
+    for (const restoredLive of [false, true]) {
+      for (const enabled of ["0", "1"]) {
+        const search = resolveBlockScanSolverSearchConfig({ SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED: enabled });
+        const deps = runInNewContext(`(${spreads[0]!.expression.getText(cli)})`, {
+          sourceSimulator: mode === "source-block" ? {} : undefined,
+          restored: restoredLive ? { provenance: {} } : undefined, search,
+        });
+        const expected = mode === "source-block" || restoredLive ? BigInt(enabled) : 0n;
+        const actual = consume.call({ deps });
+        assert.equal(actual, expected, `${mode}, restored=${restoredLive}, enabled=${enabled}`);
+        assert.equal(Object.hasOwn(deps, "solverQuoteToleranceRawUnits"), mode === "source-block" || restoredLive);
+        const encoded = runtimeAmountFlowAdapter.encode({ adapterId: "runtime-amount-flow", target: executor,
+          tokenIn, tokenOut: tokenIn, amount: 100n, children: [], params: {
+            legs: JSON.stringify([{ tokenIn, tokenOut, program }, { tokenIn: tokenOut, tokenOut: tokenIn, program }]), minimumReturn: 101n,
+            quoteToleranceRawUnits: actual,
+          } }, new Uint8Array());
+        assert.equal(encoded[36], expected === 1n ? 130 : 2);
+        assert.equal(executionInputMatches(99n, 100n, actual), expected === 1n);
+        assert.equal(executionInputMatches(98n, 100n, actual), false);
+        assert.equal(executionInputMatches(101n, 100n, actual), false);
+        assert.equal(executionInputMatches(0n, 100n, actual), false);
+      }
+    }
+  }
+});
 test("historical sizing and final simulation share the same per-run rejection cache", () => {
   const file = ts.createSourceFile("at-block.ts", readFileSync(new URL("../blockscan-at-block-cli.ts", import.meta.url), "utf8"), ts.ScriptTarget.ES2022, true);
   const calls: ts.CallExpression[] = [], allocations: ts.VariableDeclaration[] = [];
@@ -32,6 +97,189 @@ test("historical sizing and final simulation share the same per-run rejection ca
     assert.equal(value.text, allocations[0]!.name.getText(file));
   }
 });
+test("historical sizing and final simulation share the live pool attributor and per-run cache", () => {
+  const file = ts.createSourceFile("at-block.ts", readFileSync(new URL("../blockscan-at-block-cli.ts", import.meta.url), "utf8"), ts.ScriptTarget.ES2022, true);
+  const calls: ts.CallExpression[] = [], constructors: ts.NewExpression[] = [], fields: ts.PropertyAssignment[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ["createBlockScanLiveAmountSelectorFactory", "maybeSubmitBlockScanAtomic"].includes(node.expression.getText(file))) calls.push(node);
+    if (ts.isNewExpression(node) && node.expression.getText(file) === "BlockScanPoolRevertAttributor") constructors.push(node);
+    if (ts.isPropertyAssignment(node) && node.name.getText(file) === "isPoolSimRejected") fields.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.equal(constructors.length, 1);
+  assert.equal(constructors[0]!.arguments?.[0]?.getText(file), "simRejects");
+  assert.equal(calls.length, 2);
+  for (const call of calls) {
+    const input = call.arguments[0]; assert(input && ts.isObjectLiteralExpression(input));
+    assert(input.properties.some(p => ts.isShorthandPropertyAssignment(p) && p.name.text === "poolRevertAttributor"));
+  }
+  assert.equal(fields.length, 1);
+  assert.equal(fields[0]!.initializer.getText(file).includes("simRejects.hasPool(edge)"), true);
+});
+test("experiment P reverts are hash-bound, single-source and distinct from historical cache knowledge", () => {
+  const dir = mkdtempSync(join(tmpdir(), "p-revert-proof-"));
+  try {
+    const edge: TokenEdge = { adapterId: "fixture", target: `0x${"1".repeat(40)}`, tokenIn: `0x${"2".repeat(40)}`,
+      tokenOut: `0x${"3".repeat(40)}`, slotKind: "swap", ...deriveEdgeTaxonomy("swap") };
+    const source = { number: 123, hash: `0x${"a".repeat(64)}`, generation: 1 }, routeId = blockScanRouteId([edge]);
+    const evidencePath = join(dir, "event.json"), path = join(dir, "table.json");
+    const event = atBlockJson({ source, event: { type: "p_revert_recorded", p: 2n, pTrials: 2, routeId, edges: [edge] } });
+    writeFileSync(evidencePath, event);
+    const value = { schemaVersion: 1, scope: "this-historical-experiment-only", notHistoricalPriorKnowledge: true,
+      source: { number: source.number, hash: source.hash },
+      routes: [{ p: "2", pTrials: 2, routeId, evidence: { path: evidencePath, sha256: createHash("sha256").update(event).digest("hex") } }] };
+    writeFileSync(path, JSON.stringify(value));
+    assert(historicalExperimentReverts(path, { source }).ids.has(routeId));
+    assert.throws(() => historicalExperimentReverts(path, { source: { ...source, number: 124 } }));
+    assert.throws(() => historicalExperimentReverts(path, { source: { ...source, generation: 2 } }));
+    writeFileSync(path, JSON.stringify({ ...value, notHistoricalPriorKnowledge: false }));
+    assert.throws(() => historicalExperimentReverts(path, { source }));
+    writeFileSync(path, JSON.stringify(value)); writeFileSync(evidencePath, event + " ");
+    assert.throws(() => historicalExperimentReverts(path, { source }), /evidence changed/);
+  } finally { rmSync(dir, { recursive: true }); }
+});
+test("restored live mids support shared runtime continuation, not a funding or repricing shortcut", () => {
+  const live = [...base, "--live-mids", "manifest.json", "--offline"];
+  assert.equal(parseAtBlockArgs(live)?.through, "enumerate");
+  assert.equal(parseAtBlockArgs([...live, "--rejected-routes", "rejects.json"])?.["rejected-routes"], "rejects.json");
+  for (const through of ["prices", "solver", "ev"])
+    assert.throws(() => parseAtBlockArgs([...live, "--through", through]));
+  assert.equal(parseAtBlockArgs([...base, "--live-mids", "manifest.json", "--max-candidates", "3332"])?.maxCandidates, 3332);
+  assert.equal(parseAtBlockArgs([...base, "--live-mids", "manifest.json", "--amount-selector", "sim"])?.through, "ev");
+  assert.throws(() => parseAtBlockArgs([...base, "--live-mids", "manifest.json", "--effective-weth-input", "0.01"]));
+  for (const value of ["0", "-1", "1.5", "01", "10001", "NaN"])
+    assert.throws(() => parseAtBlockArgs([...base, "--max-candidates", value]));
+  assert.throws(() => parseAtBlockArgs([...base, "--rejected-routes", "rejects.json"]));
+  assert.throws(() => parseAtBlockArgs([...live, "--prices", "snapshot.json"]));
+  assert.throws(() => parseAtBlockArgs([...live, "--funding-token", "0x1111111111111111111111111111111111111111"]));
+  assert.throws(() => parseAtBlockArgs([...live, "--effective-weth-input", "0.01"]));
+  assert.throws(() => parseAtBlockArgs([...live, "--amount-selector", "sim"]));
+});
+
+test("prior rejected complete routes do not consume the 512 coarse slots or blacklist their individual legs", () => {
+  const weth = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+  const address = (n: number) => `0x${n.toString(16).padStart(40, "0")}`;
+  const edges: TokenEdge[] = [], mids = new Map<string, ResolvedBlockScanQuote>();
+  for (let i = 0; i < 620; i++) {
+    const token = address(10_000 + i);
+    for (const [j, [tokenIn, tokenOut]] of [[weth, token], [token, weth]].entries()) {
+      const edge: TokenEdge = { adapterId: "fixture-swap", target: address(20_000 + i * 2 + j),
+        tokenIn, tokenOut, slotKind: "swap", ...deriveEdgeTaxonomy("swap") };
+      const quoteAmountIn = 10_000n, quoteAmountOut = j === 0 ? quoteAmountIn : quoteAmountIn + BigInt(620 - i);
+      edges.push(edge);
+      mids.set(blockScanEdgeKey(edge), { kind: "fixture", pool: edge.target, edges: [edge],
+        mid: Number(quoteAmountOut) / Number(quoteAmountIn), quoteAmountIn, quoteAmountOut, feeBps: 0, depthProxy: 0 });
+    }
+  }
+  const input: Parameters<typeof scan>[0] = { edges, mids, sourceBlock: 123, swapTouched: null, captureCoarseEnumeration: true,
+    cfg: { maxHops: 2, minSpreadBps: 0, maxCandidates: 512, budgetMs: 30_000, hopTokensPerStep: 0, hopPoolsPerPair: 1,
+      ethSignalPairsPerToken: 1000, deduplicateRotations: true, allowRepeatedPools: false,
+      pricedTokens: new Map([[weth, { maxBorrow: 1_000_000n }]]) } };
+  const ids = (routes: readonly { seedEdges: TokenEdge[] }[]) => routes.map(route => blockScanRouteId(route.seedEdges));
+  const baseline = scan(input);
+  assert.equal(baseline.outcome, "ran");
+  assert.equal(baseline.coarseEnumeration!.length, 620);
+  assert.equal(baseline.opportunities.length, 512);
+  assert.deepEqual(scan({ ...input, ...historicalRankedRouteEligibility(new Set()) }).opportunities, baseline.opportunities);
+  const rejected = new Set(ids(baseline.opportunities));
+  const filter = historicalRankedRouteEligibility(rejected);
+  const filtered = scan({ ...input, rankedRouteEligible: filter.rankedRouteEligible });
+  assert.equal(filtered.outcome, "ran");
+  assert.deepEqual(ids(filtered.opportunities), ids(baseline.coarseEnumeration!.slice(512)),
+    "original rank 513 and the next 99 routes survive without expanding either cap");
+  assert.deepEqual(ids(filtered.coarseEnumeration!), ids(filtered.opportunities));
+  assert.equal(filter.matched.size, 512);
+  assert.equal(filtered.selection.forcedSelectionCount, 0);
+  assert.deepEqual(filtered.opportunities.slice(0, 100), baseline.coarseEnumeration!.slice(512, 612));
+  const all = historicalRankedRouteEligibility(new Set(ids(baseline.coarseEnumeration!)));
+  assert.equal(scan({ ...input, rankedRouteEligible: all.rankedRouteEligible }).opportunities.length, 0);
+  assert.equal(scan({ ...input, rankedRouteEligible: filter.rankedRouteEligible, routeEligible: () => false }).opportunities.length, 0,
+    "existing route eligibility still applies");
+  const partial = historicalRankedRouteEligibility(new Set([blockScanRouteId([edges[0]!])]));
+  assert.equal(partial.rankedRouteEligible([edges[0]!, edges[1]!]), true, "partial legs are not route identities");
+  assert.equal(filter.rankedRouteEligible([...baseline.opportunities[0]!.seedEdges].reverse()), true,
+    "route identity is ordered, not a pool or token blacklist");
+  assert.equal(scan({ ...input, rankedRouteEligible: filter.rankedRouteEligible, edgeEligible: () => false }).opportunities.length, 0);
+  const dualFunding = { ...input, cfg: { ...input.cfg,
+    pricedTokens: new Map([...input.cfg.pricedTokens, [edges[0]!.tokenOut, { maxBorrow: 1_000_000n }]]) } };
+  const dual = scan(dualFunding);
+  const chosen = dual.coarseEnumeration!.find(route => route.seedEdges.some(edge => edge.target === edges[0]!.target))!;
+  const chosenId = blockScanRouteId(chosen.seedEdges);
+  const blocked = historicalRankedRouteEligibility(new Set([chosenId]));
+  const dualFiltered = scan({ ...dualFunding, rankedRouteEligible: blocked.rankedRouteEligible });
+  assert.deepEqual(ids(dualFiltered.coarseEnumeration!), ids(dual.coarseEnumeration!).filter(id => id !== chosenId),
+    "rejecting the selected funding rotation removes its slot instead of choosing a new rotation");
+  const oldFilter = scan({ ...dualFunding, routeEligible: blocked.rankedRouteEligible });
+  assert.equal(oldFilter.coarseEnumeration!.length, dual.coarseEnumeration!.length,
+    "regression: filtering before funding-start dedup silently resurrected that same cycle");
+  const rotations = scan({ ...dualFunding, cfg: { ...dualFunding.cfg, deduplicateRotations: false } });
+  const alternate = rotations.coarseEnumeration!.find(route => blockScanRouteId(route.seedEdges) !== chosenId &&
+    route.seedEdges.some(edge => edge.target === edges[0]!.target))!;
+  assert(alternate);
+  const blockAlternate = historicalRankedRouteEligibility(new Set([blockScanRouteId(alternate.seedEdges)]));
+  assert.deepEqual(scan({ ...dualFunding, ...blockAlternate }).coarseEnumeration, dual.coarseEnumeration,
+    "an unselected rotation cannot blacklist the chosen representative");
+  const rotationsFiltered = scan({ ...dualFunding, cfg: { ...dualFunding.cfg, deduplicateRotations: false }, ...blocked });
+  assert.deepEqual(ids(rotationsFiltered.coarseEnumeration!), ids(rotations.coarseEnumeration!).filter(id => id !== chosenId),
+    "without rotation dedup, only the exact rejected ordered ID is excluded");
+});
+
+test("historical production configuration rejects primitive values instead of silently using defaults", () => {
+  for (const value of [true, 1, "abc", null, [], { SEARCHER_DRY_RUN: 1 }])
+    assert.throws(() => historicalLiveConfig(JSON.stringify(value)));
+  assert.deepEqual(historicalLiveConfig('{"SEARCHER_DRY_RUN":"1"}'), { SEARCHER_DRY_RUN: "1" });
+});
+
+test("historical rejection evidence is source-bound and cannot leak later reverts into an earlier enumeration", async () => {
+  const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+  const expected = { runId: "same-process-epoch", source: { number: 123, hash: `0x${"a".repeat(64)}`, generation: 3 } };
+  const routeId = `0x${"b".repeat(64)}`;
+  const event = { type: "pipeline_dropped", reason: "sim_revert_seen_this_live", stage: "planner_solver",
+    run_id: expected.runId, source_block: 122, emitted_at_ms: 999, route_id: routeId };
+  const rawLine = JSON.stringify(event) + "\n";
+  const cutoff = { type: "block_scan_result", run_id: expected.runId, source_block: 123, state_block: 123,
+    pass_mode: "periodic", pricing_mode: "source_n", coarse_source_block: null, coarse_source_block_hash: null,
+    exact_source_block_hash: expected.source.hash, stages: { enumeration: { started_at_ms: 1000 } } };
+  const cutoffLine = JSON.stringify(cutoff);
+  const input = { schema: "at-block-rejected-routes/v1", coverage: "observed-only", runId: expected.runId,
+    sourceBlock: 123, sourceBlockHash: expected.source.hash, generation: 3,
+    cutoff: { emittedAtMs: 1000, timeField: "stages.enumeration.started_at_ms",
+      proof: { rawLine: cutoffLine, lineSha256: sha(cutoffLine), byteOffset: Buffer.byteLength(rawLine) } },
+    evidence: { prefixBytes: 4096, prefixSha256: "c".repeat(64) },
+    routes: [{ routeId, observedAtMs: 999, sourceBlock: 122, line: 1, byteOffset: 0, lineSha256: sha(rawLine), rawLine }] };
+  assert.deepEqual([...historicalRejectedRoutes(JSON.stringify(input), expected).ids], [routeId]);
+  const early = JSON.stringify({ ...event, stage: "enumeration" }) + "\n";
+  assert.deepEqual([...historicalRejectedRoutes(JSON.stringify({ ...input,
+    routes: [{ ...input.routes[0], rawLine: early, lineSha256: sha(early) }],
+  }), expected).ids], [routeId], "current live rejects remembered routes before the coarse cap");
+  for (const patch of [{ coverage: "complete" }, { runId: "other-run" }, { sourceBlock: 124 }, { generation: 4 },
+    { sourceBlockHash: `0x${"d".repeat(64)}` }, { routes: [...input.routes, ...input.routes] }])
+    assert.throws(() => historicalRejectedRoutes(JSON.stringify({ ...input, ...patch }), expected));
+  for (const patch of [{ type: "sim_amount_execution" }, { stage: "final_sim" }, { reason: "rpc-throttle" }, { source_block: 123 },
+    { emitted_at_ms: 1000 }, { run_id: "restart" }]) {
+    const changed = JSON.stringify({ ...event, ...patch });
+    assert.throws(() => historicalRejectedRoutes(JSON.stringify({ ...input,
+      routes: [{ ...input.routes[0], rawLine: changed, lineSha256: sha(changed) }] }), expected));
+  }
+  assert.throws(() => historicalRejectedRoutes(JSON.stringify({ ...input, cutoff: { ...input.cutoff, emittedAtMs: 1001 } }), expected));
+  const stale = JSON.stringify({ ...cutoff, pricing_mode: "n_minus_one_coarse_current_n_exact", coarse_source_block: 122 });
+  assert.throws(() => historicalRejectedRoutes(JSON.stringify({ ...input,
+    cutoff: { ...input.cutoff, proof: { ...input.cutoff.proof, rawLine: stale, lineSha256: sha(stale) } } }), expected));
+  const dir = mkdtempSync(join(tmpdir(), "at-block-reject-test-"));
+  try {
+    const path = join(dir, "events.jsonl");
+    writeFileSync(path, rawLine + cutoffLine);
+    const verified = { ...input, evidence: { path, prefixBytes: Buffer.byteLength(rawLine), prefixSha256: sha(rawLine) } };
+    await historicalRejectedRoutes(JSON.stringify(verified), expected).verifyEvidence();
+    await assert.rejects(historicalRejectedRoutes(JSON.stringify({ ...verified,
+      evidence: { ...verified.evidence, prefixSha256: "c".repeat(64) } }), expected).verifyEvidence(), /prefix hash mismatch/);
+    await assert.rejects(historicalRejectedRoutes(JSON.stringify({ ...verified,
+      routes: [{ ...verified.routes[0], byteOffset: 1 }] }), expected).verifyEvidence());
+    writeFileSync(path, "x" + rawLine.slice(1) + cutoffLine);
+    await assert.rejects(historicalRejectedRoutes(JSON.stringify(verified), expected).verifyEvidence(), /original source bytes/);
+  } finally { rmSync(dir, { recursive: true }); }
+});
 test("historical sim sizing is an explicit opt-in and never an offline or target-route shortcut", () => {
   assert.equal(parseAtBlockArgs(base)?.amountSelector, "solver");
   assert.equal(parseAtBlockArgs([...base, "--amount-selector", "sim"])?.amountSelector, "sim");
@@ -47,8 +295,7 @@ test("historical target selection only filters actual natural outputs and preser
     assert.throws(() => parseAtBlockArgs([...base, "--only-enumerated-rank", rank]));
   assert.throws(() => parseAtBlockArgs([...base, "--only-enumerated-rank", "1", "--through", "enumerate"]));
   const make = (digit: string) => ({ seedEdges: [{ adapterId: "fixture", target: `0x${digit.repeat(40)}`,
-    tokenIn: `0x${"a".repeat(40)}`, tokenOut: `0x${"b".repeat(40)}`,
-    slotKind: "swap" as const, edgeKind: "swap" as const, leavesStandingPosition: false }] });
+    tokenIn: `0x${"a".repeat(40)}`, tokenOut: `0x${"b".repeat(40)}`, slotKind: "swap" as const, ...deriveEdgeTaxonomy("swap") }] });
   const opportunities = [make("1"), make("2")], called: any[] = [];
   const planner: any = { async planBlockScanFromSeedEdges(...input: any[]) { called.push(input); return ["original plan"]; } };
   assert.throws(() => historicalCandidateSelection(planner, 101, 100));
@@ -68,6 +315,11 @@ test("historical target selection only filters actual natural outputs and preser
   const templates: any[] = [], opts = { deadlineAtMs: 123 };
   assert.deepEqual(await planner.planBlockScanFromSeedEdges(opportunities[1], templates, opts), ["original plan"]);
   assert.deepEqual(called, [[opportunities[1], templates, opts]]);
+  const core: any = { opportunities, selection: { mode: "natural_ranked", forcedSelectionCount: 0 } };
+  assert.equal(select(core).routeId, blockScanRouteId(opportunities[1].seedEdges));
+  assert.throws(() => select({ ...core, selection: null }), /natural producer metadata/);
+  assert.throws(() => select({ ...core, selection: { mode: "diagnostic", forcedSelectionCount: 0 } }));
+  assert.throws(() => select({ ...core, selection: { mode: "natural_ranked", forcedSelectionCount: 1 } }));
 });
 
 test("fixed effective P requires online repricing and preserves live default", () => {
@@ -106,7 +358,7 @@ test("live and historical policy allow WBTC starts with an eight-decimal search 
   assert.equal(tokens.get("0x6b175474e89094c44da98b954eedeac495271d0f")?.maxBorrow, 5_000_000n * 10n ** 18n);
 });
 test("historical executor code is opt-in, hash-bound and cannot override account state", () => {
-  assert.throws(() => parseAtBlockArgs([...base, "--executor-runtime-code", "code.json"]));
+  assert.equal(parseAtBlockArgs([...base, "--executor-runtime-code", "code.json"])?.executionMode, "next-block");
   assert.throws(() => parseAtBlockArgs(["--prices", "p", "--block", "123", "--out", "o", "--offline",
     "--execution-mode", "source-block", "--executor-runtime-code", "code.json"]));
   assert.equal(parseAtBlockArgs([...base, "--execution-mode", "source-block", "--executor-runtime-code", "code.json"])?.executionMode, "source-block");
