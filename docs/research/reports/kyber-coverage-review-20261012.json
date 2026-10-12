@@ -1,0 +1,886 @@
+{
+  "schema": "mev.four-family-coverage.non-author-review-round2-final.v1",
+  "round": 2,
+  "maximum_rounds": 3,
+  "continuation_of_round2": true,
+  "candidate_review_complete": true,
+  "checked_at": "2026-10-12T05:24:40.529Z",
+  "verdict": "no_blocking_findings_in_agreed_candidate_scope",
+  "blocking_findings": [],
+  "scope": "Non-author narrow review of the two observer files within the previously reviewed five-file diff, plus offline attribution checks against saved Kyber2 attempt01/attempt02. This completes round2, not an additional or unbounded review round.",
+  "author_role": "independent non-author; no source or production modifications",
+  "workspace": {
+    "cloud": "/opt/mev-cloud/family-runtime-20261007",
+    "local_audit": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z",
+    "cloud_audit": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX",
+    "observed_head": "328de492b86a0c0eab12f11b0f5ebfea1d9b27c7",
+    "head_is_not_a_clean_worktree_claim": true,
+    "unrelated_dirty_work_excluded": true
+  },
+  "prior_reviews": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/review.json",
+      "sha256": "e7a85fc1dcbc5d3bff9a9816609ac8208dcf6395f394315df19393fd8cafedf5",
+      "unchanged": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/review-round2.json",
+      "sha256": "dd81bf0618e6378b971e4318be3725b36d2c17ceb6d579826baa4e7047cbe580",
+      "unchanged": true
+    }
+  ],
+  "previous_five_file_conclusions": "Retained. The original eight new fixed sample TX/N/instance mappings, real-Family ABI choice, historical-ready cost/capability/CLI scope, and no production address seeding were reviewed in review.json. The other three owned files remain byte-identical. No expanded re-audit of older system changes.",
+  "owned_files": {
+    "listener/package.json": "834240a69a73db1f61c72e16c18d55679ec9e6fa04e8412683ab9f8cb5de1574",
+    "analysis/src/tool-index.ts": "2acc1fc66b719a5f7c5e9962f302abd16d02b7641440b3feead4c10f49af777e",
+    "analysis/src/test/tool-index.ts": "41d94fd4bc45500ce91dc0eaf48892acf512f22f12f35f7aabf5adb955c18947",
+    "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts": "3fd31c3aa92722626e620a1b33dc6fdd1106551d6bee8636bf62c818f165ee6d",
+    "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.test.ts": "3aeecb0392d067fc4f080e203bc6a6d7f85480ee3644a4146454b6ac49be1c7e"
+  },
+  "owned_files_identical_before_after_independent_tests": true,
+  "round2_changed_files": [
+    {
+      "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+      "sha256": "3fd31c3aa92722626e620a1b33dc6fdd1106551d6bee8636bf62c818f165ee6d",
+      "round1_sha256": "31a1ef23ceda9849f05d38be4e152986e6ab1d72badcdb93c4dbae93c827289f"
+    },
+    {
+      "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.test.ts",
+      "sha256": "3aeecb0392d067fc4f080e203bc6a6d7f85480ee3644a4146454b6ac49be1c7e",
+      "round1_sha256": "1ad14d9008ec42d5ff86169e3cf5c85159f3d12787d57681a64bf3f15534d710"
+    }
+  ],
+  "source_review": {
+    "diff_scope": "Only ERC20 transfer ABI addition, successful swap-subtree output attribution, swap-only receipt payer predicate, and corresponding offline tests.",
+    "locations": [
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+        "start": 144,
+        "end": 144,
+        "claim": "Add transfer ABI for observation only."
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+        "start": 316,
+        "end": 326,
+        "claim": "Exactly one successful CALL in the selected swap subtree from pool to output token, decoded recipient and exact amount. Missing/empty returndata accepted; nonempty data must be canonical 32-byte true."
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+        "start": 361,
+        "end": 364,
+        "claim": "Independent receipt must retain exact recipient/amount and, only for swap branches, target-pool payer; uniqueness remains exactly one."
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.test.ts",
+        "start": 38,
+        "end": 67,
+        "claim": "Sibling/duplicate/absent/outside-subtree/wrong field/revert/malformed/false and empty-return cases applied to nine Kyber and six Algebra samples, both directions."
+      }
+    ],
+    "count_gate_widened": false,
+    "production_addresses_seeded": false,
+    "production_logic_modified": false,
+    "non_swap_paths_changed": false,
+    "strict_or_source_gates_weakened": false,
+    "preservation_proof": {
+      "method": "Remove exactly the three observer insertions from candidate evidence.ts; assert resulting text is byte-identical to before-observer-evidence.ts.",
+      "candidate_sha256": "3fd31c3aa92722626e620a1b33dc6fdd1106551d6bee8636bf62c818f165ee6d",
+      "before_sha256": "31a1ef23ceda9849f05d38be4e152986e6ab1d72badcdb93c4dbae93c827289f",
+      "byte_identical": true,
+      "caveat": "This is preservation of the previously reviewed source, not a new full-system validation."
+    },
+    "attribution_limit": "Trace has no per-frame receipt logs. Attribution uses selected successful swap subtree plus unique payer/token/recipient/value CALL and independent unique receipt; no invented logIndex-to-frame mapping. Descendants rather than only direct children are accepted, with caller/payer and ancestor-success gates."
+  },
+  "tooling_defect": {
+    "id": "kyber2-original-output-sibling-transfer-false-ambiguity",
+    "type": "tooling_defect",
+    "priority": "P2",
+    "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+    "start_line": 349,
+    "end_line": 351,
+    "failed_observer_sha256": "31a1ef23ceda9849f05d38be4e152986e6ab1d72badcdb93c4dbae93c827289f",
+    "summary": "The transaction-wide tokenOut/to/value filter counts a successful same-token/same-amount sibling transfer from another payer as the selected Kyber pool output and falsely rejects an otherwise uniquely attributable output.",
+    "introduced_by_prior_five_file_diff": false,
+    "reason": "This predicate was preserved from baseline; the newly exercised real Kyber2 sample exposed it.",
+    "status": "confirmed_observer_correction_verified_codify_commit_pending",
+    "codify_commit": null,
+    "codify_commit_requirement": "Main/author must record the real code commit with the retained original failure and regression results before formal tooling-defect closure. Reviewer makes no commit and does not fabricate a codify_commit.",
+    "candidate_observer_sha256": "3fd31c3aa92722626e620a1b33dc6fdd1106551d6bee8636bf62c818f165ee6d",
+    "closure_claimed": false
+  },
+  "original_primary_evidence": {
+    "tx": "0x10b81a77dc9949d9ab1581a341d539de2ab0fbeae827b2a87d9ea6033c9b7549",
+    "source": {
+      "number": 26030898,
+      "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+      "generation": 26030898
+    },
+    "amountIn": "1340362",
+    "amountOut": "1340519",
+    "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "caller": "0xc1e7dfe73e1598e3910ef4c7845b68a9ab6f4c83",
+    "recipient": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+    "selected_pool": "0x952ffc4c47d66b454a8181f5c68b6248e18b66ec",
+    "swap_call_path": [
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      12,
+      0
+    ],
+    "swap_event_logIndex": "0x23b",
+    "target_output": {
+      "from": "0x952ffc4c47d66b454a8181f5c68b6248e18b66ec",
+      "logIndex": "0x239",
+      "call_path": [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        12,
+        0,
+        0
+      ],
+      "success": true,
+      "return_data": "absent"
+    },
+    "excluded_sibling": {
+      "from": "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb",
+      "logIndex": "0x192",
+      "call_path": [
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      "same_token_recipient_amount": true,
+      "inside_selected_swap": false
+    },
+    "adjudication": "Confirmed tooling false ambiguity, not protocol failure. Old receipt predicate combined two distinct payers. New observer accepts the uniquely attributable selected pool payment while retaining exact CALL/event/receipt proofs."
+  },
+  "original_failed_artifact": {
+    "local_path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber2-dual-attempt01.json",
+    "cloud_path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber2-dual-attempt01.json",
+    "sha256": "974469af837c659a8bf5eda08cbbc1a7587ceaab15f68a32dfb966b98137b770",
+    "preserved_unchanged": true,
+    "result": "failed",
+    "failure": "original output receipt is missing/ambiguous: 2 !== 1",
+    "exact_calls": 0,
+    "quoted_calls": 0,
+    "embedded_hash_encoding": "SHA256(JSON.stringify(value, null, 2)), no trailing newline",
+    "embedded_receipt_sha256": "08bafc3abac033bc91f838287d92a3f1740d786033d1df2cba9d1ac0ab216613",
+    "embedded_trace_sha256": "e92f8101b4f20c6ce4698f030f1cac691cc740f6b74849555eb46e56eaca2d34"
+  },
+  "saved_fail_before": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/observer-before-tests.log",
+    "sha256": "5ac454e5b28a335b11d5ee9d001b3870207a157b9d5efd957aa8b8e18f17a841",
+    "bytes": 23074,
+    "provenance": "Main's preserved run inspected independently; reviewer did not re-run old observer.",
+    "total": 36,
+    "passed": 21,
+    "failed": 15,
+    "finding": "All fifteen swap-sample tests fail at old output receipt uniqueness (2 !== 1); new same-value foreign payer fixture exposes the old predicate.",
+    "old_observer_sha256": "31a1ef23ceda9849f05d38be4e152986e6ab1d72badcdb93c4dbae93c827289f",
+    "candidate_test_sha256": "3aeecb0392d067fc4f080e203bc6a6d7f85480ee3644a4146454b6ac49be1c7e"
+  },
+  "independent_offline_suite": {
+    "id": "kyber-yb-compound-dual-contract",
+    "argv": [
+      "--import",
+      "tsx",
+      "--test",
+      "src/searcher/test/family-integration/kyber-yb-compound/evidence.test.ts",
+      "src/searcher/test/family-integration/kyber-yb-compound/nomination-address-binding.test.ts",
+      "src/searcher/test/family-integration/kyber-yb-compound/historical-input-origin.test.ts"
+    ],
+    "cwd": "/opt/mev-cloud/family-runtime-20261007/listener",
+    "started_at": "2026-10-12T05:17:39.643Z",
+    "finished_at": "2026-10-12T05:17:41.650Z",
+    "exit_code": 0,
+    "signal": null,
+    "error": null,
+    "stdout": "✔ executor upgrade is explicit, old-code-pinned, source-trusted and not the default (19.764896ms)\n✔ no-hook native sample is distinct from Sat1 and uses the bound V4 observer (4.897308ms)\n✔ native observation detects one-unit residual, old-inventory debit and deleted actor (1.322174ms)\n✔ origin guard accepts EIP-7702 exactly, without accepting arbitrary contract code (1.379299ms)\n✔ only an exact ABI word with the injected balance proves a candidate storage slot (0.236895ms)\n✔ probe failure classification never swallows transport, unknown, upstream or malformed errors (0.725449ms)\n✔ paired fixed-family CLI rejects arbitrary samples, repeats, missing/unsafe ports (3.443277ms)\n✔ N header checks timestamp/hash/stateRoot and refuses missing fields (0.72642ms)\n✔ source/Ready fingerprints, N environment and single-block natural scope are mandatory (0.940462ms)\n✔ missing valuation never creates a production reference amount; stale/wrong-direction rows reject (2.193581ms)\n✔ explicit donor takes only recorded input; carried provenance cannot become target valuation/output (1.000731ms)\n✔ donor bridge rejects mismatched tokens, source/graph/config, future rows and invalid amounts (11.308698ms)\n✔ receipt anchors reject another transaction, block, failed receipt or removed log (0.675023ms)\n✔ kyber: its own ABI binds signed amounts, both directions and settled receipts (62.730184ms)\n✔ kyber2: its own ABI binds signed amounts, both directions and settled receipts (43.937426ms)\n✔ kyber3: its own ABI binds signed amounts, both directions and settled receipts (31.226384ms)\n✔ kyber4: its own ABI binds signed amounts, both directions and settled receipts (28.71828ms)\n✔ kyber5: its own ABI binds signed amounts, both directions and settled receipts (36.979886ms)\n✔ kyber6: its own ABI binds signed amounts, both directions and settled receipts (29.924711ms)\n✔ kyber7: its own ABI binds signed amounts, both directions and settled receipts (26.667283ms)\n✔ kyber8: its own ABI binds signed amounts, both directions and settled receipts (28.243298ms)\n✔ kyber9: its own ABI binds signed amounts, both directions and settled receipts (24.190357ms)\n✔ algebra: observed swap binds its own ABI, direction, full input and settled output (28.862978ms)\n✔ algebra2: observed swap binds its own ABI, direction, full input and settled output (25.400462ms)\n✔ algebra3: observed swap binds its own ABI, direction, full input and settled output (25.188775ms)\n✔ algebra4: observed swap binds its own ABI, direction, full input and settled output (29.734085ms)\n✔ algebra5: observed swap binds its own ABI, direction, full input and settled output (37.060307ms)\n✔ algebra6: observed swap binds its own ABI, direction, full input and settled output (20.817125ms)\n✔ standard ERC4626 deposit binds call, event and independent receipt (4.953673ms)\n✔ standard ERC4626 redeem binds call, event and independent receipt (3.450357ms)\n✔ YB accepts ordinary withdraw; same Withdraw event with emergency call is insufficient (1.328313ms)\n✔ Compound redeemUnderlying maps real burned shares, never declares original share-input parity (1.338739ms)\n✔ runtime construction guard traps Exact, quoted fallback and service access before executing them (0.214041ms)\n✔ observation rejects missing credit even when initial output inventory exceeds quote (0.811888ms)\n✔ standard vault original depositNative is mapped, not same-interface parity (1.730316ms)\n✔ standard vault original withdraw is mapped, not same-interface parity (2.341864ms)\n✔ YB external caller pays one asset; protocol stablecoins are not a second caller input (11.766254ms)\n✔ YB requires actual input receipts, share mint and ordered deposit/withdraw amounts (21.715152ms)\n✔ failed ancestors and DELEGATECALL are never new successful external call evidence (1.005168ms)\n✔ nested Compound caller owns cTokens; wrapper share input is separate and any inventory delta stays visible (2.789285ms)\n✔ nested Compound attribution rejects siblings, missing forwarded receipt, cToken user input and error codes (6.220464ms)\n✔ Compound: two targets in one TX retain their own emitting addresses (1.873351ms)\n✔ Compound: another target's log cannot satisfy a missing nomination (0.385739ms)\n✔ Compound: retained no-TX nomination still uses its address-bound recent log (0.436986ms)\n✔ Compound: an out-of-scope recent log is not accepted as the target (0.337376ms)\n✔ Yield Basis: two targets in one TX retain their own emitting addresses (1.204887ms)\n✔ Yield Basis: another target's log cannot satisfy a missing nomination (0.283214ms)\n✔ Yield Basis: retained no-TX nomination still uses its address-bound recent log (0.277095ms)\n✔ Yield Basis: an out-of-scope recent log is not accepted as the target (0.292079ms)\nℹ tests 49\nℹ suites 0\nℹ pass 49\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 1978.328095\n",
+    "stderr": "",
+    "stdout_sha256": "ab0bac465ec1628226ada76975f84c719e09d9c3e44ea44c210830974dfbc980",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 4954,
+    "stderr_bytes": 0,
+    "node": "v26.0.0",
+    "uid": 999,
+    "nice": 15,
+    "clean_environment": true,
+    "git_safe_directory_via_GIT_CONFIG_COUNT": "/opt/mev-cloud/family-runtime-20261007",
+    "totals": {
+      "tests": 49,
+      "pass": 49,
+      "fail": 0,
+      "skipped": 0
+    },
+    "no_rpc_or_evm_execution": true
+  },
+  "independent_saved_attempt01_probe": {
+    "uid": 0,
+    "nice": 15,
+    "started_at": "2026-10-12T05:19:32.163Z",
+    "finished_at": "2026-10-12T05:19:32.592Z",
+    "exit_code": 0,
+    "source_sha256": "de36956b590d1f8dcec2dab1380a8fecd671fb4bd5575b3105758769588d142d",
+    "stdout": "{\"kind\":\"offline_saved_receipt_observer_and_adversarial_checks\",\"artifact_sha256\":\"974469af837c659a8bf5eda08cbbc1a7587ceaab15f68a32dfb966b98137b770\",\"descriptor\":{\"token0\":\"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"token1\":\"0xdac17f958d2ee523a2206206994597c13d831ec7\"},\"descriptor_source\":\"Unique actual incoming and outgoing target-pool Transfer receipts, aligned to positive amount0/negative amount1 swap return; no invented state or RPC.\",\"accepted\":{\"tokenIn\":\"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"tokenOut\":\"0xdac17f958d2ee523a2206206994597c13d831ec7\",\"amountIn\":\"1340362\",\"amountOut\":\"1340519\",\"caller\":\"0xc1e7dfe73e1598e3910ef4c7845b68a9ab6f4c83\",\"recipient\":\"0xe08d97e151473a848c3d9ca3f323cb720472d015\",\"originalInterface\":\"swap/exact-input\",\"comparison\":\"same interface at N-end; original pre-call state NOT restored\",\"logIndex\":\"0x23b\"},\"positive_return_cases\":[{\"returndata\":\"absent\",\"amountOut\":\"1340519\"},{\"returndata\":\"empty\",\"amountOut\":\"1340519\"},{\"returndata\":\"true\",\"amountOut\":\"1340519\"}],\"negative_cases\":[{\"name\":\"target receipt removed; foreign same-value receipt retained\",\"status\":\"rejected\",\"message\":\"original output receipt is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"target receipt payer changed to foreign sibling\",\"status\":\"rejected\",\"message\":\"original output receipt is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"duplicate target receipt\",\"status\":\"rejected\",\"message\":\"original output receipt is missing/ambiguous\\n\\n2 !== 1\\n\"},{\"name\":\"target child removed; real foreign sibling retained\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"target child moved outside swap subtree\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"duplicate target output child\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n2 !== 1\\n\"},{\"name\":\"wrong child payer\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"wrong child token\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"wrong child recipient\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"one-unit wrong child amount\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"child reverted\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"child ancestor error\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"child ancestor revertReason\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"wrong child type STATICCALL\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"wrong child type DELEGATECALL\",\"status\":\"rejected\",\"message\":\"swap output transfer call is missing/ambiguous\\n\\n0 !== 1\\n\"},{\"name\":\"child returndata false\",\"status\":\"rejected\",\"message\":\"swap output transfer returned false/malformed data\"},{\"name\":\"child returndata noncanonical bool\",\"status\":\"rejected\",\"message\":\"swap output transfer returned false/malformed data\"},{\"name\":\"child returndata short hex\",\"status\":\"rejected\",\"message\":\"swap output transfer returned false/malformed data\"},{\"name\":\"child returndata not hex\",\"status\":\"rejected\",\"message\":\"swap output transfer returned false/malformed data\"},{\"name\":\"child returndata extra byte\",\"status\":\"rejected\",\"message\":\"swap output transfer returned false/malformed data\"},{\"name\":\"malformed transfer calldata\",\"status\":\"rejected\",\"message\":\"data out-of-bounds (buffer=0x, length=0, offset=32, code=BUFFER_OVERRUN, version=6.16.0)\"},{\"name\":\"swap sender/event mismatch\",\"status\":\"rejected\",\"message\":\"The expression evaluated to a falsy value:\\n\\n  assert(same(a.sender, caller) && same(a.recipient, recipient))\\n\"},{\"name\":\"swap output/event one-unit mismatch\",\"status\":\"rejected\",\"message\":\"Expected values to be strictly equal:\\n+ actual - expected\\n\\n+ -1340520n\\n- -1340519n\\n        ^\\n\"}],\"negative_count\":23,\"normalized_candidate_equals_pre_observer\":true,\"non_swap_and_existing_source_gates_byte_preserved\":true,\"original_failure_unchanged\":true}\n",
+    "stderr": "",
+    "stdout_sha256": "b3f1ac402fffabaf666531b771adf0a5be47e80a24ee710508012d56775148c9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 4330,
+    "stderr_bytes": 0,
+    "source": "import fs from \"node:fs\"; import crypto from \"node:crypto\"; import assert from \"node:assert/strict\"; import {createRequire} from \"node:module\";\nimport {originalLeg, SAMPLES, ERC20, assertReceipt, word} from \"/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts\";\nimport {KYSWAP_POOL_INTERFACE as ABI} from \"/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts\";\nconst root=\"/opt/mev-cloud/family-runtime-20261007\",audit=root+\"/logs/four-family-coverage-20261012.zHKuWX\",sha=b=>crypto.createHash(\"sha256\").update(b).digest(\"hex\");\nconst paths={observer:root+\"/listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts\",tests:root+\"/listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.test.ts\",artifact:audit+\"/kyber2-dual-attempt01.json\"};\nassert.equal(sha(fs.readFileSync(paths.observer)),\"3fd31c3aa92722626e620a1b33dc6fdd1106551d6bee8636bf62c818f165ee6d\");assert.equal(sha(fs.readFileSync(paths.tests)),\"3aeecb0392d067fc4f080e203bc6a6d7f85480ee3644a4146454b6ac49be1c7e\");\nconst bytes=fs.readFileSync(paths.artifact);assert.equal(sha(bytes),\"974469af837c659a8bf5eda08cbbc1a7587ceaab15f68a32dfb966b98137b770\");\nconst r=JSON.parse(bytes),receipt=r.original.receipt,trace=r.original.trace,pool=SAMPLES.kyber2.instances[0],same=(a,b)=>a.toLowerCase()===b.toLowerCase();\nassert.equal(sha(JSON.stringify(receipt,null,2)),r.original.receiptSha256);assert.equal(sha(JSON.stringify(trace,null,2)),r.original.traceSha256);assertReceipt(receipt,SAMPLES.kyber2.tx,r.environment);\nconst frames=[];function walk(f,path=[],ok=true){ok=ok&&!f.error&&!f.revertReason;frames.push({f,path,ok});(f.calls||[]).forEach((c,i)=>walk(c,[...path,i],ok));}walk(trace);\nconst matches=frames.filter(x=>x.ok&&x.f.type===\"CALL\"&&same(x.f.to??\"\",pool)&&x.f.input?.startsWith(ABI.getFunction(\"swap\").selector));assert.equal(matches.length,1);\nconst swap=matches[0],out=ABI.decodeFunctionResult(\"swap\",swap.f.output);assert(out[0]>0n&&out[1]<0n);\nconst transfers=receipt.logs.map((l,i)=>({l,i})).filter(x=>x.l.topics?.[0]===ERC20.getEvent(\"Transfer\").topicHash).map(x=>({...x,a:ERC20.parseLog(x.l).args}));\nconst inputs=transfers.filter(x=>same(x.a.to,pool)&&x.a.value===out[0]),outputs=transfers.filter(x=>same(x.a.from,pool)&&x.a.value===-out[1]);assert.equal(inputs.length,1);assert.equal(outputs.length,1);\nconst descriptor={token0:inputs[0].l.address,token1:outputs[0].l.address};\nconst accepted=originalLeg(\"kyber2\",pool,descriptor,receipt,trace);assert.equal(accepted.amountIn,1340362n);assert.equal(accepted.amountOut,1340519n);assert.equal(accepted.tokenOut,descriptor.token1);\nconst getSwap=t=>swap.path.reduce((f,i)=>f.calls[i],t),logOrdinal=outputs[0].i;\nassert.equal(getSwap(trace).calls[0].from,pool);assert.equal(getSwap(trace).calls[0].to,descriptor.token1);\nconst cases=[];\nfunction reject(name,mutate,pattern){const a={receipt:structuredClone(receipt),trace:structuredClone(trace)};mutate(a,getSwap(a.trace));let error=null;try{originalLeg(\"kyber2\",pool,descriptor,a.receipt,a.trace);}catch(e){error=e;}assert(error,name+\" was incorrectly accepted\");if(pattern)assert.match(String(error.message),pattern);cases.push({name,status:\"rejected\",message:error.message});}\nconst callGate=/swap output transfer call is missing\\/ambiguous/,receiptGate=/original output receipt is missing\\/ambiguous/,returnGate=/false\\/malformed/;\nreject(\"target receipt removed; foreign same-value receipt retained\",a=>a.receipt.logs.splice(logOrdinal,1),receiptGate);\nreject(\"target receipt payer changed to foreign sibling\",a=>a.receipt.logs[logOrdinal].topics[1]=receipt.logs[5].topics[1],receiptGate);\nreject(\"duplicate target receipt\",a=>a.receipt.logs.push(structuredClone(a.receipt.logs[logOrdinal])),receiptGate);\nreject(\"target child removed; real foreign sibling retained\",(_,s)=>s.calls.shift(),callGate);\nreject(\"target child moved outside swap subtree\",(a,s)=>a.trace.calls.push(s.calls.shift()),callGate);\nreject(\"duplicate target output child\",(_,s)=>s.calls.push(structuredClone(s.calls[0])),callGate);\nreject(\"wrong child payer\",(_,s)=>s.calls[0].from=accepted.caller,callGate);\nreject(\"wrong child token\",(_,s)=>s.calls[0].to=descriptor.token0,callGate);\nreject(\"wrong child recipient\",(_,s)=>s.calls[0].input=ERC20.encodeFunctionData(\"transfer\",[accepted.caller,accepted.amountOut]),callGate);\nreject(\"one-unit wrong child amount\",(_,s)=>s.calls[0].input=ERC20.encodeFunctionData(\"transfer\",[accepted.recipient,accepted.amountOut+1n]),callGate);\nreject(\"child reverted\",(_,s)=>s.calls[0].error=\"reverted\",callGate);\nreject(\"child ancestor error\",(_,s)=>s.calls[0]={error:\"reverted\",calls:[s.calls[0]]},callGate);\nreject(\"child ancestor revertReason\",(_,s)=>s.calls[0]={revertReason:\"reverted\",calls:[s.calls[0]]},callGate);\nfor(const type of [\"STATICCALL\",\"DELEGATECALL\"])reject(\"wrong child type \"+type,(_,s)=>s.calls[0].type=type,callGate);\nfor(const [name,value] of [[\"false\",word(0n)],[\"noncanonical bool\",word(2n)],[\"short hex\",\"0x01\"],[\"not hex\",\"malformed\"],[\"extra byte\",word(1n)+\"00\"]])reject(\"child returndata \"+name,(_,s)=>s.calls[0].output=value,returnGate);\nreject(\"malformed transfer calldata\",(_,s)=>s.calls[0].input=\"0xa9059cbb\");\nreject(\"swap sender/event mismatch\",(_,s)=>s.from=pool);\nreject(\"swap output/event one-unit mismatch\",(_,s)=>s.output=ABI.encodeFunctionResult(\"swap\",[out[0],out[1]-1n]));\nconst positives=[];\nfor(const [name,value] of [[\"absent\",undefined],[\"empty\",\"0x\"],[\"true\",word(1n)]]){\nconst t=structuredClone(trace);if(value===undefined)delete getSwap(t).calls[0].output;else getSwap(t).calls[0].output=value;const got=originalLeg(\"kyber2\",pool,descriptor,receipt,t);assert.equal(got.amountOut,1340519n);positives.push({returndata:name,amountOut:String(got.amountOut)});}\nlet normalized=fs.readFileSync(paths.observer,\"utf8\").replace('  \"function transfer(address,uint256) returns(bool)\",\\n',\"\");\nconst start=normalized.indexOf(\"    // A same-value flashloan/sibling payment\"),end=normalized.indexOf('    comparison = \"same interface at N-end; original pre-call state NOT restored\";',start);assert(start>0&&end>start);\nnormalized=normalized.slice(0,start)+normalized.slice(end);\nnormalized=normalized.replace(\" && t.value === amountOut\\n      && (!isSwap || same(t.from, instance)));\",\" && t.value === amountOut);\");\nconst baseline=fs.readFileSync(audit+\"/before-observer-evidence.ts\",\"utf8\");assert.equal(sha(baseline),\"31a1ef23ceda9849f05d38be4e152986e6ab1d72badcdb93c4dbae93c827289f\");assert.equal(normalized,baseline);\nassert.equal(sha(fs.readFileSync(paths.artifact)),sha(bytes));\nconsole.log(JSON.stringify({kind:\"offline_saved_receipt_observer_and_adversarial_checks\",artifact_sha256:sha(bytes),descriptor,descriptor_source:\"Unique actual incoming and outgoing target-pool Transfer receipts, aligned to positive amount0/negative amount1 swap return; no invented state or RPC.\",accepted,positive_return_cases:positives,negative_cases:cases,negative_count:cases.length,normalized_candidate_equals_pre_observer:true,non_swap_and_existing_source_gates_byte_preserved:true,original_failure_unchanged:true},(_,v)=>typeof v===\"bigint\"?v.toString():v));",
+    "result": {
+      "kind": "offline_saved_receipt_observer_and_adversarial_checks",
+      "artifact_sha256": "974469af837c659a8bf5eda08cbbc1a7587ceaab15f68a32dfb966b98137b770",
+      "descriptor": {
+        "token0": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "token1": "0xdac17f958d2ee523a2206206994597c13d831ec7"
+      },
+      "descriptor_source": "Unique actual incoming and outgoing target-pool Transfer receipts, aligned to positive amount0/negative amount1 swap return; no invented state or RPC.",
+      "accepted": {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountIn": "1340362",
+        "amountOut": "1340519",
+        "caller": "0xc1e7dfe73e1598e3910ef4c7845b68a9ab6f4c83",
+        "recipient": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+        "originalInterface": "swap/exact-input",
+        "comparison": "same interface at N-end; original pre-call state NOT restored",
+        "logIndex": "0x23b"
+      },
+      "positive_return_cases": [
+        {
+          "returndata": "absent",
+          "amountOut": "1340519"
+        },
+        {
+          "returndata": "empty",
+          "amountOut": "1340519"
+        },
+        {
+          "returndata": "true",
+          "amountOut": "1340519"
+        }
+      ],
+      "negative_cases": [
+        {
+          "name": "target receipt removed; foreign same-value receipt retained",
+          "status": "rejected",
+          "message": "original output receipt is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "target receipt payer changed to foreign sibling",
+          "status": "rejected",
+          "message": "original output receipt is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "duplicate target receipt",
+          "status": "rejected",
+          "message": "original output receipt is missing/ambiguous\n\n2 !== 1\n"
+        },
+        {
+          "name": "target child removed; real foreign sibling retained",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "target child moved outside swap subtree",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "duplicate target output child",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n2 !== 1\n"
+        },
+        {
+          "name": "wrong child payer",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "wrong child token",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "wrong child recipient",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "one-unit wrong child amount",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "child reverted",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "child ancestor error",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "child ancestor revertReason",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "wrong child type STATICCALL",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "wrong child type DELEGATECALL",
+          "status": "rejected",
+          "message": "swap output transfer call is missing/ambiguous\n\n0 !== 1\n"
+        },
+        {
+          "name": "child returndata false",
+          "status": "rejected",
+          "message": "swap output transfer returned false/malformed data"
+        },
+        {
+          "name": "child returndata noncanonical bool",
+          "status": "rejected",
+          "message": "swap output transfer returned false/malformed data"
+        },
+        {
+          "name": "child returndata short hex",
+          "status": "rejected",
+          "message": "swap output transfer returned false/malformed data"
+        },
+        {
+          "name": "child returndata not hex",
+          "status": "rejected",
+          "message": "swap output transfer returned false/malformed data"
+        },
+        {
+          "name": "child returndata extra byte",
+          "status": "rejected",
+          "message": "swap output transfer returned false/malformed data"
+        },
+        {
+          "name": "malformed transfer calldata",
+          "status": "rejected",
+          "message": "data out-of-bounds (buffer=0x, length=0, offset=32, code=BUFFER_OVERRUN, version=6.16.0)"
+        },
+        {
+          "name": "swap sender/event mismatch",
+          "status": "rejected",
+          "message": "The expression evaluated to a falsy value:\n\n  assert(same(a.sender, caller) && same(a.recipient, recipient))\n"
+        },
+        {
+          "name": "swap output/event one-unit mismatch",
+          "status": "rejected",
+          "message": "Expected values to be strictly equal:\n+ actual - expected\n\n+ -1340520n\n- -1340519n\n        ^\n"
+        }
+      ],
+      "negative_count": 23,
+      "normalized_candidate_equals_pre_observer": true,
+      "non_swap_and_existing_source_gates_byte_preserved": true,
+      "original_failure_unchanged": true
+    },
+    "reproduction": "Evaluate the embedded source with node --import tsx --input-type=module -e <source>, nice15, in cloud listener and a clean environment with GIT_CONFIG_COUNT safe.directory. Read-only root was needed for audit-directory access; no network/RPC/runner.",
+    "tested_current_originalLeg": true,
+    "negative_mutations_rejected": 23,
+    "positive_return_modes_passed": 3
+  },
+  "saved_attempt02": {
+    "local_path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/kyber2-dual-attempt02.json",
+    "cloud_path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber2-dual-attempt02.json",
+    "sha256": "cdbb1f96bf77b1b98e40ca81dc39134c20526231def5b34d1d4038569bab660c",
+    "bytes": 3040228,
+    "result": "pass-with-spliced-reference",
+    "author_execution": true,
+    "reviewer_execution": false,
+    "evidence_sha256": "3fd31c3aa92722626e620a1b33dc6fdd1106551d6bee8636bf62c818f165ee6d",
+    "code": {
+      "sourceTreeSha256": "c07c2310160ef72f154587440040b37a6009d5bfa791c47bdb49232c0e23f9fa",
+      "harnessSha256": "7bedee2d3a531a21de32aed370c70b1e90fbba8957ce3627b5d130d85729e831",
+      "evidenceSha256": "3fd31c3aa92722626e620a1b33dc6fdd1106551d6bee8636bf62c818f165ee6d",
+      "observationHelpers": [
+        {
+          "path": "../three-family/historical-input-observations.ts",
+          "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+        },
+        {
+          "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+          "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+        },
+        {
+          "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+          "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+        },
+        {
+          "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+          "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+        },
+        {
+          "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+          "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+        },
+        {
+          "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+          "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+        },
+        {
+          "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+          "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+        },
+        {
+          "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+          "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+        },
+        {
+          "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+          "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+        }
+      ]
+    },
+    "source": {
+      "number": 26030898,
+      "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+      "generation": 26030898
+    },
+    "reported_invocation_counts": {
+      "exact": 4,
+      "quoted": 4,
+      "forbiddenDuringBuild": 0,
+      "directRpcCalls": 126,
+      "forkInternalRpcCalls": "not counted"
+    },
+    "independent_crosscheck": {
+      "exit_code": 0,
+      "source_sha256": "244eb92c60e9ebe4cdbc29ae3e5ffb1e79463de55085ab593a6f666ed83b09c5",
+      "source": "\nconst fs = require('node:fs');\nconst assert = require('node:assert/strict');\nconst crypto = require('node:crypto');\nconst base = '/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z';\nconst sha = value => crypto.createHash('sha256').update(value).digest('hex');\nconst raw = fs.readFileSync(base + '/kyber2-dual-attempt02.json');\nconst failedRaw = fs.readFileSync(base + '/kyber2-dual-attempt01.json');\nassert.equal(sha(raw), 'cdbb1f96bf77b1b98e40ca81dc39134c20526231def5b34d1d4038569bab660c');\nassert.equal(sha(failedRaw), '974469af837c659a8bf5eda08cbbc1a7587ceaab15f68a32dfb966b98137b770');\nconst r = JSON.parse(raw), failed = JSON.parse(failedRaw);\nconst lower = v => v.toLowerCase(), same = (a,b) => lower(a) === lower(b);\nconst stringify = value => JSON.stringify(value, (_k,v) => typeof v === 'bigint' ? String(v) : v, 2);\nconst originalHashes = {};\nfor (const field of ['receipt', 'trace']) {\n  const h = sha(JSON.stringify(r.original[field], null, 2));\n  assert.equal(h, r.original[field+'Sha256']);\n  assert.equal(h, sha(JSON.stringify(failed.original[field], null, 2)));\n  originalHashes[field] = h;\n}\nassert.equal(r.code.evidenceSha256, '3fd31c3aa92722626e620a1b33dc6fdd1106551d6bee8636bf62c818f165ee6d');\nassert.equal(r.result, 'pass-with-spliced-reference'); assert.deepEqual(r.errors, []);\nassert.deepEqual(r.source, {number:26030898, hash:'0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e',generation:26030898});\nassert.equal(r.samples.length, 2);\nconst pool = '0x952ffc4c47d66b454a8181f5c68b6248e18b66ec';\nconst actor = r.actors.executor;\nconst byPath = (node,path) => path.reduce((n,i) => n.calls[i], node);\nconst originalSwap = byPath(r.original.trace, [0,1,0,1,0,1,0,1,12,0]);\nassert(same(originalSwap.to, pool));\nconst swapSelector = originalSwap.input.slice(0,10);\nconst successful = (node, path=[], result=[]) => {\n  if (!node || node.error || node.revertReason) return result;\n  result.push({node,path});\n  for (const [i,child] of (node.calls||[]).entries()) successful(child,[...path,i],result);\n  return result;\n};\nconst account = (diff,side,address) => Object.entries(diff[side]).find(([k]) => same(k,address))?.[1] || {};\nconst storage = (diff,side,token,slot) => {\n  const entry = Object.entries(account(diff,side,token).storage||{}).find(([k]) => BigInt(k) === BigInt(slot));\n  return entry ? BigInt(entry[1]) : undefined;\n};\nconst observe = (diff,token,slot,initial) => {\n  assert(diff.pre && diff.post);\n  const pre = storage(diff,'pre',token,slot), post = storage(diff,'post',token,slot);\n  const before = pre ?? (post === undefined ? initial : 0n);\n  const after = post ?? (pre === undefined ? initial : 0n);\n  assert.equal(before, initial);\n  return {before,after,delta:after-before};\n};\nconst word = (input,index) => '0x'+input.slice(10+64*index,10+64*(index+1));\nconst transfer = (entry,from,token,to,amount) => {\n  const n=entry.node;\n  return n.type==='CALL' && same(n.from,from) && same(n.to,token) &&\n    n.input?.startsWith('0xa9059cbb') && n.input.length>=138 &&\n    same('0x'+word(n.input,0).slice(-40),to) && BigInt(word(n.input,1))===amount;\n};\nconst outputs = [];\nlet executions=0, noInputControls=0;\nfor (const s of r.samples) {\n  assert(same(s.instance,pool));\n  assert.deepEqual(s.productionReferenceGate,{status:'unmet',reason:'missing-valuation'});\n  assert.deepEqual({exactCalls:s.runtimeConstruction.exactCalls,quotedCalls:s.runtimeConstruction.quotedCalls,rpcCalls:s.runtimeConstruction.rpcCalls,quotedFallback:s.runtimeConstruction.quotedFallback},\n    {exactCalls:0,quotedCalls:0,rpcCalls:0,quotedFallback:false});\n  for (const t of s.trials) {\n    assert.equal(t.status,'pass'); assert.equal(t.executions.length,4);\n    assert.equal(new Set(t.executions.map(e=>e.encoding+':'+e.inventoryControl)).size,4);\n    const amountIn=BigInt(t.amountIn), out=BigInt(t.quote.amountOut), details=[];\n    for (const e of t.executions) {\n      assert.equal(e.status,'pass'); assert.deepEqual(e.source,r.source);\n      assert.equal(e.executorCodeHash,r.runtimeCode.keccak256);\n      assert(same(e.transaction.from,r.actors.owner) && same(e.transaction.to,actor));\n      assert(same(e.trace.from,e.transaction.from) && same(e.trace.to,e.transaction.to));\n      assert.equal(e.trace.input,e.transaction.data); assert(!e.trace.error && !e.trace.revertReason);\n      const slots=[s.tokenIn,s.tokenOut].map(token=>{\n        const matches=r.balanceSlotProofs.filter(p=>same(p.token,token)&&same(p.actor,actor));\n        assert.equal(matches.length,1); return matches[0].slot;\n      });\n      const balances=[s.tokenIn,s.tokenOut].map((token,i)=>observe(e.diff,token,slots[i],BigInt(e.initial[i])));\n      assert.equal(balances[0].delta,-amountIn); assert.equal(balances[1].delta,out);\n      assert.deepEqual(JSON.parse(stringify(balances)),e.balances); assert.equal(e.signedDelta,'0');\n      const nativeBefore=account(e.diff,'pre',actor).balance, nativeAfter=account(e.diff,'post',actor).balance;\n      const nb=nativeBefore === undefined ? (nativeAfter === undefined ? 17n : 0n) : BigInt(nativeBefore);\n      const na=nativeAfter === undefined ? (nativeBefore === undefined ? 17n : 0n) : BigInt(nativeAfter);\n      assert.equal(nb,17n); assert.equal(na,17n);\n      assert.deepEqual(e.nativeInventory,{before:'17',after:'17',delta:'0'});\n      const swaps=successful(e.trace).filter(({node:n})=>n.type==='CALL'&&same(n.to,pool)&&n.input?.startsWith(swapSelector));\n      assert.equal(swaps.length,1);\n      const descendants=successful(swaps[0].node,swaps[0].path);\n      const paid=descendants.filter(c=>transfer(c,pool,s.tokenOut,actor,out));\n      const debited=descendants.filter(c=>transfer(c,actor,s.tokenIn,pool,amountIn));\n      assert.equal(paid.length,1); assert.equal(debited.length,1);\n      for (const p of [...paid,...debited]) {\n        const v=p.node.output??'0x';\n        assert(v==='0x'||(/^0x[0-9a-fA-F]{64}$/.test(v)&&BigInt(v)===1n));\n      }\n      if (e.inventoryControl) {\n        assert.equal(e.initial[1],'1000000000000000000000000');\n        assert(e.noInput.error || e.noInput.revertReason);\n        assert(same(e.noInput.from,e.transaction.from)&&same(e.noInput.to,e.transaction.to));\n        assert.equal(e.noInput.input,e.transaction.data);\n        noInputControls++;\n      }\n      executions++;\n      details.push({encoding:e.encoding,inventoryControl:e.inventoryControl,debit:balances[0].delta.toString(),credit:balances[1].delta.toString(),outputPath:paid[0].path,inputPath:debited[0].path,nativeUnchanged:true,noInputReverted:e.inventoryControl?true:null});\n    }\n    if(t.originalTxComparison?.signedDelta!==null&&t.originalTxComparison?.signedDelta!==undefined)\n      assert.equal(out-BigInt(t.originalTxComparison.originalAmountOut),BigInt(t.originalTxComparison.signedDelta));\n    outputs.push({tokenIn:s.tokenIn,tokenOut:s.tokenOut,label:t.label,amountIn:t.amountIn,amountOut:t.quote.amountOut,originalTxSignedDelta:t.originalTxComparison?.signedDelta??null,executions:details});\n  }\n}\nassert.equal(executions,16); assert.equal(noInputControls,8);\nconsole.log(stringify({kind:'offline_saved_attempt02_selected_receipt_crosscheck',artifactSha256:sha(raw),originalFailureSha256:sha(failedRaw),originalHashes,swapSelector,executionsVerified:executions,noInputControlsVerified:noInputControls,traceAndTransactionBound:true,sourceBound:true,allTokenBalanceDeltasRecomputed:true,allPoolOutputAndActorInputCallsMatched:true,nativeInventoryUnchanged:true,results:outputs,naturalProductionReference:'unmet/missing-valuation; spliced amountIn only',originalPreCallParity:'not verified; historical input at N-end differs by -29 units',newRpcCalls:0,newEvmTrials:0}));\n",
+      "stdout_sha256": "f3ed8ec78ccd590188579a4c1004d1492fd6e70e42ead2ef1ad520c249d593b7",
+      "stdout_bytes": 8151,
+      "stdout_encoding": "JSON.stringify(result, null, 2) + newline",
+      "result": {
+        "kind": "offline_saved_attempt02_selected_receipt_crosscheck",
+        "artifactSha256": "cdbb1f96bf77b1b98e40ca81dc39134c20526231def5b34d1d4038569bab660c",
+        "originalFailureSha256": "974469af837c659a8bf5eda08cbbc1a7587ceaab15f68a32dfb966b98137b770",
+        "originalHashes": {
+          "receipt": "08bafc3abac033bc91f838287d92a3f1740d786033d1df2cba9d1ac0ab216613",
+          "trace": "e92f8101b4f20c6ce4698f030f1cac691cc740f6b74849555eb46e56eaca2d34"
+        },
+        "swapSelector": "0x24b31a0c",
+        "executionsVerified": 16,
+        "noInputControlsVerified": 8,
+        "traceAndTransactionBound": true,
+        "sourceBound": true,
+        "allTokenBalanceDeltasRecomputed": true,
+        "allPoolOutputAndActorInputCallsMatched": true,
+        "nativeInventoryUnchanged": true,
+        "results": [
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "label": "spliced-production-input-at-N",
+            "amountIn": "5135191",
+            "amountOut": "5135529",
+            "originalTxSignedDelta": null,
+            "executions": [
+              {
+                "encoding": "quoted",
+                "inventoryControl": false,
+                "debit": "-5135191",
+                "credit": "5135529",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": null
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": false,
+                "debit": "-5135191",
+                "credit": "5135529",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": null
+              },
+              {
+                "encoding": "quoted",
+                "inventoryControl": true,
+                "debit": "-5135191",
+                "credit": "5135529",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": true
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": true,
+                "debit": "-5135191",
+                "credit": "5135529",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": true
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "label": "historical-input-at-N",
+            "amountIn": "1340362",
+            "amountOut": "1340490",
+            "originalTxSignedDelta": "-29",
+            "executions": [
+              {
+                "encoding": "quoted",
+                "inventoryControl": false,
+                "debit": "-1340362",
+                "credit": "1340490",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": null
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": false,
+                "debit": "-1340362",
+                "credit": "1340490",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": null
+              },
+              {
+                "encoding": "quoted",
+                "inventoryControl": true,
+                "debit": "-1340362",
+                "credit": "1340490",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": true
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": true,
+                "debit": "-1340362",
+                "credit": "1340490",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": true
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "label": "spliced-production-input-at-N",
+            "amountIn": "5137921",
+            "amountOut": "5136341",
+            "originalTxSignedDelta": null,
+            "executions": [
+              {
+                "encoding": "quoted",
+                "inventoryControl": false,
+                "debit": "-5137921",
+                "credit": "5136341",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": null
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": false,
+                "debit": "-5137921",
+                "credit": "5136341",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": null
+              },
+              {
+                "encoding": "quoted",
+                "inventoryControl": true,
+                "debit": "-5137921",
+                "credit": "5136341",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": true
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": true,
+                "debit": "-5137921",
+                "credit": "5136341",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": true
+              }
+            ]
+          },
+          {
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "label": "twice-spliced-production-input-at-N",
+            "amountIn": "10275842",
+            "amountOut": "10272266",
+            "originalTxSignedDelta": null,
+            "executions": [
+              {
+                "encoding": "quoted",
+                "inventoryControl": false,
+                "debit": "-10275842",
+                "credit": "10272266",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": null
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": false,
+                "debit": "-10275842",
+                "credit": "10272266",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": null
+              },
+              {
+                "encoding": "quoted",
+                "inventoryControl": true,
+                "debit": "-10275842",
+                "credit": "10272266",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": true
+              },
+              {
+                "encoding": "runtime",
+                "inventoryControl": true,
+                "debit": "-10275842",
+                "credit": "10272266",
+                "outputPath": [
+                  0,
+                  0
+                ],
+                "inputPath": [
+                  0,
+                  2,
+                  0
+                ],
+                "nativeUnchanged": true,
+                "noInputReverted": true
+              }
+            ]
+          }
+        ],
+        "naturalProductionReference": "unmet/missing-valuation; spliced amountIn only",
+        "originalPreCallParity": "not verified; historical input at N-end differs by -29 units",
+        "newRpcCalls": 0,
+        "newEvmTrials": 0
+      },
+      "scope": "Recomputed saved pre/post actor token balances at saved slot proofs; checked all sixteen execution debits/credits, pool-output and actor-input successful transfer paths/amounts, transaction/trace/source agreement, unchanged native inventory, and eight same-calldata no-input reverts. No fresh state/slot proof/bytecode execution, full donor provenance, or RPC recount."
+    },
+    "natural_target_valuation": "unmet/missing-valuation; only authorized donor amountIn was spliced",
+    "original_pre_call_parity": "unverified; N-end historical amount quote/received=1340490 versus landed=1340519, signed delta -29",
+    "reverse_direction_original_tx": "not claimed; opposite production direction is not an original TX leg",
+    "representative_performance": "not verified; diagnostic wall time is not performance acceptance"
+  },
+  "failures_not_reclassified": [
+    {
+      "kind": "author_shell_launch",
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber2-dual-run-attempt02.log",
+      "exit_code": 127,
+      "cause": "qnode typo before runner start",
+      "source": "user report; log not independently inspected",
+      "protocol_failure": false,
+      "evm_trial": false,
+      "successful_run_log": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/kyber2-dual-run-attempt02-start02.log"
+    },
+    {
+      "kind": "reviewer_audit_access",
+      "exit_code": 1,
+      "cause": "mev user EACCES on root-readable saved audit artifact; no observer checks executed",
+      "stderr_sha256": "97714710ea9cda7f846db824ca343946597d5a2269ccae47b2e057e17da24541",
+      "protocol_failure": false,
+      "evm_trial": false,
+      "resolution": "same offline read-only probe as root"
+    },
+    {
+      "kind": "reviewer_expected_hash_typo",
+      "exit_code": 1,
+      "cause": "incorrectly transcribed pre-observer hash; actual file hash was correct",
+      "stderr_sha256": "f4dfb6eca7dbbd101664d616bdac5ead06c9803b8d59f1c6954b7f2454c50548",
+      "protocol_failure": false,
+      "evm_trial": false,
+      "resolution": "corrected expected hash; final pinned probe exit0"
+    },
+    {
+      "kind": "reviewer_local_diagnostic_launch",
+      "exit_code": 1,
+      "cause": "invalid shell quoting of inline Node diagnostic; SyntaxError before evidence read",
+      "protocol_failure": false,
+      "evm_trial": false,
+      "resolution": "quoted heredoc; local offline verification exit0"
+    }
+  ],
+  "author_reported_not_independently_repeated": {
+    "production_build_live": "passed (tsc --noEmit), per user",
+    "evidence_plus_dual_offline_tests": "116/116 passed, per user",
+    "owned_port_18631": "free, per user; not independently probed",
+    "candidate_files_after_latest_user_update": "five files hash-identical, per user"
+  },
+  "excluded_and_unverified": [
+    "No reviewer RPC, live, performance, build, dual runner, EVM execution, or broadcast.",
+    "No .env, RPC configuration file, private key, or signing material read.",
+    "No production Family/central changes, address seeding, deployment, code commit, or process control by reviewer.",
+    "No natural USDC/USDT-to-WETH valuation closure or original pre-call output parity.",
+    "No fresh route-pinned Adapter Replay, family_local merge-ready, final production sim/EV, production-gap-fixed, or full-system claim.",
+    "No broad audit of older unrelated dirty worktree changes or all eight added samples' historical executions.",
+    "Separate Kyber3 N26005915 event-count2 case is explicitly outside this round2 candidate review; no adjudication or inspection.",
+    "Formal tooling-defect closure awaits main's actual codify_commit; candidate review itself is complete."
+  ],
+  "skill_scope": "Family adaptation acceptance evidence boundaries applied: reuse immutable saved evidence, distinguish offline re-observation from fresh EVM, and preserve natural-valuation/original-parity/performance limitations.",
+  "actions": {
+    "local_files_created": [
+      "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/review-round2-final.json"
+    ],
+    "existing_files_modified": [],
+    "cloud_files_modified": [],
+    "source_files_modified": [],
+    "reviewer_new_rpc_calls": 0,
+    "reviewer_new_evm_trials": 0
+  }
+}

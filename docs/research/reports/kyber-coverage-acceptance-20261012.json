@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "328de492b86a0c0eab12f11b0f5ebfea1d9b27c7",
+  "implementationCommit": "af07bb0ad3f20f85140591df01b98e87231cbba1",
+  "scope": "Acceptance-only Kyber sample coverage and original swap-output attribution; no production Family, math, admission, scheduling, default or gas-policy change.",
+  "verdict": "Kyber second handoff instance: natural strict/Graph/raw and same-state quote/quoted/runtime pass using explicitly spliced production input amounts. Natural effective valuation, full opportunity and performance remain unverified.",
+  "productionSourceTreeSha256": "c07c2310160ef72f154587440040b37a6009d5bfa791c47bdb49232c0e23f9fa",
+  "sourceCaveat": "Historical receipts bind the actual cloud production tree including preserved peer changes. This scoped commit contains only the five reviewed acceptance/registration files.",
+  "anchor": {
+    "tx": "0x10b81a77dc9949d9ab1581a341d539de2ab0fbeae827b2a87d9ea6033c9b7549",
+    "block": 26030898,
+    "blockHash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+    "pool": "0x952ffc4c47d66b454a8181f5c68b6248e18b66ec",
+    "state": "N-end state and N execution environment; original transaction pre-call state not restored"
+  },
+  "evidenceRoot": "logs/four-family-coverage-20261012.zHKuWX",
+  "naturalIntegration": {
+    "ready": "kyber2-ready-attempt01/ready.json",
+    "readySha256": "8de1532aa62ebdd401edda85f62fce70da0dceb3ce8be98ea45c2a8d49ae4321",
+    "graphHash": "10f4ad349382b7ef358ca4248d603778d9eefe18c8d53cf92b3a5f7f3656cc09",
+    "familyDefinitionHash": "d5ab0e373075039393ccc6ae6feee1b2d3f6e3e3bdd8f607c3774f9d7cb69c0e",
+    "strictInstances": 1,
+    "graphDirections": 2,
+    "rawMidRows": 2,
+    "naturalEffectiveQuotedRows": 0,
+    "naturalEffectiveReason": "Both USDC/USDT directions lack a WETH valuation entry in this family-only graph.",
+    "prices": "kyber2-ready-attempt01/prices/prices.json",
+    "pricesSha256": "24a5c7188f7483945c0533a100fd5623414da2827cbdb5ff6adeb86e321aa7f0",
+    "priceInputSha256": "02f26d6f646148426ee991b899dcd4004c8de0a01e942ab4dd06f6cc4a33b815",
+    "readyRebuiltAfterObserverCorrection": false
+  },
+  "borrowedInputs": {
+    "inputOnly": true,
+    "selection": "First quoted saved row per input token after deterministic edge-id ordering; no target output selected or copied.",
+    "donor": "logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+    "donorSha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378",
+    "declarationSha256": "6536fa18b3c2c18accc342a3941c907825914e4e531887c76a51916b2f968f8f",
+    "backgroundEdges": 28040,
+    "sourceCommit": "2a2243bdf009ac1951644794ed38cb9e98d138e4",
+    "minCapitalFraction": 0.001,
+    "referenceWethInput": "2000000000000000",
+    "rows": [
+      {"token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "amountIn": "5135191", "quotedAt": 26146968, "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417", "generation": 1, "freshness": "carried"},
+      {"token": "0xdac17f958d2ee523a2206206994597c13d831ec7", "amountIn": "5137921", "quotedAt": 26146969, "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500", "generation": 2, "freshness": "fresh"}
+    ],
+    "limitations": "Saved historical production-stage rows, not a current live run. Does not supply target identity, admission, output or natural target valuation. Exact donor edge IDs and resolved configuration are preserved in the dual artifact. All target quotes and executions stay at N=26030898."
+  },
+  "dualExecution": {
+    "artifact": "kyber2-dual-attempt02.json",
+    "sha256": "cdbb1f96bf77b1b98e40ca81dc39134c20526231def5b34d1d4038569bab660c",
+    "result": "pass-with-spliced-reference",
+    "directions": 2,
+    "amountTrials": 4,
+    "executionsPassed": 16,
+    "quotedExecutions": 8,
+    "runtimeExecutions": 8,
+    "inventoryControlExecutions": 8,
+    "missingInputRejectionControls": 8,
+    "allQuoteToReceivedDeltas": "0",
+    "nativeInventoryDeltaEachExecution": "0",
+    "construction": {"exactCalls": 0, "quotedCalls": 0, "rpcCalls": 0, "quotedFallback": false},
+    "sampleRows": [
+      {"direction": "USDC to USDT", "inputSource": "spliced-production-input", "amountIn": "5135191", "amountOut": "5135529"},
+      {"direction": "USDC to USDT", "inputSource": "original input at N-end", "amountIn": "1340362", "amountOut": "1340490"},
+      {"direction": "USDT to USDC", "inputSource": "spliced-production-input", "amountIn": "5137921", "amountOut": "5136341"},
+      {"direction": "USDT to USDC", "inputSource": "twice-spliced-input", "amountIn": "10275842", "amountOut": "10272266"}
+    ],
+    "originalReceiptAmountOut": "1340519",
+    "originalInputAtNEndDelta": "-29",
+    "originalComparison": "Receipt is authenticated, not pre-call replay. N-end result must not be presented as original transaction output parity.",
+    "executorCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "harnessSha256": "7bedee2d3a531a21de32aed370c70b1e90fbba8957ce3627b5d130d85729e831",
+    "observerSha256": "3fd31c3aa92722626e620a1b33dc6fdd1106551d6bee8636bf62c818f165ee6d",
+    "directReadCalls": 126,
+    "costCaveat": "Excludes local fork upstream reads; not total RPC/CU or a stage performance result.",
+    "cleanup": "owned fork exited; port 18631 verified free"
+  },
+  "checks": {
+    "oldObserverNewRegression": {"tests": 36, "passed": 21, "failed": 15, "reason": "Same-value foreign payment creates false ambiguity in each Kyber/Algebra swap fixture."},
+    "observerAndProductionDualContracts": {"tests": 116, "passed": 116},
+    "threeFamilyEvidenceContracts": {"tests": 49, "passed": 49},
+    "toolIndexContracts": {"tests": 19, "passed": 19},
+    "currentProductionBuild": "build:live passed; tsc --noEmit, no runtime deployment",
+    "generatedToolCatalog": "check passed",
+    "diffCheck": "passed"
+  },
+  "reconciliation": [
+    {"query": "kyber,historical,ready", "manifest": "kyber2-tools.json", "sha256": "21b4a64924953bd88a7816d56bf271c5acd1cac06655f06b7ddee5d0136060d5", "tool": "listener:searcher:kyberswap-elastic-historical-ready", "exit": 0},
+    {"query": "kyber,historical,dual", "manifest": "kyber2-dual-tools-attempt02.json", "sha256": "a8d0293badf95dbdfdae7c7ca56b46695206eb901d528732f17098d1e4ec264c", "tool": "listener:searcher:kyber-yb-compound-dual-historical-fork", "exit": 0}
+  ],
+  "toolingDefect": {"learningCase": "tooldef-20261012-swap-output-attribution", "status": "codified", "codifyCommit": "af07bb0ad3f20f85140591df01b98e87231cbba1"},
+  "independentReview": {"round": 2, "maximumRounds": 3, "artifact": "kyber-coverage-review-20261012.json", "sha256": "c164956d1176c2147d65bc5494fde1e367f68327c105ca7dd623358d5e5078fc", "status": "no_blocking_findings_in_agreed_candidate_scope", "checks": "Independent 49-test suite, saved original-artifact attribution, 23 adversarial mutations, 16 saved executions and eight missing-input controls; no additional RPC or live."},
+  "additionalSampleNotAccepted": {
+    "tx": "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c",
+    "block": 26005915,
+    "blockHash": "0xf4caf43faa7a0c6fe62b6e72b9c4a7e606f15574f5227617dfff6836b7678c3c",
+    "pool": "0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc",
+    "ready": "kyber3-ready-attempt01/ready.json",
+    "readySha256": "3392db3017e065d31f98c2a2b3100d6c0339eaa59a2cab18a9bfe5c82dcb22e9",
+    "prices": "kyber3-ready-attempt01/prices/prices.json",
+    "pricesSha256": "abdf77d621d32e414f0440f2025f6278fc04ddcd7d05702206cb033fd6d71bd7",
+    "graphHash": "6a163f68fbefd9f80738a48cc77384c86571180c2b5bb7a864156075b4ab67e5",
+    "graphDirections": 2,
+    "rawMidRows": 2,
+    "dual": "kyber3-dual-attempt01.json",
+    "dualSha256": "c918884af4c7ff84beb89f5cf4242abb2c7d3ef82d26487ac90957b0fff05e58",
+    "outcome": "Two target Swap events (0x118 and 0x121) in the same transaction; the existing one-original-leg observer rejects ambiguous original event count before Exact or execution. Do not select one arbitrarily or call this a pool revert. Separate multi-visit observation adjudication remains open.",
+    "exactCalls": 0,
+    "executionTrials": 0,
+    "performance": "not run"
+  },
+  "preservedFailures": [
+    {"artifact": "kyber2-dual-attempt01.json", "sha256": "974469af837c659a8bf5eda08cbbc1a7587ceaab15f68a32dfb966b98137b770", "kind": "observer false ambiguity before any Exact/quoted/trial execution", "directReadCalls": 18},
+    {"artifact": "kyber2-dual-run-attempt02.log", "kind": "shell launch typo, exit 127 before runner; no EVM attempt. Successful launch recorded separately in kyber2-dual-run-attempt02-start02.log."}
+  ],
+  "remaining": [
+    "Remaining handoff instances/variants and other goal phases; one new passing pool does not complete the four-family goal.",
+    "Natural target effective valuation; input splice is explicitly not a natural valuation pass.",
+    "Original transaction pre-call output reproduction; natural opportunity enumeration, final sim and EV.",
+    "Formal adapter_fixed/adapter_merge_ready/production_gap_fixed judgments.",
+    "All stage-4 local and representative performance acceptance; not run here."
+  ],
+  "configurationTablePatch": "docs/research/reports/kyber-coverage-impl-table-20261012.patch",
+  "configurationTableUpdate": {"mode": "one additive row in the original external main table; all previous bytes preserved", "beforeSha256": "d6f0e90cd60b3fd228a20c08f5f8b151692d96bc7baa1c1f75e5e7caee7c0638", "afterSha256": "fc5c99f46639b66dae730cd4c9028fa23afd1b196a74758888dfa90236d25350"},
+  "safety": {"signing": false, "broadcast": false, "liveStarted": false, "deployment": false, "defaultEnablementChanged": false, "protocolOverrides": false, "originalReadyPreserved": true, "peerProcessesUntouched": true}
+}
