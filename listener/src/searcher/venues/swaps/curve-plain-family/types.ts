@@ -16,6 +16,7 @@ export interface CurvePlainDirection {
   readonly tokenOut: string;
   readonly amountIn: bigint;
   readonly amountOut: bigint;
+  readonly transferQuote?: CurveNativeTransferQuote;
   readonly executionMode: CurvePlainMode;
 }
 export interface CurvePlainBinding {
@@ -59,7 +60,16 @@ export interface CurvePlainPricingSnapshot {
   readonly balanceOut: bigint;
   readonly amplification: bigint;
   readonly fee: bigint;
+  readonly transferQuote?: CurveNativeTransferQuote;
 }
+export type CurveNativeTransferQuote = {
+  readonly model: "steth-transfer-shares";
+  readonly nominalAmountOut: bigint;
+  readonly totalShares: bigint;
+  readonly totalPooledEther: bigint;
+  readonly transferredShares: bigint;
+  readonly amountOut: bigint;
+};
 export interface CurvePlainExactEvidence {
   readonly kind: "curve-plain-get-dy";
   readonly quoteAbi: CurveIndexAbi;
@@ -68,4 +78,5 @@ export interface CurvePlainExactEvidence {
   readonly routeKey: CurvePlainRoute["routeKey"];
   readonly amountIn: bigint;
   readonly amountOut: bigint;
+  readonly transferQuote?: CurveNativeTransferQuote;
 }

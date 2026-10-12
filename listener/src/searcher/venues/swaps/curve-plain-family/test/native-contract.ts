@@ -13,6 +13,8 @@ import { CURVE_PLAIN_FAMILY_ID, CURVE_PLAIN_LINEAGE } from "../manifest.js";
 import { instanceKey } from "../../../adapter-family-identifiers.js";
 import { ERC20, EXECUTION, META, POOL, routeToken, isNativeCoin } from "../codec.js";
 import { nativeExchangeProgram } from "../native.js";
+import { nativeStEthRateRequests, projectNativeTransferQuote, usesNativeStEthTransfer } from "../native-transfer-quote.js";
+import { curveRefreshAddresses } from "../refresh-scope.js";
 import type { CurvePlainDescriptor } from "../types.js";
 import type { AdapterRequestResult } from "../../../adapter-request-program.js";
 import { declareRequestProgram } from "../../../adapter-request-program.js";
@@ -106,8 +108,8 @@ const d: CurvePlainDescriptor = { familyId: CURVE_PLAIN_FAMILY_ID, lineageId: CU
 
 // Emitter interpreter only. Same-N EVM execution is a separate acceptance.
 function run(i: number, amount: bigint, options: { short?: boolean; extraDebit?: boolean; nativeLoss?: boolean;
-  noCleanup?: boolean; insufficient?: boolean; minimum?: bigint; unspent?: bigint } = {}) {
-  const inventory = 12345n, receipt = amount * 2n - (options.short ? 1n : 0n);
+  noCleanup?: boolean; insufficient?: boolean; minimum?: bigint; unspent?: bigint; actualReceipt?: bigint } = {}) {
+  const inventory = 12345n, receipt = options.actualReceipt ?? amount * 2n - (options.short ? 1n : 0n);
   const balances = new Map([[ADDR.WETH.toLowerCase(), inventory + (i === 0 ? amount : 0n)],
     [token, inventory + (i === 1 ? amount : 0n)]]);
   if (options.insufficient) balances.set(routeToken(coins[i]).toLowerCase(), amount - 1n);
@@ -160,13 +162,14 @@ function run(i: number, amount: bigint, options: { short?: boolean; extraDebit?:
 }
 
 test("native direct-coin runtime preserves inventories and transfers only current input/receipt", () => {
-  for (const i of [0, 1]) for (const amount of [19n, 2_000_000_000_000_000n, 10n ** 18n]) run(i, amount);
+  for (const i of [0, 1]) for (const amount of [1n, 19n, 2_000_000_000_000_000n, 10n ** 18n]) run(i, amount);
   for (const i of [0, 1]) {
     assert.throws(() => run(i, 19n, { short: true }), /checked uint256/);
     assert.throws(() => run(i, 19n, { insufficient: true }), /checked uint256/);
     assert.throws(() => run(i, 19n, { nativeLoss: true }), /mismatch|checked uint256/);
   }
   assert.throws(() => run(1, 19n, { extraDebit: true }), /checked uint256/);
+  run(1, 2n, { unspent: 1n });
   run(1, 19n, { unspent: 1n });
   assert.throws(() => run(1, 19n, { unspent: 2n }), /checked uint256/);
 });
@@ -190,8 +193,9 @@ test("native dual construction uses production Family routes, source quotes and 
   }
 });
 
-function nativeIdentity(corrupt?: "authority" | "output" | "output2" | "input" | "input2" | "overdebit" | "native" | "unknown",
-  answers?: Map<string, AdapterRequestResult>, executionRoundingRawUnits = 0n) {
+function nativeIdentity(corrupt?: "authority" | "output" | "output2" | "extra-output1" | "input" | "input2" | "overdebit" | "native" | "unknown",
+  answers?: Map<string, AdapterRequestResult>, executionRoundingRawUnits = 0n, outputToken = token) {
+  const identityCoins = [native, outputToken];
   const variant = plugin.identity.variants[0], candidate = { candidateKind: "curve-plain-pool" as const, pool, hintedI: null, hintedJ: null };
   let evidence: any;
   const ok = (id: string, data: string): Extract<AdapterRequestResult, { ok: true }> => ({ id, ok: true, data, source,
@@ -216,20 +220,24 @@ function nativeIdentity(corrupt?: "authority" | "output" | "output2" | "input" |
         return { ...ok(r.id, "0x"), effects: { tokenDeltas: [
           { token: q.tokenIn, account: actor, delta: -q.amountIn +
             (corrupt === "input" ? 1n : corrupt === "input2" ? 2n : corrupt === "overdebit" ? -1n : 0n) },
-          { token: q.tokenOut, account: actor, delta: q.amountOut - (corrupt === "output" ? 1n : corrupt === "output2" ? 2n : 0n) }],
+          { token: q.tokenOut, account: actor, delta: (q.tokenOut.toLowerCase() === ADDR.STETH.toLowerCase() ? 11n : q.amountOut)
+            - (corrupt === "output" ? 1n : corrupt === "output2" ? 2n : corrupt === "extra-output1" ? -1n : 0n) }],
           nativeDeltas: [{ account: actor, delta: corrupt === "native" ? 1n : 0n }], logs: [] } };
       }
       if (r.kind === "get-code") return ok(r.id, "0x6000");
       if (r.kind !== "eth-call") throw new Error("unexpected request");
       if (r.id === "registry-handlers") return ok(r.id, META.encodeFunctionResult("get_registry_handlers_from_pool", [pad([handler], 10)]));
-      if (r.id === "registry-coins") return ok(r.id, META.encodeFunctionResult("get_coins", [pad(coins, 8)]));
+      if (r.id === "registry-coins") return ok(r.id, META.encodeFunctionResult("get_coins", [pad(identityCoins, 8)]));
       if (r.id === "amplification") return ok(r.id, word(100n));
       if (r.id === "fee") return ok(r.id, word(1_000_000n));
       if (r.id.startsWith("coin-int128") || r.id.startsWith("balance-int128")) return { ...ok(r.id, "0x"), completion: "reverted-as-declared" };
-      if (r.id.startsWith("coin:")) return ok(r.id, POOL.encodeFunctionResult("coins", [coins[Number(r.id.split(":")[1])]]));
+      if (r.id.startsWith("coin:")) return ok(r.id, POOL.encodeFunctionResult("coins", [identityCoins[Number(r.id.split(":")[1])]]));
       if (r.id.startsWith("balance:")) return ok(r.id, word(10n ** 24n));
       if (r.data === ERC20.encodeFunctionData("decimals")) return ok(r.id, word(18n));
-      if (r.id.startsWith("quote:")) return ok(r.id, word(r.id.endsWith(":0") ? 99n : 990n));
+      if (r.id === "native-steth-total-shares") return ok(r.id, word(3n));
+      if (r.id === "native-steth-total-pooled") return ok(r.id, word(5n));
+      if (r.id.startsWith("quote:")) return ok(r.id, word(outputToken.toLowerCase() === ADDR.STETH.toLowerCase()
+        ? (r.id.endsWith(":0") ? 13n : 130n) : (r.id.endsWith(":0") ? 99n : 990n)));
       throw new Error(r.id);
     });
     for (const result of results) answers?.set(result.id, result);
@@ -250,6 +258,117 @@ test("native identity binds real coins, symbolic actor, WETH graph assets and ex
   for (const corrupt of ["output", "input"] as const) assert.equal(nativeIdentity(corrupt, undefined, 1n).status, "verified");
   for (const corrupt of ["output2", "input2", "overdebit", "native"] as const)
     assert.equal(nativeIdentity(corrupt, undefined, 1n).status, "retryable");
+});
+
+function transferRates(totalShares = 3n, totalPooledEther = 5n): AdapterRequestResult[] {
+  return nativeStEthRateRequests().map(request => ({ id: request.id, ok: true as const,
+    data: word(request.id.endsWith("shares") ? totalShares : totalPooledEther), source,
+    completion: "returned" as const, provenance: { kind: "fixture", fingerprint: "native-transfer-rate" } }));
+}
+test("native stETH quote models actual shares, not a fixed one/two-unit discount", () => {
+  const stethCoins = [native, ADDR.STETH];
+  assert(usesNativeStEthTransfer(stethCoins, 0, 1));
+  assert(!usesNativeStEthTransfer(stethCoins, 1, 0));
+  assert(!usesNativeStEthTransfer([ADDR.WETH, ADDR.STETH], 0, 1));
+  assert(!usesNativeStEthTransfer(coins, 0, 1));
+  for (const [s, t] of [[3n, 5n], [11n, 13n], [5n, 3n]]) for (const nominal of [0n, 1n, 2n, 13n, 83n]) {
+    const q = projectNativeTransferQuote(stethCoins, 0, 1, nominal, source, transferRates(s, t));
+    const movedShares = nominal * s / t;
+    assert.equal(q.amountOut, movedShares * t / s);
+    assert.equal(q.transferQuote?.nominalAmountOut, nominal);
+    // Difference of rounded balances with arbitrary old shares is q or q+1.
+    for (let oldShares = 0n; oldShares < 30n; oldShares++) {
+      const received = (oldShares + movedShares) * t / s - oldShares * t / s;
+      assert(received === q.amountOut || received === q.amountOut + 1n);
+    }
+  }
+  const q = projectNativeTransferQuote(stethCoins, 0, 1, 13n, source, transferRates());
+  assert.equal(q.amountOut, 11n); // old raw-get_dy plus tolerance=1 must fail this case.
+  assert.deepEqual(projectNativeTransferQuote(coins, 0, 1, 13n, source, []), { amountOut: 13n });
+  for (const rates of [[], transferRates(0n), transferRates(3n, 0n),
+    transferRates().map(r => ({ ...r, source: { ...source, generation: 2 } })),
+    transferRates().map(r => ({ ...r, data: "0x" })),
+    transferRates().map(r => ({ ...r, completion: "reverted-as-declared" as const }))]) {
+    assert.throws(() => projectNativeTransferQuote(stethCoins, 0, 1, 13n, source, rates));
+  }
+});
+test("native stETH identity uses net quote but never tolerates an extra two-unit receipt shortfall", () => {
+  const result = nativeIdentity(undefined, undefined, 1n, ADDR.STETH);
+  assert.equal(result.status, "verified");
+  if (result.status !== "verified") throw Error("no native fixture identity");
+  const forward = result.identity.facts.directions.find(r => r.i === 0)!;
+  assert.equal(forward.amountOut, 11n);
+  assert.equal(forward.transferQuote?.nominalAmountOut, 13n);
+  assert.equal(nativeIdentity("output2", undefined, 1n, ADDR.STETH).status, "retryable");
+  assert.equal(nativeIdentity("input2", undefined, 1n, ADDR.STETH).status, "retryable");
+  assert.equal(nativeIdentity("overdebit", undefined, 1n, ADDR.STETH).status, "retryable");
+  assert.equal(nativeIdentity("extra-output1", undefined, 0n, ADDR.STETH).status, "retryable");
+  assert.equal(nativeIdentity("extra-output1", undefined, 1n, ADDR.STETH).status, "verified");
+});
+test("net native quoted minimum cannot be paid from old output inventory", () => {
+  for (const tolerance of [0n, 1n]) {
+    // stETH nominal 13 transfers 7 shares at 5/3, giving 11 or 12 raw units.
+    const net = projectNativeTransferQuote([native, ADDR.STETH], 0, 1, 13n, source, transferRates()).amountOut;
+    for (const actualReceipt of [net, net + 1n]) run(0, 19n, { minimum: net - tolerance, actualReceipt });
+    assert.throws(() => run(0, 19n, { minimum: net - tolerance, actualReceipt: net - tolerance - 1n }), /checked uint256/);
+    assert.throws(() => run(0, 19n, { minimum: net - tolerance, actualReceipt: 0n }), /checked uint256/);
+  }
+  assert.throws(() => run(1, 1n, { unspent: 1n }), /checked uint256/);
+});
+test("native stETH production raw and Exact share source-bound transfer math without extra rounds", () => {
+  const descriptor: CurvePlainDescriptor = { ...d, binding: { ...d.binding, coins: [native, ADDR.STETH] },
+    directions: d.directions.map(r => ({ ...r, tokenIn: r.i === 0 ? ADDR.WETH : ADDR.STETH,
+      tokenOut: r.i === 0 ? ADDR.STETH : ADDR.WETH })) };
+  const [route, reverse] = plugin.routes.project({ descriptor });
+  assert.equal(route.i, 0);
+  const input = { descriptor, route, source, amountIn: 2_000_000_000_000_000n, executor: actor, runtimeEvidence: [] };
+  const method = plugin.exact.methods(input)[1]; assert(method.kind === "request-program");
+  const requests = method.program.buildRequests(input);
+  const quotedInput = requests.find(r => r.id === "exact-get-dy")!; assert(quotedInput.kind === "eth-call");
+  assert.equal(POOL.decodeFunctionData("get_dy", quotedInput.data)[2], input.amountIn);
+  assert.equal(requests.filter(r => r.id.startsWith("native-steth-")).length, 2);
+  assert(!method.program.buildDependentProgram);
+  const answer = (request: { id: string }): AdapterRequestResult => transferRates().find(r => r.id === request.id) ?? {
+    id: request.id, ok: true, source, completion: "returned", provenance: { kind: "fixture", fingerprint: "quote" },
+    data: word(request.id.includes("balance") ? 10n ** 24n : request.id === "current-A" ? 100n :
+      request.id === "current-fee" ? 1_000_000n : 13n),
+  };
+  const exact = method.program.decode({ programInput: input, initialResults: requests.map(answer), dependentEvidence: [] });
+  assert.equal(exact.amountOut, 11n); assert.equal(exact.evidence.transferQuote?.nominalAmountOut, 13n);
+  assert.equal(exact.evidence.amountIn, input.amountIn);
+  assert.deepEqual(method.program.buildRequests({ ...input, amountIn: 0n }), []);
+  assert(!method.program.buildRequests({ ...input, route: reverse }).some(r => r.id.startsWith("native-steth-")));
+  const draft = plugin.pricing.compileDraft({ descriptor, routes: [route], stateKey: plugin.pricing.stateKey(route) });
+  const pd = plugin.pricing.finalizePricingDescriptor({ draft, sharedBindings: [] });
+  const current = { descriptor: pd, routes: [route], source };
+  const initialResults = plugin.pricing.current.buildRequests(current).map(answer);
+  const dependent = plugin.pricing.current.buildDependentProgram!({ current, completedRound: 0, initialResults, priorEvidence: [] })!;
+  assert.deepEqual(dependent.requests.map(r => r.id), ["current-get-dy"]);
+  const snapshot = plugin.pricing.current.decodeSnapshot({ descriptor: pd, initialResults,
+    dependentEvidence: [dependent.decode(dependent.requests.map(answer))] });
+  assert.equal(snapshot.amountOut, exact.amountOut);
+  assert.equal(snapshot.transferQuote?.nominalAmountOut, 13n);
+  const mid = plugin.pricing.current.deriveMids({ descriptor: pd, routes: [route], snapshot }).get(route.routeKey)!;
+  assert.equal(mid.mid, Number(snapshot.amountOut) / Number(snapshot.amountIn));
+  assert(curveRefreshAddresses(descriptor).some(a => a.toLowerCase() === ADDR.STETH.toLowerCase()));
+  assert.deepEqual(plugin.pricing.mutation.affectedStateKeys({ descriptor: pd, routes: [route],
+    observation: { kind: "call", target: ADDR.STETH, source, data: "0x" } }), [route.routeKey]);
+  assert.deepEqual(plugin.pricing.mutation.affectedStateKeys({ descriptor: pd, routes: [route],
+    observation: { kind: "call", target: handler, source, data: "0x" } }), []);
+  // Even a known storage-only Curve implementation gains the output-token
+  // dependency; changing that token alone is not an unrelated observation.
+  const impl = "0xc629a01ec23ab04e1050500a3717a2a5c0701497";
+  const scoped = { ...descriptor, binding: { ...descriptor.binding,
+    codeHash: ethers.keccak256(`0x363d3d373d3d3d363d73${impl.slice(2)}5af43d82803e903d91602b57fd5bf3`) } };
+  const scopedRoute = plugin.routes.project({ descriptor: scoped })[0];
+  const scopedDraft = plugin.pricing.compileDraft({ descriptor: scoped, routes: [scopedRoute], stateKey: plugin.pricing.stateKey(scopedRoute) });
+  const scopedPricing = plugin.pricing.finalizePricingDescriptor({ draft: scopedDraft, sharedBindings: [] });
+  const dependencies = plugin.pricing.dependencies({ descriptor: scopedPricing });
+  assert(dependencies.some(a => a.toLowerCase() === ADDR.STETH.toLowerCase()));
+  const index = plugin.pricing.mutation.compile!({ entries: [{ descriptor: scopedPricing, routes: [scopedRoute], dependencies }] });
+  for (const target of [ADDR.STETH, pool, impl]) assert.deepEqual(index.affectedStateKeys({
+    observation: { kind: "call", target, source, data: "0x" } }), [scopedRoute.routeKey]);
+  assert.deepEqual(index.affectedStateKeys({ observation: { kind: "call", target: handler, source, data: "0x" } }), []);
 });
 
 test("mixed native pool declares effects for executable directions, not all pool coins", () => {

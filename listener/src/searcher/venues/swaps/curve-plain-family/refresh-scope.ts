@@ -2,6 +2,8 @@ import { Interface, keccak256 } from "ethers";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
 import { assertSource, call, returned, uint } from "./codec.js";
 import type { CurvePlainDescriptor } from "./types.js";
+import { ADDR } from "../../../../shared/constants/addresses.js";
+import { hasNativeStEthTransfer } from "./native-transfer-quote.js";
 
 interface StorageQuoteModel {
   readonly implementation: string;
@@ -51,7 +53,8 @@ function modelFor(descriptor: CurvePlainDescriptor): StorageQuoteModel | undefin
  * and immutable implementation observed; no token-behavior assumptions. */
 export function curveRefreshAddresses(descriptor: CurvePlainDescriptor): readonly string[] {
   const model = modelFor(descriptor);
-  return model ? [descriptor.pool, model.implementation] : [descriptor.pool, ...descriptor.binding.coins];
+  return model ? [descriptor.pool, model.implementation,
+    ...(hasNativeStEthTransfer(descriptor.binding.coins) ? [ADDR.STETH] : [])] : [descriptor.pool, ...descriptor.binding.coins];
 }
 
 export function curveRefreshGuardRequests(descriptor: CurvePlainDescriptor): readonly AdapterRequest[] {

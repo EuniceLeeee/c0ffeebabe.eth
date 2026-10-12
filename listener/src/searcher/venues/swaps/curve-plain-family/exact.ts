@@ -1,6 +1,7 @@
 import { localZeroExactMethod, type ExactQuoteSemantics, type ExactQuoteInput, type ExactRequestProgram } from "../../adapter-family-plugin.js";
 import { MAX_UINT, assertSource, call, quotePool, returned, uint } from "./codec.js";
 import { assertRoute } from "./routes.js";
+import { usesNativeStEthTransfer, nativeStEthRateRequests, projectNativeTransferQuote } from "./native-transfer-quote.js";
 import { curveRefreshGuardRequests, curveRefreshRequirements, validateCurveRefreshScope } from "./refresh-scope.js";
 import type { CurvePlainDescriptor, CurvePlainExactEvidence, CurvePlainRoute } from "./types.js";
 
@@ -8,9 +9,11 @@ function validate(input: ExactQuoteInput<CurvePlainDescriptor, CurvePlainRoute>)
   assertRoute(input.descriptor, input.route);
   if (input.amountIn < 0n || input.amountIn > MAX_UINT) throw new Error("curve-plain invalid uint256 amount");
 }
-function quote(input: ExactQuoteInput<CurvePlainDescriptor, CurvePlainRoute>, amountOut: bigint) {
+function quote(input: ExactQuoteInput<CurvePlainDescriptor, CurvePlainRoute>, amountOut: bigint,
+  transferQuote?: CurvePlainExactEvidence["transferQuote"]) {
   return { amountOut, evidence: { kind: "curve-plain-get-dy" as const, quoteAbi: input.route.quoteAbi, source: input.source,
-    binding: input.route.bindingRef.fingerprint, routeKey: input.route.routeKey, amountIn: input.amountIn, amountOut } };
+    binding: input.route.bindingRef.fingerprint, routeKey: input.route.routeKey, amountIn: input.amountIn, amountOut,
+    ...(transferQuote ? { transferQuote } : {}) } };
 }
 const program: ExactRequestProgram<CurvePlainDescriptor, CurvePlainRoute, CurvePlainExactEvidence> = {
   requirements: ({ descriptor }) => curveRefreshRequirements(descriptor),
@@ -18,6 +21,7 @@ const program: ExactRequestProgram<CurvePlainDescriptor, CurvePlainRoute, CurveP
     validate(input);
     return input.amountIn === 0n ? [] : [call("exact-get-dy", input.descriptor.pool,
       quotePool(input.route.quoteAbi).encodeFunctionData("get_dy", [input.route.i, input.route.j, input.amountIn])),
+      ...(usesNativeStEthTransfer(input.descriptor.binding.coins, input.route.i, input.route.j) ? nativeStEthRateRequests() : []),
       ...curveRefreshGuardRequests(input.descriptor)];
   },
   decode({ programInput, initialResults }) {
@@ -26,9 +30,10 @@ const program: ExactRequestProgram<CurvePlainDescriptor, CurvePlainRoute, CurveP
     validateCurveRefreshScope(programInput.descriptor, programInput.source, initialResults);
     const read = returned(initialResults, "exact-get-dy");
     assertSource(read.source, programInput.source);
-    const amountOut = uint(read.data);
+    const { amountOut, transferQuote } = projectNativeTransferQuote(programInput.descriptor.binding.coins,
+      programInput.route.i, programInput.route.j, uint(read.data), programInput.source, initialResults);
     if (amountOut === 0n) throw new Error("curve-plain no positive exact output");
-    return quote(programInput, amountOut);
+    return quote(programInput, amountOut, transferQuote);
   },
 };
 export const curvePlainExact = {

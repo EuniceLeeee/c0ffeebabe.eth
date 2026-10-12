@@ -1417,7 +1417,7 @@
         "familyId": "curve-plain",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "c5f27ad8c90507339d4dfa8743faca5a2d87e50e9941c174ab5e0865d42f4c27",
+        "contentHash": "248200a1d0ef909cf4e34acab68ddf778ab8fe405b2dc85aec8f67f41fea2154",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -1429,6 +1429,7 @@
           "src/searcher/venues/swaps/curve-plain-family/codec.ts",
           "src/searcher/venues/swaps/curve-plain-family/instance.ts",
           "src/searcher/venues/swaps/curve-plain-family/manifest.ts",
+          "src/searcher/venues/swaps/curve-plain-family/native-transfer-quote.ts",
           "src/searcher/venues/swaps/curve-plain-family/refresh-scope.ts",
           "src/searcher/venues/swaps/curve-plain-family/routes.ts",
           "src/shared/constants/addresses.ts"
@@ -1451,7 +1452,7 @@
         "familyId": "curve-plain",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "da16a2f2ed583ab60cc737f9e04536f564dfe199c65c69c7fe5091bf5a91e803",
+        "contentHash": "d1f6613778d935aeb45a31ab6e3946208cf6e3b528feb4a91c8b86a9509bcfa3",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -1513,7 +1514,7 @@
         "familyId": "curve-plain",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "c62b783d5d9063e7dec36cb7a823890c8c943963117a8003b6e6306211dbbf1e",
+        "contentHash": "26b279c0ca29f79af653f14c2ce57018856e1be39edcaab3309a3062eabe92ba",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -1525,6 +1526,7 @@
           "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/curve-plain-family/codec.ts",
           "src/searcher/venues/swaps/curve-plain-family/manifest.ts",
+          "src/searcher/venues/swaps/curve-plain-family/native-transfer-quote.ts",
           "src/searcher/venues/swaps/curve-plain-family/native.ts",
           "src/shared/constants/addresses.ts",
           "src/shared/executor/amount-rounding.ts",
@@ -1575,7 +1577,7 @@
         "familyId": "curve-plain",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "ba4603e34755965debdb6f91c90fcef725df3bc2842f4b1b3f8c5dca6a5dc8ae",
+        "contentHash": "d96ab7c32631b062118274baf85dce91eb1d14eb1ef951f914569d12f41dc2ed",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -1595,6 +1597,7 @@
           "src/searcher/venues/swaps/curve-plain-family/codec.ts",
           "src/searcher/venues/swaps/curve-plain-family/instance.ts",
           "src/searcher/venues/swaps/curve-plain-family/manifest.ts",
+          "src/searcher/venues/swaps/curve-plain-family/native-transfer-quote.ts",
           "src/searcher/venues/swaps/curve-plain-family/refresh-scope.ts",
           "src/searcher/venues/swaps/curve-plain-family/routes.ts",
           "src/shared/constants/addresses.ts"
@@ -14785,5 +14788,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "1e587e1819ce7e84bf58a257f84f37ba4b4e983af38b8a57db2c7bbe4d80c6e7"
+  "artifactHash": "b9375a6d30341cd4f5fd0caf6f21a6ffba7e44b3dd058ce00f8587fa231a4721"
 }

@@ -9,6 +9,7 @@ import { CURVE_METAREGISTRY, META, POOL, ERC20, GETTER_ABIS, INT_MODES, UINT_MOD
   call, executionData, getterPool, getterReadId, hasReceiver, lower, probeAmount, quotePool, result, resultSource, returned, same, uint,
   isNativeCoin, isNativeMode, routeToken } from "./codec.js";
 import { nativeExecutionProbe } from "./native.js";
+import { hasNativeStEthTransfer, nativeStEthRateRequests, projectNativeTransferQuote } from "./native-transfer-quote.js";
 import { executionInputMatches, executionOutputMatches } from "../../../../shared/executor/amount-rounding.js";
 import { CURVE_PLAIN_FAMILY_ID, CURVE_PLAIN_LINEAGE } from "./manifest.js";
 import type { CurveIndexAbi, CurvePlainBinding, CurvePlainCandidate, CurvePlainDirection, CurvePlainIdentity, CurvePlainMode } from "./types.js";
@@ -73,11 +74,11 @@ function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainC
         ]),
         executorRequest(),
       ];
-      if (prior.phase === "structure") return pairs(prior.binding.coins.length).flatMap(([i, j]) => {
+      if (prior.phase === "structure") return [...pairs(prior.binding.coins.length).flatMap(([i, j]) => {
         const amount = probeAmount(prior.binding.decimals[i], prior.balances[i]);
         return [amount, amount * 10n].map((dx, probe) =>
           call(`quote:${i}:${j}:${probe}`, prior.pool, quotePool(quoteAbi).encodeFunctionData("get_dy", [i, j, dx])));
-      });
+      }), ...(hasNativeStEthTransfer(prior.binding.coins) ? nativeStEthRateRequests() : [])];
       if (prior.phase === "quotes") return prior.quotes.flatMap(quote =>
         (isNativeCoin(prior.binding.coins[quote.i]) || isNativeCoin(prior.binding.coins[quote.j]))
           ? [nativeExecutionProbe(prior.pool, quote, quoteAbi === "int128" ? "native-exchange" : "native-exchange-uint",
@@ -139,9 +140,11 @@ function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainC
           const small = result(results, `quote:${i}:${j}:0`);
           const large = result(results, `quote:${i}:${j}:1`);
           if (small.completion !== "returned" || large.completion !== "returned") continue;
-          const amountOut = uint(small.data), largerOut = uint(large.data);
+          const projected = projectNativeTransferQuote(prior.binding.coins, i, j, uint(small.data), source, results);
+          const { amountOut } = projected;
+          const largerOut = projectNativeTransferQuote(prior.binding.coins, i, j, uint(large.data), source, results).amountOut;
           if (amountOut <= 0n || largerOut <= amountOut || largerOut >= prior.balances[j]) continue;
-          quotes.push({ i, j, tokenIn: routeToken(prior.binding.coins[i]), tokenOut: routeToken(prior.binding.coins[j]), amountIn, amountOut });
+          quotes.push({ i, j, tokenIn: routeToken(prior.binding.coins[i]), tokenOut: routeToken(prior.binding.coins[j]), amountIn, ...projected });
         }
         return { ...prior, phase: "quotes", quotes, requestIds } satisfies Evidence;
       }

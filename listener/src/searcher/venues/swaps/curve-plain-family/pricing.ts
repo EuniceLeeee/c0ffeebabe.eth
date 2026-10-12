@@ -5,6 +5,7 @@ import { quotedPoolMid } from "../blockscan-state-shared.js";
 import { POOL, call, getterPool, probeAmount, quotePool, resultSource, returned, same, uint } from "./codec.js";
 import { staticBinding } from "./instance.js";
 import { actionId, assertRoute } from "./routes.js";
+import { usesNativeStEthTransfer, nativeStEthRateRequests, projectNativeTransferQuote } from "./native-transfer-quote.js";
 import { curveRefreshAddresses, curveRefreshGuardRequests, curveRefreshRequirements, validateCurveRefreshScope } from "./refresh-scope.js";
 import type { CurvePlainDescriptor, CurvePlainPricingDescriptor, CurvePlainPricingSnapshot, CurvePlainRoute } from "./types.js";
 
@@ -28,6 +29,7 @@ export const curvePlainPricing = {
         call("current-fee", instance.pool, POOL.encodeFunctionData("fee")),
         call("current-balance-in", instance.pool, balances.encodeFunctionData("balances", [route.i])),
         call("current-balance-out", instance.pool, balances.encodeFunctionData("balances", [route.j])),
+        ...(usesNativeStEthTransfer(instance.binding.coins, route.i, route.j) ? nativeStEthRateRequests() : []),
         ...curveRefreshGuardRequests(instance)];
     },
     buildDependentProgram({ current, completedRound, initialResults }) {
@@ -48,11 +50,13 @@ export const curvePlainPricing = {
       const balanceOut = uint(returned(results, "current-balance-out").data);
       const amplification = uint(returned(results, "current-A").data);
       const fee = uint(returned(results, "current-fee").data);
-      const amountOut = uint(returned(results, "current-get-dy").data);
+      const projected = projectNativeTransferQuote(descriptor.instance.binding.coins, descriptor.route.i, descriptor.route.j,
+        uint(returned(results, "current-get-dy").data), source, results);
+      const { amountOut } = projected;
       if (amplification <= 0n || fee >= 10_000_000_000n || amountOut <= 0n || amountOut >= balanceOut) {
         throw new Error("curve-plain no valid current liquidity/quote");
       }
-      return Object.freeze({ source, balanceIn, balanceOut, amplification, fee, amountOut,
+      return Object.freeze({ source, balanceIn, balanceOut, amplification, fee, ...projected,
         amountIn: probeAmount(descriptor.instance.binding.decimals[descriptor.route.i], balanceIn) });
     },
     deriveMids({ descriptor, routes, snapshot }) {

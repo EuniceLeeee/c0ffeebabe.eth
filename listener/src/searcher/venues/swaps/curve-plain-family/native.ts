@@ -30,6 +30,8 @@ export function nativeExchangeProgram(pool: string, tokenIn: string, tokenOut: s
   if (!nativeIn) runtimeClearApproval(p, tokenIn, pool);
   if (nativeIn) p.nativeBalance(1);
   else p.call(tokenIn, balanceIn, { static: true }).load(1, 0);
+  // Rounding dust may remain, but zero actual debit is never a swap.
+  p.math("sub", 7, 4, 1).constant(2, 1n).math("sub", 7, 7, 2);
   p.math("sub", 1, 1, 6).constant(2, MAX_EXECUTION_ROUNDING_RAW_UNITS).math("sub", 1, 2, 1);
   if (nativeIn) p.call(tokenOut, balanceIn, { static: true }).load(1, 0);
   else p.nativeBalance(1);
