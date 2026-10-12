@@ -1,0 +1,17 @@
+{
+  "schema": "external-impl-exact-patch/v1",
+  "externalFile": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "0c1c55ad14bf7822ee56e0f8017ff18e1bcf6f88c2353a5f9f686c20f987167f",
+  "afterSha256": "c5b92bfa8c5a2f91312abc271057970f0484ca6a357f629b086c7f44d1cb204c",
+  "unchangedOtherRowsSha256": "dcc2928f9263f4d39c54ee4d1566b4d45f569d8c80869cb64fc53a911a53272d",
+  "columns": 4,
+  "updatedRows": [
+    "Yield Basis LT",
+    "Compound V2 cToken"
+  ],
+  "addedRows": [
+    "Algebra Integral"
+  ],
+  "codeAndReportsCommit": "687ff9dbbacef57a558132fd4560f5c19ab19b94",
+  "evidenceClaim": "Scoped correctness only; cUNI production reference incomplete; all performance deferred."
+}
