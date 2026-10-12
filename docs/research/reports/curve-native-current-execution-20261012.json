@@ -1,0 +1,254 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "scope": "Curve native-exchange current-source single-block Ready and dual execution; test-harness-only change",
+  "status": "scoped_historical_integration_and_dual_pass_with_one_raw_unit_rounding",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseCommit": "f4f5f07b54bd1e0ab5c9356c08df73d704eba402",
+  "tx": "0x6fc18a5c63f708f6b03b1ccec5e14fcec03c4e7aaf01816814777fab97d6af91",
+  "pool": "0xdc24316b9ae028f1497c275eb9192a3ea0f67022",
+  "source": {
+    "number": 26139768,
+    "hash": "0xd7bdbad87da07f0885234e0a53200cf4ec3ae61d73dd7b71db79b2705cb634f5",
+    "generation": 26139768
+  },
+  "implementation": {
+    "sourceFingerprint": "0a8f0e3358dfe7dbc5bf25ed5b6975128947dd4a2f5c94adb8346e31905bc102",
+    "sourceTreeSha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+    "familyDefinitionHash": "ed3bf3843f511e88cf3a63b649aa137efc69b946bd8909801c7c00a1a4a546d5",
+    "memoFingerprint": "b61245097bf91ed89f4aa05eb4dd9b671d84b1dec18adbffaeb1e1a6f85db1a9",
+    "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+    "dualHarnessSha256": "8f048640bf57643e9be09d0bb9b7fc69c1f88496d5ddebcfda248aae431d0a40",
+    "owner": "0x1000000000000000000000000000000000000001",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "stateAndEnvironment": "N block-end state + N environment, counterfactual source-authenticated current BotVM in local REVM"
+  },
+  "changes": [
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-ready.ts",
+      "sha256": "6b3e9047c681e44bdadd17f75aa87bcf9f93724d132bfe10727613419a28122a",
+      "description": "Optional --reuse-ready; copy inactive materialized snapshot exclusively into fresh output, then authenticate and scope-check the COPY with the production loader. Production familyUpdateScope performs one-block Curve revalidation/publication."
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
+      "sha256": "d24f5a416ccdd0b7f3b49c42a41a8a4d3ff43636c989ea91732a9d0603e7c31c",
+      "description": "Scope-rejection/nonmutation and snapshot copy/overwrite/lock/journal regressions; prior native/runtime/strict/production-selector contracts retained."
+    }
+  ],
+  "reuse": {
+    "sourcePath": "logs/rounding-central-20261009.V3Y8qS/single-N26139768-attempt02/ready.json",
+    "sourceSha256BeforeAndAfter": "61a05112612db8a2402a4ae6c43ab2e4330e71d9fbfebdba470ec539d0d1026a",
+    "parentCheckpointFingerprint": "0994eb5e7e5e01bda7c1a133b99ddf55d1ab3c884d6814a7fd9766380e1313ed",
+    "sourceSidecars": "No lock/journal present. Final helper rejects either, never opens production loader on original path.",
+    "originalPreserved": true,
+    "scope": [
+      "curve-plain"
+    ],
+    "limitations": "Still performs existing one-block production log/trace discovery and stale-Family attestation. No manual memo/hash/Graph edits and no all-family or 14400-block rebuild."
+  },
+  "ready": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-native-ready-current-attempt02/ready.json",
+    "sha256": "12df414bd022a81aec09501f1db5db68beadecc3e36e8f0166127e19dae1cc0c",
+    "generation": 2,
+    "candidates": 5,
+    "verified": 4,
+    "terminalRejected": 0,
+    "retryable": 1,
+    "instances": 4,
+    "graphEdges": 7,
+    "targetDirections": 2,
+    "graphHash": "c53d87baa21df4b15837af333310e21441dbe050fea933f0182878d40a9dc042"
+  },
+  "prices": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-native-ready-current-attempt02/prices/prices.json",
+    "sha256": "7d6c4016f58bab7c936ba9f2e3935370d2d3147b0682e2c117eddac9bd35b56b",
+    "inputSha256": "a2c8f92a18689a4b9c333d140dda81dafe958f1eb503cc1540e092f7dda9be6c",
+    "rawDirections": 7,
+    "quoted": 3,
+    "missingValuation": 4,
+    "targetRawMids": [
+      1.0001273447898076,
+      0.9996727045329958
+    ],
+    "referenceWethInputRaw": "2000000000000000",
+    "referenceExplanation": "WETH amountIn directly equals configured P=0.002 WETH. Reverse stETH amountIn is obtained from current production forward effective output. No donor amounts or extra WETH valuation pool.",
+    "targetRows": []
+  },
+  "execution": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-native-dual-current-attempt02.json",
+    "sha256": "ff4e7578a51e4903ee2de2cdb5b4e1c3e7ce6b40f516c3de7dbae88857e96329",
+    "directions": 2,
+    "amountSamples": 4,
+    "executions": 8,
+    "amounts": "Current production reference amount and 10x per direction",
+    "toleranceRawUnits": "1",
+    "runtimeConstructionRpc": 0,
+    "nativeInventoryBeforeAndAfterRaw": "107",
+    "result": "All 8 successful; forward output -1 raw, reverse actual input debit -1 raw, all other quoted/input deltas 0.",
+    "samples": [
+      {
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+        "amountIn": "2000000000000000",
+        "productionAmountIn": "2000000000000000",
+        "quoteAmountOut": "2000254691457174",
+        "executions": [
+          {
+            "mode": "quoted",
+            "actualAmountIn": "2000000000000000",
+            "actualAmountOut": "2000254691457173",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "-1"
+          },
+          {
+            "mode": "runtime",
+            "actualAmountIn": "2000000000000000",
+            "actualAmountOut": "2000254691457173",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "-1"
+          }
+        ]
+      },
+      {
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+        "amountIn": "20000000000000000",
+        "productionAmountIn": "2000000000000000",
+        "quoteAmountOut": "20002546892662011",
+        "executions": [
+          {
+            "mode": "quoted",
+            "actualAmountIn": "20000000000000000",
+            "actualAmountOut": "20002546892662010",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "-1"
+          },
+          {
+            "mode": "runtime",
+            "actualAmountIn": "20000000000000000",
+            "actualAmountOut": "20002546892662010",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "-1"
+          }
+        ]
+      },
+      {
+        "tokenIn": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "2000254691457174",
+        "productionAmountIn": "2000254691457174",
+        "quoteAmountOut": "1999600019513298",
+        "executions": [
+          {
+            "mode": "quoted",
+            "actualAmountIn": "2000254691457173",
+            "actualAmountOut": "1999600019513298",
+            "inputDeltaVsRequested": "-1",
+            "outputDeltaVsQuote": "0"
+          },
+          {
+            "mode": "runtime",
+            "actualAmountIn": "2000254691457173",
+            "actualAmountOut": "1999600019513298",
+            "inputDeltaVsRequested": "-1",
+            "outputDeltaVsQuote": "0"
+          }
+        ]
+      },
+      {
+        "tokenIn": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "20002546914571740",
+        "productionAmountIn": "2000254691457174",
+        "quoteAmountOut": "19996000173232598",
+        "executions": [
+          {
+            "mode": "quoted",
+            "actualAmountIn": "20002546914571739",
+            "actualAmountOut": "19996000173232598",
+            "inputDeltaVsRequested": "-1",
+            "outputDeltaVsQuote": "0"
+          },
+          {
+            "mode": "runtime",
+            "actualAmountIn": "20002546914571739",
+            "actualAmountOut": "19996000173232598",
+            "inputDeltaVsRequested": "-1",
+            "outputDeltaVsQuote": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "remainingRetryable": {
+    "pool": "0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714",
+    "tx": "0x0466e70178b1a56a93dad92aeaec90c83256bf05884294636e921be77bda6f48",
+    "stage": "identity",
+    "reasonCode": "identity_unverified:unresolved:identity-work-unresolved:registry-direct-coin-behavior-int128:decode-failure:family decode failed: curve-plain unresolved execution proof|registry-direct-coin-behavior-uint256:no-positive-uint256-quote-pair",
+    "notInGraph": true,
+    "interpretation": "Unresolved main execution proof. Legacy failureCode=rpc does not establish provider failure, contract defect or permanent rejection. Not resolved in this supplement."
+  },
+  "reconciliation": {
+    "capabilityQuery": [
+      "curve-plain-ready",
+      "curve-plain-native",
+      "curve-native-dual"
+    ],
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-ready-current-tools-attempt03.json",
+    "sha256": "965363c5ad9ea9e4c68bd12327f56f0fcb94d8ec5ab4cfea945e7939a7fdde93",
+    "receipts": [
+      {
+        "toolId": "listener:searcher:curve-plain-native-contract",
+        "exitCode": 0,
+        "startedAt": "2026-10-12T10:33:53.749Z",
+        "finishedAt": "2026-10-12T10:33:55.274Z"
+      },
+      {
+        "toolId": "listener:searcher:curve-plain-historical-ready",
+        "exitCode": 0,
+        "startedAt": "2026-10-12T10:34:21.698Z",
+        "finishedAt": "2026-10-12T10:34:41.850Z"
+      },
+      {
+        "toolId": "listener:searcher:curve-plain-historical-native-dual",
+        "exitCode": 0,
+        "startedAt": "2026-10-12T10:35:23.283Z",
+        "finishedAt": "2026-10-12T10:35:27.067Z"
+      }
+    ],
+    "nativeContractTests": 8,
+    "manualCheck": "Independently recomputed sample input/output deltas from saved REVM token effects; checked source, prices hash and 107->107 native balances; both fresh rounds agree."
+  },
+  "review": {
+    "path": "docs/research/reports/curve-ready-reuse-review-20261012.json",
+    "sha256": "18eb720f61062b721f406ff613245f57ff5f94efbb8cb1877e20282f3101bac0",
+    "scope": "Independent review of initial reuse candidate, not final post-review patch or fresh EVM output.",
+    "finding": "C1: source production loader briefly writes source-directory lock.",
+    "resolution": "Final patch copies before authenticating; rejects lock/journal sources. Added filesystem regression, 8/8 contract tests, fresh Ready plus 8 fresh executions rerun successfully. No production source changed."
+  },
+  "earlierAttempt": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-native-dual-current-attempt01.json",
+    "sha256": "836664b0ce2947b3d3f7e22967f8d8d58f04d85f987aa5afacccd827eaded64e",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-ready-current-tools-attempt02.json",
+    "manifestSha256": "5ae62fb396fcfe0fc483f869b588e745b22a48574c8ae87b3aea321b0bd73376",
+    "disposition": "Valid same-state 8-execution results retained; earlier Ready reader used source-side lock. Latest pass does not erase it or count repeated executions as new variant coverage."
+  },
+  "limits": [
+    "No new production build in this test-only supplement; fixtures and actual historical execution are reported separately.",
+    "No original-TX pre-call state parity, complete opportunity, final sim/EV or formal adapter/production fix verdict.",
+    "No new historical zero-input/failure rollback controls in this Curve dual runner; the native contracts cover synthetic negative safety cases.",
+    "Curve exchange/exchange_received, Underlying, active-ramp and residual checkpoint coverage remain separate outstanding items.",
+    "All local and representative combined performance tests NOT RUN; another window live remained active; no performance inference from these command durations."
+  ],
+  "safety": {
+    "originalReadyUnchanged": true,
+    "defaultActivationUnchanged": true,
+    "broadcast": false,
+    "signing": false,
+    "liveStarted": false,
+    "privateKeysRead": false
+  },
+  "goalComplete": false
+}

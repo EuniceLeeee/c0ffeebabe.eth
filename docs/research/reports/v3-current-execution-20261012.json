@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "scope": "current-executor historical single-pool correctness supplement; not performance or route acceptance",
+  "date": "2026-10-12",
+  "status": "scoped_historical_dual_pass_with_limits",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "tx": "0x1b474eb9c6da5bd400c4a20c0d029a039cb6d509df756140b3e09e42374845e3",
+  "pool": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+  "variant": "stable-surge-pool-v2 / stable-surge-v2 Hook",
+  "inputs": {
+    "ready": "/opt/mev-cloud/family-runtime-20261007/logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/ready.json",
+    "prices": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/v3-hook-N25936827-prices-attempt01/prices.json",
+    "readySha256": "e9906fcddd7218f65f6caa32bdb525a7569437da1dda7e124beee6560609a945",
+    "pricesSha256": "62d56e0703655f8fcea21c77b4d65848120d2da55097edb4a0a70d28f3ad6ed8",
+    "source": {
+      "number": 25936827,
+      "hash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+      "generation": 25936827
+    },
+    "priceGeneration": 1,
+    "timestamp": 1788920903,
+    "memoFingerprint": "4f0fe47ccf227db275934b43b19f1e488765ce80b7d38c73874aa3a38f979485",
+    "familyDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38",
+    "hooks": {
+      "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+      "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+      "flags": [
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        true,
+        false,
+        true
+      ],
+      "stableSurgeModel": "stable-surge-v2"
+    },
+    "hasSwapHooks": true,
+    "localModel": null,
+    "stableSurgePoolModel": "stable-surge-pool-v2",
+    "runtimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec"
+  },
+  "codeAtExecution": {
+    "headAtStart": "f4f5f07b54bd1e0ab5c9356c08df73d704eba402",
+    "sourceSha256": "0a8f0e3358dfe7dbc5bf25ed5b6975128947dd4a2f5c94adb8346e31905bc102",
+    "sourceTreeSha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+    "fileCount": 1149,
+    "testSha256": "afc56eb3a4514d5db22d9432bf22aa1e0f432d7a92a7a3479b9c0755441eafd0",
+    "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+    "familyDefinitionHash": "e515ffc67c8020c03125fc903784b9bc25787e48faef76af072d7569946ff84d",
+    "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+  },
+  "actor": {
+    "executor": "0x1000000000000000000000000000000000000002",
+    "owner": "0x1000000000000000000000000000000000000001"
+  },
+  "safety": {
+    "broadcast": false,
+    "signing": false,
+    "remoteSubmission": false,
+    "minedBlocks": 0,
+    "executionOverrides": "test actor code/native gas and actor ERC20 balances only; no pool/Vault/hook overrides"
+  },
+  "evidence": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/v3-hook-N25936827-dual-attempt01.json",
+    "sha256": "586b7e1e6270cee2681c5b310e7e38e239d899a19b8c9a68be8e1a253f100ae1",
+    "priceInput": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/v3-hook-N25936827-prices-attempt01/input.json",
+    "independentReview": "docs/research/reports/v3-current-execution-independent-review-20261012.json"
+  },
+  "naturalIntegration": {
+    "originalReadyUnchanged": true,
+    "usedProductionRunHead": true,
+    "referenceWethInputRaw": "2000000000000000",
+    "instances": 21,
+    "graphEdges": 42,
+    "rawDirections": 42,
+    "quoted": 36,
+    "missingValuation": 6,
+    "targetQuotedDirections": 2,
+    "donorAmountUsed": false
+  },
+  "results": {
+    "directions": 2,
+    "amountSamples": 4,
+    "positiveExecutions": 8,
+    "zeroInputControls": 8,
+    "quoteVsActualRawDelta": "0",
+    "requestedVsDebitedRawDelta": "0",
+    "oldInputRaw": "101",
+    "oldOutputRaw": "103",
+    "nativeBeforeAndAfterRaw": "17",
+    "negative": "Same positive calldata, zero input, sufficient old output, native 17: root execution reverted, no token/native/allowance state change.",
+    "approval": "Success: ERC20 amount=0; Permit2 amount=0, expiration=1788920903, nonce=0. Expiration is not asserted zero. Negative rollback retains initial allowances.",
+    "familyRuntimeConstructionRpc": 0,
+    "localForkRpcCalls": 178,
+    "forkStopped": true,
+    "samples": [
+      {
+        "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:0:1",
+        "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "amountKind": "target-production-reference",
+        "amountIn": "871641832876",
+        "productionP": "871641832876",
+        "savedPriceOut": "90539586",
+        "status": "pass",
+        "quoteAmountOut": "90539586"
+      },
+      {
+        "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:0:1",
+        "tokenIn": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "tokenOut": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "435820916438",
+        "productionP": "871641832876",
+        "savedPriceOut": "90539586",
+        "status": "pass",
+        "quoteAmountOut": "45271164"
+      },
+      {
+        "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:1:0",
+        "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "amountKind": "target-production-reference",
+        "amountIn": "99278215",
+        "productionP": "99278215",
+        "savedPriceOut": "871641832876",
+        "status": "pass",
+        "quoteAmountOut": "871641832876"
+      },
+      {
+        "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:1:0",
+        "tokenIn": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "tokenOut": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "amountKind": "target-production-reference-half",
+        "amountIn": "49639107",
+        "productionP": "99278215",
+        "savedPriceOut": "871641832876",
+        "status": "pass",
+        "quoteAmountOut": "435835338830"
+      }
+    ]
+  },
+  "reconciliation": {
+    "capabilityQuery": [
+      "balancer",
+      "at"
+    ],
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/v3-hook-current-tools-attempt02.json",
+    "sha256": "807ac63761bd19d65fe6394cfbd2bd384c02cedea3c23da63d23b2a77560650e",
+    "receipts": [
+      {
+        "toolId": "listener:searcher:at-block",
+        "exitCode": 0,
+        "startedAt": "2026-10-12T10:10:14.167Z",
+        "finishedAt": "2026-10-12T10:10:17.724Z"
+      },
+      {
+        "toolId": "listener:searcher:balancer-v3",
+        "exitCode": 0,
+        "startedAt": "2026-10-12T10:15:26.782Z",
+        "finishedAt": "2026-10-12T10:15:28.987Z"
+      }
+    ],
+    "fixtureTests": 18,
+    "historicalDual": "Executed actual Family-owned historical-runtime-dual.ts directly; not currently a package-indexed command. Raw result retained separately from the indexed fixture suite."
+  },
+  "review": {
+    "rawBalanceAndRollbackChecks": 503,
+    "result": "No raw difference inconsistency found in the supplied 8 positive / 8 negative records.",
+    "limits": [
+      "Reviewer did not rerun EVM/RPC.",
+      "Reviewer checked supplied source/report hashes, not the entire cloud source tree or artifact bytes.",
+      "17 wei absolute initial value and initial allowance baseline depend on captured harness setup; raw diff independently proves no change.",
+      "Query outer from=null with ABI sender=executor; execution root owner->executor. This does not prove arbitrary tx.origin-dependent Hooks."
+    ]
+  },
+  "limits": [
+    "Single Hook pool only; other seven-pool evidence remains separately scoped.",
+    "This supplement does not increase cumulative reference coverage: 35/36; siUSD->sUSDe still lacks a valid production reference amount.",
+    "Family runtime construction local guards/RPC=0 are not a new historical production sim-selector zero-Exact receipt.",
+    "Not original-TX pre-call output parity, complete loop, repayment/EV, adapter_fixed, adapter_merge_ready or production_gap_fixed.",
+    "No new production build run in this test-only supplement.",
+    "All local and combined representative latency tests remain NOT RUN; peer live was left running."
+  ],
+  "originalFailuresPreserved": true,
+  "goalComplete": false
+}

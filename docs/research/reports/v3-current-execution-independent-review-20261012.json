@@ -1,0 +1,252 @@
+{
+  "schemaVersion": 1,
+  "reviewType": "independent-offline-saved-execution-evidence-review",
+  "reviewedAt": "2026-10-12T10:26:16.164Z",
+  "result": "local_execution_evidence_supported_with_explicit_limits",
+  "summary": "原始保存证据支持 N=25936827、指定 StableSurge v2 池、两方向各 P/P÷2 的 quote/两种编码到账一致及无输入原子回滚。未发现这 8 正例与 8 负例的原始差分矛盾；本次没有重跑 EVM。",
+  "scope": {
+    "pool": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+    "block": 25936827,
+    "directions": 2,
+    "amountSamples": 4,
+    "positiveExecutions": 8,
+    "noInputControls": 8,
+    "reviewRpcCalls": 0,
+    "reviewEvmRuns": 0,
+    "reviewBenchmarkRuns": 0,
+    "sshUsed": false,
+    "credentialsRead": false,
+    "otherChatsContacted": false,
+    "productionOrTableOrGitWrites": false,
+    "onlyWrittenFile": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/v3-hook-current-independent-review.json"
+  },
+  "reviewStandard": {
+    "skill": "/Users/eunice/.codex/skills/family-plugin-adaptation/SKILL.md",
+    "applied": "N 状态＋N 环境；保留同状态单腿执行证据，分别检查 quote、quoted fragment 与 runtime；原交易调用前状态和正式修复门槛不作推导。",
+    "formalVerdicts": "not_assessed",
+    "notClaimed": [
+      "adapter_fixed",
+      "adapter_merge_ready",
+      "merge_ready",
+      "production_gap_fixed",
+      "original_transaction_output_parity",
+      "production_sim_builder_zero_exact",
+      "family_performance"
+    ]
+  },
+  "evidence": {
+    "report": {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/v3-hook-N25936827-dual-attempt01.json",
+      "sha256": "586b7e1e6270cee2681c5b310e7e38e239d899a19b8c9a68be8e1a253f100ae1",
+      "independentlyHashed": true
+    },
+    "executedTest": {
+      "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/v3-safety-source/historical-runtime-dual.ts",
+      "sha256": "afc56eb3a4514d5db22d9432bf22aa1e0f432d7a92a7a3479b9c0755441eafd0",
+      "independentlyHashed": true
+    },
+    "declaredSource": {
+      "head": "f4f5f07b54bd1e0ab5c9356c08df73d704eba402",
+      "sourceSha256": "0a8f0e3358dfe7dbc5bf25ed5b6975128947dd4a2f5c94adb8346e31905bc102",
+      "sourceTreeSha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+      "fileCount": 1149,
+      "fullSourceTreeIndependentlyRecomputed": false
+    },
+    "declaredBotVm": {
+      "runtimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+      "runtimeBytesPresentInSavedDiff": false,
+      "independentlyRecomputed": false
+    },
+    "anchor": {
+      "number": 25936827,
+      "hash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+      "generation": 25936827,
+      "priceGeneration": 1,
+      "timestamp": 1788920903,
+      "baseFeePerGas": "43674383",
+      "chainId": "1",
+      "executor": "0x1000000000000000000000000000000000000002",
+      "owner": "0x1000000000000000000000000000000000000001"
+    }
+  },
+  "executedZeroRpcChecks": [
+    {
+      "id": "file_integrity",
+      "method": "rg --files 定位测试源；shasum -a 256 读取并校验两份给定文件。",
+      "result": "pass"
+    },
+    {
+      "id": "raw_diff_and_trace_recalculation",
+      "method": "只读 Node BigInt/ethers ABI 与 Keccak 检查；不导入或执行历史测试，不创建 provider。444 项断言检查原始 pre/post、正负例根调用、执行身份、审批 calldata、Permit2 packed slot 及内部环境绑定。",
+      "assertionsPassed": 444,
+      "result": "pass"
+    },
+    {
+      "id": "amount_transfer_program_probe_recalculation",
+      "method": "另 59 项断言检查四组 P/P÷2、原始 transfer/transferFrom、从 execute(bytes) 提取 runtime 程序与长度/金额/hash、非标准余额槽两次探针返回值。",
+      "assertionsPassed": 59,
+      "result": "pass"
+    },
+    {
+      "id": "balance_mapping",
+      "result": "pass_with_provenance_limit",
+      "standardToken": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+      "computedKey": "0xfb750de6f7d0583f749efc558ce6626b24fed04efd7219dc3f4294c408699e8c",
+      "method": "独立计算 keccak256(abi.encode(executor, uint256(0)))；另一 token 使用已存 access-list proof 的 key，逐个解码 returned，等于 717171717171、919191919193。verifiedProbes 数字本身不作独立证明。",
+      "nonstandardKey": "0x6aa5cd4d378316cfebc5d961fcdcd115fad1dfc8bf53f3c65c7f4fee7e7cb2ac"
+    },
+    {
+      "id": "native_and_negative_rollback",
+      "result": "pass_for_saved_diffs",
+      "method": "逐个检查执行器在正负 pre/post 两侧均缺席，因此 diffMode 表示无变化；不将双侧缺席误判为零余额。8 个负例 pre/post 只有 owner gas/nonce，token、Permit2、executor 均无变化。17 的绝对初值来自已哈希测试源 override 与报告，未保存独立原生余额响应。"
+    },
+    {
+      "id": "calldata_and_hashes",
+      "result": "pass",
+      "method": "8 组正负根 input 逐字节相等；execute(bytes) 解码后 8 个 scriptHash 全部重算一致。4 个 runtime 子程序均为 1047 bytes；外层金额等于 amountIn，programHash 重算一致，同方向两个金额使用同一 programHash。"
+    },
+    {
+      "id": "allowance_cleanup",
+      "result": "pass_for_saved_execution",
+      "method": "8 个正例 ERC20 approve(Permit2,0/amountIn/0) 和 Permit2 approve(token,Router,amountIn,max48)/(0,0) 均在成功调用链上。独立由 mapping 基槽 1 派生 Permit2 三重 mapping key；post packed word 解码为 amount=0、expiration=1788920903、nonce=0。负例的授权调用虽已进入，根回滚且无任何授权存储变化。",
+      "negativeReportedFinalAllowances": [
+        [
+          "0"
+        ],
+        [
+          "0",
+          "0",
+          "0"
+        ]
+      ],
+      "absoluteZeroLimit": "初始 allowance 的 eth_call 原始返回及 access-list 未保存；绝对零基线依赖源代码断言与解码后的 finalAllowances。无新增授权泄漏由根回滚和 raw diff 独立支持。"
+    },
+    {
+      "id": "source_header_caller_and_price",
+      "result": "internally_consistent_not_fully_reauthenticated",
+      "method": "headerBefore=headerAfter；source/quote outcome 的 N/hash/generation 一致；7 项环境值与已有字段可交叉核对的 number/timestamp/baseFee/coinbase/chain 一致。8 个 root 为 OWNER→EXECUTOR、value=0，Router 由 EXECUTOR 调用；pool/tokens/amount 与样本吻合。两个 P 样本的 savedPriceOut=quote；价格原文件不在本地。"
+    },
+    {
+      "id": "hook_execution",
+      "result": "pass_for_this_pool_and_samples",
+      "method": "8 个正例均存在到声明 Hook 的成功子调用，所有正例均无错误子调用。不能外推任意 Hook/池型/金额。"
+    },
+    {
+      "id": "runtime_construction_guard_source_review",
+      "result": "limited_local_builder_support",
+      "locations": [
+        "historical-runtime-dual.ts:274",
+        "historical-runtime-dual.ts:375",
+        "historical-runtime-dual.ts:383",
+        "historical-runtime-dual.ts:400",
+        "historical-runtime-dual.ts:533"
+      ],
+      "method": "源码先构造 Family runtime leg，再 quote；amountIn/exact getter 抛错，构造期经过该 rpc 包装器会计数并抛错，末尾断言 attempts=0。样本 runtimeConstructionRpc 字段直接赋 0。未保存独立构造事件日志，未调用生产 sim 选额器，也未全局拦截所有 Exact/quoted 入口。"
+    },
+    {
+      "id": "bound_file_availability",
+      "result": "upstream_artifacts_unavailable_locally",
+      "method": "只读检查报告指定 Ready、prices、input.json 的本地存在性，三者均不可用；未 SSH/远程读取。两份已存在本地 BotVM artifact 的 SHA 均不同于报告绑定 artifact，未用来替代云端构建物。"
+    }
+  ],
+  "recomputedSamples": [
+    {
+      "sampleIndex": 0,
+      "direction": "0:1",
+      "amountKind": "P",
+      "amountIn": "871641832876",
+      "inputBefore": "871641832977",
+      "inputAfter": "101",
+      "outputBefore": "103",
+      "outputAfter": "90539689",
+      "quote": "90539586",
+      "oldFragmentActual": "90539586",
+      "runtimeActual": "90539586",
+      "quoteActualDelta": "0"
+    },
+    {
+      "sampleIndex": 1,
+      "direction": "0:1",
+      "amountKind": "floor(P/2)",
+      "amountIn": "435820916438",
+      "inputBefore": "435820916539",
+      "inputAfter": "101",
+      "outputBefore": "103",
+      "outputAfter": "45271267",
+      "quote": "45271164",
+      "oldFragmentActual": "45271164",
+      "runtimeActual": "45271164",
+      "quoteActualDelta": "0"
+    },
+    {
+      "sampleIndex": 2,
+      "direction": "1:0",
+      "amountKind": "P",
+      "amountIn": "99278215",
+      "inputBefore": "99278316",
+      "inputAfter": "101",
+      "outputBefore": "103",
+      "outputAfter": "871641832979",
+      "quote": "871641832876",
+      "oldFragmentActual": "871641832876",
+      "runtimeActual": "871641832876",
+      "quoteActualDelta": "0"
+    },
+    {
+      "sampleIndex": 3,
+      "direction": "1:0",
+      "amountKind": "floor(P/2)",
+      "amountIn": "49639107",
+      "inputBefore": "49639208",
+      "inputAfter": "101",
+      "outputBefore": "103",
+      "outputAfter": "435835338933",
+      "quote": "435835338830",
+      "oldFragmentActual": "435835338830",
+      "runtimeActual": "435835338830",
+      "quoteActualDelta": "0"
+    }
+  ],
+  "findings": [
+    {
+      "id": "V3-L1",
+      "kind": "evidence_limit",
+      "severity": "info",
+      "location": "$.code; $.inputs.runtimeCodeHash; $.inputs.readySha256; $.inputs.pricesSha256; $.extraInputs",
+      "finding": "测试源和报告内容已独立哈希；源码全集、BotVM 字节码、Ready/price/header 原始输入未随本地证据完整提供。给定 HEAD/sourceTree/runtime hash 能核对声明值，不能由本报告重算完整绑定。",
+      "action": "主代理如需强化可移交的源码/价格绑定证据，可附同次运行的逐文件指纹或源码快照、对应 BotVM 构建物和 Ready/prices/input 原文件；保留本次已验证的局部执行结论。"
+    },
+    {
+      "id": "V3-L2",
+      "kind": "claim_boundary",
+      "severity": "info",
+      "location": "$.runtimeConstructionRpcAttempts; $.samples[*].runtimeConstructionRpc; historical-runtime-dual.ts:375",
+      "finding": "计数 0 有源码局部护栏支持，但不是独立保存的生产 sim 构造调用记录，也不是全局链外 Exact 调用数证明。",
+      "action": "表述限定为本次 Family runtime leg 构造通过局部无 RPC/禁止输入 getter 检查；生产 sim 选额构造的零 Exact 保持未验证。"
+    },
+    {
+      "id": "V3-L3",
+      "kind": "caller_and_quote_provenance_limit",
+      "severity": "info",
+      "location": "$.samples[*].quote.queryCalls; historical-runtime-dual.ts:355",
+      "finding": "quote.queryCalls.from=null，ABI sender=EXECUTOR；执行 root from=OWNER。源码明确保留此生产查询封装。报告未保存原始 quote 请求/返回全文；quote=actual 的 amount 比较成立，但不能声称查询与执行外层 caller/tx.origin 完全相同。",
+      "action": "摘要同时列出 query outer from、ABI sender 和执行 OWNER→EXECUTOR；不要扩展为任意依赖 tx.origin 的 Hook 等价证明。"
+    },
+    {
+      "id": "V3-L4",
+      "kind": "coverage_boundary",
+      "severity": "info",
+      "location": "$.samples; $.samples[*].executions[*].noInputControl",
+      "finding": "是两个方向各 P/P÷2，共四组金额，非每方向四金额；无原交易 receipt/调用前状态。负例总输入为 0，旧输出为 quote+103，原生为 17；证明既有输出不能补足无输入交易。仅单腿，没有下一跳、偿还/完整盈利闭环证据。",
+      "action": "沿用单池 N 状态双接口/原子回滚局部证据口径，不升级正式 verdict、原 TX 输出复现或整族性能结论。"
+    }
+  ],
+  "auditDiagnostics": {
+    "successfulAssertionPasses": 503,
+    "earlierExploratoryChecks": "一次只读 schema 辅助片段有语法错误；两次补充断言错误假设 runtime 根 trace 必有执行器 balanceOf 调用，实际程序消费 Router 返回量，故该额外观测不可用。已更正检查为原始 token 差分/transfer/Router 返回及程序 hash；未修改证据、未隐去 EVM 失败、无新增 EVM 或 RPC。",
+    "testSuitesExecuted": false,
+    "canonicalRunnerExecuted": false,
+    "canonicalRunnerReason": "用户限定零 RPC、唯一报告文件可写；仅执行独立只读解析，不运行产生额外 manifest/日志的仓库 runner。"
+  }
+}

@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "reviewType": "independent-read-only-candidate-code-review",
+  "reviewedAt": "2026-10-12T10:30:50.265Z",
+  "result": "no_blocking_change_specific_issue_found_with_one_side_effect_caveat",
+  "summary": "候选改动保持 Family 自有薄入口；六项 Ready 范围断言与 production loader/parent fingerprint/issuer/Graph 发布链配合，未发现本次变更绕过认证、选择性重验或手改图/hash。原 Ready 内容不作为重建写入目标，但原路径 load() 会创建/删除旁侧 .lock，并非原目录零写入。",
+  "scope": {
+    "files": [
+      "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/curve-ready-reuse-source.ZHyXnL/historical-ready.ts",
+      "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/curve-ready-reuse-source.ZHyXnL/native-contract.ts"
+    ],
+    "baselineCommit": "f4f5f07b54bd1e0ab5c9356c08df73d704eba402",
+    "baselineRepository": "/Users/eunice/src/MEV",
+    "rpcCalls": 0,
+    "evmRuns": 0,
+    "cloudTasksRun": 0,
+    "sshUsed": false,
+    "credentialsRead": false,
+    "contractTestsRun": false,
+    "benchmarkRuns": 0,
+    "candidateModulesImported": false,
+    "productionSourceWrites": false,
+    "mainTableWrites": false,
+    "gitWrites": false,
+    "onlyWrittenFile": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/curve-ready-reuse-review-20261012.json"
+  },
+  "fingerprints": [
+    {
+      "file": "historical-ready.ts",
+      "baselineSha256": "ee0aa531ddbb97feaed08ea83c70ed23a475c9304795b94c0a2378746819adbb",
+      "baselineMatchesUser": true,
+      "candidateSha256": "1311a26c551f493c06b16ed0734013b2041f23d82f171548451e69b155ae1c64"
+    },
+    {
+      "file": "native-contract.ts",
+      "baselineSha256": "ac0f59612928767290d7bf12034222096c8e67d227429b3a555e58029277b7de",
+      "baselineMatchesUser": true,
+      "candidateSha256": "33ee9c39a2235e62508c859817ed41e0f91f47eb8dc897f38c13686c5d5e37ed"
+    }
+  ],
+  "executedReadOnlyChecks": [
+    {
+      "id": "candidate_and_baseline_integrity",
+      "result": "pass",
+      "method": "rg --files 定位两份候选；shasum 计算候选哈希；仅用本地 git cat-file/ls-tree/show 读取指定提交中的两份原源码并计算 SHA256，两项均匹配给定历史值；diff 比较源码，不 checkout，不修改 Git。"
+    },
+    {
+      "id": "ast_and_diff_review",
+      "result": "pass",
+      "method": "TypeScript 5.9.3 parser 只解析文本，不导入候选模块，不运行测试。18 项静态断言通过：语法、顶层 main guard、认证 loader 调用形状、COPYFILE_EXCL、生产参数不变和原 native 测试保留。",
+      "assertionsPassed": 18,
+      "typecheckPerformed": false
+    },
+    {
+      "id": "production_trust_chain_read",
+      "result": "pass_with_side_effect_caveat",
+      "method": "只读 git show 同一提交的 universe-rebuild-checkpoint.ts、universe-rebuild-runner.ts、universe-rebuild-production.ts、strict-ready-runtime.ts 和 blockscan-at-block-cli.ts，追踪认证、父指纹、选择性重验、Graph 与 CLI 导入边界。未执行 loader 或任何生产函数。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "authenticated_loader_input",
+      "status": "supported_by_code",
+      "locations": [
+        "historical-ready.ts:19",
+        "historical-ready.ts:85",
+        "universe-rebuild-checkpoint.ts:1250",
+        "universe-rebuild-checkpoint.ts:817"
+      ],
+      "detail": "生产路径唯一调用 readyReuseScope 时传入 await new UniverseRebuildCheckpointStore({path:reusePath}).load()；load 解析并核对 envelope checkpointFingerprint、已提交 journal 的 revision/fingerprint 链。helper 本身只是 scope predicate，不能独立认证手造对象。"
+    },
+    {
+      "id": "completed_single_block_curve_only",
+      "status": "supported_by_code",
+      "locations": [
+        "historical-ready.ts:20",
+        "historical-ready.ts:21",
+        "historical-ready.ts:24",
+        "historical-ready.ts:25",
+        "historical-ready.ts:26"
+      ],
+      "detail": "要求非空 readyGeneration 且 inProgressRun===null；universeRange 精确等于 {fromBlock:block,toBlock:block}；familyPartitions 的全部 key 必须恰为 Curve 单族；任何 observationScope 均拒绝，因此 TX-set 不能冒充全单块。空分区、缺分区、多族、旧宽范围或未完成状态均拒绝。"
+    },
+    {
+      "id": "receipt_block_hash_binding",
+      "status": "supported_by_code",
+      "locations": [
+        "historical-ready.ts:71",
+        "historical-ready.ts:72",
+        "historical-ready.ts:73",
+        "historical-ready.ts:74",
+        "historical-ready.ts:85",
+        "historical-ready.ts:95"
+      ],
+      "detail": "保留实际 receipt 的 tx hash/status 与真实 Curve swap topic 检查；block 来自 receipt，header.hash 必须等于 receipt.blockHash；reuse cutoff number/hash 要匹配该 block/header。重建返回的 cutoff 再次核对相同锚点。"
+    },
+    {
+      "id": "copy_preserves_original_content",
+      "status": "supported_by_code_with_caveat",
+      "locations": [
+        "historical-ready.ts:40",
+        "historical-ready.ts:79",
+        "historical-ready.ts:84",
+        "historical-ready.ts:86",
+        "historical-ready.ts:87",
+        "historical-ready.ts:88",
+        "historical-ready.ts:96"
+      ],
+      "detail": "新 out 必须不存在；checkpoint 位于新 out/ready.json；copyFileSync 使用 COPYFILE_EXCL；复制后与先读 bytes 相等，保存 SHA 与原路径；重建完成后原文件再次逐字节核对。所有 rebuild/CAS 写入目标是副本，未向旧 Ready 写入新 hash/graph。load 的 .lock 副作用见 C1。"
+    },
+    {
+      "id": "parent_and_scope_fence",
+      "status": "supported_by_production_code",
+      "locations": [
+        "historical-ready.ts:27",
+        "historical-ready.ts:91",
+        "universe-rebuild-runner.ts:271",
+        "universe-rebuild-runner.ts:455",
+        "universe-rebuild-checkpoint.ts:2121"
+      ],
+      "detail": "仅新增 familyUpdateScope，含认证 parentCheckpointFingerprint 与 Curve familyIds。生产 runner 重新加载副本，校验 parent fingerprint/coverage/activation/exact cutoff/range；beginOrResumeRun 调用 activeReadyMemos 校验已封存 memo、catalog、graph roots、partition accounting/coverage。scope helper 未重复实现这些生产认证。"
+    },
+    {
+      "id": "selective_revalidation_owned_by_production",
+      "status": "supported_by_production_code",
+      "locations": [
+        "universe-rebuild-production.ts:2161",
+        "universe-rebuild-production.ts:3789",
+        "universe-rebuild-runner.ts:711",
+        "universe-rebuild-runner.ts:778",
+        "universe-rebuild-runner.ts:900",
+        "historical-ready.ts:91"
+      ],
+      "detail": "生产 findReusableMemo 判断 family/candidate/definition/policy/proof source 与 projection；不兼容 memo 返回 null 并由既有 attestFamilyInstanceOnce/issuer 重验。生产聚合与 buildGraphSnapshot/CAS 完成发布。候选没有增删 memo、强改 definition hash、注入 expected pool、手写 graph 或自行准入。"
+    },
+    {
+      "id": "production_amount_and_execution_unchanged",
+      "status": "pass_static_comparison",
+      "locations": [
+        "historical-ready.ts:48",
+        "historical-ready.ts:91",
+        "historical-ready.ts:103",
+        "native-contract.ts:55"
+      ],
+      "detail": "AST 比较确认 createRebuildWiring、runAtBlock、loadBotVmRuntimeCode 调用与原版完全相同；rebuildUniverse 除新增可选 familyUpdateScope 外原参数逐项相同；native-contract 从原有 const pool 起的全部原测试字节不变。未修改生产金额、准入或执行实现。"
+    },
+    {
+      "id": "safe_import_of_historical_ready",
+      "status": "supported_by_static_guard",
+      "locations": [
+        "historical-ready.ts:30",
+        "historical-ready.ts:45",
+        "historical-ready.ts:57",
+        "historical-ready.ts:111",
+        "native-contract.ts:21"
+      ],
+      "detail": "历史 CLI 的 main 不导出，且仅在 process.argv[1] 解析路径等于当前模块 fileURLToPath(import.meta.url) 时调用。env 设置、provider 构造、strictSimulate 包装、文件写入全部位于 main 内；被 native-contract 导入时该 main 条件不成立。未实际执行 import smoke；静态依赖原已有 blockscan CLI 自身入口 guard。"
+    },
+    {
+      "id": "new_test_coverage_boundary",
+      "status": "fixture_only_not_executed_here",
+      "locations": [
+        "native-contract.ts:24",
+        "native-contract.ts:26",
+        "native-contract.ts:30",
+        "native-contract.ts:36",
+        "native-contract.ts:47"
+      ],
+      "detail": "新增合成对象覆盖 scope 正例、不变性和 null/错误块/hash/未完成/宽范围/缺分区/空分区/多族/TX-set 负例。对象经 unknown as StartupCheckpointEnvelope 转型，不经过 authenticated loader；因此该 fixture 不证明磁盘 checksum/journal 认证、COPYFILE_EXCL、生产重验或真实历史执行。"
+    }
+  ],
+  "findings": [
+    {
+      "id": "C1",
+      "severity": "low",
+      "blocking": false,
+      "category": "source_directory_side_effect",
+      "file": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/curve-ready-reuse-source.ZHyXnL/historical-ready.ts",
+      "line": 85,
+      "dependencyAtBaseline": "listener/src/searcher/universe-rebuild-checkpoint.ts:1250",
+      "dependencyDetails": "load() 调用 mkdir/#acquireLock；#acquireLock 在 path+'.lock' 以 wx 写入当前 PID，也可清理 stale lock；load finally unlink 锁。",
+      "finding": "原 Ready JSON 内容不会由此修改，但认证读取会写原目录的旁侧锁；若证据目录仅有读权限，新增复用入口会在 load 阶段失败。不能把这一实现描述为对源目录完全零写入。",
+      "action": "当前摘要表述为“保留原 Ready 内容、通过生产 loader 锁读取”。若要支持真正只读的证据目录，可在本 Family 薄 CLI 将不可覆盖副本及适用 journal 先放入新输出目录，再让同一生产 loader 认证副本；仍保留源 bytes/hash 和 parent fingerprint 核对，无需扩建框架。"
+    }
+  ],
+  "limitations": [
+    "这是候选源码的有界静态审阅，不是运行时验收或正式 adapter_fixed/merge_ready/production_gap_fixed 结论。",
+    "已审阅 loader 与 issuer 为本地指定 f4f5f07b54bd1e0ab5c9356c08df73d704eba402 对象；未认证云端当前进程或其他未提供源码变更。",
+    "未读取任何凭据或运行候选 CLI、合同、RPC、EVM、live、benchmark；主代理负责正在进行的生产合同与真实单块重验。",
+    "用户后续告知 Curve fresh dual 的 8 次执行、P=2000000000000000、输出/欠扣各 1 raw 和原生余额不变；本任务未读取那份原始执行文件，未将该消息转记为独立验证结果。",
+    "无访问阻碍影响两份候选和基线的代码审阅；未补跑 authenticated-loader/复制/导入集成 fixture。"
+  ]
+}

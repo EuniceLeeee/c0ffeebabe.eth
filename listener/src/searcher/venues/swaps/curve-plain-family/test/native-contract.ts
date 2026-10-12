@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ethers } from "ethers";
 import { ADDR } from "../../../../../shared/constants/addresses.js";
 import { inspectRuntime } from "../../../../test/runtime-program-testkit.js";
@@ -18,6 +21,59 @@ import { executeAdapterFamilyLifecycleBatch } from "../../../adapter-family-runt
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { asPricedFamily } from "../../../family-capability-catalog.js";
 import { executionData } from "../codec.js";
+import { copyReadySnapshot, readyReuseScope } from "./historical-ready.js";
+import type { StartupCheckpointEnvelope } from "../../../../universe-rebuild-checkpoint.js";
+
+test("Ready snapshot copy preserves source, refuses overwrite and excludes live journal/lock", t => {
+  const dir = mkdtempSync(join(tmpdir(), "curve-ready-copy-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const sourceDir = join(dir, "source"); mkdirSync(sourceDir);
+  const source = join(sourceDir, "ready.json"), destination = join(dir, "copy.json");
+  const bytes = Buffer.from('{"fixture":"copied before production authentication"}\n');
+  writeFileSync(source, bytes);
+  assert.deepEqual(copyReadySnapshot(source, destination), bytes);
+  assert.deepEqual(readFileSync(source), bytes);
+  assert.deepEqual(readFileSync(destination), bytes);
+  assert.deepEqual(readdirSync(sourceDir), ["ready.json"]);
+  assert.throws(() => copyReadySnapshot(source, destination), /EEXIST/);
+  for (const suffix of [".lock", ".attestation-journal"]) {
+    writeFileSync(source + suffix, "preserve me");
+    assert.throws(() => copyReadySnapshot(source, join(dir, "new.json")), /inactive materialized/);
+    assert.equal(readFileSync(source + suffix, "utf8"), "preserve me");
+    rmSync(source + suffix);
+  }
+});
+
+test("historical Ready reuse requires a completed Curve-only single source and preserves evidence", () => {
+  const block = 123, hash = ethers.id("curve-ready-reuse");
+  const prior = { inProgressRun: null, checkpointFingerprint: "ab".repeat(32), readyGeneration: {
+    cutoff: { number: block, hash, generation: block },
+    universeRange: { fromBlock: block, toBlock: block },
+    familyPartitions: { [CURVE_PLAIN_FAMILY_ID]: {} },
+  } } as unknown as StartupCheckpointEnvelope;
+  const before = structuredClone(prior);
+  assert.deepEqual(readyReuseScope(prior, block, hash), {
+    parentCheckpointFingerprint: prior.checkpointFingerprint, familyIds: [CURVE_PLAIN_FAMILY_ID],
+  });
+  assert.deepEqual(prior, before);
+  assert.throws(() => readyReuseScope(null, block, hash), /completed Ready/);
+  assert.throws(() => readyReuseScope(prior, block + 1, hash));
+  assert.throws(() => readyReuseScope(prior, block, ethers.id("wrong-chain-source")));
+  for (const mutate of [
+    (p: any) => { p.readyGeneration = null; },
+    (p: any) => { p.inProgressRun = { runId: "unfinished" }; },
+    (p: any) => { p.readyGeneration.universeRange.fromBlock--; },
+    (p: any) => { p.readyGeneration.universeRange.toBlock++; },
+    (p: any) => { delete p.readyGeneration.familyPartitions; },
+    (p: any) => { p.readyGeneration.familyPartitions = {}; },
+    (p: any) => { p.readyGeneration.familyPartitions.unrelated = {}; },
+    (p: any) => { p.readyGeneration.observationScope = { kind: "transactions" }; },
+  ]) {
+    const wrong = structuredClone(prior);
+    mutate(wrong);
+    assert.throws(() => readyReuseScope(wrong, block, hash));
+  }
+});
 
 const pool = "0x1111111111111111111111111111111111111111", token = "0x2222222222222222222222222222222222222222";
 const actor = "0x3333333333333333333333333333333333333333", handler = "0x4444444444444444444444444444444444444444";
