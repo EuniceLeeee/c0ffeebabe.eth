@@ -1,7 +1,7 @@
 import type { PricingSemantics } from "../../adapter-family-plugin.js";
 import { compileAddressMutations } from "../../mutation-index.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
-import { quotedPoolMid } from "../blockscan-state-shared.js";
+import { bigintRatio, directedPoolMid } from "../blockscan-state-shared.js";
 import {
   assertKyberSwapInvocation,
   kyberSwapStaticProjection,
@@ -12,7 +12,8 @@ import {
   poolStateRequests,
   decodePoolState,
 } from "./state.js";
-import { spotQuoteExactInput, virtualReserves } from "./math.js";
+import { virtualReserves } from "./math.js";
+import { KYSWAP_FEE_UNITS, KYSWAP_TWO_POW_96 } from "./abi.js";
 import type {
   KyberSwapDescriptor,
   KyberSwapPricingDescriptor,
@@ -22,12 +23,24 @@ import type {
 
 const dependencies = (descriptor: KyberSwapDescriptor) => [descriptor.pool];
 
+function unavailableReason(snapshot: KyberSwapPricingSnapshot): string | null {
+  if (snapshot.locked) return "kyberswap_elastic_pool_locked";
+  if (snapshot.baseL + snapshot.reinvestL <= 0n) return "kyberswap_elastic_no_active_liquidity";
+  const reserves = virtualReserves(snapshot);
+  // A fractional virtual reserve needs a separate precision/capacity witness.
+  // Do not fabricate a one-unit reserve or call this a chain-proven rejection.
+  if (reserves.token0 <= 0n || reserves.token1 <= 0n) {
+    return "kyberswap_elastic_raw_depth_below_one_unit";
+  }
+  return null;
+}
+
 /**
- * Raw mid sampling only. The sample amount is one hundred-thousandth of the
- * pool's virtual reserve at the current price — a depth-relative sample, never
- * a substitute for a caller's requested input amount (see exact.ts). The mid
- * itself is the zero-impact price at the pool's current sqrt price with the
- * pool fee applied, so it can be produced for any live pool state.
+ * Raw marginal price only, with the fee included exactly once. Evaluate the
+ * sqrt-price ratio directly: integer depth-relative samples can round either
+ * input or output to zero even when reinvestment liquidity remains tradable.
+ * Unrounded price does not enlarge the unchanged integer depth proxies, and
+ * never replaces amount-sensitive Exact or an actual execution (see exact.ts).
  */
 export const kyberswapElasticPricing = {
   stateKey: (route: KyberSwapRoute) => route.instanceKey,
@@ -93,23 +106,27 @@ export const kyberswapElasticPricing = {
     }) {
       const mids = new Map<
         KyberSwapRoute["routeKey"],
-        ReturnType<typeof quotedPoolMid>
+        ReturnType<typeof directedPoolMid>
       >();
+      for (const route of routes) assertKyberSwapInvocation(descriptor.instance, route);
+      if (unavailableReason(snapshot) !== null) return mids;
       const reserves = virtualReserves(snapshot);
+      const square = snapshot.sqrtP * snapshot.sqrtP;
+      const q192 = KYSWAP_TWO_POW_96 * KYSWAP_TWO_POW_96;
+      const netFee = KYSWAP_FEE_UNITS - snapshot.feeUnits;
       for (const route of routes) {
-        assertKyberSwapInvocation(descriptor.instance, route);
         const depthIn = route.isToken0 ? reserves.token0 : reserves.token1;
         const depthOut = route.isToken0 ? reserves.token1 : reserves.token0;
-        const amountIn = depthIn / 100_000n;
-        if (amountIn <= 1n || depthOut === 0n) continue;
-        const amountOut = spotQuoteExactInput(snapshot, route.isToken0, amountIn);
-        if (amountOut === 0n) continue;
-        mids.set(route.routeKey, quotedPoolMid({
+        const mid = bigintRatio(
+          (route.isToken0 ? square : q192) * netFee,
+          (route.isToken0 ? q192 : square) * KYSWAP_FEE_UNITS,
+        );
+        mids.set(route.routeKey, directedPoolMid({
           kind: "external-swap",
-          amountIn,
-          amountOut,
-          depthIn,
-          depthOut,
+          mid,
+          reserveIn: depthIn,
+          reserveOut: depthOut,
+          feeBps: 0,
           edge: {
             adapterId: KYSWAP_SWAP_ACTION,
             instanceKey: route.instanceKey,
@@ -122,6 +139,19 @@ export const kyberswapElasticPricing = {
         }));
       }
       return mids;
+    },
+    classifyUnavailable({ descriptor, routes, snapshot }: {
+      readonly descriptor: KyberSwapPricingDescriptor;
+      readonly routes: readonly KyberSwapRoute[];
+      readonly snapshot: KyberSwapPricingSnapshot;
+    }) {
+      const unavailable = new Map<KyberSwapRoute["routeKey"], string>();
+      const reason = unavailableReason(snapshot);
+      for (const route of routes) {
+        assertKyberSwapInvocation(descriptor.instance, route);
+        if (reason !== null) unavailable.set(route.routeKey, reason);
+      }
+      return unavailable;
     },
   },
   dependencies: ({

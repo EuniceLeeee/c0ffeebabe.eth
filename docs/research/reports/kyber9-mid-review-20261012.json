@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "reviewer": "Aquinas / 01a12f00-9d66-7492-a920-0a49a92997a5",
+  "pass": 1,
+  "scope": "Independent non-author, offline arithmetic/classification/boundary review of the three-file Kyber9 patch. Not formal family_local closure or EVM acceptance.",
+  "baseHead": "6c0cf56e7072c8f9a65051eb1dc24013334d9120",
+  "reviewedHashes": {
+    "pricing.ts": "9dd1bf7a627b0acbfc1cff132f30be4a1d7e53f44e874c13e97ee0d9a8e23689",
+    "test/contract.ts": "39bab6d4ed1154eb795e402aaeebd544cf4601e1dd08e290b5a02bf2b2f3cf65",
+    "test/central-exact.ts": "6a1ed6c5bcc00fc5de730281627fa51aebc318f069487cb26068780cc85039a6"
+  },
+  "ranGateReportedByReviewer": {
+    "method": "Two zero-RPC local Node processes executed in-memory current source function bodies and baseline shared helpers, both exit 0. First attempt using unsupported transform mode failed; strip mode then ran.",
+    "capturedState": {
+      "baselineMidCount": 0,
+      "candidateMidCount": 2,
+      "candidateUnavailableCount": 0,
+      "forward": 830.0571814857035,
+      "reverse": 0.001180762026834992,
+      "product": 0.9801000000000001
+    },
+    "classificationSamples": 14563,
+    "priceChecks": 12962,
+    "maximumReportedRelativeError": 1.788e-16,
+    "malformedStateRejections": 9,
+    "wrongRouteRejections": 16,
+    "marginalConvergenceChecks": 216
+  },
+  "findings": [
+    {
+      "severity": "P3",
+      "finding": "Low-liquidity production-lifecycle test only required one verified pricing outcome; a one-mid/one-unavailable mutant could pass those assertions.",
+      "disposition": "Author added mids.size=2, unavailable.size=0 and no pricing-current rejected outcome, then reran the complete 66-test suite.",
+      "finalTestSha256": "34d51655a1afb0ac11a27f9b949ad3c2bae21cba7f105a1c9506b53858e6a703",
+      "productionCodeChangedAfterReview": false
+    },
+    {
+      "severity": "baseline-boundary",
+      "finding": "At MIN_SQRT_RATIO+1 token0-in and MAX_SQRT_RATIO-1 token1-in, both baseline and candidate publish raw mid while Exact refuses price-limit-not-movable.",
+      "disposition": "Existing fail-closed Exact guard retained. Raw marginal classification does not certify every amount/direction at extreme limits. Not claimed closed by this sample patch."
+    }
+  ],
+  "verdict": "No confirmed new blocker in this patch scope; P3 test blind spot addressed by author. Not whole-family or formal merge acceptance.",
+  "limitations": [
+    "Reviewer did not run RPC, cloud Ready/EVM, or main-agent suites, and did not independently authenticate the new historical report.",
+    "Arithmetic scripts were run in-memory, not retained as versioned independent gate artifacts; counts are the reviewer's returned execution report.",
+    "Not an integer Exact/EVM parity verdict or performance result.",
+    "Post-review change is test-only; author reran tests and verified the production source/harness hash remained identical to the historical evidence."
+  ],
+  "dispatch": "Repository CLI wrapper was attempted first and terminated with unsupported configured model HTTP400 and no review output. Built-in Codex subagent was used without changing global config."
+}

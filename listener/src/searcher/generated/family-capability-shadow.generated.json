@@ -4959,7 +4959,7 @@
         "familyId": "kyberswap-elastic",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "56aec5e90631fc12d153f8a735f8cafea24b6f78915400fbee846929328a22f7",
+        "contentHash": "5a0e209a8dcb983dc5906dc210831dd38323117105d0fe9c8e94d3b324e1332d",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -14753,5 +14753,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "3299e844a22c160db9a3a926ce3eec2f39a8baa2c21886d37c3e6865a3ee0baf"
+  "artifactHash": "d9e7c7d2947283a0b094582790259f011078f7f1cf1444db33ce73747613a8fd"
 }

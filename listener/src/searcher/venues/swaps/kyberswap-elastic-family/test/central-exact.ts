@@ -54,6 +54,40 @@ function fixtureRuntime(options: Parameters<typeof answerFor>[0] = {},
   return { runtime, rounds };
 }
 
+test("production lifecycle materializes both routes with small reinvestment-only liquidity", async () => {
+  const { runtime } = fixtureRuntime({ sqrtP: 2294119265957737969105579199237n,
+    currentTick: 67318, nearestCurrentTick: -887272, baseL: 0n, reinvestL: 611895n, feeUnits: 1000n });
+  const publication = await runStrictFamilyLifecycle({
+    catalog, familyId: plugin.manifest.familyId, source: SOURCE, runtime,
+    observations: [{ kind: "log", source: SOURCE, ...swapLogEvent() }],
+  });
+  assert.equal(publication.instances.length, 1);
+  assert.equal(publication.instances[0]!.routes.length, 2);
+  const pricing = publication.instances[0]!.pricingInstances[0]!;
+  assert.equal(pricing.mids.size, 2);
+  assert.equal(pricing.unavailable.size, 0);
+  assert(publication.outcomes.some(o => o.stage === "pricing-current" && o.status === "verified"));
+  assert(!publication.outcomes.some(o => o.stage === "pricing-current" && o.status === "rejected"));
+  assert(!publication.outcomes.some(o => o.status === "failed" || o.status === "unresolved"));
+});
+
+test("production lifecycle preserves an empty instance with explicit unavailable pricing", async () => {
+  const { runtime } = fixtureRuntime({ baseL: 0n, reinvestL: 0n });
+  const publication = await runStrictFamilyLifecycle({
+    catalog, familyId: plugin.manifest.familyId, source: SOURCE, runtime,
+    observations: [{ kind: "log", source: SOURCE, ...swapLogEvent() }],
+  });
+  assert.equal(publication.instances.length, 1);
+  assert.equal(publication.instances[0]!.routes.length, 2);
+  const pricing = publication.instances[0]!.pricingInstances[0]!;
+  assert.equal(pricing.mids.size, 0);
+  assert.equal(pricing.unavailable.size, 2);
+  assert.equal(publication.outcomes.filter(o => o.stage === "pricing-current" &&
+    o.status === "rejected" && o.reasonCode ===
+      "behavior-proven-unavailable:kyberswap_elastic_no_active_liquidity").length, 2);
+  assert(!publication.outcomes.some(o => o.stage === "identity" && o.status !== "verified"));
+});
+
 for (const direction of ["token0-in", "token1-in"] as const) {
   test(`production Exact terminates ${direction} and bounds dependent reads`, async () => {
     const { runtime, rounds } = fixtureRuntime();

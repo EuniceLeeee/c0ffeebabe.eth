@@ -524,6 +524,75 @@ test("pricing projects one mid per routed direction from the same state read", (
   );
 });
 
+function priceState(options: Parameters<typeof answerFor>[0] = {}) {
+  // Keep identity/descriptor valid while exercising mutable current state,
+  // including a pool that has become locked or empty after admission.
+  const d = descriptor(), routes = routesFor(d);
+  const draft = plugin.pricing.compileDraft({ descriptor: d, stateKey: d.instanceKey, routes } as never);
+  const pricingDescriptor = plugin.pricing.finalizePricingDescriptor({ draft, sharedBindings: [] } as never);
+  const requests = plugin.pricing.current.buildRequests({ descriptor: pricingDescriptor, routes } as never);
+  const snapshot = plugin.pricing.current.decodeSnapshot({ descriptor: pricingDescriptor, routes,
+    initialResults: requests.map(answerFor(options)), dependentEvidence: [] } as never);
+  const input = { descriptor: pricingDescriptor, routes, snapshot };
+  return { input, routes, snapshot, mids: plugin.pricing.current.deriveMids(input as never) };
+}
+
+test("raw mid preserves both directions when the old integer samples round to zero", () => {
+  // N26037069 target state: no base liquidity, but positive reinvestment
+  // liquidity. The old depth/100000 samples were 0 WBTC and 177 USDT raw.
+  const { snapshot, routes, mids } = priceState({ sqrtP: 2294119265957737969105579199237n,
+    currentTick: 67318, nearestCurrentTick: MIN_TICK, baseL: 0n, reinvestL: 611895n, feeUnits: 1000n });
+  const reserves = virtualReserves(snapshot);
+  assert.deepEqual(reserves, { token0: 21131n, token1: 17717943n });
+  assert.equal(spotQuoteExactInput(snapshot, true, reserves.token0 / 100_000n), 0n);
+  assert.equal(spotQuoteExactInput(snapshot, false, reserves.token1 / 100_000n), 0n);
+  assert.equal(mids.size, 2);
+  const q192 = 1n << 192n, square = snapshot.sqrtP * snapshot.sqrtP;
+  const net = KYSWAP_FEE_UNITS - snapshot.feeUnits;
+  for (const route of routes) {
+    const mid = mids.get(route.routeKey)!;
+    const expected = Number((route.isToken0 ? square : q192) * net) /
+      Number((route.isToken0 ? q192 : square) * KYSWAP_FEE_UNITS);
+    assert(Math.abs(mid.mid / expected - 1) < 1e-14);
+    assert.equal(mid.feeBps, 0, "the marginal ratio already includes the fee once");
+    assert.equal(mid.reserveA, route.isToken0 ? reserves.token0 : reserves.token1);
+    assert.equal(mid.reserveB, route.isToken0 ? reserves.token1 : reserves.token0);
+  }
+  const product = routes.reduce((acc, route) => acc * mids.get(route.routeKey)!.mid, 1);
+  assert(Math.abs(product - (Number(net) / Number(KYSWAP_FEE_UNITS)) ** 2) < 1e-14);
+});
+
+test("raw marginal mid is independent of liquidity and does not quantize a low-decimal side", () => {
+  for (const sqrtP of [1n << 96n, 1n << 116n, 1n << 76n]) {
+    const small = priceState({ sqrtP, baseL: 2_000_000n, reinvestL: 0n });
+    const large = priceState({ sqrtP, baseL: 2_000_000n * 10n ** 12n, reinvestL: 0n });
+    assert.equal(small.mids.size, 2); assert.equal(large.mids.size, 2);
+    for (const route of small.routes) {
+      const a = small.mids.get(route.routeKey)!, b = large.mids.get(route.routeKey)!;
+      assert.equal(a.mid, b.mid);
+      assert(a.reserveA > 0n && a.reserveB > 0n);
+      assert(a.reserveA < b.reserveA && a.reserveB < b.reserveB);
+    }
+  }
+});
+
+test("raw pricing classifies unavailable states without inventing integer depth or erasing identity", () => {
+  for (const [options, reason] of [
+    [{ baseL: 0n, reinvestL: 0n }, "kyberswap_elastic_no_active_liquidity"],
+    [{ locked: true }, "kyberswap_elastic_pool_locked"],
+    [{ sqrtP: 1n << 116n, baseL: 1n, reinvestL: 0n }, "kyberswap_elastic_raw_depth_below_one_unit"],
+    [{ sqrtP: 1n << 76n, baseL: 1n, reinvestL: 0n }, "kyberswap_elastic_raw_depth_below_one_unit"],
+  ] as const) {
+    const { input, mids, routes } = priceState(options);
+    const unavailable = plugin.pricing.current.classifyUnavailable(input as never);
+    assert.equal(mids.size, 0); assert.equal(unavailable.size, 2);
+    for (const route of routes) assert.equal(unavailable.get(route.routeKey), reason);
+  }
+  const active = priceState({ baseL: 0n, reinvestL: BASE_L });
+  assert.equal(active.mids.size, 2);
+  assert.equal(plugin.pricing.current.classifyUnavailable(active.input as never).size, 0);
+});
+
 test("exact quote exposes a local-zero method without reading chain state", () => {
   const d = descriptor();
   const route = routesFor(d)[0]!;
