@@ -155,6 +155,8 @@
     "searcher:yieldbasis-lt-deposit-contract": "node --import tsx --test src/searcher/venues/protocols/yieldbasis-lt-family/test/deposit.test.ts src/searcher/venues/protocols/yieldbasis-lt-family/test/deposit-probe-report.test.ts src/searcher/venues/protocols/yieldbasis-lt-family/test/deposit-production.test.ts src/searcher/venues/protocols/yieldbasis-lt-family/test/historical-dual.test.ts",
     "searcher:yieldbasis-lt-deposit-historical": "node --import tsx src/searcher/venues/protocols/yieldbasis-lt-family/test/deposit-historical.ts",
     "searcher:yieldbasis-lt-dual-historical": "node --import tsx src/searcher/venues/protocols/yieldbasis-lt-family/test/historical-dual.ts",
+    "searcher:yieldbasis-lt-historical-ready": "node --import tsx src/searcher/venues/protocols/yieldbasis-lt-family/test/historical-ready.ts",
+    "searcher:compound-ctoken-historical-ready": "node --import tsx src/searcher/venues/protocols/compound-ctoken-family/test/historical-ready.ts",
     "searcher:kyber-yb-compound-dual-historical-fork": "node --import tsx src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
     "searcher:algebra-dual-historical-fork": "node --import tsx src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
     "searcher:curve-runtime-dual-historical-fork": "node --import tsx src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts",

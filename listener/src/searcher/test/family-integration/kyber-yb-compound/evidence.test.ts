@@ -373,6 +373,130 @@ test("Compound redeemUnderlying maps real burned shares, never declares original
   assert.throws(() => originalLeg("compound", instance, descriptor, { logs: [...receipt.logs, receipt.logs[0]] }, trace));
 });
 
+// Synthetic OFFLINE cUNI observations; these amounts are not a saved production
+// reference or historical execution evidence. Only the registry pins the real TX.
+const cuniUnderlying = "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984";
+function cuniFixture(burnedShares = 17n, underlyingOutput = 19n) {
+  const instance = SAMPLES.cuni.instances[0], descriptor = { share: instance, underlying: cuniUnderlying };
+  const receipt: any = { logs: [
+    event(CT, "Redeem", [actor, underlyingOutput, burnedShares], instance),
+    event(ERC20, "Transfer", [instance, actor, underlyingOutput], cuniUnderlying),
+  ] };
+  const trace: any = { type: "CALL", from: actor, to: instance,
+    input: CT.encodeFunctionData("redeemUnderlying", [underlyingOutput]),
+    output: CT.encodeFunctionResult("redeemUnderlying", [0n]) };
+  return { instance, descriptor, receipt, trace, burnedShares, underlyingOutput };
+}
+const observeCuni = (f: ReturnType<typeof cuniFixture>) =>
+  originalLegs("cuni", f.instance, f.descriptor, f.receipt, f.trace);
+
+test("cUNI is a separate pinned sample and preserves the cUSDC/cDAI record", () => {
+  assert.deepEqual(SAMPLES.cuni, { family: "protocol:compound-ctoken", number: 26037262,
+    tx: "0x50f2112fea14632548cfb10268c6f091f0733e5a50fc97e375c54209381d656a",
+    instances: ["0x35a18000230da775cac24873d00ff85bccded550"] });
+  assert.deepEqual(SAMPLES.compound, { family: "protocol:compound-ctoken", number: 25944463,
+    tx: "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df",
+    instances: ["0x39aa39c021dfbae8fac545936693ac917d5e7563", "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643"] });
+  assert.equal(options(["--family", "cuni", "--ready", "ready.json", "--prices", "prices.json",
+    "--port", "18593", "--out", "new.json"]).family, "cuni");
+});
+
+test("cUNI redeemUnderlying observes event shares, not its underlying-output argument or zero return code", () => {
+  for (const [shares, underlying] of [[17n, 19n], [123456789n, 5n * 10n ** 18n]]) {
+    const f = cuniFixture(shares, underlying);
+    const direct = originalLeg("cuni", f.instance, f.descriptor, f.receipt, f.trace);
+    // Delegation is implementation dispatch, not a second redemption.
+    f.trace = { calls: [{ ...f.trace, calls: [{ ...f.trace, type: "DELEGATECALL" }] }] };
+    const legs = observeCuni(f);
+    assert.deepEqual(legs, [direct]);
+    const leg = legs[0]!;
+    assert.equal(leg.amountIn, shares); assert.equal(leg.amountOut, underlying);
+    assert.notEqual(leg.amountIn, CT.decodeFunctionData("redeemUnderlying", f.trace.calls[0].input)[0]);
+    assert.equal(leg.tokenIn, f.instance); assert.equal(leg.tokenOut, cuniUnderlying);
+    assert.equal(leg.caller, actor); assert.equal(leg.recipient, actor);
+    assert.equal(leg.originalInterface, "redeemUnderlying");
+    assert.equal(leg.comparison,
+      "redeemUnderlying observed; burned shares mapped to redeem at N-end, NOT original interface/pre-call parity");
+  }
+});
+
+test("cUNI observation rejects mismatched, ambiguous, failed and incomplete redemption evidence", () => {
+  const rejected: [string, (f: ReturnType<typeof cuniFixture>) => void][] = [
+    ["underlying calldata replaced with share quantity", f => {
+      f.trace.input = CT.encodeFunctionData("redeemUnderlying", [f.burnedShares]);
+    }],
+    ["wrong caller", f => { f.trace.from = token0; }],
+    ["wrong market", f => { f.trace.to = SAMPLES.compound.instances[0]; }],
+    ["nonzero Compound error code", f => { f.trace.output = CT.encodeFunctionResult("redeemUnderlying", [1n]); }],
+    ["missing return data", f => { delete f.trace.output; }],
+    ["malformed return data", f => { f.trace.output = "0x01"; }],
+    ["delegatecall without external redemption", f => { f.trace.type = "DELEGATECALL"; }],
+    ["staticcall is not redemption", f => { f.trace.type = "STATICCALL"; }],
+    ["reverted root", f => { f.trace = { error: "reverted", calls: [f.trace] }; }],
+    ["reverted ancestor", f => { f.trace = { calls: [{ revertReason: "reverted", calls: [f.trace] }] }; }],
+    ["multiple successful calls", f => { f.trace = { calls: [f.trace, structuredClone(f.trace)] }; }],
+    ["missing Redeem event", f => { f.receipt.logs.shift(); }],
+    ["duplicate Redeem event", f => { f.receipt.logs.push(structuredClone(f.receipt.logs[0])); }],
+    ["wrong event redeemer", f => { f.receipt.logs[0] = event(CT, "Redeem", [token0, 19n, 17n], f.instance); }],
+    ["zero burned shares", f => { f.receipt.logs[0] = event(CT, "Redeem", [actor, 19n, 0n], f.instance); }],
+    ["missing output Transfer", f => { f.receipt.logs.pop(); }],
+    ["duplicate output Transfer", f => { f.receipt.logs.push(structuredClone(f.receipt.logs[1])); }],
+    ["wrong output token", f => { f.receipt.logs[1].address = asset; }],
+    ["wrong output recipient", f => {
+      f.receipt.logs[1] = event(ERC20, "Transfer", [f.instance, token0, 19n], cuniUnderlying);
+    }],
+    ["wrong output amount", f => {
+      f.receipt.logs[1] = event(ERC20, "Transfer", [f.instance, actor, 18n], cuniUnderlying);
+    }],
+  ];
+  for (const [reason, mutate] of rejected) {
+    const f = cuniFixture(); mutate(f);
+    assert.throws(() => observeCuni(f), reason);
+  }
+});
+
+test("cUNI direction grouping keeps only observed share-to-UNI redemption", () => {
+  const f = cuniFixture(), originals = observeCuni(f);
+  // Compound is not in the consumer's bidirectional-family set.
+  const directions = originalDirections(originals, false);
+  assert.deepEqual(directions, [{ tokenIn: f.instance, tokenOut: cuniUnderlying, originals }]);
+  assert.equal(directions[0]!.originals[0], originals[0]);
+  assert(!directions.some(d => d.tokenIn === cuniUnderlying));
+});
+
+test("cUNI amount trials retain burned-share history independently of fixture reference inputs", () => {
+  for (const shares of [17n, 123456789n]) {
+    const originals = observeCuni(cuniFixture(shares, 5n * 10n ** 18n)), original = originals[0]!;
+    const historical = { label: "historical-input-at-N", amountIn: shares, original };
+    assert.deepEqual(historicalAmountTrials(originals, null), [historical]);
+    for (const label of ["production-effective", "spliced-production-input-at-N"]) {
+      // Synthetic reference values test trial ownership only, including equal inputs.
+      for (const amountIn of [shares, shares + 1n]) {
+        const reference = { label, amountIn };
+        const trials = historicalAmountTrials(originals, reference);
+        assert.deepEqual(trials, [{ ...reference, original: null }, historical]);
+        assert.equal(trials[1]!.original, original);
+        assert.equal(trials[1]!.original!.amountOut, 5n * 10n ** 18n);
+      }
+    }
+  }
+});
+
+test("cUNI missing production reference stays unmet and cannot borrow another token's donor", () => {
+  const f = cuniFixture(), originals = observeCuni(f);
+  const edge = { instanceKey: f.instance, tokenIn: f.instance, tokenOut: cuniUnderlying };
+  assert.deepEqual(productionAmount(undefined, undefined, edge, source, 7),
+    { status: "unmet", reason: "missing-effective-row" });
+  assert.deepEqual(productionAmount({ ...edge, status: "missing-valuation", amountIn: 17n }, { mid: 1 }, edge, source, 7),
+    { status: "unmet", reason: "missing-valuation" });
+  const donor = donorFixture();
+  assert.throws(() => splicedProductionAmount(donor.saved, donor.declaration, [donor.edgeId], f.instance),
+    /select exactly one reference row per target input token/);
+  const trials = historicalAmountTrials(originals, null);
+  assert.equal(trials.length, 1); assert.equal(trials[0]!.label, "historical-input-at-N");
+  assert.equal(trials[0]!.original, originals[0]);
+});
+
 test("runtime construction guard traps Exact, quoted fallback and service access before executing them", () => {
   const g = constructionGuard(); let executed = false;
   assert.throws(() => g.build(() => g.exact(() => { executed = true; })));

@@ -1,0 +1,161 @@
+{
+  "review": "Independent non-author Yield Basis historical-dual harness review, one bounded pass",
+  "verdict": "no_actionable_findings_within_reviewed_scope",
+  "findings": [],
+  "scope": "Two family-owned historical harness files; read-only source review and lightweight offline checks. Not adapter_fixed or merge/deployment approval.",
+  "cloud_workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "head_observed": "ac3182be13a5af2ff43822cd401db2c251537a1b",
+  "dirty_peer_files": "Observed and preserved; HEAD alone was not treated as the tested source identity.",
+  "candidate_sha256": {
+    "historical-dual.ts": "04eef0e153e05e339ba3f9c10aca15038b6cc88d5b072ec1d9498701044e5314",
+    "historical-dual.test.ts": "3d931bd84b543113ddb576b9256d3e4208e4083edc64beaded0a5c10a8ece9ab"
+  },
+  "binding_checks": {
+    "local_and_cloud_candidate_bytes_match": true,
+    "saved_cbbtc_harness_sha_matches": true,
+    "five_saved_input_files_rehashed": true,
+    "current_runtime_source_tree_rehashed": true,
+    "source_tree_sha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+    "ready_loaded_through_current_production_resolver": true,
+    "single_N_range_hash_graph_memo_fingerprint_and_family_definition_checked": true,
+    "current_prepared_instance_has_two_verified_directions": true,
+    "price_provenance_source_executor_and_saved_revm_hash_consistency_checked": true,
+    "revm_binary_not_executed_or_independently_rehashed": true
+  },
+  "executed_checks": {
+    "runner": "/tmp/yb-dual-review.xaBITt/check.mjs",
+    "runner_sha256": "e1c5746bf3979aa31c96bd0673b4c017dab02300acb1fb46458b54aa4a7182f4",
+    "execution": "Cloud Node v26.0.0, existing tsx loader, /tmp working directory, script supplied over SSH stdin. Only entry-declared SEARCHER_FAMILY_YIELDBASIS_LT_ENABLED=1 set in the test process. No environment file loaded.",
+    "final_exit_code": 0,
+    "final_tests": 11,
+    "final_passed": 11,
+    "final_failed": 0,
+    "candidate_tests": 4,
+    "additional_checks": [
+      "Candidate/report/input/runtime-source byte binding",
+      "Saved original receipt and trace re-observation plus bad receipt identity/status/removed-log rejection",
+      "All 16 saved positive executions: source, exact input debit, actual output delta, stable/native conservation, old-inventory equality",
+      "All 8 saved negative controls: resolved trusted evidence, declared EVM revert, matching positive script/amount and no reported balance changes",
+      "Existing donor helper: input-only use, changed donor output leaves selected input unchanged; failed donor, wrong input token and contradictory carried-source hash rejected; observed mint shares supply reverse input",
+      "Current Ready rehydration and both production runtime-leg builders with service and quote fields poisoned; zero accesses",
+      "Network entry points poisoned; zero network attempts; reviewed candidate/report bytes preserved"
+    ],
+    "scratch_setup_corrections": [
+      "First run: 9/10 passed; scratch check incorrectly compared a full provenance header with the compact source record. Corrected to compare canonical number/hash fields.",
+      "Second run: 10/11 passed; new runtime-builder check omitted the family's entry-declared opt-in and was correctly rejected by the disabled production catalog. Enabled it only inside the scratch process."
+    ]
+  },
+  "saved_cbbtc_evidence": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/yb722-dual-attempt01.json",
+    "sha256": "00b5a185f6581b5d90754fe1ff77649b7d440a20467a677c816e47f092fb49c4",
+    "result": "pass-with-spliced-reference",
+    "sample_count": 4,
+    "positive_executions": 16,
+    "negative_controls": 8,
+    "runtime_build_exact_calls": 0,
+    "runtime_build_service_accesses_rechecked_offline": 0,
+    "donor_input_raw": "6178",
+    "same_N_actual_minted_shares_raw": "61367628222262",
+    "independent_same_N_reverse_output_raw": "6177",
+    "original_deposit_output_raw": "443545563675625799",
+    "same_N_deposit_output_at_original_input_raw": "443501515889823860",
+    "original_withdraw_output_raw": "44648192",
+    "same_N_withdraw_output_at_original_input_raw": "44648189",
+    "interpretation": "Original amounts are observations. Their differing same-N outputs are not certified as original-precall parity. Reverse amount comes from actual target mint deltas, not donor output."
+  },
+  "wbtc_artifact_extension": {
+    "scope": "Append-only evidence extension for the same reviewed candidate; six focused offline artifact checks, without repeating the code review or running historical execution.",
+    "verdict": "no_actionable_findings_in_WBTC_artifact_checks",
+    "local_path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/yb651-dual-attempt01.json",
+    "cloud_path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/yb651-dual-attempt01.json",
+    "local_and_cloud_sha256": "facbb4922f71b15c421708dc1347037368739f5a2dd014948d539df44507aeb4",
+    "result": "pass-with-spliced-reference",
+    "tx": "0x061eb9595d5deb25b4e5b410a415e3e4567f28f7566c80aaf86cf30cada6a73e",
+    "block": 25981574,
+    "hash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+    "instance": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+    "same_candidate_and_recorded_runtime_source_fingerprint": true,
+    "five_saved_input_files_rehashed": true,
+    "sample_count": 4,
+    "positive_executions": 16,
+    "negative_controls": 8,
+    "original_observation": {
+      "ordinary_deposit_only": true,
+      "amount_in_raw_WBTC": "12",
+      "amount_out_raw_shares": "51089049460806",
+      "interface": "deposit(uint256,uint256,uint256,address)",
+      "log_index": "0x2f0",
+      "ordinary_withdrawal_calls": 0,
+      "decoded_successful_target_calls": [
+        "deposit(uint256,uint256,uint256,address)",
+        "balanceOf(address)"
+      ],
+      "original_withdrawal_or_emergency_parity_claim": false
+    },
+    "same_N_trials": [
+      {
+        "direction": "deposit",
+        "label": "spliced-production-input-at-N",
+        "amount_in_raw": "6184",
+        "amount_out_raw": "62977493765201"
+      },
+      {
+        "direction": "deposit",
+        "label": "original-amount-at-N",
+        "amount_in_raw": "12",
+        "amount_out_raw": "122207303022"
+      },
+      {
+        "direction": "withdraw",
+        "label": "same-N-minted-reference-input",
+        "amount_in_raw": "62977493765201",
+        "amount_out_raw": "6192"
+      },
+      {
+        "direction": "withdraw",
+        "label": "twice-same-N-minted-reference-input",
+        "amount_in_raw": "125954987530402",
+        "amount_out_raw": "12385"
+      }
+    ],
+    "executed_checks": {
+      "runner": "/tmp/yb-dual-review.xaBITt/check-wbtc.mjs",
+      "runner_sha256": "8e4990a03ba6a055c398bc3f6d8f203e7e45299647939b17539e26d883772440",
+      "execution": "Existing cloud Node/tsx, /tmp working directory, scratch script over SSH stdin. Network entries poisoned; no environment files loaded.",
+      "exit_code": 0,
+      "tests": 6,
+      "passed": 6,
+      "failed": 0,
+      "network_attempts": 0,
+      "checks": [
+        "Local/cloud report equality, reviewed harness/test hashes, same recorded source hash, five input hashes and price/source/executor provenance",
+        "Original receipt/trace hashes and current observer reproduce only the four-argument deposit with input 12; no original ordinary withdrawal",
+        "All 16 positive executions match quote input/output, independent token/native deltas, old-inventory invariants, source and ordinary Deposit/Withdraw events",
+        "All 8 controls contain declared-revert evidence and uniquely match successful scripts for each trial and encoding",
+        "Donor contributes input only; actual minted shares and twice those shares feed separately labelled ordinary reverse trials, with no original/emergency parity claim",
+        "No attempted network access; report and harness bytes preserved"
+      ]
+    },
+    "interpretation": "The same-N deposit at the original 12-raw-WBTC input yields 122207303022 shares, whereas the original receipt observes 51089049460806 shares. These remain separate observations, not original output parity. The two ordinary reverse legs independently start at N and do not recreate an original ordinary or emergency withdrawal, composed round trip or profit.",
+    "runtime_gate": "Saved artifact records two directions, Exact=0, RPC=0 and no quoted fallback. Builder behavior was checked in the original same-candidate review and was not rerun in this artifact extension.",
+    "natural_target_valuation": "missing; spliced input does not satisfy it",
+    "new_RPC_EVM_simulation_build_or_source_edits": false
+  },
+  "reviewed_control_flow": [
+    "Existing WETH constants and default selection remain intact; fixed cbBTC/WBTC selections do not become production admission allowlists.",
+    "Original observer binds canonical receipt/log identities, successful ordinary call and return amount, receiver, independent mint/transfer receipt, and successful withdrawal-payment subtree. Emergency withdrawal cannot satisfy an ordinary withdrawal.",
+    "Reference mint is assigned only after a deposit sample completes its positive and negative checks. A failed execution/control leaves the sample failed or incomplete; final four-sample/eight-control gates reject it.",
+    "Spliced success is labeled distinctly, natural target valuation remains missing, and reverse execution is explicitly a separate same-N leg."
+  ],
+  "limitations": [
+    "This review rechecked main-owned saved cbBTC EVM evidence and the appended WBTC artifact; it did not execute RPC, EVM, simulation, build, live or signing.",
+    "WBTC was added by a focused offline artifact extension. Fresh default-WETH historical execution remains unreviewed; its source/fixture behavior was inspected/tested.",
+    "No original call-prestate restoration, composed round trip, natural valuation, complete loop, profitability, representative performance, adapter_fixed or merge-ready conclusion.",
+    "Runtime source fingerprint excludes test directories; this bounded review does not establish a tamper-proof transitive closure of all shared test helpers. Saved evidence remains within the trusted-producer boundary."
+  ],
+  "writes": [
+    "/tmp/yb-dual-review.xaBITt/check.mjs",
+    "/tmp/yb-dual-review.xaBITt/check-wbtc.mjs",
+    "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/yb-historical-dual-independent-review-20261012.json"
+  ]
+}

@@ -1,0 +1,901 @@
+{
+  "schema": "yb-cuni-additional-acceptance/v1",
+  "date": "2026-10-12",
+  "status": "two-more-Yield-Basis-instances-same-N-dual-pass-with-borrowed-input; cUNI-historical-amount-dual-pass-but-reference-unmet",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "sourceBaseCommit": "ac3182be13a5af2ff43822cd401db2c251537a1b",
+  "scope": "Acceptance entrypoint registration, fixed historical sample coverage and evidence tests only. No production Family or central execution/pricing change in this patch.",
+  "testedSourceTreeSha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+  "sourceNote": "Runtime tree includes preserved contemporaneous peer edits, which are not part of this commit. Harness, Ready, price input, simulator and saved-result hashes are bound separately.",
+  "authorization": {
+    "localForksOrReadOnlyHistoricalRpc": true,
+    "signing": false,
+    "broadcast": false,
+    "deploy": false,
+    "liveStarted": false,
+    "defaultActivationChanged": false,
+    "originalReadyMutated": false,
+    "newBranchOrWorktree": false
+  },
+  "implementation": [
+    "Expose the two pre-existing receipt-bound natural single-block Ready harnesses through package scripts and the generated tool inventory, explicitly declaring archive-RPC cost and not dual/performance scope.",
+    "Preserve default WETH Yield Basis sample; add cbBTC/WBTC output-only sample assertions. No sample registry is consumed as a production identity or admission allowlist.",
+    "Bind ordinary Yield Basis deposit/withdraw observations to successful call/event/return and independent mint/transfer evidence. Emergency exits do not satisfy ordinary withdrawal.",
+    "Borrow only a saved production underlying amountIn. Generate reverse test input from independently measured current target deposit receipts, not a donor output. This is an independent same-N reverse test, not a composed transaction or natural WETH valuation.",
+    "Register cUNI as a separate original redeemUnderlying sample; preserve cUSDC/cDAI. Burned shares from the matched Redeem observation become a current redeem input, not the original underlying-output calldata.",
+    "Add six offline cUNI tests with twenty negative mutations and a tool-registration cost/scope regression."
+  ],
+  "yieldBasis": [
+    {
+      "artifact": {
+        "path": "logs/four-family-coverage-20261012.zHKuWX/yb722-dual-attempt01.json",
+        "sha256": "00b5a185f6581b5d90754fe1ff77649b7d440a20467a677c816e47f092fb49c4"
+      },
+      "transaction": "0x1d1f257fc96b602e28292c8ff49a8e9924c3872a48ad0f9cf5d1b2af68d13e60",
+      "block": 25978646,
+      "blockHash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4",
+      "instance": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+      "result": "pass-with-spliced-reference",
+      "sourceTreeSha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+      "harnessSha256": "04eef0e153e05e339ba3f9c10aca15038b6cc88d5b072ec1d9498701044e5314",
+      "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+      "executorCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "inputs": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/yb722-ready-attempt02/ready.json",
+          "sha256": "9b7dfe9b4467fb977145532b7e9aa5620810ca67abd0c9b07a057a77a56fe650"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/yb722-ready-attempt02/prices/prices.json",
+          "sha256": "fc1d20dc866c2990f88710a7757dec3c4974b06434b342c95e0b4188ad97a402"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/yb722-ready-attempt02/prices/input.json",
+          "sha256": "2246ac5aca0138fb640d92b75cdc6331ab522356753a4efa38dc4d7ffa086424"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+          "sha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/declaration.json",
+          "sha256": "6536fa18b3c2c18accc342a3941c907825914e4e531887c76a51916b2f968f8f"
+        }
+      ],
+      "ready": {
+        "graphHash": "e18655d6305ea664712063cfd059f6b3397f62ea41716efb6d272887501168a3",
+        "memoFingerprint": "297062f9f5b042f5a26c8f24f6aff705ffbf2f70a3b14c82f26c84dc4182b878",
+        "familyDefinitionHash": "377e984a23500d280274d88875bbcb055d35d4e39729b4db45dfcde542df754f",
+        "candidate": {
+          "adapter": "yieldbasis-lt",
+          "address": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+          "blockHash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4",
+          "blockNumber": 25978646,
+          "candidateKind": "yieldbasis-lt",
+          "familyId": "protocol:yieldbasis-lt",
+          "logIndex": 70,
+          "lt": "0x722FC3640BA007C3E9867CCdB0dCa59F2e2F29F9",
+          "pluginCandidateKey": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+          "transactionHash": "0x1d1f257fc96b602e28292c8ff49a8e9924c3872a48ad0f9cf5d1b2af68d13e60"
+        }
+      },
+      "priceRows": [
+        {
+          "edgeId": "protocol:yieldbasis-lt\u001f0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9\u001f0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9\u001f0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf>0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9\u001f5f20b294001880d5732998d41a9af2f4582b00a7511f20a8722141b603d00a57",
+          "instanceKey": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+          "tokenIn": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "tokenOut": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+          "amountIn": null,
+          "status": "missing-valuation",
+          "amountOut": null,
+          "effectiveMid": null
+        },
+        {
+          "edgeId": "protocol:yieldbasis-lt\u001f0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9\u001f0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9\u001f0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9>0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf\u001fef4fd0e1b3ad8a90416f1e9570ba693c1bab457480a81ee0ddd806c7006e8a9d",
+          "instanceKey": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+          "tokenIn": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+          "tokenOut": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "amountIn": null,
+          "status": "missing-valuation",
+          "amountOut": null,
+          "effectiveMid": null
+        }
+      ],
+      "referenceInput": {
+        "prices": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+        "declaration": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/declaration.json",
+        "sourceCommit": "2a2243bdf009ac1951644794ed38cb9e98d138e4",
+        "cfg": {
+          "maxHops": 6,
+          "deduplicateRotations": true,
+          "allowRepeatedPools": true,
+          "allowRepeatedTokens": false,
+          "prefixPruningEnabled": true,
+          "maxPrefixDrawdownBps": 0,
+          "enumerationMethod": "joint-dfs",
+          "enumerationBackend": "typescript",
+          "rustEnumerationThreads": 1,
+          "rustEnumerationScratchMb": 512,
+          "ethSignalPairsPerToken": 50,
+          "hopTokensPerStep": 3,
+          "hopPoolsPerPair": 3,
+          "minSpreadBps": 0,
+          "requireDislocatedPair": true,
+          "exactAdmissionSpreadBps": 0,
+          "minCapitalFraction": 0.001,
+          "maxCandidates": 100,
+          "budgetMs": 2000,
+          "pricedTokens": {
+            "$type": "map",
+            "entries": [
+              [
+                "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "2000000000000000000000"
+                  }
+                }
+              ],
+              [
+                "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000"
+                  }
+                }
+              ],
+              [
+                "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000"
+                  }
+                }
+              ],
+              [
+                "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000"
+                  }
+                }
+              ],
+              [
+                "0x6b175474e89094c44da98b954eedeac495271d0f",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000000000000000"
+                  }
+                }
+              ]
+            ]
+          }
+        },
+        "donorReadySha256": "b6a7a579f7fd4cc9a7241c729410f8f85ff42357247ba7ed5a795256353b2b40",
+        "referenceWethInput": "2000000000000000",
+        "row": {
+          "edgeId": "univ3-standard\u001f0x0da6253560822973185297d5f32ff8fa38243afe\u001f0x0da6253560822973185297d5f32ff8fa38243afe\u001f0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf>0x2260fac5e5542a773aa44fbcfedf7c193bc2c599\u001f6b7aa390d4460b74c8a5c137136aaaf70189fbde6e865d65cfdda77931b0fc6e",
+          "tokenIn": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "amountIn": "6178",
+          "quotedAt": {
+            "number": 26146968,
+            "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+            "generation": 1
+          }
+        },
+        "tableSource": {
+          "number": 26146969,
+          "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+          "generation": 2
+        },
+        "freshness": "carried",
+        "inputOnly": true,
+        "naturalTargetValuation": false
+      },
+      "reverseReference": {
+        "label": "same-N-minted-reference-input",
+        "amountIn": "61367628222262",
+        "parentSampleIndex": 0,
+        "source": {
+          "number": 25978646,
+          "hash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4",
+          "generation": 25978646
+        },
+        "kind": "actual target mint receipts, independent same-N reverse leg",
+        "naturalWethValuation": false,
+        "composedRoundTrip": false,
+        "donorOutputBorrowed": false
+      },
+      "samples": [
+        {
+          "label": "spliced-production-input-at-N",
+          "direction": "deposit",
+          "tokenIn": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "tokenOut": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+          "amountIn": "6178",
+          "amountOut": "61367628222262",
+          "executions": 4,
+          "signedQuoteActualDeltas": [
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        {
+          "label": "original-amount-at-N",
+          "direction": "deposit",
+          "tokenIn": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "tokenOut": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+          "amountIn": "44648192",
+          "amountOut": "443501515889823860",
+          "executions": 4,
+          "signedQuoteActualDeltas": [
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        {
+          "label": "same-N-minted-reference-input",
+          "direction": "withdraw",
+          "tokenIn": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+          "tokenOut": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "amountIn": "61367628222262",
+          "amountOut": "6177",
+          "executions": 4,
+          "signedQuoteActualDeltas": [
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        {
+          "label": "original-amount-at-N",
+          "direction": "withdraw",
+          "tokenIn": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+          "tokenOut": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+          "amountIn": "443529484709018041",
+          "amountOut": "44648189",
+          "executions": 4,
+          "signedQuoteActualDeltas": [
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        }
+      ],
+      "controls": 8,
+      "runtimeConstruction": {
+        "directions": 2,
+        "exactCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false
+      },
+      "originalObserved": {
+        "deposit": {
+          "amountIn": "44648192",
+          "amountOut": "443545563675625799",
+          "interface": "deposit(uint256,uint256,uint256)",
+          "logIndex": "0x46"
+        },
+        "withdraw": {
+          "amountIn": "443529484709018041",
+          "amountOut": "44648192",
+          "interface": "withdraw(uint256,uint256)",
+          "logIndex": "0x58"
+        },
+        "comparison": "original call-prestate not restored; N-end output may differ"
+      }
+    },
+    {
+      "artifact": {
+        "path": "logs/four-family-coverage-20261012.zHKuWX/yb651-dual-attempt01.json",
+        "sha256": "facbb4922f71b15c421708dc1347037368739f5a2dd014948d539df44507aeb4"
+      },
+      "transaction": "0x061eb9595d5deb25b4e5b410a415e3e4567f28f7566c80aaf86cf30cada6a73e",
+      "block": 25981574,
+      "blockHash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+      "instance": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+      "result": "pass-with-spliced-reference",
+      "sourceTreeSha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+      "harnessSha256": "04eef0e153e05e339ba3f9c10aca15038b6cc88d5b072ec1d9498701044e5314",
+      "revmSha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d",
+      "executorCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "inputs": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/yb651-ready-attempt01/ready.json",
+          "sha256": "42dd6e1b00192a8bd2e457131f9c41f38c60e4da185faf40e3c0ba5dc903321c"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/yb651-ready-attempt01/prices/prices.json",
+          "sha256": "653d77a3bdbcad659f8ae0c27f49ad70450c4221847e789e98ea84f82d12d533"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/yb651-ready-attempt01/prices/input.json",
+          "sha256": "30255aa010d01b4151868f53995a5ec0bf3c8945a400301e826d6e98b513d2ce"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+          "sha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/declaration.json",
+          "sha256": "6536fa18b3c2c18accc342a3941c907825914e4e531887c76a51916b2f968f8f"
+        }
+      ],
+      "ready": {
+        "graphHash": "9019ef2a1b0b8fe6140fdef7a2c3e059dab89b6a160e47bbaac6e67a7a46e40e",
+        "memoFingerprint": "9bc21e060df61e7e6adb3fd2e28f03f3ad22200f6cfba70c453628363d51404b",
+        "familyDefinitionHash": "377e984a23500d280274d88875bbcb055d35d4e39729b4db45dfcde542df754f",
+        "candidate": {
+          "adapter": "yieldbasis-lt",
+          "address": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+          "blockHash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+          "blockNumber": 25981574,
+          "candidateKind": "yieldbasis-lt",
+          "familyId": "protocol:yieldbasis-lt",
+          "logIndex": 752,
+          "lt": "0x651D4b8168488FA163D85304662E8278d4c55BAa",
+          "pluginCandidateKey": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+          "transactionHash": "0x061eb9595d5deb25b4e5b410a415e3e4567f28f7566c80aaf86cf30cada6a73e"
+        }
+      },
+      "priceRows": [
+        {
+          "edgeId": "protocol:yieldbasis-lt\u001f0x651d4b8168488fa163d85304662e8278d4c55baa\u001f0x651d4b8168488fa163d85304662e8278d4c55baa\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0x651d4b8168488fa163d85304662e8278d4c55baa\u001f7180e371c316d3087d30e09792221f4d7f3cfb0ab561d79537e7d4d4fb84c9d4",
+          "instanceKey": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+          "amountIn": null,
+          "status": "missing-valuation",
+          "amountOut": null,
+          "effectiveMid": null
+        },
+        {
+          "edgeId": "protocol:yieldbasis-lt\u001f0x651d4b8168488fa163d85304662e8278d4c55baa\u001f0x651d4b8168488fa163d85304662e8278d4c55baa\u001f0x651d4b8168488fa163d85304662e8278d4c55baa>0x2260fac5e5542a773aa44fbcfedf7c193bc2c599\u001fcc2a0a2f544b2ab07d08a6b8fbbfd791e4fef01359b2267c7b905bd7507408e0",
+          "instanceKey": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+          "tokenIn": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "amountIn": null,
+          "status": "missing-valuation",
+          "amountOut": null,
+          "effectiveMid": null
+        }
+      ],
+      "referenceInput": {
+        "prices": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+        "declaration": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/declaration.json",
+        "sourceCommit": "2a2243bdf009ac1951644794ed38cb9e98d138e4",
+        "cfg": {
+          "maxHops": 6,
+          "deduplicateRotations": true,
+          "allowRepeatedPools": true,
+          "allowRepeatedTokens": false,
+          "prefixPruningEnabled": true,
+          "maxPrefixDrawdownBps": 0,
+          "enumerationMethod": "joint-dfs",
+          "enumerationBackend": "typescript",
+          "rustEnumerationThreads": 1,
+          "rustEnumerationScratchMb": 512,
+          "ethSignalPairsPerToken": 50,
+          "hopTokensPerStep": 3,
+          "hopPoolsPerPair": 3,
+          "minSpreadBps": 0,
+          "requireDislocatedPair": true,
+          "exactAdmissionSpreadBps": 0,
+          "minCapitalFraction": 0.001,
+          "maxCandidates": 100,
+          "budgetMs": 2000,
+          "pricedTokens": {
+            "$type": "map",
+            "entries": [
+              [
+                "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "2000000000000000000000"
+                  }
+                }
+              ],
+              [
+                "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000"
+                  }
+                }
+              ],
+              [
+                "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000"
+                  }
+                }
+              ],
+              [
+                "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000"
+                  }
+                }
+              ],
+              [
+                "0x6b175474e89094c44da98b954eedeac495271d0f",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000000000000000"
+                  }
+                }
+              ]
+            ]
+          }
+        },
+        "donorReadySha256": "b6a7a579f7fd4cc9a7241c729410f8f85ff42357247ba7ed5a795256353b2b40",
+        "referenceWethInput": "2000000000000000",
+        "row": {
+          "edgeId": "univ3-standard\u001f0x0273d4aac5b0f0c86bbd6ad58cf89710b2ece234\u001f0x0273d4aac5b0f0c86bbd6ad58cf89710b2ece234\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0x8daebade922df735c38c80c7ebd708af50815faa\u001f54d7561c06b7533c097eec4a69a6c551c4e63a43463e4cd325f3d432e6348319",
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "amountIn": "6184",
+          "quotedAt": {
+            "number": 26146968,
+            "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+            "generation": 1
+          }
+        },
+        "tableSource": {
+          "number": 26146969,
+          "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+          "generation": 2
+        },
+        "freshness": "carried",
+        "inputOnly": true,
+        "naturalTargetValuation": false
+      },
+      "reverseReference": {
+        "label": "same-N-minted-reference-input",
+        "amountIn": "62977493765201",
+        "parentSampleIndex": 0,
+        "source": {
+          "number": 25981574,
+          "hash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+          "generation": 25981574
+        },
+        "kind": "actual target mint receipts, independent same-N reverse leg",
+        "naturalWethValuation": false,
+        "composedRoundTrip": false,
+        "donorOutputBorrowed": false
+      },
+      "samples": [
+        {
+          "label": "spliced-production-input-at-N",
+          "direction": "deposit",
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+          "amountIn": "6184",
+          "amountOut": "62977493765201",
+          "executions": 4,
+          "signedQuoteActualDeltas": [
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        {
+          "label": "original-amount-at-N",
+          "direction": "deposit",
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+          "amountIn": "12",
+          "amountOut": "122207303022",
+          "executions": 4,
+          "signedQuoteActualDeltas": [
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        {
+          "label": "same-N-minted-reference-input",
+          "direction": "withdraw",
+          "tokenIn": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "amountIn": "62977493765201",
+          "amountOut": "6192",
+          "executions": 4,
+          "signedQuoteActualDeltas": [
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        {
+          "label": "twice-same-N-minted-reference-input",
+          "direction": "withdraw",
+          "tokenIn": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "amountIn": "125954987530402",
+          "amountOut": "12385",
+          "executions": 4,
+          "signedQuoteActualDeltas": [
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        }
+      ],
+      "controls": 8,
+      "runtimeConstruction": {
+        "directions": 2,
+        "exactCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false
+      },
+      "originalObserved": {
+        "deposit": {
+          "amountIn": "12",
+          "amountOut": "51089049460806",
+          "interface": "deposit(uint256,uint256,uint256,address)",
+          "logIndex": "0x2f0"
+        },
+        "comparison": "original call-prestate not restored; N-end output may differ"
+      }
+    }
+  ],
+  "compoundCuni": {
+    "artifact": {
+      "path": "logs/four-family-coverage-20261012.zHKuWX/cuni-dual-attempt01.json",
+      "sha256": "80ec8de673c0c0108fa015f9ddd3597f2d1e9203724899087bfca2a66f0ac585"
+    },
+    "transaction": "0x50f2112fea14632548cfb10268c6f091f0733e5a50fc97e375c54209381d656a",
+    "result": "incomplete-production-reference",
+    "source": {
+      "number": 26037262,
+      "hash": "0xbb2188010009ec062a4b88eed08ff7d51bf7dc747257a8aa50749304d68b0bc7",
+      "generation": 26037262
+    },
+    "code": {
+      "sourceTreeSha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+      "harnessSha256": "43f43ca6314a9272ddfd6e4cbb277e1e6723de92480227ee97e2dbfd42d0babb",
+      "evidenceSha256": "e629c11197ec914cf9a6ad42196f02be6068ccbefcb11a01ef0fbabdd06da44a",
+      "observationHelpers": [
+        {
+          "path": "../three-family/historical-input-observations.ts",
+          "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+        },
+        {
+          "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+          "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+        },
+        {
+          "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+          "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+        },
+        {
+          "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+          "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+        },
+        {
+          "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+          "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+        },
+        {
+          "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+          "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+        },
+        {
+          "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+          "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+        },
+        {
+          "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+          "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+        },
+        {
+          "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+          "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+        }
+      ]
+    },
+    "runtimeCode": {
+      "keccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+    },
+    "inputHashes": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/cuni-ready-attempt01/ready.json",
+        "sha256": "9a74a9378da13d66e190e11cc318ecef4260fe66f1eec62d518e162b2f1599c3"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/cuni-ready-attempt01/prices/prices.json",
+        "sha256": "f45bd96f03d288de6ce867a17249c91b9d6b9c4e3ec057963688784708c672b8"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/cuni-ready-attempt01/prices/input.json",
+        "sha256": "5c93c1488a0ead0c65326b4abb3cab5a84bc2a85a606ce846eb2ad7b19749166"
+      }
+    ],
+    "admission": [
+      {
+        "instanceKey": "0x35a18000230da775cac24873d00ff85bccded550",
+        "memoFingerprint": "f2b69056012aae70d9fa354e2c8449422a254091c1133932ce496810bf02638c",
+        "familyDefinitionHash": "42bcea101816e0dbd338b1b3e2348dba43579ca1f5bd9e4937d976dc259f1150",
+        "candidate": {
+          "adapter": "compound-ctoken",
+          "address": "0x35a18000230da775cac24873d00ff85bccded550",
+          "blockHash": "0xbb2188010009ec062a4b88eed08ff7d51bf7dc747257a8aa50749304d68b0bc7",
+          "blockNumber": 26037262,
+          "candidateKind": "compound-ctoken-market",
+          "familyId": "protocol:compound-ctoken",
+          "logIndex": 232,
+          "market": "0x35A18000230DA775CAc24873d00Ff85BccdeD550",
+          "pluginCandidateKey": "0x35a18000230da775cac24873d00ff85bccded550",
+          "transactionHash": "0x50f2112fea14632548cfb10268c6f091f0733e5a50fc97e375c54209381d656a"
+        }
+      }
+    ],
+    "naturalProductionReferenceGate": "unmet",
+    "samples": [
+      {
+        "instance": "0x35a18000230da775cac24873d00ff85bccded550",
+        "tokenIn": "0x35a18000230da775cac24873d00ff85bccded550",
+        "tokenOut": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+        "productionReferenceGate": {
+          "status": "unmet",
+          "reason": "missing-valuation"
+        },
+        "runtimeConstruction": {
+          "exactCalls": 0,
+          "quotedCalls": 0,
+          "rpcCalls": 0,
+          "quotedFallback": false,
+          "programHash": "0x119f6864af8a3e60cfbfe7dee5e4b3e299a9d3a7529d83f4a618f6c05f0e61ce"
+        },
+        "trials": [
+          {
+            "label": "historical-input-at-N",
+            "amountIn": "3309303296",
+            "amountOut": "679066135847953170",
+            "executions": 4,
+            "negativeControls": 2,
+            "signedQuoteActualDeltas": [
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            "originalComparison": {
+              "originalAmountOut": "679066136024079596",
+              "signedDelta": "-176126426",
+              "observationId": null,
+              "logIndex": "0xe8",
+              "verdict": "redeemUnderlying observed; burned shares mapped to redeem at N-end, NOT original interface/pre-call parity"
+            }
+          }
+        ]
+      }
+    ],
+    "errors": []
+  },
+  "previousEvidence": {
+    "yieldBasisWeth": "docs/research/reports/yieldbasis-deposit-integration-20261009.json",
+    "cUSDCAndCDAI": "docs/research/reports/compound-reference-acceptance-20261009.json",
+    "scope": "Historical source-bound evidence retained; not rerun or silently relabelled as this turn's runtime source."
+  },
+  "correctnessSummary": {
+    "newNaturalAdmittedInstances": 3,
+    "newGraphDirections": 5,
+    "newRawMidDirections": 5,
+    "newNaturalEffectiveQuotedDirections": 0,
+    "ybPositiveExecutions": 32,
+    "ybMissingInputControls": 16,
+    "cuniPositiveExecutions": 4,
+    "cuniMissingInputControls": 2,
+    "quoteActualSignedDeltas": "all executed successful legs exactly zero",
+    "runtimeConstruction": "Exact/RPC zero; quoted fallback false. Runtime construction guards are separate from subsequent explicitly requested quote tests.",
+    "cuniReference": "unmet, runner exit 2 intentionally retained; no contract/transport failure and no quote exception in the historical amount trial"
+  },
+  "cuniDonorSearch": {
+    "standard28040EdgeDonor": "No cUNI input row or edge; not rescanned in follow-up",
+    "additionalBoundedSearch": {
+      "candidateTables": 16,
+      "effectiveRows": 1931,
+      "cuniInputRowsAnyStatus": 0,
+      "scope": [
+        "/opt/mev-cloud/family-runtime-20261007/logs and /opt/mev-cloud/app-run2/logs metadata; latest live2500-direct-hop-20261012.tjunQG / live2500-enum-revert-20261011.1CLdAe exposed no saved table",
+        "Native/PSV/Yearn loops, UNI-BAT, V3 reference and four-token tables at 26152606,26152595,26152334,26152814,26030897,26105714",
+        "family-latency-refresh.oHBqtz four candidate tables at 26138093,26138094,26138136,26138179",
+        "curve-model-historical.Lm9tY5 and curve-model-historical.AlVUH1",
+        "DeepSeek handoff unscoped-N25944463 and smoke-prices-N25944463",
+        "seven-amount-20261005-xHmFvp/results sat1-target-final and v1-target-final"
+      ],
+      "interpretation": "Bounded negative evidence, not global absence. No invented reference, extra graph generation or RPC."
+    }
+  },
+  "tests": [
+    {
+      "command": "listener: npm run build:live",
+      "result": "exit 0",
+      "log": "logs/four-family-coverage-20261012.zHKuWX/yb-cuni-build-attempt01.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "command": "listener: npm run searcher:yieldbasis-lt-deposit-contract",
+      "result": "15/15",
+      "log": "logs/four-family-coverage-20261012.zHKuWX/yb-range-tests-attempt02.log",
+      "sha256": "17a93de6734e0ab74da0a69ff13f65251d82eeac97b11a78a76e31fd0f2d0fba"
+    },
+    {
+      "command": "listener: npm run searcher:kyber-yb-compound-dual-contract",
+      "result": "127/127",
+      "log": "logs/four-family-coverage-20261012.zHKuWX/cuni-evidence-contract-attempt01.log",
+      "sha256": "718653d21cfc622bf837bc4e5e786629df3fcf6d0f41b06d1df9c5f1fb8f8940"
+    },
+    {
+      "command": "listener: npm run searcher:family-dual-execution",
+      "result": "80/80",
+      "log": "logs/four-family-coverage-20261012.zHKuWX/yb-cuni-shared-dual-attempt01.log",
+      "sha256": "06447adfc190a45263e3d8084b19262c3d7d7a1dcd8e6a6d70324aa53917f2f4"
+    },
+    {
+      "command": "analysis: npm run test:tool-index (command-local safe.directory)",
+      "result": "20/20",
+      "log": "logs/four-family-coverage-20261012.zHKuWX/yb-cuni-tool-index-tests-attempt03.log",
+      "sha256": "e514d0eab4e86385c4eac49de50c53b23e2b0fde9a33ece40245722588f4a004"
+    }
+  ],
+  "reconciliation": [
+    {
+      "path": "logs/four-family-coverage-20261012.zHKuWX/yb-cuni-ready-tools.json",
+      "sha256": "40a46ba01b8561ff28d0c984707cbb6ee1fcc05d6b2d86137158d9384d48010f",
+      "requested": [
+        "yieldbasis",
+        "compound",
+        "historical",
+        "strict",
+        "ready",
+        "graph"
+      ],
+      "executions": [
+        {
+          "id": "listener:searcher:yieldbasis-lt-historical-ready",
+          "descriptorSha256": "b1cfdf9be6b07735e342243651afadf9c40571e29da8f8de3a61141ea02e6fa3",
+          "started": "2026-10-12T07:52:59.866Z",
+          "finished": "2026-10-12T07:53:00.978Z",
+          "exit": 1,
+          "argvSha256": "de78ea3ffb330c6b441f4159f54d422a04f51dc0406b9f1cdef82605ea217414",
+          "stdoutSha256": "71aad09ea8848ca0793ebea8f2f031923a3d532bbcef47b1111f632c5d9af4b1",
+          "stderrSha256": "0742d8fa70de4901ce0747e56cd01303a89ab3437f1c9e512e76940cfc760eda"
+        },
+        {
+          "id": "listener:searcher:yieldbasis-lt-historical-ready",
+          "descriptorSha256": "b1cfdf9be6b07735e342243651afadf9c40571e29da8f8de3a61141ea02e6fa3",
+          "started": "2026-10-12T07:54:40.478Z",
+          "finished": "2026-10-12T07:54:49.131Z",
+          "exit": 0,
+          "argvSha256": "74685ba2548cf97042d5587af95288d6c149050462a7164d1461c44e9edd682e",
+          "stdoutSha256": "e7da5f1e2c5c36e65c9bb92c0001711b5fc48ccb9613e0d4fb54e4dd8163a3a2",
+          "stderrSha256": "4465c9e8e888f9beff831db8bf51cc0da2d882c4950ed6f6b56e6ed4475b2b70"
+        },
+        {
+          "id": "listener:searcher:yieldbasis-lt-historical-ready",
+          "descriptorSha256": "b1cfdf9be6b07735e342243651afadf9c40571e29da8f8de3a61141ea02e6fa3",
+          "started": "2026-10-12T07:55:55.438Z",
+          "finished": "2026-10-12T07:56:05.846Z",
+          "exit": 0,
+          "argvSha256": "cde2dbc4b243bc873067d72daf5cd84e574a4d80078e00c89d51d8925ee00c00",
+          "stdoutSha256": "e24b23dcf79df9279dc19709b96dac518344ba5316a7978b5266b96051daf495",
+          "stderrSha256": "ef516caa8cb84bfdf380eae5b22d383728b6eb08c62a5900bde72a511566a3a2"
+        },
+        {
+          "id": "listener:searcher:compound-ctoken-historical-ready",
+          "descriptorSha256": "da2734c4c734bc54004c7946db80c21f32977a07f5b3ca39ff340a7dba3e2893",
+          "started": "2026-10-12T07:56:37.203Z",
+          "finished": "2026-10-12T07:56:41.949Z",
+          "exit": 0,
+          "argvSha256": "7848fcd8298039b60f3bbdceee9a12e8423320203c4f794524521a157d139926",
+          "stdoutSha256": "f3b316590ef0b846dc55e4efea1301fae9b716af90483f139a88a89c17363e1f",
+          "stderrSha256": "d72e4b39068c791a158767c9a895e06360ca4ceda8f4671641d8a2fbd86e852a"
+        }
+      ]
+    },
+    {
+      "path": "logs/four-family-coverage-20261012.zHKuWX/yb-dual-tools.json",
+      "sha256": "2fdc916d670de47e58fd66676f3a546c37c2196698fb849e74f1b37f8e048a53",
+      "requested": [
+        "yieldbasis",
+        "dual",
+        "historical",
+        "execution"
+      ],
+      "executions": [
+        {
+          "id": "listener:searcher:yieldbasis-lt-dual-historical",
+          "descriptorSha256": "f33ed99e9f0513891bca7fb02b252c0d4758e1268c98a515dd178700af9915fb",
+          "started": "2026-10-12T08:09:00.783Z",
+          "finished": "2026-10-12T08:09:10.057Z",
+          "exit": 0,
+          "argvSha256": "a2fb4feefee582929501fd10687e5e6d3ed8959842d720b0b243dbc69bf64f56",
+          "stdoutSha256": "209a6befd6d9080562b3cc9c2bfcfc0abd70c8545fefc2a0709ff2934cc95500",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "id": "listener:searcher:yieldbasis-lt-dual-historical",
+          "descriptorSha256": "f33ed99e9f0513891bca7fb02b252c0d4758e1268c98a515dd178700af9915fb",
+          "started": "2026-10-12T08:18:29.229Z",
+          "finished": "2026-10-12T08:18:42.049Z",
+          "exit": 0,
+          "argvSha256": "94f9f47d81d526afc18841a81025998b9e865285a450827409433cbcee15bdca",
+          "stdoutSha256": "605656e7daf71804ccd562ff188dcd1413cf92530c3fab34739a90ed8a44c119",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    },
+    {
+      "path": "logs/four-family-coverage-20261012.zHKuWX/cuni-dual-tools.json",
+      "sha256": "4857d106f56b56ee86dda15d3e32add7d874cbc58b6f515831fee1edf6cb4b61",
+      "requested": [
+        "compound",
+        "dual",
+        "historical",
+        "execution"
+      ],
+      "executions": [
+        {
+          "id": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+          "descriptorSha256": "be49b52e9cd477b396d8aeced305700f21dd9c83fa82b0839dab601d0d78a0fb",
+          "started": "2026-10-12T08:22:17.909Z",
+          "finished": "2026-10-12T08:22:21.538Z",
+          "exit": 2,
+          "argvSha256": "ee6b3dad4637451fc49f380472fee5b1a27d55f65a94273761d48f8d783d6db8",
+          "stdoutSha256": "92503e917957c9811dea656f69e8a5c41a0ebaf0bf1d470046e5e6b913749ba5",
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+  ],
+  "independentReview": "docs/research/reports/yb-historical-dual-independent-review-20261012.json; scope and executed offline checks recorded there, not independent new EVM or performance.",
+  "retainedNonPasses": [
+    {
+      "path": "logs/four-family-coverage-20261012.zHKuWX/yb722-ready-attempt01.log",
+      "status": "exit 1, generic invalid-input message; command-local opt-in omitted. Preserved first invocation; attempt02 supplies existing activation flag, no default change."
+    },
+    {
+      "path": "logs/four-family-coverage-20261012.zHKuWX/cuni-dual-attempt01.json",
+      "status": "exit 2, incomplete-production-reference; four historical-input executions passed, no errors"
+    },
+    {
+      "path": "logs/four-family-coverage-20261012.zHKuWX/yb-cuni-tool-index-tests-attempt01.log",
+      "status": "Git safe-directory bootstrap failure before tests; command-local setting used on later test runs, no global Git modification"
+    }
+  ],
+  "limitations": [
+    "All new executions use N-end state and N environment, not the original leg pre-call state. Original outputs and current quote/output remain distinct.",
+    "The WBTC original transaction supplies a deposit-only observation and a different deposit/debt selection. Ordinary withdrawal is additional current same-state coverage, not emergency/original-exit parity.",
+    "Both new Yield Basis singleton price tables and cUNI have missing-valuation. Borrowed input and actual minted reverse input do not turn these into natural effective success.",
+    "cUNI has one original-amount trial, not a production-reference or multiple-amount completion. This remains an unfinished correctness acceptance item.",
+    "Saved Compound Redeem observation is matched to the successful call/event; it is not a separate historical share-balance/pre-call proof or full external-wrapper reproduction.",
+    "No original-profit/complete loop, target-blind opportunity, adapter_fixed/adapter_merge_ready, live-stage latency or representative combined-graph verdict.",
+    "All local and representative performance tests remain NOT RUN in this phase, including Balancer V2/V3 and Curve plain/underlying; preserve earlier performance failures and schedule performance last."
+  ]
+}

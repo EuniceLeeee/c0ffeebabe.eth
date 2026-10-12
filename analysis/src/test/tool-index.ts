@@ -137,6 +137,19 @@ test("Yield Basis dual execution is archive-RPC acceptance, not zero-CU or repre
     assert.equal(selected[0]?.capabilities.includes(unsupported), false);
 });
 
+test("Yield Basis and Compound natural Ready entries declare archive reads without dual or timing claims", () => {
+  const tools = discoverToolIndex(repoRoot);
+  for (const [family, id] of [["yieldbasis", "yieldbasis-lt"], ["compound", "compound-ctoken"]]) {
+    const selected = selectTools(tools, [family, "historical", "ready"]);
+    assert.equal(selected.length, 1);
+    assert.equal(selected[0]?.id, `listener:searcher:${id}-historical-ready`);
+    assert.equal(selected[0]?.cost, "archive-rpc");
+    for (const supported of ["strict", "ready", "graph"]) assert(selected[0]?.capabilities.includes(supported));
+    for (const unsupported of ["dual", "execution", "live-window", "stage-timing", "benchmark"])
+      assert.equal(selected[0]?.capabilities.includes(unsupported), false);
+  }
+});
+
 test("Kyber natural single-block Ready has its own archive-RPC entry, not an unrelated family or fixture", () => {
   const selected = selectTools(discoverToolIndex(repoRoot), ["kyber", "historical", "ready"]);
   assert.equal(selected.length, 1);
