@@ -306,7 +306,7 @@ const summary = definedFamilyPluginContractSummary(
   curveUnderlyingStrictFamilyPlugin,
 );
 assert.equal(summary.domain, "swap");
-assert.deepEqual(summary.suppliedActionAdapterIds, ["curve-exchange-underlying"]);
+assert.deepEqual(summary.suppliedActionAdapterIds, ["curve-exchange-underlying", "curve-exchange-underlying-uint-native"]);
 console.log("curve-underlying-family-plugin PASS");
 
 function runIdentity(

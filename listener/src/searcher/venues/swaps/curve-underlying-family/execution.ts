@@ -2,8 +2,8 @@ import { ethers } from "ethers";
 import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
 import { runtimeLeg, runtimeExecutor, assertProjectedRuntimeRoute } from "../../runtime-execution.js";
 import { curveUnderlyingRoutes } from "./routes.js";
+import { CURVE_UNDERLYING_NATIVE_ACTION, underlyingNativeAssets, underlyingNativeAliasProgram } from "./native.js";
 import {
-  hopTargetExecutionRuntimeProjection,
   type ExecutionSemantics,
 } from "../../adapter-family-plugin.js";
 import { sameAddress } from "./codec.js";
@@ -19,14 +19,32 @@ export const curveUnderlyingExecution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertProjectedRuntimeRoute(r, curveUnderlyingRoutes.project({ descriptor: d })); runtimeExecutor(executor, d.pool);
+    if (d.nativeAlias) {
+      const assets = underlyingNativeAssets(d, r);
+      return runtimeLeg(CURVE_UNDERLYING_NATIVE_ACTION, underlyingNativeAliasProgram(d.pool, r.tokenIn, r.tokenOut,
+        r.i, r.j, executor, assets?.input === "native", assets?.output === "native"));
+    }
     const p = new RuntimeAmountProgram().allowance(r.tokenIn, d.pool, 0, MAX_UINT)
       .call(d.pool, new ethers.Interface(["function exchange_underlying(int128,int128,uint256,uint256)"]).encodeFunctionData("exchange_underlying",
         [r.i, r.j, 0n, 1n]), { patches: [{ offset: 68, reg: 0 }] });
     return runtimeLeg("curve-exchange-underlying", p);
   },
-  runtimeProjection: hopTargetExecutionRuntimeProjection,
+  runtimeProjection: ({ hop }) => ({ allowanceSpender: hop.adapterId === CURVE_UNDERLYING_NATIVE_ACTION ? null : hop.target,
+    prewarmQuoteCalls: [] }),
   buildFragment(input) {
     assertExecutionEvidence(input);
+    if (input.descriptor.nativeAlias) {
+      if (input.amountIn <= 0n || input.amountIn > MAX_UINT || input.quotedAmountOut <= 0n ||
+          input.minAmountOut < 0n || input.minAmountOut > input.quotedAmountOut)
+        throw new Error("curve-underlying invalid native quoted amount");
+      assertProjectedRuntimeRoute(input.route, curveUnderlyingRoutes.project({ descriptor: input.descriptor }));
+      const assets = underlyingNativeAssets(input.descriptor, input.route);
+      return { requirements: [], nodes: [{ adapterId: CURVE_UNDERLYING_NATIVE_ACTION,
+        target: input.descriptor.pool, tokenIn: input.route.tokenIn, tokenOut: input.route.tokenOut,
+        amount: input.amountIn, params: { i: BigInt(input.route.i), j: BigInt(input.route.j), minDy: input.minAmountOut,
+          nativeIn: assets?.input === "native", nativeOut: assets?.output === "native",
+          inputToleranceRawUnits: input.quoteToleranceRawUnits ?? 0n }, children: [] }] };
+    }
     return Object.freeze({
       requirements: Object.freeze([Object.freeze({
         kind: "approve" as const,
@@ -49,7 +67,10 @@ export const curveUnderlyingExecution = {
       })]),
     });
   },
-  expectedEffects: ({ route }) => Object.freeze([
+  expectedEffects: ({ route }) => route.executionAssets ? [
+    { kind: "token-delta", token: route.tokenIn, account: "executor", direction: "decrease" },
+    { kind: "token-delta", token: route.tokenOut, account: "executor", direction: "increase" },
+  ] : Object.freeze([
     Object.freeze({
       kind: "token-delta" as const,
       token: route.tokenIn,
@@ -91,6 +112,8 @@ function assertExecutionEvidence(input: {
   const evidence = input.exactEvidence;
   if (
     evidence.kind !== (input.descriptor.quoteModel ? "curve-underlying-classic-meta" : "curve-underlying-get-dy") ||
+    evidence.nativeAlias?.nativeIndex !== input.descriptor.nativeAlias?.nativeIndex ||
+    evidence.nativeAlias?.poolCodeHash !== input.descriptor.nativeAlias?.poolCodeHash ||
     !sameAddress(evidence.pool, input.descriptor.pool) ||
     evidence.routeKey !== input.route.routeKey ||
     evidence.i !== input.route.i ||

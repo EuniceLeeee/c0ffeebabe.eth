@@ -2836,6 +2836,9 @@ export function buildFamilyExecutionFragment(
       amountIn: exactRecord.amountIn,
       quotedAmountOut: exactRecord.amountOut,
       minAmountOut: input.minAmountOut,
+      ...(input.quoteToleranceRawUnits === undefined ? {} : {
+        quoteToleranceRawUnits: input.quoteToleranceRawUnits,
+      }),
       exactEvidence: exactRecord.evidence,
       executor: exactRecord.executor,
       ...(exactRecord.callerContext.transactionOrigin === undefined ? {} : {

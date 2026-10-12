@@ -28,12 +28,22 @@ import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../../../production-infra-actions.js";
 import { CURVE_PLAIN_FAMILY_ID } from "../manifest.js";
+import { CURVE_UNDERLYING_FAMILY_ID } from "../../curve-underlying-family/manifest.js";
 import { resolveBlockScanExecutionRounding, minimumExecutionOutput,
   executionInputMatches, executionOutputMatches } from "../../../../../shared/executor/amount-rounding.js";
 
 const ROOT = fileURLToPath(new URL("../../../../../../../", import.meta.url));
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const sha = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+export function historicalCurveNativeFamily(value: string = CURVE_PLAIN_FAMILY_ID) {
+  assert(value === CURVE_PLAIN_FAMILY_ID || value === CURVE_UNDERLYING_FAMILY_ID, "unknown native Curve family");
+  return value;
+}
+export function assertHistoricalNegativeRevert(response: any) {
+  assert(response?.ok === true && response.success === false && response.strict?.outcome?.kind === "Revert" &&
+    response.strict.outcome.phase === "main" && response.strict.outcome.nestedHalt === null,
+  "negative control must be a recorded main-call revert, not transport failure or EVM halt");
+}
 export async function verifyHistoricalQuoteCaller(input: {
   tx: { to: string; data: string; from?: string; blockTag?: number };
   sourceNumber: number; pin: { blockHash: string; requireCanonical: boolean }; executor: string;
@@ -69,10 +79,11 @@ async function main() {
   const names = ["--ready", "--prices", "--pool", "--rpc-file", "--revm-bin", "--executor", "--owner", "--out"];
   const args = new Map<string, string>();
   for (let i = 2; i < process.argv.length; i += 2) {
-    assert(names.includes(process.argv[i]) && !args.has(process.argv[i]) && process.argv[i + 1]);
+    assert([...names, "--family"].includes(process.argv[i]) && !args.has(process.argv[i]) && process.argv[i + 1]);
     args.set(process.argv[i], process.argv[i + 1]);
   }
   assert(names.every(n => args.has(n)));
+  const familyId = historicalCurveNativeFamily(args.get("--family"));
   const out = resolve(args.get("--out")!); assert(!existsSync(out));
   const readyPath = resolve(args.get("--ready")!), pricePath = resolve(args.get("--prices")!);
   const readyBytes = readFileSync(readyPath), priceBytes = readFileSync(pricePath);
@@ -83,7 +94,7 @@ async function main() {
   assert(typeof rpcUrl === "string" && /^https?:\/\//.test(rpcUrl));
   const redact = (s: string) => s.split(rpcUrl).join("[REDACTED]").replace(/https?:\/\/[^\s"<>]+/g, "[REDACTED_URL]");
   const tolerance = resolveBlockScanExecutionRounding();
-  const report: any = { schema: "curve-native-dual/v1", result: "failed", pool, executor, owner, toleranceRawUnits: tolerance,
+  const report: any = { schema: "curve-native-dual/v1", result: "failed", familyId, pool, executor, owner, toleranceRawUnits: tolerance,
     claim: "current production issued quote/quoted/runtime same-N single-leg receipts, not original TX/full-route/performance acceptance",
     broadcast: false, signing: false, readyPath, pricePath, readySha256: sha(readyBytes), pricesSha256: sha(priceBytes),
     sourceFingerprint: sourceFingerprint(), harnessSha256: sha(readFileSync(fileURLToPath(import.meta.url))),
@@ -103,11 +114,11 @@ async function main() {
     assert.equal(saved.runtime.sourceBlock, source.number); assert.equal(saved.runtime.sourceBlockHash, source.hash);
     const header = await provider.send("eth_getBlockByNumber", [ethers.toQuantity(source.number), false]);
     assert.equal(header.hash, source.hash); report.source = source; report.header = header;
-    const memos = activeReadyMemos(envelope).filter(m => m.familyId === CURVE_PLAIN_FAMILY_ID && same(m.instanceKey, pool));
+    const memos = activeReadyMemos(envelope).filter(m => m.familyId === familyId && same(m.instanceKey, pool));
     assert.equal(memos.length, 1, "one naturally admitted current pool memo required");
-    assert([familyDefinitionHash(CURVE_PLAIN_FAMILY_ID), familyMemoDefinitionHash(CURVE_PLAIN_FAMILY_ID)].includes(memos[0].familyDefinitionHash));
-    const family = asPricedFamily(catalog.forStrictFamily(CURVE_PLAIN_FAMILY_ID));
-    const wiring = createRebuildWiring({ rpcUrl, familyIds: [CURVE_PLAIN_FAMILY_ID], executionIdentity: { executor, transactionOrigin: owner } });
+    assert([familyDefinitionHash(familyId), familyMemoDefinitionHash(familyId)].includes(memos[0].familyDefinitionHash));
+    const family = asPricedFamily(catalog.forStrictFamily(familyId));
+    const wiring = createRebuildWiring({ rpcUrl, familyIds: [familyId], executionIdentity: { executor, transactionOrigin: owner } });
     const instance = wiring.rehydrateVerifiedInstance({ memo: memos[0], cutoff: source }) as PreparedFamilyInstance;
     assertIssuedPreparedFamilyInstance({ family, instance, source, generation: source.generation });
     const edges = graph.filter(e => e.instanceKey === instance.instanceKey && same(e.target, pool));
@@ -216,12 +227,29 @@ async function main() {
           assert(executionOutputMatches(received, quote.amountOut, tolerance), "output outside common raw-unit policy");
           const native = result.effects?.nativeDeltas; assert.equal(native?.length, 1);
           assert(same(native![0].account, executor)); assert.equal(native![0].delta, 0n);
-          execution.actualAmountOut = delta(row.tokenOut); execution.result = "passed";
+          execution.actualAmountOut = delta(row.tokenOut);
+          // Same program/source with only old input inventory: it must not
+          // manufacture a successful swap from pre-existing output/native funds.
+          assert(amountIn > 101n, "negative control requires less inventory than the declared input");
+          const wireStart = report.wire.length;
+          const negative: any = { result: "failed", wireIndex: wireStart };
+          execution.noCurrentInput = negative;
+          let rejected = false;
+          try {
+            await simulation.transport.simulate({ request: { ...request, id: `${request.id}-no-current-input`,
+              overrideIntent: { ...request.overrideIntent, tokenBalances: [
+                { token: row.tokenIn, amount: 101n }, { token: row.tokenOut, amount: 103n }] } },
+              source, callerAuthority: { executor, transactionOrigin: owner }, control });
+          } catch (error) { rejected = true; negative.message = redact(String(error instanceof Error ? error.message : error)); }
+          assert(rejected, "no-current-input control unexpectedly succeeded");
+          assert.equal(report.wire.length, wireStart + 1, "negative execution response must be recorded");
+          assertHistoricalNegativeRevert(report.wire[wireStart].response);
+          negative.result = "passed"; execution.result = "passed";
         }
         sample.result = "passed";
       }
     }
-    assert.equal(report.samples.length, 4); assert.equal(report.wire.length, 8);
+    assert.equal(report.samples.length, 4); assert.equal(report.wire.length, 16);
     assert.equal(sourceFingerprint(), report.sourceFingerprint, "source changed during evidence run");
     assert.equal(sha(readFileSync(readyPath)), report.readySha256); assert.equal(sha(readFileSync(pricePath)), report.pricesSha256);
     assert.equal(sha(readFileSync(args.get("--revm-bin")!)), report.revmSha256, "simulator changed during run");

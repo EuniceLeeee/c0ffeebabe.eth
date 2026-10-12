@@ -59,6 +59,7 @@ export interface CurveUnderlyingIdentityFacts {
   readonly coins: readonly string[];
   readonly registryBinding: CurveUnderlyingRegistryBinding;
   readonly quoteModel?: CurveUnderlyingClassicMetaBinding;
+  readonly nativeAlias?: CurveUnderlyingNativeAlias;
   readonly verifiedDirections: readonly CurveUnderlyingVerifiedDirection[];
 }
 
@@ -76,6 +77,7 @@ export interface CurveUnderlyingDescriptor extends CompiledInstanceDescriptor {
   readonly coins: readonly string[];
   readonly registryBinding: CurveUnderlyingRegistryBinding;
   readonly quoteModel?: CurveUnderlyingClassicMetaBinding;
+  readonly nativeAlias?: CurveUnderlyingNativeAlias;
   readonly verifiedDirections: readonly CurveUnderlyingVerifiedDirection[];
   readonly runtimeRequirements: readonly RuntimeRequirement[];
 }
@@ -94,6 +96,7 @@ export interface CurveUnderlyingPricingDescriptor {
   readonly coins: readonly string[];
   readonly route: CurveUnderlyingRoute;
   readonly quoteModel?: CurveUnderlyingClassicMetaBinding;
+  readonly nativeAlias?: CurveUnderlyingNativeAlias;
 }
 
 export interface CurveUnderlyingPricingSnapshot {
@@ -115,6 +118,14 @@ export interface CurveUnderlyingExactEvidence {
   readonly tokenOut: string;
   readonly amountIn: bigint;
   readonly amountOut: bigint;
+  readonly nativeAlias?: CurveUnderlyingNativeAlias;
+}
+
+/** Registry direct/underlying topology plus same-state native execution proof.
+ * This is an ABI/asset variant, never a pool-address admission list. */
+export interface CurveUnderlyingNativeAlias {
+  readonly nativeIndex: number;
+  readonly poolCodeHash: string;
 }
 
 export type CurveUnderlyingIdentityEvidence =

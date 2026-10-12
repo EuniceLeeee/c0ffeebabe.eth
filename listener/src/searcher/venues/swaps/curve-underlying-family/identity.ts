@@ -1,5 +1,6 @@
 import { hasClassicUnderlyingQuoteModel, underlyingQuoteModelBindingRequests, decodeUnderlyingQuoteModel,
   curveUnderlyingQuoteModelProjection } from "./quote-model.js";
+import { curveUnderlyingNativeIdentity } from "./native-identity.js";
 import type {
   IdentityDecision,
   IdentitySemantics,
@@ -70,7 +71,7 @@ export const curveUnderlyingIdentity = {
     decide(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>) {
       return decideIdentity(input, identityEvidence(input.evidence));
     },
-  }],
+  }, curveUnderlyingNativeIdentity],
   identityKey: (identity) => lowerAddress(identity.subject),
 } satisfies IdentitySemantics<CurveUnderlyingCandidate, CurveUnderlyingIdentity>;
 

@@ -9,11 +9,11 @@ export const CURVE_UNDERLYING_REGISTRY_LINEAGE_ID = lineageId(
 export const curveUnderlyingFamilyManifest = {
   familyId: CURVE_UNDERLYING_FAMILY_ID,
   domain: "swap",
-  ownedActionAdapterIds: ["curve-exchange-underlying"],
+  ownedActionAdapterIds: ["curve-exchange-underlying", "curve-exchange-underlying-uint-native"],
   requiredInfraActionAdapterIds: ["erc20-approve"],
   allowedTaxonomy: [{ slotKind: "swap" }],
   supportedLineages: [CURVE_UNDERLYING_REGISTRY_LINEAGE_ID],
   poolAdapterIds: ["curve-underlying"],
-  edgeAdapterIds: ["curve-exchange-underlying"],
+  edgeAdapterIds: ["curve-exchange-underlying", "curve-exchange-underlying-uint-native"],
   requiresProtocolEdgesFlag: false,
 } satisfies FamilyManifest<"swap">;

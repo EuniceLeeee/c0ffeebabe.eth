@@ -1,0 +1,639 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "family": "curve-underlying",
+  "variant": "metaregistry-uint-native-alias",
+  "claim": "Implemented, offline contracts and source-bound two-direction same-N historical integration/dual execution passed. Not formal adapter_fixed/merge-ready, original call-prestate, complete opportunity, or performance acceptance.",
+  "workspace": {
+    "root": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "baseHead": "0920d0df37df9de9c9930a313a64d0886f2a0321",
+    "peerWorkingChangesPreserved": true,
+    "context": "Actual cloud source includes peer UniV1 and Ready changes; staged-source checks are reported separately."
+  },
+  "transactionHash": "0xcff958cfb929feddc72043ac41c0065774cd9ab0bae4d66e77b7aaf633e8d42c",
+  "pool": "0xC15F285679a1Ef2d25F53D4CbD0265E1D02F2A92",
+  "source": {
+    "number": 26029240,
+    "hash": "0x8c479064c328fe4b422533f9b57488571e92c1008501c8552070e286ed7a859f",
+    "generation": 26029240
+  },
+  "sourceFingerprint": "9f33800df5a5469a07b1832ffa3751afc1d11902d048aee0ae6dc287fd8b9c77",
+  "familyDefinitionHash": "274f38d150d096f756938fb37ef0621fbab09878c062e8fc2ce4ee716ccad819",
+  "implementation": {
+    "sourceFilesSha256": {
+      "listener/src/searcher/venues/swaps/curve-underlying-family/types.ts": "17079f8cdcf0f7d602ec8b0e5d81effbfcfdca4de7de2f8d3215182b5255228e",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/identity.ts": "63630a7a53acb3f7e02359b0a966a243a748eb7ade248ae99d3f9649ef9ac842",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts": "3fa0693b5a1d0b6f7a34ddbdf69d84315487ce7acbb3dd0ebb7a3138f6c6fe39",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/routes.ts": "ce1d04beb5700ebad04fea348bb307f8c6f2aa81d29e59c17a54e0781e3d8338",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/exact.ts": "9a296ae98f1467f5228a79851d5c583430f96b49812c4cc26fadde58204834ba",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/pricing.ts": "79030a70d849c867c6fa32b0414c2410868c35c84f91bce51623099eca394ac2",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts": "76b6533a89952c27cfced81c6cacb37ec2f261bd93fd6f10ef0682deb00c7766",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/action.ts": "5683e2c23d05624f211796c04d049402e17a80e080ebcfccfe970ae42576b4e5",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/manifest.ts": "5e6398246c15f07f6999b23096f91ec44edc9bf5f39d65daf507c80628c5c015",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts": "6656238f22939b97152d0b0eb5521ed43e758a0c6808a4c9d4cec47a69f4b6a0",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts": "8b6ee83a9146373cce4bd14a36d3335ce10979303cfbd9d30db4d447a7c9bc0e",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/test/native-alias-contract.ts": "093c008ef16e7d7717da895e0c022a4b443980bdab96d1052893a2275812b976",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/test/historical-native-entrypoint.test.ts": "141b34da18bbd7f4a7145efa26a28fe589aebd1461474c4c3f0ef784ba279eae",
+      "listener/src/searcher/venues/adapter-family-plugin.ts": "f6c377f73d3eac232522bdf6685369b836b37ef5f724eed722da227a9fe126cf",
+      "listener/src/searcher/venues/adapter-family-runtime.ts": "e9b3b94466dca4f232743bf08d83fcd83860f8400b794ab418cf77bb0e629a2d",
+      "listener/src/searcher/venues/production-families/curve-underlying.production.ts": "953a1e87ddedc8220c4463b27c3d3bff91e4687a2b2ac35797f0a75da5726542",
+      "listener/src/searcher/venues/swaps/curve-underlying-family-plugin.ts": "5b163014baaa89ed7ccd40712e9b5f108d837a298db03d5d2695fa40c2f4d048",
+      "listener/src/searcher/test/curve-underlying-family-plugin.ts": "7c78edde88bb1f3a06083b45ee3c6b74640ea3a88f91593285de8444267f4101",
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-ready.ts": "709ca97766893654e438f1afddb1b72aee68b901ad2e410621cbbca20e59ed4f",
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-native-dual.ts": "c993939f186c014c1eb3fb3d0d8178ed39403209e1627f3d9117f09b19d42931",
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts": "f535c12fe4eed26630a1451bd64ecd6b06b856234400e3a010af75ef1ab011de"
+    },
+    "semantics": "Reverse registry binding plus matching direct/underlying/WETH topology, direct uint get_dy, and independently execution-proven raw uint exchange_underlying directions. Original classic/int128 branch preserved. No pool allowlist.",
+    "execution": "Family owns uint ABI, exact temporary approval/cleanup and positive debit/independent receipt checks. Shared asset boundary owns native/WETH transport and old inventory. Pure ERC20 directions omit native boundary.",
+    "sharedChange": "Six-line optional generic quoteToleranceRawUnits declaration/forwarding; existing central issuer validates 0/1 before passing to Family. No protocol branch. Quoted absent policy is conservative zero; strict admission passes its policy; runtime retains outer selected policy.",
+    "freshness": "Native alias pricing conservatively declares each-block; tested against production pricing-index consumer. Startup raw reference is not claimed as per-block refreshed raw. No performance verdict."
+  },
+  "before": {
+    "ready": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/underlying-uint-baseline01/ready.json",
+      "sha256": "c32566aeb4d65c2569f32fb5eb51ade235f205e781133403fea9e515533eecd0",
+      "bytes": 8007
+    },
+    "verifiedMemos": 0,
+    "edges": 0,
+    "candidateAccounting": {
+      "total": 1,
+      "verified": 0,
+      "terminalRejected": 0,
+      "retryable": 1,
+      "remainingUnaccounted": 0
+    },
+    "retryable": [
+      {
+        "stage": "identity",
+        "failureCode": "rpc",
+        "reasonCode": "identity_unverified:unresolved:identity-work-unresolved:metaregistry-member:family-decode:family decode failed: could not decode result data (value=\"0x\", info={ \"method\": \"get_dy_underlying\", \"signature\": \"get_"
+      }
+    ],
+    "diagnosis": "Target was naturally nominated; unsupported underlying quote ABI returned empty bytes. Not missing discovery, valuation or proof of provider failure."
+  },
+  "after": {
+    "ready": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/underlying-uint-candidate03/ready.json",
+      "sha256": "b2c216456dcc8a3183a236bc3c3e3d94d3e6c49450f0dc2018c11041b641e32f",
+      "bytes": 40256
+    },
+    "summary": {
+      "tx": "0xcff958cfb929feddc72043ac41c0065774cd9ab0bae4d66e77b7aaf633e8d42c",
+      "block": 26029240,
+      "blockHash": "0x8c479064c328fe4b422533f9b57488571e92c1008501c8552070e286ed7a859f",
+      "graphHash": "4c59e0626162d071aaf33d1fec0822d643aca5789f3d15da291c445255da3b4f",
+      "totalEdges": 2,
+      "targetEdges": [
+        {
+          "instanceKey": "0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92",
+          "executionVariantKey": "406342dc0ee5196da28401f56b448d54ffa659faa0abc4c437573759f7dc327b",
+          "adapterId": "curve-exchange-underlying-uint-native",
+          "target": "0xC15F285679a1Ef2d25F53D4CbD0265E1D02F2A92",
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0x365AccFCa291e7D3914637ABf1F7635dB165Bb09",
+          "slotKind": "swap",
+          "edgeKind": "swap",
+          "leavesStandingPosition": false,
+          "score": 0,
+          "canonicalEdgeId": "curve-underlying\u001f0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92\u001f0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x365accfca291e7d3914637abf1f7635db165bb09\u001f406342dc0ee5196da28401f56b448d54ffa659faa0abc4c437573759f7dc327b"
+        },
+        {
+          "instanceKey": "0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92",
+          "executionVariantKey": "79c99845948ff9919f631349dd1b2c3aa1f5eba77c2353a5aa57f08e535569c3",
+          "adapterId": "curve-exchange-underlying-uint-native",
+          "target": "0xC15F285679a1Ef2d25F53D4CbD0265E1D02F2A92",
+          "tokenIn": "0x365AccFCa291e7D3914637ABf1F7635dB165Bb09",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "slotKind": "swap",
+          "edgeKind": "swap",
+          "leavesStandingPosition": false,
+          "score": 0,
+          "canonicalEdgeId": "curve-underlying\u001f0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92\u001f0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92\u001f0x365accfca291e7d3914637abf1f7635db165bb09>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f79c99845948ff9919f631349dd1b2c3aa1f5eba77c2353a5aa57f08e535569c3"
+        }
+      ],
+      "instances": [
+        "6d998773bac7c8470cffa55191736f74f8cbfe0a522291b4646965a11e40e369"
+      ],
+      "familyIds": [
+        "curve-underlying"
+      ],
+      "broadcast": false,
+      "claim": "natural single-block strict/Graph; not opportunity or representative performance acceptance"
+    },
+    "prices": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/underlying-uint-candidate03/prices/prices.json",
+      "sha256": "78e144a00de33df024a167320aff5e6f0123c4fb3fb7af7edc19dfae26df8f64",
+      "bytes": 26973
+    },
+    "naturalEffective": [
+      {
+        "edgeId": "curve-underlying\u001f0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92\u001f0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x365accfca291e7d3914637abf1f7635db165bb09\u001f406342dc0ee5196da28401f56b448d54ffa659faa0abc4c437573759f7dc327b",
+        "instanceKey": "0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0x365accfca291e7d3914637abf1f7635db165bb09",
+        "amountIn": "2000000000000000",
+        "status": "quoted",
+        "amountOut": "166231363684660222",
+        "effectiveMid": 83.11568184233012,
+        "quotedAt": {
+          "number": 26029240,
+          "hash": "0x8c479064c328fe4b422533f9b57488571e92c1008501c8552070e286ed7a859f",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92\u001f0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92\u001f0x365accfca291e7d3914637abf1f7635db165bb09>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f79c99845948ff9919f631349dd1b2c3aa1f5eba77c2353a5aa57f08e535569c3",
+        "instanceKey": "0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92",
+        "tokenIn": "0x365accfca291e7d3914637abf1f7635db165bb09",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "166231363684660222",
+        "status": "quoted",
+        "amountOut": "1982721587464099",
+        "effectiveMid": 0.011927481935510728,
+        "quotedAt": {
+          "number": 26029240,
+          "hash": "0x8c479064c328fe4b422533f9b57488571e92c1008501c8552070e286ed7a859f",
+          "generation": 1
+        }
+      }
+    ],
+    "valuation": "Natural same-block WETH reference P=0.002; no donor input or synthetic admission used."
+  },
+  "sameStateDual": {
+    "evidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/underlying-uint-dual03.json",
+      "sha256": "e7fec3ab4898e1ab75c541ceb91a5081fd8155059248bc26a4a824ef131fb7ad",
+      "bytes": 748859
+    },
+    "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "owner": "0x1000000000000000000000000000000000000001",
+    "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "toleranceRawUnits": "1",
+    "samples": [
+      {
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0x365accfca291e7d3914637abf1f7635db165bb09",
+        "amountIn": "2000000000000000",
+        "multiplier": "1",
+        "productionAmountIn": "2000000000000000",
+        "quoteAmountOut": "166231363684660222",
+        "executions": [
+          {
+            "mode": "quoted",
+            "scriptHash": "0x11b3288fc4f885c4b08d90f244b75e3e316d7916fa92e466d382a644ea954bb6",
+            "actualAmountIn": "2000000000000000",
+            "actualAmountOut": "166231363684660222",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "nativeDeltas": [
+              {
+                "account": "0x1000000000000000000000000000000000000002",
+                "delta": "0"
+              }
+            ],
+            "noCurrentInput": {
+              "result": "passed",
+              "wireIndex": 1,
+              "message": "revm strict main call reverted",
+              "outcome": {
+                "kind": "Revert",
+                "output": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "phase": "main",
+                "nestedHalt": null
+              }
+            }
+          },
+          {
+            "mode": "runtime",
+            "scriptHash": "0xdb0ca2ba052eec89754cae58a3317624ce3def7d6ab3dafceb5b15fe52f1c864",
+            "actualAmountIn": "2000000000000000",
+            "actualAmountOut": "166231363684660222",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "nativeDeltas": [
+              {
+                "account": "0x1000000000000000000000000000000000000002",
+                "delta": "0"
+              }
+            ],
+            "noCurrentInput": {
+              "result": "passed",
+              "wireIndex": 3,
+              "message": "revm strict main call reverted",
+              "outcome": {
+                "kind": "Revert",
+                "output": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "phase": "main",
+                "nestedHalt": null
+              }
+            }
+          }
+        ]
+      },
+      {
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0x365accfca291e7d3914637abf1f7635db165bb09",
+        "amountIn": "20000000000000000",
+        "multiplier": "10",
+        "productionAmountIn": "2000000000000000",
+        "quoteAmountOut": "1662216513170685644",
+        "executions": [
+          {
+            "mode": "quoted",
+            "scriptHash": "0x9c7a73a7637d1f5bbfcbfd73e14f7198a7e37f650750725281ce32f5cf94c112",
+            "actualAmountIn": "20000000000000000",
+            "actualAmountOut": "1662216513170685644",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "nativeDeltas": [
+              {
+                "account": "0x1000000000000000000000000000000000000002",
+                "delta": "0"
+              }
+            ],
+            "noCurrentInput": {
+              "result": "passed",
+              "wireIndex": 5,
+              "message": "revm strict main call reverted",
+              "outcome": {
+                "kind": "Revert",
+                "output": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "phase": "main",
+                "nestedHalt": null
+              }
+            }
+          },
+          {
+            "mode": "runtime",
+            "scriptHash": "0xc9bead9baec54a16e13a6d3bd8b5150f31a1df93cba6a708831631819c2aff95",
+            "actualAmountIn": "20000000000000000",
+            "actualAmountOut": "1662216513170685644",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "nativeDeltas": [
+              {
+                "account": "0x1000000000000000000000000000000000000002",
+                "delta": "0"
+              }
+            ],
+            "noCurrentInput": {
+              "result": "passed",
+              "wireIndex": 7,
+              "message": "revm strict main call reverted",
+              "outcome": {
+                "kind": "Revert",
+                "output": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "phase": "main",
+                "nestedHalt": null
+              }
+            }
+          }
+        ]
+      },
+      {
+        "tokenIn": "0x365accfca291e7d3914637abf1f7635db165bb09",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "166231363684660222",
+        "multiplier": "1",
+        "productionAmountIn": "166231363684660222",
+        "quoteAmountOut": "1982721587464099",
+        "executions": [
+          {
+            "mode": "quoted",
+            "scriptHash": "0x8179a6a9d06a81c56accab0afdcf820a23bc9bc5089906f884af742531d8de43",
+            "actualAmountIn": "166231363684660222",
+            "actualAmountOut": "1982721587464099",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "nativeDeltas": [
+              {
+                "account": "0x1000000000000000000000000000000000000002",
+                "delta": "0"
+              }
+            ],
+            "noCurrentInput": {
+              "result": "passed",
+              "wireIndex": 9,
+              "message": "revm strict main call reverted",
+              "outcome": {
+                "kind": "Revert",
+                "output": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "phase": "main",
+                "nestedHalt": null
+              }
+            }
+          },
+          {
+            "mode": "runtime",
+            "scriptHash": "0x41509578ecef9f9fce61d2cd81926c107675fdc564d597fa162676af2e2cdbcf",
+            "actualAmountIn": "166231363684660222",
+            "actualAmountOut": "1982721587464099",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "nativeDeltas": [
+              {
+                "account": "0x1000000000000000000000000000000000000002",
+                "delta": "0"
+              }
+            ],
+            "noCurrentInput": {
+              "result": "passed",
+              "wireIndex": 11,
+              "message": "revm strict main call reverted",
+              "outcome": {
+                "kind": "Revert",
+                "output": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "phase": "main",
+                "nestedHalt": null
+              }
+            }
+          }
+        ]
+      },
+      {
+        "tokenIn": "0x365accfca291e7d3914637abf1f7635db165bb09",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "1662313636846602220",
+        "multiplier": "10",
+        "productionAmountIn": "166231363684660222",
+        "quoteAmountOut": "19826077014812327",
+        "executions": [
+          {
+            "mode": "quoted",
+            "scriptHash": "0xdefc320b1173705a18c4925a31d276eb98ef902bbfce6b1aacbeec2de6ba7f27",
+            "actualAmountIn": "1662313636846602220",
+            "actualAmountOut": "19826077014812327",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "nativeDeltas": [
+              {
+                "account": "0x1000000000000000000000000000000000000002",
+                "delta": "0"
+              }
+            ],
+            "noCurrentInput": {
+              "result": "passed",
+              "wireIndex": 13,
+              "message": "revm strict main call reverted",
+              "outcome": {
+                "kind": "Revert",
+                "output": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "phase": "main",
+                "nestedHalt": null
+              }
+            }
+          },
+          {
+            "mode": "runtime",
+            "scriptHash": "0x306534b4cdec2ab3d0ab3fa7c765a3754fb4ffb71c2718065d281e2e935ba9d4",
+            "actualAmountIn": "1662313636846602220",
+            "actualAmountOut": "19826077014812327",
+            "inputDeltaVsRequested": "0",
+            "outputDeltaVsQuote": "0",
+            "nativeDeltas": [
+              {
+                "account": "0x1000000000000000000000000000000000000002",
+                "delta": "0"
+              }
+            ],
+            "noCurrentInput": {
+              "result": "passed",
+              "wireIndex": 15,
+              "message": "revm strict main call reverted",
+              "outcome": {
+                "kind": "Revert",
+                "output": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "phase": "main",
+                "nestedHalt": null
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "positives": 8,
+    "noCurrentInputReverts": 8,
+    "scope": "N-end state and N environment, authenticated current executor bytecode, both directions at production P and 10P. Not original historical executor or call-prestate."
+  },
+  "originalObservation": {
+    "amountIn": "1513350643658081274",
+    "amountOutNativeEth": "18051628748184720",
+    "direction": [
+      1,
+      0
+    ],
+    "selector": "0x65b2489b",
+    "traceAddress": [
+      0,
+      3,
+      13
+    ],
+    "traceGzipSha256": "976e43e3733c89fae2d866edebe0d0e37e419f7d79088f26a2e08aaf6ca13dc5",
+    "comparison": "Original successful trace observation retained separately. Original call-prestate and original input-sized dual comparison NOT RUN; no original-output equivalence claimed."
+  },
+  "tests": [
+    {
+      "name": "production build",
+      "exitCodeObserved": 0,
+      "tests": null,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-build04.txt",
+        "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+        "bytes": 71
+      }
+    },
+    {
+      "name": "new native contracts",
+      "exitCodeObserved": 0,
+      "tests": 16,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-native-contract02.txt",
+        "sha256": "6d0400f63ca8578e93b7738dbc9b8bd702db64d1afcc281789953fe3296ca667",
+        "bytes": 2054
+      }
+    },
+    {
+      "name": "legacy/receipt/native entrypoints",
+      "exitCodeObserved": 0,
+      "tests": 96,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-legacy-regressions05.txt",
+        "sha256": "41372c0b5843b4aacb60cf4c69a1c54ff4326b745ad66d7530e1770de2c6e7d8",
+        "bytes": 7643
+      }
+    },
+    {
+      "name": "all-family dual contracts",
+      "exitCodeObserved": 0,
+      "tests": 80,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-dual-contract04.txt",
+        "sha256": "53b1cef1587b08d4637e2c7cae2b2a516d7167c284222441dc4a0cf5aed42cac",
+        "bytes": 9852
+      }
+    },
+    {
+      "name": "strict central runtime",
+      "exitCodeObserved": 0,
+      "tests": 174,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-central04.txt",
+        "sha256": "8cde26c03d8f2ab028b88c34bfede0d8553e0d219c83202b0401812ffee35bbb",
+        "bytes": 16676
+      }
+    },
+    {
+      "name": "strict lifecycle",
+      "exitCodeObserved": 0,
+      "tests": null,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-lifecycle04.txt",
+        "sha256": "6ef7e8e525f87e9652311bf24bf58e50c0a400fe7ad8ebaccfab3bc1746a73b7",
+        "bytes": 171
+      }
+    },
+    {
+      "name": "execution projection",
+      "exitCodeObserved": 0,
+      "tests": null,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-projection04.txt",
+        "sha256": "2fcb18e90f6883ebe96b57862b8591c6193f9cb420543140407c2f160dd8d1b5",
+        "bytes": 228
+      }
+    },
+    {
+      "name": "indexed Underlying contract",
+      "exitCodeObserved": 0,
+      "tests": null,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-underlying-contract04.txt",
+        "sha256": "c3696c5d132d57ae382c0d217fc6c7f83586e401a6620c2f6cd975bfcd0d9551",
+        "bytes": 576
+      }
+    },
+    {
+      "name": "capability generation",
+      "exitCodeObserved": 0,
+      "tests": null,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-generate04.txt",
+        "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+        "bytes": 136
+      }
+    }
+  ],
+  "independentReview": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-underlying-native-review-20261012.json",
+    "sha256": "3f639b7ed4d7cf40eaf0883e1171f701a86617c9c2f03591058072c518bb793d",
+    "bytes": 3009
+  },
+  "tools": {
+    "manifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-tools04.json",
+      "sha256": "b0a8c64ee558666192c2f43336b835b3b1b8715172e165dfcf9a78222d745cfc",
+      "bytes": 6061
+    },
+    "query": [
+      "curve",
+      "underlying"
+    ],
+    "selected": [
+      "listener:searcher:curve-underlying-family-plugin"
+    ],
+    "reconciliation": "Indexed legacy/offline Family contract passed. Historical native runner is a Family-owned thin production entry, not the old standing-approval fork harness. Offline contract is not substituted for historical execution."
+  },
+  "retainedAttempts": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-build01.txt",
+      "sha256": "0605190aae98c53be7a9458045c2eaf6507c87b0d497234101c8cdaff8ff06bb",
+      "bytes": 10447
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-legacy-regressions04.txt",
+      "sha256": "4e7e678719062f0afab8445d3a0de48148a93c5f77b860f2d617c77224c88022",
+      "bytes": 8656
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-native-contract01.txt",
+      "sha256": "339b43d91bcd2aeed37f018c25c898ededceb5fa84260d3b1c12bc59152b0e9e",
+      "bytes": 3386
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/underlying-uint-dual01.json",
+      "sha256": "a58c8723a13044cde43bac0a504cedb7f2bd1efaeab9b3212320d837a3a824cf",
+      "bytes": 425571
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/underlying-uint-dual02.json",
+      "sha256": "f8176bc06bbddf2c1a0205a9ef1a5882f87e693f31a1414556cbca95d2915600",
+      "bytes": 748851
+    }
+  ],
+  "retainedFailureInterpretation": [
+    "Initial production build required a CanonicalValue object projection; fixed before build02.",
+    "Legacy-regressions04 invoked an archival CLI without its required checkpoint argument; other 96 tests passed, correct unit-only rerun preserved as05.",
+    "Native-contract01:15/16; a synthetic reverted result lacked declared effect collections. Corrected fixture, not weakened production validation."
+  ],
+  "generatedManifest": {
+    "baseHead": "0920d0df37df9de9c9930a313a64d0886f2a0321",
+    "workingArtifactSha256": "d98b9a2748503d9b7b146fe5bc850cffa93a4177649a01f0c4527c8fd21ab2cc",
+    "stagedArtifactSha256": "be3907c69f1122fe36e5c376a862f799f15481f5215c99f2aeb69ca3bc6777f7",
+    "procedure": "Officially generated Underlying records plus unchanged HEAD records for other families; official create/serialize. Rechecked successfully by the full official generator on exact staged-source snapshot. Working peer UniV1 records remain unchanged; no Ready/hash override."
+  },
+  "stagedSourceVerification": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/uint-staged-source.ojnxsL",
+    "kind": "Ignored immutable source audit snapshot from the Git index, not a new Git worktree or branch.",
+    "scope": "Production build and offline tests on intended committed source without peer changes. Historical EVM evidence above was run on actual cloud working source, not this snapshot.",
+    "checks": [
+      {
+        "name": "official generated artifact check",
+        "exitCodeObserved": 0,
+        "log": "uint-staged-manifest01.txt",
+        "sha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef"
+      },
+      {
+        "name": "production build",
+        "exitCodeObserved": 0,
+        "log": "uint-staged-build01.txt",
+        "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      },
+      {
+        "name": "native contracts",
+        "exitCodeObserved": 0,
+        "tests": 16,
+        "log": "uint-staged-native01.txt",
+        "sha256": "f27b19794fa8136379197ac08ffd1fe176680bc5320b68584ce2ef024a2c287c"
+      },
+      {
+        "name": "all-family dual contracts",
+        "exitCodeObserved": 0,
+        "tests": 79,
+        "log": "uint-staged-dual01.txt",
+        "sha256": "05b484311386781bd7cb4e84c56df181e9c3bc031d0fc22ea6bbdd8fc53bbaa4",
+        "difference": "Actual working tree ran80; the additional peer-owned shared-test change is preserved but deliberately not staged."
+      },
+      {
+        "name": "strict central runtime",
+        "exitCodeObserved": 0,
+        "tests": 174,
+        "log": "uint-staged-central01.txt",
+        "sha256": "0711ce09194c5cd01a8b968ad930dbb82c362bdd56f34821242980ed36f3e5e8"
+      }
+    ]
+  },
+  "performance": {
+    "localSingleReady": "NOT RUN",
+    "representativeCombinedGraph": "NOT RUN",
+    "live": "NOT RUN"
+  },
+  "limitations": [
+    "Three-coin six-direction behavior is offline fixture coverage, not a historical three-coin acceptance.",
+    "No natural enumeration, final full-route simulation, repayment/EV opportunity or original call-prestate restoration in this sample.",
+    "Other coffee Curve instances, native21 forward failure and all performance remain active. Existing results are not silently recertified.",
+    "Contains an explicit shared generic policy-forwarding change; no family_local or formal merge-ready verdict claimed."
+  ]
+}

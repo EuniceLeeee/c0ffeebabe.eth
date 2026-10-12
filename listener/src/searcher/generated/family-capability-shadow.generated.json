@@ -1677,7 +1677,7 @@
         "familyId": "curve-underlying",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "0378fefd0357eceab971de1abd23e04f20bf40df23198f779d5902427c463b67",
+        "contentHash": "be516f7d1001819de5e5eb4bbc2569d7aa8ccba9e480553e775e5369c75dacd6",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -1727,7 +1727,7 @@
         "familyId": "curve-underlying",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "7ddcefb4c3282d85ade979cc9f4907eb6b173ad97a66118fe924f105dfdd6707",
+        "contentHash": "33ef11ad04127fff489a9ded4a4412125a17e1716bbb39cde6a71447ebd0e420",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -1755,20 +1755,27 @@
         "familyId": "curve-underlying",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "6c03e8b642213dec13c5f8b6446861cb3eb7d5dbde5fb91b202a6d413aaa20e5",
+        "contentHash": "a626da426c9452cf606172ef62e73bc4d868b419193d01a4522ee9fa57879ea7",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/curve-underlying-family/base-pool-math.ts",
           "src/searcher/venues/swaps/curve-underlying-family/classic-meta-quote.ts",
           "src/searcher/venues/swaps/curve-underlying-family/codec.ts",
           "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
-          "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts"
+          "src/searcher/venues/swaps/curve-underlying-family/native.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
+          "src/shared/constants/addresses.ts",
+          "src/shared/executor/amount-rounding.ts",
+          "src/shared/executor/botvm-program-entry.ts"
         ],
         "provenanceCommit": null
       },
@@ -1788,7 +1795,7 @@
         "familyId": "curve-underlying",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "83e56b95c09e37e6f9ab6278787de3e43faa711aae46c746232913fd40d53663",
+        "contentHash": "722ec922e16e7ada91778fdf7bb2d75ad0ce9aeee49ff30a2d89c1c592fbfbe1",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -1798,7 +1805,6 @@
           "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
-          "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/runtime-execution.ts",
@@ -1806,9 +1812,12 @@
           "src/searcher/venues/swaps/curve-underlying-family/codec.ts",
           "src/searcher/venues/swaps/curve-underlying-family/instance.ts",
           "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/native.ts",
           "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
           "src/searcher/venues/swaps/curve-underlying-family/routes.ts",
-          "src/shared/executor/amount-rounding.ts"
+          "src/shared/constants/addresses.ts",
+          "src/shared/executor/amount-rounding.ts",
+          "src/shared/executor/botvm-program-entry.ts"
         ],
         "provenanceCommit": null
       },
@@ -1849,16 +1858,25 @@
         "familyId": "curve-underlying",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "b3a6a4b9a91bdaec901cfac2df80169ae9b0f755b81976fd3833c6ba6ff17061",
+        "contentHash": "73319f519da4a14632e2a6d4b2f576eb029d4526e77ae26da27d25ce1e7fdf5a",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/searcher/venues/swaps/curve-plain-family/codec.ts",
           "src/searcher/venues/swaps/curve-underlying-family/codec.ts",
           "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
-          "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts"
+          "src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/native.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
+          "src/shared/constants/addresses.ts",
+          "src/shared/executor/amount-rounding.ts",
+          "src/shared/executor/botvm-program-entry.ts"
         ],
         "provenanceCommit": null
       },
@@ -1878,7 +1896,7 @@
         "familyId": "curve-underlying",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "a6934226bf8729ad94c684fffb411a560f5052179c31b3580e11bd956c159cb8",
+        "contentHash": "bc4e35a54a1ed649a87a2b43eec6ddc4dd37c089b54b1562f0069d2435fe0dff",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
@@ -1905,11 +1923,13 @@
         "familyId": "curve-underlying",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "e465e8639eef9119120cfc89b270bd162f60300eab90dad09174a894d8b7d561",
+        "contentHash": "598b80af1625f293814c1f47dbae52e81beec2c540385e82fad53f88ec39066e",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
           "src/searcher/blockscan-multicall.ts",
           "src/searcher/detector/blockscan-sizing-constants.ts",
           "src/searcher/strategy-taxonomy.ts",
@@ -1921,10 +1941,15 @@
           "src/searcher/venues/mutation-index.ts",
           "src/searcher/venues/route-immutable-binding.ts",
           "src/searcher/venues/route-instance-identity.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/blockscan-state-shared.ts",
           "src/searcher/venues/swaps/curve-underlying-family/codec.ts",
           "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
-          "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts"
+          "src/searcher/venues/swaps/curve-underlying-family/native.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
+          "src/shared/constants/addresses.ts",
+          "src/shared/executor/amount-rounding.ts",
+          "src/shared/executor/botvm-program-entry.ts"
         ],
         "provenanceCommit": null
       },
@@ -1944,17 +1969,24 @@
         "familyId": "curve-underlying",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "ae01c293566199a8c4598b7754da0e443b59d403bea6fd4d48d06a2598265d2b",
+        "contentHash": "edb5bd4044a442ef8d13d1be1584d8901fae386bbe1f86fc000488f2824d0fcc",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/curve-underlying-family/codec.ts",
           "src/searcher/venues/swaps/curve-underlying-family/instance.ts",
           "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
-          "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts"
+          "src/searcher/venues/swaps/curve-underlying-family/native.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
+          "src/shared/constants/addresses.ts",
+          "src/shared/executor/amount-rounding.ts",
+          "src/shared/executor/botvm-program-entry.ts"
         ],
         "provenanceCommit": null
       },
@@ -1974,7 +2006,7 @@
         "familyId": "curve-underlying",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
-        "contentHash": "a02572b687c1bc9fa0e0d627f7d835d858e44f72dd0ca409a5aeabbed71e7e33",
+        "contentHash": "d1d50477904a117fc19fd2d29378e143e52cb1eb0c011518f0f9426e45a339c9",
         "semanticDependencies": [
           "contract:adapter-family/victim@s1-victim-v2",
           "package:ethers@6.16.0",
@@ -14753,5 +14785,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "f0c3d780eb2cecce69fce2696f6932d4f284b0f2de8d02d3cba28c14bf8d00f5"
+  "artifactHash": "1e587e1819ce7e84bf58a257f84f37ba4b4e983af38b8a57db2c7bbe4d80c6e7"
 }

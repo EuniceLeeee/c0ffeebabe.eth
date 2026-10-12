@@ -3,6 +3,7 @@ import { routeKey } from "../../adapter-family-identifiers.js";
 import { hashCanonical } from "../../canonical-value.js";
 import { lowerAddress } from "./codec.js";
 import { curveUnderlyingStaticBindingProjection } from "./instance.js";
+import { CURVE_UNDERLYING_NATIVE_ACTION, underlyingNativeAssets } from "./native.js";
 import type {
   CurveUnderlyingDescriptor,
   CurveUnderlyingRoute,
@@ -13,8 +14,9 @@ export const curveUnderlyingRoutes = {
     const bindingFingerprint = hashCanonical(
       curveUnderlyingStaticBindingProjection(descriptor),
     );
-    return Object.freeze(descriptor.verifiedDirections.map((direction) =>
-      Object.freeze({
+    return Object.freeze(descriptor.verifiedDirections.map((direction) => {
+      const executionAssets = underlyingNativeAssets(descriptor, direction);
+      return Object.freeze({
         routeKey: routeKey([
           descriptor.familyId,
           lowerAddress(descriptor.pool),
@@ -29,6 +31,7 @@ export const curveUnderlyingRoutes = {
         instanceKey: descriptor.instanceKey,
         tokenIn: direction.tokenIn,
         tokenOut: direction.tokenOut,
+        ...(executionAssets ? { executionAssets } : {}),
         taxonomy: Object.freeze({ slotKind: "swap" as const }),
         bindingRef: Object.freeze({
           bindingKey: `${lowerAddress(descriptor.pool)}:${direction.i}:${direction.j}`,
@@ -39,12 +42,12 @@ export const curveUnderlyingRoutes = {
         i: direction.i,
         j: direction.j,
         semantics: "exchange_underlying(i,j,dx,minDy)" as const,
-      })
-    ));
+      });
+    }));
   },
   projectGraph({ descriptor, route }) {
     return Object.freeze({
-      routeActionAdapterId: "curve-exchange-underlying",
+      routeActionAdapterId: descriptor.nativeAlias ? CURVE_UNDERLYING_NATIVE_ACTION : "curve-exchange-underlying",
       executionTarget: descriptor.pool,
       venueIdentity: Object.freeze({
         kind: "address-pool",

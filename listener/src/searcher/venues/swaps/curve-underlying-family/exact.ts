@@ -1,5 +1,6 @@
 import { classicUnderlyingQuoteRequests, classicUnderlyingQuoteNextRound, decodeClassicUnderlyingQuote } from "./classic-meta-quote.js";
 import { curveUnderlyingQuoteModelProjection } from "./quote-model.js";
+import { CURVE_UNDERLYING_NATIVE_QUOTE } from "./native.js";
 import {
   localZeroExactMethod,
   type ExactQuoteSemantics,
@@ -36,8 +37,8 @@ const curveUnderlyingRequestProgram: ExactRequestProgram<
       id: EXACT_QUOTE_ID,
       kind: "eth-call" as const,
       to: input.descriptor.pool,
-      data: CURVE_UNDERLYING_POOL_INTERFACE.encodeFunctionData(
-        "get_dy_underlying",
+      data: (input.descriptor.nativeAlias ? CURVE_UNDERLYING_NATIVE_QUOTE : CURVE_UNDERLYING_POOL_INTERFACE).encodeFunctionData(
+        input.descriptor.nativeAlias ? "get_dy" : "get_dy_underlying",
         [BigInt(input.route.i), BigInt(input.route.j), input.amountIn],
       ),
       completion: "return-data" as const,
@@ -94,6 +95,7 @@ export const curveUnderlyingExact = {
   cacheCompatibilityProjection: ({ descriptor, route }) => ({
     pool: descriptor.pool,
     quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
+    nativeAlias: descriptor.nativeAlias ? { ...descriptor.nativeAlias } : null,
     registryBinding: {
       registry: descriptor.registryBinding.registry,
       handlers: descriptor.registryBinding.handlers,
@@ -141,6 +143,7 @@ function exactEvidence(
     tokenOut: input.route.tokenOut,
     amountIn: input.amountIn,
     amountOut,
+    ...(input.descriptor.nativeAlias ? { nativeAlias: input.descriptor.nativeAlias } : {}),
   });
 }
 

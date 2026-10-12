@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "reviewerAgent": "01a1307f-dbb9-77a3-9261-289d2b1cbd64",
+  "reviewer": "Kierkegaard",
+  "scope": "Independent read-only source review; no tests, RPC, fork, build or performance executed by reviewer.",
+  "baseHead": "0920d0df37df9de9c9930a313a64d0886f2a0321",
+  "rounds": [
+    {
+      "round": 1,
+      "finding": "P2: three-coin pure ERC20 directions must not declare an all-ERC20 native executionAssetBoundary; the central declaration validator rejects it.",
+      "disposition": "underlyingNativeAssets returns undefined for non-native pairs; probes/routes omit the optional boundary. All supported directions still require independent execution proof."
+    },
+    {
+      "round": 2,
+      "finding": "P2: without the native wrapper, a fixed one-unit raw-program allowance could bypass selected zero tolerance in pure ERC20 quoted execution.",
+      "disposition": "Existing central validated quoteToleranceRawUnits is forwarded through an optional generic buildFragment input; Family quoted action consumes that policy, conservatively zero if absent. No protocol branch added centrally."
+    },
+    {
+      "round": 3,
+      "finding": "No new actionable finding in the limited final delta.",
+      "verifiedStatically": [
+        "Shared interface and issuer add only optional policy forwarding; original sealed Exact, route, source, caller, ownership and generation checks remain.",
+        "Native-in, native-out and pure ERC20 raw operations require positive actual debit, no overdebit, and residual no greater than selected zero or one raw unit.",
+        "Strict probes pass admission tolerance explicitly; runtime raw maximum remains one, with the selected outer production policy unchanged.",
+        "Output is independently observed; authorization cleanup and old native/token inventory isolation remain."
+      ],
+      "requestedExecutedCoverage": "Real issuer propagation; native and pure ERC20 selected 0/1, zero debit, overdebit and old-inventory negatives. Main agent owns execution evidence separately."
+    }
+  ],
+  "reviewedFinalFileSha256": {
+    "adapter-family-plugin.ts": "f6c377f73d3eac232522bdf6685369b836b37ef5f724eed722da227a9fe126cf",
+    "adapter-family-runtime.ts": "e9b3b94466dca4f232743bf08d83fcd83860f8400b794ab418cf77bb0e629a2d",
+    "curve-underlying-family/native.ts": "6656238f22939b97152d0b0eb5521ed43e758a0c6808a4c9d4cec47a69f4b6a0",
+    "curve-underlying-family/execution.ts": "76b6533a89952c27cfced81c6cacb37ec2f261bd93fd6f10ef0682deb00c7766",
+    "curve-underlying-family/action.ts": "5683e2c23d05624f211796c04d049402e17a80e080ebcfccfe970ae42576b4e5"
+  },
+  "claimLimits": [
+    "Not an executed acceptance, formal adapter_merge_ready or family_local boundary receipt.",
+    "Each-block policy has a production consumer, but startup raw reference is not a per-block refreshed raw table.",
+    "Two-coin historical success does not prove arbitrary three-coin historical behavior or representative latency."
+  ]
+}

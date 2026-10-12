@@ -81,6 +81,9 @@ test("historical Ready reuse selects authenticated partitions without mutating i
   });
   assert.deepEqual(shared, sharedBefore);
   assert.deepEqual(readyReuseScope(shared, block, hash).familyIds, [CURVE_PLAIN_FAMILY_ID]);
+  assert.deepEqual(curveReadyFamilies("curve-underlying"), ["curve-underlying"]);
+  assert.deepEqual(readyReuseScope(shared, block, hash, ["curve-underlying"]).familyIds, ["curve-underlying"]);
+  assert.deepEqual(curveReadyFamilies("univ3-standard,curve-underlying"), ["curve-underlying", "univ3-standard"]);
   assert.throws(() => readyReuseScope(prior, block, hash, families), /selected source partitions/);
   for (const bad of ["", "univ3-standard", "curve-plain,unrelated", "curve-plain,curve-plain", "curve-plain,"])
     assert.throws(() => curveReadyFamilies(bad), /scope requires/);

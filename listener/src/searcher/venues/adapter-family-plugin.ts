@@ -1172,6 +1172,9 @@ export interface ExecutionSemantics<
     readonly amountIn: bigint;
     readonly quotedAmountOut: bigint;
     readonly minAmountOut: bigint;
+    /** Central 0/1 raw-unit policy for actual input debit, not a change to
+     * amountIn. Optional for existing callers; Families may default to zero. */
+    readonly quoteToleranceRawUnits?: bigint;
     readonly exactEvidence: ExactEvidence;
     readonly executor: string;
     /** The immutable origin from the sealed Exact invocation, when available. */

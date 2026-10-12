@@ -20,9 +20,9 @@ import { SWAP_TOPIC, UINT_SWAP_TOPIC, UINT_NG_SWAP_TOPIC } from "../discovery.js
 // wiring still owns discovery, identity and graph publication for every family.
 export function curveReadyFamilies(value: string = CURVE_PLAIN_FAMILY_ID): string[] {
   const ids = value.split(",");
-  assert(ids.includes(CURVE_PLAIN_FAMILY_ID) && new Set(ids).size === ids.length &&
+  assert(ids.some(id => id === CURVE_PLAIN_FAMILY_ID || id === "curve-underlying") && new Set(ids).size === ids.length &&
     ids.every(id => [CURVE_PLAIN_FAMILY_ID, "curve-underlying", "univ3-standard"].includes(id)),
-  "scope requires curve-plain and only optional curve-underlying/univ3-standard");
+  "scope requires a Curve family and only optional univ3-standard");
   return ids.sort();
 }
 

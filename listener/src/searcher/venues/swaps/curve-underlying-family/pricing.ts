@@ -1,4 +1,5 @@
 import { curveUnderlyingAcceptBaseCall, curveUnderlyingAcceptLpMutation, curveUnderlyingAcceptMutation, curveUnderlyingQuoteModelProjection, curveUnderlyingRefreshAddresses } from "./quote-model.js";
+import { CURVE_UNDERLYING_NATIVE_QUOTE } from "./native.js";
 import { compileAddressMutations } from "../../mutation-index.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import type { TokenEdge } from "../../../planner/token-graph.js";
@@ -37,10 +38,15 @@ const TOKEN_DECIMALS_ID = "current-token-decimals";
 const QUOTE_PREFIX = "current-get-dy:";
 
 export const curveUnderlyingPricing = {
+  // Native-alias admission proves executable amounts, not time-independent
+  // pricing. Crypto A/gamma ramps may change get_dy without a pool event.
+  // Keep this variant fresh until a narrower code/state model proves reuse.
+  refreshPolicyForInstance: ({ descriptor }) => descriptor.nativeAlias ? "each-block" : "on-touch",
   stateKey: (route) => route.routeKey,
   staticBindingProjection: ({ descriptor, routes }) => ({
     pool: descriptor.pool,
     quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
+    nativeAlias: descriptor.nativeAlias ? { ...descriptor.nativeAlias } : null,
     coins: descriptor.coins,
     registryBinding: {
       registry: descriptor.registryBinding.registry,
@@ -58,6 +64,7 @@ export const curveUnderlyingPricing = {
   snapshotCompatibilityProjection: ({ descriptor, routes }) => ({
     pool: descriptor.pool,
     quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
+    nativeAlias: descriptor.nativeAlias ? { ...descriptor.nativeAlias } : null,
     registry: descriptor.registryBinding.registry,
     directions: routes.map((route) => ({
       i: route.i,
@@ -78,6 +85,7 @@ export const curveUnderlyingPricing = {
       registry: descriptor.registryBinding.registry,
       coins: Object.freeze([...descriptor.coins]),
       ...(descriptor.quoteModel ? { quoteModel: descriptor.quoteModel } : {}),
+      ...(descriptor.nativeAlias ? { nativeAlias: descriptor.nativeAlias } : {}),
       route,
     });
   },
@@ -361,8 +369,8 @@ function quoteRequest(
     id: quoteRequestId(index),
     kind: "eth-call" as const,
     to: descriptor.pool,
-    data: CURVE_UNDERLYING_POOL_INTERFACE.encodeFunctionData(
-      "get_dy_underlying",
+    data: (descriptor.nativeAlias ? CURVE_UNDERLYING_NATIVE_QUOTE : CURVE_UNDERLYING_POOL_INTERFACE).encodeFunctionData(
+      descriptor.nativeAlias ? "get_dy" : "get_dy_underlying",
       [BigInt(descriptor.route.i), BigInt(descriptor.route.j), amountIn],
     ),
     completion: "return-data" as const,
