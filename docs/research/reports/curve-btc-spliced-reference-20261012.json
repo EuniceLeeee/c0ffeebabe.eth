@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "claim": "Bounded same-N quote/quoted/runtime parity for the naturally admitted renBTC/WBTC directions using explicitly authorized recorded production input amounts. Natural target valuation remains unmet; not original-call/full-route/merge/performance acceptance.",
+  "pool": "0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714",
+  "transaction": "0x0466e70178b1a56a93dad92aeaec90c83256bf05884294636e921be77bda6f48",
+  "code": {
+    "headAtStart": "170c571326dcf0495b5b6b158772bb4c13a18632",
+    "sourceSha256": "e3d0189478f63f3bb44973a3ca7716f2b7d67ade2af26b3c08e3c286ff180ce4",
+    "fileCount": 1149,
+    "testSha256": "886b2733a6b6425f5234d2b46c88dd88a678387e22648ca2db2c0bc8f5e9d714",
+    "testSafetySha256": "d7c74e64d1086c13de7ff9f48c6151c84a0f0c9c08825c89fcd9769bc4a7671a",
+    "testInputHelperSha256": "a4a0449afc1777b3a0f5256b99fb63d23db8f7e54d6bce8f75128f1d65c0abbd",
+    "testPriceInputHelperSha256": "c5a503ae065c2f925edf35b568649b58e7ed281827ee1df33881f085cd6d9502",
+    "testDonorHelperSha256": "e629c11197ec914cf9a6ad42196f02be6068ccbefcb11a01ef0fbabdd06da44a",
+    "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+    "familyDefinitionHash": "1865fd65f2ee50cba0b9fd28de1fd0f6c30ddc564a7c0e16bcb2f196879cf2b7",
+    "familyMemoDefinitionHash": "43ba457166436da16055cebf9cf62cebbaa936a8faccdd394bc5bc3f661d67ff"
+  },
+  "inputs": {
+    "source": {
+      "number": 26139768,
+      "hash": "0xd7bdbad87da07f0885234e0a53200cf4ec3ae61d73dd7b71db79b2705cb634f5",
+      "generation": 26139768
+    },
+    "readySha256": "890ba350725242d8ba30945666e6bdfde695c959e161dc60b0a72b7c9755ee02",
+    "pricesSha256": "7271a2e9cfcc8756f9a08e2419a014f814f3ac385e572c4b03a25bb6b48eb0e3",
+    "memoFingerprint": "36a231ab8d2f3108bda8c4be14ce6b1432d4452dc6fc05d95e9379a832234b6f",
+    "familyDefinitionHash": "43ba457166436da16055cebf9cf62cebbaa936a8faccdd394bc5bc3f661d67ff",
+    "runtimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec"
+  },
+  "header": {
+    "number": 26139768,
+    "hash": "0xd7bdbad87da07f0885234e0a53200cf4ec3ae61d73dd7b71db79b2705cb634f5",
+    "timestamp": 1791367187,
+    "baseFeePerGas": "0xa068cde"
+  },
+  "implementation": {
+    "scope": "Two Curve-owned historical test files only. No production quote/execution/identity change.",
+    "files": [
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts",
+        "sha256": "886b2733a6b6425f5234d2b46c88dd88a678387e22648ca2db2c0bc8f5e9d714"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual-safety.test.ts",
+        "sha256": "d7c74e64d1086c13de7ff9f48c6151c84a0f0c9c08825c89fcd9769bc4a7671a"
+      }
+    ],
+    "change": "Reuse existing splicedProductionAmount for input-only borrowing. Preserve target rows/Ready and same-source checks. Prefer existing target quotes; never hide failed target quotes. Map only admitted-direction execution tokens while checking all descriptor-token source inventory. Retain original quote/quoted/runtime and zero-input atomic rollback checks."
+  },
+  "result": {
+    "sameStateDualExecution": "pass",
+    "amountPoints": 4,
+    "encodingsPerPoint": 2,
+    "successfulExecutions": 8,
+    "zeroInputAtomicRollbackControls": 8,
+    "exactOutputDeltaRaw": "0 for all eight executions",
+    "inputInventoryRaw": "101 preserved",
+    "nativeInventoryWei": "17 preserved",
+    "runtimeConstructionRpc": 0,
+    "localReadCalls": 147,
+    "forkStopped": true,
+    "measuredDirections": [
+      "renBTC to WBTC",
+      "WBTC to renBTC"
+    ],
+    "sbtcDirections": "not admitted; not a supported execution claim",
+    "naturalProductionReferenceComplete": false
+  },
+  "samples": [
+    {
+      "tokenIn": "0xeb4c2781e4eba804ce9a9803c67d0893436bb27d",
+      "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "amountIn": "32164",
+      "multiplier": "1",
+      "quoteAmountOut": "6099",
+      "quotedAmountOut": "6099",
+      "runtimeAmountOut": "6099",
+      "oldInventoryConsumed": "0"
+    },
+    {
+      "tokenIn": "0xeb4c2781e4eba804ce9a9803c67d0893436bb27d",
+      "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "amountIn": "321640",
+      "multiplier": "10",
+      "quoteAmountOut": "60968",
+      "quotedAmountOut": "60968",
+      "runtimeAmountOut": "60968",
+      "oldInventoryConsumed": "0"
+    },
+    {
+      "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "tokenOut": "0xeb4c2781e4eba804ce9a9803c67d0893436bb27d",
+      "amountIn": "6183",
+      "multiplier": "1",
+      "quoteAmountOut": "32577",
+      "quotedAmountOut": "32577",
+      "runtimeAmountOut": "32577",
+      "oldInventoryConsumed": "0"
+    },
+    {
+      "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "tokenOut": "0xeb4c2781e4eba804ce9a9803c67d0893436bb27d",
+      "amountIn": "61830",
+      "multiplier": "10",
+      "quoteAmountOut": "325657",
+      "quotedAmountOut": "325657",
+      "runtimeAmountOut": "325657",
+      "oldInventoryConsumed": "0"
+    }
+  ],
+  "donor": {
+    "sourceReport": "docs/research/reports/curve-btc-production-donor-authentication-sidecar-20261012.json",
+    "reportSha256": "56e79c954da94ce3ed3f3f5ff1c8d16b4295b1f1ae0cecafdf2de221f3d0980c",
+    "artifact": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/baseline-revalidated-same-graph-effective-26146938/prices-1-26146938.json",
+    "artifactSha256": "61b40b231db6a77dba5cff03b637ea1ebb26b53374d880dbd5d87bc32d4fad39",
+    "selection": [
+      "univ3-standard\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0xeb4c2781e4eba804ce9a9803c67d0893436bb27d>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f699d2315b1b9cd33803307c723dcdc258efb98892cd74bf361bb9730f331cdfc",
+      "balancer-v1\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fa83c80c3e6cd85f7981f24dbd7cc26c43926c4a422f16a56070790c5c45fa89f"
+    ],
+    "quotedAt": {
+      "number": 26146937,
+      "hash": "0xda52667c2c1abf3976b8a57e1b33ce2902feef57bd03b18edc79aad58d4875e8",
+      "generation": 1
+    },
+    "publishedAt": {
+      "number": 26146938,
+      "hash": "0x300437c730d09431cb74d03d572c0d14d83bf893092ae1527a7db478172f8d09",
+      "generation": 2
+    },
+    "freshness": "carried",
+    "referenceWethInputWei": "2000000000000000",
+    "originatingQuoteCfgP": null,
+    "sourceConfigStatus": "No separate cfg.P is serialized. The recorded publication reference is 0.002 WETH; neither it nor minCapitalFraction establishes originating carried-row P. Private configuration was not read.",
+    "scope": "Only tokenIn/amountIn borrowed. Old amountOut/identity/valuation/admission never substituted."
+  },
+  "evidence": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-btc-donor-dual-current-attempt01.json",
+    "sha256": "b33893dff239441e9eb2c059249c8185614eaa8a9a975014d57a7009d5790926",
+    "bytes": 657047,
+    "readyAndStrictReport": "docs/research/reports/curve-atomic-identity-20261012.json",
+    "actualBackend": "Owned local Anvil fork at N; read-only eth_call/debug_traceCall, independent balance/state-diff observations. No signed or submitted transaction."
+  },
+  "toolReconciliation": {
+    "query": [
+      "curve",
+      "dual",
+      "fork",
+      "historical"
+    ],
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-btc-donor-dual-current-attempt01.manifest.json",
+    "sha256": "7abe2f7c87d939312993d06244e08f7345fb8d9b1824f0aa49d13397faf4f740",
+    "executed": [
+      {
+        "id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptorSha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "startedAt": "2026-10-12T12:46:12.090Z",
+        "finishedAt": "2026-10-12T12:46:18.114Z",
+        "exitCode": 0
+      }
+    ],
+    "manualComparison": "All four amount points independently checked against captured input/output deltas, both encodings and rollback controls; agrees."
+  },
+  "regressions": {
+    "contract": {
+      "passed": 126,
+      "failed": 0,
+      "path": "logs/four-family-coverage-20261012.zHKuWX/curve-donor-contract-attempt01.txt",
+      "sha256": "c285c2552445735fabd49eb21c733088bef81965dc02a4b5132472af2b4b16fc"
+    },
+    "buildLive": {
+      "exitCode": 0,
+      "path": "logs/four-family-coverage-20261012.zHKuWX/curve-donor-build-live-attempt01.txt",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    "generatedManifestCheck": {
+      "exitCode": 0,
+      "path": "logs/four-family-coverage-20261012.zHKuWX/curve-donor-manifest-check.txt",
+      "sha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef",
+      "scope": "Current working tree, including preserved peer UniV1 generated changes. Those unrelated generated changes are not included in this test-only commit."
+    }
+  },
+  "orchestration": "Delegated runner completed preparation only and was stopped before any historical run. Main then executed exactly one indexed historical attempt. No duplicate run or success substituted for an execution failure.",
+  "limitations": [
+    "Both target effective rows remain missing-valuation. This passes same-state execution at borrowed production-sized inputs, not target single-block natural valuation.",
+    "State/environment is N block-end, not original TX leg prestate. No original-output or opportunity/EV claim.",
+    "No route-pinned Adapter Replay/family-local merge judgment or full-Family coverage claim.",
+    "Neither single-Ready nor representative latency acceptance ran. The harness wall time is not production-stage latency evidence.",
+    "Other worker live/Anvil processes, original Ready and donor files preserved. No deployment, signing, broadcast or new main-task worktree."
+  ]
+}

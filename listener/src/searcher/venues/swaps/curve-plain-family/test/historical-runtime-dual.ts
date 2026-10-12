@@ -5,6 +5,7 @@
 // original-TX replay, latency benchmark, or adapter/production acceptance gate.
 import { curveHistoricalAmounts } from "./historical-amounts.js";
 import { curveHistoricalHeader } from "./historical-price-input.js";
+import { splicedProductionAmount } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -63,13 +64,14 @@ function sourcePin(name: string) {
     testSafetySha256: sha(readFileSync(new URL("./historical-runtime-dual-safety.test.ts", import.meta.url))),
     testInputHelperSha256: sha(readFileSync(new URL("./historical-amounts.ts", import.meta.url))),
     testPriceInputHelperSha256: sha(readFileSync(new URL("./historical-price-input.ts", import.meta.url))),
+    testDonorHelperSha256: sha(readFileSync(new URL("../../../../test/family-integration/kyber-yb-compound/evidence.ts", import.meta.url))),
     artifactSha256: sha(readFileSync(resolve(ROOT, "out/BotVM.sol/BotVM.json"))),
     familyDefinitionHash: familyDefinitionHash(name), familyMemoDefinitionHash: familyMemoDefinitionHash(name) };
 }
 
 function options(argv: string[]) {
   const names = ["--ready", "--prices", "--pool", "--family", "--rpc-file", "--out", "--port"];
-  const allowedNames = [...names, "--reference-executions", "--price-input"];
+  const allowedNames = [...names, "--reference-executions", "--price-input", "--reference-prices", "--reference-edges"];
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     assert(allowedNames.includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
@@ -77,6 +79,12 @@ function options(argv: string[]) {
     values.set(argv[i], argv[i + 1]);
   }
   assert(names.every(name => values.has(name)), "required: --ready --prices --pool --family --rpc-file --out --port");
+  assert.equal(values.has("--reference-prices"), values.has("--reference-edges"), "donor requires prices and edge keys");
+  assert(!(values.has("--reference-executions") && values.has("--reference-prices")), "choose saved execution or donor inputs, not both");
+  const referenceEdges: unknown = JSON.parse(values.get("--reference-edges") ?? "[]");
+  assert(Array.isArray(referenceEdges) && referenceEdges.every(key => typeof key === "string" && key.length > 0));
+  assert(!values.has("--reference-prices") || referenceEdges.length > 0);
+  assert.equal(new Set(referenceEdges).size, referenceEdges.length, "duplicate donor edge");
   assert.equal(values.get("--port"), "8591", "this narrow test owns only loopback port 8591");
   const name = values.get("--family")!;
   assert(name === "curve-plain" || name === "curve-underlying", "only the two Curve families are in scope");
@@ -88,6 +96,8 @@ function options(argv: string[]) {
   return { ready: realpathSync(values.get("--ready")!), prices: realpathSync(values.get("--prices")!),
     priceInput: values.has("--price-input") ? realpathSync(values.get("--price-input")!) : undefined,
     reference: values.has("--reference-executions") ? realpathSync(values.get("--reference-executions")!) : undefined,
+    referencePrices: values.has("--reference-prices") ? realpathSync(values.get("--reference-prices")!) : undefined,
+    referenceEdges: referenceEdges as string[],
     name, rpcFile: realpathSync(values.get("--rpc-file")!), pool: lower(ethers.getAddress(
       values.get("--pool")!.startsWith("0x") ? values.get("--pool")! : `0x${values.get("--pool")!}`)), out };
 }
@@ -168,6 +178,25 @@ export function curveHistoricalQuoteTargets(descriptor: CurvePlainDescriptor | C
     ? [model.basePool, model.baseLPToken, model.implementation, ...model.baseCoins] : [])].map(lower));
 }
 
+/** Donors supply an input only. Never replace a quoted target row or hide a
+ * target quote/execution failure behind a cross-block price. */
+export function curveHistoricalReferenceInput(row: any, donor?: {
+  saved: any; declaration: any; edgeKeys: readonly string[];
+}) {
+  if (row?.status === "quoted") {
+    assert(typeof row.amountIn === "bigint" && row.amountIn > 0n && row.amountIn * 10n <= MAX_INPUT);
+    assert(typeof row.amountOut === "bigint" && row.amountOut > 0n);
+    return { kind: "current-production-effective" as const, amountIn: row.amountIn as bigint,
+      expectedOut: row.amountOut as bigint, borrowed: undefined };
+  }
+  assert(row?.status === "missing-valuation" && row.amountIn == null && row.amountOut == null,
+    "donor may fill only a missing valuation input, not a failed target quote");
+  assert(donor, "actual quoted production row or explicitly bound donor input required");
+  const borrowed = splicedProductionAmount(donor.saved, donor.declaration, donor.edgeKeys, row.tokenIn);
+  assert(borrowed.amountIn * 10n <= MAX_INPUT);
+  return { kind: borrowed.kind, amountIn: borrowed.amountIn, expectedOut: undefined, borrowed };
+}
+
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const args = options(argv);
   // Reserve before any fork; write once in finally, including failed attempts.
@@ -191,6 +220,15 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const startPin = sourcePin(args.name); report.code = { headAtStart: git("rev-parse", "HEAD").trim(), ...startPin };
     const readyBytes = readFileSync(args.ready), priceBytes = readFileSync(args.prices);
     const saved = parseAtBlockJson(priceBytes.toString());
+    const donorPaths = args.referencePrices ? [args.referencePrices, resolve(dirname(args.referencePrices), "declaration.json")] : [];
+    const donorPins = () => donorPaths.map(path => ({ path, sha256: sha(readFileSync(path)) }));
+    const donorInputPins = donorPins();
+    const donor = args.referencePrices ? { saved: parseAtBlockJson(readFileSync(args.referencePrices, "utf8")),
+      declaration: parseAtBlockJson(readFileSync(donorPaths[1], "utf8")), edgeKeys: args.referenceEdges } : undefined;
+    if (donor) report.amountDonor = { inputs: donorInputPins, edgeKeys: args.referenceEdges,
+      cfg: donor.saved.cfg, sourceCommit: donor.declaration.head,
+      referenceWethInput: donor.saved.runtime?.pricing?.effectiveMids?.referenceWethInput,
+      use: "recorded input amounts only; not target output, identity, admission or natural valuation" };
     assert.equal(saved.readySha256, sha(readyBytes), "prices are not from this immutable Ready");
     assert.equal(realpathSync(saved.readyPath), args.ready);
     const envelope = await new UniverseRebuildCheckpointStore({ path: args.ready }).load();
@@ -229,25 +267,30 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const rows = edges.map(edge => {
       const key = blockScanEdgeKey(edge), row = saved.runtime.pricing.effectiveMids.rows.get(key);
       assert(saved.runtime.graph.edges.some((e: any) => blockScanEdgeKey(e) === key), "price graph lacks Ready edge");
-      assert(row && row.edgeId === key && row.status === "quoted", "actual quoted production price row required");
+      assert(row && row.edgeId === key, "actual target production price row required, even if unquoted");
       assert(same(row.tokenIn, edge.tokenIn) && same(row.tokenOut, edge.tokenOut));
-      assert(typeof row.amountIn === "bigint" && row.amountIn > 0n && row.amountIn * 10n <= MAX_INPUT);
-      assert(typeof row.amountOut === "bigint" && row.amountOut > 0n);
-      sameBlock(row.quotedAt.number, row.quotedAt.hash);
-      assert.equal(row.quotedAt.generation, saved.runtime.generation);
+      const referenceInput = curveHistoricalReferenceInput(row, donor);
+      if (referenceInput.kind === "current-production-effective") {
+        sameBlock(row.quotedAt.number, row.quotedAt.hash);
+        assert.equal(row.quotedAt.generation, saved.runtime.generation);
+      }
+      const amountRow = { tokenIn: row.tokenIn, tokenOut: row.tokenOut, amountIn: referenceInput.amountIn };
       const routes = instance.routes.filter(r => same(r.tokenIn, row.tokenIn) && same(r.tokenOut, row.tokenOut));
       assert.equal(routes.length, 1);
       const handles = instance.routeHandles.filter(h => h.routeKey === routes[0].routeKey);
       assert.equal(handles.length, 1);
-      return { row, route: handles[0], definition: routes[0] };
+      return { row, amountRow, referenceInput, route: handles[0], definition: routes[0] };
     });
     report.expectedSamples = rows.length * 2;
+    report.naturalProductionReferenceComplete = rows.every(r => r.referenceInput.kind === "current-production-effective");
     const reference = args.reference ? JSON.parse(readFileSync(args.reference, "utf8")) : undefined;
     if (args.reference) report.referenceExecutions = { path: args.reference,
       sha256: sha(readFileSync(args.reference)), use: "saved executed inputs and independent outputs only; not admission" };
     // Validate every reference direction before opening the owned fork.
-    for (const { row } of rows) curveHistoricalAmounts({ source, pool: args.pool, family: args.name, row, reference });
-    report.scope = { family: args.name, directions: rows.map(r => r.route.routeKey), tokenCount: tokens.length };
+    for (const { amountRow } of rows) curveHistoricalAmounts({ source, pool: args.pool, family: args.name, row: amountRow, reference });
+    const measuredTokens = [...new Set(rows.flatMap(r => [lower(r.row.tokenIn), lower(r.row.tokenOut)]))];
+    assert(measuredTokens.every(token => tokens.some(t => same(t, token))), "admitted direction outside descriptor coins");
+    report.scope = { family: args.name, directions: rows.map(r => r.route.routeKey), tokenCount: tokens.length, measuredTokens };
     const botvm = currentBotVm();
     report.inputs = { ready: args.ready, prices: args.prices, readySha256: sha(readyBytes), pricesSha256: sha(priceBytes),
       source, priceGeneration: saved.runtime.generation, timestamp: header.timestamp,
@@ -293,7 +336,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     for (const actor of [OWNER, EXECUTOR]) assert.equal(await rpc("eth_getCode", [actor, pin]), "0x", "actor already has source code");
     const slots = new Map<string, string>();
     report.balanceMappings = [];
-    for (const token of tokens) {
+    for (const token of tokens) assert.equal(await balance(token, EXECUTOR), 0n, "actor already has source inventory");
+    // Only admitted directions need controllable balances. An unadmitted,
+    // suspended coin must not block testing the independently admitted pair.
+    for (const token of measuredTokens) {
       assert(![OWNER, EXECUTOR, args.pool].some(a => same(a, token)),
         "actor/token/protocol addresses must not alias");
       assert.equal(await balance(token, EXECUTOR), 0n, "actor already has source inventory");
@@ -356,7 +402,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     // coins. This is a test read boundary, not another quote implementation.
     const quoteTargets = curveHistoricalQuoteTargets(descriptor);
     report.quoteReadTargets = [...quoteTargets].sort();
-    for (const { row, route, definition } of rows) {
+    for (const { row, amountRow, referenceInput, route, definition } of rows) {
       let overrides: Overrides = {};
       const queryCalls: any[] = [];
       const runtime = createStrictCentralAdapterRuntime({ executor: EXECUTOR, transactionOrigin: OWNER,
@@ -392,7 +438,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       } finally { constructing = false; }
       assert(leg, "Family returned null runtime leg");
       assert.equal(calls - beforeCalls, 0); assert.equal(constructionAttempts, 0);
-      for (const point of curveHistoricalAmounts({ source, pool: args.pool, family: args.name, row, reference })) {
+      for (const point of curveHistoricalAmounts({ source, pool: args.pool, family: args.name, row: amountRow, reference })) {
         const { multiplier, amountIn, priorActualOut } = point;
         const inputSentinel = 101n, outputSentinel = 103n, nativeSentinel = 17n;
         const tokenIn = lower(row.tokenIn), tokenOut = lower(row.tokenOut);
@@ -402,8 +448,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           [tokenIn]: { stateDiff: { [inSlot]: word(amountIn + inputSentinel) } },
           [tokenOut]: { stateDiff: { [outSlot]: word(outputSentinel) } } };
         const sample: Record<string, any> = { edgeId: row.edgeId, routeKey: route.routeKey, tokenIn, tokenOut,
-          amountSource: reference ? "saved-execution-reference" : "current-production-effective", priorActualOut,
-          multiplier, amountIn, productionP: row.amountIn, savedPriceOut: row.amountOut,
+          amountSource: reference ? "saved-execution-reference" : referenceInput.kind, priorActualOut,
+          multiplier, amountIn, productionP: amountRow.amountIn, targetPriceStatus: row.status,
+          savedPriceOut: row.amountOut, borrowedInput: referenceInput.borrowed,
           runtimeConstructionRpc: 0, programHash: ethers.keccak256(leg.program), status: "failed", executions: [] };
         report.samples.push(sample);
         try {
@@ -418,7 +465,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           if (quote.status !== "resolved") throw new Error("production Exact unresolved");
           assert(quote.amountOut > 0n); sample.quote.amountOut = quote.amountOut;
           assert(queryCalls.length > 0, "quote/state source was never read for this route");
-          if (!reference && multiplier === 1n) assert.equal(quote.amountOut, row.amountOut, "fresh P quote differs from saved production price");
+          if (!reference && multiplier === 1n && referenceInput.expectedOut !== undefined)
+            assert.equal(quote.amountOut, referenceInput.expectedOut, "fresh P quote differs from saved production price");
           const fragment = buildFamilyExecutionFragment({ family, route, exact: quote, minAmountOut: quote.amountOut,
             executor: EXECUTOR, runtimeEvidence: [], actionOwnership: catalog });
           assert.equal(fragment.status, "resolved");
@@ -576,6 +624,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     assert.equal(sha(readFileSync(args.ready)), report.inputs.readySha256);
     assert.equal(sha(readFileSync(args.prices)), report.inputs.pricesSha256);
     if (args.priceInput) assert.equal(sha(readFileSync(args.priceInput)), report.priceInput.sha256);
+    assert.deepEqual(donorPins(), donorInputPins, "donor input files changed during test");
     assert.deepEqual(sourcePin(args.name), startPin, "source/code changed during test");
     assert.equal(constructionAttempts, 0);
     assert(report.samples.length === report.expectedSamples && report.samples.every((s: any) => s.status === "pass"), "one or more samples failed; retained in receipt");
@@ -601,6 +650,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--price-input INPUT_JSON] [--reference-executions SAVED_JSON]");
+  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--price-input INPUT_JSON] [--reference-executions SAVED_JSON | --reference-prices PRICES_JSON --reference-edges JSON_ARRAY]");
   else main().catch(() => { console.error("historical-runtime-dual: input/output setup failed; no RPC started if no receipt was reserved"); process.exitCode = 1; });
 }

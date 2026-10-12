@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 1,
+  "task": "Read-only authentication of one renBTC and one WBTC recorded production input donor",
+  "startedAtUtc": "2026-10-12T12:31:00.721Z",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "observedHeadBefore": "a7892e9671f88526f0b0a99df1056ca83e0b8b3d",
+  "requiredHelper": "splicedProductionAmount",
+  "sourcePinsBefore": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/blockscan-at-block-cli.ts",
+      "sha256": "0e4af960a5f17e44aa19206e63e0776b9d5532198092e41c32fff0cbe0b7b7ac"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+      "sha256": "e629c11197ec914cf9a6ad42196f02be6068ccbefcb11a01ef0fbabdd06da44a"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-integration/three-family/historical-input-observations.ts",
+      "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/blockscan-state-capability.ts",
+      "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/route-immutable-binding.ts",
+      "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/route-instance-identity.ts",
+      "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+    }
+  ],
+  "inputOnly": true,
+  "helperInvocations": [
+    {
+      "target": "renBTC",
+      "tokenIn": "0xeb4c2781e4eba804ce9a9803c67d0893436bb27d",
+      "edgeKeys": [
+        "univ3-standard\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0xeb4c2781e4eba804ce9a9803c67d0893436bb27d>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f699d2315b1b9cd33803307c723dcdc258efb98892cd74bf361bb9730f331cdfc",
+        "balancer-v1\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fa83c80c3e6cd85f7981f24dbd7cc26c43926c4a422f16a56070790c5c45fa89f"
+      ],
+      "passed": true,
+      "returnedKind": "spliced-recorded-input",
+      "returnedAmountInRaw": "32164",
+      "returnedDonorKey": "univ3-standard\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0xeb4c2781e4eba804ce9a9803c67d0893436bb27d>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f699d2315b1b9cd33803307c723dcdc258efb98892cd74bf361bb9730f331cdfc",
+      "tableSource": {
+        "number": 26146938,
+        "hash": "0x300437c730d09431cb74d03d572c0d14d83bf893092ae1527a7db478172f8d09",
+        "generation": 2
+      },
+      "freshness": "carried",
+      "naturalTargetValuation": "unmet; not supplied by this input splice"
+    },
+    {
+      "target": "WBTC",
+      "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "edgeKeys": [
+        "univ3-standard\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0xeb4c2781e4eba804ce9a9803c67d0893436bb27d>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f699d2315b1b9cd33803307c723dcdc258efb98892cd74bf361bb9730f331cdfc",
+        "balancer-v1\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fa83c80c3e6cd85f7981f24dbd7cc26c43926c4a422f16a56070790c5c45fa89f"
+      ],
+      "passed": true,
+      "returnedKind": "spliced-recorded-input",
+      "returnedAmountInRaw": "6183",
+      "returnedDonorKey": "balancer-v1\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fa83c80c3e6cd85f7981f24dbd7cc26c43926c4a422f16a56070790c5c45fa89f",
+      "tableSource": {
+        "number": 26146938,
+        "hash": "0x300437c730d09431cb74d03d572c0d14d83bf893092ae1527a7db478172f8d09",
+        "generation": 2
+      },
+      "freshness": "carried",
+      "naturalTargetValuation": "unmet; not supplied by this input splice"
+    }
+  ],
+  "errors": [],
+  "resourceGuard": {
+    "memAvailableKb": 4729468,
+    "minimumAvailableKb": 3145728
+  },
+  "artifact": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/baseline-revalidated-same-graph-effective-26146938/prices-1-26146938.json",
+    "bytes": 209615176,
+    "sha256": "61b40b231db6a77dba5cff03b637ea1ebb26b53374d880dbd5d87bc32d4fad39",
+    "mtimeUtc": "2026-10-08T14:49:49.705Z",
+    "stableDuringReadAndParse": true,
+    "wholeFileParses": 1,
+    "fullSha256Passes": 1,
+    "parser": "parseAtBlockJson",
+    "rowHashEncoding": "Each serializedParsedRowSha256 hashes atBlockJson(parsedRow), including its trailing newline; it is not a raw file-slice hash."
+  },
+  "declaration": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/baseline-revalidated-same-graph-effective-26146938/declaration.json",
+    "bytes": 326652,
+    "sha256": "eb084836a10487efc29f4c0adb673f1ec61f9bfe7627e952f6ea77bf2de4cded",
+    "stableDuringReadAndParse": true,
+    "schema": 2,
+    "benchmark": "effective-update",
+    "sourceHead": "2a2243bdf009ac1951644794ed38cb9e98d138e4",
+    "graphEdges": 28040,
+    "liveStarted": false,
+    "broadcast": false,
+    "signing": false
+  },
+  "selection": {
+    "policy": "renBTC uses the first exact key from the supplied sidecar; WBTC uses the lexicographically first quoted WBTC-to-WETH key, falling back to other WBTC outputs only if none exist",
+    "quotedWbtcInputRows": 194,
+    "quotedWbtcToWethRows": 34,
+    "referencePrices": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/baseline-revalidated-same-graph-effective-26146938/prices-1-26146938.json",
+    "referenceEdges": [
+      "univ3-standard\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0xeb4c2781e4eba804ce9a9803c67d0893436bb27d>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f699d2315b1b9cd33803307c723dcdc258efb98892cd74bf361bb9730f331cdfc",
+      "balancer-v1\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fa83c80c3e6cd85f7981f24dbd7cc26c43926c4a422f16a56070790c5c45fa89f"
+    ]
+  },
+  "table": {
+    "publicationSource": {
+      "number": 26146938,
+      "hash": "0x300437c730d09431cb74d03d572c0d14d83bf893092ae1527a7db478172f8d09",
+      "generation": 2
+    },
+    "effectiveSource": {
+      "number": 26146938,
+      "hash": "0x300437c730d09431cb74d03d572c0d14d83bf893092ae1527a7db478172f8d09",
+      "generation": 2
+    },
+    "parentHash": "0xda52667c2c1abf3976b8a57e1b33ce2902feef57bd03b18edc79aad58d4875e8",
+    "graphEdges": 28040,
+    "effectiveRows": 28040,
+    "completeness": "degraded",
+    "reference": "default",
+    "referenceWethInputWei": "2000000000000000"
+  },
+  "config": {
+    "savedEqualsDeclaration": true,
+    "encodingForHash": "atBlockJson(cfg), including trailing newline",
+    "savedCfgSha256": "dd6e3b76c3dab2a42995ba5faa626ffb1f78ad65c11664a0b1cba987e830b230",
+    "declarationCfgSha256": "dd6e3b76c3dab2a42995ba5faa626ffb1f78ad65c11664a0b1cba987e830b230",
+    "minCapitalFraction": 0.001,
+    "explicitP": null,
+    "originatingQuoteP": null,
+    "explicitPStatus": "No separate cfg.P is serialized. The recorded publication reference is 0.002 WETH; neither it nor minCapitalFraction establishes originating carried-row P. Private configuration was not read."
+  },
+  "declaredBindings": {
+    "ready": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/ready-baseline-revalidated.json",
+      "sha256": "1f35bd03e7ea9429059c59f198f4929ea87183e9f24349c9f4a955e53666b38b"
+    },
+    "selectedDeclarationBindings": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/benchmarks/effective-update.ts",
+        "sha256": "08abf872b71c0b2b39d68b9bdd428c5661fa5ca5169827ee95a4038c1fecbdfa"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/blockscan-runtime-loop.ts",
+        "sha256": "7624077589a37c9ebd386116a8f663f5d5aab091dd4baf7ba652fcc184ec9360"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/main.ts",
+        "sha256": "fa0dee3e5bdcb8d443bd5c09ca388fa0797a6cf95addcc082c6903a1ab7712ac"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/ready-baseline-revalidated.json",
+        "sha256": "1f35bd03e7ea9429059c59f198f4929ea87183e9f24349c9f4a955e53666b38b"
+      }
+    ],
+    "scope": "Recorded binding consistency checked by the existing helper; Ready bytes and historical producer source closure were not independently revalidated."
+  },
+  "donors": [
+    {
+      "symbol": "renBTC",
+      "key": "univ3-standard\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0x3cb75142bdae2bef3eb119affb288aeb0599dc4f\u001f0xeb4c2781e4eba804ce9a9803c67d0893436bb27d>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f699d2315b1b9cd33803307c723dcdc258efb98892cd74bf361bb9730f331cdfc",
+      "tokenIn": "0xeb4c2781e4eba804ce9a9803c67d0893436bb27d",
+      "tokenOutLocatorOnly": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "instanceKey": "0x3cb75142bdae2bef3eb119affb288aeb0599dc4f",
+      "amountInRaw": "32164",
+      "status": "quoted",
+      "quotedAt": {
+        "number": 26146937,
+        "hash": "0xda52667c2c1abf3976b8a57e1b33ce2902feef57bd03b18edc79aad58d4875e8",
+        "generation": 1
+      },
+      "serializedParsedRowSha256": "13d0978f172d84abfca2c7550629725ac743bfed181f1a42d2636c1c3f5ebdaa",
+      "graphKeyOccurrences": 1,
+      "selectedInputTokenOccurrences": 1,
+      "coverage": {
+        "carried": true,
+        "refreshed": false
+      }
+    },
+    {
+      "symbol": "WBTC",
+      "key": "balancer-v1\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fa83c80c3e6cd85f7981f24dbd7cc26c43926c4a422f16a56070790c5c45fa89f",
+      "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "tokenOutLocatorOnly": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "instanceKey": "0x1eff8af5d577060ba4ac8a29a13525bb0ee2a3d5",
+      "amountInRaw": "6183",
+      "status": "quoted",
+      "quotedAt": {
+        "number": 26146937,
+        "hash": "0xda52667c2c1abf3976b8a57e1b33ce2902feef57bd03b18edc79aad58d4875e8",
+        "generation": 1
+      },
+      "serializedParsedRowSha256": "8a100eff5991ec237ab86aef65dbfb31f3bbe38eae78d6ebc3f743c8e018bbb4",
+      "graphKeyOccurrences": 1,
+      "selectedInputTokenOccurrences": 1,
+      "coverage": {
+        "carried": true,
+        "refreshed": false
+      }
+    }
+  ],
+  "result": "both_selected_input_donors_pass_existing_helper",
+  "sourcePinsAfter": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/blockscan-at-block-cli.ts",
+      "sha256": "0e4af960a5f17e44aa19206e63e0776b9d5532198092e41c32fff0cbe0b7b7ac"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+      "sha256": "e629c11197ec914cf9a6ad42196f02be6068ccbefcb11a01ef0fbabdd06da44a"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-integration/three-family/historical-input-observations.ts",
+      "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/blockscan-state-capability.ts",
+      "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/route-immutable-binding.ts",
+      "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/route-instance-identity.ts",
+      "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+    }
+  ],
+  "sourcePinsStable": true,
+  "observedHeadAfter": "a7892e9671f88526f0b0a99df1056ca83e0b8b3d",
+  "finishedAtUtc": "2026-10-12T12:31:06.636Z",
+  "bounds": {
+    "rpcCalls": 0,
+    "liveRunsStarted": 0,
+    "forksStarted": 0,
+    "buildsRun": 0,
+    "performanceRuns": 0,
+    "sourceOrGitEdits": 0,
+    "readyOrPricesOrImplEdits": 0,
+    "protectedPids": [
+      406305,
+      406318,
+      406337
+    ],
+    "processSignalsOrControlActions": 0,
+    "privateConfigurationOrKeysRead": false,
+    "networkUse": "SSH file reads only",
+    "tsxCacheDisabled": true,
+    "writes": [
+      "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/curve-btc-production-donor-authentication-sidecar-20261012.json"
+    ]
+  },
+  "limitations": [
+    "Only recorded tokenIn/amountIn may be borrowed. Output, valuation, identity, admission and current-P acceptance are not borrowed.",
+    "This check authenticates saved production-stage benchmark evidence, not live acceptance or Curve same-state EVM parity.",
+    "Producer source closure and Ready content are retained as recorded hashes and were not independently revalidated."
+  ],
+  "previousEvidence": {
+    "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/renbtc-production-amount-donor-sidecar-20261012.json",
+    "sha256": "a901e6a37502d2a2c852bc4e18d1c0984a493032b58bf5a05d50a40a95d56515"
+  },
+  "validationExecution": {
+    "exitCode": 0,
+    "nodeVersion": "v26.0.0",
+    "parseFunction": "listener/src/searcher/blockscan-at-block-cli.ts::parseAtBlockJson",
+    "helperFunction": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts::splicedProductionAmount",
+    "calls": 2,
+    "bothCallsReceivedSameTwoKeys": true,
+    "helperModified": false,
+    "pricingPipelineExecuted": false,
+    "scope": "Authentication of the saved input donors only; this is not a Curve integration or EVM pass."
+  }
+}

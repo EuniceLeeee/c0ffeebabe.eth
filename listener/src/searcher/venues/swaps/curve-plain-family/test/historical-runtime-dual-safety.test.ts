@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
-import { assertNoInputRollback, curveHistoricalQuoteTargets, observedNativeInventory } from "./historical-runtime-dual.js";
+import { assertNoInputRollback, curveHistoricalQuoteTargets, curveHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
 import { curveRefreshGuardRequests } from "../refresh-scope.js";
 import type { CurvePlainDescriptor } from "../types.js";
+import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
 
 // Pure helper regressions only; these fixtures are not historical EVM evidence.
 const OWNER = "0x1000000000000000000000000000000000000001";
@@ -11,6 +12,58 @@ const EXECUTOR = "0x1000000000000000000000000000000000000002";
 const TOKEN_IN = "0x2000000000000000000000000000000000000001";
 const TOKEN_OUT = "0x2000000000000000000000000000000000000002";
 const word = (n: bigint) => ethers.toBeHex(n, 32);
+
+function amountDonor() {
+  const source = { number: 123, hash: "0x" + "ab".repeat(32), generation: 2 };
+  const parent = "0x" + "cd".repeat(32);
+  const edge = { canonicalEdgeId: "donor-fixture", adapterId: "univ2-standard", target: OWNER,
+    instanceKey: OWNER, tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, slotKind: "swap" };
+  const edgeId = blockScanEdgeKey(edge as any);
+  const row = { ...edge, edgeId, status: "quoted", amountIn: 17n, amountOut: 900n,
+    quotedAt: { number: 122, hash: parent, generation: 1 } };
+  const cfg = { minCapitalFraction: 0.001 }, readyPath = "/fixture/ready.json", readySha256 = "33".repeat(32);
+  const saved = { cfg, readyPath, readySha256, header: { ...source, parentHash: parent }, runtime: {
+    sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
+    graph: { edges: [edge] }, pricing: { sourceBlock: source.number, sourceBlockHash: source.hash,
+      generation: source.generation, effectiveMids: { source, rows: new Map([[edgeId, row]]) } } } };
+  const declaration = { benchmark: "effective-update", liveStarted: false, broadcast: false, signing: false,
+    head: "44".repeat(20), cfg, graphEdges: 1, notifications: [source], bindings: [readyPath,
+      "/fixture/listener/benchmarks/effective-update.ts", "/fixture/listener/src/searcher/blockscan-runtime-loop.ts",
+      "/fixture/listener/src/searcher/main.ts"].map(path => ({ path, sha256: readySha256 })) };
+  return { saved, declaration, edgeKeys: [edgeId] };
+}
+const missingReference = () => ({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT,
+  status: "missing-valuation", amountIn: null, amountOut: null });
+
+test("Curve donor mode borrows only authenticated input and keeps target missing valuation", () => {
+  const row = missingReference(), before = structuredClone(row);
+  const result = curveHistoricalReferenceInput(row, amountDonor());
+  assert.equal(result.kind, "spliced-recorded-input"); assert.equal(result.amountIn, 17n);
+  assert.equal(result.expectedOut, undefined); assert.equal(result.borrowed!.freshness, "carried");
+  assert.equal(result.borrowed!.donorRow.amountOut, 900n, "donor output is provenance only");
+  assert.match(result.borrowed!.naturalTargetValuation, /unmet/);
+  assert.deepEqual(row, before, "must not relabel or overwrite the target row");
+});
+
+test("Curve donor mode cannot replace quoted target inputs or hide quote failures", () => {
+  const row = { ...missingReference(), status: "quoted", amountIn: 21n, amountOut: 23n };
+  assert.deepEqual(curveHistoricalReferenceInput(row, amountDonor()),
+    { kind: "current-production-effective", amountIn: 21n, expectedOut: 23n, borrowed: undefined });
+  for (const status of ["quote-failed", "unreachable", "capacity-exceeded"])
+    assert.throws(() => curveHistoricalReferenceInput({ ...missingReference(), status }, amountDonor()), /missing valuation/);
+  assert.throws(() => curveHistoricalReferenceInput(missingReference()), /explicitly bound donor/);
+  assert.throws(() => curveHistoricalReferenceInput({ ...missingReference(), amountIn: 1n }, amountDonor()));
+});
+
+test("Curve donor mode retains shared token, graph, config and bounded-amount checks", () => {
+  assert.throws(() => curveHistoricalReferenceInput({ ...missingReference(), tokenIn: EXECUTOR }, amountDonor()));
+  const wrongGraph = amountDonor(); wrongGraph.saved.runtime.graph.edges = [];
+  assert.throws(() => curveHistoricalReferenceInput(missingReference(), wrongGraph));
+  const wrongConfig = amountDonor(); wrongConfig.saved.cfg = { minCapitalFraction: 1 };
+  assert.throws(() => curveHistoricalReferenceInput(missingReference(), wrongConfig));
+  const oversized = amountDonor(); oversized.saved.runtime.pricing.effectiveMids.rows.values().next().value!.amountIn = ethers.MaxUint256;
+  assert.throws(() => curveHistoricalReferenceInput(missingReference(), oversized));
+});
 
 test("historical reads include current Family implementation guards without permitting unrelated targets", () => {
   const pool = "0x4dece678ceceb27446b35c672dc7d61f30bad69e";
