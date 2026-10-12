@@ -37,7 +37,7 @@ function response(req: StrictSimulateRequest): DaemonResponse {
 }
 function failure(req: StrictSimulateRequest, kind: "Revert" | "Halt", phase: "main" | "preCall" = "main"): DaemonResponse {
   const r = response(req), where = phase === "main" ? { phase } : { phase, preCallIndex: 0 };
-  r.success = false; r.strict!.outcome = kind === "Revert" ? { kind, ...where, output: "0xdeadbeef" } : { kind, ...where, reason: "OutOfGas" };
+  r.success = false; r.strict!.outcome = kind === "Revert" ? { kind, ...where, output: "0xdeadbeef", nestedHalt: null } : { kind, ...where, reason: "OutOfGas" };
   r.output = kind === "Revert" ? "0xdeadbeef" : undefined; r.revertReason = kind === "Revert" ? r.output : undefined;
   r.strict!.tokenDeltas = []; r.strict!.nativeDeltas = []; r.strict!.totalSupplyDeltas = []; r.strict!.logs = []; return r;
 }
@@ -64,6 +64,97 @@ function prefixInvocation(request: PrefixInvocation["request"] = {
   return { ...invocation(), request, prefix: { executor: EXECUTOR, calldata: "0x12345678", inputToken: TOKEN, inputAmount: 123n } };
 }
 const PROGRAM_CODE = { code: "0x60006000f3", keccak256: keccak256("0x60006000f3") };
+
+test("wrapped child Halt stays incomplete, not deterministic main revert evidence", async () => {
+  const f = fixture(async req => {
+    const r = failure(req, "Revert");
+    (r.strict!.outcome as any).nestedHalt = "OutOfGas";
+    return r;
+  });
+  await assert.rejects(f.transport.simulate(invocation()), error => {
+    assert(error instanceof RevmStrictError); assert.equal(error.kind, "execution"); return notEvidence(error);
+  });
+  assert.deepEqual(f.fatals, [], "a bounded execution failure must not retire the source");
+});
+
+test("nested Halt keeps exact-prefix completion unresolved with diagnostic provenance", async () => {
+  const f = fixture(async req => {
+    const r = failure(req, "Revert");
+    (r.strict!.outcome as any).nestedHalt = "InvalidFEOpcode";
+    return r;
+  });
+  await assert.rejects(f.transport.simulatePrefix!(prefixInvocation()), error => {
+    assert(error instanceof RevmStrictError); assert.equal(error.kind, "execution");
+    assert.deepEqual((error as any).exactPrefixFailure,
+      { kind: "Revert", phase: "main", output: "0xdeadbeef", nestedHalt: "InvalidFEOpcode" });
+    return notEvidence(error);
+  });
+  assert.deepEqual(f.fatals, []);
+});
+
+for (const metadata of ["", 1, {}, "x".repeat(257)]) test(`invalid nested Halt metadata ${typeof metadata} is a protocol fault`, async () => {
+  const f = fixture(async req => {
+    const r = failure(req, "Revert"); (r.strict!.outcome as any).nestedHalt = metadata; return r;
+  });
+  await assert.rejects(f.transport.simulate(invocation()), RevmFatalError);
+  assert.deepEqual(f.fatals, [{ kind: "protocol-fault" }]);
+});
+
+for (const kind of ["Success", "Halt"] as const) test(`nested Halt metadata cannot be attached to ${kind}`, async () => {
+  const f = fixture(async req => {
+    const r = kind === "Success" ? response(req) : failure(req, kind);
+    (r.strict!.outcome as any).nestedHalt = null; return r;
+  });
+  await assert.rejects(f.transport.simulate(invocation()), RevmFatalError);
+});
+
+test("executor-program Revert requires explicit complete nested-outcome provenance", async () => {
+  for (const provenance of [undefined, null, "OutOfGas"] as const) {
+    const f = fixture(async req => {
+      const r = failure(req, "Revert");
+      r.strict!.counterfactualExecutorCode = { address: EXECUTOR, keccak256: PROGRAM_CODE.keccak256 };
+      if (provenance !== undefined) (r.strict!.outcome as any).nestedHalt = provenance;
+      else delete (r.strict!.outcome as any).nestedHalt;
+      return r;
+    });
+    const transport = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
+    await assert.rejects(transport.simulate(programInvocation()), error => {
+      if (provenance === null) { assert.equal((error as any).code, "CALL_EXCEPTION"); return true; }
+      assert(error instanceof RevmStrictError); assert.equal(error.kind, "execution"); return notEvidence(error);
+    });
+    assert.deepEqual(f.fatals, []);
+  }
+});
+
+for (const provenance of [undefined, null, "OutOfGas"] as const)
+test(`executor-program after prefix checks nested-outcome provenance ${String(provenance)}`, async () => {
+  const f = fixture(async req => {
+    assert.equal(req.executorRuntimeCode, undefined);
+    assert.deepEqual(req.trialPrefix!.executorRuntimeCode, PROGRAM_CODE);
+    assert.equal(req.to, EXECUTOR);
+    const r = failure(req, "Revert");
+    r.strict!.counterfactualExecutorCode = { address: EXECUTOR, keccak256: PROGRAM_CODE.keccak256 };
+    if (provenance !== undefined) (r.strict!.outcome as any).nestedHalt = provenance;
+    else delete (r.strict!.outcome as any).nestedHalt;
+    return r;
+  });
+  const transport = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
+  const result = transport.simulatePrefix!(prefixInvocation(programInvocation().request));
+  if (provenance === null) {
+    assert.equal((await result).completion, "reverted-as-declared");
+  } else {
+    await assert.rejects(result, error => {
+      assert(error instanceof RevmStrictError); assert.equal(error.kind, "execution");
+      assert.deepEqual((error as any).exactPrefixFailure, {
+        kind: "Revert", phase: "main", output: "0xdeadbeef",
+        ...(typeof provenance === "string" ? { nestedHalt: provenance } : {}),
+      });
+      return notEvidence(error);
+    });
+  }
+  assert.deepEqual(f.fatals, []);
+});
+
 function programInvocation(): MutableInvocation {
   const v = invocation();
   v.request = { ...v.request,

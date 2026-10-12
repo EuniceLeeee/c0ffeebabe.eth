@@ -1,4 +1,6 @@
 import { ethers } from "ethers";
+import { concatBytes, encodeCall } from "../../../../encoder.js";
+import { buildSubscriptCalldata } from "../../../../shared/executor/botvm-program-entry.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import type { IdentityDecision, IdentitySemantics } from "../../adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
@@ -39,7 +41,7 @@ function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainC
     applies: candidate => candidate.candidateKind === "curve-plain-pool",
     requirements({ evidence }) {
       const prior = evidence as Evidence | undefined;
-      if (prior?.phase === "registry" && prior.binding.coins.some(isNativeCoin))
+      if (prior?.phase === "registry")
         return { transports: ["eth-call", "effect-delta-simulation"], caller: "executor",
           effects: ["return-data", "revert-data", "token-delta", "native-delta"] };
       if (prior?.phase === "quotes" && prior.quotes.some(q =>
@@ -69,7 +71,7 @@ function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainC
             call(getterReadId("balance", abi, i), prior.pool, getterPool(abi).encodeFunctionData("balances", [i])),
           ]),
         ]),
-        ...(prior.binding.coins.some(isNativeCoin) ? [nativeExecutorRequest()] : []),
+        executorRequest(),
       ];
       if (prior.phase === "structure") return pairs(prior.binding.coins.length).flatMap(([i, j]) => {
         const amount = probeAmount(prior.binding.decimals[i], prior.balances[i]);
@@ -80,7 +82,7 @@ function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainC
         (isNativeCoin(prior.binding.coins[quote.i]) || isNativeCoin(prior.binding.coins[quote.j]))
           ? [nativeExecutionProbe(prior.pool, quote, quoteAbi === "int128" ? "native-exchange" : "native-exchange-uint",
             prior.executor!, prior.binding.coins, executionRoundingRawUnits)]
-          : modes.map(mode => executionProbe(prior.pool, quote, mode)));
+          : modes.map(mode => executionProbe(prior.pool, quote, mode, prior.executor!)));
       return [];
     },
     decode({ step, results }) {
@@ -127,7 +129,7 @@ function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainC
         }
         return { ...prior, phase: "structure", binding: { ...prior.binding, decimals,
           coinAbi: coinsRead?.abi ?? null, balanceAbi: balancesRead?.abi ?? null }, balances, requestIds,
-          ...(prior.binding.coins.some(isNativeCoin) ? { executor: nativeExecutor(results, prior.pool) } : {}),
+          executor: probeExecutor(results, prior.pool),
           ...(rejection ? { rejection } : {}) } satisfies Evidence;
       }
       if (prior.phase === "structure") {
@@ -200,22 +202,22 @@ export const curvePlainIdentity: IdentitySemantics<CurvePlainCandidate, CurvePla
 };
 // Bind symbolic authority through a read-only observed call in the existing
 // structure round. No candidate-supplied address or extra identity round.
-function nativeExecutorRequest(): AdapterRequest {
+function executorRequest(): AdapterRequest {
   const balance = new ethers.Interface(["function balanceOf(address) view returns(uint256)"]);
-  return { id: "native-executor", kind: "effect-delta-simulation",
+  return { id: "probe-executor", kind: "effect-delta-simulation",
     call: { caller, executionMode: "impersonated-call-frame", to: ADDR.WETH,
       data: balance.encodeFunctionData("balanceOf", [ethers.ZeroAddress]) },
     overrideIntent: { caller }, observeTokenBalances: [{ token: ADDR.WETH, account: caller }],
     observe: ["return-data", "revert-data", "token-delta", "native-delta"] };
 }
-function nativeExecutor(results: readonly AdapterRequestResult[], pool: string): string {
-  const read = returned(results, "native-executor");
+function probeExecutor(results: readonly AdapterRequestResult[], pool: string): string {
+  const read = returned(results, "probe-executor");
   uint(read.data);
   const rows = read.effects?.tokenDeltas, native = read.effects?.nativeDeltas;
   if (rows?.length !== 1 || !same(rows[0].token, ADDR.WETH) || rows[0].delta !== 0n ||
       native?.length !== 1 || !same(native[0].account, rows[0].account) || native[0].delta !== 0n ||
       same(rows[0].account, ethers.ZeroAddress) || same(rows[0].account, pool))
-    throw new Error("curve-plain missing native executor authority");
+    throw new Error("curve-plain missing executor authority");
   return ethers.getAddress(rows[0].account);
 }
 function provesNativeExecution(results: readonly AdapterRequestResult[], quote: QuoteDirection, mode: CurvePlainMode, actor: string, toleranceRawUnits: bigint): boolean {
@@ -255,13 +257,20 @@ function pairs(length: number): readonly [number, number][] {
   return Array.from({ length }, (_, i) => Array.from({ length }, (_, j) => [i, j] as [number, number]))
     .flat().filter(([i, j]) => i !== j);
 }
-function executionProbe(pool: string, quote: QuoteDirection, mode: CurvePlainMode): AdapterRequest {
+function executionProbe(pool: string, quote: QuoteDirection, mode: CurvePlainMode, actor: string): AdapterRequest {
+  // Execute preparation and exchange atomically under the trusted executor.
+  // A token's deterministic preparation revert is then a failed complete mode,
+  // not unknown preCall evidence that hides another direction's valid proof.
+  // Transport failures and incomplete effects remain unresolved below.
+  const script = concatBytes(
+    encodeCall(quote.tokenIn, ethers.getBytes(ERC20.encodeFunctionData(
+      pullsInput(mode) ? "approve" : "transfer", [pool, quote.amountIn]))),
+    encodeCall(pool, ethers.getBytes(executionData(mode, quote.i, quote.j,
+      quote.amountIn, quote.amountOut, PROBE_RECEIVER))),
+  );
   return {
     id: `execution:${quote.i}:${quote.j}:${mode}`, kind: "effect-delta-simulation", required: false,
-    preCalls: [{ caller, to: quote.tokenIn,
-      data: ERC20.encodeFunctionData(pullsInput(mode) ? "approve" : "transfer", [pool, quote.amountIn]) }],
-    call: { caller, executionMode: "impersonated-call-frame", to: pool,
-      data: executionData(mode, quote.i, quote.j, quote.amountIn, quote.amountOut, PROBE_RECEIVER) },
+    call: { caller, executionMode: "executor-program", to: actor, data: buildSubscriptCalldata(script) },
     overrideIntent: { caller, tokenBalances: [{ token: quote.tokenIn, amount: quote.amountIn }] },
     observeTokenBalances: [
       { token: quote.tokenIn, account: caller }, { token: quote.tokenIn, account: pool },

@@ -132,7 +132,8 @@ export interface DaemonResponse {
 }
 
 export type StrictExecutionOutcome = (
-  | { kind: "Success" | "Revert"; output: string }
+  | { kind: "Success"; output: string }
+  | { kind: "Revert"; output: string; nestedHalt?: string | null }
   | { kind: "Halt"; reason: string }
 ) & ({ phase: "main" } | { phase: "preCall"; preCallIndex: number });
 
@@ -305,6 +306,8 @@ function strictResponse(resp: DaemonResponse, req: StrictSimulateRequest): void 
   if (o.kind === "Halt") {
     if (typeof o.reason !== "string" || !o.reason || "output" in o || resp.output !== undefined) bad();
   } else if (!bytesHex(o.output) || resp.output !== o.output || "reason" in o) bad();
+  if ("nestedHalt" in o && (o.kind !== "Revert" ||
+    (o.nestedHalt !== null && (typeof o.nestedHalt !== "string" || !o.nestedHalt.length || o.nestedHalt.length > 256)))) bad();
   if (req.stateRead?.kind === "get-storage" && o.kind === "Success" && !hash32(o.output)) bad();
   if (resp.revertReason !== (o.kind === "Revert" ? o.output : undefined)) bad();
   if (req.callerMode === "impersonated-call-frame" && BigInt(s.executionGasUsed) > BigInt(req.executionGasLimit!)) bad();

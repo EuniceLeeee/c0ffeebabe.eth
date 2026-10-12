@@ -1,0 +1,274 @@
+{
+  "schemaVersion": 1,
+  "reviewId": "strict-nested-independent-review-20261012-01",
+  "reviewedAtUtc": "2026-10-12 12:18:56 UTC",
+  "role": "fresh non-author; read-only source review",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "head": "a7892e9671f88526f0b0a99df1056ca83e0b8b3d",
+  "scope": "Exactly the current dirty diff of the four files below against HEAD; supporting crate/source and saved logs read only.",
+  "patchSha256": "16712ad13efe72266cdfe1e99156b1bd00ea1d33258b899950bd874f3fdd1d80",
+  "patchHashDefinition": "SHA-256 of git diff --no-ext-diff --no-textconv --binary HEAD -- <the four scope paths in listed order>",
+  "pinsStableAcrossReview": true,
+  "files": [
+    {
+      "file": "listener/revm-sim/src/main.rs",
+      "sha256": "44d3bda3c7184371fe7f81bdcb968d90cdef4085344bdecd05cc3eddb2d2f7a2"
+    },
+    {
+      "file": "listener/src/searcher/revm-sim-client.ts",
+      "sha256": "a041f6f7d311d83c2788c3acdbc1ff0576f8aa43b50bf694e2810032e3d51bf0"
+    },
+    {
+      "file": "listener/src/searcher/revm-strict-simulation-transport.ts",
+      "sha256": "d6bc311db7b2fb523f58e12498278f170398b045490efe4911580b67f249cdfa"
+    },
+    {
+      "file": "listener/src/searcher/test/revm-strict-simulation-transport.ts",
+      "sha256": "1728511d274253541c40471e639857d91423a8712209be88fc88f39292ebde56"
+    }
+  ],
+  "instructions": {
+    "reviewedWorkspace": [
+      "/opt/mev-cloud/family-runtime-20261007/AGENTS.md",
+      "/opt/mev-cloud/family-runtime-20261007/CLAUDE.md",
+      "/opt/mev-cloud/family-runtime-20261007/docs/research/HERMES.md",
+      "/opt/mev-cloud/family-runtime-20261007/docs/research/gates.md"
+    ],
+    "skill": "/Users/eunice/.codex/skills/family-plugin-adaptation/SKILL.md",
+    "skillReference": "/Users/eunice/.codex/skills/family-plugin-adaptation/references/acceptance-entrypoints.md",
+    "skillApplication": "Exact workspace/dirty-patch handoff, preserved evidence, and separate contract/source/historical/Family/performance claims.",
+    "auditDestinationInstructionsRead": [
+      "/Users/eunice/src/MEV/AGENTS.md",
+      "/Users/eunice/src/MEV/CLAUDE.md"
+    ]
+  },
+  "initialIssue": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/curve-atomic-independent-review-20261012-01.json#R1",
+  "verdict": {
+    "status": "review_complete_one_P2",
+    "genericR1Closure": "incomplete: old-sidecar provenance guard misses executor-program requests following an exact prefix",
+    "remainingSourceReview": "No additional actionable finding in the reviewed Rust frame observer, client metadata validation, or explicit nested-Halt transport handling.",
+    "adapterFixedClaim": false,
+    "adapterMergeReadyClaim": false,
+    "productionGapFixedClaim": false,
+    "fullFamilyClaim": false,
+    "performanceClaim": false,
+    "mergeClaim": false
+  },
+  "findings": [
+    {
+      "id": "SN1",
+      "priority": "P2",
+      "confidence": "high; independently reproduced against the current production transport",
+      "title": "Apply the missing-provenance guard to executor programs following a prefix",
+      "file": "listener/src/searcher/revm-strict-simulation-transport.ts",
+      "startLine": 339,
+      "endLine": 340,
+      "trigger": "simulatePrefix() executes an executor-program main request using trusted bytecode carried by trialPrefix.executorRuntimeCode; an older sidecar returns an otherwise valid source/code-attested main Revert without nestedHalt.",
+      "behavior": "prefixRequestSnapshot removes the standalone executorRuntimeCode at line 157 and carries it in trialPrefix. The new incomplete predicate only checks request.executorRuntimeCode, so it evaluates false. simulatePrefix then returns completion=reverted-as-declared with the outer revert bytes instead of throwing RevmStrictError(execution).",
+      "impact": "An old response can be accepted as completed main-revert evidence despite lacking the child-Halt provenance needed to distinguish a wrapped child failure. This leaves the stated old-program fail-closed requirement incomplete in the exact-prefix path. The current sidecar's explicit null/string path is not disproved.",
+      "evidence": {
+        "standaloneWithoutMetadata": "RevmStrictError(kind=execution), as required",
+        "prefixWithoutMetadata": {
+          "data": "0xdeadbeef",
+          "effects": {},
+          "completion": "reverted-as-declared"
+        },
+        "prefixWithNull": "reverted-as-declared",
+        "prefixWithOutOfGas": "RevmStrictError(kind=execution), exactPrefixFailure retains outer Revert and nestedHalt",
+        "proofPlacement": "Independent check asserted main target is the executor, top-level executorRuntimeCode is absent for prefix requests, and trialPrefix.executorRuntimeCode matches the trusted hash."
+      },
+      "supportingLocations": [
+        {
+          "file": "listener/src/searcher/revm-strict-simulation-transport.ts",
+          "line": 149,
+          "detail": "Trusted code is placed on trialPrefix."
+        },
+        {
+          "file": "listener/src/searcher/revm-strict-simulation-transport.ts",
+          "line": 157,
+          "detail": "Standalone executorRuntimeCode is removed from the prefix wire request."
+        },
+        {
+          "file": "listener/src/searcher/revm-strict-simulation-transport.ts",
+          "line": 308,
+          "detail": "Integrity validation already resolves code from both allowed locations."
+        },
+        {
+          "file": "listener/src/searcher/revm-strict-simulation-transport.ts",
+          "line": 131,
+          "detail": "Main Revert is accepted as completed prefix evidence."
+        },
+        {
+          "file": "listener/src/searcher/test/revm-strict-simulation-transport.ts",
+          "line": 111,
+          "detail": "New absent/null/string regression exercises simulate(), not the corresponding executor-program simulatePrefix() path."
+        },
+        {
+          "file": "listener/src/searcher/test/revm-strict-simulation-transport.ts",
+          "line": 227,
+          "detail": "Existing test establishes executor-program-after-prefix as a supported entry."
+        }
+      ],
+      "requestedResolution": "Include prefix-owned executor code in the missing-provenance decision, using the effective trusted code/current-program binding, and cover an executor-program main Revert after a prefix for absent, explicit null and nonempty-string metadata. Preserve source/code integrity checks and diagnostic-only prefix failures.",
+      "owner": "author/main task",
+      "codeChangedByReviewer": false
+    }
+  ],
+  "sourceReasoning": [
+    {
+      "topic": "REVM lifecycle, gas, journal and refunds",
+      "assessment": "The override preserves the exact default loop's frame_init/frame_run/frame_return_result ordering and error propagation, including no pop for immediate child results. Added code only reads InstructionResult and stores diagnostic state. Pre/post execution, refund and gas-accounting code are unchanged by this scoped diff. This is source reasoning, not an independently executed EVM equivalence test."
+    },
+    {
+      "topic": "Immediate child versus returned child versus root",
+      "assessment": "An immediate child Result rejoins the same observation branch as a returned child. evm.frame_return_result returns None when a parent remains, so the result is recorded only for a child. Root immediate results bypass recording; root returned results produce Some and return before recording. frame.rs runs create-return conversion before exposing FrameResult, so those final child outcomes reach the observer."
+    },
+    {
+      "topic": "Sibling reset and caught failures",
+      "assessment": "nested_halt resets before each initial frame_init. Only outer ExecutionResult::Revert serializes nestedHalt; outer Success and Halt retain their existing tags and fields. Therefore a caught child failure does not invalidate an outer success, and successful preparation provenance is cleared before a later sibling."
+    },
+    {
+      "topic": "Wire and integrity",
+      "assessment": "The client and transport accept absence for legacy compatibility and enforce null or a nonempty string of at most 256 characters only on Revert. Source and executor-code integrity are checked before outcome classification. The independent negative controls confirmed source/code faults remain fatal even with nested/absent metadata."
+    },
+    {
+      "topic": "Prefix diagnostics and isolation",
+      "assessment": "Explicit nested metadata preserves exact outer kind, phase, preCallIndex and output in exactPrefixFailure without CALL_EXCEPTION or top-level revert evidence. The diff does not modify production final-sim or live pool-revert filtering."
+    },
+    {
+      "topic": "Tests",
+      "assessment": "The added Rust fixture contains actual local EVM bytecode for looping OOG, invalid opcode, ordinary child Revert and Stop, with both outer Revert/Success and top-level/inner modes; rollback/success storage and sibling resets are asserted. Immediate precompile Halt and default-loop gas/refund equivalence are covered here by source reasoning, not a new dedicated execution check."
+    }
+  ],
+  "dependencyPins": {
+    "revm": "40.0.3",
+    "handler": "20.0.3",
+    "interpreter": "37.0.3",
+    "handlerLockChecksum": "3ce1d66037ca1394128313bb995fa9f50d834927a389386bb34f8f0ef914648f",
+    "root": "/opt/mev-cloud/home/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/revm-handler-20.0.3/src",
+    "files": [
+      {
+        "file": "handler.rs",
+        "sha256": "436fbe6a9d552e6c8ab94770c7d9da64516187c0356c0bb2be436f5539606538",
+        "reviewedLoopStartLine": 448
+      },
+      {
+        "file": "evm.rs",
+        "sha256": "35d81fa7f291f5cea4fd83f493dcfeb070569570529701c674de9a54f4c42a29"
+      },
+      {
+        "file": "frame.rs",
+        "sha256": "3e3257c7d4344be5b19a9a3041944e997ad223e95689154e4ba148a88b577d4b"
+      }
+    ]
+  },
+  "executedChecks": [
+    {
+      "name": "scoped-diff-check-and-pin-recheck",
+      "result": "pass",
+      "detail": "Executed git diff --check HEAD restricted to the four paths; no output. HEAD, all four file SHA-256 values and binary scoped-diff SHA-256 matched initial reads."
+    },
+    {
+      "name": "independent-offline-prefix-program-provenance",
+      "runner": "TSX_DISABLE_CACHE=1 node --import tsx --input-type=module (stdin)",
+      "workingDirectory": "/opt/mev-cloud/family-runtime-20261007/listener",
+      "result": "7 expected controls passed; 1 expected incomplete case failed, reproducing SN1",
+      "exitCode": 1,
+      "network": "No RPC/daemon/fork; in-memory source lease and response only",
+      "cases": [
+        {
+          "name": "standalone-program-absent",
+          "expected": "incomplete",
+          "actual": "incomplete"
+        },
+        {
+          "name": "prefix-program-absent",
+          "expected": "incomplete",
+          "actual": "reverted-as-declared"
+        },
+        {
+          "name": "prefix-program-null",
+          "expected": "reverted-as-declared",
+          "actual": "reverted-as-declared"
+        },
+        {
+          "name": "prefix-program-nested",
+          "expected": "incomplete",
+          "actual": "incomplete"
+        },
+        {
+          "name": "prefix-stage-nested",
+          "expected": "incomplete",
+          "actual": "incomplete",
+          "diagnostics": "Exact preCall index 0, outer Revert output and nested OutOfGas retained."
+        },
+        {
+          "name": "prefix-absent-wrong-code-proof",
+          "expected": "protocol-fault",
+          "actual": "protocol-fault"
+        },
+        {
+          "name": "prefix-nested-wrong-source",
+          "expected": "source-fault",
+          "actual": "source-fault"
+        },
+        {
+          "name": "prefix-malformed-metadata",
+          "expected": "protocol-fault",
+          "actual": "protocol-fault"
+        }
+      ],
+      "reproductionSource": "\nimport assert from 'node:assert/strict';\nimport { keccak256 } from 'ethers';\nimport { createRevmStrictSimulationTransport } from './src/searcher/revm-strict-simulation-transport.ts';\nimport { RevmFatalError, RevmStrictError } from './src/searcher/revm-sim-client.ts';\nimport { buildSubscriptCalldata } from './src/shared/executor/botvm-program-entry.ts';\nconst addr = x => '0x' + x.repeat(40), hash = x => '0x' + x.repeat(64);\nconst executor = addr('a'), origin = addr('b'), token = addr('c');\nconst source = { number: 101, hash: hash('1'), generation: 1 };\nconst pin = { chainId: 1, blockHash: source.hash, stateRoot: hash('2') };\nconst code = { code: '0x60006000f3', keccak256: keccak256('0x60006000f3') };\nconst invocation = { source, callerAuthority: { executor, transactionOrigin: origin },\n  request: { id: 'review-program', kind: 'effect-delta-simulation',\n    call: { caller: {kind:'executor'}, executionMode:'executor-program', to:executor,\n      data:buildSubscriptCalldata(new Uint8Array([0])) },\n    overrideIntent: { caller:{kind:'executor'}, tokenBalances:[{token,amount:1n}] },\n    observe:['return-data','revert-data'] } };\nconst prefix = { executor, calldata: invocation.request.call.data, inputToken:token,inputAmount:1n };\nconst cases = [\n  {name:'standalone-program-absent',prefix:false,expected:'incomplete'},\n  {name:'prefix-program-absent',prefix:true,expected:'incomplete'},\n  {name:'prefix-program-null',prefix:true,metadata:null,expected:'reverted-as-declared'},\n  {name:'prefix-program-nested',prefix:true,metadata:'OutOfGas',expected:'incomplete'},\n  {name:'prefix-stage-nested',prefix:true,phase:'preCall',metadata:'OutOfGas',expected:'incomplete'},\n  {name:'prefix-absent-wrong-code-proof',prefix:true,tamper:'code',expected:'protocol-fault'},\n  {name:'prefix-nested-wrong-source',prefix:true,metadata:'OutOfGas',tamper:'source',expected:'source-fault'},\n  {name:'prefix-malformed-metadata',prefix:true,metadata:257,expected:'protocol-fault'},\n];\nconst results=[];\nfor (const c of cases) {\n  const fatals=[]; let wire;\n  const transport=createRevmStrictSimulationTransport({rpcUrl:'http://offline.invalid',executionGasLimit:100000,executorRuntimeCode:code,\n    leaseFor:async()=>({source,sourcePin:pin,closeAndDrain:async()=>assert.fail('unexpected lease close'),\n      strictSimulate:async req=>{\n        wire=req;\n        const outcome={kind:'Revert',phase:c.phase??'main',output:'0xdeadbeef',\n          ...(c.phase==='preCall'?{preCallIndex:0}:{}),\n          ...(Object.hasOwn(c,'metadata')?{nestedHalt:c.metadata}:{})};\n        return {ok:true,success:false,output:outcome.output,revertReason:outcome.output,gasUsed:'123',latencyMs:1,\n          sourceAttestation:{kind:'node-attested',...pin,blockHash:c.tamper==='source'?hash('9'):pin.blockHash,blockNumber:source.number,parentHash:hash('3')},\n          strict:{outcome,executionGasUsed:'123',tokenDeltas:[],nativeDeltas:[],totalSupplyDeltas:[],logs:[],\n            counterfactualExecutorCode:{address:executor,keccak256:c.tamper==='code'?hash('4'):code.keccak256}}};\n      }}),onFatal:reason=>fatals.push(reason)});\n  let actual,detail;\n  try {\n    const value=c.prefix?await transport.simulatePrefix({...invocation,prefix}):await transport.simulate(invocation);\n    actual=value.completion??'success'; detail=value;\n  } catch(e) {\n    actual=e instanceof RevmFatalError?e.fatal.kind:e instanceof RevmStrictError&&e.kind==='execution'?'incomplete':e.code??e.name;\n    detail={name:e.name,kind:e.kind,code:e.code,exactPrefixFailure:e.exactPrefixFailure};\n    assert.notEqual(e.code,'CALL_EXCEPTION');\n  }\n  assert.equal(wire.to,executor);\n  assert.equal(wire.executorRuntimeCode===undefined,c.prefix);\n  if(c.prefix) assert.equal(wire.trialPrefix.executorRuntimeCode.keccak256,code.keccak256);\n  if(actual==='incomplete') assert.deepEqual(fatals,[]);\n  if(c.name==='prefix-stage-nested') assert.deepEqual(detail.exactPrefixFailure,{kind:'Revert',phase:'preCall',preCallIndex:0,output:'0xdeadbeef',nestedHalt:'OutOfGas'});\n  results.push({name:c.name,expected:c.expected,actual,pass:actual===c.expected,detail});\n}\nconsole.log(JSON.stringify({check:'independent-offline-prefix-program-provenance',cases:results,\n  passed:results.filter(r=>r.pass).length,failed:results.filter(r=>!r.pass).length},null,2));\nprocess.exitCode=results.some(r=>!r.pass)?1:0;\n"
+    }
+  ],
+  "savedEvidenceInspectedNotReexecuted": [
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-rust-candidate02.txt",
+      "sha256": "e59ddf78b60f43971581f4ceeb6f7b8e0c3f0e7b704bb60847eddde5b80eea8c",
+      "observed": "93 passed, 0 failed; both new nested provenance tests named PASS."
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-transport-indexed.txt",
+      "sha256": "96b00e08b42dac01c72c87ec0808cc4e2fa8f7e0953d2d1d7f5734099a5a5a94",
+      "observed": "196 passed, 0 failed; indexed runner receipt exit=0."
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-central-indexed.txt",
+      "sha256": "818ad6c9716b503d6ee35530a170eb42af471cffd342eaff253f4cb115788104",
+      "observed": "174 passed, 0 failed; indexed runner receipt exit=0."
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-build-live.txt",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "observed": "tsc -p tsconfig.live.json --noEmit logged without errors; successful completion also reported by user."
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-build-binary.txt",
+      "sha256": "3be785c6bb0842973f45b05fe74e22013f1a236f36282585aeca8eb308e10b52",
+      "observed": "Successful dev-profile Rust binary build logged; unrelated dead-code warning."
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-rust-baseline.txt",
+      "sha256": "93f23198a20aef1c872c8775b666ca0b21e13e6496ad2678489494a036a7289c",
+      "observed": "Saved baseline fixture fails because nestedHalt is absent."
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-rust-candidate01.txt",
+      "sha256": "d4b39d0e03cd9a1ba09cce011794d2ea6e0109b63870238f66d2c18d1d2e9530",
+      "observed": "Preserved historical E0614 dereference compile failure. Current reviewed source omits that dereference; not a current finding."
+    }
+  ],
+  "userReportedNotIndependentlyVerified": {
+    "newBinarySha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+    "historicalRun": "N=26139768 attempt02 reported exit 0, 5/5 verified, target 2 graph directions, 18 captured programs: 2 exact successes and 16 Revert with nestedHalt:null.",
+    "assessment": "These reported results do not exercise the old-sidecar metadata-absence path in SN1. No claim that any saved historical failure is OOG."
+  },
+  "limitations": [
+    "No source, generated artifact, Ready, price/config table or existing audit evidence modified. The sole planned write is this new local review JSON adjacent to the supplied R1 report.",
+    "No build, Rust test, full/indexed test suite, RPC, live run, fork, key access, daemon launch or process-control action performed by reviewer.",
+    "Saved author test logs are supporting evidence, not independently executed tests or a new EVM run.",
+    "Review is bounded to this exact dirty four-file patch and does not attest the rest of the shared workspace or later source changes.",
+    "No Family completion, merge approval, production opportunity, performance or deployment verdict."
+  ]
+}

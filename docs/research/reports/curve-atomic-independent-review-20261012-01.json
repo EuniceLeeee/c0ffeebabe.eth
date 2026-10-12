@@ -1,0 +1,745 @@
+{
+  "schemaVersion": 1,
+  "reviewId": "curve-plain-atomic-identity-nonauthor-20261012-01",
+  "reviewedAtUtc": "2026-10-12T11:47:48Z",
+  "role": "read-only non-author reviewer",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "head": "a7892e9671f88526f0b0a99df1056ca83e0b8b3d",
+  "files": {
+    "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts": "e07219fe3462d889b81ccdc7669534b8b308fa2224d81aadde01115deebe28d9",
+    "listener/src/searcher/venues/swaps/curve-plain-family/test/contract.ts": "d69f5754c242006a31d7f5317f82ab4c681b92a8a243d9826d8b5f89b39818a5",
+    "listener/src/searcher/venues/swaps/curve-plain-family/test/identity-execution.ts": "78d731fcd6a187456fc835548265be3d4c129494943273f257d6a1a882220521",
+    "listener/src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts": "2aa1dcdb828c0e6534a4f108bf4a3189475eca40a04e40c6713a3e9ca923ba8c",
+    "listener/src/searcher/venues/swaps/curve-plain-family/test/identity-probe.ts": "25765f0b1e8ef9e169129920808fadd3dd4e281f7620ceae443e2fe837a07cd1"
+  },
+  "trackedPatchSha256": "d43a148bf2688648891be9abc524eed1955fbf8f3020c5b1aeb3aba8340b5619",
+  "untrackedPatchSha256": "df6063f1d431ebb5d6b9d12acaba0dcf8dd5a1d7727cefdcf9ea108f719e1e5d",
+  "completePatchSha256": "657b1dbfdebed7b950f5c7044eb93430f13f3d17421690cdb3900b58717c5057",
+  "patchHashDefinition": {
+    "tracked": "git diff --no-ext-diff --no-color --binary HEAD -- the four tracked reviewed files in the order recorded above",
+    "untracked": "git diff --no-ext-diff --no-color --binary --no-index -- /dev/null listener/src/searcher/venues/swaps/curve-plain-family/test/identity-probe.ts",
+    "complete": "SHA-256 of the exact tracked diff bytes followed immediately by the untracked new-file diff bytes"
+  },
+  "scope": {
+    "reviewedChanges": [
+      "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/contract.ts",
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/identity-execution.ts",
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/identity-probe.ts"
+    ],
+    "unchangedBetweenInitialAndFinalRead": true,
+    "dependencyReadsOnly": [
+      "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-ready.ts (artifact anchoring only)",
+      "listener/src/searcher/revm-strict-simulation-transport.ts",
+      "listener/src/searcher/venues/adapter-request-program.ts (request validation references)",
+      "listener/src/shared/executor/botvm-program-entry.ts",
+      "listener/src/encoder.ts",
+      "src/BotVM.sol",
+      "src/RuntimeAmountVM.sol",
+      "listener/revm-sim/src/main.rs (strict result classification only)"
+    ],
+    "excluded": "Other dirty central/Ready/generated/UniV1 files; main-agent amount/quoted/runtime execution work; production opportunity and timing acceptance.",
+    "mutations": "Only this new local logs JSON. No source/generated/Ready/document/original IMPL edits, staging, commits, process control, RPC, live, Anvil, key or env inspection.",
+    "rpcCuSpent": 0,
+    "newHistoricalOrEvmRuns": 0
+  },
+  "instructions": {
+    "cloudAgentsAndClaudeSha256": "4ab1f6aaed59f8aa31837542a55b5d1c452896e89b568918e0923bd0e420244d",
+    "skill": "/Users/eunice/.codex/skills/family-plugin-adaptation/SKILL.md",
+    "skillReference": "/Users/eunice/.codex/skills/family-plugin-adaptation/references/acceptance-entrypoints.md",
+    "localCloudDocumentHashesMatched": {
+      "current-family-architecture.md": "b8bcee3b7a3dff124286c8830f34c18e2f7c64e3d417f438849cb8475be7246d",
+      "current-family-template.md": "b8465dc160defffa19df5295bf32b09cd3c4399764f5e0b4993c21c45d4861fc",
+      "cloud-HERMES.md": "d8607aeca0d16e7d3d78f8de0942f56ef3349f343a0e4f4b0cfc76704e5ad316"
+    },
+    "appliedContracts": "Cloud CLAUDE/AGENTS; HERMES non-author executed-check requirement; gates.md claim separation; architecture caller/source/typed outcome and retryable contracts; family template strict/native and dual-execution boundaries.",
+    "effectOfSkill": "Separated cached historical response authentication and current-code revalidation from fresh EVM execution, reference-amount dual execution, formal adapter merge readiness and production/timing claims."
+  },
+  "verdict": {
+    "status": "review_complete_one_P2_correctness_finding",
+    "historicalSample": "Supported: at N=26139768 the target changed from retryable/no Graph edges to an admitted two-direction ERC20 exchange subset, with exactly matched observed balances.",
+    "generalUnknownSafety": "Not fully established: inner CALL resource exhaustion can be wrapped as an outer deterministic Revert.",
+    "recommendation": "Do not mark the general true-unknown preservation requirement closed until finding R1 is fixed or explicitly resolved with a bounded scope.",
+    "adapterFixedClaim": false,
+    "adapterMergeReadyClaim": false,
+    "productionGapFixedClaim": false,
+    "completeOpportunityClaim": false,
+    "timingPassedClaim": false,
+    "referenceAmountDualExecutionClaim": false
+  },
+  "findings": [
+    {
+      "id": "R1",
+      "priority": "P2",
+      "title": "Preserve inner out-of-gas as unresolved when moving preparation and exchange into CALL instructions",
+      "file": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+      "startLine": 265,
+      "endLine": 274,
+      "confidence": "high from source path and executed classification controls; no new EVM reproduction",
+      "trigger": "A preparation CALL or pool CALL exhausts its forwarded gas while the executor retains enough gas under EIP-150 to report failure; all modes of that still-unproved direction then appear reverted while another direction succeeds.",
+      "behavior": "BotVM opcode 0x00 observes only ok=false. _bubbleRuntimeHopFailure discards ordinary inner failure detail and reverts Error(\"call failed\"). The Rust strict backend records the outer ExecutionResult::Revert, and the TS transport converts a main Revert to CALL_EXCEPTION. Family decoding consequently treats that result as deterministic negative evidence and may publish only the other directions. In the old preCall path, a preparation OOG is an unresolved preCall/Halt. Injecting an already classified resource-limited result in the new tests does not cover this inner-to-outer conversion.",
+      "impact": "A real resource-unknown direction can be omitted from an admitted pool rather than holding admission retryable. This is an admission/coverage correctness issue, not evidence of incorrect successful token balances or a demonstrated loss.",
+      "supportingLocations": [
+        {
+          "file": "src/BotVM.sol",
+          "line": 116,
+          "detail": "target.call(payload); failed CALL bubbles through _bubbleRuntimeHopFailure"
+        },
+        {
+          "file": "src/RuntimeAmountVM.sol",
+          "line": 259,
+          "detail": "only RuntimeHopFailed is preserved; all ordinary failures revert the legacy string"
+        },
+        {
+          "file": "listener/revm-sim/src/main.rs",
+          "line": 3304,
+          "detail": "strict outcome derives from the returned outer ExecutionResult; StrictHandler does not retain descendant Halt provenance"
+        },
+        {
+          "file": "listener/src/searcher/revm-strict-simulation-transport.ts",
+          "line": 123,
+          "detail": "outer main Revert becomes CALL_EXCEPTION; Halt and transport errors remain unresolved"
+        },
+        {
+          "file": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+          "line": 160,
+          "detail": "unproved direction blocks only when an alternative result is !ok"
+        }
+      ],
+      "actualChecks": "Executed production transport against captured success/revert responses and in-memory negatives: top-level Halt and transport execution errors do not become CALL_EXCEPTION, but the captured wrapper Revert does. Independently re-decoded all 18 current target programs; introducing resource-limited on an unproved direction blocks publication.",
+      "historicalSampleNotDisproved": "The actual saved failure gas values inspected are 94,575–236,765 against a 16,777,216 execution limit. Baseline sBTC transfer preCalls have explicit 'Synth is suspended. Operation prohibited'; this review does not label the supplied failures OOG.",
+      "requestedResolution": "Retain trusted nested resource-failure provenance, or otherwise establish gas completion before using a wrapped failure as negative evidence. Add a bounded offline/EVM regression in the author task where an inner preparation/pool call exhausts gas and the direction remains retryable. Merely interpreting the common 'call failed' string cannot distinguish it from a deterministic revert."
+    }
+  ],
+  "executedChecks": [
+    {
+      "command": "node --import tsx src/searcher/venues/swaps/curve-plain-family/test/contract.ts",
+      "cwd": "/opt/mev-cloud/family-runtime-20261007/listener",
+      "exitCode": 0,
+      "result": "17 groups passed; fixture contract only"
+    },
+    {
+      "command": "node --import tsx src/searcher/venues/swaps/curve-plain-family/test/identity-execution.ts",
+      "cwd": "/opt/mev-cloud/family-runtime-20261007/listener",
+      "exitCode": 0,
+      "result": "per-direction unknown, deterministic revert, exact effects, source, missing/duplicate result controls passed"
+    },
+    {
+      "command": "node --import tsx --test src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
+      "cwd": "/opt/mev-cloud/family-runtime-20261007/listener",
+      "exitCode": 0,
+      "result": "8/8 passed, including production catalog/default four-round scheduler and native sim-selector construction; synthetic transport, no EVM"
+    },
+    {
+      "command": "git diff --check HEAD -- four tracked reviewed files (required safe.directory/core.pager options applied)",
+      "exitCode": 0,
+      "result": "passed"
+    },
+    {
+      "command": "Independent inline read-only JSON/ABI/hash verifier over both supplied evidence directories",
+      "exitCode": 0,
+      "result": "82 response source attestations checked; both headers match chain 1 / block N / block hash / state root / parent hash; counterfactual runtime code hashes matched; 36 target requests independently decoded; every successful target response has the exact requested four balance pairs and deltas"
+    },
+    {
+      "command": "Independent inline current production strict transport with a captured-response in-memory lease",
+      "exitCode": 0,
+      "result": "12 assertions passed: successful four effects; missing balance, wrong input account, wrong output recipient, foreign source, wrong runtime code, foreign call target, absent origin, external preCall, transport error, complete-program revert, top-level Halt. No network or EVM."
+    },
+    {
+      "command": "Independent inline current Curve execution-phase build/decode using saved target requests/responses",
+      "exitCode": 0,
+      "result": "18/18 current request calldata and target/override inputs match captures; six positive quote directions resolve to exactly 0:1 and 1:0 exchange; two explicit resource-limited controls on unproved directions block admission"
+    }
+  ],
+  "checkCaveats": [
+    "The initial ad hoc artifact verifier stopped because it incorrectly expected the baseline receipt.json to be the target transaction. Read-only inspection established baseline receipt TX 0x6fc18a5c63f708f6b03b1ccec5e14fcec03c4e7aaf01816814777fab97d6af91 at the same N/hash. The candidate receipt is the requested TX. The corrected verifier checked each receipt/header binding and target membership in both headers; it passed.",
+    "The transport negative-control output used an error-class name in its name field, overwriting scenario labels; scenarios are recorded in executedChecks in exact execution order. Assertions completed successfully.",
+    "No compilation, heavy regression suite, new historical run or EVM gas-exhaustion fixture was executed."
+  ],
+  "codeReviewChecks": {
+    "callOrder": "Exactly two ordinary zero-value CALLs: input approve/transfer to pool, then the mode-specific exchange. Independent decoder rejects hidden/trailing instructions.",
+    "caller": "Symbolic executor is resolved by read-only WETH balance observation in the existing structure round for all coins. The transport requires program from=to=executor, a distinct nonzero transactionOrigin, trusted runtime code, and no preCalls.",
+    "source": "Evidence stages compare number/hash/generation. Saved node attestations independently match the source header and bytecode proof.",
+    "receiver": "Receiver modes retain PROBE_RECEIVER; receiverless modes retain executor. The transport checks exact requested balance pairs before Family decoding.",
+    "success": "Empty execSubscript output does not prove success. Current acceptance still requires exact input debit, pool credit, recipient output credit and pool output debit.",
+    "failureAtomicity": "Both preparation and exchange now run in one reverting executor frame; unsuccessful captured programs report no token/native/supply effects or logs. Strict backend also commits the journal only after success. Nested failure classification caveat is R1.",
+    "unknown": "Missing/duplicate/foreign-source results and classified transport/resource errors remain fail closed. Same-direction successful alternatives may survive other unknown modes. The nested-OOG conversion is not covered by that guarantee.",
+    "rounds": "Authority read joins the existing structure round; no fifth identity round was added. Native production-scheduler fixture passed the default four-round budget."
+  },
+  "historical": {
+    "evidenceRoot": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX",
+    "blockNumber": 26139768,
+    "blockHash": "0xd7bdbad87da07f0885234e0a53200cf4ec3ae61d73dd7b71db79b2705cb634f5",
+    "stateRoot": "0xf5fe3f57534edd73309ed094482f4333585a9b89131a1df06265e50ede596ffa",
+    "transactionHash": "0x0466e70178b1a56a93dad92aeaec90c83256bf05884294636e921be77bda6f48",
+    "targetPool": "0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "transactionOrigin": "0x1000000000000000000000000000000000000001",
+    "counterfactualExecutorKeccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "baselineReadySha256": "12df414bd022a81aec09501f1db5db68beadecc3e36e8f0166127e19dae1cc0c",
+    "candidateReadySha256": "890ba350725242d8ba30945666e6bdfde695c959e161dc60b0a72b7c9755ee02",
+    "sharedHeaderSha256": "f6e4d526bc8de83bc5bd157e114bde01c58e73990102360a381b903e8485fabb",
+    "baselineReceiptSha256": "4fd5d13ffe6cb11e7337ce4066d6a39e70c3ed9393a62bf91ee050adfe75b3ad",
+    "candidateReceiptSha256": "2fee434b0dee4ad52b5aac5b2cd1ed9a8fd85b808f4ffb72ac74a55bbb693c12",
+    "sharedExecutorArtifactSha256": "9b6ae793759a3a11e80c51779c6f90d83b564f8c052a1c6ae69991c95925b1ca",
+    "baseline": "No target memo/edges; retryable reason includes unresolved execution proof. Two exact exchange successes already existed, but four sBTC transfer-preCall reverts were unresolved.",
+    "candidate": "Target memo admitted with exactly renBTC->WBTC and WBTC->renBTC exchange edges; no target retry entry. 18 target programs: strict-004 and strict-010 succeed; other 16 revert in main with no effects. No sBTC edge.",
+    "effective": "Main agent independently reports both target rows missing-valuation. Pricing/valuation is outside this review; no pricing pass or reference-amount dual claim.",
+    "savedResponseAudit": [
+      {
+        "dir": "curve-native-ready-current-attempt02",
+        "receiptTransactionHash": "0x6fc18a5c63f708f6b03b1ccec5e14fcec03c4e7aaf01816814777fab97d6af91",
+        "headerContainsTarget": true,
+        "headerHash": "0xd7bdbad87da07f0885234e0a53200cf4ec3ae61d73dd7b71db79b2705cb634f5",
+        "stateRoot": "0xf5fe3f57534edd73309ed094482f4333585a9b89131a1df06265e50ede596ffa",
+        "runtimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+        "counts": {
+          "savedStrictResponses": 38,
+          "sourceAttestationsChecked": 38,
+          "wireErrorResponses": 0
+        },
+        "authorities": [
+          "strict-025.json",
+          "strict-028.json",
+          "strict-029.json",
+          "strict-032.json"
+        ],
+        "target": [
+          {
+            "file": "strict-001.json",
+            "sha256": "02ed3e50a823f48233fe1a4f955514606325a1430d416694a4eb538a7ab29e21",
+            "direction": "0:1",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "794",
+            "minOut": "150",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          },
+          {
+            "file": "strict-002.json",
+            "sha256": "b9296607bd0a1c9adb5f1907ade8698f59c13a0504147ce7491e08e9938a6de4",
+            "direction": "0:1",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "794",
+            "minOut": "150",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          },
+          {
+            "file": "strict-003.json",
+            "sha256": "7c0fb706dfd0d1952aa3ad275547aee71a9a3e33cefe7aebf87d5d944905c1b4",
+            "direction": "0:1",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "794",
+            "minOut": "150",
+            "kind": "Success",
+            "phase": "main",
+            "reason": null,
+            "deltas": [
+              "-794",
+              "794",
+              "150",
+              "-150"
+            ]
+          },
+          {
+            "file": "strict-004.json",
+            "sha256": "a15992b934c557fc038fc8006e86336f2fd8ffca57d81b7e22ee43018c88e4a1",
+            "direction": "0:2",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "794",
+            "minOut": "26265385120531",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          },
+          {
+            "file": "strict-005.json",
+            "sha256": "005226b8ede368a0ae195266637f95198faf493eb9a6e91bcdce9f284b797f6d",
+            "direction": "0:2",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "794",
+            "minOut": "26265385120531",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          },
+          {
+            "file": "strict-006.json",
+            "sha256": "2b81bd97e27898fce67ae6c50fefc127dc997389fbdcb755a17f30222e2212a0",
+            "direction": "0:2",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "794",
+            "minOut": "26265385120531",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          },
+          {
+            "file": "strict-007.json",
+            "sha256": "364f3175bcdb014e5ec65ac93571f1888a1c248a9f745a65937730a561dbab8e",
+            "direction": "1:0",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "117",
+            "minOut": "616",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          },
+          {
+            "file": "strict-008.json",
+            "sha256": "6c1275fa1c94c5a97c025779d9478144c3f63031acfdf819ecc8a097180afdca",
+            "direction": "1:0",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "117",
+            "minOut": "616",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          },
+          {
+            "file": "strict-009.json",
+            "sha256": "e932ae57ae438e85873e37f074fac45955316fdb976605335598b9a228f9acb7",
+            "direction": "1:0",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "117",
+            "minOut": "616",
+            "kind": "Success",
+            "phase": "main",
+            "reason": null,
+            "deltas": [
+              "-117",
+              "117",
+              "616",
+              "-616"
+            ]
+          },
+          {
+            "file": "strict-010.json",
+            "sha256": "8c5900ba5b49f6f61cbaeb666ba76d7e8f26188f3f458baa0b784cb5c2de3be2",
+            "direction": "1:2",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "117",
+            "minOut": "20401588057477",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          },
+          {
+            "file": "strict-011.json",
+            "sha256": "b57ee3e6a5a90d0042325b17ef29a661ecd9b52a075aa2a557161e3fc0d7ee77",
+            "direction": "1:2",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "117",
+            "minOut": "20401588057477",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          },
+          {
+            "file": "strict-012.json",
+            "sha256": "2fd917a5faf65409e93a91eb9bd63ac7069ed7b9224ddb8887b03c19c66303ae",
+            "direction": "1:2",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "117",
+            "minOut": "20401588057477",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          },
+          {
+            "file": "strict-013.json",
+            "sha256": "99e2df1929637b7fc7cc94718ba5e356d76c17134ebb6685d5de89c561ffd417",
+            "direction": "2:0",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "136999307361028",
+            "minOut": "4138",
+            "kind": "Revert",
+            "phase": "preCall",
+            "reason": "Synth is suspended. Operation prohibited",
+            "deltas": []
+          },
+          {
+            "file": "strict-014.json",
+            "sha256": "138eb1e102628109d74e814169695908468f4d78417332e908276ffeef540b4e",
+            "direction": "2:0",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "136999307361028",
+            "minOut": "4138",
+            "kind": "Revert",
+            "phase": "preCall",
+            "reason": "Synth is suspended. Operation prohibited",
+            "deltas": []
+          },
+          {
+            "file": "strict-015.json",
+            "sha256": "d8df3280a563ef3d5714848d26c22adf452eb9d6d47081d17c303ef17f88de28",
+            "direction": "2:0",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "136999307361028",
+            "minOut": "4138",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          },
+          {
+            "file": "strict-016.json",
+            "sha256": "6aa47baf8cd88bbf24039665762675cab4c7cf12d4a5ef9fc97d5634d3a95a51",
+            "direction": "2:1",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "136999307361028",
+            "minOut": "785",
+            "kind": "Revert",
+            "phase": "preCall",
+            "reason": "Synth is suspended. Operation prohibited",
+            "deltas": []
+          },
+          {
+            "file": "strict-017.json",
+            "sha256": "f71d6b1234c6b0ca30a4df5d084734482522aa8b0aeae4a3701cde8f93041ffa",
+            "direction": "2:1",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "136999307361028",
+            "minOut": "785",
+            "kind": "Revert",
+            "phase": "preCall",
+            "reason": "Synth is suspended. Operation prohibited",
+            "deltas": []
+          },
+          {
+            "file": "strict-018.json",
+            "sha256": "f95554dd9cbbfbbc58e883fbd7ae1a0e5d8bc3cd4e54d2161b8d141f05a25b52",
+            "direction": "2:1",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "136999307361028",
+            "minOut": "785",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": null,
+            "deltas": []
+          }
+        ],
+        "targetOutcomeCounts": {
+          "Revert:main": 12,
+          "Success:main": 2,
+          "Revert:preCall": 4
+        }
+      },
+      {
+        "dir": "curve-atomic-ready-current-attempt01",
+        "receiptTransactionHash": "0x0466e70178b1a56a93dad92aeaec90c83256bf05884294636e921be77bda6f48",
+        "headerContainsTarget": true,
+        "headerHash": "0xd7bdbad87da07f0885234e0a53200cf4ec3ae61d73dd7b71db79b2705cb634f5",
+        "stateRoot": "0xf5fe3f57534edd73309ed094482f4333585a9b89131a1df06265e50ede596ffa",
+        "runtimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+        "counts": {
+          "savedStrictResponses": 44,
+          "sourceAttestationsChecked": 44,
+          "wireErrorResponses": 0
+        },
+        "authorities": [
+          "strict-001.json",
+          "strict-020.json",
+          "strict-021.json",
+          "strict-028.json",
+          "strict-029.json",
+          "strict-032.json",
+          "strict-033.json",
+          "strict-036.json",
+          "strict-037.json",
+          "strict-044.json"
+        ],
+        "target": [
+          {
+            "file": "strict-002.json",
+            "sha256": "508a229aa9921e41372f908bd6d5fc37ea998041a07845874e31e06e5180a429",
+            "direction": "0:1",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "794",
+            "minOut": "150",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-003.json",
+            "sha256": "e4b58958daa1be982ba5f8a74591c6cea904ae3838b600825119676a76e26b49",
+            "direction": "0:1",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "794",
+            "minOut": "150",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-004.json",
+            "sha256": "bffbe11d1235a1d50803ac085b20e9f1509da41f06c513df0c380313d44a834f",
+            "direction": "0:1",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "794",
+            "minOut": "150",
+            "kind": "Success",
+            "phase": "main",
+            "reason": null,
+            "deltas": [
+              "-794",
+              "794",
+              "150",
+              "-150"
+            ]
+          },
+          {
+            "file": "strict-005.json",
+            "sha256": "613edb0e0e8fb4bb536950c948e603be58c96d3ebd9e1ca47e2401236bb9d2e9",
+            "direction": "0:2",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "794",
+            "minOut": "26265385120531",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-006.json",
+            "sha256": "2e41b9042130ba331d80b9fe425f98b87a2e97605f81ef98b46aeaaa50b47abf",
+            "direction": "0:2",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "794",
+            "minOut": "26265385120531",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-007.json",
+            "sha256": "c4aa373bab5df457f003c0f1e745069779c3577d67ec0bf797321c693b522ef1",
+            "direction": "0:2",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "794",
+            "minOut": "26265385120531",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-008.json",
+            "sha256": "2be95dea9c53bea19e1aaf4915a795cd3ca95ebf6b533e7550e9b19e057ee692",
+            "direction": "1:0",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "117",
+            "minOut": "616",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-009.json",
+            "sha256": "4484968dafc9cc9f40d8ee0bccd61d370f04681c9ec3433ff28ff36b56ee8d83",
+            "direction": "1:0",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "117",
+            "minOut": "616",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-010.json",
+            "sha256": "5fd44c858ee9b258fc2e8b307033223e577c5674ad95fa5ee7c6452e30fe9228",
+            "direction": "1:0",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "117",
+            "minOut": "616",
+            "kind": "Success",
+            "phase": "main",
+            "reason": null,
+            "deltas": [
+              "-117",
+              "117",
+              "616",
+              "-616"
+            ]
+          },
+          {
+            "file": "strict-011.json",
+            "sha256": "b006597474cce5f2be2816c63adb18362db947826312f43a05954c191a8f6288",
+            "direction": "1:2",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "117",
+            "minOut": "20401588057477",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-012.json",
+            "sha256": "bc1b1025fa25076a69145a434738f1320b5a0e1802117032746ccfdf5010a765",
+            "direction": "1:2",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "117",
+            "minOut": "20401588057477",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-013.json",
+            "sha256": "67bfc5b9ed1945471bb7bc82aa8af97e828b9a8a91c2bb5ed16ff98b1147af25",
+            "direction": "1:2",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "117",
+            "minOut": "20401588057477",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-014.json",
+            "sha256": "0336ac6094f5937e795e1b52bcf04b710b5be56f26b50ad4c7dffc93653ba3c7",
+            "direction": "2:0",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "136999307361028",
+            "minOut": "4138",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-015.json",
+            "sha256": "c3b7c232c43edc69c107e21d15934fa020e38478e7702a33d65ae9ed5deb48af",
+            "direction": "2:0",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "136999307361028",
+            "minOut": "4138",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-016.json",
+            "sha256": "b372923dba1ef41fad9cf31b1835b8517bf4e623122c89aae393fc1c52f1406a",
+            "direction": "2:0",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "136999307361028",
+            "minOut": "4138",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-017.json",
+            "sha256": "350e77ab5b9921e143b95b06efe1ddfdc56ec16c31f85a2c3a4c6fcddc24df32",
+            "direction": "2:1",
+            "selector": "0xafb43012",
+            "prepare": "0xa9059cbb",
+            "amountIn": "136999307361028",
+            "minOut": "785",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-018.json",
+            "sha256": "f95f44dedf6b01cce1119fdd34a527ee0c0463c1b330d41ecc9ba5c4ea910579",
+            "direction": "2:1",
+            "selector": "0x7e3db030",
+            "prepare": "0xa9059cbb",
+            "amountIn": "136999307361028",
+            "minOut": "785",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          },
+          {
+            "file": "strict-019.json",
+            "sha256": "bd50abcc0bc56aa1b8180c186de7526b733de03ca01eb2558ed210edff99291f",
+            "direction": "2:1",
+            "selector": "0x3df02124",
+            "prepare": "0x095ea7b3",
+            "amountIn": "136999307361028",
+            "minOut": "785",
+            "kind": "Revert",
+            "phase": "main",
+            "reason": "call failed",
+            "deltas": []
+          }
+        ],
+        "targetOutcomeCounts": {
+          "Revert:main": 16,
+          "Success:main": 2
+        }
+      }
+    ]
+  },
+  "limitations": [
+    "Review scope is the exact five-file dirty patch on the stated HEAD, not the whole shared dirty workspace, generated catalog, or a clean commit.",
+    "Current-code execution-phase revalidation authenticates saved requests/results; it is not a new EVM run or a fresh full structural identity attestation.",
+    "The historical evidence is N block-end source-state probing with counterfactual executor code and explicit balance overrides. It is not the original TX call-prestate/output replay, a full route, final sim, EV result, or a deployment claim.",
+    "No production-reference amount quote/quoted/runtime dual acceptance, valuation fix, timing/load benchmark, or formal Adapter Replay/conformance/family-local merge gate was performed.",
+    "R1 has a source-level proof path and executed outer-classification controls; an actual inner-OOG EVM fixture remains for the author task."
+  ]
+}

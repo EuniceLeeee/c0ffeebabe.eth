@@ -3,6 +3,8 @@ import { ethers } from "ethers";
 import type { AdapterRequestResult, CanonicalSource } from "../../../adapter-request-program.js";
 import { EXECUTION, META, POOL, selector } from "../codec.js";
 import { curvePlainIdentity, PROBE_RECEIVER } from "../identity.js";
+import { ADDR } from "../../../../../shared/constants/addresses.js";
+import { erc20ProbeCalls } from "./identity-probe.js";
 
 // Synthetic request/decision contract only: not on-chain execution evidence.
 const pool = "0x1111111111111111111111111111111111111111";
@@ -21,6 +23,9 @@ let evidence: unknown;
 for (let step = 0; step < 3; step++) {
   const input = { candidate, step, ...(evidence === undefined ? {} : { evidence }) };
   const results = variant.buildRequests(input).map(request => {
+    if (request.id === "probe-executor") return { ...returned(request.id, word(0n)), effects: {
+      tokenDeltas: [{ token: ADDR.WETH, account: executor, delta: 0n }],
+      nativeDeltas: [{ account: executor, delta: 0n }] } };
     if (/^(coin|balance)-int128:/.test(request.id)) {
       return { ...returned(request.id, "0x"), completion: "reverted-as-declared" as const };
     }
@@ -49,10 +54,14 @@ assert(requests.every(request => request.required === false), "alternatives must
 const successful = requests.map(request => {
   assert.equal(request.kind, "effect-delta-simulation");
   if (request.kind !== "effect-delta-simulation") throw new Error("unexpected request");
-  const mode = request.call.data.startsWith(selector("received")) ? "received" :
-    request.call.data.startsWith(selector("exchange")) ? "exchange" : "received-no-receiver";
-  const args = EXECUTION[mode].decodeFunctionData(mode === "exchange" ? "exchange" : "exchange_received", request.call.data);
+  const [setup, swap] = erc20ProbeCalls(request);
+  assert.equal(request.call.to.toLowerCase(), executor);
+  assert.equal(swap.to, pool);
+  const mode = swap.data.startsWith(selector("received")) ? "received" :
+    swap.data.startsWith(selector("exchange")) ? "exchange" : "received-no-receiver";
+  const args = EXECUTION[mode].decodeFunctionData(mode === "exchange" ? "exchange" : "exchange_received", swap.data);
   const [i, j, dx, minDy] = [Number(args[0]), Number(args[1]), BigInt(args[2]), BigInt(args[3])];
+  assert.equal(setup.to, coins[i]);
   assert.equal(minDy, 999n, "minimum remains exactly the source-pinned quote");
   return { ...returned(request.id, word(minDy)), effects: { tokenDeltas: [
     { token: coins[i], account: executor, delta: -dx }, { token: coins[i], account: pool, delta: dx },
@@ -68,8 +77,8 @@ const decide = (results: readonly AdapterRequestResult[], observed = candidate) 
   candidate: observed, step: 4, evidence: variant.decode({ step, results }),
 });
 
-// Mirrors the existing transport's preCall-failure classification: optional
-// approval failure cannot erase an independently successful received proof.
+// Unknown optional modes cannot erase an independently successful proof for
+// the same direction. Unknown unproved directions still block publication.
 for (const mode of ["received", "received-no-receiver", "exchange"] as const) {
   const results = successful.map(result => result.id.endsWith(`:${mode}`) ? result : unavailable(result.id));
   const decision = decide(results);

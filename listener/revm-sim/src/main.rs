@@ -20,7 +20,7 @@ use revm::{
     context_interface::{ContextTr, JournalTr, LocalContextTr, Transaction,
         journaled_state::account::JournaledAccountTr,
         result::{ExecutionResult, EVMError, HaltReason, ResultGas}},
-    handler::{Handler, EvmTr, EvmTrError, FrameTr, FrameResult, MainnetHandler},
+    handler::{Handler, EvmTr, EvmTrError, FrameTr, FrameResult, MainnetHandler, ItemOrResult},
     interpreter::{FrameInput, InitialAndFloorGas, interpreter_action::FrameInit},
     database::{AccountState, CacheDB},
     database_interface::{DBErrorMarker, DatabaseRef},
@@ -1850,7 +1850,10 @@ struct StrictSimulateEffects {
 #[serde(tag = "kind")]
 enum StrictOutcome {
     Success { output: String, #[serde(flatten)] stage: StrictStage },
-    Revert { output: String, #[serde(flatten)] stage: StrictStage },
+    Revert { output: String, #[serde(flatten)] stage: StrictStage,
+        // null attests a completed frame walk with no exceptional descendant;
+        // omission from an older sidecar is not the same claim.
+        #[serde(rename = "nestedHalt")] nested_halt: Option<String> },
     Halt { reason: String, #[serde(flatten)] stage: StrictStage },
 }
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -3141,10 +3144,13 @@ fn apply_executor_runtime_code<D: ExecutionProfile>(db: &mut CacheDB<D>, plan: &
 /// restored afterward. Validation/delegated code and internal transfers remain.
 struct StrictHandler<EVM, ERROR, FRAME> {
     entry: Option<(Address, usize, bool)>,
+    nested_halt: Option<String>,
     marker: std::marker::PhantomData<(EVM, ERROR, FRAME)>,
 }
 impl<EVM, ERROR, FRAME> StrictHandler<EVM, ERROR, FRAME> {
-    fn new(entry: Option<(Address, usize, bool)>) -> Self { Self { entry, marker: std::marker::PhantomData } }
+    fn new(entry: Option<(Address, usize, bool)>) -> Self {
+        Self { entry, nested_halt: None, marker: std::marker::PhantomData }
+    }
 }
 impl<EVM, ERROR, FRAME> Handler for StrictHandler<EVM, ERROR, FRAME>
 where
@@ -3155,6 +3161,26 @@ where
     type Evm = EVM;
     type Error = ERROR;
     type HaltReason = HaltReason;
+    fn run_exec_loop(&mut self, evm: &mut EVM, first_frame: FrameInit) -> Result<FrameResult, ERROR> {
+        // Same revm frame lifecycle as Handler::run_exec_loop. Observe only the
+        // result before a parent can wrap it in REVERT; do not modify execution,
+        // gas, state, or a successful parent's treatment of a caught failure.
+        self.nested_halt = None;
+        if let ItemOrResult::Result(result) = evm.frame_init(first_frame)? { return Ok(result); }
+        loop {
+            let result = match evm.frame_run()? {
+                ItemOrResult::Item(init) => match evm.frame_init(init)? {
+                    ItemOrResult::Item(_) => continue,
+                    ItemOrResult::Result(result) => result,
+                },
+                ItemOrResult::Result(result) => result,
+            };
+            let instruction = result.instruction_result();
+            let halt = instruction.is_halt().then(|| format!("{instruction:?}"));
+            if let Some(result) = evm.frame_return_result(result)? { return Ok(result); }
+            if self.nested_halt.is_none() { self.nested_halt = halt; }
+        }
+    }
     fn validate_against_state_and_deduct_caller(&self, evm: &mut EVM, _: &mut InitialAndFloorGas) -> Result<(), ERROR> {
         let (_, tx, cfg, journal, _, _) = evm.ctx().all_mut();
         let mut caller = journal.load_account_with_code_mut(tx.caller())?.data;
@@ -3303,7 +3329,8 @@ fn strict_execute_observed<D: ExecutionProfile>(db: &mut CacheDB<D>, env: &Block
         let hex_output = |b: &Bytes| format!("0x{}", hex::encode(b));
         let outcome = match &result {
             ExecutionResult::Success { output, .. } => StrictOutcome::Success { output: hex_output(output.data()), stage },
-            ExecutionResult::Revert { output, .. } => StrictOutcome::Revert { output: hex_output(output), stage },
+            ExecutionResult::Revert { output, .. } => StrictOutcome::Revert {
+                output: hex_output(output), stage, nested_halt: handler.nested_halt.clone() },
             ExecutionResult::Halt { reason, .. } => StrictOutcome::Halt { reason: format!("{reason:?}"), stage },
         };
         if !result.is_success() { return Ok((outcome, used, Vec::new())); }
@@ -4226,6 +4253,66 @@ mod tests {
     }
     fn setup(req: &StrictRequest, data: &str) -> PreCall {
         PreCall { from: req.from.clone(), to: req.to.clone(), calldata: data.into(), gas_limit: Some(100000), allowance_slot: None }
+    }
+
+    #[test]
+    fn strict_nested_halt_provenance_survives_outer_revert_only() {
+        // Equivalent failure boundary to an ordinary executor CALL: the outer
+        // frame can wrap an exceptional child halt in an ordinary REVERT.
+        // The child is real local EVM bytecode, not a classified-outcome fixture.
+        let child = Address::repeat_byte(0xcc);
+        for inner in [false, true] {
+            for (code, exceptional) in [("0x5b600056", true), ("0xfe", true),
+                ("0x60006000fd", false), ("0x00", false)] {
+                for outer_reverts in [true, false] {
+                    let wrapper = format!("0x602a6000556000600060006000600073{}5af150{}",
+                        hex::encode(child), if outer_reverts { "60006000fd" } else { "00" });
+                    let (mut db, req) = local_strict(inner, &wrapper);
+                    let bytes = Bytes::from(parse_hex_bytes(code).unwrap());
+                    db.insert_account_info(child, AccountInfo { code_hash: keccak256(&bytes),
+                        code: Some(Bytecode::new_raw(bytes)), ..Default::default() });
+                    let target = parse_address(&req.to).unwrap();
+                    db.insert_account_storage(target, U256::ZERO, U256::from(9)).unwrap();
+                    let plan = StrictPlan::validate(&req).unwrap();
+                    let (outcome, _, logs) = strict_execute(&mut db, &test_source().env, &req, &plan).unwrap();
+                    let encoded = serde_json::to_value(&outcome).unwrap();
+                    if outer_reverts {
+                        assert!(matches!(outcome, StrictOutcome::Revert { stage: StrictStage::Main, .. }));
+                        assert!(encoded.as_object().unwrap().contains_key("nestedHalt"), "backend must attest absence too");
+                        assert_eq!(encoded["nestedHalt"].as_str().is_some(), exceptional, "child={code} inner={inner}");
+                        assert_eq!(db.storage(target, U256::ZERO).unwrap(), U256::from(9));
+                        assert!(logs.is_empty());
+                    } else {
+                        assert!(matches!(outcome, StrictOutcome::Success { .. }), "caught failures must not invalidate successful execution");
+                        assert!(encoded.get("nestedHalt").is_none());
+                        assert_eq!(db.storage(target, U256::ZERO).unwrap(), U256::from(42));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn strict_nested_halt_provenance_does_not_leak_across_sibling_calls() {
+        let child = Address::repeat_byte(0xcc);
+        let wrapper = Address::repeat_byte(0xee);
+        for inner in [false, true] {
+            let (mut db, mut req) = local_strict(inner, "0x60006000fd");
+            let wrapper_code = format!("0x6000600060006000600073{}5af15000", hex::encode(child));
+            for (address, code) in [(child, "0x5b600056"), (wrapper, wrapper_code.as_str())] {
+                let bytes = Bytes::from(parse_hex_bytes(code).unwrap());
+                db.insert_account_info(address, AccountInfo { code_hash: keccak256(&bytes),
+                    code: Some(Bytecode::new_raw(bytes)), ..Default::default() });
+            }
+            req.pre_calls.push(PreCall { from: req.from.clone(), to: format!("{wrapper:#x}"),
+                calldata: "0x".into(), gas_limit: Some(100000), allowance_slot: None });
+            let plan = StrictPlan::validate(&req).unwrap();
+            let (outcome, _, _) = strict_execute(&mut db, &test_source().env, &req, &plan).unwrap();
+            assert!(matches!(outcome, StrictOutcome::Revert { stage: StrictStage::Main, .. }));
+            let encoded = serde_json::to_value(outcome).unwrap();
+            assert!(encoded.as_object().unwrap().contains_key("nestedHalt"));
+            assert!(encoded["nestedHalt"].is_null(), "successful prefix provenance leaked into unrelated main failure");
+        }
     }
 
     fn trial_prefix(req: &mut StrictRequest) {

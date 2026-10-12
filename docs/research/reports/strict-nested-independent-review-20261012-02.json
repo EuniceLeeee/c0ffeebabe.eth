@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "reviewId": "strict-nested-independent-review-20261012-02",
+  "reviewedAtUtc": "2026-10-12 12:27:07 UTC",
+  "role": "non-author follow-up; read-only source review",
+  "previousReview": {
+    "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/strict-nested-independent-review-20261012-01.json",
+    "sha256": "2bd3e559d5a13396bcc9af051bd4ea5af67f5f45fb1f46dbaa9ca38960d1a9b2",
+    "preserved": true
+  },
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "head": "a7892e9671f88526f0b0a99df1056ca83e0b8b3d",
+  "scope": "SN1 correction within the same four-file dirty diff. Rust/client hashes verified unchanged; inspect the minimal TS transport/test delta and rerun the exact eight prior independent offline controls.",
+  "files": [
+    {
+      "file": "listener/revm-sim/src/main.rs",
+      "sha256": "44d3bda3c7184371fe7f81bdcb968d90cdef4085344bdecd05cc3eddb2d2f7a2"
+    },
+    {
+      "file": "listener/src/searcher/revm-sim-client.ts",
+      "sha256": "a041f6f7d311d83c2788c3acdbc1ff0576f8aa43b50bf694e2810032e3d51bf0"
+    },
+    {
+      "file": "listener/src/searcher/revm-strict-simulation-transport.ts",
+      "sha256": "dcd6f1d8b0bf9cf8f17ea18ef1a8d39dfd3ed30a223730e0775bf48f336ad851"
+    },
+    {
+      "file": "listener/src/searcher/test/revm-strict-simulation-transport.ts",
+      "sha256": "85f487db69ab41dab2e07b61c0ed9eeeb01ede1e53247c38c41469d796b8368d"
+    }
+  ],
+  "patchSha256": "63b8bb6a620a822f1b05aba832d492890866996ded2f3649e653cea65ce40f05",
+  "patchHashDefinition": "SHA-256 of git diff --no-ext-diff --no-textconv --binary HEAD -- <the four scope paths in listed order>",
+  "pinsStableAcrossChecks": true,
+  "instructions": {
+    "refreshed": [
+      "/opt/mev-cloud/family-runtime-20261007/AGENTS.md",
+      "/opt/mev-cloud/family-runtime-20261007/CLAUDE.md",
+      "/Users/eunice/.codex/skills/family-plugin-adaptation/SKILL.md"
+    ],
+    "retainedFromPreviousReview": [
+      "/opt/mev-cloud/family-runtime-20261007/docs/research/HERMES.md",
+      "/opt/mev-cloud/family-runtime-20261007/docs/research/gates.md",
+      "/Users/eunice/.codex/skills/family-plugin-adaptation/references/acceptance-entrypoints.md"
+    ],
+    "application": "Same narrow review/evidence boundary as -01; no expanded Family acceptance or execution authority."
+  },
+  "verdict": {
+    "status": "bounded_no_findings",
+    "SN1": "resolved for the reviewed strict transport contract",
+    "basis": "The exact previously failing prefix-program response without nestedHalt now remains incomplete; all eight unchanged independent offline controls pass. No additional actionable finding in the minimal correction.",
+    "adapterFixedClaim": false,
+    "adapterMergeReadyClaim": false,
+    "productionGapFixedClaim": false,
+    "fullFamilyClaim": false,
+    "performanceClaim": false,
+    "mergeClaim": false
+  },
+  "findings": [],
+  "resolvedFindings": [
+    {
+      "id": "SN1",
+      "priorPriority": "P2",
+      "status": "resolved",
+      "file": "listener/src/searcher/revm-strict-simulation-transport.ts",
+      "startLine": 339,
+      "endLine": 340,
+      "correction": "Use the already authenticated code variable from line 308 (trialPrefix.executorRuntimeCode ?? request.executorRuntimeCode) in the missing-nestedHalt guard.",
+      "before": "A valid executor-program Revert following a prefix without nestedHalt returned completion=reverted-as-declared.",
+      "after": "The same response throws RevmStrictError(kind=execution), preserving outer kind=Revert, phase=main and output=0xdeadbeef in exactPrefixFailure without CALL_EXCEPTION.",
+      "independentTransition": "Same eight-control source: prior 7 pass/1 fail, now 8 pass/0 fail; the only outcome flip is prefix-program-absent.",
+      "newRegression": {
+        "file": "listener/src/searcher/test/revm-strict-simulation-transport.ts",
+        "startLine": 129,
+        "endLine": 156,
+        "assessment": "Three real transport-contract tests cover absent, null and OutOfGas. They assert prefix-owned bytecode placement and executor target, require nonfatal incomplete errors with exact diagnostics for absent/string, and preserve reverted-as-declared for explicit null. This is mock-response TS behavior, not a new EVM execution test."
+      }
+    }
+  ],
+  "minimalDeltaInspection": {
+    "status": "pass",
+    "details": "Ignoring Git index/hunk line metadata, the entire four-file diff equals review -01 after reversing exactly the one guard expression replacement and removing the new 29-line prefix regression block."
+  },
+  "sourceReasoning": [
+    "At lines 308-312 the effective code's address/hash proof is validated before outcome validation/classification. Reusing code in the guard adds no weaker trust path.",
+    "The guard correction covers prefix-owned and standalone code uniformly. Explicit null still attests no child Halt; nonempty string remains incomplete; ordinary source/code integrity failures still retire the source.",
+    "The entire four-file patch, after undoing the one expression replacement and removing the 29-line test block, matches the -01 patch apart from Git index/hunk metadata.",
+    "The unchanged Rust/client bytes preserve the preceding review's bounded REVM lifecycle, root/child distinction, sibling reset, outer-success and metadata-validation assessment. No new gas/state/refund equivalence execution was performed.",
+    "The minimal correction changes strict transport completion handling only. No live pool-revert policy or production final-simulation edit appears in this correction."
+  ],
+  "executedChecks": [
+    {
+      "name": "minimal-delta-comparison",
+      "result": "pass",
+      "detail": "Ignoring Git index/hunk line metadata, the entire four-file diff equals review -01 after reversing exactly the one guard expression replacement and removing the new 29-line prefix regression block."
+    },
+    {
+      "name": "scoped-diff-check-and-pin-recheck",
+      "result": "pass",
+      "detail": "git diff --check HEAD restricted to the four paths produced no diagnostics; before/after HEAD, all four file hashes and scoped binary-diff hash matched."
+    },
+    {
+      "name": "independent-offline-prefix-program-provenance",
+      "result": "pass",
+      "exitCode": 0,
+      "runner": "TSX_DISABLE_CACHE=1 node --import tsx --input-type=module (stdin)",
+      "workingDirectory": "/opt/mev-cloud/family-runtime-20261007/listener",
+      "sameSourceAsPreviousReview": true,
+      "sourceInputs": "In-memory lease and attested response fixtures; current production transport imported from the pinned cloud checkout.",
+      "executedOutput": {
+        "check": "independent-offline-prefix-program-provenance",
+        "cases": [
+          {
+            "name": "standalone-program-absent",
+            "expected": "incomplete",
+            "actual": "incomplete",
+            "pass": true,
+            "detail": {
+              "name": "RevmStrictError",
+              "kind": "execution"
+            }
+          },
+          {
+            "name": "prefix-program-absent",
+            "expected": "incomplete",
+            "actual": "incomplete",
+            "pass": true,
+            "detail": {
+              "name": "RevmStrictError",
+              "kind": "execution",
+              "exactPrefixFailure": {
+                "kind": "Revert",
+                "phase": "main",
+                "output": "0xdeadbeef"
+              }
+            }
+          },
+          {
+            "name": "prefix-program-null",
+            "expected": "reverted-as-declared",
+            "actual": "reverted-as-declared",
+            "pass": true,
+            "detail": {
+              "data": "0xdeadbeef",
+              "effects": {},
+              "completion": "reverted-as-declared"
+            }
+          },
+          {
+            "name": "prefix-program-nested",
+            "expected": "incomplete",
+            "actual": "incomplete",
+            "pass": true,
+            "detail": {
+              "name": "RevmStrictError",
+              "kind": "execution",
+              "exactPrefixFailure": {
+                "kind": "Revert",
+                "phase": "main",
+                "output": "0xdeadbeef",
+                "nestedHalt": "OutOfGas"
+              }
+            }
+          },
+          {
+            "name": "prefix-stage-nested",
+            "expected": "incomplete",
+            "actual": "incomplete",
+            "pass": true,
+            "detail": {
+              "name": "RevmStrictError",
+              "kind": "execution",
+              "exactPrefixFailure": {
+                "kind": "Revert",
+                "phase": "preCall",
+                "preCallIndex": 0,
+                "output": "0xdeadbeef",
+                "nestedHalt": "OutOfGas"
+              }
+            }
+          },
+          {
+            "name": "prefix-absent-wrong-code-proof",
+            "expected": "protocol-fault",
+            "actual": "protocol-fault",
+            "pass": true,
+            "detail": {
+              "name": "RevmFatalError"
+            }
+          },
+          {
+            "name": "prefix-nested-wrong-source",
+            "expected": "source-fault",
+            "actual": "source-fault",
+            "pass": true,
+            "detail": {
+              "name": "RevmFatalError"
+            }
+          },
+          {
+            "name": "prefix-malformed-metadata",
+            "expected": "protocol-fault",
+            "actual": "protocol-fault",
+            "pass": true,
+            "detail": {
+              "name": "RevmFatalError"
+            }
+          }
+        ],
+        "passed": 8,
+        "failed": 0
+      },
+      "reproductionSource": "\nimport assert from 'node:assert/strict';\nimport { keccak256 } from 'ethers';\nimport { createRevmStrictSimulationTransport } from './src/searcher/revm-strict-simulation-transport.ts';\nimport { RevmFatalError, RevmStrictError } from './src/searcher/revm-sim-client.ts';\nimport { buildSubscriptCalldata } from './src/shared/executor/botvm-program-entry.ts';\nconst addr = x => '0x' + x.repeat(40), hash = x => '0x' + x.repeat(64);\nconst executor = addr('a'), origin = addr('b'), token = addr('c');\nconst source = { number: 101, hash: hash('1'), generation: 1 };\nconst pin = { chainId: 1, blockHash: source.hash, stateRoot: hash('2') };\nconst code = { code: '0x60006000f3', keccak256: keccak256('0x60006000f3') };\nconst invocation = { source, callerAuthority: { executor, transactionOrigin: origin },\n  request: { id: 'review-program', kind: 'effect-delta-simulation',\n    call: { caller: {kind:'executor'}, executionMode:'executor-program', to:executor,\n      data:buildSubscriptCalldata(new Uint8Array([0])) },\n    overrideIntent: { caller:{kind:'executor'}, tokenBalances:[{token,amount:1n}] },\n    observe:['return-data','revert-data'] } };\nconst prefix = { executor, calldata: invocation.request.call.data, inputToken:token,inputAmount:1n };\nconst cases = [\n  {name:'standalone-program-absent',prefix:false,expected:'incomplete'},\n  {name:'prefix-program-absent',prefix:true,expected:'incomplete'},\n  {name:'prefix-program-null',prefix:true,metadata:null,expected:'reverted-as-declared'},\n  {name:'prefix-program-nested',prefix:true,metadata:'OutOfGas',expected:'incomplete'},\n  {name:'prefix-stage-nested',prefix:true,phase:'preCall',metadata:'OutOfGas',expected:'incomplete'},\n  {name:'prefix-absent-wrong-code-proof',prefix:true,tamper:'code',expected:'protocol-fault'},\n  {name:'prefix-nested-wrong-source',prefix:true,metadata:'OutOfGas',tamper:'source',expected:'source-fault'},\n  {name:'prefix-malformed-metadata',prefix:true,metadata:257,expected:'protocol-fault'},\n];\nconst results=[];\nfor (const c of cases) {\n  const fatals=[]; let wire;\n  const transport=createRevmStrictSimulationTransport({rpcUrl:'http://offline.invalid',executionGasLimit:100000,executorRuntimeCode:code,\n    leaseFor:async()=>({source,sourcePin:pin,closeAndDrain:async()=>assert.fail('unexpected lease close'),\n      strictSimulate:async req=>{\n        wire=req;\n        const outcome={kind:'Revert',phase:c.phase??'main',output:'0xdeadbeef',\n          ...(c.phase==='preCall'?{preCallIndex:0}:{}),\n          ...(Object.hasOwn(c,'metadata')?{nestedHalt:c.metadata}:{})};\n        return {ok:true,success:false,output:outcome.output,revertReason:outcome.output,gasUsed:'123',latencyMs:1,\n          sourceAttestation:{kind:'node-attested',...pin,blockHash:c.tamper==='source'?hash('9'):pin.blockHash,blockNumber:source.number,parentHash:hash('3')},\n          strict:{outcome,executionGasUsed:'123',tokenDeltas:[],nativeDeltas:[],totalSupplyDeltas:[],logs:[],\n            counterfactualExecutorCode:{address:executor,keccak256:c.tamper==='code'?hash('4'):code.keccak256}}};\n      }}),onFatal:reason=>fatals.push(reason)});\n  let actual,detail;\n  try {\n    const value=c.prefix?await transport.simulatePrefix({...invocation,prefix}):await transport.simulate(invocation);\n    actual=value.completion??'success'; detail=value;\n  } catch(e) {\n    actual=e instanceof RevmFatalError?e.fatal.kind:e instanceof RevmStrictError&&e.kind==='execution'?'incomplete':e.code??e.name;\n    detail={name:e.name,kind:e.kind,code:e.code,exactPrefixFailure:e.exactPrefixFailure};\n    assert.notEqual(e.code,'CALL_EXCEPTION');\n  }\n  assert.equal(wire.to,executor);\n  assert.equal(wire.executorRuntimeCode===undefined,c.prefix);\n  if(c.prefix) assert.equal(wire.trialPrefix.executorRuntimeCode.keccak256,code.keccak256);\n  if(actual==='incomplete') assert.deepEqual(fatals,[]);\n  if(c.name==='prefix-stage-nested') assert.deepEqual(detail.exactPrefixFailure,{kind:'Revert',phase:'preCall',preCallIndex:0,output:'0xdeadbeef',nestedHalt:'OutOfGas'});\n  results.push({name:c.name,expected:c.expected,actual,pass:actual===c.expected,detail});\n}\nconsole.log(JSON.stringify({check:'independent-offline-prefix-program-provenance',cases:results,\n  passed:results.filter(r=>r.pass).length,failed:results.filter(r=>!r.pass).length},null,2));\nprocess.exitCode=results.some(r=>!r.pass)?1:0;\n"
+    }
+  ],
+  "savedEvidenceInspectedNotReexecuted": [
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-prefix-baseline02.txt",
+      "sha256": "0001806249b7382a249af7de88233bb4dc9e8844952eb84e92913a3855a102d6",
+      "status": "valid supporting red baseline",
+      "observed": "Three named prefix-provenance tests: null and OutOfGas pass; undefined fails with Missing expected rejection. 2 pass/1 fail."
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-transport-indexed02.txt",
+      "sha256": "ab922bd5f5c5b2db70a30b4af95f2f396bb389c70b716cca02fdca6e272ba00b",
+      "status": "saved author run",
+      "observed": "199 tests, 199 pass, 0 fail; tool-run receipt exit=0."
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-central-indexed02.txt",
+      "sha256": "3f2a259f6aa490df7565081264df418cedc29366748fa205a2e3c5c49d333540",
+      "status": "saved author run",
+      "observed": "174 tests, 174 pass, 0 fail; tool-run receipt exit=0."
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-build-live02.txt",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "status": "saved author log only",
+      "observed": "Contains build:live / tsc --noEmit invocation without diagnostics. This review did not rerun the build or independently capture its process exit status."
+    }
+  ],
+  "excludedEvidence": [
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-prefix-baseline.txt",
+      "sha256": "91f07844b91db79480a90796f56603dd322df624293cf224c452980bd5094ecf",
+      "status": "invalid; preserved; excluded from all correctness and baseline claims",
+      "reason": "User reported a test-file transfer race. The inspected log lists only a file-level success and no named target assertions. It cannot establish a passing or failing prefix-provenance baseline."
+    }
+  ],
+  "limitations": [
+    "Reviewer wrote only this separate new audit JSON; -01 is retained byte-identically.",
+    "No source, generated artifact, Ready, table, old log or existing evidence was modified.",
+    "No build, Rust test, full/indexed suite, RPC, live run, fork, key access, daemon launch or process-control action was performed by reviewer.",
+    "The independently executed result proves this strict transport contract for the eight declared offline controls. It is not a fresh historical/EVM replay or a full Family, merge, production, performance or deployment verdict.",
+    "Review applies to the exact HEAD plus dirty-file hashes recorded here, not later mutations or unrelated shared-workspace changes."
+  ]
+}

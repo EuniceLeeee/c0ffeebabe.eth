@@ -17,6 +17,7 @@ type ExactPrefixFailure = Readonly<{
   preCallIndex?: number;
   reason?: string;
   output?: string;
+  nestedHalt?: string;
 }>;
 const UINT256 = 1n << 256n;
 const EFFECTS = ["return-data", "revert-data", "token-delta", "native-delta", "total-supply-delta", "logs"];
@@ -309,7 +310,7 @@ function responseSnapshot(value: unknown, request: StrictSimulateRequest, source
       const proof = record(s.counterfactualExecutorCode, ["address", "keccak256"]);
       if (address(proof.address) !== (request.trialPrefix?.executor ?? request.to) || proof.keccak256 !== code.keccak256) invalid();
     } else if (s.counterfactualExecutorCode !== undefined) invalid();
-    const o = record(s.outcome, ["kind", "phase", "preCallIndex", "output", "reason"]);
+    const o = record(s.outcome, ["kind", "phase", "preCallIndex", "output", "reason", "nestedHalt"]);
     if (typeof o.kind !== "string" || !["Success", "Revert", "Halt"].includes(o.kind) || r.success !== (o.kind === "Success") ||
       r.error !== undefined || r.errorKind !== undefined || !uint(s.executionGasUsed) || r.gasUsed !== s.executionGasUsed ||
       BigInt(s.executionGasUsed) > BigInt(request.executionGasLimit!) ||
@@ -320,6 +321,8 @@ function responseSnapshot(value: unknown, request: StrictSimulateRequest, source
     if (o.kind === "Halt") {
       if (typeof o.reason !== "string" || !o.reason.length || Object.hasOwn(o, "output") || r.output !== undefined) invalid();
     } else if (r.output !== bytes(o.output) || Object.hasOwn(o, "reason")) invalid();
+    if (Object.hasOwn(o, "nestedHalt") && (o.kind !== "Revert" ||
+      (o.nestedHalt !== null && (typeof o.nestedHalt !== "string" || !o.nestedHalt.length || o.nestedHalt.length > 256)))) invalid();
     if (r.revertReason !== (o.kind === "Revert" ? o.output : undefined)) invalid();
     if (request.stateRead !== undefined && o.phase === "main" &&
       (o.kind !== "Success" || (request.stateRead.kind === "get-storage" && !hash32(o.output)))) invalid();
@@ -328,8 +331,14 @@ function responseSnapshot(value: unknown, request: StrictSimulateRequest, source
       if (tokens.length || natives.length || supplies.length || logs.length) invalid();
       const failure: ExactPrefixFailure = freeze({ kind: o.kind as "Revert" | "Halt", phase: o.phase as "main" | "preCall",
         ...(o.phase === "preCall" ? { preCallIndex: o.preCallIndex as number } : {}),
-        ...(o.kind === "Revert" ? { output: o.output as string } : { reason: o.reason as string }) });
-      return freeze({ kind: o.phase === "main" ? String(o.kind) : "preCall", data: o.kind === "Revert" ? o.output as string : "0x", failure, effects: {
+        ...(o.kind === "Revert" ? { output: o.output as string } : { reason: o.reason as string }),
+        ...(typeof o.nestedHalt === "string" ? { nestedHalt: o.nestedHalt } : {}) });
+      // A wrapper's REVERT does not prove its child completed. Trusted program
+      // reverts from an older sidecar also lack that provenance and stay retryable.
+      // This affects strict evidence only, not live final-sim/pool-filter policy.
+      const incomplete = o.kind === "Revert" && (typeof o.nestedHalt === "string" ||
+        (code !== undefined && !Object.hasOwn(o, "nestedHalt")));
+      return freeze({ kind: incomplete ? "nested-incomplete" : o.phase === "main" ? String(o.kind) : "preCall", data: o.kind === "Revert" ? o.output as string : "0x", failure, effects: {
         ...(observe.has("token-delta") ? { tokenDeltas: [] } : {}), ...(observe.has("native-delta") ? { nativeDeltas: [] } : {}),
         ...(observe.has("total-supply-delta") ? { totalSupplyDeltas: [] } : {}), ...(observe.has("logs") ? { logs: [] } : {}) } });
     }

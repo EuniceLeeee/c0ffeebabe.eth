@@ -1513,7 +1513,7 @@
         "familyId": "curve-plain",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "0ec7548ef4ce8285049a230c46a0afb4eafd9df73d9b58606159bf1d522788af",
+        "contentHash": "c62b783d5d9063e7dec36cb7a823890c8c943963117a8003b6e6306211dbbf1e",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -14753,5 +14753,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "d9e7c7d2947283a0b094582790259f011078f7f1cf1444db33ce73747613a8fd"
+  "artifactHash": "f0c3d780eb2cecce69fce2696f6932d4f284b0f2de8d02d3cba28c14bf8d00f5"
 }

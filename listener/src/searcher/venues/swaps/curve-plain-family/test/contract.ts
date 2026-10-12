@@ -9,6 +9,8 @@ import { CURVE_METAREGISTRY, ERC20, EXECUTION, MAX_UINT, META, MODES, POOL, SIGN
   executionData, executionFunction, pullsInput, getterPool, hasReceiver, lower, probeAmount, quotePool, selector, uint, UINT_POOL } from "../codec.js";
 import { LOG_ID, SURFACE, SURFACE_ID, SWAP_TOPIC, UINT_LOG_ID, UINT_SWAP_TOPIC, UINT_NG_LOG_ID, UINT_NG_SWAP_TOPIC, decodeSwapLog } from "../discovery.js";
 import { PROBE_RECEIVER } from "../identity.js";
+import { ADDR } from "../../../../../shared/constants/addresses.js";
+import { erc20ProbeCalls } from "./identity-probe.js";
 import { reverseBindCurvePlain } from "../nomination.js";
 import { actionId } from "../routes.js";
 import type { CaptureNominationProvider } from "../../../adapter-family-plugin.js";
@@ -47,16 +49,25 @@ function fixture(anchor: Anchor, allowedModes: readonly CurvePlainMode[] = ["rec
   };
   const rawAnswer = (request: AdapterRequest): AdapterRequestResult => {
     if (request.kind === "get-code") return success(request.id, "0x6000");
+    if (request.id === "probe-executor") {
+      assert(request.kind === "effect-delta-simulation");
+      assert.equal(request.call.executionMode, "impersonated-call-frame");
+      assert.equal(request.call.to, ADDR.WETH);
+      return { ...success(request.id, word(0n)), effects: {
+        tokenDeltas: [{ token: ADDR.WETH, account: EXECUTOR, delta: 0n }],
+        nativeDeltas: [{ account: EXECUTOR, delta: 0n }] } };
+    }
     if (request.kind === "effect-delta-simulation") {
-      const mode = MODES.find(m => request.call.data.slice(0, 10) === selector(m))!;
+      const [setup, swap] = erc20ProbeCalls(request);
+      assert.equal(lower(request.call.to), lower(EXECUTOR));
+      assert.equal(swap.to, anchor.pool);
+      const mode = MODES.find(m => swap.data.slice(0, 10) === selector(m))!;
       if (!allowedModes.includes(mode)) return revert(request.id);
       assert.equal(request.call.caller.kind, "executor");
-      assert.equal(request.call.executionMode, "impersonated-call-frame");
-      const args = EXECUTION[mode].decodeFunctionData(executionFunction(mode), request.call.data);
+      const args = EXECUTION[mode].decodeFunctionData(executionFunction(mode), swap.data);
       const [i, j, dx, minDy] = [Number(args[0]), Number(args[1]), BigInt(args[2]), BigInt(args[3])];
       const amountOut = dy(i, j, dx);
       assert.equal(minDy, amountOut);
-      const setup = request.preCalls![0];
       assert.equal(lower(setup.to), anchor.coins[i]);
       const setupArgs = ERC20.decodeFunctionData(pullsInput(mode) ? "approve" : "transfer", setup.data);
       assert.equal(lower(String(setupArgs[0])), anchor.pool);
@@ -221,12 +232,12 @@ check("padded scalar decoding uses the first canonical word and never relaxes ex
   assert.equal(identity(anchor, f.answer).facts.directions.length, 2);
   const empty = (req: AdapterRequest): AdapterRequestResult => {
     const read = f.answer(req);
-    return req.kind === "effect-delta-simulation" && read.ok && read.completion === "returned" ? { ...read, data: "0x" } : read;
+    return req.id.startsWith("execution:") && read.ok && read.completion === "returned" ? { ...read, data: "0x" } : read;
   };
   assert.equal(identity(anchor, empty).facts.directions.length, 2);
   assert.throws(() => identity(anchor, req => {
     const read = empty(req);
-    if (req.kind !== "effect-delta-simulation" || !read.ok || !read.effects?.tokenDeltas) return read;
+    if (!req.id.startsWith("execution:") || !read.ok || !read.effects?.tokenDeltas) return read;
     return { ...read, effects: { tokenDeltas: read.effects.tokenDeltas.map((delta, i) => i === 2 ? { ...delta, delta: 0n } : delta) } };
   }), /no-execution-proven-direction/);
 });
@@ -315,12 +326,33 @@ check("execution proof cannot be forged with a return value or a transfer to a f
   const anchor = ANCHORS[0], answer = fixture(anchor).answer;
   assert.throws(() => identity(anchor, req => {
     const r = answer(req);
-    if (req.kind !== "effect-delta-simulation" || !r.ok || !r.effects) return r;
+    if (!req.id.startsWith("execution:") || !r.ok || !r.effects) return r;
     return { ...r, effects: { tokenDeltas: r.effects.tokenDeltas!.map(d =>
       lower(d.account) === lower(PROBE_RECEIVER) ? { ...d, account: EXECUTOR } : d) } };
   }), /no-execution-proven-direction/);
-  assert.throws(() => identity(anchor, req => req.kind === "effect-delta-simulation" ? success(req.id, word(1n)) : answer(req)), /no-execution-proven-direction/);
-  assert.throws(() => identity(anchor, req => req.kind === "effect-delta-simulation" ? { id: req.id, ok: false, source: SOURCE, failure: "deadline" } : answer(req)), /unresolved/);
+  assert.throws(() => identity(anchor, req => req.id.startsWith("execution:") ? success(req.id, word(1n)) : answer(req)), /no-execution-proven-direction/);
+  assert.throws(() => identity(anchor, req => req.id.startsWith("execution:") ? { id: req.id, ok: false, source: SOURCE, failure: "deadline" } : answer(req)), /unresolved/);
+});
+check("three-coin pool isolates deterministic failures but never unknown directions or foreign authority", () => {
+  const anchor = { ...ANCHORS[0], coins: [...ANCHORS[0].coins, ANCHORS[1].coins[0]], decimals: [18, 6, 18] };
+  const answer = fixture(anchor, ["exchange"]).answer;
+  const suspended = (req: AdapterRequest): AdapterRequestResult =>
+    /^execution:(?:2:\d|\d:2):/.test(req.id) ? revert(req.id) : answer(req);
+  assert.deepEqual(identity(anchor, suspended).facts.directions.map(d => [d.i, d.j]), [[0, 1], [1, 0]]);
+  for (const id of ["execution:2:0:received", "execution:0:2:exchange"]) {
+    assert.throws(() => identity(anchor, req => req.id === id
+      ? { id, ok: false, source: SOURCE, failure: "resource-limited" } : suspended(req)), /unresolved execution proof/);
+  }
+  for (const corrupt of ["native", "token", "missing", "pool", "zero"] as const) {
+    assert.throws(() => identity(anchor, req => {
+      const read = suspended(req);
+      if (req.id !== "probe-executor" || !read.ok) return read;
+      const account = corrupt === "pool" ? anchor.pool : corrupt === "zero" ? ethers.ZeroAddress : EXECUTOR;
+      return { ...read, effects: { tokenDeltas: corrupt === "missing" ? [] : [
+        { token: ADDR.WETH, account, delta: corrupt === "token" ? 1n : 0n }],
+        nativeDeltas: [{ account, delta: corrupt === "native" ? 1n : 0n }] } };
+    }), /executor authority/);
+  }
 });
 check("amount-sensitive exact quotes, source fencing, tampered routes, zero, negative and overflow", () => {
   const anchor = ANCHORS[0], f = fixture(anchor), d = descriptor(identity(anchor)), route = plugin.routes.project({ descriptor: d })[1];

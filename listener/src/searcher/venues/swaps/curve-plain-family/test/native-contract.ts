@@ -204,7 +204,7 @@ function nativeIdentity(corrupt?: "authority" | "output" | "output2" | "input" |
     }, undefined);
     assert(!requests.some(r => r.kind === "eth-call" && r.to.toLowerCase() === native), "never read native sentinel as ERC20");
     const results: AdapterRequestResult[] = requests.map(r => {
-      if (r.id === "native-executor") return { ...ok(r.id, word(0n)), effects: {
+      if (r.id === "probe-executor") return { ...ok(r.id, word(0n)), effects: {
         tokenDeltas: [{ token: ADDR.WETH, account: actor, delta: 0n }], nativeDeltas: [{ account: actor, delta: corrupt === "authority" ? 1n : 0n }] } };
       if (r.kind === "effect-delta-simulation") {
         assert.equal(r.call.executionMode, "executor-program"); assert.equal(r.call.to.toLowerCase(), actor);
@@ -262,7 +262,7 @@ test("mixed native pool declares effects for executable directions, not all pool
       buildRequests: () => variant.buildRequests(input), decode: results => results }, undefined);
     assert(declared.requests.length > 0);
     assert(!declared.requirements.effects?.includes("native-delta"));
-    assert(declared.requests.every(r => r.kind === "effect-delta-simulation" && r.call.executionMode === "impersonated-call-frame"));
+    assert(declared.requests.every(r => r.kind === "effect-delta-simulation" && r.call.executionMode === "executor-program"));
   }
 });
 
@@ -296,9 +296,9 @@ test("native identity runs through the production catalog and default four-round
   assert(result.outcomes.some(o => o.stage === "identity" && o.status === "verified"),
     JSON.stringify(result.outcomes.map(o => ({ stage: o.stage, status: o.status, reason: o.reasonCode }))));
   assert(!result.outcomes.some(o => o.reasonCode?.includes("identity-step-budget-exhausted")));
-  assert(rounds[1].includes("native-executor"), "authority read shares the existing structure round");
+  assert(rounds[1].includes("probe-executor"), "authority read shares the existing structure round");
   assert.equal(rounds[3].filter(id => id.startsWith("execution:")).length, 2);
-  assert.equal(rounds.slice(0, 4).flat().filter(id => id === "native-executor").length, 1);
+  assert.equal(rounds.slice(0, 4).flat().filter(id => id === "probe-executor").length, 1);
   // No publication/pricing/on-chain assertion: this is the real identity scheduler
   // and catalog with synthetic transport results, not historical execution.
 });

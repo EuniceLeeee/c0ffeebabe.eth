@@ -1,0 +1,292 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "claim": "Curve Plain atomic ERC20 identity implementation plus generic strict nested-Halt provenance: offline contract regression and bounded historical strict/Graph evidence. Not full Family, production-reference dual execution, opportunity, formal merge or performance acceptance.",
+  "source": {
+    "head": "a7892e9671f88526f0b0a99df1056ca83e0b8b3d",
+    "blockNumber": 26139768,
+    "blockHash": "0xd7bdbad87da07f0885234e0a53200cf4ec3ae61d73dd7b71db79b2705cb634f5",
+    "tx": "0x0466e70178b1a56a93dad92aeaec90c83256bf05884294636e921be77bda6f48",
+    "pool": "0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714",
+    "stateAndEnvironment": "N block-end state / N environment; not original leg prestate"
+  },
+  "implementation": {
+    "scope": "Five Curve Family identity/test files and four explicitly generic strict simulator/client/transport/test files; no Solidity, gas policy, live final-sim or pool-filter policy change.",
+    "change": "Resolve trusted executor authority in the existing structure round; encode ERC20 approve-or-transfer plus the original swap as one existing trusted executor-program. No detached preCalls. Preserve exact actor/pool four-token-delta proof and unknown/transport failure guard.",
+    "identitySha256": "e07219fe3462d889b81ccdc7669534b8b308fa2224d81aadde01115deebe28d9",
+    "familyDefinitionHash": "43ba457166436da16055cebf9cf62cebbaa936a8faccdd394bc5bc3f661d67ff",
+    "savedPriceSourceTreeSha256": "0e0b9a410117bf03d0f50fec957e962f30f108b0e0f23f1820f34c39c418e8c4",
+    "runtimeCodeKeccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "costLimit": "Adds one read-only authority simulation for ERC20-only pools within the same identity round; no performance claim.",
+    "genericStrictChange": "Preserve first descendant exceptional Halt when an outer Revert wraps it. Explicit nestedHalt:null attests no descendant Halt; absence remains incomplete for trusted programs, including prefix-owned executor code. Preserve all source/code/effect checks and exact-prefix diagnostics. Reset provenance per sibling; caught child failure with successful parent stays Success.",
+    "historicalScopeNote": "Historical attempt02 executed before the subsequent one-line legacy-prefix guard correction. Captured target programs are standalone, have explicit null on all Reverts and no trialPrefix. That correction has no semantic effect on this recorded path. This is saved historical evidence, not a third fresh EVM run.",
+    "sourceFiles": [
+      {
+        "path": "listener/revm-sim/src/main.rs",
+        "sha256": "44d3bda3c7184371fe7f81bdcb968d90cdef4085344bdecd05cc3eddb2d2f7a2"
+      },
+      {
+        "path": "listener/src/searcher/revm-sim-client.ts",
+        "sha256": "a041f6f7d311d83c2788c3acdbc1ff0576f8aa43b50bf694e2810032e3d51bf0"
+      },
+      {
+        "path": "listener/src/searcher/revm-strict-simulation-transport.ts",
+        "sha256": "dcd6f1d8b0bf9cf8f17ea18ef1a8d39dfd3ed30a223730e0775bf48f336ad851"
+      },
+      {
+        "path": "listener/src/searcher/test/revm-strict-simulation-transport.ts",
+        "sha256": "85f487db69ab41dab2e07b61c0ed9eeeb01ede1e53247c38c41469d796b8368d"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+        "sha256": "e07219fe3462d889b81ccdc7669534b8b308fa2224d81aadde01115deebe28d9"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/contract.ts",
+        "sha256": "d69f5754c242006a31d7f5317f82ab4c681b92a8a243d9826d8b5f89b39818a5"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/identity-execution.ts",
+        "sha256": "78d731fcd6a187456fc835548265be3d4c129494943273f257d6a1a882220521"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
+        "sha256": "2aa1dcdb828c0e6534a4f108bf4a3189475eca40a04e40c6713a3e9ca923ba8c"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/identity-probe.ts",
+        "sha256": "25765f0b1e8ef9e169129920808fadd3dd4e281f7620ceae443e2fe837a07cd1"
+      }
+    ],
+    "genericBinary": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+      "sha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+      "deployment": false,
+      "oldBinaryReplaced": false,
+      "oldBinarySha256": "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d"
+    },
+    "generatedCommitArtifact": {
+      "workingSha256": "f218f75f3739123d1d4f75f1affafcd6e1d00d32eb189bd0a6d2efb4550bf3dd",
+      "indexOnlySha256": "78a6cce9d4b74e437004f7f799a0514fdd7098640231490250763c5ecc9240f4",
+      "meaning": "Official create/serialize of current Curve records plus HEAD other-family records; peer UniV1 working changes retained."
+    },
+    "identityImplementationSnapshot": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-atomic-before-history-source.patch",
+      "sha256": "0b099a009da0724d48eb4e6fd9057ca60447bf11ee1ce3677dca653c3ddb06c8"
+    },
+    "genericPatchSha256": "63b8bb6a620a822f1b05aba832d492890866996ded2f3649e653cea65ce40f05"
+  },
+  "baseline": {
+    "ready": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-native-ready-current-attempt02/ready.json",
+    "readySha256": "12df414bd022a81aec09501f1db5db68beadecc3e36e8f0166127e19dae1cc0c",
+    "verified": 4,
+    "total": 5,
+    "retryable": 1,
+    "targetEdges": 0,
+    "cause": "Four detached sBTC transfer preCalls reverted with 'Synth is suspended. Operation prohibited'. The central transport correctly treats preparation failure as unknown main execution; Family conservatively withheld the whole pool despite proved renBTC/WBTC modes. Not an approve failure or RPC-throttling diagnosis.",
+    "preservedPreCallReceipts": [
+      "strict-013.json",
+      "strict-014.json",
+      "strict-016.json",
+      "strict-017.json"
+    ],
+    "failingNewRegression": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-atomic-identity-baseline.txt",
+      "sha256": "299f095381bcf411845942b37e7228f3ba07be062f28cca48bc2d625577f6804",
+      "result": "Old production identity fails the new program-shape assertion; not Adapter Replay."
+    }
+  },
+  "current": {
+    "ready": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-atomic-ready-current-attempt02/ready.json",
+      "sha256": "890ba350725242d8ba30945666e6bdfde695c959e161dc60b0a72b7c9755ee02",
+      "total": 5,
+      "verified": 5,
+      "retryable": 0,
+      "terminalRejected": 0,
+      "remainingUnaccounted": 0,
+      "totalGraphEdges": 9,
+      "targetGraphEdges": 2
+    },
+    "strict": {
+      "allPoolReceiptFiles": 44,
+      "targetProgramReceipts": 18,
+      "targetSuccesses": 2,
+      "targetMainReverts": 16,
+      "targetTransportUnknowns": 0,
+      "sourceAttestation": "node-attested at N/hash for every target program",
+      "nativeAndTokenDeltasOnRevert": "empty",
+      "programFailureReason": "BotVM generic 'call failed'; this alone does not preserve or prove the inner sBTC suspension reason",
+      "successfulDirections": [
+        {
+          "receipt": "strict-004.json",
+          "tokenIn": "0xeb4c2781e4eba804ce9a9803c67d0893436bb27d",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "amountIn": "794",
+          "amountOut": "150",
+          "actorInputDelta": "-794",
+          "poolInputDelta": "794",
+          "actorOutputDelta": "150",
+          "poolOutputDelta": "-150"
+        },
+        {
+          "receipt": "strict-010.json",
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0xeb4c2781e4eba804ce9a9803c67d0893436bb27d",
+          "amountIn": "117",
+          "amountOut": "616",
+          "actorInputDelta": "-117",
+          "poolInputDelta": "117",
+          "actorOutputDelta": "616",
+          "poolOutputDelta": "-616"
+        }
+      ],
+      "admittedExecutionMode": "exchange",
+      "sbtcDirectionsAdmitted": 0,
+      "amountScope": "Identity probe amounts only; NOT production effective reference amount acceptance.",
+      "nestedHaltProvenance": "All 16 target main Reverts explicitly record nestedHalt:null; no child exceptional Halt observed. The actual failures are not labeled out-of-gas."
+    },
+    "prices": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-atomic-ready-current-attempt02/prices/prices.json",
+      "sha256": "7271a2e9cfcc8756f9a08e2419a014f814f3ac385e572c4b03a25bb6b48eb0e3",
+      "inputPath": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-atomic-ready-current-attempt02/prices/input.json",
+      "inputSha256": "a67c563bd33f928bdee916688e1992cec49bf06addd5352d83a22e5f613e0531",
+      "rawTargetDirections": 2,
+      "rawMids": [
+        0.1889168765743073,
+        5.264957264957265
+      ],
+      "allRows": 9,
+      "quoted": 3,
+      "missingValuation": 6,
+      "targetEffective": "2/2 missing-valuation; both amountIn/amountOut null",
+      "referenceWethInputRaw": "2000000000000000",
+      "referenceRule": "WETH input equals configured P directly. renBTC/WBTC input needs a production effective valuation path or explicitly recorded donor input; neither target is WETH."
+    }
+  },
+  "regressions": {
+    "identityExecution": "Candidate PASS; old identity fails the same new assertion.",
+    "familyContract": "17 groups PASS, including three-coin direction isolation and foreign/missing executor authority negatives.",
+    "nativeContract": "8/8 PASS through current indexed tool.",
+    "productionBuild": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-build-live02.txt",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "exitCode": 0
+    },
+    "revmTransport": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-transport-indexed02.txt",
+      "sha256": "ab922bd5f5c5b2db70a30b4af95f2f396bb389c70b716cca02fdca6e272ba00b",
+      "testsPassed": 199,
+      "exitCode": 0
+    },
+    "centralRuntime": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-central-indexed02.txt",
+      "sha256": "3f2a259f6aa490df7565081264df418cedc29366748fa205a2e3c5c49d333540",
+      "testsPassed": 174,
+      "exitCode": 0
+    },
+    "rust": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-rust-candidate02.txt",
+      "sha256": "e59ddf78b60f43971581f4ceeb6f7b8e0c3f0e7b704bb60847eddde5b80eea8c",
+      "testsPassed": 93,
+      "exitCode": 0,
+      "coverage": "Actual offline EVM bytecode: child OOG loop, invalid opcode, empty revert, success; outer Revert/Success; top-level and inner-call modes, rollback and sibling reset."
+    },
+    "prefixBaseline": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-prefix-baseline02.txt",
+      "sha256": "0001806249b7382a249af7de88233bb4dc9e8844952eb84e92913a3855a102d6",
+      "passed": 2,
+      "failed": 1,
+      "meaning": "Absent/null/OutOfGas controls; old guard wrongly completed absent provenance."
+    }
+  },
+  "toolReconciliation": {
+    "query": [
+      "curve-plain-ready",
+      "curve-plain-native"
+    ],
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-atomic-identity-tools-attempt02.json",
+    "sha256": "5c798fb56e5db110d4ef0abd247861d3f492d717c1161a15226566e7cab05970",
+    "executed": [
+      {
+        "id": "listener:searcher:curve-plain-historical-ready",
+        "exitCode": 0
+      },
+      {
+        "id": "listener:searcher:curve-plain-native-contract",
+        "exitCode": 0
+      }
+    ],
+    "finding": "Saved production Ready/Graph/prices agree with manual inspection; quoted coverage does not imply target price coverage.",
+    "genericContracts": {
+      "query": [
+        "strict",
+        "revm"
+      ],
+      "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-tools-attempt02.json",
+      "sha256": "5885f98b9b28feb7e893a8d591fafec49acd00ba2127508f76c69a71a82fa4ef",
+      "executed": [
+        {
+          "id": "listener:searcher:revm-strict-simulation-transport",
+          "exitCode": 0
+        },
+        {
+          "id": "listener:searcher:strict-central-adapter-runtime",
+          "exitCode": 0
+        }
+      ]
+    }
+  },
+  "review": {
+    "status": "bounded independent review complete; R1 and SN1 resolved with regressions. No full-Family or merge verdict",
+    "reports": [
+      {
+        "path": "docs/research/reports/curve-atomic-independent-review-20261012-01.json",
+        "sha256": "c302f5eb21de2856e5920db4ef0edeb8ff733908b3209e6397db9e0b53d2c780",
+        "result": "Initial R1 identifies wrapped child Halt ambiguity; original historical failures not labeled OOG."
+      },
+      {
+        "path": "docs/research/reports/strict-nested-independent-review-20261012-01.json",
+        "sha256": "2bd3e559d5a13396bcc9af051bd4ea5af67f5f45fb1f46dbaa9ca38960d1a9b2",
+        "result": "Generic Rust/client review; SN1 legacy-prefix guard found, independent controls 7/8."
+      },
+      {
+        "path": "docs/research/reports/strict-nested-independent-review-20261012-02.json",
+        "sha256": "3c7c2cf47b22b73f75a39e74346b848d9ed5984a25dd4529a8743fab446d7ba9",
+        "result": "Same controls 8/8; minimal delta inspection and pin/diff checks; no remaining bounded findings."
+      }
+    ]
+  },
+  "limitations": [
+    "Target production-reference quote/quoted/runtime dual execution still unverified; identity probes are not substitute amounts.",
+    "Original-TX call-prestate output and complete opportunity/funding/EV not replayed.",
+    "No route-pinned Adapter Replay/family_local conformance receipt; no formal adapter_merge_ready or production_gap_fixed claim.",
+    "Other Curve variants/active-ramp coverage remains scoped/incomplete; previous execution evidence not converted into current Ready evidence by relabeling hashes.",
+    "Local and representative performance NOT RUN; other worker live process protected.",
+    "All original Ready/strict failure evidence retained; no deployment, signing or broadcast.",
+    "The new TS strict classification requires the newly built sidecar for completed executor-program Revert evidence. Older binaries remain untouched and return incomplete for absent provenance; no operational rollout was performed."
+  ],
+  "preservedAttempts": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-rust-baseline.txt",
+      "result": "New real EVM negative fixture fails baseline missing metadata; retained."
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-ts-baseline.txt",
+      "result": "Two new transport tests fail old implementation; retained."
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-rust-candidate01.txt",
+      "result": "Compile E0614, corrected in candidate02; retained, not counted pass."
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-prefix-baseline.txt",
+      "result": "Invalid run: started before test upload completed, no target assertions; not execution evidence."
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-atomic-ready-current-attempt01",
+      "result": "First historical result retained; attempt02 uses new explicit provenance binary."
+    }
+  ]
+}
