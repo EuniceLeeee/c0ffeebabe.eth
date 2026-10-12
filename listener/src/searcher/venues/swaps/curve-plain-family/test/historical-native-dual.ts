@@ -39,6 +39,24 @@ export function historicalCurveNativeFamily(value: string = CURVE_PLAIN_FAMILY_I
   assert(value === CURVE_PLAIN_FAMILY_ID || value === CURVE_UNDERLYING_FAMILY_ID, "unknown native Curve family");
   return value;
 }
+/** Cover every issued direction, including multi-coin native-alias pools. A
+ * missing/duplicate graph direction must not silently shrink the test matrix. */
+export function assertHistoricalNativeDirectionCoverage(
+  edges: readonly { readonly tokenIn: string; readonly tokenOut: string }[],
+  routes: readonly { readonly tokenIn: string; readonly tokenOut: string }[],
+): number {
+  const keys = (rows: typeof edges) => rows.map(row => {
+    const input = ethers.getAddress(row.tokenIn).toLowerCase(), output = ethers.getAddress(row.tokenOut).toLowerCase();
+    assert.notEqual(input, output, "native acceptance cannot contain a self direction");
+    return `${input}>${output}`;
+  }).sort();
+  assert(routes.length > 0, "issued native directions required");
+  const expected = keys(routes), actual = keys(edges);
+  assert.equal(new Set(expected).size, expected.length, "duplicate issued native direction");
+  assert.equal(new Set(actual).size, actual.length, "duplicate native graph direction");
+  assert.deepEqual(actual, expected, "native graph must cover every issued direction exactly once");
+  return actual.length;
+}
 export function assertHistoricalNegativeRevert(response: any) {
   assert(response?.ok === true && response.success === false && response.strict?.outcome?.kind === "Revert" &&
     response.strict.outcome.phase === "main" && response.strict.outcome.nestedHalt === null,
@@ -122,7 +140,8 @@ async function main() {
     const instance = wiring.rehydrateVerifiedInstance({ memo: memos[0], cutoff: source }) as PreparedFamilyInstance;
     assertIssuedPreparedFamilyInstance({ family, instance, source, generation: source.generation });
     const edges = graph.filter(e => e.instanceKey === instance.instanceKey && same(e.target, pool));
-    assert.equal(edges.length, 2); assert.equal(instance.routes.length, 2);
+    const directionCount = assertHistoricalNativeDirectionCoverage(edges, instance.routes);
+    report.directionCount = directionCount;
     const code = loadBotVmRuntimeCode(owner); report.executorRuntimeCodeHash = code.keccak256;
     const artifact = JSON.parse(readFileSync(resolve(ROOT, "out/BotVM.sol/BotVM.json"), "utf8"));
     const metadata = typeof artifact.metadata === "string" ? JSON.parse(artifact.metadata) : artifact.metadata;
@@ -249,7 +268,8 @@ async function main() {
         sample.result = "passed";
       }
     }
-    assert.equal(report.samples.length, 4); assert.equal(report.wire.length, 16);
+    assert.equal(report.samples.length, directionCount * 2);
+    assert.equal(report.wire.length, directionCount * 8);
     assert.equal(sourceFingerprint(), report.sourceFingerprint, "source changed during evidence run");
     assert.equal(sha(readFileSync(readyPath)), report.readySha256); assert.equal(sha(readFileSync(pricePath)), report.pricesSha256);
     assert.equal(sha(readFileSync(args.get("--revm-bin")!)), report.revmSha256, "simulator changed during run");

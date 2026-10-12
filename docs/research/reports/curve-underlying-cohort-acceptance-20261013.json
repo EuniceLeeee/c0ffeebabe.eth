@@ -1,0 +1,1481 @@
+{
+  "schemaVersion": "curve-underlying-cohort-acceptance/v1",
+  "date": "2026-10-13",
+  "claim": "Four named pools passed natural historical single-block integration and same-N quote/quoted/runtime checks. Three retained failures remain; not all-cohort, full-Family, original-prestate, route, formal merge or performance acceptance.",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "executedHead": "570e61297a38473e3702df09247c1127ec93c630",
+  "workingSourceDiffSha256": "70b202aea9bd381044ae449d74215f873829c0ecda477f5537c99eb670deadbb",
+  "peerDirtyPreserved": true,
+  "productionCodeChanged": false,
+  "implementation": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/curve-plain-family/test/historical-native-dual.ts",
+      "sha256": "905e97771aa88b2cbe3922b549d4d1f18cae1dab1665fb206d3a01572548f598",
+      "bytes": 21314
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/curve-plain-family/test/historical-native-dual-contract.ts",
+      "sha256": "33de8c8997fc174918aa7b1191077d42c82923786bb54457011a5a27280a8371",
+      "bytes": 3640
+    }
+  ],
+  "pools": [
+    {
+      "pool": "0x4eBdF703948ddCEA3B11f675B4D1Fba9d2414A14",
+      "transactionHash": "0x4df016bdf45675f8680769ef3403712c92e76d7466fb0597d2cdb4c02cbe0db3",
+      "source": {
+        "number": 26018980,
+        "hash": "0x29e00078ff534b0c7e2347efd97b494d7f30e73eb4e0730fa78aada72c628bf0",
+        "generation": 26018980
+      },
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-4ebdf01/ready.json",
+        "sha256": "8c4d3e76048f64d3ddf0641e1d2e3c6c37342103f93c7f9858ad8ed2ef59a138",
+        "bytes": 97489
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-4ebdf01/prices/prices.json",
+        "sha256": "617567468f68ce847ab4020147d09be58d14bf2ed32e0dee04af39231102748e",
+        "bytes": 58014
+      },
+      "receipt": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-4ebdf01/receipt.json",
+        "sha256": "95fc1ae17feda70c7dec2e3e1e0035e40c291230214c499c3a5253ca4e19f4c8",
+        "bytes": 118615
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/dual-4ebdf-after01.json",
+        "sha256": "6dce3bb799dcbd625440496cff806dc971f393998ae5f55f36d35aa09a35bcab",
+        "bytes": 2164247
+      },
+      "directions": 6,
+      "naturalEffective": [
+        {
+          "edgeId": "curve-underlying\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f12012f91e804fb0f558e00c3fd74eff23e903c74431e532574ec39955e5c3796",
+          "instanceKey": "0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14",
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "5156134017648676598",
+          "status": "quoted",
+          "amountOut": "1997850202782999",
+          "effectiveMid": 0.00038747057309694745,
+          "quotedAt": {
+            "number": 26018980,
+            "hash": "0x29e00078ff534b0c7e2347efd97b494d7f30e73eb4e0730fa78aada72c628bf0",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xd533a949740bb3306d119cc777fa900ba034cd52\u001f6449c3ade47c2cdd06106c8cad9c7d072e6a9ce97a9dff6137bf995b3972ca16",
+          "instanceKey": "0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14",
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "5156134017648676598",
+          "status": "quoted",
+          "amountOut": "15608443579825234607",
+          "effectiveMid": 3.0271601797780785,
+          "quotedAt": {
+            "number": 26018980,
+            "hash": "0x29e00078ff534b0c7e2347efd97b494d7f30e73eb4e0730fa78aada72c628bf0",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xf939e0a03fb07f59a73314e73794be0e57ac1b4e\u001f719994b62edbe345d2b259b024d2d3bf64587aadf1dae97d3fa75f646a88e92c",
+          "instanceKey": "0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "2000000000000000",
+          "status": "quoted",
+          "amountOut": "5156134017648676598",
+          "effectiveMid": 2578.0670088243382,
+          "quotedAt": {
+            "number": 26018980,
+            "hash": "0x29e00078ff534b0c7e2347efd97b494d7f30e73eb4e0730fa78aada72c628bf0",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd533a949740bb3306d119cc777fa900ba034cd52\u001f101b950c4cd6beffbe3e8d8edc68d2d4868087067bf959729390b0b9c3083779",
+          "instanceKey": "0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "2000000000000000",
+          "status": "quoted",
+          "amountOut": "15616851928263677626",
+          "effectiveMid": 7808.425964131839,
+          "quotedAt": {
+            "number": 26018980,
+            "hash": "0x29e00078ff534b0c7e2347efd97b494d7f30e73eb4e0730fa78aada72c628bf0",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0xd533a949740bb3306d119cc777fa900ba034cd52>0xf939e0a03fb07f59a73314e73794be0e57ac1b4e\u001f11d11b4716ceef69982fead2c8c572a685be8720e7377eab94d3bad91743e5a7",
+          "instanceKey": "0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14",
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "15616851928263677626",
+          "status": "quoted",
+          "amountOut": "5153339058862335339",
+          "effectiveMid": 0.32998577962666875,
+          "quotedAt": {
+            "number": 26018980,
+            "hash": "0x29e00078ff534b0c7e2347efd97b494d7f30e73eb4e0730fa78aada72c628bf0",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14\u001f0xd533a949740bb3306d119cc777fa900ba034cd52>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f7c0264904a28f1e496e2a54e92c7b86e326cccc3dd5bf64e4fddf3cf270905ff",
+          "instanceKey": "0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14",
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "15616851928263677626",
+          "status": "quoted",
+          "amountOut": "1997842902028942",
+          "effectiveMid": 0.00012792865753008824,
+          "quotedAt": {
+            "number": 26018980,
+            "hash": "0x29e00078ff534b0c7e2347efd97b494d7f30e73eb4e0730fa78aada72c628bf0",
+            "generation": 1
+          }
+        }
+      ],
+      "productionReference": {
+        "mode": "default",
+        "wethInput": "2000000000000000",
+        "donor": false
+      },
+      "sourceFingerprint": "d6dd9c28f2681354b65dde49685a5666648281d7a54726b6784060ee79dbfe2d",
+      "familyDefinitionHash": "274f38d150d096f756938fb37ef0621fbab09878c062e8fc2ce4ee716ccad819",
+      "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+      "amounts": [
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "5156134017648676598",
+          "multiplier": "1",
+          "quoteAmountOut": "1997850202782999",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "5156134017648676598",
+              "actualAmountOut": "1997850202782999",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "5156134017648676598",
+              "actualAmountOut": "1997850202782999",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "51561340176486765980",
+          "multiplier": "10",
+          "quoteAmountOut": "19977936491700081",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "51561340176486765980",
+              "actualAmountOut": "19977936491700081",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "51561340176486765980",
+              "actualAmountOut": "19977936491700081",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "5156134017648676598",
+          "multiplier": "1",
+          "quoteAmountOut": "15608443579825234607",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "5156134017648676598",
+              "actualAmountOut": "15608443579825234607",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "5156134017648676598",
+              "actualAmountOut": "15608443579825234607",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "51561340176486765980",
+          "multiplier": "10",
+          "quoteAmountOut": "156077139182171226439",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "51561340176486765980",
+              "actualAmountOut": "156077139182171226439",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "51561340176486765980",
+              "actualAmountOut": "156077139182171226439",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "2000000000000000",
+          "multiplier": "1",
+          "quoteAmountOut": "5156134017648676598",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "5156134017648676598",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "5156134017648676598",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "20000000000000000",
+          "multiplier": "10",
+          "quoteAmountOut": "51559763352961062557",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "51559763352961062557",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "51559763352961062557",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "2000000000000000",
+          "multiplier": "1",
+          "quoteAmountOut": "15616851928263677626",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "15616851928263677626",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "15616851928263677626",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "20000000000000000",
+          "multiplier": "10",
+          "quoteAmountOut": "156162218760322846529",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "156162218760322846529",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "156162218760322846529",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "15616851928263677626",
+          "multiplier": "1",
+          "quoteAmountOut": "5153339058862335339",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "15616851928263677626",
+              "actualAmountOut": "5153339058862335339",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "15616851928263677626",
+              "actualAmountOut": "5153339058862335339",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "156168519282636776260",
+          "multiplier": "10",
+          "quoteAmountOut": "51530310355324936042",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "156168519282636776260",
+              "actualAmountOut": "51530310355324936042",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "156168519282636776260",
+              "actualAmountOut": "51530310355324936042",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "15616851928263677626",
+          "multiplier": "1",
+          "quoteAmountOut": "1997842902028942",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "15616851928263677626",
+              "actualAmountOut": "1997842902028942",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "15616851928263677626",
+              "actualAmountOut": "1997842902028942",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "156168519282636776260",
+          "multiplier": "10",
+          "quoteAmountOut": "19977401874086180",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "156168519282636776260",
+              "actualAmountOut": "19977401874086180",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "156168519282636776260",
+              "actualAmountOut": "19977401874086180",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        }
+      ],
+      "successfulExecutions": 24,
+      "noCurrentInputReverts": 24
+    },
+    {
+      "pool": "0x5426178799ee0a0181A89b4f57eFddfAb49941Ec",
+      "transactionHash": "0x20cd15f804bf2c420c2058f9d8f85f822c8aa3493758af32c97ab26cb9446e94",
+      "source": {
+        "number": 26019171,
+        "hash": "0x238c0a9f313ceb44384411b2b80bec53795883f4e93587d3fc003fb651fc6520",
+        "generation": 26019171
+      },
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-542601/ready.json",
+        "sha256": "5d0f48d875239228c9a69b5b6a17c9b6565df65ac8a175c2e3b376330688200b",
+        "bytes": 96885
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-542601/prices/prices.json",
+        "sha256": "cc2176f94cf03993b9b4cae521516b839df0a68040a33821a71358e19dcc42a0",
+        "bytes": 57837
+      },
+      "receipt": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-542601/receipt.json",
+        "sha256": "3ce1eadb61e9764a6cfa8e84be18a7f92b8854524608699d443682bb9f56a89b",
+        "bytes": 116136
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/dual-542601.json",
+        "sha256": "bce790bcb7d54a9855c40c7fbdca6cc65d6336e06555934fccae9b3327a89360",
+        "bytes": 2158254
+      },
+      "directions": 6,
+      "naturalEffective": [
+        {
+          "edgeId": "curve-underlying\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f6d733cac923f1aa8c828965a0cd4147ac626eb5ba21d9b0afec1b74268d21dfc",
+          "instanceKey": "0x5426178799ee0a0181a89b4f57efddfab49941ec",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "5152726",
+          "status": "quoted",
+          "amountOut": "1997642235092423",
+          "effectiveMid": 387686485.7732437,
+          "quotedAt": {
+            "number": 26019171,
+            "hash": "0x238c0a9f313ceb44384411b2b80bec53795883f4e93587d3fc003fb651fc6520",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68\u001ff8a2825b5cc440542be2e809883892c21eacdd30034946cba5713726adb5f0be",
+          "instanceKey": "0x5426178799ee0a0181a89b4f57efddfab49941ec",
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "amountIn": "5152726",
+          "status": "quoted",
+          "amountOut": "592758180696975739",
+          "effectiveMid": 115037784018.97864,
+          "quotedAt": {
+            "number": 26019171,
+            "hash": "0x238c0a9f313ceb44384411b2b80bec53795883f4e93587d3fc003fb651fc6520",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f4129c119a550cc0489f8fbaa280ca63a6a12358824c954af730feadaa764d89c",
+          "instanceKey": "0x5426178799ee0a0181a89b4f57efddfab49941ec",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "2000000000000000",
+          "status": "quoted",
+          "amountOut": "5152726",
+          "effectiveMid": 2.576363e-9,
+          "quotedAt": {
+            "number": 26019171,
+            "hash": "0x238c0a9f313ceb44384411b2b80bec53795883f4e93587d3fc003fb651fc6520",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68\u001f831f68ccb2ae701184107b6904b1e48f663380c45f02fffe7b1057bae5b79974",
+          "instanceKey": "0x5426178799ee0a0181a89b4f57efddfab49941ec",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "amountIn": "2000000000000000",
+          "status": "quoted",
+          "amountOut": "593217072182969352",
+          "effectiveMid": 296.60853609148467,
+          "quotedAt": {
+            "number": 26019171,
+            "hash": "0x238c0a9f313ceb44384411b2b80bec53795883f4e93587d3fc003fb651fc6520",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f6b14c5d3b6ce51ed3b111d16a2977f637edd565bbf8544ad10d6abe92f997d84",
+          "instanceKey": "0x5426178799ee0a0181a89b4f57efddfab49941ec",
+          "tokenIn": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "593217072182969352",
+          "status": "quoted",
+          "amountOut": "5148043",
+          "effectiveMid": 8.678177418353461e-12,
+          "quotedAt": {
+            "number": 26019171,
+            "hash": "0x238c0a9f313ceb44384411b2b80bec53795883f4e93587d3fc003fb651fc6520",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0x5426178799ee0a0181a89b4f57efddfab49941ec\u001f0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f1c56e68c4050a8f245706c29d58a9fdeae07d2bfba42e2de3b9505d06be7f21b",
+          "instanceKey": "0x5426178799ee0a0181a89b4f57efddfab49941ec",
+          "tokenIn": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "593217072182969352",
+          "status": "quoted",
+          "amountOut": "1997310006813865",
+          "effectiveMid": 0.0033669125527085696,
+          "quotedAt": {
+            "number": 26019171,
+            "hash": "0x238c0a9f313ceb44384411b2b80bec53795883f4e93587d3fc003fb651fc6520",
+            "generation": 1
+          }
+        }
+      ],
+      "productionReference": {
+        "mode": "default",
+        "wethInput": "2000000000000000",
+        "donor": false
+      },
+      "sourceFingerprint": "d6dd9c28f2681354b65dde49685a5666648281d7a54726b6784060ee79dbfe2d",
+      "familyDefinitionHash": "274f38d150d096f756938fb37ef0621fbab09878c062e8fc2ce4ee716ccad819",
+      "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+      "amounts": [
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "5152726",
+          "multiplier": "1",
+          "quoteAmountOut": "1997642235092423",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "5152726",
+              "actualAmountOut": "1997642235092423",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "5152726",
+              "actualAmountOut": "1997642235092423",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "51527260",
+          "multiplier": "10",
+          "quoteAmountOut": "19900935180169765",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "51527260",
+              "actualAmountOut": "19900935180169765",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "51527260",
+              "actualAmountOut": "19900935180169765",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "amountIn": "5152726",
+          "multiplier": "1",
+          "quoteAmountOut": "592758180696975739",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "5152726",
+              "actualAmountOut": "592758180696975739",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "5152726",
+              "actualAmountOut": "592758180696975739",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "amountIn": "51527260",
+          "multiplier": "10",
+          "quoteAmountOut": "5915220619682144066",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "51527260",
+              "actualAmountOut": "5915220619682144066",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "51527260",
+              "actualAmountOut": "5915220619682144066",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "2000000000000000",
+          "multiplier": "1",
+          "quoteAmountOut": "5152726",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "5152726",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "5152726",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "20000000000000000",
+          "multiplier": "10",
+          "quoteAmountOut": "51242322",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "51242322",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "51242322",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "amountIn": "2000000000000000",
+          "multiplier": "1",
+          "quoteAmountOut": "593217072182969352",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "593217072182969352",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "593217072182969352",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "amountIn": "20000000000000000",
+          "multiplier": "10",
+          "quoteAmountOut": "5914239285076234544",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "5914239285076234544",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "5914239285076234544",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "593217072182969352",
+          "multiplier": "1",
+          "quoteAmountOut": "5148043",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "593217072182969352",
+              "actualAmountOut": "5148043",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "593217072182969352",
+              "actualAmountOut": "5148043",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "5932170721829693520",
+          "multiplier": "10",
+          "quoteAmountOut": "51123470",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "5932170721829693520",
+              "actualAmountOut": "51123470",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "5932170721829693520",
+              "actualAmountOut": "51123470",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "593217072182969352",
+          "multiplier": "1",
+          "quoteAmountOut": "1997310006813865",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "593217072182969352",
+              "actualAmountOut": "1997310006813865",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "593217072182969352",
+              "actualAmountOut": "1997310006813865",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x41d5d79431a913c4ae7d69a668ecdfe5ff9dfb68",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "5932170721829693520",
+          "multiplier": "10",
+          "quoteAmountOut": "19849938264804763",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "5932170721829693520",
+              "actualAmountOut": "19849938264804763",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "5932170721829693520",
+              "actualAmountOut": "19849938264804763",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        }
+      ],
+      "successfulExecutions": 24,
+      "noCurrentInputReverts": 24
+    },
+    {
+      "pool": "0x053D5be7C653325B58D88B942fB2454f8Ffd8673",
+      "transactionHash": "0x45a21b27dc863d356250c863f5f3fa95a54b9552f3dfa3f3d17dcc086b398fe7",
+      "source": {
+        "number": 26041904,
+        "hash": "0x1eec80cffb264141234ddbf4aa9048f79995178f755bc5621316bcc1a8853822",
+        "generation": 26041904
+      },
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-053d01/ready.json",
+        "sha256": "fd30eb21ed4c17138d1012b5d96382cf7b0b4eabc90cc6607867dffd317f8463",
+        "bytes": 40091
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-053d01/prices/prices.json",
+        "sha256": "f7561db21770f85bb766860cfd77e9c3441f0456761ed17b439d1f1cee3921d1",
+        "bytes": 26962
+      },
+      "receipt": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-053d01/receipt.json",
+        "sha256": "8c8678b122c2f6a0e60aa1083bd470fece044a352e2e2bf1c18d596dac42bbed",
+        "bytes": 17440
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/dual-053d01.json",
+        "sha256": "279d9a2fcd895dff600f08858b73602cd79501d0bb48c0f75f783d93de61a4f3",
+        "bytes": 751833
+      },
+      "directions": 2,
+      "naturalEffective": [
+        {
+          "edgeId": "curve-underlying\u001f0x053d5be7c653325b58d88b942fb2454f8ffd8673\u001f0x053d5be7c653325b58d88b942fb2454f8ffd8673\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xe063f04f280c60aeca68b38341c2eecbec703ae2\u001fcc2514d44034239b7d6ee6f83a9f2eb31a3a211afe218990fbeeca92582ed3ca",
+          "instanceKey": "0x053d5be7c653325b58d88b942fb2454f8ffd8673",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xe063f04f280c60aeca68b38341c2eecbec703ae2",
+          "amountIn": "2000000000000000",
+          "status": "quoted",
+          "amountOut": "3647067077299838866",
+          "effectiveMid": 1823.5335386499196,
+          "quotedAt": {
+            "number": 26041904,
+            "hash": "0x1eec80cffb264141234ddbf4aa9048f79995178f755bc5621316bcc1a8853822",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x053d5be7c653325b58d88b942fb2454f8ffd8673\u001f0x053d5be7c653325b58d88b942fb2454f8ffd8673\u001f0xe063f04f280c60aeca68b38341c2eecbec703ae2>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fff2d931db4aa0eb4e1de7878d9e1557256a63881d24b99e186c9027f314f727f",
+          "instanceKey": "0x053d5be7c653325b58d88b942fb2454f8ffd8673",
+          "tokenIn": "0xe063f04f280c60aeca68b38341c2eecbec703ae2",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "3647067077299838866",
+          "status": "quoted",
+          "amountOut": "1981941958336331",
+          "effectiveMid": 0.0005434344683903351,
+          "quotedAt": {
+            "number": 26041904,
+            "hash": "0x1eec80cffb264141234ddbf4aa9048f79995178f755bc5621316bcc1a8853822",
+            "generation": 1
+          }
+        }
+      ],
+      "productionReference": {
+        "mode": "default",
+        "wethInput": "2000000000000000",
+        "donor": false
+      },
+      "sourceFingerprint": "d6dd9c28f2681354b65dde49685a5666648281d7a54726b6784060ee79dbfe2d",
+      "familyDefinitionHash": "274f38d150d096f756938fb37ef0621fbab09878c062e8fc2ce4ee716ccad819",
+      "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+      "amounts": [
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xe063f04f280c60aeca68b38341c2eecbec703ae2",
+          "amountIn": "2000000000000000",
+          "multiplier": "1",
+          "quoteAmountOut": "3647067077299838866",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "3647067077299838866",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "3647067077299838866",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xe063f04f280c60aeca68b38341c2eecbec703ae2",
+          "amountIn": "20000000000000000",
+          "multiplier": "10",
+          "quoteAmountOut": "36418456906497197900",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "36418456906497197900",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "36418456906497197900",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xe063f04f280c60aeca68b38341c2eecbec703ae2",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "3647067077299838866",
+          "multiplier": "1",
+          "quoteAmountOut": "1981941958336331",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "3647067077299838866",
+              "actualAmountOut": "1981941958336331",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "3647067077299838866",
+              "actualAmountOut": "1981941958336331",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xe063f04f280c60aeca68b38341c2eecbec703ae2",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "36470670772998388660",
+          "multiplier": "10",
+          "quoteAmountOut": "19791370706389087",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "36470670772998388660",
+              "actualAmountOut": "19791370706389087",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "36470670772998388660",
+              "actualAmountOut": "19791370706389087",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        }
+      ],
+      "successfulExecutions": 8,
+      "noCurrentInputReverts": 8
+    },
+    {
+      "pool": "0x6ec38b3228251a0C5D491Faf66858e2E23d7728B",
+      "transactionHash": "0x6a59fd7bfd63127c31a1c488c5a95b7003a135e345d36f17840c693e243f850c",
+      "source": {
+        "number": 26024481,
+        "hash": "0xd623babbe5b1d89b7979f582e77b5b4fa5d2fb0d9a06f043f77e97d19936049f",
+        "generation": 26024481
+      },
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-6ec301/ready.json",
+        "sha256": "74f7fb7467e2da29b148a78378468e144e1ce9f3736024040efb68072b8da712",
+        "bytes": 39889
+      },
+      "prices": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-6ec301/prices/prices.json",
+        "sha256": "34a9317ff39ed32508331399dba38a2f10390978bb4b370427d2c56774f744db",
+        "bytes": 26895
+      },
+      "receipt": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-6ec301/receipt.json",
+        "sha256": "c074a98e09bb08c95e685d1359f52deced17ddd5ddaf8ab81272ee63a6f553bd",
+        "bytes": 27618
+      },
+      "dual": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/dual-6ec301.json",
+        "sha256": "f9996b199cd5aa5fe0436be84428e57edf870c229ad19a423f19cd930bc53ab6",
+        "bytes": 751778
+      },
+      "directions": 2,
+      "naturalEffective": [
+        {
+          "edgeId": "curve-underlying\u001f0x6ec38b3228251a0c5d491faf66858e2e23d7728b\u001f0x6ec38b3228251a0c5d491faf66858e2e23d7728b\u001f0x64aa3364f17a4d01c6f1751fd97c2bd3d7e7f1d5>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f50d3cf593302a004e2d9df5f1ff64b290fc6c4ad9e8463e9c6c92b5e873daaad",
+          "instanceKey": "0x6ec38b3228251a0c5d491faf66858e2e23d7728b",
+          "tokenIn": "0x64aa3364f17a4d01c6f1751fd97c2bd3d7e7f1d5",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "264633350",
+          "status": "quoted",
+          "amountOut": "1982823553032959",
+          "effectiveMid": 7492719.844392096,
+          "quotedAt": {
+            "number": 26024481,
+            "hash": "0xd623babbe5b1d89b7979f582e77b5b4fa5d2fb0d9a06f043f77e97d19936049f",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "curve-underlying\u001f0x6ec38b3228251a0c5d491faf66858e2e23d7728b\u001f0x6ec38b3228251a0c5d491faf66858e2e23d7728b\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x64aa3364f17a4d01c6f1751fd97c2bd3d7e7f1d5\u001fd0266a532394bc15a3690095364e4ffbf51e0bec6dd63a18af81427c74b8bcd6",
+          "instanceKey": "0x6ec38b3228251a0c5d491faf66858e2e23d7728b",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x64aa3364f17a4d01c6f1751fd97c2bd3d7e7f1d5",
+          "amountIn": "2000000000000000",
+          "status": "quoted",
+          "amountOut": "264633350",
+          "effectiveMid": 1.32316675e-7,
+          "quotedAt": {
+            "number": 26024481,
+            "hash": "0xd623babbe5b1d89b7979f582e77b5b4fa5d2fb0d9a06f043f77e97d19936049f",
+            "generation": 1
+          }
+        }
+      ],
+      "productionReference": {
+        "mode": "default",
+        "wethInput": "2000000000000000",
+        "donor": false
+      },
+      "sourceFingerprint": "d6dd9c28f2681354b65dde49685a5666648281d7a54726b6784060ee79dbfe2d",
+      "familyDefinitionHash": "274f38d150d096f756938fb37ef0621fbab09878c062e8fc2ce4ee716ccad819",
+      "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+      "amounts": [
+        {
+          "tokenIn": "0x64aa3364f17a4d01c6f1751fd97c2bd3d7e7f1d5",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "264633350",
+          "multiplier": "1",
+          "quoteAmountOut": "1982823553032959",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "264633350",
+              "actualAmountOut": "1982823553032959",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "264633350",
+              "actualAmountOut": "1982823553032959",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0x64aa3364f17a4d01c6f1751fd97c2bd3d7e7f1d5",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "2646333500",
+          "multiplier": "10",
+          "quoteAmountOut": "19765440355361574",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "2646333500",
+              "actualAmountOut": "19765440355361574",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "2646333500",
+              "actualAmountOut": "19765440355361574",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x64aa3364f17a4d01c6f1751fd97c2bd3d7e7f1d5",
+          "amountIn": "2000000000000000",
+          "multiplier": "1",
+          "quoteAmountOut": "264633350",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "264633350",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "2000000000000000",
+              "actualAmountOut": "264633350",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x64aa3364f17a4d01c6f1751fd97c2bd3d7e7f1d5",
+          "amountIn": "20000000000000000",
+          "multiplier": "10",
+          "quoteAmountOut": "2638516029",
+          "runtimeConstructionRpc": 0,
+          "executions": [
+            {
+              "mode": "quoted",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "2638516029",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            },
+            {
+              "mode": "runtime",
+              "actualAmountIn": "20000000000000000",
+              "actualAmountOut": "2638516029",
+              "inputDeltaVsRequested": "0",
+              "outputDeltaVsQuote": "0",
+              "noCurrentInput": "passed"
+            }
+          ]
+        }
+      ],
+      "successfulExecutions": 8,
+      "noCurrentInputReverts": 8
+    }
+  ],
+  "totals": {
+    "passedPools": 4,
+    "directions": 16,
+    "successfulExecutions": 64,
+    "noCurrentInputReverts": 64
+  },
+  "harnessDefect": {
+    "before": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/dual-4ebdf-before01.json",
+      "sha256": "be5e88283c8a08e7c69f87753a9538c83cb6784b8585484765d6d086cfb72a00",
+      "bytes": 28716
+    },
+    "failure": {
+      "stage": "inputs",
+      "message": "Expected values to be strictly equal:\n\n6 !== 2\n"
+    },
+    "fix": "Require exact unique Graph/issued-route direction equality; size the unchanged positive/negative matrix from all issued directions, not a hardcoded two-coin pool.",
+    "regression": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/entrypoint-contract01.txt",
+      "sha256": "42b021b45ef86f86051593bc3084b399e5781c0f06a75a032dc781a60fcf5a3e",
+      "bytes": 831
+    },
+    "tests": "7/7",
+    "productionBuild": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/build-live01.txt",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "bytes": 71
+    }
+  },
+  "retainedFailures": {
+    "invalidSuccessAnchors": [
+      {
+        "tx": "0xa520edda7bd95363d3fcabacf2f0d8a96dff473193396d848fc7623967632512",
+        "N": 25969898,
+        "blockHash": "0x6a265e486c9958553b11adb3b15fae60f7ecf38a7e3304fdea9b3a369d80dfad",
+        "status": "0x0",
+        "conclusion": "Landed transaction failed. Not a successful underlying-call witness or proof this pool is unsupported."
+      },
+      {
+        "tx": "0xdb897a88585c2103e31907744ff509e07b63005c822253dd4d5a69ab9a1bbd7f",
+        "N": 25981246,
+        "blockHash": "0x9ce03120a9f18ee5e2d22596e0f86f24718049d728d01d42d35afd200480871a",
+        "status": "0x0",
+        "conclusion": "Landed transaction failed. Not a successful underlying-call witness or proof this pool is unsupported."
+      }
+    ],
+    "erc20OnlyUint": {
+      "pool": "0x3211c6cbef1429da3d0d58494938299c92ad5860",
+      "transactionHash": "0x6b02a33297a985d3e3a040d71321e98e5dd6e68d5c0fd99ce6ffc73bf94ed855",
+      "N": 26036250,
+      "blockHash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee",
+      "receipt": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-321101/receipt.json",
+        "sha256": "0c790ce3805bdba2f1e429363677064854a04a028a72694f27bb690143031e68",
+        "bytes": 20713
+      },
+      "ready": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/ready-321101/ready.json",
+        "sha256": "1a68b6d1b570d831b5ef64defba3956214cf5eedff123b23dbd28120c6fc619c",
+        "bytes": 8007
+      },
+      "readyResult": "retryable identity, zero target graph directions",
+      "registryEvidence": [
+        {
+          "method": "get_underlying_coins",
+          "pool": "0x3211c6cbef1429da3d0d58494938299c92ad5860",
+          "pin": {
+            "blockHash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee",
+            "requireCanonical": true
+          },
+          "request": {
+            "to": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC",
+            "data": "0xa77576ef0000000000000000000000003211c6cbef1429da3d0d58494938299c92ad5860"
+          },
+          "data": "0x000000000000000000000000af5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "addresses": [
+            "0xAf5191B0De278C7286d6C7CC6ab6BB8A73bA2Cd6",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000"
+          ]
+        },
+        {
+          "method": "get_coins",
+          "pool": "0x3211c6cbef1429da3d0d58494938299c92ad5860",
+          "pin": {
+            "blockHash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee",
+            "requireCanonical": true
+          },
+          "request": {
+            "to": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC",
+            "data": "0x9ac90d3d0000000000000000000000003211c6cbef1429da3d0d58494938299c92ad5860"
+          },
+          "data": "0x000000000000000000000000af5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "addresses": [
+            "0xAf5191B0De278C7286d6C7CC6ab6BB8A73bA2Cd6",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000"
+          ]
+        },
+        {
+          "method": "get_registry_handlers_from_pool",
+          "pool": "0x3211c6cbef1429da3d0d58494938299c92ad5860",
+          "pin": {
+            "blockHash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee",
+            "requireCanonical": true
+          },
+          "request": {
+            "to": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC",
+            "data": "0x308d1b6d0000000000000000000000003211c6cbef1429da3d0d58494938299c92ad5860"
+          },
+          "data": "0x000000000000000000000000c4f389020002396143b863f6325aa6ae481d19ce000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "addresses": [
+            "0xC4F389020002396143B863F6325aA6ae481D19CE",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000"
+          ]
+        }
+      ],
+      "cachedTrace": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/coffee-tx-ready-20261008/checkpoint.json.transactions/trace-0x6b02a33297a985d3e3a040d71321e98e5dd6e68d5c0fd99ce6ffc73bf94ed855-0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee.json.gz",
+        "sha256": "19dc2c49bd7532a68e7ebb9fe4ece2e7da8113e831aebb2a3190a7a5f84e9b4c",
+        "bytes": 3141
+      },
+      "successfulCall": {
+        "traceAddress": [
+          0,
+          3,
+          4
+        ],
+        "selector": "0x65b2489b",
+        "value": "0x0",
+        "amountIn": "175056088253548130293",
+        "returnedAmountOut": "22552984",
+        "ancestorErrors": []
+      },
+      "firstGap": "Successful uint exchange_underlying on identical direct/underlying STG/USDC registry topology; get_dy_underlying int128 returns empty, while the current alternative identity requires WETH. New pure-ERC20 uint-alias coverage is not implemented or accepted by this report.",
+      "nextAction": "Add separately proven ERC20-only uint semantics inside Curve Underlying without weakening reverse identity, per-direction execution proofs or shared inventory safety; then rerun this retained single-block copy."
+    },
+    "receiptRegistryEvidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/receipt-registry-check01.json",
+      "sha256": "ae56d0149a21ef1e4c8625e49d4e0d121218efbffed78d0f0d627efa6f9671ec",
+      "bytes": 6822
+    },
+    "sequentialAttemptManifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/remaining-status01.json",
+      "sha256": "9b3f4e30887c16b1529ba3bf869706cd3d9e1f8788f5c8b63502300b4f7fdc98",
+      "bytes": 2983
+    },
+    "setupFailure": "Initial tool-index failed on repository ownership before test invocation. Per-process safe.directory fixed the setup; no global Git configuration changed."
+  },
+  "tools": {
+    "manifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-cohort-20261013.hES0xa/tools02.json",
+      "sha256": "4e3b9868efea55b8a08f94cefcda0a51cbffffae4c53bb48d6d41dad28a6452e",
+      "bytes": 6061
+    },
+    "query": [
+      "curve",
+      "underlying"
+    ],
+    "selected": [
+      "listener:searcher:curve-underlying-family-plugin"
+    ],
+    "reconciliation": "Indexed offline contract passed. Production-backed Family Ready/dual CLIs independently ran the historical states. Legacy fixture success is not substituted for historical execution."
+  },
+  "independentReview": {
+    "agent": "Mill",
+    "id": "01a130fe-0149-7862-9320-c9f7080f5cef",
+    "passes": 1,
+    "result": "no blocking findings",
+    "checked": "Candidate two-file change and local raw 4ebdf before/after receipts, contexts, 24 positive/24 negative responses; did not rerun EVM/build or inspect binary; other three pool records are main-agent verified."
+  },
+  "limitations": [
+    "Original TX pre-call states and original output equivalence not replayed.",
+    "Current authenticated BotVM is a local code override, not a deployment or historical executor reproduction.",
+    "Same-N tests use current working production source including preserved peer edits; HEAD alone is not the entire tested source.",
+    "Two failed-TX anchors need authentic replacement observations before historical success acceptance.",
+    "Pure ERC20 uint instance remains an actionable adaptation gap.",
+    "All local and representative performance remains NOT RUN; other window live left untouched. No no-latency claim is inferred from correctness runtime."
+  ],
+  "safety": {
+    "signing": false,
+    "broadcast": false,
+    "deployment": false,
+    "liveStarted": false,
+    "performanceRuns": 0,
+    "originalCoffeeReadyModified": false
+  }
+}

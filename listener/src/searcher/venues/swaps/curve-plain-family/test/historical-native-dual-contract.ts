@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { verifyHistoricalQuoteCaller } from "./historical-native-dual.js";
+import { assertHistoricalNativeDirectionCoverage, verifyHistoricalQuoteCaller } from "./historical-native-dual.js";
 
 const executor = `0x${"12".repeat(20)}`;
 const tx = { to: `0x${"34".repeat(20)}`, data: "0x12345678", blockTag: 123 };
@@ -32,4 +32,25 @@ test("caller-dependent results, alien callers and wrong source reject before acc
     await assert.rejects(verifyHistoricalQuoteCaller({ tx: invalid, sourceNumber: 123, pin, executor, wire: [],
       async send() { assert.fail("invalid caller/source must not reach RPC"); } }));
   }
+});
+
+const coins = ["12", "34", "56"].map(byte => `0x${byte.repeat(20)}`);
+const directions = (tokens: readonly string[]) => tokens.flatMap(tokenIn => tokens
+  .filter(tokenOut => tokenOut !== tokenIn).map(tokenOut => ({ tokenIn, tokenOut })));
+
+test("native acceptance covers all two-coin and three-coin issued directions", () => {
+  for (const tokens of [coins.slice(0, 2), coins]) {
+    const routes = directions(tokens);
+    assert.equal(assertHistoricalNativeDirectionCoverage([...routes].reverse(), routes), tokens.length * (tokens.length - 1));
+  }
+});
+
+test("missing, extra or duplicate native directions cannot reduce the acceptance matrix", () => {
+  const routes = directions(coins);
+  assert.throws(() => assertHistoricalNativeDirectionCoverage(routes.slice(0, 2), routes), /every issued direction/);
+  assert.throws(() => assertHistoricalNativeDirectionCoverage(routes, routes.slice(0, 2)), /every issued direction/);
+  assert.throws(() => assertHistoricalNativeDirectionCoverage([...routes.slice(0, -1), routes[0]!], routes), /duplicate native graph/);
+  assert.throws(() => assertHistoricalNativeDirectionCoverage(routes, [...routes, routes[0]!]), /duplicate issued/);
+  assert.throws(() => assertHistoricalNativeDirectionCoverage([], []), /issued native directions required/);
+  assert.throws(() => assertHistoricalNativeDirectionCoverage([{ tokenIn: coins[0]!, tokenOut: coins[0]! }], routes), /self direction/);
 });
