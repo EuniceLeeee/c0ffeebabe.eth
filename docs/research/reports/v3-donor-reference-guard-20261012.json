@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-12",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "headAtStart": "8b9040b6eb81b5630175152de3ea0d710ae063a3",
+  "claim": "Test-only repair: recorded donor inputs may fill missing valuation, but must not replace a failed target quote or an already recorded target input. Not a new historical Family execution or performance pass.",
+  "status": "implemented-and-offline-regressions-passed",
+  "priorGoalTurn": {
+    "classification": "progress",
+    "evidence": "41e2321 and 8b9040b committed/pushed Curve borrowed-input same-state execution evidence and the original IMPL-table update."
+  },
+  "implementation": {
+    "files": [
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+        "sha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.test.ts",
+        "sha256": "7bc0d0464b8f0b1817fe8536833dd18fda1b87c0ee8d3bf7fcbf634146c94858"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+        "sha256": "6d6c5c82fd971d5a55c50817b0738d7524e7f129ec60d5f8fc24af37dffbec54"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v3-family/test/historical-runtime-dual.ts",
+        "sha256": "d609e8faf46c5a0ea553ff2a3db1e9b3237e6a9d79e60498d72c2e773ba46de7"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v3-family/test/contract.ts",
+        "sha256": "d5b1096a04cd9f9dd6d83d9f2fb62bce10196ca44e3c8677ce62418d65b28644"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/test/infinifi-historical-dual.ts",
+        "sha256": "31e36455a5a9011d6e9ccb0a8eec99c06c76fc809b032f0b90c09b020b33f90d"
+      }
+    ],
+    "productionCodeChanged": false,
+    "defaultParametersChanged": false,
+    "meaning": "A narrow shared test helper validates the target gap and input-token identity before retaining existing donor source/graph/config/freshness checks. V3 and the shared historical dual runner use it. The lower-level reader is retained for explicit diagnostic amount comparisons; the target row is never mutated. InfiniFi uses the guard only for an unmet N-state reference. Intentional N+1 same-input controls and supplementary donor trials after a valid target reference retain the authenticated lower-level reader."
+  },
+  "regressions": {
+    "baseline": {
+      "scope": "Original V3 inline selection extracted without changing its decision, with six new offline contract tests; not a failed on-chain execution.",
+      "pass": 2,
+      "fail": 4,
+      "exitCode": 1,
+      "log": "logs/four-family-coverage-20261012.zHKuWX/v3-donor-guard-baseline01.txt",
+      "sha256": "4dd2431fbf66e90145be4d9aad8e41c91d3d48234a8691f0a5d7ccfb1db20899",
+      "extractionPatch": "logs/four-family-coverage-20261012.zHKuWX/v3-donor-guard-baseline01.patch",
+      "patchSha256": "df78d31a5e6b3c5c94f3ad86ea3019e235ed76fa1e5f555a381424a2d30308e8"
+    },
+    "initialLocalGuard": {
+      "pass": 6,
+      "fail": 0,
+      "exitCode": 0,
+      "log": "logs/four-family-coverage-20261012.zHKuWX/v3-donor-guard-candidate01.txt",
+      "scope": "Before extracting the same guard to the shared test helper; final full suites follow."
+    },
+    "v3Final": {
+      "pass": 24,
+      "fail": 0,
+      "exitCode": 0,
+      "log": "logs/four-family-coverage-20261012.zHKuWX/v3-donor-contract-final01.txt",
+      "sha256": "e9bf5eec993872b84d7ab1e89a096d089f694fe467d281d0a379736017147a63"
+    },
+    "sharedFinal": {
+      "pass": 150,
+      "fail": 0,
+      "exitCode": 0,
+      "log": "logs/four-family-coverage-20261012.zHKuWX/infinifi-donor-shared-final02.txt",
+      "sha256": "21214b69daea8e1a76c900d7d170751e298a017246278ca62ea43be56232dab6",
+      "scope": [
+        "shared evidence.test.ts",
+        "historical-input-origin.test.ts",
+        "Curve historical-runtime-dual-safety.test.ts",
+        "InfiniFi contract"
+      ],
+      "includes": "Ten InfiniFi donor-selection tests plus actual disabled-for-run/cancelled and non-null failed-input shared negative fixtures."
+    },
+    "buildLive": {
+      "exitCode": 0,
+      "log": "logs/four-family-coverage-20261012.zHKuWX/infinifi-donor-build-live-final01.txt",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    "sharedFiveFile": {
+      "pass": 128,
+      "fail": 0,
+      "exitCode": 0,
+      "log": "logs/four-family-coverage-20261012.zHKuWX/v3-donor-shared-final01.txt",
+      "sha256": "a90d53931697408752d350099a572e4febd0da614a804a94edbfd1259e3dd896"
+    },
+    "infinifiBaseline": {
+      "pass": 4,
+      "fail": 4,
+      "exitCode": 1,
+      "scope": "Original branch extracted without a guard; eight offline counterexamples/controls. Not a failed historical protocol call.",
+      "log": "logs/four-family-coverage-20261012.zHKuWX/infinifi-donor-baseline01.txt",
+      "sha256": "9231b890de6e2cf521ee35c41aac37d1ad92cd07b744f09d3c8cb51128173166",
+      "extractionPatch": "logs/four-family-coverage-20261012.zHKuWX/infinifi-donor-baseline01.patch",
+      "patchSha256": "3fd7613c0d403e9045796d277222b3a7ce27c2f8a10a4cdd54eb58aae7e4d833"
+    },
+    "infinifiInitialFull": {
+      "pass": 148,
+      "fail": 0,
+      "exitCode": 0,
+      "log": "logs/four-family-coverage-20261012.zHKuWX/infinifi-donor-shared-final01.txt",
+      "note": "Before the two additional actual enum-status tests; preserved, not substituted for the final150."
+    },
+    "manifestCheck": {
+      "exitCode": 0,
+      "log": "logs/four-family-coverage-20261012.zHKuWX/v3-donor-manifest-final01.txt",
+      "sha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef",
+      "scope": "Completed before InfiniFi test-only change; no production capability source changed. Peer-generated catalog was not staged."
+    }
+  },
+  "toolReconciliation": {
+    "query": [
+      "balancer",
+      "v3"
+    ],
+    "manifest": "logs/four-family-coverage-20261012.zHKuWX/v3-donor-guard-tools02.json",
+    "sha256": "1cfc674c4b4da1bf26e29c50d887b4ace42a4c683c239261107510ee96ea65a1",
+    "executedTool": "listener:searcher:balancer-v3",
+    "descriptorSha256": "8db742bc8df4e26e65a482ff85fa14935fa3aecd22c2d1d9e1eeafe07505c4ec",
+    "exitCode": 0,
+    "startedAt": "2026-10-12T13:16:30.019Z",
+    "finishedAt": "2026-10-12T13:16:32.119Z",
+    "initialInventoryFailure": "The first query used the unsupported single capability balancer-v3 and exited 2 before tool execution; its log is retained as v3-donor-tool-index01.txt."
+  },
+  "limitations": [
+    "No new RPC, fork, Ready rebuild, original-TX replay, simulation/EV or latency acceptance was run for this repair.",
+    "cUNI, three legacy Set directions and V3 siUSD reverse reference gaps are not closed by these tests.",
+    "The counterexamples prove a test-tool defect, not an actual protocol failure or historical false pass. Historical impact checking is bounded as documented.",
+    "Other-window live PIDs 406305/406318/406337 and peer source changes are preserved; no deployment/signing/broadcast."
+  ],
+  "codify_commit": "89a77eacb90651a30b067d4cb00c96581d5c7494",
+  "erc4626ToolReconciliation": {
+    "query": [
+      "erc4626"
+    ],
+    "manifest": "logs/four-family-coverage-20261012.zHKuWX/infinifi-donor-tools01.json",
+    "sha256": "94e7a6abf8892bf1ac101a553312c269bbdb78745cdcd0cc362d85f305b9e88d",
+    "executedTool": "listener:searcher:erc4626-family-plugin",
+    "descriptorSha256": "8abff8b794b5bcf992a9a947f3d0fe81a4c47599705e185b8d7c4f18d7e9e465",
+    "startedAt": "2026-10-12T13:35:39.481Z",
+    "finishedAt": "2026-10-12T13:35:40.055Z",
+    "exitCode": 0,
+    "log": "logs/four-family-coverage-20261012.zHKuWX/infinifi-donor-family-final01.txt",
+    "logSha256": "3122e1e058d570737bf8be918fe2cfc6b7f74961a0c44f4b5c784642fa6eacd9",
+    "scope": "Offline ERC4626 lifecycle/Family contracts, not historical execution."
+  },
+  "independentReview": {
+    "agent": "01a13038-05d5-7983-9028-1530e6ed20ad",
+    "name": "Huygens",
+    "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/v3-donor-reference-independent-review-20261012.json",
+    "sha256": "b24c7b38ec27f7f62e69dd39585c8824fb2f2f874b1cce1824894cd32438b140",
+    "verdict": "Original V3/shared defect confirmed; five-file candidate has no blocking finding. Separate InfiniFi N-state unmet branch needed the same guard.",
+    "followup": "Main agent implemented that branch-specific recommendation, reproduced4 failures, then passed150 related tests. Supplemental N+1/met-P paths remain available.",
+    "limit": "Reviewer did not rerun EVM, tests, performance or independently rereview the final InfiniFi patch. Its five-file review predates the added negative fixtures."
+  },
+  "historicalImpact": {
+    "independentlyChecked": "No ineligible failed-target substitution found in bounded reviewed V3/Compound/other indexed samples; not an all-history claim.",
+    "v3": "Cumulative35/36 reference directions retained;12 are borrowed-input-only, not natural target valuation. No new historical run.",
+    "infinifiMainAgentCheck": {
+      "path": "logs/erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-natural-ready-1/prices/prices.json",
+      "sha256": "b039f7ae7400e841c27d360f3e2493704fa02199c7ad1661db9d66f5b42d2c2c",
+      "rows": [
+        {
+          "tokenIn": "0x48f9e38f3070ad8945dfeae3fa70987722e3d89c",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null
+        },
+        {
+          "tokenIn": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null
+        }
+      ],
+      "claim": "These target rows are eligible for missing-input-only borrowing; their outputs/admission are not borrowed. Not reauthentication of all archived InfiniFi executions."
+    }
+  },
+  "originalImplTable": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "beforeSha256": "84a8e5293f64e08653f84a330bb8020d14e6caff534fd2cd216f5f49d70bc30e",
+    "afterSha256": "41e6454d36c842c575c9fabe3327048c2e65b7d3289bfd8f952ad463346be40f",
+    "patch": "docs/research/reports/v3-donor-impl-table-20261012.patch",
+    "patchSha256": "2bad38f47ef2ceff034617043336e58ca11fc5c434f96ad2f1c5c4498a0ca69e",
+    "rows": [
+      "Balancer V3 (including InfiniFi bridge notes)",
+      "Compound V2 cToken"
+    ],
+    "meaning": "Only tool-fix notes appended. Existing historical coverage and missing reference/performance gates retained."
+  }
+}
