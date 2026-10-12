@@ -1,0 +1,692 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T03:15:16.580Z",
+  "scope": "Historical CLI search-parameter diagnostics using saved production Planner inputs; not real EVM or profitability acceptance",
+  "source": {
+    "repo": "/opt/mev-cloud/family-runtime-20261007",
+    "head": "f1c189acf217269e35afaef46f4635d7300b76bc",
+    "dirty": true,
+    "sourceTreeSha256": "2e5871b5e45ced8e6b46f2314787b08bfe4611a38545dbe0ee8e9f32ad3fb7a3",
+    "fullSrcSha256": "8cf94a28f8105b52501d03ad435e3ad58dfc854e609afd416cdd8f54b254e894",
+    "canonicalFileCount": 1138,
+    "frozenListener": "/opt/mev-cloud/family-runtime-20261007/logs/planner-offline-5b6114-20261012.lExPxG/frozen/listener"
+  },
+  "historicalState": {
+    "parent": {
+      "number": 26152606,
+      "hash": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+      "stateRoot": "0xb013ee88cd486c5e84d01f7d0c0d702e692d94240c84151e959c40ba185e0924"
+    },
+    "target": {
+      "number": 26152607,
+      "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369"
+    },
+    "trigger": {
+      "index": 3,
+      "hash": "0x50354ee2a5ada3aec4d176ec8e127723f3de40e20b0d5f9e9f31f13a099796ae"
+    },
+    "prerequisites": [
+      {
+        "index": 0,
+        "hash": "0x59743878f140db2e0c1b9cbd9450b37735b842cb3085d0a1c13b7325e7daa6b3"
+      },
+      {
+        "index": 1,
+        "hash": "0xc653c146b30178b2e17051e2c0cf7a61a52c6ffb28a3f522bc8d6c3e1944eae0"
+      },
+      {
+        "index": 2,
+        "hash": "0xb131a2f02d80d911cfc5af070cfb7e6814006e0e5a7290723c3a2c5802c0533c"
+      }
+    ],
+    "derivedHeader": {
+      "number": "0x18f0e9f",
+      "hash": "0xee03eae748066df770a5c667377c549cc3f66b4ad8025990df68c2e96c518561",
+      "stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "difficulty": "0x67cffbc75673333fd5ecd2c6cb3c3a2907d3cf5f846ae1dab9edfa0e72f50537"
+    },
+    "stateReexecuted": false,
+    "topology": "N hindsight topology, not pre-B natural discovery proof",
+    "limitations": [
+      "materialized PREVRANDAO differs from canonical N",
+      "EIP4788 block-start update not complete",
+      "not strict causal gate evidence"
+    ]
+  },
+  "lane": "backrun",
+  "txHash": "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+  "baseline": {
+    "exact": true,
+    "compared": "both ordered full CandidatePlan arrays, including full tokenPath and flash fields",
+    "perOpportunity": [
+      {
+        "opportunityIndex": 1,
+        "count": 20,
+        "exact": true
+      },
+      {
+        "opportunityIndex": 2,
+        "count": 20,
+        "exact": true
+      }
+    ]
+  },
+  "parameters": {
+    "currentUserRequestedPoolsPerToken": 10,
+    "currentResolved": {
+      "planner": {
+        "maxHops": 6,
+        "maxCandidates": 500,
+        "maxPoolsPerToken": 10,
+        "maxRotationsPerPath": 3
+      },
+      "execution": {
+        "minProfit": "1",
+        "forkRefreshBlocks": 5,
+        "solverDeadlineMs": 300000,
+        "solverQuoteConcurrency": 6,
+        "oppTtlMs": 1200000,
+        "planBudgetMs": 30000,
+        "oppMinSliceMs": 500,
+        "gssMaxTries": 12,
+        "finalSimTopN": 3,
+        "maxCandidatesPerOpp": 0,
+        "quoteSafetyBps": "10000",
+        "quoteToleranceRawUnits": "1",
+        "quoteProfitFloorBps": "20",
+        "revmPrewarmRouteHops": 0,
+        "allowHashOnlySubmit": false,
+        "allowHashOnlyMevShareSubmit": false
+      }
+    },
+    "historicalRequestLimitUnchanged": 20000,
+    "historicalWallLimitMsUnchanged": 1200000,
+    "productionDefaultsChanged": false,
+    "currentConfig": "/Users/eunice/src/MEV/logs/enum-integration-20261011.dh5pIr/backrun/diagnostic-config-cli-degree10-20261012.json",
+    "previousConfigurationsPreserved": true,
+    "currentSource": "explicit CLI configuration only"
+  },
+  "groups": [
+    {
+      "opportunityIndex": 1,
+      "maxCandidates": 20,
+      "maxPoolsPerToken": 8,
+      "plans": 20,
+      "candidateCapReached": true,
+      "deadlineAtReturnExceeded": false,
+      "full5Ranks": [],
+      "core3ExactRingRanks": [],
+      "core3ContiguousRanks": [],
+      "targetLegUsage": [
+        0,
+        0,
+        0,
+        0,
+        20
+      ],
+      "rawDfsTruncated": "unknown"
+    },
+    {
+      "opportunityIndex": 2,
+      "maxCandidates": 20,
+      "maxPoolsPerToken": 8,
+      "plans": 20,
+      "candidateCapReached": true,
+      "deadlineAtReturnExceeded": false,
+      "full5Ranks": [],
+      "core3ExactRingRanks": [],
+      "core3ContiguousRanks": [],
+      "targetLegUsage": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "rawDfsTruncated": "unknown"
+    },
+    {
+      "opportunityIndex": 1,
+      "maxCandidates": 200,
+      "maxPoolsPerToken": 8,
+      "plans": 101,
+      "candidateCapReached": false,
+      "deadlineAtReturnExceeded": false,
+      "full5Ranks": [],
+      "core3ExactRingRanks": [],
+      "core3ContiguousRanks": [],
+      "targetLegUsage": [
+        0,
+        0,
+        0,
+        0,
+        101
+      ],
+      "rawDfsTruncated": "unknown"
+    },
+    {
+      "opportunityIndex": 2,
+      "maxCandidates": 200,
+      "maxPoolsPerToken": 8,
+      "plans": 56,
+      "candidateCapReached": false,
+      "deadlineAtReturnExceeded": false,
+      "full5Ranks": [],
+      "core3ExactRingRanks": [],
+      "core3ContiguousRanks": [],
+      "targetLegUsage": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "rawDfsTruncated": "unknown"
+    },
+    {
+      "opportunityIndex": 1,
+      "maxCandidates": 200,
+      "maxPoolsPerToken": 64,
+      "plans": 200,
+      "candidateCapReached": true,
+      "deadlineAtReturnExceeded": false,
+      "full5Ranks": [],
+      "core3ExactRingRanks": [],
+      "core3ContiguousRanks": [],
+      "targetLegUsage": [
+        2,
+        2,
+        0,
+        0,
+        0
+      ],
+      "rawDfsTruncated": "unknown"
+    },
+    {
+      "opportunityIndex": 2,
+      "maxCandidates": 200,
+      "maxPoolsPerToken": 64,
+      "plans": 200,
+      "candidateCapReached": true,
+      "deadlineAtReturnExceeded": false,
+      "full5Ranks": [],
+      "core3ExactRingRanks": [],
+      "core3ContiguousRanks": [],
+      "targetLegUsage": [
+        0,
+        0,
+        0,
+        72,
+        16
+      ],
+      "rawDfsTruncated": "unknown"
+    },
+    {
+      "opportunityIndex": 1,
+      "maxCandidates": 500,
+      "maxPoolsPerToken": 64,
+      "plans": 468,
+      "candidateCapReached": false,
+      "deadlineAtReturnExceeded": false,
+      "full5Ranks": [],
+      "core3ExactRingRanks": [],
+      "core3ContiguousRanks": [],
+      "targetLegUsage": [
+        6,
+        6,
+        0,
+        0,
+        0
+      ],
+      "rawDfsTruncated": "unknown"
+    },
+    {
+      "opportunityIndex": 2,
+      "maxCandidates": 500,
+      "maxPoolsPerToken": 64,
+      "plans": 500,
+      "candidateCapReached": true,
+      "deadlineAtReturnExceeded": false,
+      "full5Ranks": [],
+      "core3ExactRingRanks": [],
+      "core3ContiguousRanks": [],
+      "targetLegUsage": [
+        0,
+        0,
+        0,
+        123,
+        32
+      ],
+      "rawDfsTruncated": "unknown"
+    },
+    {
+      "opportunityIndex": 1,
+      "maxCandidates": 500,
+      "maxPoolsPerToken": 10,
+      "plans": 270,
+      "candidateCapReached": false,
+      "deadlineAtReturnExceeded": false,
+      "full5Ranks": [],
+      "core3ExactRingRanks": [],
+      "core3ContiguousRanks": [],
+      "targetLegUsage": [
+        0,
+        0,
+        0,
+        40,
+        270
+      ],
+      "rawDfsTruncated": "unknown"
+    },
+    {
+      "opportunityIndex": 2,
+      "maxCandidates": 500,
+      "maxPoolsPerToken": 10,
+      "plans": 113,
+      "candidateCapReached": false,
+      "deadlineAtReturnExceeded": false,
+      "full5Ranks": [],
+      "core3ExactRingRanks": [],
+      "core3ContiguousRanks": [],
+      "targetLegUsage": [
+        0,
+        0,
+        0,
+        44,
+        12
+      ],
+      "rawDfsTruncated": "unknown"
+    }
+  ],
+  "interpretation": {
+    "degree10TotalPlans": 383,
+    "ninthFluidEdgeNowUsed": [
+      40,
+      44
+    ],
+    "targetFull5Found": false,
+    "targetCore3Found": false,
+    "degree10FirstCoreGap": "Target V4 WETH-to-USDT is outgoing ordinal 30, non-pinned ordinal 29 with one pinned edge; degree10 cannot retain it. Fluid USDT-to-USDC ordinal9 is retained and appears in plans.",
+    "pinAndOrderEvidence": [
+      {
+        "opportunityIndex": 1,
+        "template": "flash-lend-swap-repay",
+        "startToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "pinnedPool": "0xe0554a476a092703abdb3ef35c80e0d76d32939f",
+        "rows": [
+          {
+            "targetLeg": 3,
+            "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73",
+            "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xdac17f958d2ee523a2206206994597c13d831ec7\u001fe9f4c86030b758bf665f32a1478b6fc3732a15f758def6c9df7ba07510211f81",
+            "outgoingCount": 31,
+            "outgoingOrdinal": 30,
+            "allScoresZero": true,
+            "pinned": false,
+            "pinnedCount": 1,
+            "nonPinnedOrdinal": 29,
+            "degree8ScoredAllowance": 7,
+            "outsideDegree8Allowance": true,
+            "degree64ExceedsOutgoingCount": true
+          },
+          {
+            "targetLeg": 4,
+            "instanceKey": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+            "canonicalEdgeId": "fluid-dex\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f059edb097760dcf5d6b3143eec02c1b7cfdbb58eac93463d7fc1cd1dec6131a3",
+            "outgoingCount": 20,
+            "outgoingOrdinal": 9,
+            "allScoresZero": true,
+            "pinned": false,
+            "pinnedCount": 0,
+            "nonPinnedOrdinal": 9,
+            "degree8ScoredAllowance": 8,
+            "outsideDegree8Allowance": true,
+            "degree64ExceedsOutgoingCount": true
+          }
+        ],
+        "evidenceKind": "post-output arithmetic on actual hydrated template-filtered input order plus production pin contract; no search reimplementation and no production kept-edge instrumentation"
+      },
+      {
+        "opportunityIndex": 1,
+        "template": "flash-swap-repay",
+        "startToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "pinnedPool": "0xe0554a476a092703abdb3ef35c80e0d76d32939f",
+        "rows": [
+          {
+            "targetLeg": 3,
+            "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73",
+            "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xdac17f958d2ee523a2206206994597c13d831ec7\u001fe9f4c86030b758bf665f32a1478b6fc3732a15f758def6c9df7ba07510211f81",
+            "outgoingCount": 31,
+            "outgoingOrdinal": 30,
+            "allScoresZero": true,
+            "pinned": false,
+            "pinnedCount": 1,
+            "nonPinnedOrdinal": 29,
+            "degree8ScoredAllowance": 7,
+            "outsideDegree8Allowance": true,
+            "degree64ExceedsOutgoingCount": true
+          },
+          {
+            "targetLeg": 4,
+            "instanceKey": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+            "canonicalEdgeId": "fluid-dex\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f059edb097760dcf5d6b3143eec02c1b7cfdbb58eac93463d7fc1cd1dec6131a3",
+            "outgoingCount": 20,
+            "outgoingOrdinal": 9,
+            "allScoresZero": true,
+            "pinned": false,
+            "pinnedCount": 0,
+            "nonPinnedOrdinal": 9,
+            "degree8ScoredAllowance": 8,
+            "outsideDegree8Allowance": true,
+            "degree64ExceedsOutgoingCount": true
+          }
+        ],
+        "evidenceKind": "post-output arithmetic on actual hydrated template-filtered input order plus production pin contract; no search reimplementation and no production kept-edge instrumentation"
+      },
+      {
+        "opportunityIndex": 2,
+        "template": "flash-lend-swap-repay",
+        "startToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "pinnedPool": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+        "rows": [
+          {
+            "targetLeg": 3,
+            "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73",
+            "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xdac17f958d2ee523a2206206994597c13d831ec7\u001fe9f4c86030b758bf665f32a1478b6fc3732a15f758def6c9df7ba07510211f81",
+            "outgoingCount": 31,
+            "outgoingOrdinal": 30,
+            "allScoresZero": true,
+            "pinned": false,
+            "pinnedCount": 1,
+            "nonPinnedOrdinal": 29,
+            "degree8ScoredAllowance": 7,
+            "outsideDegree8Allowance": true,
+            "degree64ExceedsOutgoingCount": true
+          },
+          {
+            "targetLeg": 4,
+            "instanceKey": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+            "canonicalEdgeId": "fluid-dex\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f059edb097760dcf5d6b3143eec02c1b7cfdbb58eac93463d7fc1cd1dec6131a3",
+            "outgoingCount": 20,
+            "outgoingOrdinal": 9,
+            "allScoresZero": true,
+            "pinned": false,
+            "pinnedCount": 0,
+            "nonPinnedOrdinal": 9,
+            "degree8ScoredAllowance": 8,
+            "outsideDegree8Allowance": true,
+            "degree64ExceedsOutgoingCount": true
+          }
+        ],
+        "evidenceKind": "post-output arithmetic on actual hydrated template-filtered input order plus production pin contract; no search reimplementation and no production kept-edge instrumentation"
+      },
+      {
+        "opportunityIndex": 2,
+        "template": "flash-swap-repay",
+        "startToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "pinnedPool": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+        "rows": [
+          {
+            "targetLeg": 3,
+            "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73",
+            "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xdac17f958d2ee523a2206206994597c13d831ec7\u001fe9f4c86030b758bf665f32a1478b6fc3732a15f758def6c9df7ba07510211f81",
+            "outgoingCount": 31,
+            "outgoingOrdinal": 30,
+            "allScoresZero": true,
+            "pinned": false,
+            "pinnedCount": 1,
+            "nonPinnedOrdinal": 29,
+            "degree8ScoredAllowance": 7,
+            "outsideDegree8Allowance": true,
+            "degree64ExceedsOutgoingCount": true
+          },
+          {
+            "targetLeg": 4,
+            "instanceKey": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+            "canonicalEdgeId": "fluid-dex\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f059edb097760dcf5d6b3143eec02c1b7cfdbb58eac93463d7fc1cd1dec6131a3",
+            "outgoingCount": 20,
+            "outgoingOrdinal": 9,
+            "allScoresZero": true,
+            "pinned": false,
+            "pinnedCount": 0,
+            "nonPinnedOrdinal": 9,
+            "degree8ScoredAllowance": 8,
+            "outsideDegree8Allowance": true,
+            "degree64ExceedsOutgoingCount": true
+          }
+        ],
+        "evidenceKind": "post-output arithmetic on actual hydrated template-filtered input order plus production pin contract; no search reimplementation and no production kept-edge instrumentation"
+      }
+    ],
+    "wider64Result": "64/cap200 and 64/cap500 did not find the core either. Candidate-cap and unreported internal raw-path limit prohibit an exhaustive absence claim; no conclusion of protocol execution failure."
+  },
+  "validation": {
+    "productionPlanner": true,
+    "graphHydratedByProductionLoader": true,
+    "targetNeverPassedToPlanner": true,
+    "upstreamRpcRequests": 0,
+    "isolatedNetworkNamespace": true,
+    "solverCalls": 0,
+    "finalSimCalls": 0,
+    "evEvaluations": 0,
+    "performance": "NOT RUN",
+    "tools": {
+      "query": [
+        "planner",
+        "backrun"
+      ],
+      "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/planner-offline-5b6114-20261012.lExPxG/tool-selection.json",
+      "manifestSha256": "562ecb7f3b5efcca6a51f462545875200cc98908db0d1986373517b99775956d",
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:planner",
+          "descriptor_sha256": "149934af82d03f28f1f5505731c045825848f060fb2653eb0ba6888bca16a36b",
+          "started_at": "2026-10-12T02:47:42.328Z",
+          "finished_at": "2026-10-12T02:47:43.350Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "687bae00bbfd8326f1a31e56b56d6efd580cebd6eeb14c780933c5cd26cbfca6",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:planner",
+            "--"
+          ],
+          "stdout_sha256": "9e5d068a126b0525a9cdfe368ab238bb3c6318edd64f4a4def1c1037525ae9d1",
+          "stderr_sha256": "263d482040e251b54b508567ff32dbaad3132a6a0027e3e229650e29c4497da9",
+          "stdout_bytes": 3355,
+          "stderr_bytes": 75
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:backrun-candidate-pipeline",
+          "descriptor_sha256": "5c44617b06a6e2b2d1ed8efb554477cecfc9c88d9b1cf4f0c22c30bc8a7889a2",
+          "started_at": "2026-10-12T02:49:16.007Z",
+          "finished_at": "2026-10-12T02:49:17.338Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "c4a9f3185ca0e21e7c0d3e322b8098cfdd250bb36a97a278015e3d7ab5a6efac",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:backrun-candidate-pipeline",
+            "--"
+          ],
+          "stdout_sha256": "ed407d64d68fd15c40c2fdbdf088905793aecd081d98a2b6cfd21c4b2bb68999",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 7341,
+          "stderr_bytes": 0
+        }
+      ],
+      "plannerRegression": "14/14",
+      "backrunPipelineRegression": "7/7",
+      "coverageBoundary": "indexed entries are fixture/regression suites, not CLIs consuming saved detector/Ready inputs; thin caller covers that missing composition; fixture passes are not historical sim/EV evidence",
+      "archiveRpcAlternativeNotRun": "analysis:tx-source-shape"
+    }
+  },
+  "limits": [
+    "Saved opportunities came from the prior noncanonical-header run; this is planning-only, not a new state replay.",
+    "RPC monthly capacity was exhausted in the previous real attempt; no new RPC or retry was made.",
+    "No target injection or copied search implementation. No full historical causality, final sim, EV, or 20-percent gross-profit match has passed."
+  ],
+  "safety": {
+    "liveStarted": false,
+    "deployed": false,
+    "signed": false,
+    "broadcast": false,
+    "privateKeyRead": false,
+    "originalReadyModified": false
+  },
+  "evidence": [
+    {
+      "role": "report.draft.json",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/report.draft.json",
+      "sha256": "45b8349f38a79010a4631eff6d7e1b01161d1c88612ae5791bd750cefcf4941a"
+    },
+    {
+      "role": "preparation.json",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/preparation.json",
+      "sha256": "9f9d81efe742e08d33c7b408e5de05a4c4b2d754b6fd4aca4f109abb07fda4bd"
+    },
+    {
+      "role": "planner-inputs.json",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/planner-inputs.json",
+      "sha256": "3925b19475a5c0b427c0252c0952b4543bbec599d7da1eb29f5d7d4222f7209e"
+    },
+    {
+      "role": "baseline-comparison.json",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/baseline-comparison.json",
+      "sha256": "344b3fd6e0726b4c20b3cbc15c7526a7aec8b6d36f671a5da6bea61a6df8e09e"
+    },
+    {
+      "role": "postmatch-degree8.json",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/postmatch-degree8.json",
+      "sha256": "f8d96ad69aa995156e7d90e954cf7f836d9e021160a9311012cd997eee7b6593"
+    },
+    {
+      "role": "postmatch-degree64-cli.json",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/postmatch-degree64-cli.json",
+      "sha256": "32dff80d1ad9d4a78972e1efb1546a5ce171eabcfa358c927c4a5065a908673f"
+    },
+    {
+      "role": "postmatch-degree64-cli-cap500-cli.json",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/postmatch-degree64-cli-cap500-cli.json",
+      "sha256": "5fc20dc4fbb53af080667f4e9a578036430a2659c8e72209e861896504e7dbec"
+    },
+    {
+      "role": "hydrated-graph.json",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/hydrated-graph.json",
+      "sha256": "51f3aca91f831c995d5d16b4220408e53ac90e0bcdb0bfd0c65d3ed88a4f99de"
+    },
+    {
+      "role": "templates.json",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/templates.json",
+      "sha256": "2c3902254883fa700d15165b80d16a33d50ff52b9abeeabfd14c37a4464864c9"
+    },
+    {
+      "role": "tool-selection.json",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/tool-selection.json",
+      "sha256": "562ecb7f3b5efcca6a51f462545875200cc98908db0d1986373517b99775956d"
+    },
+    {
+      "role": "current-resolved-historical-cli",
+      "path": "/Users/eunice/src/MEV/logs/enum-integration-20261011.dh5pIr/backrun/diagnostic-config-cli-degree10-resolved-20261012.json",
+      "sha256": "2684f941ed62db42527847f4b04dbbf115a475e1baaaa70286f162b2b4f65de0"
+    },
+    {
+      "role": "current-requested-historical-cli",
+      "path": "/Users/eunice/src/MEV/logs/enum-integration-20261011.dh5pIr/backrun/diagnostic-config-cli-degree10-20261012.json",
+      "sha256": "1b5c56af17ce7ea7908af7fd725124e6f83cdfe8d1e32cc1f004b9b70b7e8452"
+    },
+    {
+      "role": "current-postmatch",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap500-degree10-cli/postmatch.json",
+      "sha256": "700492f81c3b3671506ac6b577ef53c60f0025b1027af5bb6fbe08b27e8d7d87"
+    },
+    {
+      "role": "current-planner-resolved-cli",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap500-degree10-cli/cli-effective-config.json",
+      "sha256": "988d7d4a3621e50aa5a9c2029dd9d2f4077a51446415831685e8fba33d8c62d9"
+    },
+    {
+      "role": "current-planner-terminal",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap500-degree10-cli/wide-cli.terminal.json",
+      "sha256": "c114379f788addbf3e813ebb320b581f6adbb6525830965d7ecdf48725552e41"
+    },
+    {
+      "role": "parameterized-thin-caller-run-planner-cli-bounded.mjs",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/run-planner-cli-bounded.mjs",
+      "sha256": "9490872c5c150920d130cbdfeebb9dbbfed595006ee275d0138bc9b9c08a1400"
+    },
+    {
+      "role": "parameterized-thin-caller-postmatch-cli-bounded.mjs",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/postmatch-cli-bounded.mjs",
+      "sha256": "0b657ef51addde8ba8abfebf015d4135b041cc2250f3e2e7511edff9a6987830"
+    },
+    {
+      "role": "parameterized-thin-caller-run-planner-cli-parameters.mjs",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/run-planner-cli-parameters.mjs",
+      "sha256": "523fe27d420023c6ffc59471b2ddf9ed603f6b843fdb5b91de18867050efa8e1"
+    },
+    {
+      "role": "parameterized-thin-caller-postmatch-cli-output.mjs",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/postmatch-cli-output.mjs",
+      "sha256": "dedfc11a20859bc6308b96e0e8ba65994959dc975bebcbc7fefe1b4683e241c4"
+    },
+    {
+      "role": "plans-degree8-cap20-opp1",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap20-degree8-opp1.plans.json",
+      "sha256": "4d03ad63c864eaea85ff28f2e60021c958881898cc3fb4ba053f9d13daeeca4a"
+    },
+    {
+      "role": "plans-degree8-cap20-opp2",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap20-degree8-opp2.plans.json",
+      "sha256": "eb4314642848fd422266aca0a1da67fa6f8a8ae0c3817ca3b70c846ad4882d29"
+    },
+    {
+      "role": "plans-degree8-cap200-opp1",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap200-degree8-opp1.plans.json",
+      "sha256": "ae9bfddff188301746d82efd129116261dca3db691b1f9bf78484ced118bca87"
+    },
+    {
+      "role": "plans-degree8-cap200-opp2",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap200-degree8-opp2.plans.json",
+      "sha256": "7ed1022b966df679e136dd1c95bc10c4d922560d5466650303270995024fc177"
+    },
+    {
+      "role": "plans-degree64-cap200-opp1",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap200-degree64-cli-opp1.plans.json",
+      "sha256": "fc776b7a1d576748b3c56ab3ec18738252cab28e504c8783e4c51ded9908b598"
+    },
+    {
+      "role": "plans-degree64-cap200-opp2",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap200-degree64-cli-opp2.plans.json",
+      "sha256": "2a24349b21664b750eb65b8e2677cd585506761613957398155e4b33ffc5e8d5"
+    },
+    {
+      "role": "plans-degree64-cap500-opp1",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap500-cli/cap500-degree64-cli-opp1.plans.json",
+      "sha256": "5956104b083c44e5fc89fb94e0f7668ccd3c45d99e8e911b08c95bd9daa1820c"
+    },
+    {
+      "role": "plans-degree64-cap500-opp2",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap500-cli/cap500-degree64-cli-opp2.plans.json",
+      "sha256": "9222691db4b13da9c71322831d21a9b888e059fc9a0db5788d67c94a5000544a"
+    },
+    {
+      "role": "plans-degree10-cap500-opp1",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap500-degree10-cli/cap500-degree10-cli-opp1.plans.json",
+      "sha256": "fb74000b6f18f0fadabd5931c104aaca0ac7fb70ac96e28d702ba5216c441210"
+    },
+    {
+      "role": "plans-degree10-cap500-opp2",
+      "path": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/cap500-degree10-cli/cap500-degree10-cli-opp2.plans.json",
+      "sha256": "a53879893a9810cf93a427996f472e8689735efc33ce48d977c49179ad5c9464"
+    },
+    {
+      "role": "original-ready",
+      "path": "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/ready.json",
+      "sha256": "2294f8eb425db372525502d77d801828b724e64959f07864b4c90b64001c54f5"
+    }
+  ]
+}
