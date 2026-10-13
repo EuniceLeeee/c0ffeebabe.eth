@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-14",
+  "originalTable": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "806de1be3ed53bce3332b8ebeeaabc208464b49af8ad7f6fa1ca423c8c132e56",
+  "afterSha256": "3fbb89c343460dc13cd170b65d985d52a480c3aee8e70d29fb8de9f9b6fe27c4",
+  "beforeBytes": 244985,
+  "afterBytes": 248810,
+  "changedLines": [
+    6,
+    31
+  ],
+  "method": "Append only at current Stage2 summary and existing Curve Underlying row; all other bytes and all previous row contents preserved",
+  "stageAddition": " **2026-10-14 增量：** coffee sUSD旧四币池（N25944618）的underlying报价精度和零值探测缺口已补：6个可交易稳定币方向×2手工金额的24次quoted／runtime主执行通过，另12次诊断及36个零输入控制通过。3个买入退役sUSD方向×2金额的12次主执行与6次诊断均真实原子回滚；3个sUSD输入方向依该块退役实现记状态不适用。目标12个raw均为正，12个effective仍缺自然估值，不将12图边写成12可交易方向。此前四个coffee候选现余USDx／d0的dToken变体及SnowSwap yVault三项待适配；全机会、正式合入门及4A／4B未验，阶段2／goal继续active。",
+  "rowAddition": " <br>**2026-10-14 sUSD旧四币池 underlying 增量（源码 `66b5cf86`）：** 池 `0xa5407eae9ba41422680e2e00537571bcc53efbfd`，TX `0xc5e76781d6343d814ca516a4bc41337035e0e24c2e271099a606ae9784b6653b`，**N25944618／hash `0x624fb87fef9564150b1aff4858a7454a4a9eac6f0b5dd8992453e545b7217caa`**。沿现有MetaRegistry反查及实际coins／underlying_coins绑定旧四币无lending代码行为，补齐Vyper执行手续费／精度顺序、uint256边界、slot15停用状态及有界余额缩放探测，保留既有MetaRegistry／历史FEI／V1工厂／原生别名路径，中央未加协议分支。**真实单块Ready目标10→12方向，12个raw为正；12个effective仍missing-valuation，12个图方向不等于12个可交易方向。** 手工输入仅取原TX数量：DAI `67378445856171186`（原目标输出改作新输入）、USDC `695978`（原TX另一Transfer）、USDT `67393`（原目标输入），各1倍／2倍，不借输出或改原价格表。**DAI／USDC／USDT之间6方向×2金额，共24次quoted／runtime主执行与12次minimum1诊断逐单位对齐，36个零输入控制回滚通过。** DAI→USDC原错误quote `67370`、实到 `67369`已修为quote与到账均 `67369`，请求输入未减1；旧输入101／旧输出103／原生17保持，构造RPC=0。成功方向按既有standing-grant策略保留授权，不宣称一律清零。原USDT→DAI事件输出 `67378445856171186`，本次N块末报价／实际 `67373788328315197`，不是原调用前输出复现。**该历史状态的sUSD代理指向退役实现 `0xeb05c1de97296ae3dca16f99cd0bdf5a7910943c`：余额／总供应返回0，转账明确 `sUSD retired`。** 三种稳定币买入sUSD的两档金额，12次主执行＋6次诊断均在同一池调用中先成功拉取完整输入、再于真实输出转账失败，最终原子回滚且无扣款／授权残留；未篡改输出代币实现或余额。sUSD作为输入的3方向记该状态不适用，未伪造成功。退役负例没有额外零输入测试，不计入前述36个。验收CLI新增显式state-rejected观察并修复USDT空返回表示；18份保存trace由补强后helper离线再验，保留原捕获hash与首次失败，未冒称新EVM重跑。生产build、27项插件、4项撤价／恢复离线回归、174项strict、80项双接口、11项观察器和86项旧profile回归、只读catalog检查通过；独立复核5064项零失败（只读原始证据，无独立重跑EVM）。原coffee、23项他人tracked内容、7项untracked与共享catalog他人行保留。**USDx `0xfe0a…`／d0 `0xd0d3…` 的dToken存赎与反向身份、SnowSwap `0x4571…` 的yVault语义仍待适配；自然估值、原交易机会复现、正式Adapter Replay／family_local合入门及所有4A／4B未验，阶段2和goal保持active。** FEI旧“MetaRegistry未部署”描述是修复前我方发现缺口，池子兑换并不经过该登记合约；其N14127510后续手工验收继续引用，不重做。 [完整证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c2a3e7871085e1da2228c5e41bc478552253b830/docs/research/reports/curve-underlying-susd-acceptance-20261014.json)。",
+  "sourceCommit": "66b5cf8667cd66a000d83c99149ab33b77c58de9",
+  "reportCommit": "c2a3e7871085e1da2228c5e41bc478552253b830",
+  "reportSha256": "9183d0526d4d7e55e36de2ef0f984a4476d65243096d09ab052825c7c19d1517",
+  "goalStatus": "active",
+  "stage": 2,
+  "performance4A": "not-run",
+  "performance4B": "not-run"
+}
