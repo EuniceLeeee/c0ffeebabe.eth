@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-10-13T20:57:16.130170+00:00",
+  "target": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "baseHead": "ccdc3d58b7404da3387431b0fe636691e76da14d",
+  "sourceAndReportCommit": "377a86b04b233859fff720a517cdeec55be1bf8d",
+  "before": {
+    "sha256": "abae82323e986c770489168ab0dc6cc77888dd5c22fa536c7f94e52c549dce56",
+    "bytes": 256606,
+    "backup": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/impl-psm-aqua-before-20261014.md"
+  },
+  "after": {
+    "sha256": "6a9ece25affb2ae689d6038bd1346a35aec74740de3150364b22e10b5eb836c5",
+    "bytes": 261425
+  },
+  "changedLines": [
+    7,
+    8,
+    39,
+    46
+  ],
+  "operations": [
+    {
+      "line": 7,
+      "prefix": "- **阶段3按本表增量继续：**",
+      "append": " **2026-10-14 后续：** Aqua当前公开云端配置已绑定到原受测origin，复用该地址12次quote／12次swap的凭证不足拒绝，Family仍未实现。Ekubo原TX实际借入8.137414 USDC，旧DAI缺口只属于旧旋转候选。本轮当前生产B/B自然第4／56条闭环定位并修复PSM buyGem预算语义；N/N双向6组12次实际执行通过，原P从回滚翻为成功，独立final sim成功、核心毛利差0.893%，扣gas后净EV仍负。Adapter Replay／family_local、Ready无变化发布顺序问题、剩余因果backrun及全部4A／4B仍待处理，goal保持active。",
+      "beforeRowSha256": "4b44dfc9439fd86c57913784333030e6f7208f2f318582ab9593bc16929a04ab",
+      "afterRowSha256": "454078dd5e14e481acc58359568393bf7d417c7a98076867acbc27ea8feba7d8"
+    },
+    {
+      "line": 8,
+      "prefix": "- **阶段4仍在最后：**",
+      "append": " **本轮适用范围增量：** PSM buyGem运行时预算修复纳入最终4A逐族和4B代表性背景图组合验收；本轮历史执行耗时只是正确性诊断，不算局部或代表性时效性通过。",
+      "beforeRowSha256": "1d9cdc1bfcf24a8e1774df5ee361202838b70668594ede0440bbbf97f7ad1840",
+      "afterRowSha256": "e6dfac5f2e95077838c4b3a8c6bf4695fd10f803f065089486d1244d0ad0f70b"
+    },
+    {
+      "line": 39,
+      "prefix": "| Ekubo＋PSM DAI→USDC",
+      "append": " **2026-10-14 当前源码生产复现与PSM预算修复（377a86b）：核心毛利匹配，净EV正确拒绝，时效性未验。** 原TX `0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72`／N26029876；原Morpho借入和归还均8137414 raw USDC，不是DAI；旧DAI资金Ready缺口属于旧旋转候选，历史记录保留。复用当前N单块Ready的98边，48 verified／6 terminal rejected／3 retryable；不冒称B块自然发现。报价、枚举、sim选额及独立final sim均绑定B26029875／hash 0x38ca214bcbd8018d6723e9c50caad370f60b9d785fd5c4a8992402783aca675b，无前缀，当前生产入口自然第4／56条USDC起点闭环。原P=5492700 raw USDC时，PSM收取5674124000000000000 raw DAI并退留933591466214，先前被误作必须全额扣款而回滚。现仅在PSM buyGem声明已有maximum-input语义，sellGem仍exact；报价／请求／费率计算及0／1容差不改，中央无协议分支，正扣款、不得超预算、退款与旧库存隔离、最终偿还／原生币／守恒门不变。N26029876两方向×生产P／2P／历史金额共6组12次quote＋quoted／runtime到账逐单位相符；构造链外RPC／Exact=0、无quoted fallback；该状态fee=0，非零费率仅有fixture，不扩大历史覆盖。修后原P实际成功；自然选额12点中6成功／6回滚均留存，最终选8248315 raw USDC，独立final sim实际毛利199689 raw USDC、gas748966，偿还与守恒通过，退留706052892157 raw DAI不计利润。原核心毛利73363522571263 wei ETH，我方毛利经B状态生产估值为72708486138087 wei，相差0.892864%，核心匹配≤20%；gas成本98668243082412 wei，净EV为−25959756944325 wei，below_ev_gate正确拒绝，不能称可盈利复现。生产build通过，80项双接口fixture及56项合约金额／库存安全回归通过，独立复核12次原始调用／余额差分与修前后整环到账；全build缺rustc、无关special-protocols旧断言失败、初次EIP-7702 owner假设失败均保留。Ready更新副本因98条相同边的顺序差异而失败，当前消费者兼容检查和实际生产复现通过；未重写旧hash，该中央发布问题待单独修复。实际1149文件生产指纹2043221f…与2006文件扩展指纹447723ff…分别冻结，含源码包；共享catalog只提交PSM项，9项peer生成差异及24 tracked／7 untracked保持。**正式Adapter Replay／family_local及4A／4B仍未运行；PSM加入最终时效性范围，不把本轮27.479秒诊断当性能验收。** [完整证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/377a86b04b233859fff720a517cdeec55be1bf8d/docs/research/reports/psm-runtime-budget-and-ekubo-replay-20261014.json)；[不可覆盖独立档案](/Users/eunice/src/MEV/logs/replay-history/1/0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72/20261014-current-runtime-ekubo-psm-1rjnj0zh.json)。",
+      "beforeRowSha256": "222c708f7e422ec7f7b2470b5b4e2d49af733a545357454304114a0d8d6b2671",
+      "afterRowSha256": "18eccc015327c852ef0f00dd7f245334a8697e11aaac86648f841cb8a4fd4e87"
+    },
+    {
+      "line": 46,
+      "prefix": "| 1inch Aqua／SwapVM",
+      "append": " **2026-10-14 补充：当前云端公开执行身份已核实，复用既有权限拒绝。** 公开profile／run-contract绑定wallet 0xb8578B6de173C8554FF0390dB5a7effA567DDA3c、executor 0xd1E500860893B64Ba12B7B6AFDdb131B5c75A657；该origin与此前N26151137矩阵中已测试地址相同，故两条原策略及同块第三条策略的12次quote／12次swap原子拒绝可直接复用，无新增RPC或EVM执行。修正此前“当前live caller尚未核实”的状态；身份来自公开配置，未读私钥、未启动live。结论仅限这三策略／该状态对当前origin凭证不足；Aqua Family仍未实现，其他合法可用策略、自然接入及机会仍缺，不将整协议标为不适用或完成。[身份绑定证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/377a86b04b233859fff720a517cdeec55be1bf8d/docs/research/reports/aqua-configured-origin-binding-20261014.json)；[独立档案](/Users/eunice/src/MEV/logs/replay-history/1/0x36764eba7fc601d36c67d575a2e656d803ce9c07240e0cb0ad32a0aed154307a/20261014-aqua-configured-origin-binding-8uveia9.json)。",
+      "beforeRowSha256": "57e6b2d7e30c7f0fdbb48f8916fd7ad805d3ce89ef9846775d190b6d5ce24e05",
+      "afterRowSha256": "1902991591fba798594f101dec5be97dce969171d3c9531dad2afd1f1d3f736e"
+    }
+  ],
+  "preservation": "Append only to existing Stage3/Stage4 progress and original Ekubo/Aqua rows. Prior content and every unrelated line retained, including Curve FEI, Few and peer increments. No new master table.",
+  "histories": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/replay-history/1/0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72/20261014-current-runtime-ekubo-psm-1rjnj0zh.json",
+      "sha256": "5b2510c5a372515455a78d9cd021d2a656da157372d38a857713c63ad70b7093"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/replay-history/1/0x36764eba7fc601d36c67d575a2e656d803ce9c07240e0cb0ad32a0aed154307a/20261014-aqua-configured-origin-binding-8uveia9.json",
+      "sha256": "41fc74bf2a4c7a40c2c67d111cf7a510149666f6363cf692f16d116f03fcc23f"
+    }
+  ],
+  "evidenceArchiveSha256": "21e0dd7ac200d2f22f4352224c7316bebe13b554778c83b65bfd22fb536cdac7",
+  "evidenceArtifactsVerified": 266,
+  "goalStatus": "active",
+  "phase4A": "not-run",
+  "phase4B": "not-run"
+}
