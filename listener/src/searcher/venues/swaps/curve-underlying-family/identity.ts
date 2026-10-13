@@ -1,7 +1,9 @@
 import { ethers } from "ethers";
+import { CURVE_V1_FACTORY, CURVE_V1_FACTORY_INTERFACE, CURVE_V1_FACTORY_LOOKUP,
+  assertV1FactoryCode, decodeV1FactoryRegistration } from "./v1-factory.js";
 import { CURVE_LEGACY_FACTORY, CURVE_LEGACY_FACTORY_INTERFACE, CURVE_LEGACY_FACTORY_LOOKUP,
   decodeLegacyFactoryBasePool, decodeLegacyFactoryCoins } from "./legacy-factory.js";
-import { hasClassicUnderlyingQuoteModel, underlyingQuoteModelBindingRequests, decodeUnderlyingQuoteModel,
+import { hasClassicUnderlyingQuoteModel, hasLegacyV1UnderlyingQuoteModel, underlyingQuoteModelBindingRequests, decodeUnderlyingQuoteModel,
   curveUnderlyingQuoteModelProjection } from "./quote-model.js";
 import { curveUnderlyingNativeIdentity } from "./native-identity.js";
 import type {
@@ -30,6 +32,7 @@ import {
 import {
   CURVE_UNDERLYING_FAMILY_ID,
   CURVE_UNDERLYING_FACTORY_LINEAGE_ID,
+  CURVE_UNDERLYING_V1_FACTORY_LINEAGE_ID,
   CURVE_UNDERLYING_REGISTRY_LINEAGE_ID,
 } from "./manifest.js";
 import type {
@@ -122,6 +125,73 @@ function factoryIdentityEvidence(value: unknown): FactoryAvailabilityEvidence | 
   return identityEvidence(value);
 }
 
+interface V1PoolCodeEvidence { readonly phase: "v1-pool-code"; readonly poolCode: string; }
+function v1IdentityEvidence(value: unknown): V1PoolCodeEvidence | CurveUnderlyingIdentityEvidence | undefined {
+  if (value !== null && typeof value === "object" && "phase" in value && value.phase === "v1-pool-code") {
+    if (!("poolCode" in value) || typeof value.poolCode !== "string" || !ethers.isHexString(value.poolCode)) {
+      throw new Error("curve-underlying malformed V1 pool code evidence");
+    }
+    return value as V1PoolCodeEvidence;
+  }
+  return identityEvidence(value);
+}
+const V1_FACTORY_CODE_ID = "v1-factory-code";
+const V1_FACTORY_WRAPPED_ID = "v1-factory-wrapped-coins";
+const curveUnderlyingV1FactoryIdentity = {
+  id: "factory-v1-member",
+  kind: "registry-member" as const,
+  lineageId: CURVE_UNDERLYING_V1_FACTORY_LINEAGE_ID,
+  applies: () => true,
+  requirements(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>) {
+    const evidence = v1IdentityEvidence(input.evidence);
+    if (evidence === undefined) return { transports: ["get-code" as const] };
+    return evidence.phase === "registry-surface"
+      ? { transports: ["eth-call" as const, "get-code" as const, "get-storage" as const] }
+      : { transports: ["eth-call" as const, "get-code" as const] };
+  },
+  buildRequests(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>): readonly AdapterRequest[] {
+    const evidence = v1IdentityEvidence(input.evidence);
+    if (evidence === undefined) return [{ id: POOL_CODE_ID, kind: "get-code", address: canonicalAddress(input.candidate.pool) }];
+    if (evidence.phase !== "v1-pool-code") return evidence.phase === "registry-surface" ? behaviorRequests(evidence) : [];
+    return [
+      { id: V1_FACTORY_CODE_ID, kind: "get-code", address: CURVE_V1_FACTORY },
+      { id: V1_FACTORY_WRAPPED_ID, kind: "eth-call", to: CURVE_V1_FACTORY,
+        data: CURVE_V1_FACTORY_INTERFACE.encodeFunctionData("get_coins", [input.candidate.pool]), completion: "return-data" },
+      { id: REGISTRY_COINS_ID, kind: "eth-call", to: CURVE_V1_FACTORY,
+        data: CURVE_V1_FACTORY_INTERFACE.encodeFunctionData("get_underlying_coins", [input.candidate.pool]), completion: "return-data" },
+      { id: POOL_CODE_ID, kind: "get-code", address: canonicalAddress(input.candidate.pool) },
+    ];
+  },
+  decode(input: { readonly step: IdentityStepInput<CurveUnderlyingCandidate, unknown>;
+    readonly results: readonly AdapterRequestResult[] }): V1PoolCodeEvidence | CurveUnderlyingIdentityEvidence {
+    const prior = v1IdentityEvidence(input.step.evidence);
+    if (prior === undefined) return { phase: "v1-pool-code", poolCode: requireSuccessfulResult(input.results, POOL_CODE_ID).data };
+    if (prior.phase !== "v1-pool-code") return decodeBehaviorProof(prior, input.results);
+    const reads = [V1_FACTORY_CODE_ID, V1_FACTORY_WRAPPED_ID, REGISTRY_COINS_ID, POOL_CODE_ID]
+      .map(id => requireSuccessfulResult(input.results, id));
+    assertSameSource(reads);
+    assertV1FactoryCode(reads[0].data);
+    const { wrappedCoins, coins } = decodeV1FactoryRegistration(reads[1].data, reads[2].data);
+    return Object.freeze({
+      phase: "registry-surface", pool: canonicalAddress(input.step.candidate.pool),
+      handlers: Object.freeze([]), coins, poolHasCode: reads[3].data !== "0x", poolCode: reads[3].data,
+      registryBinding: Object.freeze({ registry: CURVE_V1_FACTORY, handlers: Object.freeze([]),
+        lookupSemantics: CURVE_V1_FACTORY_LOOKUP, wrappedCoins }),
+    });
+  },
+  decide(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>) {
+    const evidence = v1IdentityEvidence(input.evidence);
+    if (evidence?.phase === "v1-pool-code" || evidence?.phase === "registry-surface") {
+      if (!hasLegacyV1UnderlyingQuoteModel(evidence.poolCode)) {
+        return { status: "chain-proven-rejected" as const, reasonCode: "v1_factory_quote_model_unsupported",
+          evidenceRequestIds: [POOL_CODE_ID] };
+      }
+      if (evidence.phase === "v1-pool-code") return { status: "continue" as const };
+    }
+    return decideIdentity(input, evidence);
+  },
+};
+
 export const curveUnderlyingIdentity = {
   variants: [{
     id: "metaregistry-member",
@@ -155,7 +225,7 @@ export const curveUnderlyingIdentity = {
     decide(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>) {
       return decideIdentity(input, identityEvidence(input.evidence));
     },
-  }, curveUnderlyingNativeIdentity, curveUnderlyingHistoricalFactoryIdentity],
+  }, curveUnderlyingNativeIdentity, curveUnderlyingHistoricalFactoryIdentity, curveUnderlyingV1FactoryIdentity],
   identityKey: (identity) => lowerAddress(identity.subject),
 } satisfies IdentitySemantics<CurveUnderlyingCandidate, CurveUnderlyingIdentity>;
 
@@ -279,6 +349,11 @@ function decodeBehaviorProof(
       lowerAddress(prior.registryBinding.basePool) !== lowerAddress(quoteModel.basePool)) {
     throw new Error("curve-underlying factory base pool conflicts with bound implementation");
   }
+  if (prior.registryBinding?.lookupSemantics === CURVE_V1_FACTORY_LOOKUP && (!quoteModel ||
+      !hasLegacyV1UnderlyingQuoteModel(prior.poolCode) ||
+      lowerAddress(prior.registryBinding.wrappedCoins[1]) !== lowerAddress(quoteModel.baseLPToken))) {
+    throw new Error("curve-underlying V1 wrapped LP conflicts with bound implementation");
+  }
   return Object.freeze({
     phase: "behavior-proof" as const,
     pool: prior.pool,
@@ -323,11 +398,14 @@ function decideIdentity(
     }
     const factoryBinding = evidence.registryBinding?.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP
       ? evidence.registryBinding : undefined;
-    if (factoryBinding ? factoryBinding.basePool === ethers.ZeroAddress : evidence.handlers.length === 0) {
+    const v1Binding = evidence.registryBinding?.lookupSemantics === CURVE_V1_FACTORY_LOOKUP
+      ? evidence.registryBinding : undefined;
+    if (factoryBinding ? factoryBinding.basePool === ethers.ZeroAddress
+      : v1Binding ? v1Binding.wrappedCoins[0] === ethers.ZeroAddress : evidence.handlers.length === 0) {
       return {
         status: "chain-proven-rejected",
         reasonCode: "registry_reverse_binding_failed",
-        evidenceRequestIds: [factoryBinding ? FACTORY_BASE_POOL_ID : REGISTRY_HANDLERS_ID],
+        evidenceRequestIds: [factoryBinding ? FACTORY_BASE_POOL_ID : v1Binding ? V1_FACTORY_WRAPPED_ID : REGISTRY_HANDLERS_ID],
       };
     }
     if (evidence.coins.length < 2 || evidence.coins.length > 8) {
@@ -377,6 +455,7 @@ function decideIdentity(
       handlers: registryBinding.handlers,
       lookupSemantics: registryBinding.lookupSemantics,
       ...(registryBinding.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP ? { basePool: registryBinding.basePool } : {}),
+      ...(registryBinding.lookupSemantics === CURVE_V1_FACTORY_LOOKUP ? { wrappedCoins: registryBinding.wrappedCoins } : {}),
     },
     verifiedDirections: evidence.verifiedDirections.map((direction) => ({
       i: direction.i,
@@ -391,12 +470,14 @@ function decideIdentity(
     status: "verified",
     identity: Object.freeze({
       familyId: CURVE_UNDERLYING_FAMILY_ID,
-      lineageId: registryBinding.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP
-        ? CURVE_UNDERLYING_FACTORY_LINEAGE_ID : CURVE_UNDERLYING_REGISTRY_LINEAGE_ID,
+      lineageId: registryBinding.lookupSemantics === CURVE_V1_FACTORY_LOOKUP
+        ? CURVE_UNDERLYING_V1_FACTORY_LINEAGE_ID : registryBinding.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP
+          ? CURVE_UNDERLYING_FACTORY_LINEAGE_ID : CURVE_UNDERLYING_REGISTRY_LINEAGE_ID,
       subject: evidence.pool,
       provenance: Object.freeze([Object.freeze({
-        kind: registryBinding.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP
-          ? "curve-factory-reverse-behavior-proof" : "curve-metaregistry-reverse-behavior-proof",
+        kind: registryBinding.lookupSemantics === CURVE_V1_FACTORY_LOOKUP
+          ? "curve-v1-factory-reverse-behavior-proof" : registryBinding.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP
+            ? "curve-factory-reverse-behavior-proof" : "curve-metaregistry-reverse-behavior-proof",
         subject: registryBinding.registry,
         evidenceHash,
       })]),

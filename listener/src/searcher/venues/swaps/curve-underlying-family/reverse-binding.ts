@@ -1,6 +1,9 @@
 import { CURVE_LEGACY_FACTORY, CURVE_LEGACY_FACTORY_INTERFACE,
   decodeLegacyFactoryBasePool, decodeLegacyFactoryCoins } from "./legacy-factory.js";
 import { ethers } from "ethers";
+import { hasLegacyV1UnderlyingQuoteModel } from "./quote-model.js";
+import { CURVE_V1_FACTORY, CURVE_V1_FACTORY_INTERFACE, assertV1FactoryCode,
+  decodeV1FactoryRegistration } from "./v1-factory.js";
 import type {
   CaptureNominationInput,
   CaptureNominationProvider,
@@ -49,44 +52,57 @@ export async function reverseBindCurveUnderlying(input: {
         }));
         continue;
       }
-      const registryData = METAREGISTRY_INTERFACE.encodeFunctionData(
-        "get_pool_from_lp_token",
-        [pool],
-      );
-      const registryRaw = await input.provider.call(
-        { to: CURVE_METAREGISTRY, data: registryData },
-        input.source.number,
-      );
-      let registered: string;
-      try {
-        if (registryRaw === "0x") {
-          const registryCode = await input.provider.getCode(CURVE_METAREGISTRY, input.source.number);
-          if (registryCode !== "0x") throw new Error("deployed registry returned no identity");
-          const baseRaw = await input.provider.call({ to: CURVE_LEGACY_FACTORY,
-            data: CURVE_LEGACY_FACTORY_INTERFACE.encodeFunctionData("get_base_pool", [pool]) }, input.source.number);
-          if (decodeLegacyFactoryBasePool(baseRaw) === ethers.ZeroAddress) throw new Error("not factory metapool");
-          const coinsRaw = await input.provider.call({ to: CURVE_LEGACY_FACTORY,
-            data: CURVE_LEGACY_FACTORY_INTERFACE.encodeFunctionData("get_underlying_coins", [pool]) }, input.source.number);
-          if (decodeLegacyFactoryCoins(coinsRaw).length < 2) throw new Error("invalid factory coins");
-          registered = canonicalAddress(pool);
-        } else {
-          if (!ethers.isHexString(registryRaw) ||
-              ethers.dataLength(registryRaw) !== 32) {
-            throw new Error("non-canonical registry shape");
+      let registered: string | undefined;
+      if (hasLegacyV1UnderlyingQuoteModel(code)) {
+        assertV1FactoryCode(await input.provider.getCode(CURVE_V1_FACTORY, input.source.number));
+        const wrapped = await input.provider.call({ to: CURVE_V1_FACTORY,
+          data: CURVE_V1_FACTORY_INTERFACE.encodeFunctionData("get_coins", [pool]) }, input.source.number);
+        const underlying = await input.provider.call({ to: CURVE_V1_FACTORY,
+          data: CURVE_V1_FACTORY_INTERFACE.encodeFunctionData("get_underlying_coins", [pool]) }, input.source.number);
+        const registration = decodeV1FactoryRegistration(wrapped, underlying);
+        if (registration.wrappedCoins[0] !== ethers.ZeroAddress) registered = canonicalAddress(pool);
+      }
+      // A quote implementation is not an exclusive factory identity. A canonical
+      // V1 non-member can still have an existing MetaRegistry reverse binding.
+      if (registered === undefined) {
+        const registryData = METAREGISTRY_INTERFACE.encodeFunctionData(
+          "get_pool_from_lp_token",
+          [pool],
+        );
+        const registryRaw = await input.provider.call(
+          { to: CURVE_METAREGISTRY, data: registryData },
+          input.source.number,
+        );
+        try {
+          if (registryRaw === "0x") {
+            const registryCode = await input.provider.getCode(CURVE_METAREGISTRY, input.source.number);
+            if (registryCode !== "0x") throw new Error("deployed registry returned no identity");
+            const baseRaw = await input.provider.call({ to: CURVE_LEGACY_FACTORY,
+              data: CURVE_LEGACY_FACTORY_INTERFACE.encodeFunctionData("get_base_pool", [pool]) }, input.source.number);
+            if (decodeLegacyFactoryBasePool(baseRaw) === ethers.ZeroAddress) throw new Error("not factory metapool");
+            const coinsRaw = await input.provider.call({ to: CURVE_LEGACY_FACTORY,
+              data: CURVE_LEGACY_FACTORY_INTERFACE.encodeFunctionData("get_underlying_coins", [pool]) }, input.source.number);
+            if (decodeLegacyFactoryCoins(coinsRaw).length < 2) throw new Error("invalid factory coins");
+            registered = canonicalAddress(pool);
+          } else {
+            if (!ethers.isHexString(registryRaw) ||
+                ethers.dataLength(registryRaw) !== 32) {
+              throw new Error("non-canonical registry shape");
+            }
+            registered = canonicalAddress(String(
+              METAREGISTRY_INTERFACE.decodeFunctionResult(
+                "get_pool_from_lp_token",
+                registryRaw,
+              )[0],
+            ));
           }
-          registered = canonicalAddress(String(
-            METAREGISTRY_INTERFACE.decodeFunctionResult(
-              "get_pool_from_lp_token",
-              registryRaw,
-            )[0],
-          ));
+        } catch {
+          outcomes.push(Object.freeze({
+            status: "failed",
+            reason: "registry-read-failed",
+          }));
+          continue;
         }
-      } catch {
-        outcomes.push(Object.freeze({
-          status: "failed",
-          reason: "registry-read-failed",
-        }));
-        continue;
       }
       if (registered.toLowerCase() !== pool) {
         outcomes.push(Object.freeze({

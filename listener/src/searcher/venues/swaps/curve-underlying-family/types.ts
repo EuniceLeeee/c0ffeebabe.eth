@@ -38,6 +38,7 @@ export type CurveUnderlyingRegistryBinding = {
 } & (
   | { readonly lookupSemantics: "get_registry_handlers_from_pool+get_underlying_coins" }
   | { readonly lookupSemantics: "get_base_pool+get_underlying_coins"; readonly basePool: string }
+  | { readonly lookupSemantics: "get_coins+get_underlying_coins"; readonly wrappedCoins: readonly string[] }
 );
 
 /** Semantics bound by immutable implementation code plus on-chain coin/LP topology.

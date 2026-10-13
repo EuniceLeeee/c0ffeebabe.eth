@@ -1680,7 +1680,7 @@
         "familyId": "curve-underlying",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "269718375d2cc4c8edaa2d6a6cff5f2918745489393ec5b1c07398171a3ae82e",
+        "contentHash": "8d08ab5f4ac9235a4a48179776522091c91ad679742a3e1fa0a799d4710fd629",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -1690,7 +1690,9 @@
           "src/searcher/venues/swaps/curve-underlying-family/discovery.ts",
           "src/searcher/venues/swaps/curve-underlying-family/legacy-factory.ts",
           "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
           "src/searcher/venues/swaps/curve-underlying-family/reverse-binding.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/v1-factory.ts",
           "src/searcher/venues/tx-evidence-nomination.ts"
         ],
         "provenanceCommit": null
@@ -1731,7 +1733,7 @@
         "familyId": "curve-underlying",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "0aee7a4ce78c6b6d3728e5de553d1193e99919bca4b76c69748069e1866729f5",
+        "contentHash": "aac20b8be6b76b6e186813022b70617fb2b98fba86bd7913ba6c8f660fed8a7f",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -1739,7 +1741,9 @@
           "src/searcher/venues/swaps/curve-underlying-family/codec.ts",
           "src/searcher/venues/swaps/curve-underlying-family/legacy-factory.ts",
           "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
           "src/searcher/venues/swaps/curve-underlying-family/reverse-binding.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/v1-factory.ts",
           "src/searcher/venues/tx-evidence-nomination.ts"
         ],
         "provenanceCommit": null
@@ -1760,7 +1764,7 @@
         "familyId": "curve-underlying",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "f7f8ccd0113cf29d05a6ddf786be6629bb6cc9bae27a9c4cb4094987de8b3420",
+        "contentHash": "5ed197c115af409eed3dedfc77db91e5a8545d5368bdc26f11e53a0d99bf497a",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -1800,7 +1804,7 @@
         "familyId": "curve-underlying",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "2561d581c5a20a2f2187f8f4876f360dfc76426bc5d4092e286fb26dd97418e4",
+        "contentHash": "0c6097dc760bcb776456a052a252d86f0199028fb81b76500de2abc3959fcabc",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -1863,7 +1867,7 @@
         "familyId": "curve-underlying",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "635a6c962738c4baedabc7d520f0f4168ff73d31bb74e1c38d8af727451ac1b5",
+        "contentHash": "eb1a8c65907eeded5e78c552c1f9719dcba491d668b12bf6889d314a246d35df",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -1880,6 +1884,7 @@
           "src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
           "src/searcher/venues/swaps/curve-underlying-family/native.ts",
           "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/v1-factory.ts",
           "src/shared/constants/addresses.ts",
           "src/shared/executor/amount-rounding.ts",
           "src/shared/executor/botvm-program-entry.ts"
@@ -1902,7 +1907,7 @@
         "familyId": "curve-underlying",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "1caebbf67e0807443fdd18ed59883700ea8b723ea8c0491abafce12da32f094a",
+        "contentHash": "3dba077f3220245af47fb87bc51729d0b6c274d0fe7499934214c54569fdd344",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
@@ -1929,7 +1934,7 @@
         "familyId": "curve-underlying",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "c3d78752bfa6030f606723b52edbb84683b93088f51dbf259809ed50febadf4e",
+        "contentHash": "d6c2ffa029861d4949c70beefe227591f89afe0f85c53d1f197260f54033ed01",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -1975,7 +1980,7 @@
         "familyId": "curve-underlying",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "1906380c93709eb94920750d166fe9c2ca2041847445cf4f2a5eebb35890b3ea",
+        "contentHash": "a8e434d79e039d997acb1120121236a0e5318d148a528f1a3a6a477018c927a4",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
@@ -2012,7 +2017,7 @@
         "familyId": "curve-underlying",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
-        "contentHash": "eb74fac4da33b19dda47b1bcc9b0f6b6d5c4bac0b142474d83aa1c7d81ae7c14",
+        "contentHash": "b5abdf7ffdc1b836b62a9d60e068b6037a7f373de90fbd9266534c5b0fc42117",
         "semanticDependencies": [
           "contract:adapter-family/victim@s1-victim-v2",
           "package:ethers@6.16.0",
@@ -2021,8 +2026,10 @@
           "src/searcher/venues/swaps/curve-underlying-family/discovery.ts",
           "src/searcher/venues/swaps/curve-underlying-family/legacy-factory.ts",
           "src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
           "src/searcher/venues/swaps/curve-underlying-family/receipt-observation.ts",
           "src/searcher/venues/swaps/curve-underlying-family/reverse-binding.ts",
+          "src/searcher/venues/swaps/curve-underlying-family/v1-factory.ts",
           "src/searcher/venues/tx-evidence-nomination.ts"
         ],
         "provenanceCommit": null
@@ -14792,5 +14799,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "b9416c8a6a31fd2ac3718f4157fcf877b2076b9a6c41254a26a06204f0b008ae"
+  "artifactHash": "573b4e929d02865b8ac30e9f1042c28910e2c91c8927db21bc424b318168d56b"
 }

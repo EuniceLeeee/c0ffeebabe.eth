@@ -48,6 +48,8 @@ export const curveUnderlyingInstance = {
       registryBinding: Object.freeze({
         ...draft.registryBinding,
         handlers: Object.freeze([...draft.registryBinding.handlers]),
+        ...(draft.registryBinding.lookupSemantics === "get_coins+get_underlying_coins"
+          ? { wrappedCoins: Object.freeze([...draft.registryBinding.wrappedCoins]) } : {}),
       }),
       verifiedDirections: Object.freeze(
         draft.verifiedDirections.map((direction) => Object.freeze({ ...direction })),
@@ -71,6 +73,8 @@ export function curveUnderlyingStaticBindingProjection(
       lookupSemantics: descriptor.registryBinding.lookupSemantics,
       ...(descriptor.registryBinding.lookupSemantics === "get_base_pool+get_underlying_coins"
         ? { basePool: descriptor.registryBinding.basePool } : {}),
+      ...(descriptor.registryBinding.lookupSemantics === "get_coins+get_underlying_coins"
+        ? { wrappedCoins: descriptor.registryBinding.wrappedCoins } : {}),
     },
     verifiedDirections: descriptor.verifiedDirections.map((direction) => ({
       i: direction.i,

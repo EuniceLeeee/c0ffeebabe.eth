@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { classicMetaRateSlot, classicMetaScalar } from "./quote-model.js";
 import { bindRequestResultRound, collectRequestProgramResults } from "../../adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
 import { classicBaseExchangeAmount, classicBaseMintAmount, type ClassicBasePoolState } from "./base-pool-math.js";
@@ -40,6 +41,9 @@ function binding(input: Input): CurveUnderlyingClassicMetaBinding {
     throw new Error("curve-underlying invalid classic metapool direction/domain");
   }
   if (input.amountIn <= 0n || input.amountIn > UINT_MAX) throw new Error("curve-underlying invalid positive uint256 amount");
+  if (value.metaRateMultiplier <= 0n || (input.route.i === 0 && input.amountIn > UINT_MAX / value.metaRateMultiplier)) {
+    throw new Error("curve-underlying meta input multiplication exceeds uint256");
+  }
   return value;
 }
 
@@ -54,7 +58,7 @@ export function classicUnderlyingQuoteRequests(input: Input): readonly AdapterRe
     { id: "classic-pool-code", kind: "get-code", address: input.descriptor.pool },
     { id: "classic-implementation-code", kind: "get-code", address: model.implementation },
     { id: "classic-base-code", kind: "get-code", address: model.basePool },
-    { id: "classic-meta-rate", kind: "get-storage", address: input.descriptor.pool, slot: ethers.toBeHex(16, 32) },
+    { id: "classic-meta-rate", kind: "get-storage", address: input.descriptor.pool, slot: ethers.toBeHex(classicMetaRateSlot(model), 32) },
     call("classic-meta-coin", input.descriptor.pool, "coins", [0]),
     call("classic-meta-lp", input.descriptor.pool, "coins", [1]),
     call("classic-base-A", model.basePool, "A"),
@@ -85,7 +89,8 @@ function read(input: Input, results: readonly AdapterRequestResult[], id: string
       result.source.hash.toLowerCase() !== input.source.hash.toLowerCase()) {
     throw new Error("curve-underlying execution quote source mismatch");
   }
-  return result.data;
+  return ["classic-meta-coin", "classic-meta-lp", "classic-meta-A", "classic-meta-future-A", QUOTE].includes(id)
+    ? classicMetaScalar(binding(input), result.data) : result.data;
 }
 function uint(data: string): bigint {
   if (!/^0x[0-9a-fA-F]{64}$/.test(data)) throw new Error("curve-underlying malformed uint256 return");

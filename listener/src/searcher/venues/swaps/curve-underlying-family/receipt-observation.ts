@@ -3,6 +3,8 @@ import { CURVE_LEGACY_FACTORY, CURVE_LEGACY_FACTORY_INTERFACE, CURVE_LEGACY_FACT
 import { CURVE_UNDERLYING_FAMILY_ID } from "./manifest.js";
 import type { CurveUnderlyingDescriptor } from "./types.js";
 import { ethers } from "ethers";
+import { CURVE_V1_FACTORY, CURVE_V1_FACTORY_INTERFACE, CURVE_V1_FACTORY_LOOKUP,
+  decodeV1FactoryWrappedCoins } from "./v1-factory.js";
 import type {
   ObservedSwapImpact,
   SwapEventLog,
@@ -114,6 +116,7 @@ export const curveUnderlyingReceiptObservation: SwapObservationCapability = {
         let coins = coinsByPool.get(pool);
         if (!coins) {
           let registry = CURVE_METAREGISTRY;
+          let v1Wrapped: readonly string[] | undefined;
           const binding = ctx.resolveBinding?.(edges[0]);
           if (binding?.familyId === CURVE_UNDERLYING_FAMILY_ID) {
             const descriptor = binding.descriptor as CurveUnderlyingDescriptor;
@@ -133,12 +136,28 @@ export const curveUnderlyingReceiptObservation: SwapObservationCapability = {
                 throw new Error("curve-underlying historical receipt reverse binding failed");
               }
               registry = CURVE_LEGACY_FACTORY;
+            } else if (descriptor.registryBinding?.lookupSemantics === CURVE_V1_FACTORY_LOOKUP) {
+              if (descriptor.pool.toLowerCase() !== pool || descriptor.instanceKey.toLowerCase() !== pool ||
+                  descriptor.registryBinding.registry.toLowerCase() !== CURVE_V1_FACTORY.toLowerCase()) {
+                throw new Error("curve-underlying V1 receipt binding mismatch");
+              }
+              open();
+              v1Wrapped = decodeV1FactoryWrappedCoins(await ctx.tokenQuery.call({ to: CURVE_V1_FACTORY,
+                data: CURVE_V1_FACTORY_INTERFACE.encodeFunctionData("get_coins", [swap.pool]),
+                blockTag: sourceBlock }, ctx.control));
+              const expectedWrapped = descriptor.registryBinding.wrappedCoins;
+              if (v1Wrapped[0] === ethers.ZeroAddress || v1Wrapped.some((coin, i) =>
+                coin.toLowerCase() !== expectedWrapped[i]?.toLowerCase())) {
+                throw new Error("curve-underlying V1 receipt reverse binding failed");
+              }
+              registry = CURVE_V1_FACTORY;
             }
           }
           open();
           coins = decodeCoins(await ctx.tokenQuery.call({ to: registry,
             data: CURVE_UNDERLYING_META_INTERFACE.encodeFunctionData("get_underlying_coins", [swap.pool]),
             blockTag: sourceBlock }, ctx.control));
+          if (v1Wrapped && coins[0] !== v1Wrapped[0]) throw new Error("curve-underlying V1 receipt topology mismatch");
           coinsByPool.set(pool, coins);
         }
         open();
