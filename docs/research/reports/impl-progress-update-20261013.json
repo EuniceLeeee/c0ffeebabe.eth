@@ -1,0 +1,138 @@
+{
+  "schemaVersion": "impl-progress-update/v1",
+  "date": "2026-10-13",
+  "timezone": "Asia/Shanghai",
+  "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "02241492e4ddd798e21ed81e790c174cabaa7aaf290f8335b04e9c9a935e8b0f",
+  "afterSha256": "e1ae42d9174b5445be4183a3409aedb99e34cb56c26d22a0df70ab65f1e17ced",
+  "evidenceCommit": "9810a009fa628a35e00433c9c8118903864c862e",
+  "evidenceReport": "docs/research/reports/family-progress-audit-20261013.json",
+  "summaryPrefixInserted": "**2026-10-13 接手进度核对（本轮未新增链上验收）**\n\n实际工作区已确认：谷歌云 `mev-impl-c4d-20261002 / us-east1-b` 的 `/opt/mev-cloud/family-runtime-20261007`，沿用 `codex/family-runtime-actual-20261007`；业务源码基线 `6a133d4a`＋原有 dirty，43 个生产 Family 入口，另一 DeepSeek 目录为39个。24个 tracked 修改、7个 untracked 项（含2个依赖路径）原样保留，四族已进入生产生成目录且代码默认关闭；入口数量不等于验收或 live 启用。核对时未发现 live、构建或验收进程，正式测速前须重新确认，不能沿用本次空闲判断。原 coffee checkpoint 哈希未变，当前生成清单只读检查通过。\n\n- **阶段1仍未关闭：** 复用 Yield Basis 三实例、Kyber 多池、Compound cUSDC／cDAI及 Algebra 六池的各自源码绑定证据；优先补 cUNI 的生产参考金额门，原TX金额／2倍测试量不能替代。小图缺估值与已授权借输入的同状态执行分别记账，不重复已过方向。\n- **阶段2仍未关闭：** 旧 Set 三方向参考额及非零 entryFee 历史覆盖、V3 siUSD→sUSDe（累计参考35／36）及相关 InfiniFi 赎回参考额仍缺；DODO两池、xWin自然参考、Frax同步变体、Ekubo已验范围及Curve underlying七池后续证据直接复用。其余变体仅按真实缺口补验。\n- **阶段3按本表增量继续：** Family／历史机会／Ready配置／中央缺陷分开；保留已有ETH／WETH及0／1原始单位安全修复，补未覆盖回归与实际机会缺口。Curve／Fluid目标backrun仍未验完；PSV毛利匹配与净EV拒绝分别保留；已通过的Yearn等不重开。Fluid Credit旧留仓记录不扩成本任务授权。\n- **阶段4仍在最后：** 前三阶段正确性处理后才进入4A逐协议真实单块，再进入4B全部适用协议代表性大图组合验收；包括Balancer V2／V3、Curve plain／underlying及所有本任务／IMPL新增适配协议。V2旧28,040边／94实例、4秒预算、约4.277秒重块中位数、429／缺失样本原样保留，结论仍未通过；旧小图局部成绩不代表当前4A／4B已完成。\n\n以上是证据复核进度，不是本轮重新运行build、历史EVM、自然机会或性能验收；旧成功只保留其原代码／状态／方向范围。[云端基线、证据指纹与剩余事项](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。本表仍是唯一主表。\n\n",
+  "rowInsertions": [
+    {
+      "rowAnchor": "KyberSwap Elastic（补充实例验收",
+      "originalLine": 5,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段1复用已记录跨tick与第九池修复、双接口及原失败证据；本轮不重新认证全部旧池为当前源码通过。借入amountIn的样本继续保留自然估值未通过标记，完整机会与4A／4B仍未验。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "aaf9d873b39a8051189ac838ff5f8ea43ea2752e3fb05d5d118cfb68cde70ebb",
+      "updatedRowSha256": "bb9a4cd4ef9af23411a0b25f2f4bd544dfe1f9665e8c50b76a78844cfd52c626"
+    },
+    {
+      "rowAnchor": "Balancer V3：",
+      "originalLine": 6,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段2保留36／36方向已有到账对照、35／36含生产参考金额的累计口径；N25944594的siUSD→sUSDe及InfiniFi赎回参考额仍是实际缺口。旧样本不计为本轮当前执行器重跑；4A／4B须在前三阶段后统一验。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "2c2ee1ba54e70b6a6163cebaa980da616b23483912b8b622c6607bb8443a562d",
+      "updatedRowSha256": "4e51dd4f43c7b736c4826adbdb5a45965d04cbee532ef407c6aa38d2977d1ca7"
+    },
+    {
+      "rowAnchor": "Frax frxUSD Custodian",
+      "originalLine": 7,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段2已核对现有ERC4626内的同步Custodian变体及双向借输入验收报告，复用既有成果，不另造重复Family。小图自然估值、原机会与4A／4B不随单腿正确性转通过。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "72359bd15b019cf776e542e7910b7b3d06de352acefc090b509c7af6a1879d9f",
+      "updatedRowSha256": "8c6f29c9c826cc910cd42a1330f00144ec778ebae4af28ad8d11ff0afc46f216"
+    },
+    {
+      "rowAnchor": "Yield Basis LT",
+      "originalLine": 8,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段1保留WETH／cbBTC／WBTC的存入和普通赎回证据；WETH当前执行器及自然参考补验已完成，不重做旧交接。BTC两图缺自然估值单列，已有借输入双执行不抹掉；未覆盖退出变体、原调用前状态与4A／4B不外推。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "00781a392a435754a2f5715027d4ab5a56d5e9ca7fba1103ed14c71af7be8b22",
+      "updatedRowSha256": "0e0669f41eed6ced56dc241da2c39cc6977f031af3a26a4b84fb808da1f7edf8"
+    },
+    {
+      "rowAnchor": "Compound V2 cToken",
+      "originalLine": 9,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段1首要剩余门仍为N26037262的cUNI生产参考amountIn；原TX份额及2倍份额成功不是该门通过。cUSDC／cDAI大图借输入和当前执行器记录直接复用，redeem(shares)不冒称原redeemUnderlying或外层完整机会。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "decda5afb336f28d3b8be985fef828e94666f2890def19eeb5bfd227f3c2bff2",
+      "updatedRowSha256": "354f92e0c3a5dc607f1e0b24b498f5b6bb3adb2722de1924c7e0ff32c347c75c"
+    },
+    {
+      "rowAnchor": "Algebra Integral",
+      "originalLine": 10,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段1复用六池、12方向、96次双执行及48次负例的绑定证据，不再按旧交接的“静态插件／未发现”推断重做。只覆盖已验插件和状态，任意插件、完整机会及4A／4B仍不作通过结论。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "3ce23053b4cf478c378a9c23edf131e92d0fbb7bd925d2e93de0724bd5356e1b",
+      "updatedRowSha256": "e415a26e3ea7435036ea565bff9f2a8bae324999fdde9990a1d912bdf95cd9c3"
+    },
+    {
+      "rowAnchor": "Curve plain ＋ Fluid DEX",
+      "originalLine": 11,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 中央ETH／WETH、0／1原始单位与stETH实收下界／正扣款修复已有实现和局部历史证据；请求输入不预扣、少到账与输入欠扣分列、下一跳走真实实收。尚未覆盖的strict／quoted／runtime安全回归和适用族需继续；本行目标backrun因果／自然目标／final sim／EV尚未完成，旧429、本轮未探测额度恢复及所有性能限制保留。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "a508e97876e207caeeeb0ceea86cfe376ca3137280f37cadf232ea26bb59718a",
+      "updatedRowSha256": "4bd486afd64e9088d3033046086e1ad8414a3815f17a6c814cb6bb50ec40ca08"
+    },
+    {
+      "rowAnchor": "eUSD PSV",
+      "originalLine": 12,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段3保留核心毛利匹配通过、生产净EV为负而正确拒绝的独立结论；不通过放宽EV强造盈利，也不重跑已完成的同N双接口。4A／4B未验，经济拒绝不是Family到账错误。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "22e943b3bb1b76f2dcfe64ecc1c914eb51cf8a13ee569a137b869625aa52a4e8",
+      "updatedRowSha256": "72e9fc7b59780f7b94f28e4524903a81571d0cf2a598e664beb89cb8f161c3d5"
+    },
+    {
+      "rowAnchor": "Yearn + Curve LP",
+      "originalLine": 13,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段3已有B/B自然核心、当前runtime自主选额、独立final sim及正EV记录，按原诊断资金起点和代码绑定复用，不重做机会验收。生产动态恢复的离线与历史证据仍分列；Yearn和Curve LP均纳入最后4A／4B。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "58947d9bdd01c9dda3a2ed7dd8a7b2534e540dcc03b1364e9ee861f182018d9a",
+      "updatedRowSha256": "e23434f4be7fc0017d48cc36c70311835f9e95eb2c280d3bf08a908d6caf1fe5"
+    },
+    {
+      "rowAnchor": "Curve Underlying／TBTC",
+      "originalLine": 17,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段2已核对最后两池锚点补验，七池清单均有各自版本的正确性证据；“3211待适配”和“两池仅失败TX待成功锚点”已被后续记录推进，不再作为重复任务。保留候选来源与成功swap锚点的区别，非七池本轮当前源码重跑；active-ramp／其他未覆盖变体及4A／4B仍须按范围验收，TBTC旧特殊豁免不改。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "d7e5e91d10c7d2c927c17cf598fc93c269a80dbbe0e447daace1caeb7d284f2e",
+      "updatedRowSha256": "91da8de854ef7270b9e1f6d61c988ee6312b74e01499d000a911c11fff3be5e8"
+    },
+    {
+      "rowAnchor": "Set Core legacy",
+      "originalLine": 19,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段2保留两变体四方向局部双执行；自然P得到6312 raw WBTC按400整倍数约束正确拒绝，不能少传或取整强过。其余三方向参考金额及非零entryFee历史样本仍未验证；BasicIssuance既有支持保持，4A／4B未验。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "8925d09ad50bc77a7f2f4e879e9f7c649a025ff52e64190cb99ac831277cfb76",
+      "updatedRowSha256": "abda0b270e9ee44be75438f660e0448c02475707b97e0fdac44ba607bb5f2d35"
+    },
+    {
+      "rowAnchor": "DODO GSP",
+      "originalLine": 20,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段2复用两池GSPFactory反向成员身份、4方向自然价格和16次quoted／runtime历史执行；不重复交接或验收。没有将单腿成功升级为原TX调用前／完整机会通过，4A／4B仍未验。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "10228a5dbd154e2557d4e81f2c8617fcb05564b7083dc34be42737e77c8abc95",
+      "updatedRowSha256": "041a9c14ebc750b7c49d53e829c26887f1b7cf81d5dfc61f90ddc84f234e183a"
+    },
+    {
+      "rowAnchor": "Balancer V2（兑换",
+      "originalLine": 22,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段4保留原代表性背景28040边／94目标实例／727目标方向及4秒合并阶段预算。旧候选重块报价中位数4276.945ms已超预算，第三块仅1次完成、另1次429及1次未跑，407方向启动失败隔离未解释；结论仍性能未通过。本轮未补测，必须先完成前三阶段及4A再进入4B，原慢点／失败／缺失样本不可被成功重跑覆盖。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "0ee4128cb9170e00214781dc00587c4c8b73fdc1e8fa344acd6e87f6c158a86f",
+      "updatedRowSha256": "9e23e1bb4312ae21c88be9bbf9c07d4cca57d6ca113415bd5ec1ec3e4c1afb98"
+    },
+    {
+      "rowAnchor": "Ekubo＋PSM",
+      "originalLine": 25,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段2coffee两池双执行证据按原状态复用；阶段3原DAI起点闭环的Ready／Funding缺口独立保留，不能用native coffee验收替代。仅按首个真实缺口继续，ERC20借入输入不冒称目标自然估值，4A／4B未验。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "edf2e54799101fdc7ffcb13ab5a6d2bfa66db9864fbed09c8a844c38510c73e1",
+      "updatedRowSha256": "222c708f7e422ec7f7b2470b5b4e2d49af733a545357454304114a0d8d6b2671"
+    },
+    {
+      "rowAnchor": "xWinAllocations",
+      "originalLine": 30,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段2N26075823活跃样本的自然双向参考金额及双执行已补齐，旧missing-valuation／份额参考缺失不再列为待重做；N26144845暂停正确retryable结论保持。旧机会quoted fallback不冒称新runtime完整闭环，4A／4B仍未验。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "560b2c8c6eda591d8804c13220a282a9b499f6ead14403441126c1ad9506e34a",
+      "updatedRowSha256": "baa743723df876d15b251bcae89ff5f124b71451459bf75445b0d46873b5f1c0"
+    },
+    {
+      "rowAnchor": "Fluid Credit／wstUSR",
+      "originalLine": 28,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 保留此前用户授权下的历史留仓记录；本次goal明确不扩展借款／信用／清算／锁仓库存策略，该旧记录不能提供新的留仓授权或充当本任务守恒闭环验收。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "6d505e13f5fc81b3fd76fa0ec6a8be024e6a2bed416d9ab7080e9d58aeb42d08",
+      "updatedRowSha256": "c22767a6616eeb0e45f5a700ad49876139c587ac1456fd56fe0390c98d100721"
+    },
+    {
+      "rowAnchor": "1inch Aqua／SwapVM",
+      "originalLine": 32,
+      "insertedText": "<br>**2026-10-13 接手进度核对（无新链上验收）：** 阶段3按Family接入＋合法caller准入缺口处理；当前源码43个生产入口中仍无Aqua／SwapVM入口。竞对固定calldata成功与本方凭证拒绝分别保留，不能改权限、借凭证或绕过准入强造可执行样本；时效性是否适用须先基于实际允许支持范围判定。 [核对证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json)。 ",
+      "originalRowSha256": "a1d89b58ce010888a5c462ef0c63b6b307b33979a9a3d7553c662d04c38f079b",
+      "updatedRowSha256": "e7db488ea328371ca5f5998f796325b8ad2876b52ecc0b826f3f4529f454f4d5"
+    }
+  ],
+  "updatedRows": 17,
+  "originalProtocolRows": 28,
+  "noNewMainTable": true,
+  "onlyExactInsertions": true,
+  "originalRowsColumnsAndPeerIncrementsPreserved": true,
+  "goalComplete": false
+}
