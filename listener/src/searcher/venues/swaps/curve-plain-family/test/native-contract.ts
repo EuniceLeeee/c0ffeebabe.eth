@@ -23,7 +23,7 @@ import { executeAdapterFamilyLifecycleBatch } from "../../../adapter-family-runt
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { asPricedFamily } from "../../../family-capability-catalog.js";
 import { executionData } from "../codec.js";
-import { copyReadySnapshot, curveReadyFamilies, readyReuseScope } from "./historical-ready.js";
+import { copyReadySnapshot, curveReadyFamilies, curveReadyTargetHasSwap, readyReuseScope } from "./historical-ready.js";
 import type { StartupCheckpointEnvelope } from "../../../../universe-rebuild-checkpoint.js";
 
 test("Ready snapshot copy preserves source, refuses overwrite and excludes live journal/lock", t => {
@@ -89,6 +89,46 @@ test("historical Ready reuse selects authenticated partitions without mutating i
   assert.throws(() => readyReuseScope(prior, block, hash, families), /selected source partitions/);
   for (const bad of ["", "univ3-standard", "curve-plain,unrelated", "curve-plain,curve-plain", "curve-plain,"])
     assert.throws(() => curveReadyFamilies(bad), /scope requires/);
+});
+
+test("historical Ready receipt anchor recognizes selected underlying events", () => {
+  // TX 0xd7ed92f013f5feca6f591cf5926fd1f18853d286aadd0a5c3f84fabc199692df,
+  // block 22871578, log 44: actual underlying direction 0 -> 3 and original amountIn.
+  const target = "0xc270b3b858c335b6ba5d5b10e2da8a09976005ad";
+  const actual = { address: target, topics: [
+    "0xd013ca23e77a65003c2c659c5442c00c805371b7fc1ebd4c206c41d1536bd90b",
+    "0x0000000000000000000000005141b82f5ffda4c6fe1e372978f1c5427640a190",
+  ], data: "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003f4e95584336ef243000000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000000000000000000000000000000045b0d82" };
+  const event = new ethers.Interface([
+    "event TokenExchangeUnderlying(address indexed buyer,int128 sold_id,uint256 tokens_sold,int128 bought_id,uint256 tokens_bought)",
+  ]).parseLog(actual)!;
+  assert.deepEqual([event.args.sold_id, event.args.tokens_sold, event.args.bought_id, event.args.tokens_bought],
+    [0n, 72987962862243607107n, 3n, 73076098n]);
+  const families = curveReadyFamilies("curve-underlying,univ3-standard");
+  for (const topic of [actual.topics[0], ethers.id("TokenExchangeUnderlying(address,uint256,uint256,uint256,uint256)")]) {
+    const log = { ...actual, topics: [topic, actual.topics[1]] };
+    assert.equal(curveReadyTargetHasSwap([log], target, families), true);
+    assert.equal(curveReadyTargetHasSwap([log], target.toUpperCase(), families), true);
+    assert.equal(curveReadyTargetHasSwap([log], target), false);
+    assert.equal(curveReadyTargetHasSwap([log], ethers.ZeroAddress, families), false);
+  }
+  assert.equal(curveReadyTargetHasSwap([{ ...actual, topics: [ethers.id("unrelated event")] }], target, families), false);
+  assert.equal(curveReadyTargetHasSwap([{ ...actual, topics: [] }], target, families), false);
+  assert.equal(curveReadyTargetHasSwap([], target, families), false);
+});
+
+test("historical Ready receipt anchor preserves all existing plain/native event signatures", () => {
+  const target = "0xc270b3b858c335b6ba5d5b10e2da8a09976005ad";
+  for (const signature of [
+    "TokenExchange(address,int128,uint256,int128,uint256)",
+    "TokenExchange(address,uint256,uint256,uint256,uint256)",
+    "TokenExchange(address,uint256,uint256,uint256,uint256,uint256,uint256)",
+  ]) {
+    const log = { address: target, topics: [ethers.id(signature)] };
+    assert.equal(curveReadyTargetHasSwap([log], target), true);
+    assert.equal(curveReadyTargetHasSwap([log], target, curveReadyFamilies("curve-underlying")), true);
+    assert.equal(curveReadyTargetHasSwap([log], ethers.ZeroAddress), false);
+  }
 });
 
 const pool = "0x1111111111111111111111111111111111111111", token = "0x2222222222222222222222222222222222222222";

@@ -15,6 +15,7 @@ import { resolveStrictReadyRuntime } from "../../../../strict-ready-runtime.js";
 import { RevmSimClient } from "../../../../revm-sim-client.js";
 import { CURVE_PLAIN_FAMILY_ID } from "../manifest.js";
 import { SWAP_TOPIC, UINT_SWAP_TOPIC, UINT_NG_SWAP_TOPIC } from "../discovery.js";
+import { CURVE_UNDERLYING_I128_SWAP_TOPIC, CURVE_UNDERLYING_UINT_SWAP_TOPIC } from "../../curve-underlying-family/codec.js";
 
 // Optional same-block background supplies natural valuation paths; production
 // wiring still owns discovery, identity and graph publication for every family.
@@ -24,6 +25,15 @@ export function curveReadyFamilies(value: string = CURVE_PLAIN_FAMILY_ID): strin
     ids.every(id => [CURVE_PLAIN_FAMILY_ID, "curve-underlying", "univ3-standard"].includes(id)),
   "scope requires a Curve family and only optional univ3-standard");
   return ids.sort();
+}
+
+/** Receipt anchoring only; production discovery/strict still owns admission. */
+export function curveReadyTargetHasSwap(logs: readonly { address: string; topics: readonly string[] }[],
+  target: string, familyIds = curveReadyFamilies()): boolean {
+  const topics = [SWAP_TOPIC, UINT_SWAP_TOPIC, UINT_NG_SWAP_TOPIC,
+    ...(familyIds.includes("curve-underlying") ? [CURVE_UNDERLYING_I128_SWAP_TOPIC, CURVE_UNDERLYING_UINT_SWAP_TOPIC] : [])];
+  return logs.some(log => log.address.toLowerCase() === target.toLowerCase() &&
+    topics.includes((log.topics[0] ?? "").toLowerCase() as `0x${string}`));
 }
 
 /** The production checkpoint reader authenticates prior before this scope check. */
@@ -98,8 +108,7 @@ async function main() {
     assert(receipt && receipt.transactionHash.toLowerCase() === tx.toLowerCase() && BigInt(receipt.status) === 1n);
     const block = Number(BigInt(receipt.blockNumber)), header = await provider.send("eth_getBlockByNumber", [receipt.blockNumber, false]);
     assert.equal(header.hash, receipt.blockHash); save("receipt.json", receipt); save("header.json", header);
-    assert(receipt.logs.some((l: any) => l.address.toLowerCase() === expected &&
-      [SWAP_TOPIC, UINT_SWAP_TOPIC, UINT_NG_SWAP_TOPIC].includes(l.topics[0])), "target has no real Curve swap in TX");
+    assert(curveReadyTargetHasSwap(receipt.logs, expected, familyIds), "target has no real Curve swap in TX");
     save("executor-runtime-code.json", loadBotVmRuntimeCode(owner));
     stage = "production-single-block-ready";
     const checkpoint = resolve(out, "ready.json");
