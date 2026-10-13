@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-13",
+  "sourceReportCommit": "15a9b09eb1b1c7a9dc9f4867d06bba90667f5e24",
+  "sourceReport": "docs/research/reports/manual-four-hop-reference-20261013.json",
+  "sourceReportSha256": "37fd38c6acdec65df2a38ba60942ff561076b402edf15ab4677eee03c6dc3829",
+  "originalMainTable": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "e1ae42d9174b5445be4183a3409aedb99e34cb56c26d22a0df70ab65f1e17ced",
+  "afterSha256": "b8e9c5a0b38dad953257dbe2f0b1323edd69d75e44f3eb2d4c688655da80a8cb",
+  "scope": "update this task-owned stage2 summary and append to existing Balancer V3 row, retaining all other content",
+  "changes": [
+    {
+      "kind": "replace-own-progress-summary",
+      "before": "- **阶段2仍未关闭：** 旧 Set 三方向参考额及非零 entryFee 历史覆盖、V3 siUSD→sUSDe（累计参考35／36）及相关 InfiniFi 赎回参考额仍缺；DODO两池、xWin自然参考、Frax同步变体、Ekubo已验范围及Curve underlying七池后续证据直接复用。其余变体仅按真实缺口补验。",
+      "after": "- **阶段2仍未关闭：** 旧 Set 三方向参考额及非零 entryFee 历史覆盖仍缺。N25944594已重新生成单块Ready，按用户授权用同状态四跳报价末端输出，补齐V3 siUSD→sUSDe及InfiniFi赎回的手工参考金额正确性：整额／半额共8次执行、12个负例通过。默认3跳自然估值仍缺，原生产参考累计35／36不改；本轮补样不计成自然参考通过。DODO两池、xWin自然参考、Frax同步变体、Ekubo已验范围及Curve underlying七池后续证据继续复用，其余变体只补真实缺口。"
+    },
+    {
+      "kind": "append-existing-row",
+      "line": 17,
+      "row": "Balancer V3 / related InfiniFi",
+      "beforeLineSha256": "4e51dd4f43c7b736c4826adbdb5a45965d04cbee532ef407c6aa38d2977d1ca7",
+      "append": "<br>**2026-10-13 按用户要求重新做单块Ready＋手工四跳输入（`15a9b09`）：** TX `0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5`，N25944594／hash `0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e`。从不存在的新checkpoint走现有生产startup，仅扫描本块；14候选中13验证、1项UniV3 pool-fee探测retryable，全部有账。当前源码自然Graph／raw／effective各30行，24 quoted、6缺估值，fresh无carried。保持生产参考输入上限3跳、原价格表及coffee原件不动；新价格中WETH→wstETH→crvUSD→sUSDe→siUSD四条fresh报价连续，末端 **4549931237571597530 raw siUSD** 仅作CLI手工amountIn，另验半额2274965618785798765，目标报价与执行重新绑定同N状态。<br>V3 `0x071828acc755314e687448703775f22194f56867` 的siUSD→sUSDe：两金额报价／quoted／runtime实收分别 **3968925188898275615／1984477614880721093**；4次执行差0、4个零输入＋旧输出库存负例回滚，输入旧库存101、输出旧库存103和原生17 wei未被消耗，ERC20／Permit2支出授权归零。InfiniFi Gateway赎回两金额实收分别 **4952047728233757173／2476023864116878586 raw iUSD**，4次执行差0、8个缺输入／执行后强制回滚负例通过，Gateway无残留，runtime构造Exact／quoted／RPC=0且无fallback。V3本轮只新验Family构造RPC=0，不冒称新生产选额器验收。当前生产build与178项离线测试通过；另重读原始余额差分／可信实收effects并对照Transfer净额，未见差异，非另一审查者。旧Ready源码不匹配、复制Ready漏开本地执行器override及离线提取器失败均保留。**累计仍36／36方向已有到账、35／36自然或借额生产参考，另1方向为本次授权手工四跳参考补验；默认3跳自然估值仍未通过。** 原TX调用前状态、完整机会、4A单块时效性及4B代表性组合时效性均未验；不标完整适配交付。[新Ready、同状态双执行与限制证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/15a9b09eb1b1c7a9dc9f4867d06bba90667f5e24/docs/research/reports/manual-four-hop-reference-20261013.json)。"
+    }
+  ],
+  "allOtherBytesPreserved": true,
+  "performance": "4A / 4B NOT RUN",
+  "goalStatus": "active"
+}
