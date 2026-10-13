@@ -1102,6 +1102,41 @@
       },
       "created_at": "2026-10-13T16:17:59.619Z",
       "updated_at": "2026-10-13T16:27:59.305Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261014-curve-lending-allowance-policy",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x7a50fd5125a637250c4b18a5ad573ba1cbb9a42c19a3607e57850d71c35bb79a",
+      "target_block": 25979013,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "historical_dual_assumed_all_curve_underlying_actions_keep_standing_allowance",
+      "evidence": {
+        "scope": "Family single-leg correctness tool; no opportunity or performance closure",
+        "failedArtifact": "logs/stage2-lending-wrapper-20261014.u2nf1sja/usdx-i0-j1-x1-dual-after-fix-attempt01.json",
+        "failedArtifactSha256": "fc3404cb455ca2010b660c21c7e7e90d005486ff3d5973606679c2df2f513c22",
+        "observation": "Three root calls execute full 1e18 DAI input and 1003220 USDC actual receipt; approved 0 -> input -> 0. Tool fails at old MAX-grant expectation before any no-input control. Original failure remains failed; 71 samples unrun.",
+        "independentReview": "Non-author curve_ready_review independently reproduced 76 raw checks including nested owner/spender allowance storage and final zero getter result; agrees the classifier is stale.",
+        "successfulMatrix": "logs/stage2-lending-wrapper-20261014.u2nf1sja/manual-dual-matrix-attempt02-status.json",
+        "finalIndependentReview": "logs/stage2-lending-wrapper-20261014.u2nf1sja/lending-matrix-independent-review-attempt01.json",
+        "finalIndependentReviewSha256": "6a1c7debb37fda648001aec259652c256c8e58571e12276b22c5a53749492fdb",
+        "report": "docs/research/reports/curve-underlying-lending-acceptance-20261014.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-runtime-dual-historical-fork",
+        "issue": "All Curve underlying actions were required to leave MAX or MAX-input approvals, incorrectly rejecting the lending Family temporary exact approval and cleanup.",
+        "evidence": "Same-source successful EVM calls and zero final allowance, independently checked; failure retained. Corrected canonical attempt02 completed 72 samples with 144 main executions, 72 diagnostics and 216 actual zero-input controls; independent 14655-check raw audit passed. CLI safety12/12 rejects residual approvals.",
+        "codify_target": "historical-runtime-dual.ts action-specific allowance assertion and historical-runtime-dual-safety.test.ts adverse residual coverage",
+        "status": "codified",
+        "codify_commit": "ec82f9d114a528605f4f536972c38f6b2a7d884d"
+      },
+      "created_at": "2026-10-13T18:11:43.593403+00:00",
+      "updated_at": "2026-10-13T18:38:56.517408+00:00"
     }
   ]
 }
