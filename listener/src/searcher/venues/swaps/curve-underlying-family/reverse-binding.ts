@@ -1,3 +1,5 @@
+import { lendingKind, LENDING_LP_CODE_HASH, LENDING_LP_SLOT, LENDING_MINTER_SLOT,
+  LENDING_ABI, lendingAddress } from "./lending.js";
 import { CURVE_LEGACY_FACTORY, CURVE_LEGACY_FACTORY_INTERFACE,
   decodeLegacyFactoryBasePool, decodeLegacyFactoryCoins } from "./legacy-factory.js";
 import { ethers } from "ethers";
@@ -53,7 +55,26 @@ export async function reverseBindCurveUnderlying(input: {
         continue;
       }
       let registered: string | undefined;
-      if (hasLegacyV1UnderlyingQuoteModel(code)) {
+      if (lendingKind(code)) {
+        const lp = lendingAddress(await input.provider.getStorage(pool, LENDING_LP_SLOT, input.source.number));
+        const lpCode = await input.provider.getCode(lp, input.source.number);
+        const minter = lendingAddress(await input.provider.getStorage(lp, LENDING_MINTER_SLOT, input.source.number));
+        if (ethers.keccak256(lpCode) !== LENDING_LP_CODE_HASH || minter.toLowerCase() !== pool)
+          throw new Error("lending LP reverse binding failed");
+        const wrapped: string[] = [], underlying: string[] = [];
+        for (let i = 0; i < 4; i++) {
+          const read = async (to: string, name: string, args: readonly unknown[] = []) => lendingAddress(
+            await input.provider.call({ to, data: LENDING_ABI.encodeFunctionData(name, args) }, input.source.number));
+          const coin = await read(pool, "coins", [i]), token = await read(pool, "underlying_coins", [i]);
+          if ((await read(coin, "token")).toLowerCase() !== token.toLowerCase())
+            throw new Error("lending wrapper reverse binding failed");
+          wrapped.push(coin); underlying.push(token);
+        }
+        if (new Set([...wrapped, ...underlying].map(c => c.toLowerCase())).size !== 8)
+          throw new Error("lending ambiguous topology");
+        registered = canonicalAddress(pool);
+      }
+      if (registered === undefined && hasLegacyV1UnderlyingQuoteModel(code)) {
         assertV1FactoryCode(await input.provider.getCode(CURVE_V1_FACTORY, input.source.number));
         const wrapped = await input.provider.call({ to: CURVE_V1_FACTORY,
           data: CURVE_V1_FACTORY_INTERFACE.encodeFunctionData("get_coins", [pool]) }, input.source.number);

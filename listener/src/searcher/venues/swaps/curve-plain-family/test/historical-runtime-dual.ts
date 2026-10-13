@@ -1,6 +1,8 @@
+import { RevmSimClient } from "../../../../revm-sim-client.js";
+import { createRevmStrictSourceSimulation } from "../../../../revm-strict-source-simulation.js";
 // Opt-in historical Curve single-leg evidence. Reuses the pinned-fork method
 // validated by balancer-v3-family/test/historical-runtime-dual.ts, with Curve's
-// production requirement materializer and standing-allowance semantics.
+// production requirement materializer and Family-specific allowance semantics.
 // Not a Ready writer, full-route sim,
 // original-TX replay, latency benchmark, or adapter/production acceptance gate.
 import { curveHistoricalAmounts } from "./historical-amounts.js";
@@ -91,7 +93,7 @@ export function curveHistoricalManualInput(value?: string): CurveManualInput | u
 
 function options(argv: string[]) {
   const names = ["--ready", "--prices", "--pool", "--family", "--rpc-file", "--out", "--port"];
-  const allowedNames = [...names, "--executor-hardfork", "--reference-executions", "--price-input", "--reference-prices", "--reference-edges", "--manual-input", "--expect-output-error"];
+  const allowedNames = [...names, "--revm-bin", "--executor-hardfork", "--reference-executions", "--price-input", "--reference-prices", "--reference-edges", "--manual-input", "--expect-output-error"];
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     assert(allowedNames.includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
@@ -125,6 +127,7 @@ function options(argv: string[]) {
     reference: values.has("--reference-executions") ? realpathSync(values.get("--reference-executions")!) : undefined,
     referencePrices: values.has("--reference-prices") ? realpathSync(values.get("--reference-prices")!) : undefined,
     referenceEdges: referenceEdges as string[], manual, hardfork, expectedOutputError,
+    revmBin: values.has("--revm-bin") ? realpathSync(values.get("--revm-bin")!) : undefined,
     name, rpcFile: realpathSync(values.get("--rpc-file")!), pool: lower(ethers.getAddress(
       values.get("--pool")!.startsWith("0x") ? values.get("--pool")! : `0x${values.get("--pool")!}`)), out };
 }
@@ -183,6 +186,18 @@ function observed(diff: any, address: string, slot: string, initial: bigint, req
   assert.equal(before, initial, "trace prestate disagrees with independently read balance");
   if (requireChange) assert(slot in pre || slot in post, "actor balance did not change in prestate trace");
   return { before, after, delta: after - before };
+}
+
+/** Check the admitted action's actual approval contract. Legacy pull adapters
+ * keep MAX grants; wrapper/native programs grant only this input and clear it. */
+export function curveHistoricalAllowancePolicy(adapterId: string, mode: string, amountIn: bigint, allowance: bigint) {
+  assert(amountIn > 0n && amountIn <= MAX_UINT, "allowance input bounds");
+  const temporary = adapterId === "curve-exchange-underlying-lending" ||
+    adapterId === "curve-exchange-underlying-uint-native";
+  const pulls = adapterId === "curve-exchange-underlying" || pullsInput(mode as any);
+  assert(temporary || !pulls ? allowance === 0n : allowance === MAX_UINT || allowance === MAX_UINT - amountIn,
+    "Family allowance policy mismatch");
+  return temporary ? "temporary-cleared" : pulls ? "standing-grant" : "no-grant";
 }
 
 export function observedNativeInventory(diff: any, address: string, initial: bigint) {
@@ -272,7 +287,8 @@ export function assertOutputRejection(input: {
 export function curveHistoricalQuoteTargets(descriptor: CurvePlainDescriptor | CurveUnderlyingDescriptor): Set<string> {
   if ("binding" in descriptor) return new Set(curveRefreshAddresses(descriptor).map(lower));
   const model = descriptor.quoteModel;
-  return new Set([descriptor.pool, ...(model
+  return new Set([descriptor.pool, ...(descriptor.lending ? [descriptor.lending.lpToken,
+    ...descriptor.lending.wrappedCoins, ...descriptor.coins] : []), ...(model
     ? [model.basePool, model.baseLPToken, model.implementation, ...model.baseCoins] : [])].map(lower));
 }
 
@@ -310,6 +326,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     safety: { broadcast: false, signing: false, remoteSubmission: false, minedBlocks: 0,
       executionOverrides: "test actor code/native gas and actor ERC20 balances only; no pool/registry/liquidity overrides" } };
   let backend: AnvilStateBackend | undefined, secret = "", stage = "offline-inputs";
+  let quoteSimulation: ReturnType<typeof createRevmStrictSourceSimulation> | undefined;
   const abort = new AbortController(), deadline = Date.now() + 480_000;
   const timer = setTimeout(() => abort.abort(new Error("test wall budget exceeded")), 480_000);
   const interrupt = () => abort.abort(new Error("test interrupted"));
@@ -536,10 +553,33 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     // coins. This is a test read boundary, not another quote implementation.
     const quoteTargets = curveHistoricalQuoteTargets(descriptor);
     report.quoteReadTargets = [...quoteTargets].sort();
+    if ("lending" in descriptor && descriptor.lending) assert(args.revmBin, "lending Exact requires explicit production --revm-bin");
+    if (args.revmBin) {
+      report.quoteSimulation = { binary: args.revmBin, binarySha256: sha(readFileSync(args.revmBin)), calls: [], fatals: [] };
+      quoteSimulation = createRevmStrictSourceSimulation({
+        identity: { source, rpcUrl: loopback, chainId: 1 },
+        control: { signal: abort.signal, deadlineAtMs: deadline }, executionGasLimit: 0x1000000,
+        executorRuntimeCode: { code: botvm.code, keccak256: botvm.keccak256 },
+        createClient: ({ onFatal }) => {
+          const client = new RevmSimClient({ executablePath: args.revmBin, timeoutMs: 90_000, onFatal });
+          const simulate = client.strictSimulate.bind(client);
+          client.strictSimulate = async (request, control) => {
+            if (constructing) { constructionAttempts++; throw new Error("simulation during runtime construction"); }
+            const row: Record<string, any> = { request: { ...request, rpcUrl: "owned-loopback" } };
+            report.quoteSimulation.calls.push(row);
+            try { const response = await simulate(request, control); row.response = response; return response; }
+            catch (error) { row.error = failure(error); throw error; }
+          };
+          return client;
+        },
+        onFatal(reason) { report.quoteSimulation.fatals.push(reason); },
+      });
+    }
     for (const { row, amountRow, referenceInput, route, definition } of rows) {
       let overrides: Overrides = {};
       const queryCalls: any[] = [];
       const runtime = createStrictCentralAdapterRuntime({ executor: EXECUTOR, transactionOrigin: OWNER,
+        ...(quoteSimulation ? { simulator: quoteSimulation.transport } : {}),
         generationFence: { assertCurrent(generation, requested) {
           assert.equal(generation, source.generation); assert.deepEqual(requested, source);
         } }, provider: {
@@ -591,11 +631,13 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         try {
           stage = "production-exact";
           const queryStart = queryCalls.length;
+          const simulationStart = report.quoteSimulation?.calls.length ?? 0;
           // Match production effective's original Exact selection. A proven local
           // or hybrid method is not a chain-only get_dy helper.
           const quote = await executeFamilyExactQuote({ family, route, amountIn, source, generation: source.generation,
             executor: EXECUTOR, runtimeEvidence: [], runtime });
-          sample.quote = { status: quote.status, outcome: quote.outcome, queryCalls: queryCalls.slice(queryStart) };
+          sample.quote = { status: quote.status, outcome: quote.outcome, queryCalls: queryCalls.slice(queryStart),
+            simulationCallIndexes: report.quoteSimulation ? report.quoteSimulation.calls.slice(simulationStart).map((_: unknown, i: number) => simulationStart + i) : [] };
           assert.equal(quote.status, "resolved", "production Exact unresolved");
           if (quote.status !== "resolved") throw new Error("production Exact unresolved");
           assert(quote.amountOut > 0n); sample.quote.amountOut = quote.amountOut;
@@ -698,15 +740,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               assert.equal(await balance(tokenIn, EXECUTOR, post), input.after);
               assert.equal(await balance(tokenOut, EXECUTOR, post), output.after);
               result.finalAllowances = await readAllowances(post);
-              // Curve's current contract deliberately keeps its standing ERC20
-              // grant. Assert both builders preserve that policy, not Balancer's
-              // temporary Permit2 cleanup policy. Tokens may decrement MAX_UINT.
               const mode = "executionMode" in definition ? String(definition.executionMode) : "exchange-underlying";
-              const pulls = args.name === "curve-underlying" || pullsInput(mode as any);
-              const finalAllowance = result.finalAllowances[0][0];
-              assert(pulls ? finalAllowance === MAX_UINT || finalAllowance === MAX_UINT - amountIn : finalAllowance === 0n,
-                "Family allowance policy mismatch");
-              result.allowancePolicy = pulls ? "standing-grant" : "no-grant";
+              result.allowancePolicy = curveHistoricalAllowancePolicy(leg.actionAdapterId, mode,
+                amountIn, result.finalAllowances[0][0]);
 
               stage = `${encoding}-no-input-control`;
               // Preserve enough OLD output for either observed or quoted output,
@@ -786,6 +822,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   } catch (error) { report.errors.push(failure(error)); }
   finally {
     stage = "owned-fork-cleanup";
+    try { if (quoteSimulation) await quoteSimulation.closeAndDrain(); report.quoteSimulationDrained = true; }
+    catch (error) { report.errors.push(failure(error)); report.result = "failed"; }
     try { if (backend) await backend.stopAndWait(); report.forkStopped = true; }
     catch (error) { report.errors.push(failure(error)); report.result = "failed"; }
     finally { backend?.provider.destroy(); }

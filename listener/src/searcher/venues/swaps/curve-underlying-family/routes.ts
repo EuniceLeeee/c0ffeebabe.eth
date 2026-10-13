@@ -4,6 +4,7 @@ import { hashCanonical } from "../../canonical-value.js";
 import { lowerAddress } from "./codec.js";
 import { curveUnderlyingStaticBindingProjection } from "./instance.js";
 import { CURVE_UNDERLYING_NATIVE_ACTION, underlyingNativeAssets } from "./native.js";
+import { CURVE_UNDERLYING_LENDING_ACTION } from "./lending-execution.js";
 import type {
   CurveUnderlyingDescriptor,
   CurveUnderlyingRoute,
@@ -47,7 +48,8 @@ export const curveUnderlyingRoutes = {
   },
   projectGraph({ descriptor, route }) {
     return Object.freeze({
-      routeActionAdapterId: descriptor.nativeAlias ? CURVE_UNDERLYING_NATIVE_ACTION : "curve-exchange-underlying",
+      routeActionAdapterId: descriptor.lending ? CURVE_UNDERLYING_LENDING_ACTION
+        : descriptor.nativeAlias ? CURVE_UNDERLYING_NATIVE_ACTION : "curve-exchange-underlying",
       executionTarget: descriptor.pool,
       venueIdentity: Object.freeze({
         kind: "address-pool",

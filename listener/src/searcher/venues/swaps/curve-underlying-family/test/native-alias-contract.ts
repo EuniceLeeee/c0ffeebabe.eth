@@ -323,7 +323,7 @@ function nativeProbeStep(d: CurveUnderlyingDescriptor, selected: bigint,
 }
 
 test("production catalog/lifecycle continues after legacy int128 returned 0x and publishes native uint identity", async () => {
-  assert.deepEqual(plugin.identity.variants.map(v => v.id), ["metaregistry-member", "metaregistry-uint-native-alias", "legacy-factory-member", "factory-v1-member"]);
+  assert.deepEqual(plugin.identity.variants.map(v => v.id), ["metaregistry-member", "metaregistry-uint-native-alias", "legacy-factory-member", "factory-v1-member", "legacy-lending-lp-reverse"]);
   const run = await lifecycle(), instance = assertVerified(run);
   const ids = run.rounds.map(round => round.map(r => r.id));
   const oldRound = ids.findIndex(round => round.some(id => id.startsWith("behavior-get-dy:")));

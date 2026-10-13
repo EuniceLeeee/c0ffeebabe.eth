@@ -1,3 +1,5 @@
+import { lendingGuardRequests, assertLendingGuards, lendingSwapRequest, decodeLendingSwap,
+  lendingSimulationRequirements, lendingProjection } from "./lending.js";
 import { acceptLegacyPlainControlCall, legacyPlainQuoteRequests, decodeLegacyPlainState, quoteLegacyPlain } from "./legacy-plain.js";
 import { curveUnderlyingAcceptBaseCall, curveUnderlyingAcceptLpMutation, curveUnderlyingAcceptMutation, curveUnderlyingQuoteModelProjection, curveUnderlyingRefreshAddresses } from "./quote-model.js";
 import { CURVE_UNDERLYING_NATIVE_QUOTE } from "./native.js";
@@ -42,13 +44,14 @@ export const curveUnderlyingPricing = {
   // Crypto and the bound classic meta/base model can change price as A/gamma
   // ramps advance without pool activity. Reuse the central each-block lifecycle;
   // current A and every dependent amount quote stay bound to that same source.
-  refreshPolicyForInstance: ({ descriptor }) => descriptor.nativeAlias || descriptor.quoteModel
+  refreshPolicyForInstance: ({ descriptor }) => descriptor.nativeAlias || descriptor.quoteModel || descriptor.lending
     ? "each-block" : "on-touch",
   stateKey: (route) => route.routeKey,
   staticBindingProjection: ({ descriptor, routes }) => ({
     pool: descriptor.pool,
     quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
     legacyPlain: descriptor.legacyPlain ? { ...descriptor.legacyPlain } : null,
+    lending: lendingProjection(descriptor.lending),
     nativeAlias: descriptor.nativeAlias ? { ...descriptor.nativeAlias } : null,
     coins: descriptor.coins,
     registryBinding: {
@@ -70,6 +73,7 @@ export const curveUnderlyingPricing = {
     pool: descriptor.pool,
     quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
     legacyPlain: descriptor.legacyPlain ? { ...descriptor.legacyPlain } : null,
+    lending: lendingProjection(descriptor.lending),
     nativeAlias: descriptor.nativeAlias ? { ...descriptor.nativeAlias } : null,
     registry: descriptor.registryBinding.registry,
     directions: routes.map((route) => ({
@@ -92,6 +96,7 @@ export const curveUnderlyingPricing = {
       coins: Object.freeze([...descriptor.coins]),
       ...(descriptor.quoteModel ? { quoteModel: descriptor.quoteModel } : {}),
       ...(descriptor.legacyPlain ? { legacyPlain: descriptor.legacyPlain } : {}),
+      ...(descriptor.lending ? { lending: descriptor.lending } : {}),
       ...(descriptor.nativeAlias ? { nativeAlias: descriptor.nativeAlias } : {}),
       route,
     });
@@ -101,8 +106,12 @@ export const curveUnderlyingPricing = {
     coins: Object.freeze([...draft.coins]),
   }),
   current: {
-    requirements: ({ descriptor }) => ({ transports: descriptor.legacyPlain ? ["eth-call", "get-code", "get-storage"] : ["eth-call"] }),
+    requirements: ({ descriptor }) => ({ transports: descriptor.legacyPlain || descriptor.lending ? ["eth-call", "get-code", "get-storage"] : ["eth-call"] }),
     buildRequests({ descriptor }) {
+      if (descriptor.lending) return [...lendingGuardRequests(descriptor.pool, descriptor.lending), {
+        id: TOKEN_DECIMALS_ID, kind: "eth-call" as const, to: descriptor.route.tokenIn,
+        data: CURVE_UNDERLYING_ERC20_INTERFACE.encodeFunctionData("decimals"), completion: "return-data" as const,
+      }];
       return Object.freeze([
         ...(descriptor.legacyPlain ? legacyPlainQuoteRequests(descriptor.pool) : []),
         Object.freeze({
@@ -143,6 +152,17 @@ export const curveUnderlyingPricing = {
       initialResults,
       priorEvidence,
     }) {
+      if (current.descriptor.lending) {
+        assertLendingGuards(current.descriptor.pool, current.descriptor.coins, current.descriptor.lending,
+          current.source, initialResults);
+        const results = collectRequestProgramResults(initialResults, priorEvidence);
+        const candidates = quoteCandidates(current.descriptor, results);
+        if (completedRound === 0) return bindRequestResultRound(lendingSimulationRequirements,
+          [lendingCurrentRequest(current.descriptor, candidates[0], 0)]);
+        if (lendingCurrentQuote(current.descriptor, results, candidates) !== null || completedRound !== 1) return null;
+        return bindRequestResultRound(lendingSimulationRequirements, candidates.slice(1).map((amount, index) =>
+          lendingCurrentRequest(current.descriptor, amount, index + 1)));
+      }
       if (current.descriptor.legacyPlain) return null;
       const priorResults = collectRequestProgramResults(
         initialResults,
@@ -170,6 +190,14 @@ export const curveUnderlyingPricing = {
         dependentEvidence,
       );
       const candidates = quoteCandidates(descriptor, results);
+      if (descriptor.lending) {
+        const source = requireSuccessfulResult(initialResults, "lending-pool-code").source;
+        assertLendingGuards(descriptor.pool, descriptor.coins, descriptor.lending, source, initialResults);
+        const quote = lendingCurrentQuote(descriptor, results, candidates);
+        if (quote === null) throw new Error("lending has no executable current quote");
+        const scale = decodeInputScale(descriptor, results);
+        return { source, amountIn: quote.amountIn, amountOut: quote.amountOut, inputUnit: scale.unit, inputBalance: null };
+      }
       if (descriptor.legacyPlain) {
         const source = requireSuccessfulResult(results, "legacy-plain-code").source;
         const state = decodeLegacyPlainState(descriptor.legacyPlain, source, results);
@@ -224,14 +252,14 @@ export const curveUnderlyingPricing = {
     },
   },
   dependencies: ({ descriptor }) => Object.freeze([...new Set([
-    ...curveUnderlyingRefreshAddresses(descriptor),
+    ...refreshAddresses(descriptor),
     descriptor.registry,
     ...descriptor.coins,
   ].map(address => address.toLowerCase()))]),
   mutation: {
     compile: ({ entries }) => {
       const logs = compileAddressMutations(entries, ({ descriptor, routes }) => ({
-        addresses: curveUnderlyingRefreshAddresses(descriptor).filter(address => !descriptor.quoteModel ||
+        addresses: refreshAddresses(descriptor).filter(address => !descriptor.quoteModel ||
           !sameAddress(address, descriptor.quoteModel.baseLPToken)),
         keys: routes.map(route => route.routeKey),
       }), { kinds: ["log"], accept: curveUnderlyingAcceptMutation });
@@ -244,7 +272,7 @@ export const curveUnderlyingPricing = {
         keys: routes.map(route => route.routeKey),
       }), { kinds: ["call"], accept: curveUnderlyingAcceptBaseCall });
       const controls = compileAddressMutations(entries, ({ descriptor, routes }) => ({
-        addresses: descriptor.legacyPlain ? [descriptor.pool] : [],
+        addresses: descriptor.legacyPlain || descriptor.lending ? [descriptor.pool] : [],
         keys: routes.map(route => route.routeKey),
       }), { kinds: ["call"], accept: acceptLegacyPlainControlCall });
       return Object.freeze({
@@ -263,7 +291,7 @@ export const curveUnderlyingPricing = {
     },
     affectedStateKeys({ descriptor, routes, observation }) {
       if (observation.kind === "call") {
-        if (descriptor.legacyPlain && sameAddress(observation.target, descriptor.pool) &&
+        if ((descriptor.legacyPlain || descriptor.lending) && sameAddress(observation.target, descriptor.pool) &&
             acceptLegacyPlainControlCall(observation)) return Object.freeze(routes.map(route => route.routeKey));
         return descriptor.quoteModel && curveUnderlyingAcceptBaseCall(observation) &&
           sameAddress(observation.target, descriptor.quoteModel.basePool)
@@ -274,7 +302,7 @@ export const curveUnderlyingPricing = {
           !curveUnderlyingAcceptLpMutation(observation)) return [];
       if (
         observation.kind !== "log" || !curveUnderlyingAcceptMutation(observation) ||
-        !curveUnderlyingRefreshAddresses(descriptor).some(address => sameAddress(observation.address, address))
+        !refreshAddresses(descriptor).some(address => sameAddress(observation.address, address))
       ) {
         return [];
       }
@@ -481,4 +509,24 @@ function routeEdge(
     curveJ: route.j,
     ...deriveEdgeTaxonomy("swap"),
   });
+}
+
+function refreshAddresses(descriptor: CurveUnderlyingPricingDescriptor): readonly string[] {
+  return descriptor.lending ? [descriptor.pool, descriptor.lending.lpToken, ...descriptor.lending.wrappedCoins]
+    : curveUnderlyingRefreshAddresses(descriptor);
+}
+function lendingCurrentRequest(descriptor: CurveUnderlyingPricingDescriptor, amountIn: bigint, index: number): AdapterRequest {
+  return lendingSwapRequest({ id: quoteRequestId(index), ...descriptor.route, pool: descriptor.pool, amountIn });
+}
+function lendingCurrentQuote(descriptor: CurveUnderlyingPricingDescriptor, results: readonly AdapterRequestResult[],
+  candidates: readonly bigint[]): { amountIn: bigint; amountOut: bigint } | null {
+  const source = requireSuccessfulResult(results, "lending-pool-code").source;
+  for (const [index, amountIn] of candidates.entries()) {
+    const read = results.find(r => r.id === quoteRequestId(index));
+    if (!read) continue;
+    const amountOut = decodeLendingSwap({ pool: descriptor.pool, coins: descriptor.coins, binding: descriptor.lending!,
+      i: descriptor.route.i, j: descriptor.route.j, amountIn, source }, read);
+    if (amountOut !== null) return { amountIn, amountOut };
+  }
+  return null;
 }

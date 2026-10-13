@@ -1,3 +1,5 @@
+import { lendingGuardRequests, assertLendingGuards, lendingSwapRequest, decodeLendingSwap,
+  lendingSimulationRequirements, lendingProjection } from "./lending.js";
 import { legacyPlainQuoteRequests, decodeLegacyPlainState, quoteLegacyPlain } from "./legacy-plain.js";
 import { classicUnderlyingQuoteRequests, classicUnderlyingQuoteNextRound, decodeClassicUnderlyingQuote } from "./classic-meta-quote.js";
 import { curveUnderlyingQuoteModelProjection } from "./quote-model.js";
@@ -26,14 +28,17 @@ const curveUnderlyingRequestProgram: ExactRequestProgram<
   CurveUnderlyingRoute,
   CurveUnderlyingExactEvidence
 > = {
-  requirements: ({ descriptor }) => ({ transports: descriptor.quoteModel ? ["eth-call", "get-code", "get-storage"]
-    : descriptor.legacyPlain ? ["eth-call", "get-code", "get-storage"] : ["eth-call"] }),
+  requirements: ({ descriptor }) => descriptor.lending ? { ...lendingSimulationRequirements,
+    transports: ["eth-call", "get-code", "get-storage", "effect-delta-simulation"] } :
+    ({ transports: descriptor.quoteModel || descriptor.legacyPlain ? ["eth-call", "get-code", "get-storage"] : ["eth-call"] }),
   buildRequests(input) {
     assertInvocation(input.descriptor, input.route);
     if (input.amountIn < 0n || input.amountIn > (1n << 256n) - 1n) {
       throw new Error("curve-underlying exact amountIn outside uint256 range");
     }
     if (input.amountIn === 0n) return [];
+    if (input.descriptor.lending) return [...lendingGuardRequests(input.descriptor.pool, input.descriptor.lending),
+      lendingSwapRequest({ id: EXACT_QUOTE_ID, ...input.route, pool: input.descriptor.pool, amountIn: input.amountIn })];
     if (input.descriptor.quoteModel) return classicUnderlyingQuoteRequests(input);
     if (input.descriptor.legacyPlain) return legacyPlainQuoteRequests(input.descriptor.pool);
     return Object.freeze([Object.freeze({
@@ -56,7 +61,16 @@ const curveUnderlyingRequestProgram: ExactRequestProgram<
     assertInvocation(programInput.descriptor, programInput.route);
     if (programInput.amountIn === 0n) return zeroQuote(programInput);
     let amountOut: bigint;
-    if (programInput.descriptor.quoteModel) {
+    if (programInput.descriptor.lending) {
+      assertLendingGuards(programInput.descriptor.pool, programInput.descriptor.coins,
+        programInput.descriptor.lending, programInput.source, initialResults);
+      const received = decodeLendingSwap({ pool: programInput.descriptor.pool, coins: programInput.descriptor.coins,
+        binding: programInput.descriptor.lending, i: programInput.route.i, j: programInput.route.j,
+        amountIn: programInput.amountIn, source: programInput.source, executor: programInput.executor },
+        requireSuccessfulResult(results, EXACT_QUOTE_ID));
+      if (received === null) throw new Error("curve-underlying lending exchange reverted");
+      amountOut = received;
+    } else if (programInput.descriptor.quoteModel) {
       amountOut = decodeClassicUnderlyingQuote(programInput, initialResults, dependentEvidence);
     } else if (programInput.descriptor.legacyPlain) {
       const state = decodeLegacyPlainState(programInput.descriptor.legacyPlain, programInput.source, initialResults);
@@ -90,7 +104,8 @@ export const curveUnderlyingExact = {
       },
     ),
     Object.freeze({
-      id: input.descriptor.quoteModel ? "curve-classic-meta-execution"
+      id: input.descriptor.lending ? "curve-lending-actual-receipt"
+        : input.descriptor.quoteModel ? "curve-classic-meta-execution"
         : input.descriptor.legacyPlain ? "curve-legacy-plain-execution" : "curve-get-dy",
       kind: "request-program" as const,
       ...(input.descriptor.quoteModel && input.route.i > 0
@@ -103,6 +118,7 @@ export const curveUnderlyingExact = {
     pool: descriptor.pool,
     quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
     legacyPlain: descriptor.legacyPlain ? { ...descriptor.legacyPlain } : null,
+    lending: lendingProjection(descriptor.lending),
     nativeAlias: descriptor.nativeAlias ? { ...descriptor.nativeAlias } : null,
     registryBinding: {
       registry: descriptor.registryBinding.registry,
@@ -141,7 +157,8 @@ function exactEvidence(
   amountOut: bigint,
 ): CurveUnderlyingExactEvidence {
   return Object.freeze({
-    kind: input.descriptor.quoteModel ? "curve-underlying-classic-meta" as const
+    kind: input.descriptor.lending ? "curve-underlying-lending" as const
+      : input.descriptor.quoteModel ? "curve-underlying-classic-meta" as const
       : input.descriptor.legacyPlain ? "curve-underlying-legacy-plain" as const : "curve-underlying-get-dy" as const,
     source: input.source,
     pool: input.descriptor.pool,

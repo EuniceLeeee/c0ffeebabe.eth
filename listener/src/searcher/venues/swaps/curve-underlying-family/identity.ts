@@ -1,3 +1,4 @@
+import { curveUnderlyingLendingIdentity } from "./lending-identity.js";
 import { ethers } from "ethers";
 import { legacyPlainBindingRequests, decodeLegacyPlainBinding } from "./legacy-plain.js";
 import { scaledBehaviorRequests, decodeScaledBehavior, scheduleScaledBehavior } from "./scaled-behavior.js";
@@ -227,7 +228,7 @@ export const curveUnderlyingIdentity = {
     decide(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>) {
       return decideIdentity(input, identityEvidence(input.evidence));
     },
-  }, curveUnderlyingNativeIdentity, curveUnderlyingHistoricalFactoryIdentity, curveUnderlyingV1FactoryIdentity],
+  }, curveUnderlyingNativeIdentity, curveUnderlyingHistoricalFactoryIdentity, curveUnderlyingV1FactoryIdentity, curveUnderlyingLendingIdentity],
   identityKey: (identity) => lowerAddress(identity.subject),
 } satisfies IdentitySemantics<CurveUnderlyingCandidate, CurveUnderlyingIdentity>;
 

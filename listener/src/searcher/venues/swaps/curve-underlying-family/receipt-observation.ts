@@ -1,3 +1,4 @@
+import { LENDING_LOOKUP, LENDING_ABI, lendingAddress, assertLendingBinding } from "./lending.js";
 import { CURVE_LEGACY_FACTORY, CURVE_LEGACY_FACTORY_INTERFACE, CURVE_LEGACY_FACTORY_LOOKUP,
   decodeLegacyFactoryBasePool } from "./legacy-factory.js";
 import { CURVE_UNDERLYING_FAMILY_ID } from "./manifest.js";
@@ -120,7 +121,31 @@ export const curveUnderlyingReceiptObservation: SwapObservationCapability = {
           const binding = ctx.resolveBinding?.(edges[0]);
           if (binding?.familyId === CURVE_UNDERLYING_FAMILY_ID) {
             const descriptor = binding.descriptor as CurveUnderlyingDescriptor;
-            if (descriptor.registryBinding?.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP) {
+            if (descriptor.registryBinding?.lookupSemantics === LENDING_LOOKUP) {
+              if (!descriptor.lending || descriptor.pool.toLowerCase() !== pool || descriptor.instanceKey.toLowerCase() !== pool ||
+                  descriptor.registryBinding.registry.toLowerCase() !== descriptor.lending.lpToken.toLowerCase())
+                throw new Error("curve-underlying lending receipt binding mismatch");
+              assertLendingBinding(descriptor.lending);
+              // The admitted immutable pool/LP code binds the private reverse
+              // pointers. Re-read coin indices and wrapper token bindings at the
+              // observation source; never infer direction from Graph ordering.
+              const current: string[] = [];
+              for (let i = 0; i < 4; i++) {
+                const read = async (to: string, name: string, args: readonly unknown[] = []) => {
+                  open();
+                  return lendingAddress(await ctx.tokenQuery!.call({ to,
+                    data: LENDING_ABI.encodeFunctionData(name, args), blockTag: sourceBlock }, ctx.control));
+                };
+                const wrapped = await read(swap.pool, "coins", [i]);
+                const underlying = await read(swap.pool, "underlying_coins", [i]);
+                if (wrapped.toLowerCase() !== descriptor.lending.wrappedCoins[i].toLowerCase() ||
+                    underlying.toLowerCase() !== descriptor.coins[i].toLowerCase() ||
+                    (await read(wrapped, "token")).toLowerCase() !== underlying.toLowerCase())
+                  throw new Error("curve-underlying lending receipt topology changed");
+                current.push(underlying);
+              }
+              coins = current;
+            } else if (descriptor.registryBinding?.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP) {
               if (descriptor.pool.toLowerCase() !== pool ||
                   descriptor.instanceKey.toLowerCase() !== pool ||
                   descriptor.registryBinding.registry.toLowerCase() !== CURVE_LEGACY_FACTORY.toLowerCase()) {
@@ -154,7 +179,7 @@ export const curveUnderlyingReceiptObservation: SwapObservationCapability = {
             }
           }
           open();
-          coins = decodeCoins(await ctx.tokenQuery.call({ to: registry,
+          coins ??= decodeCoins(await ctx.tokenQuery.call({ to: registry,
             data: CURVE_UNDERLYING_META_INTERFACE.encodeFunctionData("get_underlying_coins", [swap.pool]),
             blockTag: sourceBlock }, ctx.control));
           if (v1Wrapped && coins[0] !== v1Wrapped[0]) throw new Error("curve-underlying V1 receipt topology mismatch");

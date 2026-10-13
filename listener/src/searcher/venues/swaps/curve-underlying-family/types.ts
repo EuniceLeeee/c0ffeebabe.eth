@@ -39,7 +39,17 @@ export type CurveUnderlyingRegistryBinding = {
   | { readonly lookupSemantics: "get_registry_handlers_from_pool+get_underlying_coins" }
   | { readonly lookupSemantics: "get_base_pool+get_underlying_coins"; readonly basePool: string }
   | { readonly lookupSemantics: "get_coins+get_underlying_coins"; readonly wrappedCoins: readonly string[] }
+  | { readonly lookupSemantics: "pool-token+lp-minter+wrapper-token" }
 );
+
+export interface CurveUnderlyingLendingBinding {
+  readonly kind: "legacy-dtoken-four" | "legacy-yvault-four";
+  readonly poolCodeHash: string;
+  readonly lpToken: string;
+  readonly lpCodeHash: string;
+  readonly wrappedCoins: readonly string[];
+  readonly wrapperCodeHashes: readonly string[];
+}
 
 export interface CurveUnderlyingLegacyPlainBinding {
   readonly kind: "legacy-plain-four-no-lending";
@@ -67,6 +77,7 @@ export interface CurveUnderlyingIdentityFacts {
   readonly registryBinding: CurveUnderlyingRegistryBinding;
   readonly quoteModel?: CurveUnderlyingClassicMetaBinding;
   readonly legacyPlain?: CurveUnderlyingLegacyPlainBinding;
+  readonly lending?: CurveUnderlyingLendingBinding;
   readonly nativeAlias?: CurveUnderlyingNativeAlias;
   readonly verifiedDirections: readonly CurveUnderlyingVerifiedDirection[];
 }
@@ -86,6 +97,7 @@ export interface CurveUnderlyingDescriptor extends CompiledInstanceDescriptor {
   readonly registryBinding: CurveUnderlyingRegistryBinding;
   readonly quoteModel?: CurveUnderlyingClassicMetaBinding;
   readonly legacyPlain?: CurveUnderlyingLegacyPlainBinding;
+  readonly lending?: CurveUnderlyingLendingBinding;
   readonly nativeAlias?: CurveUnderlyingNativeAlias;
   readonly verifiedDirections: readonly CurveUnderlyingVerifiedDirection[];
   readonly runtimeRequirements: readonly RuntimeRequirement[];
@@ -106,6 +118,7 @@ export interface CurveUnderlyingPricingDescriptor {
   readonly route: CurveUnderlyingRoute;
   readonly quoteModel?: CurveUnderlyingClassicMetaBinding;
   readonly legacyPlain?: CurveUnderlyingLegacyPlainBinding;
+  readonly lending?: CurveUnderlyingLendingBinding;
   readonly nativeAlias?: CurveUnderlyingNativeAlias;
 }
 
@@ -118,7 +131,7 @@ export interface CurveUnderlyingPricingSnapshot {
 }
 
 export interface CurveUnderlyingExactEvidence {
-  readonly kind: "curve-underlying-get-dy" | "curve-underlying-classic-meta" | "curve-underlying-legacy-plain";
+  readonly kind: "curve-underlying-get-dy" | "curve-underlying-classic-meta" | "curve-underlying-legacy-plain" | "curve-underlying-lending";
   readonly source: CanonicalSource;
   readonly pool: string;
   readonly routeKey: CurveUnderlyingRoute["routeKey"];

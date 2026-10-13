@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
-import { assertOutputRejection, curveHistoricalExecutionProbe, curveHistoricalExecutionRules, assertNoInputRollback, curveHistoricalManualInput, curveHistoricalQuoteTargets, curveHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
+import { curveHistoricalAllowancePolicy, assertOutputRejection, curveHistoricalExecutionProbe, curveHistoricalExecutionRules, assertNoInputRollback, curveHistoricalManualInput, curveHistoricalQuoteTargets, curveHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
 import { curveRefreshGuardRequests } from "../refresh-scope.js";
 import type { CurvePlainDescriptor } from "../types.js";
 import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
@@ -229,4 +229,20 @@ test("explicit output rejection requires the exact output-transfer error and unt
       post: { [TOKEN_IN]: { storage: { [word(3n)]: word(699n) } } } } }), /consumed input/);
   assert.throws(() => assertOutputRejection({ ...base,
     diff: { pre: {}, post: { [pool]: { storage: { [word(0n)]: word(1n) } } } } }), /non-sender/);
+});
+
+test("historical allowance checks distinguish cleared Family programs from legacy standing grants", () => {
+  for (const adapter of ["curve-exchange-underlying-lending", "curve-exchange-underlying-uint-native"]) {
+    assert.equal(curveHistoricalAllowancePolicy(adapter, "exchange-underlying", 73n, 0n), "temporary-cleared");
+    for (const residual of [1n, 73n, ethers.MaxUint256, ethers.MaxUint256 - 73n])
+      assert.throws(() => curveHistoricalAllowancePolicy(adapter, "exchange-underlying", 73n, residual), /policy mismatch/);
+  }
+  for (const [adapter, mode] of [["curve-exchange-underlying", "exchange-underlying"], ["curve-exchange-plain", "exchange"]]) {
+    for (const residual of [ethers.MaxUint256, ethers.MaxUint256 - 73n])
+      assert.equal(curveHistoricalAllowancePolicy(adapter, mode, 73n, residual), "standing-grant");
+    for (const residual of [0n, 1n, 73n])
+      assert.throws(() => curveHistoricalAllowancePolicy(adapter, mode, 73n, residual), /policy mismatch/);
+  }
+  assert.equal(curveHistoricalAllowancePolicy("curve-exchange", "received", 73n, 0n), "no-grant");
+  assert.throws(() => curveHistoricalAllowancePolicy("curve-exchange", "received", 73n, 1n), /policy mismatch/);
 });

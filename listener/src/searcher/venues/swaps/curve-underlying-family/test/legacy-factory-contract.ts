@@ -86,7 +86,7 @@ test("historical FEI registry response binds the exact four coin indices and sou
 
 test("existing MetaRegistry support is retained; factory is only used before deployment", () => {
   assert.deepEqual(family.identity.variants.map(v => v.id),
-    ["metaregistry-member", "metaregistry-uint-native-alias", "legacy-factory-member", "factory-v1-member"]);
+    ["metaregistry-member", "metaregistry-uint-native-alias", "legacy-factory-member", "factory-v1-member", "legacy-lending-lp-reverse"]);
   const evidence = availability("0x6000");
   assert.deepEqual(variant.decide({ candidate, evidence, step: 1 }), { status: "chain-proven-rejected",
     reasonCode: "metaregistry_already_deployed", evidenceRequestIds: ["historical-metaregistry-code"] });
