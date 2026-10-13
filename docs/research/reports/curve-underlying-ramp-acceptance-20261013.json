@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "date": "2026-10-13",
   "stage": 2,
-  "classification": "stateful-correct-refusal plus historical acceptance tooling defect",
-  "result": "actual historical active-ramp refusal verified; successful exchange/opportunity/performance not asserted",
+  "classification": "Family active-ramp pricing capability gap with verified fail-closed guard; canonical historical acceptance tooling defect fixed separately",
+  "result": "Current production Exact safely refuses the real historical active ramp. This is a remaining adaptation capability gap, not an invalid amount or proof that the protocol cannot execute.",
   "root": "/opt/mev-cloud/family-runtime-20261007",
   "branch": "codex/family-runtime-actual-20261007",
   "baseHead": "a75693b6fd1949f050776c9ba752c7eda0f1bee3",
@@ -103,7 +103,8 @@
         "scope": "same-N raw contract view; not Family-accepted quote or actual receipt"
       }
     ],
-    "note": "Positive same-N raw contract views do not establish Family-accepted quotes or actual receipts. This is not an on-chain contract revert."
+    "note": "Positive same-N raw contract views do not establish Family-accepted quotes or actual receipts. This is not an on-chain contract revert.",
+    "interpretation": "The refusal originates in the Family static-A/on-touch pricing guard. Positive raw contract view outputs are diagnostic only; no actual swap execution was attempted. A valid protocol state that is unsupported by this model remains an adaptation gap."
   },
   "naturalProduction": {
     "families": [
@@ -432,5 +433,6 @@
     "No quoted/runtime swaps or actual debit/receipt comparison ran at this unsupported active-ramp state. Stable-state positive execution evidence at N26138094 and the seven-pool cohort remains separately version-bound.",
     "No original-TX pre-call state replay, full opportunity, local stage4A or representative stage4B performance acceptance. Production timing output is incidental correctness telemetry, not a performance verdict."
   ],
-  "goal": "active; this named stage2 active-ramp refusal and canonical tooling defect are closed at their recorded scope. Natural-valuation limitations do not invalidate the user-authorized manual adaptation input checks. Stage3 opportunities and all stage4 performance remain separate and unfinished."
+  "goal": "active; the canonical receipt-filter tooling defect is closed. The active-ramp quote/lifecycle adaptation remains open, with its current fail-closed behavior evidenced. Manual input acceptance, natural valuation, opportunity replay and performance remain separate claims.",
+  "nextAdaptationWork": "Inspect existing Family exact/pricing refresh contracts for time-varying A; implement the smallest compatible Family-owned capability and verify same-N manual quote/quoted/runtime results plus source-bound per-block refresh and unchanged-state controls before declaring support."
 }
