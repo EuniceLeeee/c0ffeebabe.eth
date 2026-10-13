@@ -1,4 +1,6 @@
 import { ethers } from "ethers";
+import { legacyPlainBindingRequests, decodeLegacyPlainBinding } from "./legacy-plain.js";
+import { scaledBehaviorRequests, decodeScaledBehavior, scheduleScaledBehavior } from "./scaled-behavior.js";
 import { CURVE_V1_FACTORY, CURVE_V1_FACTORY_INTERFACE, CURVE_V1_FACTORY_LOOKUP,
   assertV1FactoryCode, decodeV1FactoryRegistration } from "./v1-factory.js";
 import { CURVE_LEGACY_FACTORY, CURVE_LEGACY_FACTORY_INTERFACE, CURVE_LEGACY_FACTORY_LOOKUP,
@@ -211,7 +213,7 @@ export const curveUnderlyingIdentity = {
       if (evidence.phase === "registry-surface") {
         return behaviorRequests(evidence);
       }
-      return [];
+      return scaledBehaviorRequests(evidence);
     },
     decode(input: {
       readonly step: IdentityStepInput<CurveUnderlyingCandidate, unknown>;
@@ -268,7 +270,8 @@ function behaviorRequests(
     { readonly phase: "registry-surface" }
   >,
 ): readonly AdapterRequest[] {
-  const requests: AdapterRequest[] = [...underlyingQuoteModelBindingRequests(evidence.poolCode, evidence.pool)];
+  const requests: AdapterRequest[] = [...underlyingQuoteModelBindingRequests(evidence.poolCode, evidence.pool),
+    ...legacyPlainBindingRequests(evidence.poolCode, evidence.pool)];
   for (let i = 0; i < evidence.coins.length; i++) {
     for (let j = 0; j < evidence.coins.length; j++) {
       if (i === j) continue;
@@ -317,6 +320,7 @@ function decodeBehaviorProof(
   prior: CurveUnderlyingIdentityEvidence,
   results: readonly AdapterRequestResult[],
 ): CurveUnderlyingIdentityEvidence {
+  if (prior.phase === "behavior-proof" && prior.scaleProbe) return decodeScaledBehavior(prior, results);
   if (prior.phase !== "registry-surface") {
     throw new Error("curve-underlying behavior proof has already completed");
   }
@@ -354,7 +358,8 @@ function decodeBehaviorProof(
       lowerAddress(prior.registryBinding.wrappedCoins[1]) !== lowerAddress(quoteModel.baseLPToken))) {
     throw new Error("curve-underlying V1 wrapped LP conflicts with bound implementation");
   }
-  return Object.freeze({
+  const legacyPlain = decodeLegacyPlainBinding(prior.poolCode, prior.coins, results);
+  return scheduleScaledBehavior(Object.freeze({
     phase: "behavior-proof" as const,
     pool: prior.pool,
     handlers: prior.handlers,
@@ -362,7 +367,8 @@ function decodeBehaviorProof(
     coins: prior.coins,
     verifiedDirections: Object.freeze(verifiedDirections),
     ...(quoteModel ? { quoteModel } : {}),
-  });
+    ...(legacyPlain ? { legacyPlain } : {}),
+  }), results);
 }
 
 function behaviorAmountOut(
@@ -417,6 +423,7 @@ function decideIdentity(
     }
     return { status: "continue" };
   }
+  if (evidence.scaleProbe) return { status: "continue" };
   if (evidence.verifiedDirections.length === 0) {
     // All declared behavior directions reverted/returned zero at the fixed
     // cutoff: the pool exposes no proven swap direction.
@@ -450,6 +457,7 @@ function decideIdentity(
     pool: evidence.pool,
     coins: evidence.coins,
     quoteModel: curveUnderlyingQuoteModelProjection(evidence.quoteModel),
+    legacyPlain: evidence.legacyPlain ? { ...evidence.legacyPlain } : null,
     registryBinding: {
       registry: registryBinding.registry,
       handlers: registryBinding.handlers,
@@ -486,6 +494,7 @@ function decideIdentity(
         coins: Object.freeze([...evidence.coins]),
         registryBinding,
         ...(evidence.quoteModel ? { quoteModel: evidence.quoteModel } : {}),
+        ...(evidence.legacyPlain ? { legacyPlain: evidence.legacyPlain } : {}),
         verifiedDirections: Object.freeze([...evidence.verifiedDirections]),
       }),
     }),

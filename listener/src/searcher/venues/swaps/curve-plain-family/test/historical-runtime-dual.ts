@@ -91,7 +91,7 @@ export function curveHistoricalManualInput(value?: string): CurveManualInput | u
 
 function options(argv: string[]) {
   const names = ["--ready", "--prices", "--pool", "--family", "--rpc-file", "--out", "--port"];
-  const allowedNames = [...names, "--executor-hardfork", "--reference-executions", "--price-input", "--reference-prices", "--reference-edges", "--manual-input"];
+  const allowedNames = [...names, "--executor-hardfork", "--reference-executions", "--price-input", "--reference-prices", "--reference-edges", "--manual-input", "--expect-output-error"];
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     assert(allowedNames.includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
@@ -102,6 +102,9 @@ function options(argv: string[]) {
   assert.equal(values.has("--reference-prices"), values.has("--reference-edges"), "donor requires prices and edge keys");
   assert(!(values.has("--reference-executions") && values.has("--reference-prices")), "choose saved execution or donor inputs, not both");
   const manual = curveHistoricalManualInput(values.get("--manual-input"));
+  const expectedOutputError = values.get("--expect-output-error");
+  assert(expectedOutputError === undefined || (manual && expectedOutputError.length <= 160),
+    "expected output rejection requires one manual direction and a bounded exact reason");
   const hardfork = values.get("--executor-hardfork");
   assert(hardfork === undefined || hardfork === "cancun", "executor hardfork must be explicit cancun");
   assert(!manual || (!values.has("--reference-executions") && !values.has("--reference-prices")), "manual input cannot mix with reference modes");
@@ -121,7 +124,7 @@ function options(argv: string[]) {
     priceInput: values.has("--price-input") ? realpathSync(values.get("--price-input")!) : undefined,
     reference: values.has("--reference-executions") ? realpathSync(values.get("--reference-executions")!) : undefined,
     referencePrices: values.has("--reference-prices") ? realpathSync(values.get("--reference-prices")!) : undefined,
-    referenceEdges: referenceEdges as string[], manual, hardfork,
+    referenceEdges: referenceEdges as string[], manual, hardfork, expectedOutputError,
     name, rpcFile: realpathSync(values.get("--rpc-file")!), pool: lower(ethers.getAddress(
       values.get("--pool")!.startsWith("0x") ? values.get("--pool")! : `0x${values.get("--pool")!}`)), out };
 }
@@ -220,6 +223,52 @@ export function assertNoInputRollback(input: {
   return { input: spent, output: received, native };
 }
 
+/** A source-state rejection is not a successful swap. Require the intended
+ * output transfer's exact ABI revert and atomic rollback, not any root error. */
+export function assertOutputRejection(input: {
+  trace: any; diff: any; pool: string; tokenOut: string; expectedReason: string;
+  tokenIn: string; inSlot: string; inputBefore: bigint; nativeBefore: bigint; quotedAmountOut: bigint; requestedAmountIn: bigint;
+}) {
+  assert.equal(input.trace?.error, "execution reverted", "expected execution did not revert");
+  assert(input.diff?.pre && input.diff?.post, "negative sample lacks independent state diff");
+  const expected = "0x08c379a0" + ethers.AbiCoder.defaultAbiCoder().encode(["string"], [input.expectedReason]).slice(2);
+  const transferData = new ethers.Interface(["function transfer(address,uint256)"])
+    .encodeFunctionData("transfer", [EXECUTOR, input.quotedAmountOut]).toLowerCase();
+  const inputData = new ethers.Interface(["function transferFrom(address,address,uint256)"])
+    .encodeFunctionData("transferFrom", [EXECUTOR, input.pool, input.requestedAmountIn]).toLowerCase();
+  let found = false;
+  function walk(frame: any) {
+    if (frame?.type === "CALL" && typeof frame.to === "string" &&
+        same(frame.to, input.pool) && frame.error === "execution reverted") {
+      let inputTransferred = false;
+      for (const child of frame.calls ?? []) {
+        if (child?.type !== "CALL" || typeof child.from !== "string" ||
+            typeof child.to !== "string" || !same(child.from, input.pool)) continue;
+        // callTracer may omit output for tokens such as USDT that return no bytes.
+        if (same(child.to, input.tokenIn) && child.input?.toLowerCase() === inputData &&
+            !child.error && (child.output === undefined || child.output === "" ||
+              child.output === "0x" || child.output?.toLowerCase() === word(1n))) inputTransferred = true;
+        if (same(child.to, input.tokenOut) && child.input?.toLowerCase() === transferData &&
+            child.error === "execution reverted" && child.output?.toLowerCase() === expected.toLowerCase()) {
+          assert(inputTransferred, "expected full input transfer did not succeed before output rejection");
+          found = true;
+        }
+      }
+    }
+    for (const child of frame?.calls ?? []) walk(child);
+  }
+  walk(input.trace); assert(found, "expected pool output transfer and exact revert were not observed");
+  const balance = observed(input.diff, input.tokenIn, input.inSlot, input.inputBefore, false);
+  assert.equal(balance.delta, 0n, "rejected execution consumed input");
+  const native = observedNativeInventory(input.diff, EXECUTOR, input.nativeBefore);
+  for (const side of ["pre", "post"] as const) for (const [address, account] of Object.entries(input.diff[side])) {
+    assert(same(address, OWNER), "rejected execution left non-sender state changes");
+    assert(Object.keys(account as object).every(key => key === "balance" || key === "nonce"),
+      "rejected execution changed sender code/storage");
+  }
+  return { input: balance, native, reason: input.expectedReason, inputTransferredBeforeRevert: input.requestedAmountIn };
+}
+
 export function curveHistoricalQuoteTargets(descriptor: CurvePlainDescriptor | CurveUnderlyingDescriptor): Set<string> {
   if ("binding" in descriptor) return new Set(curveRefreshAddresses(descriptor).map(lower));
   const model = descriptor.quoteModel;
@@ -270,6 +319,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   const failure = (error: unknown) => ({ stage, message: redact(error instanceof Error ? error.message : error) });
   let calls = 0, constructing = false, constructionAttempts = 0;
   try {
+    if (args.expectedOutputError) report.claim =
+      "Explicit source-state output rejection through production quoted/runtime encoders; NOT successful swap, original replay or performance";
     const startPin = sourcePin(args.name); report.code = { headAtStart: git("rev-parse", "HEAD").trim(), ...startPin };
     const readyBytes = readFileSync(args.ready), priceBytes = readFileSync(args.prices);
     const saved = parseAtBlockJson(priceBytes.toString());
@@ -414,6 +465,14 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     // Only admitted directions need controllable balances. An unadmitted,
     // suspended coin must not block testing the independently admitted pair.
     for (const token of measuredTokens) {
+      if (args.expectedOutputError && same(token, args.manual!.tokenOut)) {
+        assert.equal(await balance(token, EXECUTOR), 0n, "unseeded rejection output must have no actor inventory");
+        const code = await rpc("eth_getCode", [token, pin]); assert(code !== "0x");
+        report.unseededOutput = { token, actorBalance: 0n, poolBalance: await balance(token, args.pool),
+          codeHash: ethers.keccak256(code), expectedError: args.expectedOutputError,
+          scope: "real output state; no output balance override and no successful swap claim" };
+        continue;
+      }
       assert(![OWNER, EXECUTOR, args.pool].some(a => same(a, token)),
         "actor/token/protocol addresses must not alias");
       assert.equal(await balance(token, EXECUTOR), 0n, "actor already has source inventory");
@@ -444,6 +503,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         const access = await rpc("eth_createAccessList", [{ from: OWNER, to: token,
           data: ERC20.encodeFunctionData("balanceOf", [EXECUTOR]), gas: "0x100000" }, ethers.toQuantity(source.number)]);
         assert(!access.error && Array.isArray(access.accessList), "actor balance access list unavailable");
+        (report.balanceGetterReadSets ??= []).push({ token, source, access });
         candidates.push(...access.accessList.filter((a: any) => same(a.address, token))
           .flatMap((a: any) => a.storageKeys.map((key: string) => word(key))));
       }
@@ -520,7 +580,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         overrides = { [OWNER]: { balance: ethers.toQuantity(100n * 10n ** 18n) },
           [EXECUTOR]: { code: botvm.code, balance: ethers.toQuantity(nativeSentinel) },
           [tokenIn]: { stateDiff: { [inSlot]: word(amountIn + inputSentinel) } },
-          [tokenOut]: { stateDiff: { [outSlot]: word(outputSentinel) } } };
+          ...(!args.expectedOutputError ? { [tokenOut]: { stateDiff: { [outSlot]: word(outputSentinel) } } } : {}) };
         const sample: Record<string, any> = { edgeId: row.edgeId, routeKey: route.routeKey, tokenIn, tokenOut,
           amountSource: reference ? "saved-execution-reference" : referenceInput.kind, priorActualOut,
           multiplier, amountIn, productionP: args.manual ? null : amountRow.amountIn,
@@ -595,12 +655,24 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
             sample.executions.push(result);
             try {
               assert.equal(await balance(tokenIn, EXECUTOR, overrides), amountIn + inputSentinel);
-              assert.equal(await balance(tokenOut, EXECUTOR, overrides), outputSentinel);
+              assert.equal(await balance(tokenOut, EXECUTOR, overrides), args.expectedOutputError ? 0n : outputSentinel);
               const tx = { from: OWNER, to: EXECUTOR, data: buildExecuteCalldata(script), gas: "0x800000",
                 gasPrice: ethers.toQuantity(header.baseFeePerGas!) };
               result.calldataHash = ethers.keccak256(tx.data);
               result.callTrace = await rpc("debug_traceCall", [tx, pin, { tracer: "callTracer", timeout: "30s", stateOverrides: overrides }]);
               result.evmSucceeded = !result.callTrace.error;
+              if (args.expectedOutputError) {
+                result.stateDiff = await rpc("debug_traceCall", [tx, pin,
+                  { tracer: "prestateTracer", tracerConfig: { diffMode: true }, timeout: "30s", stateOverrides: overrides }]);
+                result.rejection = assertOutputRejection({ trace: result.callTrace, diff: result.stateDiff,
+                  pool: args.pool, tokenOut, expectedReason: args.expectedOutputError, tokenIn, inSlot,
+                  inputBefore: amountIn + inputSentinel, nativeBefore: nativeSentinel, quotedAmountOut: quote.amountOut, requestedAmountIn: amountIn });
+                result.finalAllowances = await readAllowances(overrides);
+                assert.deepEqual(result.finalAllowances, [[0n]]);
+                assert.equal(await balance(tokenOut, EXECUTOR, overrides), 0n);
+                result.status = "state-rejected";
+                continue;
+              }
               assert(result.evmSucceeded, "encoded BotVM execution reverted");
               result.stateDiff = await rpc("debug_traceCall", [tx, pin,
                 { tracer: "prestateTracer", tracerConfig: { diffMode: true }, timeout: "30s", stateOverrides: overrides }]);
@@ -676,6 +748,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               result.status = "pass";
             } catch (error) { result.error = failure(error); }
           }
+          if (args.expectedOutputError) {
+            assert(sample.executions.length === scripts.length &&
+              sample.executions.every((e: any) => e.status === "state-rejected"));
+            sample.status = "state-rejected";
+            continue;
+          }
           if (args.name === "curve-underlying") {
             const actual = sample.executions.find((e: any) => e.encoding === "runtime-program");
             const diagnostic = sample.executions.find((e: any) => e.encoding === "quoted-minimum-1-diagnostic");
@@ -702,8 +780,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     assert.deepEqual(donorPins(), donorInputPins, "donor input files changed during test");
     assert.deepEqual(sourcePin(args.name), startPin, "source/code changed during test");
     assert.equal(constructionAttempts, 0);
-    assert(report.samples.length === report.expectedSamples && report.samples.every((s: any) => s.status === "pass"), "one or more samples failed; retained in receipt");
-    report.result = "pass";
+    assert(report.samples.length === report.expectedSamples && report.samples.every((s: any) => s.status === (args.expectedOutputError ? "state-rejected" : "pass")),
+      "one or more samples failed; retained in receipt");
+    report.result = args.expectedOutputError ? "state-rejected" : "pass";
   } catch (error) { report.errors.push(failure(error)); }
   finally {
     stage = "owned-fork-cleanup";
@@ -721,10 +800,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     executionsPassed: report.samples.flatMap((s: any) => s.executions).filter((e: any) => e.status === "pass").length,
     noInputControlsPassed: report.samples.flatMap((s: any) => s.executions).filter((e: any) => e.noInputControl?.status === "pass").length,
     out: args.out, forkStopped: report.forkStopped }));
-  if (report.result !== "pass") process.exitCode = 1;
+  if (report.result !== "pass" && report.result !== "state-rejected") process.exitCode = 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--executor-hardfork cancun] [--price-input INPUT_JSON] [--reference-executions SAVED_JSON | --reference-prices PRICES_JSON --reference-edges JSON_ARRAY | --manual-input JSON_TOKEN_PAIR_AND_AMOUNT]");
+  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--executor-hardfork cancun] [--price-input INPUT_JSON] [--reference-executions SAVED_JSON | --reference-prices PRICES_JSON --reference-edges JSON_ARRAY | --manual-input JSON_TOKEN_PAIR_AND_AMOUNT] [--expect-output-error EXACT_REASON]");
   else main().catch(() => { console.error("historical-runtime-dual: input/output setup failed; no RPC started if no receipt was reserved"); process.exitCode = 1; });
 }

@@ -1,3 +1,4 @@
+import { legacyPlainQuoteRequests, decodeLegacyPlainState, quoteLegacyPlain } from "./legacy-plain.js";
 import { classicUnderlyingQuoteRequests, classicUnderlyingQuoteNextRound, decodeClassicUnderlyingQuote } from "./classic-meta-quote.js";
 import { curveUnderlyingQuoteModelProjection } from "./quote-model.js";
 import { CURVE_UNDERLYING_NATIVE_QUOTE } from "./native.js";
@@ -25,7 +26,8 @@ const curveUnderlyingRequestProgram: ExactRequestProgram<
   CurveUnderlyingRoute,
   CurveUnderlyingExactEvidence
 > = {
-  requirements: ({ descriptor }) => ({ transports: descriptor.quoteModel ? ["eth-call", "get-code", "get-storage"] : ["eth-call"] }),
+  requirements: ({ descriptor }) => ({ transports: descriptor.quoteModel ? ["eth-call", "get-code", "get-storage"]
+    : descriptor.legacyPlain ? ["eth-call", "get-code", "get-storage"] : ["eth-call"] }),
   buildRequests(input) {
     assertInvocation(input.descriptor, input.route);
     if (input.amountIn < 0n || input.amountIn > (1n << 256n) - 1n) {
@@ -33,6 +35,7 @@ const curveUnderlyingRequestProgram: ExactRequestProgram<
     }
     if (input.amountIn === 0n) return [];
     if (input.descriptor.quoteModel) return classicUnderlyingQuoteRequests(input);
+    if (input.descriptor.legacyPlain) return legacyPlainQuoteRequests(input.descriptor.pool);
     return Object.freeze([Object.freeze({
       id: EXACT_QUOTE_ID,
       kind: "eth-call" as const,
@@ -55,6 +58,9 @@ const curveUnderlyingRequestProgram: ExactRequestProgram<
     let amountOut: bigint;
     if (programInput.descriptor.quoteModel) {
       amountOut = decodeClassicUnderlyingQuote(programInput, initialResults, dependentEvidence);
+    } else if (programInput.descriptor.legacyPlain) {
+      const state = decodeLegacyPlainState(programInput.descriptor.legacyPlain, programInput.source, initialResults);
+      amountOut = quoteLegacyPlain(state, programInput.route.i, programInput.route.j, programInput.amountIn);
     } else {
       const result = requireSuccessfulResult(results, EXACT_QUOTE_ID);
       assertSource(result.source, programInput.source);
@@ -84,7 +90,8 @@ export const curveUnderlyingExact = {
       },
     ),
     Object.freeze({
-      id: input.descriptor.quoteModel ? "curve-classic-meta-execution" : "curve-get-dy",
+      id: input.descriptor.quoteModel ? "curve-classic-meta-execution"
+        : input.descriptor.legacyPlain ? "curve-legacy-plain-execution" : "curve-get-dy",
       kind: "request-program" as const,
       ...(input.descriptor.quoteModel && input.route.i > 0
         ? { trialState: { unsupportedReason: "classic base deposit/exchange post-state is not modeled; independent source quotes only" } }
@@ -95,6 +102,7 @@ export const curveUnderlyingExact = {
   cacheCompatibilityProjection: ({ descriptor, route }) => ({
     pool: descriptor.pool,
     quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
+    legacyPlain: descriptor.legacyPlain ? { ...descriptor.legacyPlain } : null,
     nativeAlias: descriptor.nativeAlias ? { ...descriptor.nativeAlias } : null,
     registryBinding: {
       registry: descriptor.registryBinding.registry,
@@ -133,7 +141,8 @@ function exactEvidence(
   amountOut: bigint,
 ): CurveUnderlyingExactEvidence {
   return Object.freeze({
-    kind: input.descriptor.quoteModel ? "curve-underlying-classic-meta" as const : "curve-underlying-get-dy" as const,
+    kind: input.descriptor.quoteModel ? "curve-underlying-classic-meta" as const
+      : input.descriptor.legacyPlain ? "curve-underlying-legacy-plain" as const : "curve-underlying-get-dy" as const,
     source: input.source,
     pool: input.descriptor.pool,
     routeKey: input.route.routeKey,

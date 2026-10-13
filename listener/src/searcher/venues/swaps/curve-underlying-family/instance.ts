@@ -24,7 +24,7 @@ const CURVE_UNDERLYING_RUNTIME_REQUIREMENTS = Object.freeze([
 export const curveUnderlyingInstance = {
   instanceKey: (identity) => instanceKey(lowerAddress(identity.subject)),
   compileDraft(identity) {
-    if (identity.facts.nativeAlias && identity.facts.quoteModel) throw new Error("curve-underlying incompatible quote variants");
+    if ([identity.facts.nativeAlias, identity.facts.quoteModel, identity.facts.legacyPlain].filter(Boolean).length > 1) throw new Error("curve-underlying incompatible quote variants");
     return {
       familyId: identity.familyId,
       lineageId: identity.lineageId,
@@ -35,6 +35,7 @@ export const curveUnderlyingInstance = {
       coins: Object.freeze([...identity.facts.coins]),
       registryBinding: identity.facts.registryBinding,
       ...(identity.facts.quoteModel ? { quoteModel: identity.facts.quoteModel } : {}),
+      ...(identity.facts.legacyPlain ? { legacyPlain: Object.freeze({ ...identity.facts.legacyPlain }) } : {}),
       ...(identity.facts.nativeAlias ? { nativeAlias: Object.freeze({ ...identity.facts.nativeAlias }) } : {}),
       verifiedDirections: Object.freeze([...identity.facts.verifiedDirections]),
     };
@@ -66,6 +67,7 @@ export function curveUnderlyingStaticBindingProjection(
     pool: descriptor.pool,
     coins: descriptor.coins,
     quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
+    legacyPlain: descriptor.legacyPlain ? { ...descriptor.legacyPlain } : null,
     nativeAlias: descriptor.nativeAlias ? { ...descriptor.nativeAlias } : null,
     registryBinding: {
       registry: descriptor.registryBinding.registry,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
-import { curveHistoricalExecutionProbe, curveHistoricalExecutionRules, assertNoInputRollback, curveHistoricalManualInput, curveHistoricalQuoteTargets, curveHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
+import { assertOutputRejection, curveHistoricalExecutionProbe, curveHistoricalExecutionRules, assertNoInputRollback, curveHistoricalManualInput, curveHistoricalQuoteTargets, curveHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
 import { curveRefreshGuardRequests } from "../refresh-scope.js";
 import type { CurvePlainDescriptor } from "../types.js";
 import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
@@ -187,4 +187,46 @@ test("current executor probe checks execution-visible block, time, base fee and 
     assert.throws(() => curveHistoricalExecutionProbe(encode(wrong), header));
   }
   assert.throws(() => curveHistoricalExecutionProbe(encode(words.slice(0, 4)), header), /five words/);
+});
+
+
+test("explicit output rejection requires the exact output-transfer error and untouched protocol state", () => {
+  const pool = "0x3000000000000000000000000000000000000001";
+  const error = "0x08c379a0" + ethers.AbiCoder.defaultAbiCoder().encode(["string"], ["retired fixture"]).slice(2);
+  const transfer = { type: "CALL", from: pool, to: TOKEN_OUT, input: new ethers.Interface(["function transfer(address,uint256)"]).encodeFunctionData("transfer", [EXECUTOR, 100n]),
+    error: "execution reverted", output: error };
+  const transferred = { type: "CALL", from: pool, to: TOKEN_IN,
+    input: new ethers.Interface(["function transferFrom(address,address,uint256)"])
+      .encodeFunctionData("transferFrom", [EXECUTOR, pool, 599n]), output: word(1n) };
+  const poolCall = (calls: unknown[]) => ({ type: "CALL", to: pool, error: "execution reverted", calls });
+  const base = { trace: { error: "execution reverted", calls: [poolCall([transferred, transfer])] },
+    diff: { pre: {}, post: {} }, pool, tokenOut: TOKEN_OUT, expectedReason: "retired fixture",
+    tokenIn: TOKEN_IN, inSlot: word(3n), inputBefore: 700n, nativeBefore: 17n, quotedAmountOut: 100n, requestedAmountIn: 599n };
+  assert.equal(assertOutputRejection(base).input.delta, 0n);
+  for (const output of [undefined, "", "0x"])
+    assert.equal(assertOutputRejection({ ...base,
+      trace: { error: "execution reverted", calls: [poolCall([{ ...transferred, output }, transfer])] } }).input.delta, 0n);
+  for (const output of [null, "0x01", word(2n)])
+    assert.throws(() => assertOutputRejection({ ...base,
+      trace: { error: "execution reverted", calls: [poolCall([{ ...transferred, output }, transfer])] } }), /full input transfer/);
+  assert.throws(() => assertOutputRejection({ ...base,
+    trace: { error: "execution reverted", calls: [poolCall([{ ...transferred, error: "execution reverted" }, transfer])] } }), /full input transfer/);
+  assert.throws(() => assertOutputRejection({ ...base,
+    trace: { error: "execution reverted", calls: [poolCall([transferred]), poolCall([transfer])] } }), /full input transfer/);
+
+  assert.throws(() => assertOutputRejection({ ...base, requestedAmountIn: 600n }), /full input transfer/);
+  assert.throws(() => assertOutputRejection({ ...base,
+    trace: { error: "execution reverted", calls: [poolCall([transfer, transferred])] } }), /full input transfer/);
+  assert.throws(() => assertOutputRejection({ ...base,
+    trace: { error: "execution reverted", calls: [poolCall([{ ...transferred, output: word(0n) }, transfer])] } }), /full input transfer/);
+  assert.throws(() => assertOutputRejection({ ...base, trace: { calls: [transfer] } }), /did not revert/);
+  assert.throws(() => assertOutputRejection({ ...base, expectedReason: "different error" }), /not observed/);
+  assert.throws(() => assertOutputRejection({ ...base, tokenOut: TOKEN_IN }), /not observed/);
+  assert.throws(() => assertOutputRejection({ ...base, quotedAmountOut: 101n }), /not observed/);
+  assert.throws(() => assertOutputRejection({ ...base, trace: { error: "execution reverted", calls: [] } }), /not observed/);
+  assert.throws(() => assertOutputRejection({ ...base,
+    diff: { pre: { [TOKEN_IN]: { storage: { [word(3n)]: word(700n) } } },
+      post: { [TOKEN_IN]: { storage: { [word(3n)]: word(699n) } } } } }), /consumed input/);
+  assert.throws(() => assertOutputRejection({ ...base,
+    diff: { pre: {}, post: { [pool]: { storage: { [word(0n)]: word(1n) } } } } }), /non-sender/);
 });

@@ -111,7 +111,8 @@ function assertExecutionEvidence(input: {
 }): void {
   const evidence = input.exactEvidence;
   if (
-    evidence.kind !== (input.descriptor.quoteModel ? "curve-underlying-classic-meta" : "curve-underlying-get-dy") ||
+    evidence.kind !== (input.descriptor.quoteModel ? "curve-underlying-classic-meta"
+      : input.descriptor.legacyPlain ? "curve-underlying-legacy-plain" : "curve-underlying-get-dy") ||
     evidence.nativeAlias?.nativeIndex !== input.descriptor.nativeAlias?.nativeIndex ||
     evidence.nativeAlias?.poolCodeHash !== input.descriptor.nativeAlias?.poolCodeHash ||
     !sameAddress(evidence.pool, input.descriptor.pool) ||

@@ -1,3 +1,4 @@
+import { acceptLegacyPlainControlCall, legacyPlainQuoteRequests, decodeLegacyPlainState, quoteLegacyPlain } from "./legacy-plain.js";
 import { curveUnderlyingAcceptBaseCall, curveUnderlyingAcceptLpMutation, curveUnderlyingAcceptMutation, curveUnderlyingQuoteModelProjection, curveUnderlyingRefreshAddresses } from "./quote-model.js";
 import { CURVE_UNDERLYING_NATIVE_QUOTE } from "./native.js";
 import { compileAddressMutations } from "../../mutation-index.js";
@@ -47,6 +48,7 @@ export const curveUnderlyingPricing = {
   staticBindingProjection: ({ descriptor, routes }) => ({
     pool: descriptor.pool,
     quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
+    legacyPlain: descriptor.legacyPlain ? { ...descriptor.legacyPlain } : null,
     nativeAlias: descriptor.nativeAlias ? { ...descriptor.nativeAlias } : null,
     coins: descriptor.coins,
     registryBinding: {
@@ -67,6 +69,7 @@ export const curveUnderlyingPricing = {
   snapshotCompatibilityProjection: ({ descriptor, routes }) => ({
     pool: descriptor.pool,
     quoteModel: curveUnderlyingQuoteModelProjection(descriptor.quoteModel),
+    legacyPlain: descriptor.legacyPlain ? { ...descriptor.legacyPlain } : null,
     nativeAlias: descriptor.nativeAlias ? { ...descriptor.nativeAlias } : null,
     registry: descriptor.registryBinding.registry,
     directions: routes.map((route) => ({
@@ -88,6 +91,7 @@ export const curveUnderlyingPricing = {
       registry: descriptor.registryBinding.registry,
       coins: Object.freeze([...descriptor.coins]),
       ...(descriptor.quoteModel ? { quoteModel: descriptor.quoteModel } : {}),
+      ...(descriptor.legacyPlain ? { legacyPlain: descriptor.legacyPlain } : {}),
       ...(descriptor.nativeAlias ? { nativeAlias: descriptor.nativeAlias } : {}),
       route,
     });
@@ -97,9 +101,10 @@ export const curveUnderlyingPricing = {
     coins: Object.freeze([...draft.coins]),
   }),
   current: {
-    requirements: () => ({ transports: ["eth-call"] }),
+    requirements: ({ descriptor }) => ({ transports: descriptor.legacyPlain ? ["eth-call", "get-code", "get-storage"] : ["eth-call"] }),
     buildRequests({ descriptor }) {
       return Object.freeze([
+        ...(descriptor.legacyPlain ? legacyPlainQuoteRequests(descriptor.pool) : []),
         Object.freeze({
           id: REGISTRY_DECIMALS_ID,
           kind: "eth-call" as const,
@@ -138,6 +143,7 @@ export const curveUnderlyingPricing = {
       initialResults,
       priorEvidence,
     }) {
+      if (current.descriptor.legacyPlain) return null;
       const priorResults = collectRequestProgramResults(
         initialResults,
         priorEvidence,
@@ -164,6 +170,17 @@ export const curveUnderlyingPricing = {
         dependentEvidence,
       );
       const candidates = quoteCandidates(descriptor, results);
+      if (descriptor.legacyPlain) {
+        const source = requireSuccessfulResult(results, "legacy-plain-code").source;
+        const state = decodeLegacyPlainState(descriptor.legacyPlain, source, results);
+        const scale = decodeInputScale(descriptor, results);
+        for (const amountIn of candidates) {
+          const amountOut = quoteLegacyPlain(state, descriptor.route.i, descriptor.route.j, amountIn);
+          if (amountOut > 0n) return Object.freeze({ source, amountIn, amountOut,
+            inputUnit: scale.unit, inputBalance: scale.balance });
+        }
+        throw new Error("legacy plain has no positive current quote");
+      }
       const quote = firstPositiveQuote(results, candidates);
       if (quote === null) {
         const failed = results.find((result) =>
@@ -226,10 +243,16 @@ export const curveUnderlyingPricing = {
         addresses: descriptor.quoteModel ? [descriptor.quoteModel.basePool] : [],
         keys: routes.map(route => route.routeKey),
       }), { kinds: ["call"], accept: curveUnderlyingAcceptBaseCall });
+      const controls = compileAddressMutations(entries, ({ descriptor, routes }) => ({
+        addresses: descriptor.legacyPlain ? [descriptor.pool] : [],
+        keys: routes.map(route => route.routeKey),
+      }), { kinds: ["call"], accept: acceptLegacyPlainControlCall });
       return Object.freeze({
-        dependencies: Object.freeze([...new Set([...logs.dependencies, ...lp.dependencies, ...calls.dependencies])]),
+        dependencies: Object.freeze([...new Set([...logs.dependencies, ...lp.dependencies, ...calls.dependencies, ...controls.dependencies])]),
         affectedStateKeys: ({ observation }: Parameters<typeof logs.affectedStateKeys>[0]) => {
-          if (observation.kind === "call") return calls.affectedStateKeys({ observation });
+          if (observation.kind === "call") return Object.freeze([...new Set([
+            ...calls.affectedStateKeys({ observation }), ...controls.affectedStateKeys({ observation }),
+          ])]);
           const logKeys = logs.affectedStateKeys({ observation });
           const lpKeys = lp.affectedStateKeys({ observation });
           if (lpKeys.length === 0) return logKeys;
@@ -240,6 +263,8 @@ export const curveUnderlyingPricing = {
     },
     affectedStateKeys({ descriptor, routes, observation }) {
       if (observation.kind === "call") {
+        if (descriptor.legacyPlain && sameAddress(observation.target, descriptor.pool) &&
+            acceptLegacyPlainControlCall(observation)) return Object.freeze(routes.map(route => route.routeKey));
         return descriptor.quoteModel && curveUnderlyingAcceptBaseCall(observation) &&
           sameAddress(observation.target, descriptor.quoteModel.basePool)
           ? Object.freeze(routes.map(route => route.routeKey)) : [];
