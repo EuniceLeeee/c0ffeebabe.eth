@@ -1,0 +1,15 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { manifest } from "../protocols/few-wrapped-family/manifest.js";
+import { discovery } from "../protocols/few-wrapped-family/discovery.js";
+import { identity } from "../protocols/few-wrapped-family/identity.js";
+import { instance } from "../protocols/few-wrapped-family/instance.js";
+import { routes } from "../protocols/few-wrapped-family/routes.js";
+import { pricing } from "../protocols/few-wrapped-family/pricing.js";
+import { exact } from "../protocols/few-wrapped-family/exact.js";
+import { execution } from "../protocols/few-wrapped-family/execution.js";
+import { protocol } from "../protocols/few-wrapped-family/protocol.js";
+import { capture } from "../protocols/few-wrapped-family/capture.js";
+import { wrapAction,unwrapAction } from "../protocols/few-wrapped-family/action.js";
+export const activation=defineFamilyActivation({enabled:false,envKey:"SEARCHER_FAMILY_FEW_WRAPPED_ENABLED"});
+export const plugin=defineProtocolFamily({manifest,discovery,identity,instance,routes,pricing,exact,execution,protocol,capture,actionAdapters:[wrapAction,unwrapAction]});

@@ -1,0 +1,454 @@
+{
+  "schema_version": 1,
+  "kind": "few-wrapped-non-author-final-review",
+  "reviewPass": 3,
+  "created_at_utc": "2026-10-13T23:38:35.096377+00:00",
+  "reviewer": "Codex non-author reviewer /root/curve_ready_review",
+  "result": "no_remaining_blocking_findings_in_scoped_frozen_implementation_and_saved_evidence",
+  "blockingFindings": [],
+  "approvalScope": {
+    "accepted": "Few local implementation and recorded N-block-end dual execution on the explicitly fingerprinted existing dirty baseline, with the observation limits below.",
+    "defaultActivation": "disabled; explicit Few enable required",
+    "notApproved": [
+      "Clean-tree integration or a staged/committed tree that has not itself been run",
+      "Formal Adapter Replay or family_local merge gate",
+      "Production enablement, live operation, signing or broadcast",
+      "Full historical matrices for the other two naturally admitted wrappers",
+      "Opportunity reproduction, full conserving path completion, stage 4A/4B, or performance"
+    ],
+    "publicationBoundary": "The author plans to isolate Few changes, two Few lines in the shared dual test, and canonical HEAD 473 plus Few 11 capability rows. This review does not represent an execution of that projected clean staged tree. Peer content and the actual working catalog were present in the verified dirty workspace."
+  },
+  "frozenInputs": {
+    "root": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/few-review-20261014/candidate03",
+    "baseHead": "6b5bf26cb9e41e7a28de4f5aba75dd6905cec0d9",
+    "archiveSha256": "effd0628be2d5eb78203675b3503e7d955b86de7c0106a4b434bd3f0916a62cb",
+    "manifestPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/few-review-20261014/candidate03/manifest.json",
+    "manifestSha256": "4ba682c292ac57e501d083beffb06196910416debfdbcf2e1731385ae85d31c0",
+    "verifiedFiles": 134,
+    "verifiedBytes": 4922199,
+    "sourceConfigTestFiles": 24,
+    "productionTypeScriptFiles": 17,
+    "testOrFixtureFiles": 6,
+    "packageFiles": 1,
+    "finalCanonicalManifestPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/few-review-20261014/final-reconciliation/tool-selection06.json",
+    "finalCanonicalManifestSha256": "0bc9b8eda8932b8919d1dc11cb07644e284d8da458ae103ca950503d5c647ff4",
+    "snapshotCanonicalManifestSha256": "b5b296fcb044fb866b2fe33849c0c61b40ac762c33c01380c9e7a1cdf6000cb8",
+    "manifestVersionExplanation": "The final manifest appends four final canonical execution receipts to the five in the candidate snapshot; the two hashes refer to different saved versions."
+  },
+  "sourceBindings": {
+    "production": "12d704fa24bf60c3e7dca2b91809995ad418415acd4a5d75275d28e1f01525b1",
+    "productionFiles": 1166,
+    "fullFreezeSha256": "1980bc697cfd91c6237cce22948ce97ed2553fe048575faefd1ca88eb0156e22",
+    "fullFreezeFiles": 2029,
+    "commonProductionFiles": 1164,
+    "missingNoncodeFromFreeze": [
+      "searcher/venues/protocols/badger-sett-withdraw-family/README.md",
+      "searcher/venues/swaps/balancer-v3-family/local-math/UPSTREAM-LICENSE.txt"
+    ],
+    "productionRoot": "/opt/mev-cloud/family-runtime-20261007/listener/src",
+    "productionAlgorithm": "Recursive per-directory JavaScript localeCompare ordering; skip entries named test or templates; SHA-256 of JSON.stringify ordered [relativePath, fileSHA256] pairs, matching the actual runner.",
+    "freezeAlgorithm": "SHA-256 of the separately scoped saved 2029-file inventory, canonical JSON with sorted keys and compact separators.",
+    "commonFileContentDifferences": 0,
+    "scopeReconciliation": "The 2029-file scoped source freeze includes additional test/config/Solidity sources but omits two non-code files present in the 1166-file production fingerprint. There are 1164 common production files, all content-identical. Neither file count nor aggregate hash may be substituted across these scopes.",
+    "fullFreezeFileSha256": "cebc26979a95b0f30eeb2cbc52ba63cc7f46dd1b677911d45ec0759045c2b719",
+    "all24FrozenSourceConfigTestFilesMatchInventory": true,
+    "full2029FileBytesLocallyBundled": false,
+    "familyDefinitionHash": "e0f5eb79d9ad14406af114d87308a05679a7b5b85639cb4e75bf36e8e12c4a1d",
+    "finalActionSha256": "3e06012cf09e1d0b8c97a74ee9512addf718a27e137d77110bc3dbba869abeba",
+    "finalApprovalSha256": "97d3068817b96d8df0598b9a537ceb563982bb3991235c30bcf11578afa1a111",
+    "finalExecutionSha256": "a2e5ef29b382ad5518247b8588f58b1066e4bed066a36588f28f9793831e442c",
+    "historicalDualCliSha256": "4a7e46f2f3992f903edc37815178484a0e98c2d0ec2dd2038a449bd33d14bdd5",
+    "historicalReadyCliSha256": "5d6d18f1db155d40fa6a06edef729d098cb9e391e4329251ca737e8819ec3545"
+  },
+  "resolvedFindings": [
+    {
+      "id": "FEW-QUOTED-MINIMUM-01",
+      "status": "resolved in candidate03",
+      "originalRisk": "The earlier quoted action did not bind or enforce the requested minimum against the newly received output, and the central path supplies no equivalent ERC20 minimum-output guard.",
+      "resolution": "buildFragment binds minAmountOut into the action; the quoted RuntimeAmountProgram checks exact input net debit and computes the output increment before enforcing the minimum.",
+      "locations": [
+        {
+          "file": "listener/src/searcher/venues/protocols/few-wrapped-family/action.ts",
+          "lines": [
+            12,
+            25
+          ]
+        },
+        {
+          "file": "listener/src/searcher/venues/protocols/few-wrapped-family/execution.ts",
+          "lines": [
+            19,
+            24
+          ]
+        }
+      ],
+      "evidence": "Independently decoded final successful instruction streams and all ten minimum=quote+1 controls. Each paired control differs only in the minimum constant and records MainRevert/Panic(0x11). Existing output 103 cannot satisfy a shortfall."
+    },
+    {
+      "id": "FEW-PRODUCTION-ALLOWANCE-01",
+      "status": "resolved in candidate03",
+      "originalRisk": "A successful low-level approve(0) call can return false while leaving allowance. The CLI-only final allowance assertion did not establish the production policy.",
+      "resolution": "Both production wrap encodings invoke a private helper that calls approve(0), reads allowance(executor,wrapper), and requires actual allowance zero.",
+      "locations": [
+        {
+          "file": "listener/src/searcher/venues/protocols/few-wrapped-family/approval.ts",
+          "lines": [
+            6,
+            9
+          ]
+        },
+        {
+          "file": "listener/src/searcher/venues/protocols/few-wrapped-family/action.ts",
+          "lines": [
+            19,
+            21
+          ]
+        },
+        {
+          "file": "listener/src/searcher/venues/protocols/few-wrapped-family/execution.ts",
+          "lines": [
+            12,
+            14
+          ]
+        }
+      ],
+      "evidence": "Decoded the production allowance read/equality in both final wrap programs separately from the CLI-added guard. Read the saved passing regression for approve=false with residual allowance in both encodings; registers 14 and 15 do not conflict with the quoted local registers.",
+      "limit": "No actual historical WETH/APE approve-false/residual-allowance event is claimed; the counterexample is the scoped production-policy regression."
+    }
+  ],
+  "sourceReviewConclusions": [
+    "Admission is based on reverse factory.getWrappedToken(asset) registration plus wrapper factory/token getters and current code binding. The exact wrapper runtime profile binds executable semantics rather than enumerating admitted instance addresses.",
+    "Factory registration is evidence of registration, not by itself proof that a particular CREATE2 deployment occurred.",
+    "Requested-amount Exact uses the existing production strict simulation transport with input-only funding override and checks caller input debit, output credit, wrapper backing balance and wrapper supply changes, expected conversion/Transfer events and return amount.",
+    "Caller, origin, executor code and prefix state are bound through the existing central strict path. Runtime construction performs no quote or RPC fallback; prefix execution preserves actual earlier receipts rather than injecting the current leg input.",
+    "Raw pricing uses current binding and actual direction probes; refresh uses the existing each-block capability. Saved production lifecycle coverage demonstrates invalidation and recovery with synthetic state transitions.",
+    "Ordinary wrap/unwrap are distinct from privileged mint/burnFrom; neither a fixed instance allowlist nor a newly weakened central safety gate was found.",
+    "The production wrapper supply and backing observations are present. Underlying-token totalSupply is not requested and was not verified."
+  ],
+  "executionEvidence": {
+    "sourceBlockNumber": 26182689,
+    "sourceBlockHash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c",
+    "originalTransaction": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+    "originalConversions": [
+      {
+        "target": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "asset": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "direction": "wrap",
+        "methodSelector": "0xea598cb0",
+        "callPath": [
+          0,
+          1,
+          0
+        ],
+        "amountIn": "4387060682263585",
+        "amountOut": "4387060682263585",
+        "logIndex": 893,
+        "actor": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+        "recipient": "0xe08d97e151473a848c3d9ca3f323cb720472d015"
+      },
+      {
+        "target": "0x0e3fe143de98c73e72942c8f760a2e69d98bc1cb",
+        "asset": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+        "direction": "unwrap",
+        "methodSelector": "0x5dbd6059",
+        "callPath": [
+          0,
+          1,
+          2
+        ],
+        "amountIn": "71854376210288490340",
+        "amountOut": "71854376210288490340",
+        "logIndex": 900,
+        "actor": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+        "recipient": "0xe08d97e151473a848c3d9ca3f323cb720472d015"
+      }
+    ],
+    "dualReportSha256": "2a2cde7c9c74513ef235ffcd67717cf9312d0201b548a18e1f2a057ae7433de2",
+    "readySha256": "7725c0b43c4fedf3837b3097a7d02782fa250e62833f924a41ecdc56eff41223",
+    "pricesSha256": "5a245cc87a1682735a96c0decd10399f6f178ccd029b4457010054630d5cf854",
+    "priceInputSha256": "1ac2381bc83ca47d77162edc3fad5b5d134fbaea3fd803c59da2d22f2ff2b845",
+    "originalReceiptSha256": "7e7e6ad0694d7d3cbf9e9525e58da641943f91123932e75f3956c0637110eeaa",
+    "originalTraceSha256": "e67a003ed38f92cd0807c8f7eb7a0cc5652d89871d5b2b2781eb7119ed8c513a",
+    "recomputedCounts": {
+      "assertions": 1889,
+      "samples": 10,
+      "manualInput": 8,
+      "positive": 20,
+      "quotedPositive": 10,
+      "negative": 50,
+      "missing-current-input": 20,
+      "post-execution-revert": 20,
+      "runtimePositive": 10,
+      "minimum-output-plus-one": 10,
+      "productionInput": 2,
+      "roundTrips": 10
+    },
+    "independentRawAssertionFailures": 0,
+    "executedTargets": 2,
+    "executedDirectedRoutes": 4,
+    "positivePostconditions": [
+      "quote and actual output equal the requested amount",
+      "executor old input 101 retained after full requested debit",
+      "executor output becomes old 103 plus requested output",
+      "executor native 17 retained",
+      "wrapper backing and totalSupply changes match the direction",
+      "Transfer and Wrap/Unwrap amounts, sender and recipient match",
+      "production and observer allowance zero guards execute successfully for wrap"
+    ],
+    "negativeControls": {
+      "missingCurrentInput": 20,
+      "forcedPostExecutionRevert": 20,
+      "quotedMinimumPlusOne": 10,
+      "allMainRevert": true,
+      "emptyEffectsExpectedByTransport": true
+    },
+    "roundTrips": {
+      "count": 10,
+      "tolerance": 0,
+      "legs": 2,
+      "firstMinimum": 1,
+      "finalMinimum": "initial requested input",
+      "netAssetWrapperBackingAndWrapperSupplyDelta": 0
+    },
+    "runtimeConstruction": {
+      "rpc": 0,
+      "exactQuote": 0,
+      "quotedFallbackUsed": false,
+      "forbiddenDuringBuild": 0
+    },
+    "inputProvenance": "Eight manual amount cases use original conversion amounts and their doubles across the two target routes in each direction; reversed-direction numeric reuse is explicitly manual. Two additional cases are the natural production P rows, one per fwWETH direction, amountIn=amountOut=2000000000000000.",
+    "environment": "Saved production REVM strict transport at the bound N-block-end source. Executor code, input funding and old inventories are simulation overlays; this is not original pretransaction/caller replay.",
+    "executorArtifact": {
+      "schema_version": 1,
+      "kind": "few-candidate03-independent-cryptographic-bindings",
+      "scope": "Read-only ABI hashing and saved compiler-artifact/source/runtime comparison; no compilation, product imports, RPC, EVM, or tests.",
+      "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+      "compilerVersion": "0.8.24+commit.e11b9ed9",
+      "artifactEvmVersion": "cancun",
+      "artifactMetadataSourceKeccakMatches": {
+        "src/BotVM.sol": true,
+        "src/Constants.sol": true,
+        "src/RuntimeAmountVM.sol": true,
+        "src/interfaces/IERC20.sol": true
+      },
+      "runtimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "ownerImmutableReferencesPatched": 3,
+      "patchedArtifactEqualsSavedExecutorCode": true,
+      "patchedCodeHashEqualsReport": true,
+      "wrapperRuntimeKeccak": "0xbe63f68c8de6e3f7cf411d9b117b931128468c36e0753fc5878fd5359f16acf5",
+      "abiSelectors": {
+        "wrap(uint256)": "0xea598cb0",
+        "unwrap(uint256)": "0xde0e9a3e",
+        "wrapTo(uint256,address)": "0x26599850",
+        "unwrapTo(uint256,address)": "0x5dbd6059"
+      },
+      "abiEventTopics": {
+        "Wrap(address,uint256,address)": "0xeb5580a0908e96b78bdcb1a3c5638793b491a6073c3ff56061a069cb20581773",
+        "Unwrap(address,uint256,address)": "0x12d6424519838e57637c6db9df31af32d7926ff0a53dd37007c191d0fe302818"
+      },
+      "limits": [
+        "This checks the saved BotVM artifact against its source metadata and saved deployed code, not an independent compilation.",
+        "Few public Solidity source was reviewed for semantics; no independent Few bytecode recompilation is claimed."
+      ]
+    },
+    "recordedRevmBinarySha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+    "revmBinaryRehashedByThisReviewer": false
+  },
+  "naturalReadyAndPricing": {
+    "instances": 4,
+    "edges": 8,
+    "raw": 8,
+    "effective": {
+      "missing-valuation": 6,
+      "quoted": 2
+    },
+    "quotedRows": [
+      {
+        "instanceKey": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "amountIn": 2000000000000000,
+        "amountOut": 2000000000000000,
+        "status": "quoted"
+      },
+      {
+        "instanceKey": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "tokenIn": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": 2000000000000000,
+        "amountOut": 2000000000000000,
+        "status": "quoted"
+      }
+    ],
+    "completeness": "degraded",
+    "resolvedFamilyIds": [],
+    "incompleteFamilyIds": [
+      "protocol:few-wrapped"
+    ],
+    "targetExecutedWrappers": 2,
+    "otherAdmittedWrappersHistoricalDualNotRun": 2,
+    "rawPointValues": "Eight finite positive raw values equal one and are source-bound to N.",
+    "quotedProductionRows": 2,
+    "missingValuationRows": 6,
+    "constructionAudit": {
+      "instances": 4,
+      "routes": 8,
+      "constructed": 8,
+      "declined": 0,
+      "failed": 0,
+      "scope": "Saved Ready descriptor construction only; not independent fresh admission or EVM execution."
+    },
+    "limit": "The degraded natural valuation result is retained. No natural full-family effective pricing pass is claimed."
+  },
+  "ran_gate": {
+    "reviewerExecutedProductGates": false,
+    "reviewerRpcCalls": 0,
+    "reviewerEvmExecutions": 0,
+    "reviewerBuilds": 0,
+    "reviewerTests": 0,
+    "reviewerGeneratedWrites": 0,
+    "reviewerProductionSourceWrites": 0,
+    "reviewerActuallyPerformed": [
+      "Read frozen source and compare all three candidates",
+      "Verify all 134 manifest file hashes and sizes",
+      "Independently decode saved original receipt/trace, execution calldata and VM instructions, raw trusted effects and logs",
+      "Recompute 1889 raw assertions plus 1285 provenance assertions, with zero final differences",
+      "Read-only hash current production files using the exact runner ordering and exclusion algorithm",
+      "Recompute ABI selectors/events and saved artifact/metadata/owner-patched runtime bindings",
+      "Match all nine canonical machine receipts against saved stdout/stderr hashes and byte counts"
+    ],
+    "savedAuthorExecutionsInspected": [
+      {
+        "gate": "contract-attempt05",
+        "result": "9/9 pass"
+      },
+      {
+        "gate": "lifecycle-attempt04",
+        "result": "1/1 pass",
+        "scope": "production controller with synthetic denied/clean/recovery fixture"
+      },
+      {
+        "gate": "dual-suite03",
+        "result": "81/81 pass",
+        "scope": "shared offline dual-interface suite"
+      },
+      {
+        "gate": "build-live03",
+        "result": "exit 0"
+      },
+      {
+        "gate": "ready04 and dual04",
+        "result": "exit 0",
+        "scope": "saved real historical-source acceptance; raw evidence independently recomputed"
+      },
+      {
+        "gate": "final family-capability-manifest check",
+        "result": "exit 0"
+      },
+      {
+        "gate": "final strict production family declarations",
+        "result": "exit 0"
+      },
+      {
+        "gate": "final saved Ready runtime audit",
+        "result": "8/8 constructed; 0 declined; 0 failed",
+        "scope": "construction only"
+      },
+      {
+        "gate": "protocol legs",
+        "result": "4/4 pass"
+      },
+      {
+        "gate": "expanded types-tests04",
+        "result": "exit 2, seven dependency diagnostics",
+        "scope": "not a full repository typecheck pass"
+      }
+    ],
+    "canonicalCapabilityQuery": [
+      "adapter",
+      "family",
+      "ready",
+      "execution",
+      "few"
+    ],
+    "canonicalToolIds": [
+      "listener:searcher:few-wrapped-contract",
+      "listener:searcher:few-wrapped-lifecycle",
+      "listener:searcher:family-dual-execution",
+      "listener:searcher:few-wrapped-historical-ready",
+      "listener:searcher:few-wrapped-historical-dual",
+      "listener:family-capability-manifest:check",
+      "listener:searcher:strict-production-family-declarations",
+      "listener:searcher:family-runtime-audit",
+      "listener:searcher:protocol-legs"
+    ],
+    "canonicalMachineReceiptsVerified": 9
+  },
+  "preservedFailuresAndNonClaims": [
+    "Earlier contract/type fixture failures, incorrect strict-binary Ready failure, missing explicit Few enable failure, and first dual empty-revert-effects expectation failure remain failures; later attempts are distinct.",
+    "Candidate01/dual02 pre-minimum and candidate02/dual03 pre-allowance artifacts do not substitute for final candidate03/dual04 evidence.",
+    "Expanded type checking still has seven diagnostics in four dependency files. The author reconciliation reports identical previous diagnostics and unchanged HEAD file bytes; no complete repository typecheck success is claimed.",
+    "The reviewer initial provenance attempt mistakenly counted ERC20 transfers to wrapper addresses as conversion frames. It is retained as an invalid reviewer attempt, superseded by selector-filtered attempt02, with no changes to source or captured execution evidence."
+  ],
+  "observationLimits": [
+    "This is independent review and raw saved-evidence recomputation, not an independent EVM rerun.",
+    "MainRevert effects are empty by the trusted transport contract; separate post-revert balance snapshots or storage-diff proofs were not captured for each negative.",
+    "Positive raw trusted effects and logs are available; full per-sample EVM callTrace/stateDiff trees are not separately saved in these new reports.",
+    "Zero final wrap allowance is established by decoded executed production/observer read-equality checks, not a separately saved numeric allowance slot observation.",
+    "Underlying-token totalSupply is not observed; only wrapper supply and token/backing deltas are included.",
+    "Old inventories are execution overlays. Missing-current-input controls retain old input 101; they are not claims of an entirely empty token balance.",
+    "The historical matrix covers two target wrappers/four directions and ten amount cases, not every wrapper, token behavior, amount boundary or naturally admitted instance.",
+    "Ready nomination receipts beyond the original c191 transaction are not all frozen. Header inclusion and sealed source bindings were checked, not every nomination event independently decoded.",
+    "Exact source tree hashes were reconciled within their actual algorithms/scopes. The 2029-file aggregate inventory is not a locally bundled 2029-file content archive.",
+    "Peer/coffee preservation records and consistent hashes were inspected; original full peer diff bytes and coffee contents were not independently re-audited.",
+    "No independent Few source recompilation, new compiler run, runtime hardfork probe, chain query, or product execution was done by this reviewer.",
+    "The exact projected clean staged or committed tree has not been executed by this review. Formal Adapter Replay/family_local and stages 4A/4B remain unrun, as do opportunity and performance acceptance. Vault support is outside this implementation."
+  ],
+  "independentArtifacts": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/few-review-20261014/independent-source-review-candidate01.json",
+      "sha256": "c297cdef21f998922e95fb8957ba71b854e54a53706b2a6e29c56957ec0b6e02",
+      "role": "Initial source review; minimum-output defect found."
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/few-review-20261014/independent-source-review-candidate02.json",
+      "sha256": "a6c922f02cc825f8ba01599d056ff8d15c45b0227278fe9f0a5e4f3888c0fd46",
+      "role": "Second source review; production allowance postcondition defect found."
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/few-review-20261014/independent-raw-audit-candidate03.json",
+      "sha256": "65a7a49e22315020fb9ab09802ce57a45b1cbe9a31e1c0a8ea7aea5283a8a051",
+      "role": "Final saved raw effects, events and instruction/calldata recomputation."
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/few-review-20261014/independent-provenance-audit-candidate03-attempt02.json",
+      "sha256": "b6fb18fbd20157535bb5c2eee70f42c2f135871f769a264f40f39700b3ad488d",
+      "role": "Corrected final provenance, header, Ready/prices and source pin recomputation."
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/few-review-20261014/independent-current-source-inventory-candidate03.json",
+      "sha256": "2e067b76dc165a4068f4790257e8a0cccc4d87aa3e149451194f93bcd47d81e6",
+      "role": "Independent read-only inventory using the production runner algorithm."
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/few-review-20261014/independent-tool-receipt-audit-candidate03.json",
+      "sha256": "d3e653f1574a3062a2be4cf24ac8383e68e7966226fa295767f7811e8995bae3",
+      "role": "Nine machine receipt stdout/stderr hashes and byte counts."
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/few-review-20261014/independent-cryptographic-bindings-candidate03.json",
+      "sha256": "f2f4887ed731e59409f14bce8901074d30a8ebe85e34b166e6583a5b84ee6a27",
+      "role": "ABI signatures, BotVM artifact metadata and saved deployed code."
+    }
+  ],
+  "supersededReviewerAttempt": {
+    "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/few-review-20261014/independent-provenance-audit-candidate03.json",
+    "sha256": "127e6b8b784c27f2f6ce4137770c790b91b5e075d07b4f38ef68707452c70133",
+    "reason": "Initial reviewer trace filter counted ERC20 transfer calls to wrapper addresses as conversion frames. Corrected filter uses independently computed wrap/unwrap/To ABI selectors; no product or captured evidence changes.",
+    "productDefect": false
+  },
+  "publicSourceReferences": [
+    "https://raw.githubusercontent.com/RingProtocol/few-factory/main/contracts/FewWrappedToken.sol",
+    "https://raw.githubusercontent.com/RingProtocol/few-factory/master/contracts/FewFactory.sol"
+  ]
+}
