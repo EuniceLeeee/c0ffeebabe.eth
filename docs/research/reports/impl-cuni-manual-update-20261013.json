@@ -1,0 +1,22 @@
+{
+  "schema": "impl-cuni-manual-update/v1",
+  "date": "2026-10-13",
+  "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "b8e9c5a0b38dad953257dbe2f0b1323edd69d75e44f3eb2d4c688655da80a8cb",
+  "afterSha256": "3bd83fea292f6cf77c4efb691dfdb8a7cf9d9f81f448174bb7cb384145f8dbaa",
+  "changes": {
+    "titleBefore": "**2026-10-13 接手进度核对（本轮未新增链上验收）**",
+    "titleAfter": "**2026-10-13 接手与后续补验进度（历史执行和自然估值分列）**",
+    "phaseBefore": "- **阶段1仍未关闭：** 复用 Yield Basis 三实例、Kyber 多池、Compound cUSDC／cDAI及 Algebra 六池的各自源码绑定证据；优先补 cUNI 的生产参考金额门，原TX金额／2倍测试量不能替代。小图缺估值与已授权借输入的同状态执行分别记账，不重复已过方向。",
+    "phaseAfter": "- **阶段1当前明确的 cUNI 金额缺口已按用户手工口径补验：** 用户授权直接取原交易数量并用CLI执行。N26037262，原烧毁份额3309303296及既有CLI的2倍对照共8次quoted／runtime执行、4个无输入负例通过，108项原始receipt／余额差分／错误码复核通过。复用Yield Basis三实例、Kyber多池、cUSDC／cDAI及Algebra六池的既有范围证据，不重做已过方向。cUNI自然effective仍缺估值，原runner保留exit=2；本次记手工原TX输入正确性通过，不冒称生产自然参考或完整机会通过，也不再为这个手工金额补验扩图找路。后续按顺序处理阶段2剩余正确性，全部4A／4B仍留最后。",
+    "footerBefore": "以上是证据复核进度，不是本轮重新运行build、历史EVM、自然机会或性能验收；旧成功只保留其原代码／状态／方向范围。",
+    "footerAfter": "接手审计与后续CLI历史执行分列记录；cUNI本轮实跑、siUSD上一轮实跑及其限制见对应原行。旧成功只保留其原代码／状态／方向范围，未改生产源码的本轮复用已有build与相关合同回归；自然机会与阶段4性能不随手工金额验收通过。",
+    "append": " <br>**2026-10-13 按用户要求直接用原交易数量运行CLI：** TX `0x50f2112fea14632548cfb10268c6f091f0733e5a50fc97e375c54209381d656a`，N26037262／hash `0xbb2188010009ec062a4b88eed08ff7d51bf7dc747257a8aa50749304d68b0bc7`。复用指纹有效的原单块Ready（1实例／1边），当前生产CLI在同N新目录生成1条raw和1条缺估值effective，原价格表不改。现有双执行CLI以`--family cuni`从真实receipt核实烧毁份额 **3309303296 raw cUNI**，原样送入quote、quoted及runtime；原额实收 **679066135847953170 raw UNI**，2倍测试额6618606592实收1358132271695906341，共 **8次执行到账差0、4个零输入＋旧输出库存负例回滚**。原始存储差分与调用再次复核108项通过：实扣等于请求，cToken返回错误码0，旧输出1e24及原生17 wei未被消耗，runtime构造Exact／quoted／RPC=0、无fallback。本轮是Family构造与单腿执行，不新增生产选额器或完整机会通过。首轮误传历史执行器哈希在执行前被拒绝，失败产物保留；核实历史测试地址为空后更正参数，仅重跑双执行。**用户授权的手工原TX金额正确性已补；自然effective仍missing-valuation，runner完整生产参考结论仍exit=2，原P=0.002和价格表不变。** 原TX接口为redeemUnderlying、实收679066136024079596，与本轮N末redeem(shares)相差-176126426，非原调用前／外层路线复现。源码未改，复用当前build／合同回归；本轮原始证据复核由主线程完成，不冒称另一审查者。4A／4B均未跑。[CLI、原始差分及限制证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/cuni-manual-tx-input-acceptance-20261013.json)。"
+  },
+  "protocolRowModified": "Compound V2 cToken",
+  "otherProtocolRowsPreserved": true,
+  "tableRowsBefore": 30,
+  "tableRowsAfter": 30,
+  "goalStatus": "active",
+  "newConclusion": "Manual original-TX input same-state correctness passed under explicit user instruction; production natural reference, opportunity and performance remain distinct."
+}

@@ -1,0 +1,325 @@
+{
+  "schema": "cuni-manual-tx-input-acceptance/v1",
+  "date": "2026-10-13",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "executedHead": "96fbd863079a50d50c00af83e4cd77c158df51eb",
+  "claim": "Explicitly user-authorized original-transaction amount via existing CLI: cUNI share-input same-N quote, quoted and runtime correctness passed. Natural production reference remains missing.",
+  "productionOrHarnessCodeChanged": false,
+  "inputSelection": {
+    "manualRequestedRawAmountIn": "3309303296",
+    "unit": "raw cUNI shares",
+    "cliArgument": "--family cuni",
+    "implementation": "Existing CLI observes original receipt/trace, validates burned shares and passes that exact amount unchanged to production Exact, quoted fragment and runtime execution. No new valuation or test execution implementation.",
+    "userScopeChange": "Original TX amount accepted for this manual correctness sample; supersedes treating absent production-reference amount as a blocker for this requested manual check.",
+    "diagnosticDoubleAmount": "6618606592",
+    "diagnosticDoubleIsProductionReference": false,
+    "priceTablesPatched": false,
+    "productionPChanged": false,
+    "naturalGraphPathInvented": false
+  },
+  "target": {
+    "tx": "0x50f2112fea14632548cfb10268c6f091f0733e5a50fc97e375c54209381d656a",
+    "instance": "0x35a18000230da775cac24873d00ff85bccded550",
+    "tokenIn": "0x35a18000230da775cac24873d00ff85bccded550",
+    "tokenOut": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+    "source": {
+      "number": 26037262,
+      "hash": "0xbb2188010009ec062a4b88eed08ff7d51bf7dc747257a8aa50749304d68b0bc7",
+      "generation": 26037262
+    },
+    "stateAndEnvironment": "N-end state and N execution environment",
+    "currentAction": "redeem(shares)",
+    "originalAction": "redeemUnderlying",
+    "originalTxOutRawUNI": "679066136024079596",
+    "originalTxSignedDifferenceRawUNI": "-176126426",
+    "originalCallPrestateRestored": false
+  },
+  "source": {
+    "code": {
+      "sourceTreeSha256": "853eb200841aa1af2a439c958132bc8a2fcd7b888d3ab5770307283568d2c9e8",
+      "harnessSha256": "6d6c5c82fd971d5a55c50817b0738d7524e7f129ec60d5f8fc24af37dffbec54",
+      "evidenceSha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27",
+      "observationHelpers": [
+        {
+          "path": "../three-family/historical-input-observations.ts",
+          "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+        },
+        {
+          "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+          "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+        },
+        {
+          "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+          "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+        },
+        {
+          "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+          "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+        },
+        {
+          "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+          "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+        },
+        {
+          "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+          "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+        },
+        {
+          "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+          "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+        },
+        {
+          "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+          "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+        },
+        {
+          "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+          "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+        }
+      ]
+    },
+    "runtimeCode": {
+      "keccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+    },
+    "sourceHeader": {
+      "number": "0x18d4c0e",
+      "hash": "0xbb2188010009ec062a4b88eed08ff7d51bf7dc747257a8aa50749304d68b0bc7",
+      "stateRoot": "0x1174793179f2625abb05c8691dff311f8943e8547bdcab41caefbe8a48b0a8fa",
+      "timestamp": "0x6ab33c23",
+      "baseFeePerGas": "0x36c15f7"
+    },
+    "revmBinarySha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+    "dirtyDiffSha256": "2776910e5aeb29d5467103d67141cded583a6da8a3e293946318b05ed030a4cb"
+  },
+  "readyAndPrices": {
+    "ready": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/cuni-ready-attempt01/ready.json",
+      "sha256": "9a74a9378da13d66e190e11cc318ecef4260fe66f1eec62d518e162b2f1599c3"
+    },
+    "readyReusedUnchanged": true,
+    "currentMemoHashChecksPassed": true,
+    "admission": [
+      {
+        "instanceKey": "0x35a18000230da775cac24873d00ff85bccded550",
+        "memoFingerprint": "f2b69056012aae70d9fa354e2c8449422a254091c1133932ce496810bf02638c",
+        "familyDefinitionHash": "42bcea101816e0dbd338b1b3e2348dba43579ca1f5bd9e4937d976dc259f1150",
+        "candidate": {
+          "adapter": "compound-ctoken",
+          "address": "0x35a18000230da775cac24873d00ff85bccded550",
+          "blockHash": "0xbb2188010009ec062a4b88eed08ff7d51bf7dc747257a8aa50749304d68b0bc7",
+          "blockNumber": 26037262,
+          "candidateKind": "compound-ctoken-market",
+          "familyId": "protocol:compound-ctoken",
+          "logIndex": 232,
+          "market": "0x35A18000230DA775CAc24873d00Ff85BccdeD550",
+          "pluginCandidateKey": "0x35a18000230da775cac24873d00ff85bccded550",
+          "transactionHash": "0x50f2112fea14632548cfb10268c6f091f0733e5a50fc97e375c54209381d656a"
+        }
+      }
+    ],
+    "graphHash": "bea242df582a25661e6a020bfe752000a74035db19e8c8dce5e4e8606793c0e0",
+    "graphDirections": 1,
+    "rawRows": 1,
+    "rawMid": 205199123.534174,
+    "rawSource": {
+      "number": 26037262,
+      "hash": "0xbb2188010009ec062a4b88eed08ff7d51bf7dc747257a8aa50749304d68b0bc7",
+      "generation": 1
+    },
+    "effectiveRows": 1,
+    "effectiveRow": {
+      "edgeId": "protocol:compound-ctoken\u001f0x35a18000230da775cac24873d00ff85bccded550\u001f0x35a18000230da775cac24873d00ff85bccded550\u001f0x35a18000230da775cac24873d00ff85bccded550>0x1f9840a85d5af5bf1d1762f925bdaddc4201f984\u001fe9c6273eb304ac38c2ae326280bccc78898121c1097d8fcc7bafc84f6ad3d423",
+      "instanceKey": "0x35a18000230da775cac24873d00ff85bccded550",
+      "tokenIn": "0x35a18000230da775cac24873d00ff85bccded550",
+      "tokenOut": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+      "amountIn": null,
+      "status": "missing-valuation",
+      "amountOut": null,
+      "effectiveMid": null
+    },
+    "referenceMode": "default",
+    "referenceWethInput": "2000000000000000",
+    "freshEffectiveQuotes": 0,
+    "carriedEffectiveQuotes": 0,
+    "missingValuationRows": 1,
+    "naturalEffectiveGate": "unmet",
+    "newProductionPriceDirectory": "logs/cuni-manual-tx-20261013.gzo43m9o/current-prices",
+    "originalReadyAndOriginalPriceUnchanged": true
+  },
+  "trials": [
+    {
+      "label": "historical-input-at-N",
+      "amountInRawCUNI": "3309303296",
+      "quoteAndActualOutRawUNI": "679066135847953170",
+      "successfulQuoted": 2,
+      "successfulRuntime": 2,
+      "allSignedDeltas": "0",
+      "noInputOldOutputControlsReverted": 2
+    },
+    {
+      "label": "twice-historical-input-at-N-not-production-reference",
+      "amountInRawCUNI": "6618606592",
+      "quoteAndActualOutRawUNI": "1358132271695906341",
+      "successfulQuoted": 2,
+      "successfulRuntime": 2,
+      "allSignedDeltas": "0",
+      "noInputOldOutputControlsReverted": 2
+    }
+  ],
+  "executionSafety": {
+    "runtimeConstruction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "programHash": "0x119f6864af8a3e60cfbfe7dee5e4b3e299a9d3a7529d83f4a618f6c05f0e61ce"
+    },
+    "productionAmountSelectorRunThisIncrement": false,
+    "actualInputDebitMatchesRequestedShares": true,
+    "cTokenCallReturnsZeroErrorCode": true,
+    "oldOutputControlRawUNI": "1000000000000000000000000",
+    "oldOutputPreserved": true,
+    "positiveOldInputInventoryControlThisIncrement": false,
+    "nativeBeforeAndAfterWei": "17",
+    "borrowOrCreditAction": false,
+    "ownerExecutor": {
+      "executor": "0x1000000000000000000000000000000000000002",
+      "owner": "0x1000000000000000000000000000000000000001"
+    },
+    "localExecutorProvisioning": {
+      "historicalHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "runtimeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "replacement": false,
+      "historicalRuntimeExecuted": false,
+      "scope": "local eth_call/debug_traceCall code overlay only; same executor/origin; no protocol or permission override",
+      "admission": "existing historical Ready retained; code overlay is execution-test provisioning, not new identity evidence"
+    }
+  },
+  "validation": {
+    "manualRequestedAmountCorrectness": "pass",
+    "cliOverallResult": "incomplete-production-reference",
+    "cliExitCode": 2,
+    "cliErrors": [],
+    "cliOverallInterpretation": "The unmodified CLI still requires a production reference for full acceptance. Its exit=2 is preserved; user-authorized manual input correctness is a separate narrower verdict, not a zero-exit full-acceptance claim.",
+    "rawReadback": {
+      "path": "logs/cuni-manual-tx-20261013.gzo43m9o/raw-readback.json",
+      "sha256": "dd7eaba72f581edf0d63596c30f2ddea5ce70c00fa91aa8b2c35b3c93822d63e",
+      "checksPassed": 108,
+      "scope": "Main agent independent arithmetic over raw stored diffs and original logs, not another reviewer or new EVM"
+    },
+    "indexedTools": {
+      "query": [
+        "compound",
+        "dual",
+        "historical",
+        "at",
+        "block",
+        "status",
+        "universe"
+      ],
+      "manifest": "logs/cuni-manual-tx-20261013.gzo43m9o/tool-selection.json",
+      "manifestSha256": "4955c1d4af1b84ed80cff98be0f38e7b65ab88990ba760df131cb9f78388cbf3",
+      "executions": [
+        {
+          "toolId": "listener:searcher:universe-rebuild-status",
+          "exitCode": 0,
+          "descriptorSha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+          "argvSha256": "3bf21c399492211dfeebf48923dec9f19f5de298243de23db7fb6ae57840dc54",
+          "finishedAt": "2026-10-13T04:37:01.983Z"
+        },
+        {
+          "toolId": "listener:searcher:at-block",
+          "exitCode": 0,
+          "descriptorSha256": "6fe9b1650f257ba529c2e6c55bdc180c8bc292b13710329b76a5fee3f7d50360",
+          "argvSha256": "560921cdac77af0d8782231b60bf090b095381560fb74986f6c1c921a403d8f2",
+          "finishedAt": "2026-10-13T04:37:03.962Z"
+        },
+        {
+          "toolId": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+          "exitCode": 1,
+          "descriptorSha256": "be49b52e9cd477b396d8aeced305700f21dd9c83fa82b0839dab601d0d78a0fb",
+          "argvSha256": "78bf5c86176153131aaddb7293ed73e688c3e42944363f26952b571f1c021c26",
+          "finishedAt": "2026-10-13T04:37:06.911Z"
+        },
+        {
+          "toolId": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+          "exitCode": 2,
+          "descriptorSha256": "be49b52e9cd477b396d8aeced305700f21dd9c83fa82b0839dab601d0d78a0fb",
+          "argvSha256": "afdcccb0944fe8b6166b94b89b94fd3f142f36c9fb30a65eedda0b3f96d57ee5",
+          "finishedAt": "2026-10-13T04:39:33.889Z"
+        }
+      ],
+      "reconciliation": "Canonical CLI and independent raw readback agree: requested original shares and doubled shares execute exactly; natural production reference remains missing. Initial invocation mistake retained separately. No manual-vs-tool disagreement."
+    },
+    "buildAndContracts": "No production or harness change. Reuse current source-bound production build and 178 offline checks from docs/research/reports/manual-four-hop-reference-20261013.json; not rerun here."
+  },
+  "retainedFailure": {
+    "artifact": "logs/cuni-manual-tx-20261013.gzo43m9o/manual-tx-dual.json",
+    "sha256": "3f8486c4a129c832756bfd415b6afdad972512d057c34238ac687e60cb215b22",
+    "exitCode": 1,
+    "stage": "owned-local-fork",
+    "reason": "Operator passed current BotVM runtime hash as expected historical address code hash. Actual historical synthetic test address is empty. Guard rejected before quote/execution. Corrected invocation omitted the inapplicable upgrade parameter, retaining all checks and reusing current prices.",
+    "correctedAttempt": "logs/cuni-manual-tx-20261013.gzo43m9o/manual-tx-dual-attempt02.json"
+  },
+  "abandonedPreparation": {
+    "path": "logs/cuni-natural-input-20261013.lpe9r7yd",
+    "status": "preparation only; no startup/Ready process or history rebuild launched",
+    "reason": "Latest user instruction chose manual original TX amount; do not resume broad incoming-path search just to meet this manual-input check."
+  },
+  "artifacts": [
+    {
+      "path": "logs/cuni-manual-tx-20261013.gzo43m9o/request.json",
+      "sha256": "f191e470d4bedf3d660786705e804263c3ab363bb8e1455255e5b83a9873f802"
+    },
+    {
+      "path": "logs/cuni-manual-tx-20261013.gzo43m9o/current-prices/prices.json",
+      "sha256": "27bb8ed819d9aa99d198f9d4159461aa326970ca0107aae74e775b42b640f8f3"
+    },
+    {
+      "path": "logs/cuni-manual-tx-20261013.gzo43m9o/current-prices/input.json",
+      "sha256": "7795da8a99c657d9bbe187c629e08f2aed7d8a2730ef3f0b9a7aeb91a5b4a364"
+    },
+    {
+      "path": "logs/cuni-manual-tx-20261013.gzo43m9o/manual-tx-dual.json",
+      "sha256": "3f8486c4a129c832756bfd415b6afdad972512d057c34238ac687e60cb215b22"
+    },
+    {
+      "path": "logs/cuni-manual-tx-20261013.gzo43m9o/manual-tx-dual-attempt02.json",
+      "sha256": "e18d4d023bba691ea54c9b0e1268d6eab190bde5e02183bcbab2f9e87cec8b20"
+    },
+    {
+      "path": "logs/cuni-manual-tx-20261013.gzo43m9o/raw-readback.json",
+      "sha256": "dd7eaba72f581edf0d63596c30f2ddea5ce70c00fa91aa8b2c35b3c93822d63e"
+    },
+    {
+      "path": "logs/cuni-manual-tx-20261013.gzo43m9o/tool-selection.json",
+      "sha256": "4955c1d4af1b84ed80cff98be0f38e7b65ab88990ba760df131cb9f78388cbf3"
+    }
+  ],
+  "progress": {
+    "goalStatus": "active",
+    "currentManualCuniAmountGap": "closed under explicit user scope",
+    "nextCorrectnessWork": "Stage 2 remaining Legacy Set and other actual gaps; reread the sole IMPL table at transition.",
+    "phase4A": "NOT RUN",
+    "phase4B": "NOT RUN"
+  },
+  "limits": [
+    "Natural production-reference input and effective quote remain absent; manual original amount is not natural valuation.",
+    "Original redeemUnderlying/pre-call state and outer-wrapper/complete opportunity are unverified.",
+    "This is Family runtime construction and single-leg execution, not a new full production amount-selector proof.",
+    "No formal Adapter Replay fixed/merge-ready conclusion or complete adaptation delivery.",
+    "All local and representative timing stays in phase 4 after earlier correctness; diagnostic elapsed values are not performance evidence."
+  ],
+  "preservation": {
+    "originalCoffeeCheckpointSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "originalDirtyPreserved": true,
+    "noPeerProcessStopped": true,
+    "liveStarted": false,
+    "deployment": false,
+    "signing": false,
+    "broadcast": false,
+    "privateKeyRead": false
+  }
+}
