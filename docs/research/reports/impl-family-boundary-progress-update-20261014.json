@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-10-13T22:15:34.411000+00:00",
+  "target": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "baseHead": "b2f9d7e9dc31b8fa03ee9f20c19efb993dcdc5f1",
+  "implementationCommit": "5356cf3de6384a0921dd9a2e1e70bc32dc4dd4ac",
+  "sourceAndReportCommit": "881bf70c53740026c528ded124f63103f2c5c339",
+  "report": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/881bf70c53740026c528ded124f63103f2c5c339/docs/research/reports/family-boundary-strict-catalog-repair-20261014.json",
+  "before": {
+    "sha256": "7f2f6a30c6b8819b9d6d24a7196c7998768ed71f53169287b8397265207da1eb",
+    "bytes": 263276,
+    "backup": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/impl-boundary-before-20261014.md"
+  },
+  "after": {
+    "sha256": "15a8c53ab940557f5798788487cf1aca70f743e2a3afd3dc9f53abf048e1d43d",
+    "bytes": 265800
+  },
+  "changedLines": [
+    6,
+    31
+  ],
+  "operations": [
+    {
+      "line": 6,
+      "prefix": "- **阶段2仍未关闭：**",
+      "append": " **2026-10-14 正式边界工具增量（5356cf3）：** 已修复读取已删除旧注册表／旧action投影及误拒Family私有测试的两项工具缺口，19项回归通过、独立复算32项通过。对fba759d2→ec82f9d的真实双树检查现完整产出framework结论：其他42族源码闭包一致，但共享生成文件、兼容wrapper及两份共享验收工具仍越过单Family边界；不将工具修复当family_local或Adapter Replay通过。已有Curve历史实收证据继续复用；本轮未新增机会复现／时效性验收。原失败、实际dirty和未完成项保留，goal继续active。",
+      "beforeRowSha256": "99a11eded63266752e8b843667a9ee749aaa7349a2bd99c6f09104023344b5da",
+      "afterRowSha256": "63566be889453378dde956c7f5e2cc236f68018eb9d8767d42fb827c6354398d"
+    },
+    {
+      "line": 31,
+      "prefix": "| Curve Underlying／TBTC＋V3",
+      "append": " **2026-10-14 正式边界工具核验（5356cf3）：** 首次canonical gate因旧production-registry不存在而中止，随后发现旧action投影及Family私有测试规则已不符合当前生产目录／模板。现使用同一受信worker分别载入fba759d2与ec82f9d各自真实strict生产树，43个已安装定义（含disabled）、实际active actions 59→60、完整activation与source闭包独立绑定；只在独占目录有直接runtime锚点且不存在runtime测试引用时接纳私有.ts／.json测试。19／19回归通过，私有测试修前失败保留；独立审查32／32哈希与边界复算通过，未独立重跑EVM。生产build已运行通过；四个修改文件无类型诊断，但保留未改curve-lp导出Snapshot的TS4023，不能称全仓类型检查通过。**该历史提交对仍为framework（退出1且有完整收据）：共享capability JSON、未被生产引用的兼容wrapper以及两份curve-plain共享验收工具共4项真实范围理由保留；其他42族闭包哈希均2b5458e2…，不据此宣称family_local／adapter_merge_ready／Adapter Replay通过。**LearningCase tooldef-20261014-family-boundary-strict-catalog已绑定codify_commit；2006文件冻结仅本轮4个工具文件变化，peer的24项tracked／7项untracked、coffee与旧证据未改。本轮未重跑FEI／调A／V1／sUSD／lending执行，没有新增自然估值、原调用前机会或4A／4B结果；用户要求保留现有主分支，未为改变结论新建主分支或改写历史提交。[完整报告](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/881bf70c53740026c528ded124f63103f2c5c339/docs/research/reports/family-boundary-strict-catalog-repair-20261014.json)；[本地冻结证据](/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/family-boundary-evidence-20261014/reports/family-boundary-strict-catalog-repair-20261014.json)。",
+      "beforeRowSha256": "981b3e44ea982b8d25355d66fac87d150d12153f0182294f8d079150328c2de2",
+      "afterRowSha256": "c534a820ad5fb6c09af446f3451585865a1c7a8d983c46f06405d11abdde5b65"
+    }
+  ],
+  "preservation": "Append only to existing Stage2 progress and original Curve Underlying row. All prior contents, failures, other rows and peer increments remain. No replacement master table.",
+  "sourceProof": {
+    "priorArchive": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/ready-noop-current-evidence-20261014/frozen-tested-source.tar.gz",
+    "priorArchiveSha256": "acb07ce1cb662086f6d324a5aea130fa35af528d172ca5fffab1c3a0c7f0938a",
+    "newArchive": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/family-boundary-evidence-20261014.tar.gz",
+    "newArchiveSha256": "bfeba2b4d43838f37fc2ef5d1a88efde44a2bbca723c0394ceda930aa2957dc3",
+    "sourceFingerprint": "f6bb9f7d32f07dc84a3f8654536479fd54bf8be11f27cd728d2eec459fdb2412",
+    "verifiedSourceFiles": 2006,
+    "newSourceFiles": [
+      "analysis/src/adapter-family-boundary.ts",
+      "analysis/src/cli/adapter-family-boundary-gate.ts",
+      "analysis/src/test/adapter-family-boundary.ts",
+      "listener/src/searcher/test/family-ownership-manifest.ts"
+    ],
+    "meaning": "All 2006 frozen source bytes reconstruct from the existing prior archive plus only the four reviewed replacements. No previous hash is rewritten."
+  },
+  "evidenceArtifactsVerified": 53,
+  "goalStatus": "active",
+  "phase4A": "not-run",
+  "phase4B": "not-run"
+}
