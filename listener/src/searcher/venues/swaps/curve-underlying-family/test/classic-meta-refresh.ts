@@ -74,7 +74,7 @@ type Activity = { kind: "call"; target: string; data: string; nested?: boolean }
 
 async function setup() {
   let state = structuredClone(BASELINE), failBalances = false, previous = START, sequence = 0;
-  let ramping: string | undefined;
+  let metaAmplification = 100000n;
   const quotedEdges: string[] = [];
   const cache = createAdapterFamilyExactQuoteCache();
   function runtime(source: CanonicalSource) {
@@ -115,9 +115,10 @@ async function setup() {
           }
           const saved = fixture.calls.find(row => same(row.to, tx.to) && same(row.data, tx.data));
           assert(saved, `unexpected offline call ${tx.to} ${tx.data}`);
-          // Synthetic ramp transition; the real historical refusal is accepted separately.
-          return ramping && same(tx.to, ramping) && tx.data === ethers.id("future_A()").slice(0, 10)
-            ? word(BigInt(saved.result) + 1n) : saved.result;
+          // Synthetic timestamp-dependent A values; historical execution is separate.
+          if (same(tx.to, BASE) && tx.data === ethers.id("A()").slice(0, 10)) return word(state.amplification);
+          if (same(tx.to, POOL) && tx.data === ethers.id("A_precise()").slice(0, 10)) return word(metaAmplification);
+          return saved.result;
         },
         async getCode(address, block) {
           assert.equal(block, source.number);
@@ -219,7 +220,10 @@ async function setup() {
   return { step, descriptor, route, key,
     donate() { state = { ...state, balances: [state.balances[0] + 10n ** 23n, ...state.balances.slice(1)] }; },
     fail() { failBalances = true; },
-    ramp(address: string | undefined) { ramping = address; },
+    ramp(address: string | undefined, amplification?: bigint) {
+      state = { ...state, amplification: address && same(address, BASE) ? amplification! : BASELINE.amplification };
+      metaAmplification = address && same(address, POOL) ? amplification! : 100000n;
+    },
     expected() { return classicBaseExchangeAmount(state, 0, 1, INPUT); },
   };
 }
@@ -247,7 +251,7 @@ test("base-pool logs still refresh through the same production update entry", as
   assert.notEqual(next.row.amountOut, before.row.amountOut);
 });
 
-test("unrelated base calls, same selector at other targets and ordinary token transfers stay clean", async () => {
+test("unrelated activity stays outside touched scope while the time-sensitive model refreshes", async () => {
   const h = await setup(), before = await h.step();
   const activities: Activity[] = [
     ...["withdraw_admin_fees()", "get_virtual_price()"].map(signature => ({
@@ -259,8 +263,9 @@ test("unrelated base calls, same selector at other targets and ordinary token tr
   for (const activity of activities) {
     const next = await h.step(activity);
     assert(!next.touched.has(h.route.routeKey.toLowerCase()), JSON.stringify(activity));
-    assert.deepEqual(next.calls, [], "clean activity must not requote any metapool direction");
-    assert.strictEqual(next.row, before.row); assert.equal(next.row.amountOut, before.row.amountOut);
+    assert.deepEqual([...next.calls].sort(), [...before.calls].sort(), "unrelated activity must not expand scheduled work");
+    assert.notStrictEqual(next.row, before.row); assert.equal(next.row.amountOut, before.row.amountOut);
+    assert.deepEqual(next.row.quotedAt, next.source);
   }
 });
 
@@ -293,35 +298,37 @@ test("a failed donation refresh cannot republish the old quote, including the ne
 });
 
 for (const at of [BASE, POOL]) {
-  test(`${at === BASE ? "base" : "meta"} A ramp rejects refreshed quotes, stays failed on a clean block, then recovers`, async () => {
+  test(`${at === BASE ? "base" : "meta"} A ramp advances on a clean block and remains fresh after stopping`, async () => {
     const h = await setup(), before = await h.step();
     assert.equal(before.row.status, "quoted");
-    h.ramp(at);
-    const failed = await h.step({ kind: "log", address: at,
+    h.ramp(at, at === BASE ? 5000n : 110000n);
+    const started = await h.step({ kind: "log", address: at,
       topics: [ethers.id("RampA(uint256,uint256,uint256,uint256)")], data: "0x" });
-    assert(failed.touched.has(h.route.routeKey.toLowerCase()));
-    assert(failed.calls.includes(h.key));
-    assert.equal(failed.row.status, "quote-failed");
-    assert.equal(failed.row.amountOut, null); assert.equal(failed.row.effectiveMid, null);
-    assert.equal(failed.row.quotedAt, undefined);
-    assert(failed.snapshot.coverage.unresolvedEdgeKeys.includes(h.key));
+    assert(started.touched.has(h.route.routeKey.toLowerCase()));
+    assert(started.calls.includes(h.key));
+    assert.equal(started.row.status, "quoted"); assert.equal(started.row.amountOut, h.expected());
+    assert.deepEqual(started.row.quotedAt, started.source);
+    h.ramp(at, at === BASE ? 4500n : 105000n);
     const clean = await h.step();
-    assert.equal(clean.row.status, "quote-failed"); assert.equal(clean.row.amountOut, null);
-    assert.equal(clean.row.quotedAt, undefined);
+    assert(!clean.touched.has(h.route.routeKey.toLowerCase()));
+    assert(clean.calls.includes(h.key), "time-sensitive Exact must run without a pool event");
+    assert.equal(clean.row.status, "quoted"); assert.equal(clean.row.amountOut, h.expected());
+    assert.deepEqual(clean.row.quotedAt, clean.source);
+    assert.notStrictEqual(clean.row, started.row);
+    // The observed base->base direction depends on base A, not meta A.
+    if (at === BASE) assert.notEqual(clean.row.amountOut, started.row.amountOut);
     h.ramp(undefined);
-    const recovered = await h.step({ kind: "log", address: at,
+    const stopped = await h.step({ kind: "log", address: at,
       topics: [ethers.id("StopRampA(uint256,uint256)")], data: "0x" });
-    assert(recovered.touched.has(h.route.routeKey.toLowerCase()));
-    assert(recovered.calls.includes(h.key));
-    assert.equal(recovered.row.status, "quoted");
-    assert.equal(recovered.row.amountOut, h.expected());
-    assert.deepEqual(recovered.row.quotedAt, recovered.source);
-    assert.notStrictEqual(recovered.row, before.row);
-    assert(!recovered.snapshot.coverage.unresolvedEdgeKeys.includes(h.key));
+    assert(stopped.touched.has(h.route.routeKey.toLowerCase()));
+    assert(stopped.calls.includes(h.key)); assert.equal(stopped.row.status, "quoted");
+    assert.equal(stopped.row.amountOut, before.row.amountOut);
+    assert.deepEqual(stopped.row.quotedAt, stopped.source);
+    assert(!stopped.snapshot.coverage.unresolvedEdgeKeys.includes(h.key));
   });
 }
 
-test("bound LP ordinary transfers and approvals carry quotes; mint/burn and unknown events refresh", async () => {
+test("bound LP ordinary transfers and approvals stay clean; mint/burn and unknown events mark touched", async () => {
   const h = await setup(), before = await h.step();
   const address = h.descriptor.quoteModel!.baseLPToken;
   const actor = ethers.zeroPadValue(ACTOR, 32), other = ethers.zeroPadValue(OTHER, 32);
@@ -329,8 +336,8 @@ test("bound LP ordinary transfers and approvals carry quotes; mint/burn and unkn
   for (const topics of [[TRANSFER, actor, other], [ethers.id("Approval(address,address,uint256)"), actor, other]]) {
     const next = await h.step({ kind: "log", address, topics, data: word(1n) });
     assert(!next.touched.has(h.route.routeKey.toLowerCase()), "LP activity must not dirty this Family's price state");
-    assert.deepEqual(next.calls, [], "ordinary LP balance/allowance changes must not issue any quote");
-    assert.strictEqual(next.row, before.row);
+    assert.deepEqual([...next.calls].sort(), [...before.calls].sort(), "ordinary LP activity must not expand each-block work");
+    assert.equal(next.row.amountOut, before.row.amountOut); assert.deepEqual(next.row.quotedAt, next.source);
   }
   for (const topics of [[TRANSFER, zero, actor], [TRANSFER, actor, zero], [ethers.id("UnknownLpStateChange()")],
     [TRANSFER], [TRANSFER, word((1n << 160n) + 1n), other]]) {

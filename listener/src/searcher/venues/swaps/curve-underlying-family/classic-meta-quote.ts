@@ -113,12 +113,13 @@ function guards(input: Input, results: readonly AdapterRequestResult[]): CurveUn
   if (uint(read(input, results, "classic-meta-rate")) !== model.metaRateMultiplier) {
     throw new Error("curve-underlying current meta rate binding changed");
   }
-  // This model retains on-touch pricing. Current/final equality is exact for
-  // the bound base A precision=1 and meta A_precise precision=100. A new ramp
-  // emits a pool event and must fail closed, never silently retain stale quotes.
-  if (uint(read(input, results, "classic-base-A")) !== uint(read(input, results, "classic-base-future-A")) ||
-      uint(read(input, results, "classic-meta-A")) !== uint(read(input, results, "classic-meta-future-A"))) {
-    throw new Error("curve-underlying active A ramp requires per-block pricing");
+  // This bound model declares each-block pricing. The source-bound A()/A_precise()
+  // reads already include the contract's timestamp interpolation; future_A is a
+  // target, never the current amplification used by execution math or a quote.
+  for (const id of ["classic-base-A", "classic-base-future-A", "classic-meta-A", "classic-meta-future-A"]) {
+    if (uint(read(input, results, id)) === 0n) {
+      throw new Error("curve-underlying invalid zero amplification: " + id);
+    }
   }
   if (input.route.i === 3 || input.route.j === 3) {
     const fee = uint(read(input, results, "classic-usdt-basisPointsRate"));

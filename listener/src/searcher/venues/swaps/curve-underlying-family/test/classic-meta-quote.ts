@@ -210,10 +210,36 @@ test("USDT control changes refresh while ordinary transfers remain excluded", ()
     assert.deepEqual(family.pricing.mutation!.affectedStateKeys({ descriptor: pd, routes: [route], observation }), expected);
   }
 });
-test("active base/meta ramps cannot be carried by on-touch pricing", () => {
+test("active base/meta ramps retain current-source A instead of substituting future A", () => {
+  // Future A alone does not change this saved current-state execution result.
+  for (const sample of fixture.samples) {
+    const input = invocation(sample);
+    for (const id of ["classic-base-future-A", "classic-meta-future-A"]) {
+      const result = quote(input, results => results.map(r => r.id === id
+        ? output(id, ethers.toBeHex(123, 32)) : r));
+      assert.equal(result.amountOut, BigInt(sample.actual));
+      assert.equal(result.evidence.amountIn, input.amountIn);
+    }
+  }
+});
+
+test("time-sensitive classic bindings opt into the existing per-block lifecycle", () => {
+  const route = routes[0];
+  const pd = family.pricing.finalizePricingDescriptor({ sharedBindings: [],
+    draft: family.pricing.compileDraft({ descriptor, routes: [route], stateKey: route.routeKey }) });
+  assert.equal(family.pricing.refreshPolicyForInstance!({ descriptor: pd, routes: [route] }), "each-block");
+  assert.equal(family.pricing.refreshPolicyForInstance!({
+    descriptor: { ...pd, quoteModel: undefined }, routes: [route],
+  }), "on-touch", "unrelated variants must not inherit this binding's policy");
+});
+
+test("zero or malformed amplification evidence remains fail-closed", () => {
   const input = invocation(fixture.samples[0]);
-  for (const id of ["classic-base-future-A", "classic-meta-future-A"]) {
-    assert.throws(() => quote(input, results => results.map(r => r.id === id ? output(id, ethers.toBeHex(123, 32)) : r)), /active A ramp/);
+  for (const id of ["classic-base-A", "classic-base-future-A", "classic-meta-A", "classic-meta-future-A"]) {
+    for (const data of [ethers.ZeroHash, "0x01"]) {
+      assert.throws(() => quote(input, results => results.map(r => r.id === id ? output(id, data) : r)),
+        /invalid zero amplification|malformed uint256/);
+    }
   }
 });
 
@@ -290,7 +316,7 @@ test("decode and NextRound independently reject evidence corrupted after a valid
     }
     rejectChanged(() => replace("classic-meta-rate", ethers.toBeHex(99, 32)), /rate binding changed/);
     for (const id of ["classic-base-future-A", "classic-meta-future-A"]) {
-      rejectChanged(() => replace(id, ethers.toBeHex(1n << 128n, 32)), /active A ramp/);
+      rejectChanged(() => replace(id, ethers.ZeroHash), /invalid zero amplification/);
     }
     for (const id of ["classic-base-A", "classic-base-fee", "classic-base-supply", "classic-base-balance:0"]) {
       rejectChanged(() => replace(id, "0x01"), /malformed uint256/);

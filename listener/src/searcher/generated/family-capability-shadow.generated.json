@@ -1758,7 +1758,7 @@
         "familyId": "curve-underlying",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "b126a6b3312e3995da0dbeb7afba09d7b435d0c2ef25299c9174e417bfc972b0",
+        "contentHash": "5a31f16659512f6a6abb1aea35ce807007aeb131d8ac43b51eabe65677d877f1",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -1926,7 +1926,7 @@
         "familyId": "curve-underlying",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "33e7697a5f442b5a06b98902b9b7ca8c2a81563e24f5268d64583194639273d7",
+        "contentHash": "a1563a3721392247e863668de054b997f159e9b4c012012b49cb3c9cf480a5e9",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -14788,5 +14788,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "aaf944bc1257bac00ebbd9f68914d4aa63aa060eb2b7b3ac7977441a03dbe136"
+  "artifactHash": "9573c4da4a0e99ec23e6693db6326292f02086bc816a29ce9cb9c11fec9715e7"
 }

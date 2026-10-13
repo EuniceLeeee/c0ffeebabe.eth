@@ -69,9 +69,29 @@ function sourcePin(name: string) {
     familyDefinitionHash: familyDefinitionHash(name), familyMemoDefinitionHash: familyMemoDefinitionHash(name) };
 }
 
+interface CurveManualInput {
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly amountIn: bigint;
+}
+
+/** Explicit CLI input, not a production price or a claim of receipt provenance. */
+export function curveHistoricalManualInput(value?: string): CurveManualInput | undefined {
+  if (value === undefined) return undefined;
+  const input = JSON.parse(value);
+  assert(input && typeof input === "object" && !Array.isArray(input), "manual input must be an object");
+  assert.deepEqual(Object.keys(input).sort(), ["amountIn", "tokenIn", "tokenOut"]);
+  const tokenIn = lower(ethers.getAddress(input.tokenIn)), tokenOut = lower(ethers.getAddress(input.tokenOut));
+  assert(!same(tokenIn, tokenOut), "manual input requires distinct tokens");
+  assert(typeof input.amountIn === "string" && /^[1-9][0-9]*$/.test(input.amountIn), "manual amount must be a positive integer string");
+  const amountIn = BigInt(input.amountIn);
+  assert(amountIn <= MAX_INPUT - 101n, "manual input plus old inventory exceeds uint256");
+  return { tokenIn, tokenOut, amountIn };
+}
+
 function options(argv: string[]) {
   const names = ["--ready", "--prices", "--pool", "--family", "--rpc-file", "--out", "--port"];
-  const allowedNames = [...names, "--reference-executions", "--price-input", "--reference-prices", "--reference-edges"];
+  const allowedNames = [...names, "--reference-executions", "--price-input", "--reference-prices", "--reference-edges", "--manual-input"];
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     assert(allowedNames.includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
@@ -81,6 +101,8 @@ function options(argv: string[]) {
   assert(names.every(name => values.has(name)), "required: --ready --prices --pool --family --rpc-file --out --port");
   assert.equal(values.has("--reference-prices"), values.has("--reference-edges"), "donor requires prices and edge keys");
   assert(!(values.has("--reference-executions") && values.has("--reference-prices")), "choose saved execution or donor inputs, not both");
+  const manual = curveHistoricalManualInput(values.get("--manual-input"));
+  assert(!manual || (!values.has("--reference-executions") && !values.has("--reference-prices")), "manual input cannot mix with reference modes");
   const referenceEdges: unknown = JSON.parse(values.get("--reference-edges") ?? "[]");
   assert(Array.isArray(referenceEdges) && referenceEdges.every(key => typeof key === "string" && key.length > 0));
   assert(!values.has("--reference-prices") || referenceEdges.length > 0);
@@ -97,7 +119,7 @@ function options(argv: string[]) {
     priceInput: values.has("--price-input") ? realpathSync(values.get("--price-input")!) : undefined,
     reference: values.has("--reference-executions") ? realpathSync(values.get("--reference-executions")!) : undefined,
     referencePrices: values.has("--reference-prices") ? realpathSync(values.get("--reference-prices")!) : undefined,
-    referenceEdges: referenceEdges as string[],
+    referenceEdges: referenceEdges as string[], manual,
     name, rpcFile: realpathSync(values.get("--rpc-file")!), pool: lower(ethers.getAddress(
       values.get("--pool")!.startsWith("0x") ? values.get("--pool")! : `0x${values.get("--pool")!}`)), out };
 }
@@ -182,7 +204,11 @@ export function curveHistoricalQuoteTargets(descriptor: CurvePlainDescriptor | C
  * target quote/execution failure behind a cross-block price. */
 export function curveHistoricalReferenceInput(row: any, donor?: {
   saved: any; declaration: any; edgeKeys: readonly string[];
-}) {
+}, manual?: CurveManualInput) {
+  if (manual) {
+    assert(!donor && same(row.tokenIn, manual.tokenIn) && same(row.tokenOut, manual.tokenOut), "manual direction mismatch or mixed donor");
+    return { kind: "manual-cli" as const, amountIn: manual.amountIn, expectedOut: undefined, borrowed: undefined };
+  }
   if (row?.status === "quoted") {
     assert(typeof row.amountIn === "bigint" && row.amountIn > 0n && row.amountIn * 10n <= MAX_INPUT);
     assert(typeof row.amountOut === "bigint" && row.amountOut > 0n);
@@ -264,12 +290,15 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const edges = graph.filter(e => e.instanceKey === instance.instanceKey && same(e.target, args.pool));
     assert.equal(edges.length, instance.routes.length, "every admitted direction must already be in the production graph");
     assert(edges.length >= 2 && edges.length <= 12);
-    const rows = edges.map(edge => {
+    const selectedEdges = args.manual ? edges.filter(edge =>
+      same(edge.tokenIn, args.manual!.tokenIn) && same(edge.tokenOut, args.manual!.tokenOut)) : edges;
+    if (args.manual) assert.equal(selectedEdges.length, 1, "manual direction must be naturally admitted");
+    const rows = selectedEdges.map(edge => {
       const key = blockScanEdgeKey(edge), row = saved.runtime.pricing.effectiveMids.rows.get(key);
       assert(saved.runtime.graph.edges.some((e: any) => blockScanEdgeKey(e) === key), "price graph lacks Ready edge");
       assert(row && row.edgeId === key, "actual target production price row required, even if unquoted");
       assert(same(row.tokenIn, edge.tokenIn) && same(row.tokenOut, edge.tokenOut));
-      const referenceInput = curveHistoricalReferenceInput(row, donor);
+      const referenceInput = curveHistoricalReferenceInput(row, donor, args.manual);
       if (referenceInput.kind === "current-production-effective") {
         sameBlock(row.quotedAt.number, row.quotedAt.hash);
         assert.equal(row.quotedAt.generation, saved.runtime.generation);
@@ -281,16 +310,21 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assert.equal(handles.length, 1);
       return { row, amountRow, referenceInput, route: handles[0], definition: routes[0] };
     });
-    report.expectedSamples = rows.length * 2;
+    report.expectedSamples = rows.length * (args.manual ? 1 : 2);
+    if (args.manual) report.manualInput = { ...args.manual, use: "input only; no natural valuation or original-TX output claim" };
     report.naturalProductionReferenceComplete = rows.every(r => r.referenceInput.kind === "current-production-effective");
     const reference = args.reference ? JSON.parse(readFileSync(args.reference, "utf8")) : undefined;
     if (args.reference) report.referenceExecutions = { path: args.reference,
       sha256: sha(readFileSync(args.reference)), use: "saved executed inputs and independent outputs only; not admission" };
-    // Validate every reference direction before opening the owned fork.
-    for (const { amountRow } of rows) curveHistoricalAmounts({ source, pool: args.pool, family: args.name, row: amountRow, reference });
+    const pointsFor = (row: (typeof rows)[number]["amountRow"]) => args.manual
+      ? [{ multiplier: 1n, amountIn: args.manual.amountIn, priorActualOut: undefined }]
+      : curveHistoricalAmounts({ source, pool: args.pool, family: args.name, row, reference });
+    // Validate every selected direction before opening the owned fork.
+    for (const { amountRow } of rows) pointsFor(amountRow);
     const measuredTokens = [...new Set(rows.flatMap(r => [lower(r.row.tokenIn), lower(r.row.tokenOut)]))];
     assert(measuredTokens.every(token => tokens.some(t => same(t, token))), "admitted direction outside descriptor coins");
-    report.scope = { family: args.name, directions: rows.map(r => r.route.routeKey), tokenCount: tokens.length, measuredTokens };
+    report.scope = { family: args.name, directions: rows.map(r => r.route.routeKey),
+      admittedDirections: instance.routes.map(r => r.routeKey), tokenCount: tokens.length, measuredTokens };
     const botvm = currentBotVm();
     report.inputs = { ready: args.ready, prices: args.prices, readySha256: sha(readyBytes), pricesSha256: sha(priceBytes),
       source, priceGeneration: saved.runtime.generation, timestamp: header.timestamp,
@@ -438,7 +472,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       } finally { constructing = false; }
       assert(leg, "Family returned null runtime leg");
       assert.equal(calls - beforeCalls, 0); assert.equal(constructionAttempts, 0);
-      for (const point of curveHistoricalAmounts({ source, pool: args.pool, family: args.name, row: amountRow, reference })) {
+      for (const point of pointsFor(amountRow)) {
         const { multiplier, amountIn, priorActualOut } = point;
         const inputSentinel = 101n, outputSentinel = 103n, nativeSentinel = 17n;
         const tokenIn = lower(row.tokenIn), tokenOut = lower(row.tokenOut);
@@ -449,7 +483,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           [tokenOut]: { stateDiff: { [outSlot]: word(outputSentinel) } } };
         const sample: Record<string, any> = { edgeId: row.edgeId, routeKey: route.routeKey, tokenIn, tokenOut,
           amountSource: reference ? "saved-execution-reference" : referenceInput.kind, priorActualOut,
-          multiplier, amountIn, productionP: amountRow.amountIn, targetPriceStatus: row.status,
+          multiplier, amountIn, productionP: args.manual ? null : amountRow.amountIn,
+          referenceAmountIn: amountRow.amountIn, targetPriceAmountIn: row.amountIn, targetPriceStatus: row.status,
           savedPriceOut: row.amountOut, borrowedInput: referenceInput.borrowed,
           runtimeConstructionRpc: 0, programHash: ethers.keccak256(leg.program), status: "failed", executions: [] };
         report.samples.push(sample);
@@ -650,6 +685,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--price-input INPUT_JSON] [--reference-executions SAVED_JSON | --reference-prices PRICES_JSON --reference-edges JSON_ARRAY]");
+  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--price-input INPUT_JSON] [--reference-executions SAVED_JSON | --reference-prices PRICES_JSON --reference-edges JSON_ARRAY | --manual-input JSON_TOKEN_PAIR_AND_AMOUNT]");
   else main().catch(() => { console.error("historical-runtime-dual: input/output setup failed; no RPC started if no receipt was reserved"); process.exitCode = 1; });
 }

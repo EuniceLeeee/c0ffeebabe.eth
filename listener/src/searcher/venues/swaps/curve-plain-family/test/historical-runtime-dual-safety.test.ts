@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
-import { assertNoInputRollback, curveHistoricalQuoteTargets, curveHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
+import { assertNoInputRollback, curveHistoricalManualInput, curveHistoricalQuoteTargets, curveHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
 import { curveRefreshGuardRequests } from "../refresh-scope.js";
 import type { CurvePlainDescriptor } from "../types.js";
 import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
@@ -134,4 +134,29 @@ test("zero input requires root revert and atomic inventory/authorization rollbac
   assert.throws(() => assertNoInputRollback({ ...input, diff: {
     pre: {}, post: { [OWNER]: { storage: { [word(99n)]: word(1n) } } },
   } }), /sender code\/storage/);
+});
+
+test("manual CLI inputs are explicit, bounded and independent of target price status", () => {
+  const manual = curveHistoricalManualInput(JSON.stringify({ tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, amountIn: "73" }))!;
+  for (const status of ["quoted", "missing-valuation", "quote-failed"]) {
+    const row = { ...missingReference(), status, amountIn: status === "quoted" ? 17n : null, amountOut: status === "quoted" ? 19n : null };
+    const before = structuredClone(row);
+    assert.deepEqual(curveHistoricalReferenceInput(row, undefined, manual),
+      { kind: "manual-cli", amountIn: 73n, expectedOut: undefined, borrowed: undefined });
+    assert.deepEqual(row, before, "manual input must not change or promote the price row");
+  }
+  assert.equal(curveHistoricalManualInput(), undefined);
+  assert.throws(() => curveHistoricalReferenceInput({ ...missingReference(), tokenIn: TOKEN_OUT }, undefined, manual), /direction mismatch/);
+  assert.throws(() => curveHistoricalReferenceInput(missingReference(), amountDonor(), manual), /mixed donor/);
+});
+
+test("manual CLI rejects zero, precision loss, overflow, alien fields and invalid directions", () => {
+  const input = { tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, amountIn: "73" };
+  for (const amountIn of ["0", "-1", "1.5", "01", "1e18", 73, String(ethers.MaxUint256 - 100n)]) {
+    assert.throws(() => curveHistoricalManualInput(JSON.stringify({ ...input, amountIn })));
+  }
+  for (const value of [null, [], { ...input, amountOut: "99" }, { ...input, tokenIn: "invalid" }, { ...input, tokenOut: TOKEN_IN }]) {
+    assert.throws(() => curveHistoricalManualInput(JSON.stringify(value)));
+  }
+  assert.equal(curveHistoricalManualInput(JSON.stringify({ ...input, amountIn: String(ethers.MaxUint256 - 101n) }))!.amountIn, ethers.MaxUint256 - 101n);
 });

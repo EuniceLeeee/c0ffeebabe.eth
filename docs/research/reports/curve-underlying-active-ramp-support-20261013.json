@@ -1,0 +1,617 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-13",
+  "stage": 2,
+  "classification": "Family correctness support plus explicit manual CLI test input",
+  "result": "historical base-pool downward-ramp correctness and scoped independent evidence review passed; wider variants, opportunity replay and stage4 remain unverified",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "executedHead": "b2ac403c45219aea4a124081f6ad918a7a246b47",
+  "claim": "Curve Underlying classic metapool over 3pool, at the real N22871578 base-pool ramp: original manual TX input and all 12 admitted directions at current natural production P/10P agree between current Family Exact and quoted/runtime actual receipts. Not an original pre-call/full-route opportunity, formal merge acceptance, or performance verdict.",
+  "cause": {
+    "notAmountSelection": true,
+    "oldBehavior": "Positive input was refused because current base A 4919 differed from future target A 4000; old static model required equality. This was a Family capability gap, not proof that the protocol could not execute.",
+    "fix": "The bound Family reads source-block current A()/A_precise(); future_A is checked as a valid positive value, never substituted for current amplification. The classic descriptor declares each-block through the existing central pricing capability.",
+    "changedProductionFiles": [
+      "listener/src/searcher/venues/swaps/curve-underlying-family/classic-meta-quote.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/pricing.ts"
+    ],
+    "unchangedSafety": "Source/block binding, deployed code hashes, current topology/rate, USDT transfer-mode guards, positive output, full input debit, old inventory and native balance protection remain checked. No protocol-specific central branch.",
+    "costLimit": "Classic bound instances now request each-block pricing even outside a ramp. Incremental/representative cost is explicitly unmeasured and belongs to stage4."
+  },
+  "source": {
+    "manualScopeSha256": "4e7e74c3b536ceea7976fdd568220ba9f50e5bf69fd56122952e324e76a0c714",
+    "productionScopeSha256": "abe7a38b5479304f6d6b3f0c24c174718afd230c3ab93f27e70788a5d42d3782",
+    "manualFiles": 1152,
+    "productionFiles": 1142,
+    "commonFiles": 1139,
+    "commonContentMismatches": 0,
+    "inventory": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/source-inventory-current.json",
+      "sha256": "5b1dc9c53377da299ea463d26256f4087911fc420c503a4ccdef29c7fe05ee0c",
+      "bytes": 345879
+    },
+    "familyDefinitionHash": "11d5e2d25bfa91eaf3c34a2780d4f0faf535a47434c1a44af9675fd138565b01",
+    "familyMemoDefinitionHash": "c66ee3a0e4cfc5f1e1b6d78ea06d1c26ed03b6880f468ca109e18fdb973174be",
+    "executorArtifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+    "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "revmBinarySha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+    "dirtyIncludesPreservedPeerChanges": true
+  },
+  "sample": {
+    "tx": "0xd7ed92f013f5feca6f591cf5926fd1f18853d286aadd0a5c3f84fabc199692df",
+    "pool": "0xc270b3b858c335b6ba5d5b10e2da8a09976005ad",
+    "family": "curve-underlying",
+    "block": {
+      "number": 22871578,
+      "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b"
+    },
+    "timestamp": 1751942783,
+    "receiptLogIndex": 44,
+    "originalInput": "72987962862243607107",
+    "originalEventOutput": "73076098",
+    "basePool": "0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7",
+    "ramp": {
+      "activation": {
+        "address": "0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7",
+        "block": 22867481,
+        "blockHash": "0x7d673c6bfe54cb248ea9b3ba1c014d0b3503660958eb2a75eb8b2f109dd8367c",
+        "tx": "0x17f2c8feedd13be43ff05e21c7a070628f0f97c1919bdd77f4bf3ffe6707dcc9",
+        "logIndex": 593,
+        "oldA": "5000",
+        "newA": "4000",
+        "start": 1751893283,
+        "end": 1752497111
+      },
+      "actualStateAtTargetN": {
+        "baseA": "4919",
+        "baseFutureA": "4000",
+        "metaA": "100000",
+        "metaFutureA": "100000"
+      },
+      "timestamp": 1751942783,
+      "reason": "Bound classic-meta on-touch model requires base A == future_A and meta A_precise == future_A. Active interpolation is deliberately outside that quote model.",
+      "diagnosticRawView": [
+        {
+          "calldata": "0x07211ef700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000003f4e95584336ef243",
+          "amountOut": "73056113",
+          "scope": "same-N raw contract view; not Family-accepted quote or actual receipt"
+        },
+        {
+          "calldata": "0x07211ef700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000007e9d2ab0866dde486",
+          "amountOut": "146095727",
+          "scope": "same-N raw contract view; not Family-accepted quote or actual receipt"
+        }
+      ],
+      "note": "Positive same-N raw contract views do not establish Family-accepted quotes or actual receipts. This is not an on-chain contract revert.",
+      "interpretation": "The refusal originates in the Family static-A/on-touch pricing guard. Positive raw contract view outputs are diagnostic only; no actual swap execution was attempted. A valid protocol state that is unsupported by this model remains an adaptation gap."
+    },
+    "receipt": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/single-N22871578-attempt01/receipt.json",
+      "sha256": "5e275fbf3886013881a33ab79f1f5b0b920da9eebbc8fc4195c561cb173dbce2",
+      "bytes": 24016
+    },
+    "metaStateLocator": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/meta-ramp-location-attempt01.json",
+      "sha256": "e675cf65ee0d579a6be4be4a0d252a05c4cdf5405b1d12bc43fa331bce6233a6",
+      "bytes": 22637
+    },
+    "metaState": "initial_A=future_A=100000; both A time getters are 0 at N. This is not a real meta-pool ramp sample."
+  },
+  "productionIntegration": {
+    "entry": "current production rebuildUniverse/createRebuildWiring -> resolveStrictReadyRuntime -> runAtBlock through prices",
+    "fromBlock": 22871578,
+    "toBlock": 22871578,
+    "reuse": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/single-N22871578-attempt02/ready.json",
+      "sha256": "06e986d5e5d2c6d1135cf598fd1057d202959252b7929897e6e6bc65aca1f3de",
+      "parentCheckpointFingerprint": "2c01f749d104ea4a0ca7befad662e4fe9e342fe342528d63735f0ad71172d469",
+      "familyIds": [
+        "curve-underlying",
+        "univ3-standard"
+      ]
+    },
+    "ready": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/single-N22871578-attempt01/ready.json",
+      "sha256": "19a89b5be841b7754dce0334e46a55d15b4690de56a694e84e3962fa923ad2fd",
+      "bytes": 440904
+    },
+    "prices": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/single-N22871578-attempt01/prices/prices.json",
+      "sha256": "1d6d9e9e094908c3551ac93505af2e08591e12ad00229dea7ad33dcf316acb53",
+      "bytes": 262241
+    },
+    "input": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/single-N22871578-attempt01/prices/input.json",
+      "sha256": "3303619d415b9969c9641544530f7f3dc6ad9b7e182682ae1222d5d99bd86996",
+      "bytes": 39452
+    },
+    "readySummary": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/single-N22871578-attempt01/ready-summary.json",
+      "sha256": "0c0a10633438fca0ba862e8939af51180ab91a3a77bce97528da7d723b2247b5",
+      "bytes": 11209
+    },
+    "selectedFamilies": [
+      "curve-underlying",
+      "univ3-standard"
+    ],
+    "readyInstances": 11,
+    "targetActiveMemos": 1,
+    "graphEdges": 32,
+    "targetGraphDirections": 12,
+    "targetRawRows": 12,
+    "targetQuotedRows": 12,
+    "residualRetryableCandidates": 1,
+    "residualRetryableTreatment": "Retained outside Graph; not cleared to manufacture completion.",
+    "genericHistoricalNaturalDiscoveryProvenFlag": false,
+    "naturalClaimBoundary": "N/N receipt-anchored discovery and production publication with target instance/12 directions; the broader generic opportunity flag remains false.",
+    "productionConfig": {
+      "maxHops": 6,
+      "deduplicateRotations": true,
+      "allowRepeatedPools": true,
+      "allowRepeatedTokens": false,
+      "prefixPruningEnabled": true,
+      "maxPrefixDrawdownBps": 0,
+      "enumerationMethod": "joint-dfs",
+      "enumerationBackend": "typescript",
+      "rustEnumerationThreads": 1,
+      "rustEnumerationScratchMb": 512,
+      "ethSignalPairsPerToken": 50,
+      "hopTokensPerStep": 3,
+      "hopPoolsPerPair": 3,
+      "minSpreadBps": 0,
+      "requireDislocatedPair": true,
+      "exactAdmissionSpreadBps": 0,
+      "minCapitalFraction": 0.001,
+      "maxCandidates": 100,
+      "budgetMs": 2000,
+      "pricedTokens": {
+        "$type": "map",
+        "entries": [
+          [
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "2000000000000000000000"
+              }
+            }
+          ],
+          [
+            "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000"
+              }
+            }
+          ],
+          [
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000000"
+              }
+            }
+          ],
+          [
+            "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000000"
+              }
+            }
+          ],
+          [
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000000000000000000"
+              }
+            }
+          ]
+        ]
+      }
+    },
+    "targetRows": [
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0x8e870d67f660d95d5be530380d0ec0bd388289e1>0x6b175474e89094c44da98b954eedeac495271d0f\u001fb795010c36ac23995a48afcd5b5d144d9c79805929d287ad4da05901d37929bc",
+        "tokenIn": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "status": "quoted",
+        "amountIn": "5046292223297611341",
+        "amountOut": "5052280542415420802",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0x8e870d67f660d95d5be530380d0ec0bd388289e1>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fedf4239b025cfbf4ebfe2d3fced7213562663b8e1dd92800ec5488558f08b56f",
+        "tokenIn": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "status": "quoted",
+        "amountIn": "5046292223297611341",
+        "amountOut": "5052186",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0x8e870d67f660d95d5be530380d0ec0bd388289e1>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f226eb200f4bc209b2f66da0f848012cb3abcd5ceb048db01868ebf4af4aab20c",
+        "tokenIn": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "status": "quoted",
+        "amountIn": "5046292223297611341",
+        "amountOut": "5051601",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0x6b175474e89094c44da98b954eedeac495271d0f>0x8e870d67f660d95d5be530380d0ec0bd388289e1\u001f02e3ecd64b953807a3012ff0be8aef1ccfe3cf6cb166ce19919a54a85ceb9648",
+        "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "status": "quoted",
+        "amountIn": "5056416543622737857",
+        "amountOut": "5045602608451764399",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0x6b175474e89094c44da98b954eedeac495271d0f>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fd07d57614a1b3c4c1bd27be64845729fe8ce37a157ac4b2235a716f56c000694",
+        "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "status": "quoted",
+        "amountIn": "5056416543622737857",
+        "amountOut": "5055581",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0x6b175474e89094c44da98b954eedeac495271d0f>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f7f223f42a556b49e59825b131a5c08635c84b417c385664d49ff0b2d0e09ba19",
+        "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "status": "quoted",
+        "amountIn": "5056416543622737857",
+        "amountOut": "5055066",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x8e870d67f660d95d5be530380d0ec0bd388289e1\u001f9ef132174240f523ef36015caebe1a132bbce668386e689e96abdb8d9670c0d7",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "status": "quoted",
+        "amountIn": "5057048",
+        "amountOut": "5046292223297611341",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x6b175474e89094c44da98b954eedeac495271d0f\u001f5994dcb1c718a95b6bae3c156b5e6375f75377438a4ebce4dbc8841b94d73eab",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "status": "quoted",
+        "amountIn": "5057048",
+        "amountOut": "5056366081649852741",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xdac17f958d2ee523a2206206994597c13d831ec7\u001ffd567734ab9e27db2f6645e739bf62cd11e5a5df2058f936196d90856fd3cbfb",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "status": "quoted",
+        "amountIn": "5057048",
+        "amountOut": "5055774",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0x8e870d67f660d95d5be530380d0ec0bd388289e1\u001fc8c2d45896d9979836d711cbdd031b51852bab120c32e5fe3a493ba63783d73e",
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+        "status": "quoted",
+        "amountIn": "5056583",
+        "amountOut": "5046272716362594843",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0x6b175474e89094c44da98b954eedeac495271d0f\u001fa169e6cea32536166ffdf31489dfbfc172f60b7f5f241b5a20dcea731e5c0b45",
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "status": "quoted",
+        "amountIn": "5056583",
+        "amountOut": "5056416543622737857",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f2164ab4257bf8304438bee6e68ab1fca419eca04ece667f57fca58944e939faa",
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "status": "quoted",
+        "amountIn": "5056583",
+        "amountOut": "5056339",
+        "quotedAt": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        }
+      }
+    ]
+  },
+  "dual": {
+    "natural": {
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/dual-natural-attempt01.json",
+        "sha256": "05cec557aedd12299d1e6fa55e7fe07c8acdf8024cecaa63c35722fc5f5324eb",
+        "bytes": 7627640
+      },
+      "samples": 24,
+      "primaryExecutions": 48,
+      "diagnosticExecutions": 24,
+      "allNoInputControls": 72,
+      "rpcCalls": 1361,
+      "sourceSha256": "4e7e74c3b536ceea7976fdd568220ba9f50e5bf69fd56122952e324e76a0c714",
+      "harnessSha256": "886b2733a6b6425f5234d2b46c88dd88a678387e22648ca2db2c0bc8f5e9d714"
+    },
+    "manualOriginal": {
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/dual-manual-original-attempt01.json",
+        "sha256": "140a0a95381b48de09667b3a2a35525ec4849b39d10e486a03da63fca0ed0b66",
+        "bytes": 347280
+      },
+      "samples": 1,
+      "primaryExecutions": 2,
+      "diagnosticExecutions": 1,
+      "allNoInputControls": 3,
+      "rpcCalls": 88,
+      "sourceSha256": "4e7e74c3b536ceea7976fdd568220ba9f50e5bf69fd56122952e324e76a0c714",
+      "harnessSha256": "5ce4615d6cc34b89311f35be5c470ad94d1e8d1e48c931e72eb6708fb2c0c9fc"
+    },
+    "totalPrimaryExecutions": 50,
+    "separateDiagnosticExecutions": 25,
+    "totalNoInputControls": 75,
+    "allQuoteActualSignedDeltas": "0",
+    "oldInputInventory": "101",
+    "oldOutputInventory": "103",
+    "oldNativeInventory": "17",
+    "runtimeConstructionRpcAttempts": 0,
+    "runtimeConstruction": "Production buildFamilyRuntimeAmountLeg before Exact; throwing amountIn/exact getters, zero RPC, no quoted fallback in real single-leg trials. Current production sim-selector construction contract independently runs with throwing Exact/quoted/RPC hooks in the 80-test offline suite; its backend responses are fixtures, not full-route EVM/funding acceptance.",
+    "allowancePolicy": "Current Curve standing-grant; not falsely reported as temporary allowance cleanup.",
+    "safety": "No input controls reuse identical calldata and source with zero input and ample old output; root revert and atomic token/native/allowance rollback required.",
+    "manualInputSource": "Explicit CLI JSON with original receipt amount, separately independently checked against log44. No price row is modified, output is freshly quoted/executed at N.",
+    "manualArgs": {
+      "tokenIn": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "72987962862243607107",
+      "use": "input only; no natural valuation or original-TX output claim"
+    },
+    "manualComparison": {
+      "tokenIn": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "72987962862243607107",
+      "quoteOut": "73056113",
+      "quotedActualOut": "73056113",
+      "runtimeActualOut": "73056113",
+      "originalEventOut": "73076098",
+      "versusOriginalEventDelta": "-19985",
+      "interpretation": "N end-state parity; original call prestate not restored, so original event output equality is not claimed."
+    },
+    "harnessVersionBoundary": "Natural P/10P ran with the previous harness; manual mode was then added as an explicit input-only branch. Both source and harness hashes are retained; production source is identical. Existing paths and guards retained, 22 related tests pass."
+  },
+  "regressions": {
+    "productionBuild": "npm run build:live exit0",
+    "offlineFamily": "79/79 source-bound quote/math/overflow and real production refresh-entrypoint tests",
+    "manualAndNativeContracts": "22/22",
+    "underlyingPlugin": "canonical tool-run PASS",
+    "generatedCheck": "initial stale failure retained; serialized generation then current check PASS",
+    "files": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/build-and-index-status.json",
+        "sha256": "f672d8bd68d1d212f5bcd0d79184e101c632ce0c69d7bace006dd634478b9381",
+        "bytes": 166
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/offline-attempt01-status.json",
+        "sha256": "dffe26ab60ea79072f5f9057b0a9eac56d26bb06b6756ba7800604f25d5501b6",
+        "bytes": 598
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/offline-attempt01.stdout.log",
+        "sha256": "61f1f5cf0128408fb9850ba6ab659f40bff721355b503b42aad5409f9d099841",
+        "bytes": 5975
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/manual-original-attempt01-status.json",
+        "sha256": "66ec0b1ab82be5e807d9662b7f995acc4935d4a4911112e14b9c752b5a9c9845",
+        "bytes": 2089
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/manual-safety-current.stdout.log",
+        "sha256": "153329ee2daee7640a00b0754e528d58d130cbc688d9ef44d30fc195c67b785e",
+        "bytes": 2392
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/ready-support-attempt01-status.json",
+        "sha256": "e85318f17ebf60d6469bf48d864c87abf9d9554d1c34a3e856db2720df1b7a92",
+        "bytes": 2453
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/sim-construction-status.json",
+        "sha256": "041f75dff8fe9379d61f6dcf796ebc95815aceeb771c826fb0ee4adc3c8cb311",
+        "bytes": 399
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/sim-construction.stdout.log",
+        "sha256": "8fb8879d8cd899dea8d0716da8af0f5c856d6a18a9cd2732d6e013717ee155d4",
+        "bytes": 10085
+      }
+    ],
+    "productionSimConstruction": "80/80 current family-dual-execution tests including production sim selector with throwing Exact/quoted/RPC hooks; fixture execution responses are not funding/EVM proof."
+  },
+  "toolReconciliation": {
+    "query": [
+      "curve-underlying-ready",
+      "curve",
+      "underlying"
+    ],
+    "manifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/tool-selection-current.json",
+      "sha256": "1ee00e5f9553a74e86c1a2d6ee6bd44947b5a5b0328fdf6c72978c9f2cd19d83",
+      "bytes": 12968
+    },
+    "selectedTools": [
+      "listener:searcher:curve-underlying-family-plugin",
+      "listener:searcher:curve-plain-historical-ready",
+      "listener:searcher:curve-runtime-dual-historical-fork"
+    ],
+    "manualAndCanonicalAgreement": "Old amount rejection was traced manually to the guard; current canonical single-block production prices and historical dual CLI prove the scoped failure-to-success flip. No alternate search/scheduler.",
+    "locatorOnly": "Five read-only metadata RPC calls locate whether this target has a prior meta ramp; no quote or execution claim from the locator.",
+    "simConstruction": {
+      "query": [
+        "family",
+        "dual",
+        "execution"
+      ],
+      "selectedTool": "listener:searcher:family-dual-execution",
+      "manifest": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/tool-selection-sim-construction.json",
+        "sha256": "baf24e09047dc239c5e53516fc337d5beece09d4db65478e93e66f995d275311",
+        "bytes": 71901
+      }
+    }
+  },
+  "retainedBaseline": {
+    "report": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/curve-underlying-ramp-acceptance-20261013.json",
+      "sha256": "125ceda8a10b073dbc84a601d8bb2498ad7dc0e7cfd6fe0bc963b52ccda6d0c1",
+      "bytes": 21519
+    },
+    "oldReady": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/single-N22871578-attempt02/ready.json",
+      "sha256": "06e986d5e5d2c6d1135cf598fd1057d202959252b7929897e6e6bc65aca1f3de",
+      "bytes": 440735
+    },
+    "oldPrices": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/single-N22871578-attempt02/prices/prices.json",
+      "sha256": "9b245c2f9d1ed8b947136eaea6ce5968407f044ce781e4656bf261b40f4af2d5",
+      "bytes": 252622
+    },
+    "beforeTargetRows": {
+      "quoteFailed": 6,
+      "missingValuation": 6,
+      "quoted": 0
+    },
+    "oldEightManualRejectionsRetained": true,
+    "doNotOverwriteOldHashes": true
+  },
+  "verification": {
+    "primaryRawEvidenceCheck": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/support-evidence-validation.json",
+      "sha256": "c70e5010503defa26a1139cf18796eba895b577cbbc92973bb0f8a2f87a4b1fd",
+      "bytes": 3127
+    },
+    "generatedIndexProjection": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/generated-index-candidate-receipt.json",
+      "sha256": "9b670e1c526728e7793d0286be2c993cb6a15a82837ba8df30fae4c1d0bf4c01",
+      "bytes": 1025
+    },
+    "preservation": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/preservation-current.json",
+      "sha256": "0683e3e17eed86903ec9a114a53c0d62ead18e4505c153fe442cb57165fc50e8",
+      "bytes": 2470
+    },
+    "simConstructionReviewBoundary": "Additional primary-agent run after review2 freeze; independently reviewed historical execution package does not include this later test log."
+  },
+  "independentReview": {
+    "pass1": {
+      "scope": "New production Family ramp implementation and offline evidence, separate from the previous refusal/tool-defect review",
+      "manifestSha256": "98a17fa0e194aa7ba8cff6ceca7ff481cafa070dd7c28978987301f6bae07a71",
+      "ranGate": true,
+      "finding": "No reproducible production code defect. Independent extracted production math vs Vyper integer translation 360 cases; saved quotes, future target independence and wrong-source/other negative controls pass. Full central runtime not independently rerun.",
+      "limits": [
+        "No historical Ready/dual evidence in pass1 package",
+        "Meta ramp test follows base-to-base; not proof of real meta-dependent ramp amounts."
+      ]
+    },
+    "pass2": {
+      "status": "passed-scoped",
+      "manifestSha256": "cbb651a242fb0e90085b538fd10caedef7dbb3bfcd7f12ff2b2966d9be44c991",
+      "files": 132,
+      "archiveSha256": "1530780e8327437f60eb27ca00f0cf7cb0e27bb9bf99a242909c48056f8ad6db",
+      "ranGate": true,
+      "finding": [],
+      "bytes": 13166409,
+      "independentChecks": [
+        "All frozen file bytes and hashes matched; raw Ready, price, receipt log44 and source bindings checked.",
+        "Recomputed 48 natural primary executions plus 24 diagnostics, and 2 manual primary executions plus 1 diagnostic; all 75 raw state diffs, transfer calls, allowance slots and calldata/script hashes agree.",
+        "All 75 no-input controls revert at root; failed controls retain no protocol or allowance changes. Successful execution preserves old input 101, old output 103 and native balance 17.",
+        "Manual original input is 72987962862243607107; N-state quote and actual output 73056113 differ by -19985 from original receipt output 73076098. This is not original pre-call replay.",
+        "Extracted manual CLI checks pass 7 positive, 35 negative and 7 old/default comparisons; before/current harness hashes match and production Family code is unchanged between dual runs.",
+        "Recomputed production source fingerprint abe7a38b5479304f6d6b3f0c24c174718afd230c3ab93f27e70788a5d42d3782 and verified output hashes of four indexed tool runs."
+      ],
+      "limits": [
+        "Independent review performed offline reconstruction and extracted-function checks; no new EVM execution.",
+        "79-test, 22-test and production-build pass claims are verified run logs, not independent reruns. The subsequent 80-test production-selector run is outside this frozen review package.",
+        "N binding uses the pinned-hash harness and before/after headers; NUMBER/TIMESTAMP probe is retained earlier evidence at the same N.",
+        "Real meta ramp, upward/simultaneous ramps, fractional-rate combinations, complete route/opportunity replay and stage4 performance are not established."
+      ]
+    }
+  },
+  "preservation": {
+    "coffeeSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "originalReadyAndPricesUnchanged": true,
+    "newBranchOrWorktree": false,
+    "peerProcessStopped": false,
+    "liveStarted": false,
+    "deployment": false,
+    "broadcast": false,
+    "signing": false,
+    "privateKeyAccess": false,
+    "generated": "Serial standard generation; working artifact retains original univ1 changes. Commit candidate includes only generated Curve exact/pricing records via canonical artifact serializer, preserving nine unstaged univ1 capability records."
+  },
+  "limitations": [
+    "Actual historical meta-pool ramp, upward ramp, simultaneous ramps and fractional meta rate plus active ramp are not proved by this sample; do not generalize this bounded result to those combinations.",
+    "Synthetic meta/base ramp start, clean-block refresh, stop/recovery and failure persistence are wiring regressions, not additional historical EVM samples.",
+    "Existing stable-state and other seven-pool coverage retain their original version/state scope and are not relabeled as rerun here.",
+    "Original TX pre-call state, full natural opportunity, final route repayment/EV and formal Adapter Replay/merge gates not executed in this scope.",
+    "Stage4A local and stage4B representative performance NOT RUN. The other live window was not started/stopped.",
+    "User full goal remains active; no complete-target evidence or completion claim."
+  ]
+}

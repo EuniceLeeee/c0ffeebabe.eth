@@ -38,10 +38,11 @@ const TOKEN_DECIMALS_ID = "current-token-decimals";
 const QUOTE_PREFIX = "current-get-dy:";
 
 export const curveUnderlyingPricing = {
-  // Native-alias admission proves executable amounts, not time-independent
-  // pricing. Crypto A/gamma ramps may change get_dy without a pool event.
-  // Keep this variant fresh until a narrower code/state model proves reuse.
-  refreshPolicyForInstance: ({ descriptor }) => descriptor.nativeAlias ? "each-block" : "on-touch",
+  // Crypto and the bound classic meta/base model can change price as A/gamma
+  // ramps advance without pool activity. Reuse the central each-block lifecycle;
+  // current A and every dependent amount quote stay bound to that same source.
+  refreshPolicyForInstance: ({ descriptor }) => descriptor.nativeAlias || descriptor.quoteModel
+    ? "each-block" : "on-touch",
   stateKey: (route) => route.routeKey,
   staticBindingProjection: ({ descriptor, routes }) => ({
     pool: descriptor.pool,
