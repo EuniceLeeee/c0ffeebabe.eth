@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-13",
+  "document": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "sourceCommit": "bd2e280bfeb12906b8c5a915429ea5fd105f83ad",
+  "reportCommit": "c0683dff351171802fb70ca87a2b32cc7b191ba2",
+  "evidenceReport": "docs/research/reports/curve-underlying-historical-factory-acceptance-20261013.json",
+  "beforeSha256": "c093e86fbfcc7a6e29b69e4191bff30bdb174459947cfe11972e852e7bbde2d1",
+  "afterSha256": "a7e3cba9748fc72d9939059bf396f8893fd358d2deb42e45afb00a52fb356016",
+  "changedLines": [
+    6,
+    31
+  ],
+  "tableLinesBefore": 31,
+  "tableLinesAfter": 31,
+  "newFewRowPreservedByteForByte": true,
+  "preservation": "Only phase2 progress and an append to the original Curve underlying row changed. Every other line, including the new Few/Vault row, is byte-identical; prior Curve row content retained. No new master table.",
+  "operations": [
+    {
+      "operation": "replace-exactly-once",
+      "before": "真实元池调A、向上／同时调A及fractional组合尚未验证，不将本样本推广为全部变体通过；4A／4B仍未运行。",
+      "after": "后续FEI元池向上调A及fractional A_precise=5678已在N14127510补齐12方向×2手工金额的当前执行器验收，并修复该历史块MetaRegistry未部署导致的身份缺口；执行使用N块末状态＋显式Cancun规则，不是原交易调用前复现。目标12个effective仍缺自然估值；元池与底池同时调A、其他精度／利率组合及剩余变体仍未验，4A／4B仍未运行。"
+    },
+    {
+      "operation": "append-before-final-cell-pipe",
+      "rowKey": "Curve Underlying／TBTC＋V3",
+      "beforeRowSha256": "57f708860114bc7ec69d3d98502d4afcc39f86943a425f5cc96160da88f77a08",
+      "afterRowSha256": "a320e997de288e9914b22a60fe866abfea5d1d9027ead9e884ef40546f69baa9",
+      "append": "<br>**2026-10-13 后续：FEI历史工厂身份、元池向上调A及fractional A正确性补验（bd2e280），属于Curve underlying。** TX `0xaa578d4eaa5629cd61ef8d1d2b9827ca765fd816370654e57f3166a1270da464`，N14127510／hash `0x9cd3c812df6f4efacbae2b07895b72b09d89ae4202b5d2326d1c1e53a8cf8db6`，池 `0x06cb22615ba53e60d67bf6c341a0fd5e718e1655`。原交易直接调用已部署的元池／3pool完成FEI→USDC，MetaRegistry不是兑换前提；旧Ready因该历史块MetaRegistry尚未部署而缺目标准入，不能据此说链上不可交换或调A不支持。现仅在同源getCode明确为0x时，使用当时已部署工厂 `0xB9fC157394Af804a3578134A6585C0dc9cc990d4` 反向核实底池与底层币顺序；不按实例名单放行，RPC失败不降级，原MetaRegistry分支保留。元池initial_A=1000、future_A=10000、当前A_precise=5678，底池固定A=2000。生产单块Ready由0目标边翻为12个自然方向，raw mid均有效；**12个effective仍missing-valuation，无目标块自然估值通过结论。** 按用户手工CLI口径，FEI用原TX的135000 FEI及2倍量，DAI／USDC／USDT仅借保存的N22871578生产fresh行amountIn及10倍量，来源行／块／hash／配置完整记录，未借输出或身份、未改原价格表。12方向×2金额共48次quoted／runtime主执行逐单位对齐；另24次minimum1诊断及72个零输入实际回滚，旧输入101／旧输出103／原生17保留。原额当前到账134972071035 raw USDC；原成功事件为134977765770，差−5694735 raw，不把N块末输出冒充原调用前复现。**执行边界：当前BotVM需要Cancun，原历史规则下的NotActivated失败保留；工具新增显式counterfactual-current-executor模式，实测N块号／时间／basefee及TSTORE，不宣称历史EVM等价。** 生产build、80项双接口接线、10项工具安全与相关身份／strict／生命周期回归、最后只读生成清单检查通过；独立复核重算72份原始状态差分／转账／授权及72个回滚，输入来源、两种源码范围与27条工具执行记录绑定通过，未独立重跑EVM。历史身份失败、执行器规则失败、旧归档CLI缺checkpoint及工具索引safe.directory失败全部留存。**元池与底池同时调A、其他精度／利率组合及剩余变体、自然估值、完整机会及全部4A／4B仍未验证；阶段2和总goal继续active。** [完整证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c0683dff351171802fb70ca87a2b32cc7b191ba2/docs/research/reports/curve-underlying-historical-factory-acceptance-20261013.json)。"
+    }
+  ],
+  "remaining": "Stage2 and full goal active; simultaneous meta/base ramp and other uncovered variants, natural effective valuation, original pre-call opportunity replay and all stage4 performance remain unverified. Few/Vault increment retained for stage3."
+}
