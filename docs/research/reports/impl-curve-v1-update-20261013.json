@@ -1,0 +1,24 @@
+{
+  "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "a7e3cba9748fc72d9939059bf396f8893fd358d2deb42e45afb00a52fb356016",
+  "afterSha256": "806de1be3ed53bce3332b8ebeeaabc208464b49af8ad7f6fa1ca423c8c132e56",
+  "beforeBytes": 241641,
+  "afterBytes": 244985,
+  "appendOnly": true,
+  "changedLinesOneBased": [
+    6,
+    31
+  ],
+  "allOtherLinesByteIdentical": true,
+  "changedLinesPriorContentPreserved": true,
+  "sourceCommit": "575d53ab6684e29a69954752220c60d321054516",
+  "reportCommit": "d81f5548594adfd582c57ed33a208bc2eef87535",
+  "stageAppend": " 本轮又补齐USTP（N26015090）与BAC（N25982128）旧V1工厂的反向身份及8／18位代币精度布局：两池各12方向×2手工金额，共96次quoted／runtime主执行、48次诊断和144个零输入回滚通过；目标24个effective仍缺自然估值，未改原价格表。coffee另四个underlying候选及其他未验变体继续保留，完整机会与4A／4B未跑。",
+  "curveRowAppend": " <br>**2026-10-13 后续：USTP／BAC旧V1工厂正确性补验（575d53a），属于Curve underlying。** USTP池 `0x87510ef3573122f8cd4e3035ded958822f6a381a`，TX `0x269a7b2a4eee1cd0aa2368551ea72ccf6b9bcb5fbc0dd81e697a58c36d0d3ba7`，N26015090／hash `0x7126b90b9a23fd1bf1191f5d3fcb890102a1c199e3b4a348770be82a282f544a`；BAC池 `0x86dec049fc430d9eb7682a044cf105a570f226db`，TX `0x69dd0aa5fa3237cd0fb76b93aba70b226cdb18b9b38104a47ed63440cb941a14`，N25982128／hash `0x415fe0b4fdfe8fa670bec304f852df1d75c6812e5ce4296b6ef6449c73bfb9d1`。两块的MetaRegistry反查均未识别目标，不能据此说链上不能换；现由历史V1工厂 `0xfd6f33a0509ec67defc500755322abd9df1bd5b8` 的真实wrapped／underlying反查证明身份，无池子白名单。扩展现有Family的Vyper0.2.8实现配置，校验slot10精度倍率（USTP为1e28、BAC为1e18）及已绑定代理4096字节返回，保留旧slot16、MetaRegistry、原生别名和FEI历史分支；未新增中央协议分支。**两池生产单块Ready各12目标方向，24个目标raw点值为正且绑定各自N；24个目标effective仍missing-valuation，保存的pricing coverage亦标incomplete，未宣称完整自然价格／估值通过。** 原交易输入及2倍量、元池代币在原TX后续转出Transfer中的数量及2倍量、其余稳定币仅借既有N22871578 fresh生产行amountIn及10倍量，来源／配置／hash见报告；不借输出或身份、不改原价格表。48组金额共**96次quoted／runtime主执行逐单位对齐**，另48次minimum1诊断及144个零输入回滚。旧输入101／旧输出103／原生17保留，实际扣款等于请求量，实收构造RPC=0；按既有standing-grant政策核对授权消耗，非清零声明。原额USTP方向26346 raw USDT→6113339 raw USTP，原事件40235013，差−34121674；BAC方向1923746100811800419 raw DAI→1693458093387696717850 raw BAC，原事件1877999685765050709030，差−184541592377353991180。**均为N块末当前执行器验收（fork实际规则Bpo2），不是原调用前或整环机会复现。** 86项Family回归、20项插件合同、80项生产双接口回归、strict、生产build和只读generated检查通过；后者构造回归使用fixture执行响应。独立复核原始stateDiff、token调用树、授权映射与回滚并绑定源码／输入，未独立重跑EVM；执行callTrace不含Transfer事件，原TX的Transfer日志另有receipt证据。保留修前USTP零目标准入、首轮3项native负例失败、错误tool-index查询和连接失败，未覆写旧hash或原coffee。**coffee另四候选 `0xfe0a…`／`0xd0d3…`／`0x4571…`／`0xa540…`、其他未验组合、自然估值、完整机会及全部4A／4B仍未完成；阶段2／总goal保持active。** [完整证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/d81f5548594adfd582c57ed33a208bc2eef87535/docs/research/reports/curve-underlying-v1-factory-acceptance-20261013.json)。",
+  "fewVaultPeerIncrementPreserved": true,
+  "goalStatus": "active",
+  "stage2Complete": false,
+  "stage3Complete": false,
+  "stage4A": "not-run",
+  "stage4B": "not-run"
+}
