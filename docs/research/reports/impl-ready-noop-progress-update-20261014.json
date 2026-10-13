@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-10-13T21:31:39.787974+00:00",
+  "target": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "baseHead": "350f1d3fdcfbcbcde2cf8cfc5fd59cea63b019a3",
+  "implementationCommit": "8bae4fce35c1f3bb8414bf8098642a71b876131b",
+  "sourceAndReportCommit": "f18c09df1a8d4457771bdfa4d1915f566a6ad2ef",
+  "before": {
+    "sha256": "6a9ece25affb2ae689d6038bd1346a35aec74740de3150364b22e10b5eb836c5",
+    "bytes": 261425,
+    "backup": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/impl-ready-noop-before-20261014.md"
+  },
+  "after": {
+    "sha256": "7f2f6a30c6b8819b9d6d24a7196c7998768ed71f53169287b8397265207da1eb",
+    "bytes": 263276
+  },
+  "changedLines": [
+    7,
+    39
+  ],
+  "operations": [
+    {
+      "line": 7,
+      "prefix": "- **阶段3按本表增量继续：**",
+      "append": " **2026-10-14 Ready维护增量：** 上述无变化更新顺序缺陷已修复（8bae4fc）。N26029876真实生产update／restrict均通过，48实例、98边、原Ready字节／hash／generation1／revision6全部保持；仅对已通过独立Graph校验的strict图无变化比较忽略最外层边序，完整字段／重复次数、身份、source和CAS安全门保留。当前dirty基线回归及独立复核通过，原失败保留；本轮没有新增机会复现或性能验收。其余正确性、正式合入门及4A／4B仍未完成，goal继续active。",
+      "beforeRowSha256": "454078dd5e14e481acc58359568393bf7d417c7a98076867acbc27ea8feba7d8",
+      "afterRowSha256": "394ddf4f530a6eb3e48b6c23f60efaf9deb3c57d7e42eb5653328abceaecf786"
+    },
+    {
+      "line": 39,
+      "prefix": "| Ekubo＋PSM DAI→USDC",
+      "append": " **2026-10-14 Ready无变化维护修复（8bae4fc，中央工具正确性）：** 复用同一N26029876／hash d33e839d…及现有48实例／98边。首次候选顺序与维护目录顺序不同，完整边内容相同，修前两个入口误拒。现仅在独立生产Graph校验后比较strict图完整边多重集；单边内部顺序、metadata和重复次数均检查，未知格式仍严格比较原顺序。真实生产CLI update和production restrict均通过，后者实际运行两次历史head检查；无扫描／重验，原件与副本均逐字节保持，generation1／revision6／旧hash不改。新增workflow修前失败→修后通过，四项相关回归及build:live通过；独立候选函数与20个负例复核通过，LearningCase已绑定codify_commit。本轮不重跑PSM兑换或机会，原毛利匹配／负EV证据直接复用；正式Adapter Replay／family_local及全部4A／4B仍未验。[完整证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f18c09df1a8d4457771bdfa4d1915f566a6ad2ef/docs/research/reports/ready-noop-edge-order-acceptance-20261014.json)；[本地冻结证据](/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/ready-noop-current-evidence-20261014/reports/ready-noop-edge-order-acceptance-20261014.json)。",
+      "beforeRowSha256": "18eccc015327c852ef0f00dd7f245334a8697e11aaac86648f841cb8a4fd4e87",
+      "afterRowSha256": "2a1a0054f8125ea347b97e3fa4cb5ba87f1499be42ae8b2d330f8191482f38aa"
+    }
+  ],
+  "preservation": "Append only to existing Stage3 progress and original Ekubo/PSM row. All prior text, historical failures, unrelated rows and peer increments remain. No replacement master table.",
+  "evidenceArchiveSha256": "27546d96bcce78066c3913ddb510acb2f6dbaf20db91da92f750f420cc93944c",
+  "evidenceArchive": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/ready-noop-current-evidence-20261014.tar.gz",
+  "evidenceArtifactsVerified": 87,
+  "nestedSourceFilesVerified": 2014,
+  "sourceFingerprint": "b854000b4f98ba6432d8b312cc3790db194d8b98dc82da62f8d9c1f224ee76fb",
+  "goalStatus": "active",
+  "phase4A": "not-run",
+  "phase4B": "not-run"
+}
