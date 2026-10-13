@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "target": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "updatedAt": "2026-10-13T18:40:36.640915+00:00",
+  "before": {
+    "sha256": "3fbb89c343460dc13cd170b65d985d52a480c3aee8e70d29fb8de9f9b6fe27c4",
+    "bytes": 248810,
+    "backup": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/lending-impl-before.md"
+  },
+  "after": {
+    "sha256": "fd9e2a044f7071145ae11574cedfd6db47703a52c0870a27803a4f500c8eaad8",
+    "bytes": 253296
+  },
+  "changedLines": [
+    6,
+    31
+  ],
+  "method": "Append current scoped evidence to existing Stage2 progress and Curve underlying original row; every original line and prior text retained. No new master table.",
+  "sourceCommit": "ec82f9d114a528605f4f536972c38f6b2a7d884d",
+  "reportCommit": "20cea9fb8276a850cd22edc8cc074240af1c5b9b",
+  "reportSha256": "2ec474aa02377764ba4fd14894328a4263e3bc7fbef2a0193fc46bcdadd9c193",
+  "goalStatus": "active",
+  "stage": 2,
+  "appended": {
+    "progress": "**2026-10-14 后续：** coffee 剩余USDx／d0 dToken与SnowSwap yVault三池已补反向身份及真实存赎执行语义。N25979013／N26031811／N26022800各12方向×2手工金额，共144次quoted／runtime主执行、72次诊断及216个零输入回滚逐单位通过；原额方向用原TX输入／2倍，其余只用同块strict探测输入／2倍，不改原价格表。三个单块Ready共36个目标raw有效，36个effective仍missing-valuation；保留自然估值缺口。额外池现金的6例反事实回归单列，不算历史样本。源码ec82f9d，独立复核完成；阶段2仍有其他未验组合、正式合入门，完整机会与全部4A／4B未验，goal继续active。",
+    "row": "**2026-10-14 USDx／d0 dToken、SnowSwap yVault underlying 增量（源码 `ec82f9d114a528605f4f536972c38f6b2a7d884d`）：** USDx池 `0xfe0a8e9d60131404ffaee95b48ebf908f4d8d808`，TX `0x7a50fd5125a637250c4b18a5ad573ba1cbb9a42c19a3607e57850d71c35bb79a`，N25979013／hash `0x885ee14416b4cb791dd3d1d5b76cb01433365365e6e3127a7d1255973f9ab590`；d0池 `0xd0d3ab41c5f29eda2eac3d2d65b26bfd77369225`，TX `0xc0eb90cbf3b3ee0caee67d41343b94cdfc7ebb91859d5482d6628f26a39b597c`，N26031811／hash `0x958699b2948ba459725f2b8ea64720e86fb55d556d20d70970c3a0b124549587`；SnowSwap池 `0x4571753311e37ddb44faa8fb78a6df9a6e3c6c0b`，TX `0x3f9718957b454030df3eb0cdf4fb7198c92f66edb30ec9ec2a249f5699eed3e9`，N26022800／hash `0x20d9199f6c482e8d19038081546fa43d4484d3b48d4da8b574e5cbfd4b106845`。沿现有Curve underlying Family增加已验证代码布局下的池LP槽7↔LP minter槽6反向身份和wrapper token()顺序绑定，不按池地址名单准入；保留既有MetaRegistry／历史工厂／非lending／原生别名路径，中央没有协议专属分支。报价在绑定本块的现有strict执行传输中实际模拟存入／赎回并读取实收，不再拿近似get_dy冒充到账；d0曾差2 raw的诊断保留，没有扩大中央0／1容差。**三个真实单块Ready各12目标方向和12正raw；36个effective仍missing-valuation，未声明自然估值通过。** 各12方向×2手工输入；原方向用原TX数量及2倍（USDx `24175327260940033301`、d0 DAI `334763168622976369`、Snow DAI `23496471682888029536`），其他66组仅用同块已保存strict行为探测输入及2倍；来源／token／块／hash／配置均绑定，不借输出或准入、不改原价格表。**72组共144次quoted／runtime主执行、72次minimum1诊断及216个零输入原子回滚通过；报价与实收差0，请求输入未扣减、实际完整扣款、旧输入101／旧输出103／原生17保持。** 新lending路径只授予本次精确金额并清零；CLI此前把全部underlying误判为standing MAX授权的工具缺陷已修复，LearningCase绑定源码提交；旧attempt01仍是失败、零输入控制0且余71组未跑，成功attempt02另存。runtime构造Exact／RPC／quoted fallback=0；另以真实生产session和selector覆盖12方向×0／1构造，但外部执行响应为fixture，不能充当额外EVM或机会证明。旧池会先检查存赎前中间量、再检查实收，故池内minimum为1，执行器按自身新增到账独立守住用户minimum；**额外池现金反事实回归另6例（3成功、3原子拒绝）：实收2003220时要求2003220成功、2003221拒绝，零输入及旧库存不能过门。** 该脚本显式Cancun而未保存实际规则探针，仅限一池一方向一金额；不混入72组历史默认Bpo2证据。生产build、33项插件主测试＋3项生命周期／构造子测试、12项CLI安全、27项原生别名、80项双接口及strict传输／receipt安全回归通过。独立只读复算历史矩阵14655项、现金回归185项均零失败，未独立重跑EVM。实际1159文件生产指纹及2006文件扩展冻结范围分别记录，原hash未改；原coffee、23项peer tracked文件、7项untracked与共享catalog的9项peer改动保留。他窗live保持，未做时效性实验。**这三项当前历史状态手工金额正确性缺口已补；其他未验Curve组合、自然估值、原交易调用前完整机会、正式Adapter Replay／family_local合入门及全部4A／4B仍未验，阶段2和goal不标完成。** FEI的MetaRegistry旧缺口及N14127510已完成证据继续引用，不重做。[完整证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/20cea9fb8276a850cd22edc8cc074240af1c5b9b/docs/research/reports/curve-underlying-lending-acceptance-20261014.json)。"
+  }
+}
