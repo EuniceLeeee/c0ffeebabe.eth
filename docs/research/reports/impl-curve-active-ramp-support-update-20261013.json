@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-13",
+  "document": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "sourceCommit": "1d6273d2df0ff0596d66afd9d5bac7bb0f287b65",
+  "evidenceReport": "docs/research/reports/curve-underlying-active-ramp-support-20261013.json",
+  "beforeSha256": "1a7634355d15bc13642e226e9d62fc7a53dca99f11b984bff1ce79a7fd3b2608",
+  "afterSha256": "8f00afb8aa361c66ab51a87cad344bff46af35521ab6b3bef95c27b83bcd0248",
+  "changedLines": [
+    6,
+    30
+  ],
+  "protocolRowsBefore": 28,
+  "protocolRowsAfter": 28,
+  "preservation": "All lines other than the owned stage2 progress sentence and the appended original Curve underlying row are byte-identical; prior row content retained as a prefix. No new master table.",
+  "operations": [
+    {
+      "operation": "replace-exactly-once",
+      "before": "本轮Curve历史调A状态已验证为当前Family安全拒绝，但不是协议不可执行的证明；active-ramp报价／逐块刷新支持仍是适配缺口，继续处理。",
+      "after": "本轮Curve underlying底池向下调A缺口已补齐：N22871578的12个自然方向及原TX手工输入均通过同状态报价／quoted／runtime到账检查，原拒绝记录保留。真实元池调A、向上／同时调A及fractional组合尚未验证，不将本样本推广为全部变体通过；4A／4B仍未运行。"
+    },
+    {
+      "operation": "append-before-final-cell-pipe",
+      "rowKey": "Curve Underlying／TBTC＋V3",
+      "beforeRowSha256": "3314bbc42bebbcafff673d61b517434d26ec065f9891cbc4d09cfb1ea8c59ab3",
+      "afterRowSha256": "57f708860114bc7ec69d3d98502d4afcc39f86943a425f5cc96160da88f77a08",
+      "append": "<br>**2026-10-13 后续：Curve underlying 底池向下调A已补适配并完成该状态正确性验收（1d6273d）。** 同上池 `0xc270b3b858c335b6ba5d5b10e2da8a09976005ad`、TX `0xd7ed92f013f5feca6f591cf5926fd1f18853d286aadd0a5c3f84fabc199692df`、N22871578；底池当前A=4919、目标4000，元池A=100000。Family采用绑定本块的当前A计算，并复用中央each-block刷新；未来目标A不参与当前报价，无协议专属中央分支。旧静态A拒绝为修前证据，未覆写。单块生产Ready选择性重验副本后，目标12方向自然strict／Graph／raw／effective均有效，参考量由同块生产价格产生，未借外图输入；通用historicalNaturalDiscoveryProven标志仍为false，仅声明本次receipt绑定的N/N发现／准入证据。P及10P共24组、**48次quoted／runtime主执行**到账与报价逐单位一致；另24次minimum1诊断单列。CLI手工原TX输入 **72987962862243607107 raw USDP**，2次主执行及1次独立诊断均到账 **73056113 raw USDT**；原事件73076098，差−19985，未还原调用前状态，不能记机会复现。合计50次主执行、25次诊断及75个无输入回滚；旧输入101、旧输出103、原生币17保持，原Ready／价格表未改。当前生产build、79项Family回归、22项CLI／原生合同、80项生产双接口接线回归通过；后者用抛错桩验证链外Exact／quoted fallback／RPC=0，执行响应为fixture。独立复核132文件并重算75份原始状态差分、转账／授权和回滚，无阻碍发现；未独立重跑EVM。**本次只证明底池向下调A同状态适配；真实元池／向上／同时调A、fractional组合、原调用前完整机会及全部4A／4B仍未验。** 保留七池旧版本范围、TBTC特殊豁免和此前失败；阶段2及总goal不标完成。[源码与完整证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/1d6273d2df0ff0596d66afd9d5bac7bb0f287b65/docs/research/reports/curve-underlying-active-ramp-support-20261013.json)。"
+    }
+  ],
+  "remaining": "Real meta/upward/simultaneous/fractional ramp variants, original pre-call opportunity replay and all stage4 performance remain unverified; goal remains active."
+}
