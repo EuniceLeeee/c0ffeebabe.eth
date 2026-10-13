@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -63,6 +65,16 @@ try {
     candidate,
     "candidate",
   );
+  const worker = resolve(root, MANIFEST);
+  const workerHash = createHash("sha256").update(readFileSync(worker)).digest("hex");
+  const baseManifest = loadManifest(baseWorktree, worker);
+  const candidateManifest = loadManifest(candidateWorktree, worker);
+  const manifestFiles = {
+    baseline: resolve(cfg.out + ".baseline-manifest.json"),
+    candidate: resolve(cfg.out + ".candidate-manifest.json"),
+  };
+  writeFileSync(manifestFiles.baseline, JSON.stringify(baseManifest, null, 2) + "\n", { mode: 0o600 });
+  writeFileSync(manifestFiles.candidate, JSON.stringify(candidateManifest, null, 2) + "\n", { mode: 0o600 });
   const changedPaths = gitOut(root, [
     "diff",
     "--name-only",
@@ -72,8 +84,8 @@ try {
     baseCommit: baseline,
     candidateCommit: candidate,
     changedPaths,
-    baseManifest: loadManifest(baseWorktree),
-    candidateManifest: loadManifest(candidateWorktree),
+    baseManifest,
+    candidateManifest,
     sourceAt(commit, path) {
       const shown = git(root, ["show", `${commit}:${path}`]);
       return shown.status === 0 ? shown.stdout : null;
@@ -84,6 +96,14 @@ try {
     gate: "adapter-family-boundary",
     baseline_commit: baseline,
     candidate_commit: candidate,
+    ownership_evidence: {
+      worker_source: MANIFEST,
+      worker_sha256: workerHash,
+      baseline: { commit: baseline, source_root: baseWorktree, manifest_path: manifestFiles.baseline,
+        manifest_sha256: createHash("sha256").update(readFileSync(manifestFiles.baseline)).digest("hex") },
+      candidate: { commit: candidate, source_root: candidateWorktree, manifest_path: manifestFiles.candidate,
+        manifest_sha256: createHash("sha256").update(readFileSync(manifestFiles.candidate)).digest("hex") },
+    },
     classification: result.classification,
     impacted_family_ids: result.impactedFamilyIds,
     changed_runtime_files: result.runtimeChangedPaths,
@@ -192,7 +212,7 @@ function createWorktree(
   return target;
 }
 
-function loadManifest(cwd: string): FamilyOwnershipManifest {
+function loadManifest(cwd: string, worker: string): FamilyOwnershipManifest {
   const env: NodeJS.ProcessEnv = {
     SEARCHER_TEST_DISABLE_DOTENV: "1",
   };
@@ -210,8 +230,10 @@ function loadManifest(cwd: string): FamilyOwnershipManifest {
   const result = spawnSync(process.execPath, [
     "--import",
     TSX,
-    resolve(cwd, MANIFEST),
+    worker,
     "--json",
+    "--source-root",
+    cwd,
   ], { cwd, env, encoding: "utf8" });
   if (result.status !== 0) {
     throw new Error(result.stderr || "family manifest failed");

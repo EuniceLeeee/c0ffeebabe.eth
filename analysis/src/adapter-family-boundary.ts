@@ -312,6 +312,7 @@ function allowedSupplementalPath(
     (entry) => entry.id === family.id,
   );
   if (!baselineFamily && sourceAt(baseCommit, path) !== null) return false;
+  if (allowedPrivateFamilyTest(path, family.id, baseManifest, candidateManifest)) return true;
   const tokens = familyIdTokens(baselineFamily ?? family);
   if (tokens.length === 0) return false;
   const normalizedPath = path.toLowerCase();
@@ -339,6 +340,30 @@ function allowedSupplementalPath(
     return tokens.some((token) => normalizedPath.includes(token));
   }
   return false;
+}
+
+function allowedPrivateFamilyTest(
+  path: string,
+  familyId: string,
+  baseManifest: FamilyOwnershipManifest,
+  candidateManifest: FamilyOwnershipManifest,
+): boolean {
+  if (!path.startsWith("listener/") || (!path.endsWith(".ts") && !path.endsWith(".json"))) return false;
+  const relative = path.slice("listener/".length);
+  const split = relative.indexOf("/test/");
+  if (split < 0) return false;
+  const directory = relative.slice(0, split);
+  if (!inFamilyRuntimeStructure("listener/" + directory + "/source.ts")) return false;
+  const families = [...baseManifest.families, ...candidateManifest.families];
+  // Test paths used by runtime are not supplemental. A name alone proves no ownership.
+  if (families.some(entry => entry.source_files.includes(relative))) return false;
+  const prefix = directory + "/";
+  const ownAnchor = families.some(entry => entry.id === familyId &&
+    entry.source_files.some(source => source.startsWith(prefix) &&
+      !source.slice(prefix.length).includes("/") && source.endsWith(".ts")));
+  const anotherOwner = families.some(entry => entry.id !== familyId &&
+    entry.source_files.some(source => source.startsWith(prefix)));
+  return ownAnchor && !anotherOwner;
 }
 
 function trustedFamilyBoundaryPath(path: string): boolean {

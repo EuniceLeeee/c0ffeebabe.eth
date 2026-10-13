@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createFamilyOwnershipManifest } from
+  "../../../listener/src/searcher/test/family-ownership-manifest.js";
 import type {
   FamilyOwnershipManifest,
   FamilyOwnershipManifestEntry,
@@ -548,3 +550,104 @@ function actions(names: readonly string[]): string {
     `const PRODUCTION_ACTION_CATALOG = new Map([${names.join(",")}]);\n` +
     "registerProductionActions();\n";
 }
+
+
+test("ownership evidence uses all real strict definitions and the distinct active action catalog", async () => {
+  const manifest = await createFamilyOwnershipManifest();
+  const production = await import("../../../listener/src/searcher/venues/production-family-composition.js");
+  const load = production.PRODUCTION_STRICT_SHADOW_FAMILY_LOAD;
+  const installed = [...load.plugins, ...load.disabledPlugins]
+    .sort((left, right) => left.sourceFile.localeCompare(right.sourceFile));
+  assert.deepEqual(manifest.registry_order, installed.map(module => module.familyId));
+  assert.deepEqual(manifest.action_catalog_ids,
+    production.PRODUCTION_STRICT_SHADOW_ACTION_ADAPTERS.map(action => action.id));
+  assert.ok(load.disabledPlugins.length > 0, "exercise installed but disabled definitions");
+  for (const module of installed) {
+    const family = manifest.families.find(entry => entry.id === module.familyId);
+    assert.ok(family);
+    assert.equal(family.root_source,
+      "src/searcher/venues/production-families/" + module.sourceFile);
+    assert.equal(family.root_export, "plugin");
+    assert.ok(family.source_files.includes(family.root_source));
+    assert.deepEqual(family.owned_action_adapter_ids,
+      [...module.plugin.manifest.ownedActionAdapterIds].sort());
+    assert.deepEqual(family.required_action_adapter_ids,
+      [...module.plugin.manifest.requiredInfraActionAdapterIds].sort());
+    if (!module.activation.enabled) {
+      for (const action of family.owned_action_adapter_ids) {
+        assert.equal(manifest.action_catalog_ids.includes(action), false,
+          "disabled ownership must not masquerade as active registration");
+      }
+    }
+  }
+});
+
+test("current strict bootstrap and generated artifacts remain framework changes", () => {
+  const base = manifest([family("swap:alpha", ["src/searcher/venues/swaps/alpha.ts"])]);
+  for (const path of [
+    "listener/src/searcher/venues/production-family-composition.ts",
+    "listener/src/searcher/venues/production-families/loader.ts",
+    "listener/src/searcher/generated/production-family-entries.generated.ts",
+    "listener/src/searcher/generated/family-capability-shadow.generated.json",
+  ]) {
+    const result = evaluateAdapterFamilyBoundary({
+      baseCommit: "base", candidateCommit: "candidate", changedPaths: [path],
+      baseManifest: base, candidateManifest: base,
+      sourceAt: sources({
+        "base:listener/src/searcher/venues/swaps/alpha.ts": "alpha",
+        "candidate:listener/src/searcher/venues/swaps/alpha.ts": "alpha",
+      }),
+    });
+    assert.equal(result.classification, "framework", path);
+    assert.ok(result.reasons.some(reason => reason.includes("no family owner: " + path)), path);
+  }
+});
+
+
+test("family-private tests and JSON fixtures follow an independently owned runtime directory", () => {
+  const runtime = "src/searcher/venues/swaps/alpha-family/exact.ts";
+  const base = manifest([family("swap:alpha", [runtime])]);
+  const result = evaluateAdapterFamilyBoundary({
+    baseCommit: "base", candidateCommit: "candidate",
+    changedPaths: [
+      "listener/" + runtime,
+      "listener/src/searcher/venues/swaps/alpha-family/test/contract.ts",
+      "listener/src/searcher/venues/swaps/alpha-family/test/fixtures/history.json",
+    ],
+    baseManifest: base, candidateManifest: base,
+    sourceAt: sources({ ["base:listener/" + runtime]: "a", ["candidate:listener/" + runtime]: "b" }),
+  });
+  assert.equal(result.classification, "family_local", result.reasons.join("; "));
+});
+
+test("family-private supplemental paths reject shared, lookalike and runtime-imported tests", () => {
+  const runtime = "src/searcher/venues/swaps/alpha-family/exact.ts";
+  const importedTest = "src/searcher/venues/swaps/alpha-family/test/imported.ts";
+  const shared = "src/searcher/venues/swaps/shared/helper.ts";
+  for (const testPath of [
+    "src/searcher/venues/swaps/alphabeta-family/test/contract.ts",
+    "src/searcher/venues/swaps/beta-family/test/contract.ts",
+    "src/searcher/venues/swaps/shared/test/contract.ts",
+    importedTest,
+    "src/searcher/venues/swaps/alpha-family/subdir/test/contract.ts",
+  ]) {
+    const runtimeFiles = testPath === importedTest ? [runtime, importedTest, shared] : [runtime, shared];
+    const base = manifest([
+      family("swap:alpha", runtimeFiles),
+      family("swap:beta", ["src/searcher/venues/swaps/beta-family/exact.ts", shared]),
+    ]);
+    const result = evaluateAdapterFamilyBoundary({
+      baseCommit: "base", candidateCommit: "candidate",
+      changedPaths: ["listener/" + runtime, "listener/" + testPath],
+      baseManifest: base, candidateManifest: base,
+      sourceAt: sources({
+        ["base:listener/" + runtime]: "a", ["candidate:listener/" + runtime]: "b",
+        ["base:listener/" + shared]: "s", ["candidate:listener/" + shared]: "s",
+        "base:listener/src/searcher/venues/swaps/beta-family/exact.ts": "b",
+        "candidate:listener/src/searcher/venues/swaps/beta-family/exact.ts": "b",
+      }),
+    });
+    assert.equal(result.classification, "framework", testPath);
+    assert.ok(result.reasons.some(reason => reason.includes("outside the family boundary: listener/" + testPath)), testPath);
+  }
+});
