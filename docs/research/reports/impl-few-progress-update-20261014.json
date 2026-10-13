@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "at": "2026-10-13T23:40:32.468718+00:00",
+  "sourceHead": "6b5bf26cb9e41e7a28de4f5aba75dd6905cec0d9",
+  "reportCommit": "78cb6625c52f4b1e0f7c4fc432a1332979683b31",
+  "tablePath": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "before": {
+    "sha256": "15a8c53ab940557f5798788487cf1aca70f743e2a3afd3dc9f53abf048e1d43d",
+    "bytes": 265800,
+    "backup": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/impl-before-few-15a8c53ab940557f.md"
+  },
+  "after": {
+    "sha256": "f08504ac9ec4bde06cac34757b5fbb2af72e9a250c494959f1cbd87d79d5a6c4",
+    "bytes": 269278
+  },
+  "changedLines": {
+    "stage3": 7,
+    "stage4": 8,
+    "row": 18
+  },
+  "updates": {
+    "oldTitle": "**Few 包装／解包＋Vault 兑换（待另一窗口适配；Ring V2 已支持，2026-10-13）**",
+    "newTitle": "**Few 包装／解包目标样本局部正确性已验；Vault 兑换待适配（Ring V2 已支持，2026-10-14）**",
+    "rowAppend": " <br> **2026-10-14 Few 当前源码补验（78cb6625）：** 新增默认关闭的生产 Family `protocol:few-wrapped`，以实际 wrapper runtime、factory()/token()、factory.getWrappedToken 的同状态反向注册关系及真实 wrap／unwrap 行为准入；不使用实例白名单，注册证明不冒称 factory 创建证明。实际支持普通 wrap／unwrap，发现可识别 wrapTo／unwrapTo；不接特权 mint／burnFrom。 N26182689／hash `0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c` 单块生产 Ready 自然准入4实例／8方向，8个raw为正、2个effective quoted、6个缺估值；目标 fwWETH／fwAPE 共4方向，其中fwAPE两方向仍缺自然估值。 按用户CLI手工口径，fwWETH原TX输入4387060682263585、fwAPE原TX输入71854376210288490340及各自2倍，反方向明确只借该raw数量；另验本次单块配置自然fwWETH双向P=2000000000000000，不改前列旧live P=0.02或原价格表。 两目标10组金额共20次quoted／runtime正例，报价、实际扣款／到账、wrapper底层储备变动及wrapper总份额逐单位1:1；旧输入101／旧输出103／原生币17均保留。50个MainRevert控制（含10个最低到账量+1）及10次中央实收流程往返通过，往返最终最低归还为原输入、容差0；主调用回滚后transport不返回effects，不冒称另测回滚后余额。 quoted路径已实际约束完整输入扣款和本次最低到账；wrap的quoted与runtime都在清授权后读取并断言allowance=0，避免approve返回false留下授权。runtime实收构造Exact／RPC=0且无quoted fallback；81项共享双执行测试含生产选额构造抛错桩，未冒称历史完整路线选额。 当前生产build通过，Few合同9／9、生产状态撤价／恢复1／1、共享双接口81／81，生成清单与生产声明通过；扩展typecheck保留4个未改旧文件中的7条诊断，不称全仓类型通过。第三轮独立复核执行1889项＋来源1285项均无差异。 **这是显式当前BotVM的N块末局部正确性；不是原TX调用前逐腿复现，不覆盖另两自然wrapper的完整金额矩阵，也不观察底层token总供应。Vault `0x2d0aff409bde00451334011d55c141aff2103744`仍未适配，fwAPE自然估值、完整机会、Adapter Replay／family_local及4A／4B仍未完成；不把本环标完成。** [验收与保留失败](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/78cb6625c52f4b1e0f7c4fc432a1332979683b31/docs/research/reports/few-wrapped-acceptance-20261014.json)；[独立复核](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/78cb6625c52f4b1e0f7c4fc432a1332979683b31/docs/research/reports/few-wrapped-independent-review-20261014.json)。",
+    "stage3Append": " **2026-10-14 Few增量：** `protocol:few-wrapped`已接当前生产，N26182689目标fwWETH／fwAPE双向10组金额、20次quoted／runtime正例、50个回滚控制及10次共用实收流程往返通过；同块自然4实例／8方向、8 raw、2 quoted／6缺估值。原交易数量／2倍和本配置fwWETH自然P分列，未改原价格表。独立复核通过并提交78cb6625；Vault兑换仍未适配，fwAPE自然估值、其他wrapper全矩阵、正式合入门、完整机会及4A／4B未完成，goal保持active。",
+    "stage4Append": " **Few范围补充：** 本次Few wrap／unwrap适配明确纳入最后4A逐协议真实单块及4B代表性生产背景图组合验收；本轮正确性执行日志不计性能成绩，两个阶段均未运行。"
+  },
+  "allOtherLinesPreserved": true,
+  "originalPriceTablesModified": false,
+  "report": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/78cb6625c52f4b1e0f7c4fc432a1332979683b31/docs/research/reports/few-wrapped-acceptance-20261014.json",
+  "independentReview": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/78cb6625c52f4b1e0f7c4fc432a1332979683b31/docs/research/reports/few-wrapped-independent-review-20261014.json",
+  "goalStatus": "active",
+  "remaining": [
+    "Vault swap adaptation",
+    "fwAPE natural valuation",
+    "other naturally admitted wrapper full matrices",
+    "formal Adapter Replay / family_local",
+    "full opportunity replay",
+    "all 4A and 4B performance"
+  ]
+}
