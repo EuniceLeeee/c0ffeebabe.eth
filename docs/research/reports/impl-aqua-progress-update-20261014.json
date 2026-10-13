@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "target": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "updatedAt": "2026-10-13T19:22:46.254722+00:00",
+  "before": {
+    "sha256": "fd9e2a044f7071145ae11574cedfd6db47703a52c0870a27803a4f500c8eaad8",
+    "bytes": 253296,
+    "backup": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/aqua-impl-before.md"
+  },
+  "after": {
+    "sha256": "abae82323e986c770489168ab0dc6cc77888dd5c22fa536c7f94e52c549dce56",
+    "bytes": 256606
+  },
+  "changedLines": [
+    7,
+    46
+  ],
+  "method": "Append bounded Aqua evidence to existing Stage3 progress and original Aqua row. Prior text and every unrelated line retained. No new master table.",
+  "sourceHead": "20ddf8e5e0747a4104d45991878a09389fbd9dc5",
+  "reportCommit": "ced758336da7c58603f89ebedd04b182dc2e64ea",
+  "reportSha256": "9511e2c40534b0384e2ae499e2ab2d80281b53376a0096443691d8c8677bd938",
+  "historyRecord": "/Users/eunice/src/MEV/logs/replay-history/1/0x36764eba7fc601d36c67d575a2e656d803ce9c07240e0cb0ad32a0aed154307a/20261014-aqua-identity-permission-20ddf8e5-dts7m7vt.json",
+  "historySha256": "b64fe3fd10ebd242f58ad09f04238bf9a074e9427a942cff1a65b0c52868f61a",
+  "goalStatus": "active",
+  "itemStage": 3,
+  "familyImplementationComplete": false,
+  "appended": {
+    "progress": " **2026-10-14 Aqua增量核对：** 绑定N26151137实际已部署的五参数SwapVM ABI、完整runtime和三条Aqua注册策略；目标块本地方向／金额／调用地址矩阵48次均明确凭证不足，24次swap原子回滚。附近33块87个事件中抽查6笔交易、12条策略均有同一origin凭证检查；不能据此排除全协议。当前云端live caller尚未核实，Family接入仍未实现，成功双执行／自然集成／本方机会和4A／4B未验；不把权限拒绝写成适配完成，goal保持active。",
+    "row": " **2026-10-14 当前源码增量：历史ABI、身份与本方权限边界已核对，Family仍未实现。** 实际云端HEAD 20ddf8e5e0747a4104d45991878a09389fbd9dc5＋原dirty，1159文件生产指纹与2006文件扩展冻结全部保持。绑定N26151137／hash 0x00638cbc10d3dda85525280d551dbc54992b6774a5a9a420fb500f994b9910d8：router 0x111111338c5091e8440b67b168bae16a668ac0de 的20541字节runtime逐字节匹配Sourcify验证版本，实际为五参数quote／swap接口（swap selector 0xf4d2d412），不能套公开新版ABI。AQUA getter、order编码hash与链上hash、maker／app／strategyHash／币对的raw／safe balances均在同N反向核实；共享router不等于一个池实例。原TX两策略及同块另一TX 0xdc807c761bfc2f8db6c776bba6184b99a5f3e26bff440a42452444ce2e8e120b 的UNI→1INCH策略，均先执行凭证token 0x26ffc7d378e8e49be2c483295a3e3e511f96a468 的tx.origin余额检查。**旧档案本地owner 0xb8578b6de173c8554ff0390db5a7effa567dda3c 与诊断actor均为0，竞对origin为1；旧本地owner不冒称当前云端live配置。** 本地N/N fork实际规则Bpo2，块号／时间／basefee实测匹配；三策略×双方向×原交易参考量／2倍×两个无凭证actor，共24次quote及24次swap均报 TxOriginTokenBalanceIsZero（0x39c4052c），24次swap另核原子回滚。未注入本金／凭证、未借竞对origin强造成功；仅环境探针临时设独立地址代码，不改变受测策略调用状态。附近26151105–26151137共33块87个swap事件、32条观察订单／13个maker；按maker优先抽取6笔trace，解出12条独立策略／8个maker，均有同一凭证保护。**仅该抽样没有无凭证样本，不证明全部32订单或全协议都不可用。** 当前canonical postmortem实际执行exit0，10条ERC20转账与receipt逐项一致，但Aqua语义覆盖仍缺、winner_style=unknown；空live事件输入及零已识别venue的standing标签不构成因果或真实live漏收证据，blockscan归因继续引用旧B/B与B/N原calldata成功档案。**本轮只证明所列状态／策略／地址的真实权限拒绝；没有Aqua生产Family、strict、Ready／Graph、raw／effective、quoted／runtime成功或本方自然机会验收，也没有4A／4B。实际合法caller、适用可执行策略及Family接线仍待推进，不将全族标不适用或交付完成。** [当前审计证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ced758336da7c58603f89ebedd04b182dc2e64ea/docs/research/reports/aqua-historical-identity-caller-audit-20261014.json)；[不可覆盖独立档案](/Users/eunice/src/MEV/logs/replay-history/1/0x36764eba7fc601d36c67d575a2e656d803ce9c07240e0cb0ad32a0aed154307a/20261014-aqua-identity-permission-20ddf8e5-dts7m7vt.json)。"
+  }
+}
