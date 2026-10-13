@@ -9,7 +9,7 @@ import { ethers } from "ethers";
 import { MODULE } from "../codec.js";
 import { SAMPLE, ERC20, word, observeBalance, assertBasket, historicalReceipt } from "./historical-runtime-observations.js";
 import { CORE } from "../legacy.js";
-import { LEGACY_SAMPLES, legacyHistoricalReceipt, assertExecutionRevert, assertLegacyInvalidAmountEvidence } from "./historical-legacy-observations.js";
+import { LEGACY_SAMPLES, legacyHistoricalReceipt, assertExecutionRevert, assertLegacyInvalidAmountEvidence, historicalTransferInput, assertEntryFeeSettlement } from "./historical-legacy-observations.js";
 import { naturalLegacyIssuanceReference, options } from "./historical-runtime-dual.js";
 
 const components = [11, 12, 13, 14].map(n => ethers.toBeHex(n, 20));
@@ -69,7 +69,7 @@ test("legacy observation binds the whole basket and the actual Vault receipt aft
     const r = { ...base, logs: [
       log(sample.set, 100, ERC20.encodeEventLog(ERC20.getEvent("Transfer")!, [recipient, ethers.ZeroAddress, sample.amountIn])),
       log(sample.module, 101, CORE.encodeEventLog(CORE.getEvent("SetRedeemed")!, [sample.set, sample.amountIn])),
-      log(sample.components[0], 102, ERC20.encodeEventLog(ERC20.getEvent("Transfer")!, [sample.vault, recipient, sample.outputs[0]])),
+      log(sample.components[0], 102, ERC20.encodeEventLog(ERC20.getEvent("Transfer")!, [sample.vault, "recipient" in sample ? sample.recipient : recipient, sample.outputs[0]])),
       log(sample.components[0], 103, ERC20.encodeEventLog(ERC20.getEvent("Transfer")!, [recipient, next, sample.outputs[0] + 1n])),
     ] };
     assert.equal(legacyHistoricalReceipt(r, sample, sample.components).outputs[0].amountOut, sample.outputs[0]);
@@ -202,4 +202,37 @@ test("offline input failure retains a private receipt; an existing receipt is ne
   assert.equal(statSync(out).mode & 0o777, 0o600);
   const second = run(); assert.equal(second.status, 1, second.stderr);
   assert.deepEqual(readFileSync(out), bytes, "failed attempt was overwritten");
+});
+
+test("manual CLI input binds one exact historical transfer, without changing natural reference selection", () => {
+  const sample = LEGACY_SAMPLES["legacy-rebalancing-fee"], amount = sample.outputs[0], token = sample.components[0];
+  const base = { transactionHash: sample.tx, blockHash: sample.hash, blockNumber: ethers.toQuantity(sample.number),
+    transactionIndex: ethers.toQuantity(sample.index), status: "0x1" };
+  const log = { ...base, address: token, logIndex: "0x1b9",
+    ...ERC20.encodeEventLog(ERC20.getEvent("Transfer")!, [sample.vault, sample.recipient, amount]) };
+  const r = { ...base, logs: [log] };
+  const input = historicalTransferInput(r, sample, token, amount, 441n);
+  assert.equal(input.amountIn, amount); assert.equal(input.to, sample.recipient); assert.equal(input.inputOnly, true);
+  for (const shift of [-1n, 1n]) assert.throws(() => historicalTransferInput(r, sample, token, amount + shift, 441n), /no rounding/);
+  assert.throws(() => historicalTransferInput(r, sample, sample.set, amount, 441n), /token differs/);
+  assert.throws(() => historicalTransferInput(r, sample, token, amount, 442n), /one selected/);
+  assert.throws(() => historicalTransferInput({ ...r, logs: [log, log] }, sample, token, amount, 441n), /one selected/);
+  assert.throws(() => historicalTransferInput({ ...r, blockHash: ethers.ZeroHash }, sample, token, amount, 441n), /anchor mismatch/);
+  assert.throws(() => historicalTransferInput({ ...r, logs: [{ ...log, removed: true }] }, sample, token, amount, 441n));
+  const root = fileURLToPath(new URL("../../../../../../../", import.meta.url));
+  const out = resolve(mkdtempSync(resolve(root, "logs/set-manual-options.")), "result.json");
+  const args = ["--ready", "unused", "--prices", "unused", "--rpc-file", "unused", "--out", out, "--port", "8593",
+    "--sample", "legacy-rebalancing-fee", "--direction", "issue"];
+  assert.equal(options([...args, "--amount-in", amount.toString(), "--amount-log-index", "0x1b9"]).manualAmount, amount);
+  assert.throws(() => options([...args, "--amount-in", amount.toString()]), /requires amount/);
+  assert.throws(() => options([...args, "--amount-in", "0", "--amount-log-index", "0x1b9"]), /invalid manual/);
+});
+test("entry fee accounting detects a missing or one-raw-unit wrong fee despite correct gross mint", () => {
+  const quantity = 100000000n, rate = 5000000000000000n, fee = 500000n, net = quantity - fee;
+  assertEntryFeeSettlement(quantity, rate, net, fee);
+  assert.throws(() => assertEntryFeeSettlement(quantity, rate, quantity, 0n), /actually arrive/);
+  for (const shift of [-1n, 1n]) {
+    assert.throws(() => assertEntryFeeSettlement(quantity, rate, net - shift, fee + shift), /shortfall or excess/);
+    assert.throws(() => assertEntryFeeSettlement(quantity, rate, net + shift, fee), /conserve/);
+  }
 });

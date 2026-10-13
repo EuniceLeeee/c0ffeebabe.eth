@@ -1,0 +1,449 @@
+{
+  "schema": "set-legacy-manual-input-and-entry-fee-acceptance/v1",
+  "date": "2026-10-13",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "family": "protocol:set-redemption",
+  "verdict": "scoped-correctness-supplement; no full-family, opportunity or performance verdict",
+  "authorization": "User explicitly allowed manual original-TX amountIn through CLI without changing existing price tables. Four-stage order remains in force.",
+  "changes": {
+    "scope": "Three Family-owned historical test files only; no production source, generated catalog, enabling default or central protocol branch changed",
+    "manualInput": "--amount-in RAW plus --amount-log-index N binds a legacy issuance input to one Transfer in the pinned original receipt: chain anchor, TX index, log index, token and exact raw value. No input rounding or production row substitution.",
+    "feeSample": "Supplemental issuance-only Rebalancing V3 sample; actual redemption recipient differs from share burner and is bound separately in the receipt observer.",
+    "feeObservation": "Read current historical fee recipient and independently resolve its balance storage. Decode the authenticated Core.issue gross quantity, observe actor and fee-recipient deltas from separate prestate traces, and require net receipt plus fee equals gross mint.",
+    "preserved": "BasicIssuance support and original Legacy sample behavior remain; existing negative gates and immutable output reservation remain."
+  },
+  "source": {
+    "baseHead": "c482b21fcaac56476b3f74d8265dc4f9f9ff047c",
+    "productionSourceTreeSha256": "853eb200841aa1af2a439c958132bc8a2fcd7b888d3ab5770307283568d2c9e8",
+    "productionFileCount": 1142,
+    "familyDefinitionHash": "d7e9c6514564750d62e766c8b58d26ccf6d3c1955973341f93d1a7210650fb16",
+    "familyMemoDefinitionHash": "c16e0a0d6b95dd1093beea3d017d756fce4a90af7f5bc76da183ac60084684b3",
+    "runtimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+    "ownedTestFiles": {
+      "listener/src/searcher/venues/protocols/set-redemption-family/test/historical-runtime-dual.ts": "add4fb87aa48ced39e752dfd56e8773aa44ae665f73b9a16af37c109fc0926bd",
+      "listener/src/searcher/venues/protocols/set-redemption-family/test/historical-legacy-observations.ts": "f481fd4e7103842beae4674357aefbc75a753277588ccda9f22c3aaa48843564",
+      "listener/src/searcher/venues/protocols/set-redemption-family/test/historical-runtime-dual-offline.ts": "be3a885ef42de94104435a18bfb10c10239741111be43f73c32c792b07cb90a6"
+    },
+    "protectedDirtyDiffSha256": "2776910e5aeb29d5467103d67141cded583a6da8a3e293946318b05ed030a4cb",
+    "protectedTrackedModifications": 24,
+    "protectedUntrackedEntries": 7,
+    "coffeeCheckpointSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "reusedCoffeeReadySha256": "73dce2013f25e776d54620dd863839e929869f1cf41fcc80b66e0f7978f842b1",
+    "duringRuns": "Production/test/artifact and input hashes verified unchanged before and after each historical execution. Current synthetic executor with source-authenticated BotVM code; no on-chain deployment."
+  },
+  "feeCoverage": {
+    "transaction": "0xc5956283fa171e3e1d1e1f0ed6599deaafa7f69a7b706bf932fe2e4a0a4affea",
+    "block": 24642392,
+    "blockHash": "0x126076a2502344fdd6ef52c762b2088048c491d8d05d24b925fa0751843ffe00",
+    "transactionIndex": 122,
+    "set": "0x542156d51d10db5accb99f9db7e7c91b74e80a2c",
+    "component": "0x6cdfce320f3b94412e8be99be8a41c6b624b3ea4",
+    "entryFeeRaw": "5000000000000000",
+    "feeRecipient": "0xcc506b3c2967022094c3b00276617883167bf32b",
+    "naturalReady": {
+      "instances": 2,
+      "graphDirections": 4,
+      "rawMids": 4,
+      "effectiveQuoted": 2,
+      "quoteFailed": 1,
+      "missingValuation": 1,
+      "targetDirections": 2,
+      "targetQuoted": 0,
+      "manualSeeds": false,
+      "range": "N..N"
+    },
+    "originalTransaction": "Original TX redeems shares and routes the component through a wrapper; it is not an original issuance replay. Its exact component receipt is used only as the manually selected reverse-issuance input.",
+    "amounts": [
+      {
+        "label": "legal-unit-N-not-production-P",
+        "amountIn": "24746281",
+        "netOutput": "99500000",
+        "feeReceipt": "500000",
+        "grossMint": "100000000",
+        "executions": 2,
+        "quoteDeltas": [
+          [
+            "0"
+          ],
+          [
+            "0"
+          ]
+        ]
+      },
+      {
+        "label": "legal-multi-unit-N-not-production-P",
+        "amountIn": "24746281000",
+        "netOutput": "99500000000",
+        "feeReceipt": "500000000",
+        "grossMint": "100000000000",
+        "executions": 2,
+        "quoteDeltas": [
+          [
+            "0"
+          ],
+          [
+            "0"
+          ]
+        ]
+      },
+      {
+        "label": "manual-original-tx-transfer",
+        "amountIn": "123731405000000000",
+        "netOutput": "497500000000000000",
+        "feeReceipt": "2500000000000000",
+        "grossMint": "500000000000000000",
+        "executions": 2,
+        "quoteDeltas": [
+          [
+            "0"
+          ],
+          [
+            "0"
+          ]
+        ]
+      }
+    ],
+    "positiveExecutions": 6,
+    "missingInputSemanticReverts": 6,
+    "quantizationRuntimeReverts": 2,
+    "feeRecipientOldBalance": "24543790097296785",
+    "manualInput": {
+      "kind": "manual-original-tx-transfer",
+      "amountIn": "123731405000000000",
+      "token": "0x6cdfce320f3b94412e8be99be8a41c6b624b3ea4",
+      "tx": "0xc5956283fa171e3e1d1e1f0ed6599deaafa7f69a7b706bf932fe2e4a0a4affea",
+      "block": 24642392,
+      "blockHash": "0x126076a2502344fdd6ef52c762b2088048c491d8d05d24b925fa0751843ffe00",
+      "logIndex": "441",
+      "from": "0x5b67871c3a857de81a1ca0f9f7945e5670d986dc",
+      "to": "0xceda8318522d348f1d1aca48b24629b8fbf09020",
+      "receiptSha256": "8fda320184ed09e13f154c7d3e0ccd1f86e3a23bc29c4491b82abca9986cffd6",
+      "inputOnly": true,
+      "naturalTargetValuation": "unmet",
+      "originalPreCallReplay": "unverified; transfer size used at N end-state"
+    },
+    "manualVerdict": {
+      "status": "pass",
+      "amountIn": "123731405000000000",
+      "inputOnly": true,
+      "naturalTargetValuation": "unmet"
+    },
+    "naturalReference": {
+      "status": "correct-rejection-not-executable",
+      "amountIn": "500000000000000",
+      "unit": "24746281",
+      "remainder": "6603264",
+      "exact": "failed: non-component-multiple",
+      "runtime": "reverted: runtime amount mismatch",
+      "protocolSemantics": "Core.issue takes output quantity, not component amountIn; no exact-full-spend output multiple exists for this input",
+      "amountChanged": false,
+      "inputSource": "natural-current-prices",
+      "naturalReferenceAmount": true,
+      "naturalTargetValuation": "unmet"
+    },
+    "limitation": "This real nonzero-fee historical state covers an external fee recipient. Fee-to-executor and positive-fee zero-recipient cases remain offline fixtures, not historical samples."
+  },
+  "coffeeCoverage": {
+    "transaction": "0x00f865180dc1ffacd181f69a99db506d08766a5086a4f57a886f9611669f4375",
+    "block": 26132613,
+    "blockHash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+    "ready": "logs/set-reference-natural-20261010.ReyApV/single-N26132613/ready.json",
+    "reuse": "Current Family memo fingerprint matches; reused original Ready unchanged, produced prices in a new output directory.",
+    "currentPrices": {
+      "graphDirections": 16,
+      "rawMids": 16,
+      "targetDirections": 4,
+      "targetQuoted": 0,
+      "WBTCReference": "6312",
+      "WBTCReferenceStatus": "quote-failed; existing correct quantization rejection retained",
+      "otherTargetRows": "3 missing-valuation"
+    },
+    "manualInput": {
+      "kind": "manual-original-tx-transfer",
+      "amountIn": "1250153635979394948816",
+      "token": "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+      "tx": "0x00f865180dc1ffacd181f69a99db506d08766a5086a4f57a886f9611669f4375",
+      "block": 26132613,
+      "blockHash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+      "logIndex": "252",
+      "from": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+      "to": "0x5b67871c3a857de81a1ca0f9f7945e5670d986dc",
+      "receiptSha256": "99559d78fb9d437971a2a362bd242e85b824be0025367eec41d1c23f6a60b825",
+      "inputOnly": true,
+      "naturalTargetValuation": "unmet",
+      "originalPreCallReplay": "unverified; transfer size used at N end-state"
+    },
+    "manualVerdict": {
+      "status": "correct-rejection-not-executable",
+      "amountIn": "1250153635979394948816",
+      "unit": "238105",
+      "remainder": "230741",
+      "exact": "exact-decode:set-legacy input must be an exact component-unit multiple",
+      "runtime": "reverted: runtime amount mismatch",
+      "amountChanged": false,
+      "naturalTargetValuation": "unmet"
+    },
+    "legalControls": [
+      {
+        "input": "238105",
+        "netOutput": "100000000"
+      },
+      {
+        "input": "238105000",
+        "netOutput": "100000000000"
+      }
+    ],
+    "positiveExecutions": 4,
+    "missingInputSemanticReverts": 4,
+    "quantizationRuntimeReverts": 2,
+    "reusedOriginalRedemptionRejections": [
+      {
+        "set": "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+        "amountIn": "1461022291000000000000",
+        "NEndSupply": "275022000000000000"
+      },
+      {
+        "set": "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e",
+        "amountIn": "525045205447785400000000",
+        "NEndSupply": "117638534804342909111"
+      }
+    ],
+    "reuseLimit": "Original redemption quantities exceed the pinned N supply, with earlier Exact/native/runtime semantic-rejection evidence. Those executions were not rerun here and retain their original source/executor scope.",
+    "priorReports": [
+      "docs/research/reports/set-legacy-redemption-acceptance-20261009.json",
+      "docs/research/reports/set-legacy-issuance-acceptance-20261009.json",
+      "docs/research/reports/set-legacy-natural-reference-20261010.json"
+    ],
+    "naturalProductionReference": "Three coffee directions still lack natural production valuation; manual rejection is not a natural quote or executable opportunity."
+  },
+  "verification": {
+    "buildLive": "pass on current actual dirty cloud source",
+    "legacyContracts": "10/10 pass",
+    "historicalObserverContracts": "12/12 pass",
+    "actualPositiveExecutions": 10,
+    "zeroInputNegativeExecutions": 10,
+    "quantizationNegativeExecutions": 4,
+    "allPositiveQuoteReceiptSignedDeltas": "0",
+    "runtimeConstruction": "Both actual single-leg constructions: Exact/RPC/amount-evidence reads zero, no quoted fallback. This increment does not run a historical production amount-selector route.",
+    "productionSelector": "Current legacy-contract includes the production selector with throwing Exact/quoted stubs; fixture construction evidence only.",
+    "inventory": "Each actual positive trial leaves 101 raw input inventory and the independently measured old output inventory untouched. No zero-input success. Fee recipient receives exactly the positive fee delta.",
+    "mainIndependentRawReadback": "78 checks of six fee executions from raw storage/call data, manual Transfer binding and unchanged shared pins; this rechecks saved execution evidence, not new EVM runs.",
+    "independentReview": {
+      "verdict": "no blocking findings in this test-only increment",
+      "reviewer": "current application-native Codex non-author; configured CLI attempt failed before review",
+      "frozenSnapshotManifestSha256": "e2d46c8dfda0bd50c5b1abf5aa7b1edbe8c2f62bcece03341a0738eed324eab1",
+      "executedChecks": [
+        "20 manifest hashes and byte lengths",
+        "Three changed files against exact before versions",
+        "Receipt/header/transfer index441 and distinct wrapper recipient",
+        "Six raw actor, fee-recipient and total-supply storage deltas; mapping keys; authenticated Core.issue/mint calls and component transfers",
+        "12 Core/Set bytecode hashes and six script hashes",
+        "Quantization revert payloads and remaining gas",
+        "Frozen observation helpers executed in memory; all three Legacy receipt fixtures accepted and 24 adversarial mutations rejected",
+        "Shared source/input pins, price source and N environment consistency"
+      ],
+      "limitations": [
+        "Six zero-input failures preserve summaries, not raw failed traces; reviewer inspected their validation code but could not reconstruct each semantic failure from raw traces.",
+        "Full Ready, complete production tree and BotVM artifact were not included in the review snapshot; reviewer could not regenerate their aggregate fingerprints.",
+        "12/12 recorded suite inspected, not rerun; later cloud build and coffee execution evidence were outside this snapshot."
+      ]
+    }
+  },
+  "discovery": {
+    "registrySize": 1580,
+    "initialRegistryBudget": 1500,
+    "initialResult": "Stopped after 3 RPC reads before per-token code reads; not an absence conclusion",
+    "eventDiscovery": "3630 EntryFeePaid events, 35 registered positive-fee emitters, 10 with the supported V3 runtime at original coffee N; other 25 runtime hashes not admitted or tested by this discovery.",
+    "recentAnchors": "14 matching real Core events in 20000000..26132613, newest representative N24642392. Read-only sample discovery; no multi-block Ready rebuild.",
+    "originalCoffeeFee": "Initial constructor fee zero, no NewEntryFee events found through N; original coffee instance cannot furnish nonzero entryFee coverage."
+  },
+  "toolReconciliation": {
+    "query": [
+      "set-legacy",
+      "set-dual",
+      "flow",
+      "at",
+      "block"
+    ],
+    "manifest": "logs/set-remaining-20261013.hca2ri47/tool-selection.json",
+    "manifestSha256": "25ad1134f270241fa634ec0b984e0c530fe3a1379475852f79b0688d4441cbe6",
+    "executions": [
+      {
+        "toolId": "listener:searcher:set-legacy-historical-ready",
+        "exitCode": 0,
+        "descriptorSha256": "853bb567d43f0da968ab9c5d22c2f330a6fc1b8865f29a1ca51f97f330ebdc8f",
+        "argvSha256": "12ce2c5412a022529608830021bfe1a338edb1aa3e167d5b811200b0cb4906b3",
+        "stdoutSha256": "dfaa4b051db1df8b5c1200903e55a4aa24516f0ec7aaf6e1ccc2d48bc7f2cebf",
+        "stderrSha256": "d6ec5019f9c2be59a839f27f7b6c75c3a0ed03a4a88b20cba9601519f8527d62"
+      },
+      {
+        "toolId": "listener:searcher:set-dual-historical",
+        "exitCode": 0,
+        "descriptorSha256": "cb7e17e9a56c28c53ff4cc456ad85091d3dd6183a44610473c96621dfb10d828",
+        "argvSha256": "6c3cdfceff92c61a4376201927c8cf9dbc1c99a8378aef07eafb224a80bcba36",
+        "stdoutSha256": "454556921e5d7a5ab6c42969e945ded891123a9125dd553e9dd9fccd7366a1ce",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "toolId": "analysis:tx-flow",
+        "exitCode": 0,
+        "descriptorSha256": "2c7c7ad905dd557d2d26613b21dd2a15203967953b3179f77b9ca9214e40e7ba",
+        "argvSha256": "3f0bd5ecf6995dae6b0f7ff34a6ac5517412dd06fd06f55636ca8697091f9201",
+        "stdoutSha256": "7c496d22fb4710f66532f365194876a073193667b97fab4b4a3b6c27da8eb493",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "toolId": "analysis:tx-flow",
+        "exitCode": 0,
+        "descriptorSha256": "2c7c7ad905dd557d2d26613b21dd2a15203967953b3179f77b9ca9214e40e7ba",
+        "argvSha256": "9a7ff92473dff516813dd7dd59796e16f91a680154803251e03e4c06d83023ce",
+        "stdoutSha256": "6866fb56d12e081c3b017b9a9211717de58a35e977aa2814717332cd02a19da0",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "toolId": "listener:searcher:at-block",
+        "exitCode": 0,
+        "descriptorSha256": "6fe9b1650f257ba529c2e6c55bdc180c8bc292b13710329b76a5fee3f7d50360",
+        "argvSha256": "5a3e39085facf23f7469d0aa87b9f892972808281dbe1c2a17fb7b453faca648",
+        "stdoutSha256": "a22a9902322a57405f9a39154f5738ea0ec7f56717b3fd8f8e92191b69109358",
+        "stderrSha256": "ecc675e42e286ccbf4a09cf1cd8da5dd544e1ead1993b325ec742571bea570f2"
+      },
+      {
+        "toolId": "listener:searcher:set-dual-historical",
+        "exitCode": 0,
+        "descriptorSha256": "cb7e17e9a56c28c53ff4cc456ad85091d3dd6183a44610473c96621dfb10d828",
+        "argvSha256": "b60a31aa2630b4bc04946867e4224dbd5d3243f28e0f4399b4d69b9c5dd941c3",
+        "stdoutSha256": "6b8158e249787868232a8054d90607e5e9cc151400577af48c0fe2dbca93f985",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "result": "Canonical tx-flow independently matches exact selected transfer log252 for coffee and log441 for the fee sample, including token, sender, receiver and raw amount. Existing indexed single-block Ready, at-block and dual CLIs executed successfully.",
+    "windowBinding": "These indexed tools expose no exact window-binding adapter; TX receipts and explicit at-block N/provenance bind the historical state. Unsupported --window invocation was rejected before execution and retained."
+  },
+  "retainedFailures": [
+    {
+      "artifact": "entry-fee-census.json",
+      "kind": "bounded-discovery-stop",
+      "reason": "Registry cardinality exceeded declared code-read cap; no expanded per-token crawl."
+    },
+    {
+      "artifact": "coffee-manual-series-attempt01.status.json",
+      "kind": "launcher-setup-failed",
+      "reason": "Placeholder collision made supervisor invalid; original process verified gone and no child test/artifact before correction."
+    },
+    {
+      "artifact": "coffee-manual-series-attempt02.status.json",
+      "kind": "tool-dispatch-rejected",
+      "reason": "Unsupported --window for tx-flow; successful build and contracts retained, downstream jobs not run. Corrected call removed only unsupported CLI option."
+    },
+    {
+      "artifact": "local set-fee-review-pass1.events.jsonl",
+      "kind": "review-unavailable",
+      "reason": "Configured model requires newer Codex CLI; no review output. Current application-native Codex used for required read-only non-author review; no global configuration or client changed."
+    },
+    {
+      "artifact": "local set-fee-raw-readback-attempt01-failure.json",
+      "kind": "observer-annotation-check",
+      "reason": "Compared code object including headAtStart with sourcePin-only codeAfter; all shared values and input hashes equal. Corrected readback explicitly checks that single annotation difference."
+    }
+  ],
+  "evidenceRoot": "logs/set-remaining-20261013.hca2ri47",
+  "artifacts": {
+    "fee-issue-dual-attempt01.json": {
+      "sha256": "55c90834f2ce62f8ec923773922701740ed5bda4bba01249f3da5a8126255515",
+      "bytes": 976478
+    },
+    "coffee-issue-manual-attempt03.json": {
+      "sha256": "eb721e5e6828a0689d88e2011b32174da7ff4956df093a50b38d2e41c9dacb42",
+      "bytes": 655170
+    },
+    "fee-single-N24642392/ready.json": {
+      "sha256": "815e67e0e23fbaff4b04c1e4c1fea55ba74c306a0ec52e8e364c22f92a6b79c7",
+      "bytes": 58420
+    },
+    "fee-single-N24642392/receipt.json": {
+      "sha256": "81f17c648c97b8d0b891c36c4242ba836fa64aaa20bf99fc5b5a569d0e707641",
+      "bytes": 6194
+    },
+    "fee-single-N24642392/header.json": {
+      "sha256": "147b5b0bee1a384cedaf26a381904dbf23d4acafa0753ba89a9ad3fe29214cb7",
+      "bytes": 31460
+    },
+    "fee-single-N24642392/prices/prices.json": {
+      "sha256": "18d8f836a2fd452bd8c1215cbb7fddeda169ad22009133606decae9b0c105783",
+      "bytes": 48665
+    },
+    "fee-single-N24642392/prices/input.json": {
+      "sha256": "da6627af83c74539c6ca7ca51af1d3bb9fb6cb7e4f49f593dc70f887b51d7d62",
+      "bytes": 65839
+    },
+    "coffee-current-prices/prices.json": {
+      "sha256": "be9556d07a2f59aae9a2f10043f20e34faf8d51caae6caf4b1d74630659179be",
+      "bytes": 150808
+    },
+    "coffee-current-prices/input.json": {
+      "sha256": "7334a6a8b154c8c6a4e1f9cceec707992d11364c807db3ba170e6d6aae65ef6e",
+      "bytes": 42632
+    },
+    "entry-fee-census.json": {
+      "sha256": "8eb3711059f313a7281f8d05f1eabea81f6eed5bf673ae6e538ef2517ff95933",
+      "bytes": 80246
+    },
+    "entry-fee-events.json": {
+      "sha256": "6c14030e27e36abf80e22d2144c6d51c5c6cf21adf40192055b3a4b26821c04a",
+      "bytes": 1486728
+    },
+    "fee-recent-anchors.json": {
+      "sha256": "fb192aa7781da0432b22a43c9ccdc47bccaf361894e9d7970c0063d21b8b2518",
+      "bytes": 7895
+    },
+    "manual-fee-offline-attempt01.log": {
+      "sha256": "40e39d2332f723788e10c20bb704edb57563443da553b0ce5e2eacdac95f55e5",
+      "bytes": 1585
+    },
+    "coffee-manual-series-attempt02-current-build.log": {
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "bytes": 71
+    },
+    "coffee-manual-series-attempt02-legacy-contract.log": {
+      "sha256": "e7cc02a51c2bd597655b29981a8d9eb0342a60d03cdd95433395e3804344f195",
+      "bytes": 1478
+    },
+    "coffee-flow-canonical.json": {
+      "sha256": "c127a124e2d644a90d4f7634d17c55b85accab8333cad8a11a5bdae10cdf5456",
+      "bytes": 5753
+    },
+    "fee-flow-canonical.json": {
+      "sha256": "4c9c16167eb3b458d16fadd15c9f28174987398bfae0ca8cefedbca2b566610c",
+      "bytes": 1924
+    },
+    "tool-selection.json": {
+      "sha256": "25ad1134f270241fa634ec0b984e0c530fe3a1379475852f79b0688d4441cbe6",
+      "bytes": 15328
+    }
+  },
+  "safety": {
+    "localForksOnly": true,
+    "ownedForksStopped": true,
+    "activeCloudNodeAnvilForgeRevmProcessesAtFinalAudit": 0,
+    "liveStarted": false,
+    "signing": false,
+    "broadcast": false,
+    "deployment": false,
+    "originalPricesOrReadyOverwritten": false,
+    "coffeeCheckpointChanged": false,
+    "otherDirtyChanged": false,
+    "newMainBranchOrWorktree": false,
+    "protocolStateOverrides": false
+  },
+  "remaining": [
+    "Original coffee full pre-call issuance/donation/actualizeFee opportunity replay remains unverified.",
+    "No natural production reference pass for the three missing coffee directions; user-authorized manual inputs are recorded separately.",
+    "No historical fee-to-executor or zero-recipient fee sample added; existing fixtures retained.",
+    "No new whole-route historical production selector/final sim/EV or formal adapter merge verdict.",
+    "All 4A local and 4B representative combined-load performance acceptance remains NOT RUN and deferred until prior correctness phases are addressed."
+  ],
+  "configurationTable": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md"
+}

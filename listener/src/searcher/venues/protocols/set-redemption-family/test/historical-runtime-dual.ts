@@ -33,7 +33,7 @@ import { FAMILY } from "../manifest.js";
 import { CORE, CORE_LIBRARIES, LEGACY_SET } from "../legacy.js";
 import type { Descriptor } from "../types.js";
 import { SAMPLE as BASIC_SAMPLE, ERC20, lower, same, json, sha, word, observeBalance, assertBasket, historicalReceipt } from "./historical-runtime-observations.js";
-import { LEGACY_SAMPLES, legacyHistoricalReceipt, assertExecutionRevert, assertLegacyInvalidAmountEvidence } from "./historical-legacy-observations.js";
+import { LEGACY_SAMPLES, legacyHistoricalReceipt, assertExecutionRevert, assertLegacyInvalidAmountEvidence, historicalTransferInput, assertEntryFeeSettlement } from "./historical-legacy-observations.js";
 import { splicedProductionAmount } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 
 const ROOT = fileURLToPath(new URL("../../../../../../../", import.meta.url));
@@ -75,7 +75,7 @@ function sourcePin() {
 export function options(argv: string[]) {
   const names = ["--ready", "--prices", "--rpc-file", "--out", "--port"], values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
-    assert([...names, "--sample", "--direction", "--reference-prices", "--reference-edges"].includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
+    assert([...names, "--sample", "--direction", "--reference-prices", "--reference-edges", "--amount-in", "--amount-log-index"].includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
     assert(argv[i + 1] && !argv[i + 1].startsWith("--"), "missing option value");
     values.set(argv[i], argv[i + 1]);
   }
@@ -84,18 +84,26 @@ export function options(argv: string[]) {
   assert(sample === "basic" || Object.hasOwn(LEGACY_SAMPLES, sample), "unknown sample");
   const direction = values.get("--direction") ?? "redeem";
   assert(direction === "redeem" || (direction === "issue" && sample !== "basic"), "unsupported direction");
+  if (sample === "legacy-rebalancing-fee") assert.equal(direction, "issue", "fee supplement covers issuance only");
   assert.equal(values.has("--reference-prices"), values.has("--reference-edges"), "reference requires prices and explicit edge selection");
   const referenceEdges: string[] = JSON.parse(values.get("--reference-edges") ?? "[]");
   assert(Array.isArray(referenceEdges) && referenceEdges.every(e => typeof e === "string" && e.length > 0));
   if (values.has("--reference-prices")) assert(direction === "issue" && referenceEdges.length === 1,
     "this reference increment covers one legacy unary issuance input only");
+  assert.equal(values.has("--amount-in"), values.has("--amount-log-index"), "manual input requires amount and receipt log index");
+  const manualAmount = values.has("--amount-in") ? BigInt(values.get("--amount-in")!) : undefined;
+  const manualLogIndex = values.has("--amount-log-index") ? BigInt(values.get("--amount-log-index")!) : undefined;
+  if (manualAmount !== undefined) {
+    assert(direction === "issue" && sample !== "basic", "manual input currently covers legacy unary issuance");
+    assert(manualAmount > 0n && manualAmount < MAX && manualLogIndex! >= 0n, "invalid manual input");
+  }
   assert.equal(values.get("--port"), "8593", "this narrow test owns only loopback port 8593");
   const out = resolve(values.get("--out")!), parent = realpathSync(dirname(out)), logs = realpathSync(resolve(ROOT, "logs"));
   assert(parent === logs || parent.startsWith(logs + sep), "output parent must exist under this repo's logs/");
   assert.equal(git("check-ignore", "--", out).trim(), out, "output must be gitignored");
   // Reserve output before resolving/reading inputs, so input failures persist.
   return { ready: resolve(values.get("--ready")!), prices: resolve(values.get("--prices")!),
-    rpcFile: resolve(values.get("--rpc-file")!), out, sample, issue: direction === "issue",
+    rpcFile: resolve(values.get("--rpc-file")!), out, sample, issue: direction === "issue", manualAmount, manualLogIndex,
     referencePrices: values.has("--reference-prices") ? resolve(values.get("--reference-prices")!) : undefined, referenceEdges };
 }
 
@@ -397,6 +405,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     stage = "historical-receipt";
     const originalReceipt = await rpc("eth_getTransactionReceipt", [SAMPLE.tx]);
     report.originalTransaction = legacy ? legacyHistoricalReceipt(originalReceipt, legacy, d.components) : historicalReceipt(originalReceipt, d.components);
+    const manualInput = args.manualAmount !== undefined
+      ? historicalTransferInput(originalReceipt, legacy!, inputToken, args.manualAmount, args.manualLogIndex!) : undefined;
+    if (manualInput) report.manualInput = manualInput;
     stage = "actor-balance-mapping";
     const slots = new Map<string, string>(); report.balanceMappings = [];
     for (const token of tokens) {
@@ -429,6 +440,24 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assert(slot, "actor-only balance mapping not proven");
       slots.set(token, slot); report.balanceMappings.push({ token, holder, holderBalance, slotIndex: index, actorStorageKey: slot, probes: 2 });
     }
+    let feeObservation: { rate: bigint; recipient: string; slot: string; before: bigint } | undefined;
+    if (args.issue && d.legacy?.kind === "rebalancing-v3") {
+      const rate = BigInt(await call(d.set, LEGACY_SET.encodeFunctionData("entryFee")));
+      const recipient = lower(LEGACY_SET.decodeFunctionResult("feeRecipient",
+        await call(d.set, LEGACY_SET.encodeFunctionData("feeRecipient")))[0]);
+      report.entryFeeState = { rate, recipient };
+      if (rate > 0n) {
+        assert(!same(recipient, EXECUTOR) && !same(recipient, ethers.ZeroAddress), "this sample requires an external fee recipient");
+        const before = await balance(d.set, recipient);
+        const index = await resolveErc20BalanceSlot(d.set, recipient, { balanceOf: balance,
+          getStorage: async (t, slot) => BigInt(await rpc("eth_getStorageAt", [t, slot, pin])) });
+        assert(index !== null, "fee recipient balance mapping must be independently resolved");
+        const slot = balanceStorageKey(recipient, index);
+        assert.equal(BigInt(await rpc("eth_getStorageAt", [d.set, slot, pin])), before);
+        feeObservation = { rate, recipient, slot, before };
+        report.feeRecipientObservation = feeObservation;
+      }
+    }
     const adapters = [...family.plugin.actionAdapters, ...PRODUCTION_INFRA_ACTION_ADAPTERS];
     const compile = (node: ResolvedPlanNode): Uint8Array => {
       const adapter = adapters.find(a => a.id === node.adapterId); assert(adapter, "missing production action encoder");
@@ -444,6 +473,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         : [["production-P", row!.amountIn], ["historical-amount-at-N", second]];
       if (reference && reference.amountIn % unit === 0n) {
         amounts.push([referenceLabel, reference.amountIn]); report.expectedSamples++;
+      }
+      if (manualInput && manualInput.amountIn % unit === 0n) {
+        amounts.push(["manual-original-tx-transfer", manualInput.amountIn]); report.expectedSamples++;
       }
       for (const [label, amountIn] of amounts) {
         const sample: Record<string, any> = { routeKey: route.routeKey, edgeId, label, amountIn,
@@ -510,6 +542,22 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               for (const [n, token] of tokens.entries()) assert.equal(await balance(token, EXECUTOR, observedPost), measured[n].after);
               assertBasket(measured[0], measured.slice(1), amountIn, outputs, inventory.slice(1), outputTokens.length);
               assert.equal(measured[0].after, inventory[0]);
+              if (feeObservation) {
+                const calls: any[] = [];
+                const visit = (node: any) => { calls.push(node); for (const child of node.calls ?? []) visit(child); };
+                visit(result.callTrace);
+                const issues = calls.filter(c => same(c.to ?? "", d.module) && same(c.from ?? "", EXECUTOR)
+                  && c.input?.slice(0, 10) === CORE.getFunction("issue")!.selector);
+                assert.equal(issues.length, 1, "one authenticated Core.issue call required");
+                const [set, quantity] = CORE.decodeFunctionData("issue", issues[0].input);
+                assert(same(set, d.set)); assert(!issues[0].error);
+                const fee = observeBalance(result.stateDiff, d.set, feeObservation.slot, feeObservation.before);
+                assertEntryFeeSettlement(quantity, feeObservation.rate, measured[1].delta, fee.delta);
+                const observedFeePost = { [d.set]: { stateDiff: { [feeObservation.slot]: word(fee.after) } } };
+                assert.equal(await balance(d.set, feeObservation.recipient, observedFeePost), fee.after);
+                result.entryFeeSettlement = { ...feeObservation, ...fee, grossMintQuantity: quantity,
+                  actorReceipt: measured[1].delta, conservationDelta: measured[1].delta + fee.delta - quantity };
+              }
               const noInput = structuredClone(overrides);
               noInput[inputToken].stateDiff![slots.get(inputToken)!] = word(0n);
               const rejected = await rpc("debug_traceCall", [tx, pin, { tracer: "callTracer", timeout: "30s", stateOverrides: noInput }]);
@@ -522,6 +570,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           assert(sample.executions.every((e: any) => e.status === "pass"), "one or both encoders failed; evidence retained");
           assert.deepEqual(sample.executions[0].balances, sample.executions[1].balances, "old/runtime basket differs");
           sample.status = "pass";
+          if (label === "manual-original-tx-transfer") report.manualInputAcceptance = { status: "pass", amountIn, inputOnly: true, naturalTargetValuation: "unmet" };
           if (label === referenceLabel) report.productionReferenceAcceptance = {
             status: naturalReference ? (naturalReference.row.status === "quoted" ? "pass-natural-reference" : "input-execution-pass-price-unquoted")
               : "pass-with-spliced-input", amountIn,
@@ -568,6 +617,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           "producer quoted a non-component-multiple; rejection cannot pass as price agreement");
         invalid.push([referenceLabel, reference.amountIn]);
       }
+      if (manualInput && manualInput.amountIn % unit !== 0n) invalid.push(["manual-original-tx-transfer", manualInput.amountIn]);
       report.invalidAmountControls = [];
       for (const [label, amountIn] of invalid) {
         const quote = await exact(rows[0].route, amountIn);
@@ -586,6 +636,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         assert.equal(trace.output.slice(0, 10), "0x08c379a0");
         assert.equal(ethers.AbiCoder.defaultAbiCoder().decode(["string"], "0x" + trace.output.slice(10))[0], "runtime amount mismatch");
         control.status = "pass";
+        if (label === "manual-original-tx-transfer") report.manualInputAcceptance = {
+          status: "correct-rejection-not-executable", amountIn, unit, remainder: amountIn % unit,
+          exact: quote.outcome.reasonCode, runtime: "reverted: runtime amount mismatch",
+          amountChanged: false, naturalTargetValuation: "unmet" };
         if (label === referenceLabel) report.productionReferenceAcceptance = {
           status: "correct-rejection-not-executable", amountIn, unit, remainder: amountIn % unit,
           exact: "failed: non-component-multiple", runtime: "reverted: runtime amount mismatch",
@@ -619,6 +673,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE (with sibling input.json) --rpc-file FILE --out NEW_IGNORED_JSON --port 8593 [--sample basic|legacy-base|legacy-rebalancing] [--direction redeem|issue] [--reference-prices FILE --reference-edges JSON_ARRAY]; reference input is borrowed only for unary issuance, rejection is not executable production P");
+  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE (with sibling input.json) --rpc-file FILE --out NEW_IGNORED_JSON --port 8593 [--sample basic|legacy-base|legacy-rebalancing|legacy-rebalancing-fee] [--direction redeem|issue] [--reference-prices FILE --reference-edges JSON_ARRAY] [--amount-in RAW --amount-log-index N]; manual input binds the original receipt transfer for legacy issuance and never replaces natural prices; reference input is borrowed only for unary issuance, rejection is not executable production P");
   else main().catch(() => { console.error("Set historical test: input/output reservation failed; existing receipts were not overwritten"); process.exitCode = 1; });
 }

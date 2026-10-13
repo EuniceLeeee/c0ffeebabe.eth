@@ -17,6 +17,13 @@ export const LEGACY_SAMPLES = {
   "legacy-rebalancing": { ...common, set: "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e", kind: "rebalancing-v3",
     components: ["0x6011242b6dc2c67ed3d484db09327e933054c90a"], naturalUnit: 100000000n,
     amounts: [100000000n, 1000000000000000000n], amountIn: 525045205447785400000000n, outputs: [1250158886431449426670n] },
+  "legacy-rebalancing-fee": { ...common,
+    tx: "0xc5956283fa171e3e1d1e1f0ed6599deaafa7f69a7b706bf932fe2e4a0a4affea",
+    number: 24642392, hash: "0x126076a2502344fdd6ef52c762b2088048c491d8d05d24b925fa0751843ffe00", index: 122,
+    set: "0x542156d51d10db5accb99f9db7e7c91b74e80a2c", kind: "rebalancing-v3",
+    recipient: "0xceda8318522d348f1d1aca48b24629b8fbf09020",
+    components: ["0x6cdfce320f3b94412e8be99be8a41c6b624b3ea4"], naturalUnit: 100000000n,
+    amounts: [100000000n, 100000000000n], amountIn: 500000000000000000n, outputs: [123731405000000000n] },
 } as const;
 export type LegacySample = typeof LEGACY_SAMPLES[keyof typeof LEGACY_SAMPLES];
 
@@ -94,17 +101,46 @@ export function legacyHistoricalReceipt(receipt: any, sample: LegacySample, comp
     x.event.args.value === sample.amountIn && BigInt(x.log.logIndex) < BigInt(redemption.log.logIndex));
   assert.equal(burns.length, 1, "one actual legacy Set burn required");
   const redeemer = lower(burns[0].event.args.from);
+  const recipient = "recipient" in sample ? sample.recipient : redeemer;
   const later = coreEvents.map(x => BigInt(x.log.logIndex)).filter(n => n > BigInt(redemption.log.logIndex));
   const end = later.length ? later.reduce((a, b) => a < b ? a : b) : (indexes.reduce((a, b) => a > b ? a : b) + 1n);
   const outputs = components.map((token, n) => {
     const matches = transfers.filter(x => same(x.log.address, token) && same(x.event.args.from, sample.vault) &&
-      same(x.event.args.to, redeemer) && BigInt(x.log.logIndex) > BigInt(redemption.log.logIndex) && BigInt(x.log.logIndex) < end);
+      same(x.event.args.to, recipient) && BigInt(x.log.logIndex) > BigInt(redemption.log.logIndex) && BigInt(x.log.logIndex) < end);
     assert.equal(matches.length, 1, "one actual Vault withdrawal in redemption interval required");
     assert.equal(matches[0].event.args.value, sample.outputs[n], "historical output amount mismatch");
     return { token, amountOut: matches[0].event.args.value as bigint, logIndex: matches[0].log.logIndex };
   });
   return { tx: sample.tx, blockNumber: sample.number, blockHash: sample.hash, transactionIndex: sample.index, status: 1,
-    amountIn: sample.amountIn, redeemer, recipient: redeemer, burnLogIndex: burns[0].log.logIndex,
+    amountIn: sample.amountIn, redeemer, recipient, burnLogIndex: burns[0].log.logIndex,
     redemptionLogIndex: redemption.log.logIndex, outputs, receiptSha256: sha(json(receipt)),
-    originalPreCallReplay: "unverified; original TX includes issuance/donation/fee updates, unlike N end-state redemption" };
+    originalPreCallReplay: "unverified; N end-state is not the original redemption call state" };
+}
+
+/** A user-selected historical transfer supplies only input size, never a quote or admission. */
+export function historicalTransferInput(receipt: any, sample: LegacySample, token: string, amountIn: bigint, logIndex: bigint) {
+  assert(amountIn > 0n && amountIn < (1n << 256n) - 1n && logIndex >= 0n, "invalid manual input");
+  assert(same(receipt.transactionHash, sample.tx) && same(receipt.blockHash, sample.hash), "manual receipt anchor mismatch");
+  assert.equal(BigInt(receipt.blockNumber), BigInt(sample.number)); assert.equal(BigInt(receipt.status), 1n);
+  assert.equal(BigInt(receipt.transactionIndex), BigInt(sample.index));
+  const matches = receipt.logs.filter((l: any) => BigInt(l.logIndex) === logIndex);
+  assert.equal(matches.length, 1, "one selected historical transfer required");
+  const log = matches[0];
+  assert(!log.removed && same(log.transactionHash, sample.tx) && same(log.blockHash, sample.hash));
+  assert.equal(BigInt(log.blockNumber), BigInt(sample.number)); assert.equal(BigInt(log.transactionIndex), BigInt(sample.index));
+  assert(same(log.address, token), "manual input token differs from selected transfer");
+  const transfer = ERC20.parseLog(log);
+  assert(transfer?.name === "Transfer", "manual input requires Transfer");
+  assert.equal(transfer.args.value, amountIn, "manual input differs from selected transfer; no rounding");
+  return { kind: "manual-original-tx-transfer" as const, amountIn, token: lower(token), tx: sample.tx,
+    block: sample.number, blockHash: sample.hash, logIndex, from: lower(transfer.args.from), to: lower(transfer.args.to),
+    receiptSha256: sha(json(receipt)), inputOnly: true, naturalTargetValuation: "unmet",
+    originalPreCallReplay: "unverified; transfer size used at N end-state" };
+}
+
+export function assertEntryFeeSettlement(quantity: bigint, feeRate: bigint, actorReceipt: bigint, feeReceipt: bigint) {
+  assert(quantity > 0n && feeRate > 0n && feeRate < 10n ** 18n, "positive historical entryFee required");
+  assert(feeReceipt > 0n, "positive fee must actually arrive");
+  assert.equal(feeReceipt, quantity * feeRate / 10n ** 18n, "fee recipient shortfall or excess");
+  assert.equal(actorReceipt + feeReceipt, quantity, "net issuance plus fee must conserve minted quantity");
 }
