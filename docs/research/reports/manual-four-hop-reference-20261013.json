@@ -1,0 +1,872 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-13",
+  "createdAtUtc": "2026-10-13T04:15:01.223694+00:00",
+  "result": "fresh-single-block-ready-and-authorized-manual-input-correctness-pass-natural-reference-incomplete",
+  "tx": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "headAtRun": "388f9dceb9bc1c5cc6d752c3ee0380b257fcfc4b",
+  "userSteering": [
+    "Use manual four-hop output as amountIn without changing the original price table",
+    "Redo only the historical single-block Ready"
+  ],
+  "implementation": {
+    "scope": "historical acceptance CLI input mode only; no production code, default reference path limit, generated catalog or Ready hash edited",
+    "files": [
+      {
+        "path": "listener/src/searcher/test/family-integration/manual-forward-input.ts",
+        "sha256": "c55c3128004c1ff04c0e4862dbf83ee909d51fce0fd6dd5e97efef7184868ae4"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/manual-forward-input.test.ts",
+        "sha256": "0ad2ae5d2cb199be17191ef48bd5ae2b47cb7d82f427ca33cb7c90932ac0cf65"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v3-family/test/historical-runtime-dual.ts",
+        "sha256": "34e7d268caa68b61f7a76db7ecf854af04784af8c2119d36e4bbec967e93c395"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/test/infinifi-historical-dual.ts",
+        "sha256": "aec23c66574b43b889cad9717131dae7275db73d3216aa174d15b157f7d971d4"
+      }
+    ],
+    "manualInputChecks": "pins the source price file hash; four distinct admitted graph edges, WETH input, same historical source/hash/generation, fresh successful raw/effective rows, exact token/amount continuity, no repeated token or standing-position path; final quote output must equal supplied target input; target must be missing-valuation with absent amount; no quote-failed replacement",
+    "executionScope": "only matching missing-input direction at full amount and half; existing opposite-direction tests reused, not counted again"
+  },
+  "source": {
+    "number": 25944594,
+    "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+    "stateRoot": "0xa972b7e644213d956d7090c4ffccb0820ebc7da793a5801543f688ab95beab3e",
+    "priceGeneration": 1,
+    "implementation": {
+      "sourceTreeSha256": "853eb200841aa1af2a439c958132bc8a2fcd7b888d3ab5770307283568d2c9e8",
+      "revmBinarySha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6"
+    },
+    "executorCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "executorArtifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+    "balancer": {
+      "headAtStart": "388f9dceb9bc1c5cc6d752c3ee0380b257fcfc4b",
+      "sourceSha256": "4e39f8ba22dcbd07ec4e8e34bf5d798f1cece510190acd19ce0a162875e617cb",
+      "sourceTreeSha256": "853eb200841aa1af2a439c958132bc8a2fcd7b888d3ab5770307283568d2c9e8",
+      "fileCount": 1152,
+      "testSha256": "34e7d268caa68b61f7a76db7ecf854af04784af8c2119d36e4bbec967e93c395",
+      "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+      "familyDefinitionHash": "e515ffc67c8020c03125fc903784b9bc25787e48faef76af072d7569946ff84d",
+      "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+    },
+    "infinifi": {
+      "sourceTreeSha256": "853eb200841aa1af2a439c958132bc8a2fcd7b888d3ab5770307283568d2c9e8",
+      "harnessSha256": "6d6c5c82fd971d5a55c50817b0738d7524e7f129ec60d5f8fc24af37dffbec54",
+      "evidenceSha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27",
+      "observationHelpers": [
+        {
+          "path": "../three-family/historical-input-observations.ts",
+          "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+        },
+        {
+          "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+          "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+        },
+        {
+          "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+          "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+        },
+        {
+          "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+          "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+        },
+        {
+          "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+          "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+        },
+        {
+          "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+          "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+        },
+        {
+          "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+          "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+        },
+        {
+          "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+          "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+        },
+        {
+          "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+          "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+        }
+      ]
+    }
+  },
+  "ready": {
+    "freshFromAbsentCheckpoint": true,
+    "window": [
+      25944594,
+      25944594
+    ],
+    "canonicalEntry": "listener:searcher:universe-rebuild-startup",
+    "productionWiring": "createRebuildWiring, existing nine-family discovery scope; no pool or edge injection",
+    "generation": 1,
+    "cutoff": {
+      "number": 25944594,
+      "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+      "generation": 25944594
+    },
+    "activeInstances": 13,
+    "candidateAccounting": {
+      "total": 14,
+      "verified": 13,
+      "terminalRejected": 0,
+      "retryable": 1,
+      "remainingUnaccounted": 0
+    },
+    "graphHash": "f99259c24fdfd757f9f18825346a8d5be7bfb29cf7f5aae2f93c5b1131a49f6b",
+    "inProgressRun": null,
+    "retryableQueueCount": 1,
+    "remainingRetryable": "univ3-standard candidate 0x7d697d789ee19bc376474e0167bade9535a28cf4, pool-fee did not return; no forced admission; actual Kyber Family evidence is separate"
+  },
+  "prices": {
+    "entry": "listener:searcher:at-block",
+    "through": "prices",
+    "executionMode": "source-block",
+    "graphEdges": 30,
+    "rawRows": 30,
+    "effectiveRows": 30,
+    "statuses": {
+      "quoted": 24,
+      "missing-valuation": 6
+    },
+    "tableMetadata": {
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+        "generation": 1
+      },
+      "reference": "default",
+      "referenceWethInput": "2000000000000000",
+      "complete": true,
+      "wallMs": 564
+    },
+    "policy": {
+      "dryRun": true,
+      "finalVerifyFloorBps": {
+        "$type": "bigint",
+        "value": "7"
+      },
+      "maxProfitBpsOfFlash": {
+        "$type": "bigint",
+        "value": "10000"
+      },
+      "profitHaircutBps": 0,
+      "bribeBps": 5000,
+      "bribeAllAboveGas": false,
+      "evGate": true,
+      "minNetEth": {
+        "$type": "bigint",
+        "value": "0"
+      },
+      "blockScanSubmit": false,
+      "inclusionWatchBlocks": 3
+    },
+    "cfg": {
+      "maxHops": 6,
+      "deduplicateRotations": true,
+      "allowRepeatedPools": true,
+      "allowRepeatedTokens": false,
+      "prefixPruningEnabled": true,
+      "maxPrefixDrawdownBps": 0,
+      "enumerationMethod": "joint-dfs",
+      "enumerationBackend": "typescript",
+      "rustEnumerationThreads": 1,
+      "rustEnumerationScratchMb": 512,
+      "ethSignalPairsPerToken": 50,
+      "hopTokensPerStep": 3,
+      "hopPoolsPerPair": 3,
+      "minSpreadBps": 0,
+      "requireDislocatedPair": true,
+      "exactAdmissionSpreadBps": 0,
+      "minCapitalFraction": 0.001,
+      "maxCandidates": 100,
+      "budgetMs": 2000,
+      "pricedTokens": {
+        "$type": "map",
+        "entries": [
+          [
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "2000000000000000000000"
+              }
+            }
+          ],
+          [
+            "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000"
+              }
+            }
+          ],
+          [
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000000"
+              }
+            }
+          ],
+          [
+            "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000000"
+              }
+            }
+          ],
+          [
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000000000000000000"
+              }
+            }
+          ]
+        ]
+      }
+    },
+    "freshness": "24 quoted rows are at N/gen1; carried zero; six missing input rows preserved"
+  },
+  "manualInput": {
+    "kind": "manual-four-hop-output-input",
+    "tokenIn": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+    "amountIn": "4549931237571597530",
+    "source": {
+      "number": 25944594,
+      "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+      "generation": 1
+    },
+    "pricesSha256": "8946e77f4570dc004cf90e011dd73c67cfd29ce66b3db1f8da8ffc31e8229c0c",
+    "path": [
+      {
+        "edgeId": "univ3-standard\u001f0x109830a1aaad605bbf02a9dfa7b0b92ec2fb7daa\u001f0x109830a1aaad605bbf02a9dfa7b0b92ec2fb7daa\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0\u001f6b13131ec8cff9177e3ff3a1fc20399a0a97acab1d1748a65306a5a57d6bd45a",
+        "instanceKey": "0x109830a1aaad605bbf02a9dfa7b0b92ec2fb7daa",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+        "amountIn": "2000000000000000",
+        "status": "quoted",
+        "amountOut": "1608179666215318",
+        "effectiveMid": 0.804089833107659,
+        "quotedAt": {
+          "number": 25944594,
+          "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-plain\u001f0x2889302a794da87fbf1d6db415c1492194663d13\u001f0x2889302a794da87fbf1d6db415c1492194663d13\u001f0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0>0xf939e0a03fb07f59a73314e73794be0e57ac1b4e\u001f431b546564b68b26f3ee0bd9bc0364596a028deb8f01287a2a7458dd4af7ca9f",
+        "instanceKey": "0x2889302a794da87fbf1d6db415c1492194663d13",
+        "tokenIn": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+        "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+        "amountIn": "1608179666215318",
+        "status": "quoted",
+        "amountOut": "4951593393237176093",
+        "effectiveMid": 3079.00509952985,
+        "quotedAt": {
+          "number": 25944594,
+          "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "curve-plain\u001f0x57064f49ad7123c92560882a45518374ad982e85\u001f0x57064f49ad7123c92560882a45518374ad982e85\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0x9d39a5de30e57443bff2a8307a4256c8797a3497\u001f33e84a3d852abf47e92a5ee54d6fd8db2268c943e3ab0e5c57d33aa165a92513",
+        "instanceKey": "0x57064f49ad7123c92560882a45518374ad982e85",
+        "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+        "tokenOut": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+        "amountIn": "4951593393237176093",
+        "status": "quoted",
+        "amountOut": "3969838393931800405",
+        "effectiveMid": 0.8017294795153729,
+        "quotedAt": {
+          "number": 25944594,
+          "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "balancer-v3\u001f0x071828acc755314e687448703775f22194f56867\u001f0x071828acc755314e687448703775f22194f56867\u001f0x9d39a5de30e57443bff2a8307a4256c8797a3497>0xdbdc1ef57537e34680b898e1febd3d68c7389bcb\u001f095d73c2a56a4d65c1e59a2e5d6264939f6e51da1e7e02f5e7a1a88e1cc74284",
+        "instanceKey": "0x071828acc755314e687448703775f22194f56867",
+        "tokenIn": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+        "tokenOut": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+        "amountIn": "3969838393931800405",
+        "status": "quoted",
+        "amountOut": "4549931237571597530",
+        "effectiveMid": 1.1461250524773283,
+        "quotedAt": {
+          "number": 25944594,
+          "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+          "generation": 1
+        }
+      }
+    ],
+    "freshness": "fresh",
+    "naturalTargetValuation": "not supplied; default production sampling remains unchanged"
+  },
+  "balancerV3": {
+    "pool": "0x071828acc755314e687448703775f22194f56867",
+    "hook": {
+      "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+      "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+      "flags": [
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        true,
+        false,
+        true
+      ],
+      "stableSurgeModel": "stable-surge-v2"
+    },
+    "result": "pass",
+    "measurementScope": "manual-input directions only; prior directions intentionally not repeated",
+    "positiveExecutions": 4,
+    "noInputNegativeControls": 4,
+    "productionReferenceComplete": false,
+    "runtimeConstructionRpcAttempts": 0,
+    "constructionLimit": "Family builder RPC guard only; this run is not a new full production sim-selector zero-Exact acceptance",
+    "forkStopped": true,
+    "samples": [
+      {
+        "amountIn": "4549931237571597530",
+        "quoteOut": "3968925188898275615",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "old-fragment",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "4549931237571597631",
+                "after": "101",
+                "delta": "-4549931237571597530"
+              },
+              "output": {
+                "before": "103",
+                "after": "3968925188898275718",
+                "delta": "3968925188898275615"
+              }
+            },
+            "nativeInventory": {
+              "before": "17",
+              "after": "17",
+              "delta": "0"
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1789014455",
+                "0"
+              ]
+            ],
+            "noInputStatus": "pass"
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "4549931237571597631",
+                "after": "101",
+                "delta": "-4549931237571597530"
+              },
+              "output": {
+                "before": "103",
+                "after": "3968925188898275718",
+                "delta": "3968925188898275615"
+              }
+            },
+            "nativeInventory": {
+              "before": "17",
+              "after": "17",
+              "delta": "0"
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1789014455",
+                "0"
+              ]
+            ],
+            "noInputStatus": "pass"
+          }
+        ]
+      },
+      {
+        "amountIn": "2274965618785798765",
+        "quoteOut": "1984477614880721093",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "old-fragment",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "2274965618785798866",
+                "after": "101",
+                "delta": "-2274965618785798765"
+              },
+              "output": {
+                "before": "103",
+                "after": "1984477614880721196",
+                "delta": "1984477614880721093"
+              }
+            },
+            "nativeInventory": {
+              "before": "17",
+              "after": "17",
+              "delta": "0"
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1789014455",
+                "0"
+              ]
+            ],
+            "noInputStatus": "pass"
+          },
+          {
+            "encoding": "runtime-program",
+            "status": "pass",
+            "balances": {
+              "input": {
+                "before": "2274965618785798866",
+                "after": "101",
+                "delta": "-2274965618785798765"
+              },
+              "output": {
+                "before": "103",
+                "after": "1984477614880721196",
+                "delta": "1984477614880721093"
+              }
+            },
+            "nativeInventory": {
+              "before": "17",
+              "after": "17",
+              "delta": "0"
+            },
+            "finalAllowances": [
+              [
+                "0"
+              ],
+              [
+                "0",
+                "1789014455",
+                "0"
+              ]
+            ],
+            "noInputStatus": "pass"
+          }
+        ]
+      }
+    ]
+  },
+  "infinifi": {
+    "vault": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+    "asset": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+    "result": "same-state-pass-reference-incomplete",
+    "measurementScope": "manual-input direction only; prior directions intentionally not repeated",
+    "productionReference": "unmet",
+    "positiveExecutions": 4,
+    "negativeExecutions": 8,
+    "runtimeConstruction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "scope": "production issuer, not yet full sim selector"
+    },
+    "pendingRewards": "0",
+    "drained": true,
+    "samples": [
+      {
+        "amountIn": "4549931237571597530",
+        "quoteOut": "4952047728233757173",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "quoted",
+            "negative": "none",
+            "status": "pass",
+            "completion": "returned",
+            "quoteDelta": "0"
+          },
+          {
+            "encoding": "quoted",
+            "negative": "no-input",
+            "status": "pass",
+            "completion": "reverted-as-declared",
+            "quoteDelta": null
+          },
+          {
+            "encoding": "quoted",
+            "negative": "post-execution-revert",
+            "status": "pass",
+            "completion": "reverted-as-declared",
+            "quoteDelta": null
+          },
+          {
+            "encoding": "runtime",
+            "negative": "none",
+            "status": "pass",
+            "completion": "returned",
+            "quoteDelta": "0"
+          },
+          {
+            "encoding": "runtime",
+            "negative": "no-input",
+            "status": "pass",
+            "completion": "reverted-as-declared",
+            "quoteDelta": null
+          },
+          {
+            "encoding": "runtime",
+            "negative": "post-execution-revert",
+            "status": "pass",
+            "completion": "reverted-as-declared",
+            "quoteDelta": null
+          }
+        ]
+      },
+      {
+        "amountIn": "2274965618785798765",
+        "quoteOut": "2476023864116878586",
+        "status": "pass",
+        "executions": [
+          {
+            "encoding": "quoted",
+            "negative": "none",
+            "status": "pass",
+            "completion": "returned",
+            "quoteDelta": "0"
+          },
+          {
+            "encoding": "quoted",
+            "negative": "no-input",
+            "status": "pass",
+            "completion": "reverted-as-declared",
+            "quoteDelta": null
+          },
+          {
+            "encoding": "quoted",
+            "negative": "post-execution-revert",
+            "status": "pass",
+            "completion": "reverted-as-declared",
+            "quoteDelta": null
+          },
+          {
+            "encoding": "runtime",
+            "negative": "none",
+            "status": "pass",
+            "completion": "returned",
+            "quoteDelta": "0"
+          },
+          {
+            "encoding": "runtime",
+            "negative": "no-input",
+            "status": "pass",
+            "completion": "reverted-as-declared",
+            "quoteDelta": null
+          },
+          {
+            "encoding": "runtime",
+            "negative": "post-execution-revert",
+            "status": "pass",
+            "completion": "reverted-as-declared",
+            "quoteDelta": null
+          }
+        ]
+      }
+    ]
+  },
+  "independentRecalculation": {
+    "path": "logs/manual-four-hop-20261013.ndkrq4vh/independent-recalculation.json",
+    "sha256": "c7f0ece96a4481178e6022edfbecece7a1083b3d455ba6ff93f1291a84e4f584",
+    "checks": 16,
+    "pass": true,
+    "scope": "offline re-read by this agent: Balancer raw balance storage diff; InfiniFi trusted effect deltas cross-checked with ERC20 Transfer net and empty reverted effects; not a separate reviewer or new EVM"
+  },
+  "validation": {
+    "offlineChecks": [
+      {
+        "name": "production-build",
+        "exitCode": 0,
+        "seconds": 7.806913375854492
+      },
+      {
+        "name": "reference-contracts",
+        "exitCode": 0,
+        "seconds": 3.155916213989258
+      },
+      {
+        "name": "balancer-contracts",
+        "exitCode": 0,
+        "seconds": 2.084745407104492
+      },
+      {
+        "name": "infinifi-contracts",
+        "exitCode": 0,
+        "seconds": 2.0060858726501465
+      }
+    ],
+    "logs": [
+      {
+        "path": "logs/manual-four-hop-20261013.ndkrq4vh/manual-input-unit-attempt01.log",
+        "summary": [
+          "ℹ tests 2",
+          "ℹ pass 2",
+          "ℹ fail 0"
+        ]
+      },
+      {
+        "path": "logs/manual-four-hop-20261013.ndkrq4vh/reference-contracts-attempt01.log",
+        "summary": [
+          "✔ missing-input donor cannot turn target quote failures or existing amounts into a passed reference (0.506891ms)",
+          "ℹ tests 140",
+          "ℹ pass 140",
+          "ℹ fail 0"
+        ]
+      },
+      {
+        "path": "logs/manual-four-hop-20261013.ndkrq4vh/balancer-contracts-attempt01.log",
+        "summary": [
+          "balancer-v3 legacy compatibility PASS (edge shape, stubbed quote, missing-session rejection, selectors; not historical or production planner acceptance)",
+          "✔ no membership and foreign Vault reject; transport, malformed evidence, token hints and mixed source fail closed (9.738472ms)",
+          "ℹ tests 24",
+          "ℹ pass 24",
+          "ℹ fail 0"
+        ]
+      },
+      {
+        "path": "logs/manual-four-hop-20261013.ndkrq4vh/infinifi-contracts-attempt01.log",
+        "summary": [
+          "ℹ tests 12",
+          "ℹ pass 12",
+          "ℹ fail 0"
+        ]
+      }
+    ],
+    "gitDiffCheck": "pass"
+  },
+  "failuresPreserved": [
+    {
+      "path": "logs/manual-four-hop-20261013.ndkrq4vh/current-prices-attempt01.log",
+      "classification": "old Ready/source mismatch before RPC; not protocol execution failure",
+      "result": "failed"
+    },
+    {
+      "path": "logs/manual-four-hop-20261013.ndkrq4vh/selective-ready-attempt01.log",
+      "classification": "our copied-Ready invocation omitted opt-in local executor-code override; two Curve execution proofs retryable; no genuine protocol rejection conclusion",
+      "result": "CLI exit0 but incomplete target readiness; fresh run fixes invocation"
+    },
+    {
+      "path": "logs/manual-four-hop-20261013.ndkrq4vh/independent-recalculation-attempt01-failure.json",
+      "classification": "offline extractor assumed unchanged native balance field exists; corrected extraction, artifacts unmodified",
+      "result": "KeyError preserved"
+    }
+  ],
+  "toolReconciliation": {
+    "manualAnalysisFirst": true,
+    "capabilityQuery": [
+      "universe",
+      "status",
+      "at",
+      "block",
+      "startup"
+    ],
+    "manifest": "logs/manual-four-hop-20261013.ndkrq4vh/production-tools-with-revalidation.json",
+    "manifestSha256": "e997a50b852a435bf3bbc10d5040f2006eaf9638e54bd867ab9f8a7c79214490",
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-startup",
+        "descriptor_sha256": "249c113f96ef4042bd974e0e4a26ff0e564edd09db99297f55c6f0c98cf086ef",
+        "started_at": "2026-10-13T03:56:07.267Z",
+        "finished_at": "2026-10-13T03:56:10.283Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "8da118e5386ca2ebf2c8842ded40bbb94bd0946ea920342bd4649896039581f5",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-startup",
+          "--",
+          "--checkpoint",
+          "/opt/mev-cloud/family-runtime-20261007/logs/manual-four-hop-20261013.ndkrq4vh/current-ready.json",
+          "--from-block",
+          "25944594",
+          "--to-block",
+          "25944594",
+          "--run-id",
+          "manual-input-source-refresh-25944594"
+        ],
+        "stdout_sha256": "ac8c21b4c84f360c3e29978fe9ed01ec535d84e62f4f29ea99a97058e7271b5d",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1953,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-startup",
+        "descriptor_sha256": "249c113f96ef4042bd974e0e4a26ff0e564edd09db99297f55c6f0c98cf086ef",
+        "started_at": "2026-10-13T04:00:47.220Z",
+        "finished_at": "2026-10-13T04:00:51.907Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "2f28d1fb1053bdbbe233bf6870645c9599efb03b40a5f6b4c6ae6dfe6097d402",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-startup",
+          "--",
+          "--checkpoint",
+          "/opt/mev-cloud/family-runtime-20261007/logs/manual-four-hop-20261013.ndkrq4vh/fresh-single-block-ready.json",
+          "--from-block",
+          "25944594",
+          "--to-block",
+          "25944594",
+          "--run-id",
+          "manual-four-hop-fresh-single-25944594"
+        ],
+        "stdout_sha256": "b4d160a4a6368a1816a2f3e69dba4d381a2319133540bde085eec2fbcef3b0d1",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1965,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:at-block",
+        "descriptor_sha256": "6fe9b1650f257ba529c2e6c55bdc180c8bc292b13710329b76a5fee3f7d50360",
+        "started_at": "2026-10-13T04:02:03.021Z",
+        "finished_at": "2026-10-13T04:02:05.446Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "aa3f08b654fdf627ab1ea5d292abcab8edea14f651e1f33b572712615a08f0de",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:at-block",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/manual-four-hop-20261013.ndkrq4vh/fresh-single-block-ready.json",
+          "--block",
+          "25944594",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/manual-four-hop-20261013.ndkrq4vh/fresh-single-block-prices",
+          "--through",
+          "prices",
+          "--execution-mode",
+          "source-block",
+          "--executor",
+          "0x1000000000000000000000000000000000000002",
+          "--owner",
+          "0x1000000000000000000000000000000000000001",
+          "--revm-bin",
+          "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+          "--executor-runtime-code",
+          "/opt/mev-cloud/family-runtime-20261007/logs/manual-four-hop-20261013.ndkrq4vh/current-executor-code.json",
+          "--spread-bps",
+          "0",
+          "--budget-ms",
+          "240000"
+        ],
+        "stdout_sha256": "14b84516a0cecf0edc5ae8367d7cae6c608a644b86ea01d2494a4990e92c4af4",
+        "stderr_sha256": "ba8111ed78d1e973c2dfa8cd22311f7d8b45561812af22b1fcfdd3ecc981465a",
+        "stdout_bytes": 9334,
+        "stderr_bytes": 109
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-status",
+        "descriptor_sha256": "1842cdcffc5cb379061eb689ad010ae26cbc58a1f6fb00fd6e0cfeab8be07392",
+        "started_at": "2026-10-13T04:10:06.108Z",
+        "finished_at": "2026-10-13T04:10:06.369Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "0b95a88be6e4af585d8a2b3768d0dcce4db2d3d245eb4a510d07e7c503bb191d",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-status",
+          "--",
+          "--checkpoint",
+          "/opt/mev-cloud/family-runtime-20261007/logs/manual-four-hop-20261013.ndkrq4vh/fresh-single-block-ready.json"
+        ],
+        "stdout_sha256": "f7022a2f476e5cb03da3f49a8e8e25b83b69c922aa1b520811b06e922ab50b3e",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 565,
+        "stderr_bytes": 0
+      }
+    ],
+    "result": "fresh production startup, at-block prices and status agree with manual first-gap analysis; original failures retained",
+    "earlierGraphTool": "analysis:graph-in inspected after manual scan; implementation reads legacy runtime discovery graph, not Ready edges, so not applicable or executed; actual startup/status/at-block cover current Ready validation"
+  },
+  "protection": {
+    "originalDirtyPatchSha256ExcludingOwnedFiles": "2776910e5aeb29d5467103d67141cded583a6da8a3e293946318b05ed030a4cb",
+    "originalUncommittedPatchUnchanged": true,
+    "immutableFiles": [
+      {
+        "path": "logs/coffee-tx-ready-20261008/checkpoint.json",
+        "sha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+        "unchanged": true
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/ready.json",
+        "sha256": "bcf2f68513d70de8784f461c1940b0fd78c900179ef0a53031dd6e10deb85643",
+        "unchanged": true
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/prices/prices.json",
+        "sha256": "4bdfb0044998fa3cdb64c2b114396491570f0c6a684c34acda1244ea1ebea563",
+        "unchanged": true
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/prices/input.json",
+        "sha256": "ebc6000e6c6b62a05cea8be528ad2088f1c2baeccd6afcc92840cb9efc741ef6",
+        "unchanged": true
+      }
+    ],
+    "currentReadyAndPricesPinsVerifiedAfterDual": true
+  },
+  "coverageAndLimits": {
+    "existingBalancerCoverage": "36/36 directions already have receipt comparison; 35/36 prior natural-or-borrowed production-input directions unchanged",
+    "newSupplement": "the remaining siUSD input direction and InfiniFi redeem now have authorized manual four-forward-quote input plus half-amount same-N execution evidence",
+    "naturalTargetReference": "unmet at unchanged three-hop policy; not reclassified as natural target input or 36/36 production-reference pass",
+    "sameStateCorrectness": "new manual-input samples pass; older directions not rerun",
+    "originalCallPrestate": "not replayed",
+    "opportunity": "NOT RUN",
+    "phase4A": "NOT RUN",
+    "phase4B": "NOT RUN",
+    "goal": "active; stage1 cUNI reference and other authorized work remain",
+    "performance": "ordinary correctness diagnostics only; no timing acceptance or representative-load claim",
+    "safety": "no live start, deployment, signing, broadcast, protocol balance/permission override or key access"
+  }
+}

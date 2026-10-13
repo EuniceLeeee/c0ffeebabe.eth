@@ -33,6 +33,7 @@ import { productionAmount, splicedMissingProductionAmount, assertPriceInput } fr
 import { sourcePin as productionSourcePin } from "../../../../test/family-integration/kyber-yb-compound/historical-dual.js";
 import { proveActorBalanceSlot } from "./balance-slot-proof.js";
 import { supportsLocalPricing } from "../local-state.js";
+import { manualFourHopInput } from "../../../../test/family-integration/manual-forward-input.js";
 
 const ROOT = fileURLToPath(new URL("../../../../../../../", import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
@@ -69,7 +70,7 @@ function sourcePin() {
 
 function options(argv: string[]) {
   const required = ["--ready", "--prices", "--pool", "--rpc-file", "--out", "--port"];
-  const names = [...required, "--receipt", "--reference-prices", "--reference-edges"];
+  const names = [...required, "--receipt", "--reference-prices", "--reference-edges", "--manual-forward-input"];
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     assert(names.includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
@@ -78,6 +79,7 @@ function options(argv: string[]) {
   }
   assert(required.every(key => values.has(key)), "required: --ready --prices --pool --rpc-file --out --port");
   assert.equal(values.has("--reference-prices"), values.has("--reference-edges"));
+  assert(!values.has("--manual-forward-input") || !values.has("--reference-prices"), "choose one supplemental input source");
   const referenceEdges = values.has("--reference-edges") ? JSON.parse(values.get("--reference-edges")!) : [];
   assert(Array.isArray(referenceEdges) && referenceEdges.every(key => typeof key === "string" && key.length > 0));
   assert.equal(new Set(referenceEdges).size, referenceEdges.length);
@@ -90,6 +92,7 @@ function options(argv: string[]) {
   assert.equal(git("check-ignore", "--", out).trim(), out, "output must be gitignored");
   return { ready: realpathSync(values.get("--ready")!), prices: realpathSync(values.get("--prices")!),
     rpcFile: realpathSync(values.get("--rpc-file")!), receipt: values.has("--receipt") ? realpathSync(values.get("--receipt")!) : undefined,
+    manualInput: values.has("--manual-forward-input") ? realpathSync(values.get("--manual-forward-input")!) : undefined,
     referencePrices: values.has("--reference-prices") ? realpathSync(values.get("--reference-prices")!) : undefined,
     referenceEdges: referenceEdges as string[], pool: lower(ethers.getAddress(
       values.get("--pool")!.startsWith("0x") ? values.get("--pool")! : `0x${values.get("--pool")!}`)), out };
@@ -199,7 +202,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const inputPath = resolve(dirname(args.prices), "input.json");
     const provenance = parseAtBlockJson(readFileSync(inputPath, "utf8"));
     const header = provenance.sourceHeader;
-    const extraPaths = [inputPath, ...(args.receipt ? [args.receipt] : []),
+    const extraPaths = [inputPath, ...(args.receipt ? [args.receipt] : []), ...(args.manualInput ? [args.manualInput, fileURLToPath(new URL("../../../../test/family-integration/manual-forward-input.ts", import.meta.url))] : []),
       ...(args.referencePrices ? [args.referencePrices, resolve(dirname(args.referencePrices), "declaration.json")] : [])];
     const extraPins = () => extraPaths.map(path => ({ path, sha256: sha(readFileSync(path)) }));
     report.extraInputs = extraPins();
@@ -214,6 +217,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const source: CanonicalSource = ready.cutoff, pin = { blockHash: source.hash, requireCanonical: true };
     assertPriceInput(saved, provenance, ready, { readySha256: sha(readyBytes), sourceTreeSha256: startPin.sourceTreeSha256,
       number: source.number });
+    const manualInput = args.manualInput ? manualFourHopInput(JSON.parse(readFileSync(args.manualInput, "utf8")), saved, sha(priceBytes)) : undefined;
+    if (manualInput) report.manualForwardInput = manualInput;
     assert(same(provenance.executor, EXECUTOR) && same(provenance.owner, OWNER));
     const receipt = args.receipt ? JSON.parse(readFileSync(args.receipt, "utf8")) : null;
     if (receipt) assertOriginalReceipt(receipt, source);
@@ -243,6 +248,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     assert.equal(edges.length, descriptor.binding.tokens.length * (descriptor.binding.tokens.length - 1),
       "all directions must already be in production Ready graph");
     const rows = edges.flatMap(edge => {
+      if (manualInput && !same(edge.tokenIn, manualInput.tokenIn)) return [];
       const key = blockScanEdgeKey(edge), row = saved.runtime.pricing.effectiveMids.rows.get(key);
       assert(saved.runtime.graph.edges.some((e: any) => blockScanEdgeKey(e) === key), "price graph lacks Ready edge");
       assert(row && row.edgeId === key, "production effective row required, even if unquoted");
@@ -257,8 +263,14 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const trials: { label: string; amountIn: bigint }[] = [];
       const add = (label: string, amountIn: bigint) => { assert(amountIn > 0n && amountIn <= MAX_INPUT);
         if (!trials.some(t => t.amountIn === amountIn)) trials.push({ label, amountIn }); };
-      if (reference) { add(reference.kind, reference.amountIn); add(reference.kind + "-half", reference.amountIn / 2n || 1n); }
-      if (txAmount) { add("original-leg-amount-at-N-not-original-prestate", txAmount); add("original-leg-half", txAmount / 2n || 1n); }
+      if (manualInput) {
+        assert.equal(row.status, "missing-valuation", "manual input cannot replace a failed or already quoted target");
+        assert(row.amountIn == null && row.amountOut == null);
+        add(manualInput.kind, manualInput.amountIn); add(manualInput.kind + "-half", manualInput.amountIn / 2n || 1n);
+      } else {
+        if (reference) { add(reference.kind, reference.amountIn); add(reference.kind + "-half", reference.amountIn / 2n || 1n); }
+        if (txAmount) { add("original-leg-amount-at-N-not-original-prestate", txAmount); add("original-leg-half", txAmount / 2n || 1n); }
+      }
       if (!trials.length) { report.unmeasuredDirections.push({ edgeId: key, reason: "no-production-donor-or-original-token-input" }); return []; }
       const routes = instance.routes.filter(r => same(r.tokenIn, row.tokenIn) && same(r.tokenOut, row.tokenOut));
       assert.equal(routes.length, 1);
@@ -266,7 +278,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       assert.equal(handles.length, 1);
       return [{ row, route: handles[0], trials, reference, splice }];
     });
-    assert(rows.length >= 2, "need at least two real measured directions");
+    assert(rows.length >= (manualInput ? 1 : 2), "no requested measured directions");
+    report.measurementScope = manualInput ? "manual-input directions only; prior directions intentionally not repeated" : "all pool directions";
     report.plannedDirections = edges.length; report.measuredDirections = rows.length;
     report.productionReferenceComplete = rows.every(r => r.reference !== null) && rows.length === edges.length;
     const botvm = currentBotVm();
@@ -567,6 +580,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--receipt FILE] [--reference-prices FILE --reference-edges JSON_ARRAY]");
+  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--receipt FILE] [--reference-prices FILE --reference-edges JSON_ARRAY] [--manual-forward-input FILE (only matching missing-input directions)]");
   else main().catch(() => { console.error("historical-runtime-dual: input/output setup failed; no RPC started if no receipt was reserved"); process.exitCode = 1; });
 }

@@ -32,6 +32,7 @@ import { assertHistoricalDiscoveryReceipt } from "../../../../test/family-integr
 import { ERC4626_FAMILY_ID, INFINIFI_LINEAGE_ID } from "../manifest.js";
 import { ERC4626_INTERFACE } from "../abi.js";
 import { INFINIFI_ABI, INFINIFI_GATEWAY } from "../infinifi.js";
+import { manualFourHopInput } from "../../../../test/family-integration/manual-forward-input.js";
 
 const N = 25944594, HASH = "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e";
 const ACCRUED = { number: 25944595, generation: 25944595,
@@ -68,13 +69,15 @@ export function assertInfiniFiEffects(actual: ObservedEffects | undefined, execu
 
 async function main(argv = process.argv.slice(2)) {
   const args = new Map<string, string>(), required = ["--ready", "--prices", "--rpc-file", "--revm-bin", "--out"];
-  const names = [...required, "--state", "--reference-prices", "--reference-edge"];
+  const names = [...required, "--state", "--reference-prices", "--reference-edge", "--manual-forward-input"];
   for (let i = 0; i < argv.length; i += 2) {
     assert(names.includes(argv[i]!) && !args.has(argv[i]!) && argv[i + 1]); args.set(argv[i]!, argv[i + 1]!);
   }
   assert(required.every(name => args.has(name)));
   assert.equal(args.has("--reference-prices"), args.has("--reference-edge"));
+  assert(!args.has("--manual-forward-input") || !args.has("--reference-prices"), "choose one supplemental input source");
   const nextState = args.get("--state") === "next-accrual";
+  assert(!args.has("--manual-forward-input") || !nextState, "manual four-hop input must be tested at its recorded N state");
   assert(args.get("--state") === undefined || args.get("--state") === "receipt" || nextState);
   const fd = openSync(args.get("--out")!, "wx", 0o600), report: any = { result: "failed", samples: [], tx: TX,
     claim: "same-state production quote/quoted/runtime receipts; natural admission at N; no original pre-call or opportunity verdict",
@@ -89,7 +92,9 @@ async function main(argv = process.argv.slice(2)) {
     const readyPath = realpathSync(args.get("--ready")!), pricesPath = realpathSync(args.get("--prices")!);
     const referencePath = args.has("--reference-prices") ? realpathSync(args.get("--reference-prices")!) : undefined;
     const declarationPath = referencePath ? realpathSync(resolve(dirname(referencePath), "declaration.json")) : undefined;
+    const manualPath = args.has("--manual-forward-input") ? realpathSync(args.get("--manual-forward-input")!) : undefined;
     const paths = [readyPath, pricesPath, resolve(dirname(pricesPath), "input.json"), fileURLToPath(import.meta.url),
+      ...(manualPath ? [manualPath, fileURLToPath(new URL("../../../../test/family-integration/manual-forward-input.ts", import.meta.url))] : []),
       ...(referencePath ? [referencePath, declarationPath!] : [])];
     const pins = () => paths.map(path => ({ path, sha256: sha(readFileSync(path)) }));
     report.inputs = pins(); report.code = sourcePin(); report.revmSha256 = sha(readFileSync(args.get("--revm-bin")!));
@@ -107,6 +112,8 @@ async function main(argv = process.argv.slice(2)) {
     report.stateScope = nextState ? "N Ready reused at N+1 through current-source guards; not N+1 natural discovery" : "N state and N Ready";
     assertPriceInput(prices, provenance, ready, { readySha256: report.inputs[0].sha256,
       sourceTreeSha256: report.code.sourceTreeSha256, number: N });
+    const manualInput = manualPath ? manualFourHopInput(JSON.parse(readFileSync(manualPath, "utf8")), prices, report.inputs[1].sha256) : undefined;
+    if (manualInput) report.manualForwardInput = manualInput;
     assert.equal(provenance.implementation.revmBinarySha256, report.revmSha256);
     const executor = ethers.getAddress(provenance.executor), owner = ethers.getAddress(provenance.owner);
     assert(!same(executor, owner)); report.actors = { executor, owner };
@@ -172,8 +179,9 @@ async function main(argv = process.argv.slice(2)) {
     if (nextState) assert(report.pendingRewards > 0n, "selected next state has no accrued rewards");
     const adapters = [...family.plugin.actionAdapters, ...PRODUCTION_INFRA_ACTION_ADAPTERS];
     const compile = (node: ResolvedPlanNode): Uint8Array => { const a = adapters.find(a => a.id === node.adapterId); assert(a); return a.encode(node, executor, concatBytes(...node.children.map(compile))); };
-    let referenceComplete = true;
+    let referenceComplete = manualInput === undefined;
     for (const route of instance.routes) {
+      if (manualInput && !same(route.tokenIn, manualInput.tokenIn)) continue;
       const handle = instance.routeHandles.find(h => h.routeKey === route.routeKey)!; assert(handle);
       const edge = graph.filter(e => e.instanceKey === VAULT && same(e.tokenIn, route.tokenIn) && same(e.tokenOut, route.tokenOut)); assert.equal(edge.length, 1);
       const edgeId = blockScanEdgeKey(edge[0]!), effective = prices.runtime.pricing.effectiveMids.rows.get(edgeId);
@@ -183,13 +191,18 @@ async function main(argv = process.argv.slice(2)) {
       if (p.status !== "met" && borrowed === undefined) referenceComplete = false;
       const leg = guard.build(() => buildFamilyRuntimeAmountLeg({ family, route: handle, source, executor, runtime: guard.runtime(runtime), runtimeEvidence: [], actionOwnership: catalog })); assert(leg, "no runtime fallback");
       const originalAmount = same(route.tokenIn, VAULT) ? original.shares : original.assets;
-      const inputs: [string, bigint][] = [...(p.status === "met" ? [["production-effective", p.amountIn] as [string, bigint]] : []),
+      if (manualInput) {
+        assert.equal(effective.status, "missing-valuation", "manual input cannot replace a failed or already quoted target");
+        assert(effective.amountIn == null && effective.amountOut == null);
+      }
+      const inputs: [string, bigint][] = manualInput ? [[manualInput.kind, manualInput.amountIn],
+        [manualInput.kind + "-half", manualInput.amountIn / 2n || 1n]] : [...(p.status === "met" ? [["production-effective", p.amountIn] as [string, bigint]] : []),
         ...(borrowed ? [["spliced-production-input-only", borrowed.amountIn] as [string, bigint]] : []),
         ["one-token-control-not-production-reference", 10n ** 18n],
         [same(route.tokenIn, VAULT) ? "original-redeem-input-at-tested-state" : "original-assets-as-deposit-control-at-tested-state", originalAmount]];
       for (const [label, amountIn] of inputs) {
         const trial: any = { direction: (route as any).direction, tokenIn: route.tokenIn, tokenOut: route.tokenOut, label, amountIn,
-          productionReference: p, borrowedReference: borrowed, status: "failed", executions: [] }; report.samples.push(trial);
+          productionReference: p, borrowedReference: borrowed, manualReference: manualInput, status: "failed", executions: [] }; report.samples.push(trial);
         stage = "production-exact";
         const quote = await guard.exact(() => executeFamilyExactQuote({ family, route: handle, amountIn, source, generation: source.generation, executor, runtimeEvidence: [], runtime, control: { signal: abort.signal, deadlineAtMs } }));
         trial.quote = quote; assert.equal(quote.status, "resolved"); if (quote.status !== "resolved") throw new Error("Exact unresolved");
@@ -227,6 +240,8 @@ async function main(argv = process.argv.slice(2)) {
         trial.status = "pass"; console.log(json({ direction: trial.direction, label, status: trial.status }));
       }
     }
+    assert(report.samples.length > 0, "manual input token has no admitted direction");
+    report.measurementScope = manualInput ? "manual-input direction only; prior directions intentionally not repeated" : "both directions";
     report.runtimeConstruction = { exactCalls: 0, quotedCalls: 0, rpcCalls: 0, quotedFallback: false, scope: "production issuer, not yet full sim selector" };
     report.invocationCounts = guard.counts; report.productionReference = referenceComplete ? "met" : "unmet";
     report.result = referenceComplete ? "pass" : "same-state-pass-reference-incomplete";
