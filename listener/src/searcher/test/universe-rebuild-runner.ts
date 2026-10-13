@@ -1318,6 +1318,75 @@ async function main(): Promise<void> {
         };
         return { ...fixture, input };
       };
+
+      const orderNoWork = async (): Promise<never> => { throw new Error("graph no-op must not scan or attest"); };
+      const orderDir = join(updateDir, "graph-order");
+      const order = make(orderDir, ["b", "a"], () => ["fixture:a", "fixture:b"]);
+      type OrderGraph = { format: string; metadata: string[];
+        edges: { familyId: string; instanceKey: string; path: string[] }[] };
+      const project = (publications: Parameters<RebuildUniverseInput["buildGraphSnapshot"]>[0],
+        cutoff: Parameters<RebuildUniverseInput["buildGraphSnapshot"]>[1]): OrderGraph => {
+        const graph = order.input.buildGraphSnapshot(publications, cutoff) as OrderGraph;
+        return { format: "strict-rebuild-graph-v1", metadata: ["first", "second"],
+          edges: graph.edges.map(edge => ({ ...edge, path: ["token-in", "token-out"] })) };
+      };
+      const validateProjection = (build: typeof project) =>
+        ({ publications, graphSnapshot, cutoff }: Parameters<NonNullable<RebuildUniverseInput["assertReadyGraphSnapshot"]>>[0]) =>
+          assert.deepEqual(graphSnapshot, build(publications, cutoff), "complete graph parity");
+      const orderInput = { ...order.input, buildGraphSnapshot: project, assertReadyGraphSnapshot: validateProjection(project) };
+      const incumbent = await rebuildUniverse(orderInput);
+      assert.deepEqual((incumbent.graphSnapshot as OrderGraph).edges.map(edge => edge.instanceKey), ["inst:b", "inst:a"]);
+      assert.deepEqual(activeReadyMemos((await order.store.load())!).map(memo => memo.instanceKey), ["inst:a", "inst:b"],
+        "the initial candidate order differs from the sorted catalog used by maintenance");
+      const orderBytes = await readFile(join(orderDir, "checkpoint.json"), "utf8");
+      const noOpInput = { ...orderInput, scanSwapWindow: orderNoWork, freezeCanonicalHead: orderNoWork,
+        attestFamilyInstanceOnce: orderNoWork, findReusableMemo: orderNoWork };
+      const noOpFailures: string[] = [];
+      for (const maintain of [updateReadyFamilies, restrictReadyFamilies]) {
+        try {
+          assert.deepEqual(await maintain(noOpInput), incumbent, "no-op returns the incumbent, including its original graph order");
+        } catch (error) { noOpFailures.push(maintain.name + ": " + String(error)); }
+        assert.equal(await readFile(join(orderDir, "checkpoint.json"), "utf8"), orderBytes,
+          "no-op preserves every published byte, hash, generation and revision");
+      }
+      assert.deepEqual(noOpFailures, [], "both no-op workflows must accept an independently validated edge permutation");
+      const mutations: { name: string; mutate: (graph: OrderGraph) => unknown }[] = [
+        { name: "missing edge", mutate: graph => ({ ...graph, edges: graph.edges.slice(1) }) },
+        { name: "extra duplicate", mutate: graph => ({ ...graph, edges: [...graph.edges, graph.edges[0]] }) },
+        { name: "duplicate replacing another edge", mutate: graph => ({ ...graph, edges: [graph.edges[0], graph.edges[0]] }) },
+        { name: "changed edge field", mutate: graph => { graph.edges[0]!.instanceKey = "changed"; return graph; } },
+        { name: "edge-internal array order", mutate: graph => { graph.edges[0]!.path.reverse(); return graph; } },
+        { name: "metadata value", mutate: graph => ({ ...graph, metadata: ["changed", "second"] }) },
+        { name: "metadata array order", mutate: graph => ({ ...graph, metadata: [...graph.metadata].reverse() }) },
+        { name: "unknown metadata field", mutate: graph => ({ ...graph, additional: true }) },
+      ];
+      for (const { name, mutate } of mutations) {
+        // An independently valid current projection still cannot be published as
+        // a no-op if its complete contents differ from the sealed incumbent.
+        const changed = ((publications, cutoff) => mutate(project(publications, cutoff))) as typeof project;
+        for (const maintain of [updateReadyFamilies, restrictReadyFamilies]) {
+          await assert.rejects(maintain({ ...noOpInput, buildGraphSnapshot: changed,
+            assertReadyGraphSnapshot: validateProjection(changed) }), /no-op.*differs from incumbent/, name);
+          assert.equal(await readFile(join(orderDir, "checkpoint.json"), "utf8"), orderBytes, name);
+        }
+      }
+      for (const maintain of [updateReadyFamilies, restrictReadyFamilies]) {
+        await assert.rejects(maintain({ ...noOpInput, assertReadyGraphSnapshot: () => {
+          throw new Error("independent production validation failed");
+        } }), /independent production validation failed/, "content equality cannot bypass the production validator");
+        assert.equal(await readFile(join(orderDir, "checkpoint.json"), "utf8"), orderBytes);
+      }
+      const unknownDir = join(updateDir, "unknown-graph-order");
+      const unknown = make(unknownDir, ["b", "a"], () => ["fixture:a", "fixture:b"]);
+      await rebuildUniverse(unknown.input);
+      const unknownBytes = await readFile(join(unknownDir, "checkpoint.json"), "utf8");
+      for (const maintain of [updateReadyFamilies, restrictReadyFamilies]) {
+        await assert.rejects(maintain({ ...unknown.input, scanSwapWindow: orderNoWork, attestFamilyInstanceOnce: orderNoWork }),
+          /no-op.*differs from incumbent/, "unknown graph formats retain ordered equality");
+        assert.equal(await readFile(join(unknownDir, "checkpoint.json"), "utf8"), unknownBytes);
+      }
+      console.log("Ready no-op graph order PASS (both workflows, original bytes, full edge multiplicity, metadata and validator rejection)");
+
       const base = make(updateDir, ["a", "b", "c"], () => enabled);
       // Give a retryable outcome its actual owning Family in this fixture.
       base.failKeys.add("c");

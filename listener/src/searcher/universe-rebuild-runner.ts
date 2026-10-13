@@ -1087,6 +1087,15 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
   return updated.readyGeneration!;
 }
 
+// Initial discovery and catalog rehydration can enumerate the same validated
+// strict graph in different orders. Only no-op comparison ignores edge order;
+// publication hashes and the incumbent's actual order remain unchanged.
+function canonicalReadyGraphContent(snapshot: unknown): string {
+  const graph = snapshot as { format?: unknown; edges?: readonly unknown[] } | null;
+  if (graph?.format !== "strict-rebuild-graph-v1" || !Array.isArray(graph.edges)) return canonicalJson(snapshot);
+  return canonicalJson({ ...graph, edges: graph.edges.map(edge => canonicalJson(edge)).sort() });
+}
+
 /** Explicit activation-only subset of one completed Ready. No discovery,
  * attestation or retry fallback, and never an authority to activate new Families.
  */
@@ -1128,7 +1137,7 @@ export async function restrictReadyFamilies(input: UniverseRebuildDependencies &
     assertGraph: graph => input.assertReadyGraphSnapshot!({ publications, graphSnapshot: graph, cutoff: ready.cutoff }) });
   await input.assertCanonicalHead(ready.cutoff);
   if (disabledFamilyIds.length === 0) {
-    if (canonicalJson(graphSnapshot) !== canonicalJson(ready.graphSnapshot)) {
+    if (canonicalReadyGraphContent(graphSnapshot) !== canonicalReadyGraphContent(ready.graphSnapshot)) {
       throw new Error("Ready restriction no-op Graph differs from incumbent");
     }
     if ((await input.store.load())?.revision !== checkpoint.revision) {
@@ -1190,7 +1199,7 @@ export async function updateReadyFamilies(input: UniverseRebuildDependencies & {
     assertGraph: graph => input.assertReadyGraphSnapshot!({ publications, graphSnapshot: graph, cutoff: ready.cutoff }) });
   await input.assertCanonicalHead(ready.cutoff);
   if (update.supplements.length === 0 && canonicalJson(plan.familyPartitions) === canonicalJson(ready.familyPartitions)) {
-    if (canonicalJson(graphSnapshot) !== canonicalJson(ready.graphSnapshot) ||
+    if (canonicalReadyGraphContent(graphSnapshot) !== canonicalReadyGraphContent(ready.graphSnapshot) ||
       (await input.store.load())?.revision !== checkpoint.revision) {
       throw new Error("Ready Family no-op validation differs from incumbent");
     }
