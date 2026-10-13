@@ -27,7 +27,10 @@ export const psmExecution = {
     }
     p.call(d.target, PSM_INTERFACE.encodeFunctionData(sell ? "sellGem" : "buyGem", [executor, 0n]),
       { patches: [{ offset: 36, reg: sell ? 0 : 4 }] });
-    return runtimeLeg("psm", p);
+    // buyGem spends the cost of whole gem units; any unused DAI budget stays
+    // protected by the common maximum-input policy, independently of rounding.
+    const leg = runtimeLeg("psm", p);
+    return sell ? leg : { ...leg, inputMode: "maximum" as const };
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
+import { RuntimeAmountProgram, runtimeAmountFlowAdapter } from "../../../../../adapters/runtime-amount-program.js";
+import { createBlockScanSimAmountSelector } from "../../../../simulator/blockscan-sim-amount-selector.js";
 import { plugin } from "../../../production-families/psm.production.js";
 import { PSM_INTERFACE, PSM_WAD, psmBuyCost, psmBuyQuote, psmSellQuote } from "../codec.js";
 import { PSM_FAMILY_ID, PSM_LINEAGE_ID } from "../manifest.js";
@@ -91,3 +93,51 @@ for (const halted of ["buy-gem", "sell-gem", null]) {
   for (const route of routes) assert.equal(available.has(route.routeKey), route.direction !== halted);
 }
 console.log("PSM production plugin bidirectional integer quotes, raw mids, exact evidence and execution encoding PASS (synthetic)");
+
+
+// A buyGem budget may leave more than one raw DAI unit without reducing the
+// requested input. The shared selector must encode that policy independently
+// of the 0/1 rounding flag; sellGem continues to require an exact debit.
+for (const route of routes) for (const tolerance of [0n, 1n]) {
+  const buy = route.direction === "buy-gem", amount = buy ? 1_234_567_890_123_456_789n : 1_234_567n;
+  if (buy) assert(amount - psmBuyCost(psmBuyQuote(amount, 0n, descriptor.decimalScale), 0n, descriptor.decimalScale) > 1n);
+  let exactCalls = 0, quotedCalls = 0, rpcCalls = 0, simulated = 0;
+  const edges = [
+    { adapterId: "psm", target: descriptor.target, tokenIn: route.tokenIn, tokenOut: route.tokenOut },
+    { adapterId: "fixture-return", target: executor, tokenIn: route.tokenOut, tokenOut: route.tokenIn },
+  ];
+  const session: any = {
+    source, fundingActionIds: () => ["fixture-funding"],
+    buildRuntimeAmountLeg({ edge }: any) {
+      return edge === edges[0]
+        ? plugin.execution.buildRuntimeLeg!({ descriptor, route, source, executor, runtimeEvidence: [] })
+        : { actionAdapterId: "fixture-return", program: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()) };
+    },
+    issueExact() { exactCalls++; throw new Error("unexpected Exact"); },
+    buildExecution() { quotedCalls++; throw new Error("unexpected quoted fallback"); },
+    buildFundingRoot(input: any) {
+      return { adapterId: "fixture-funding", target: executor, tokenIn: route.tokenIn,
+        tokenOut: route.tokenIn, amount: input.amount, params: {}, children: input.children };
+    },
+  };
+  const selector = createBlockScanSimAmountSelector({ source, executor, async simulate(plan) {
+    simulated++;
+    const flow = plan.root.children[0]!;
+    const bytes = runtimeAmountFlowAdapter.encode(flow, executor, new Uint8Array());
+    assert.equal(bytes[36], 2 | (Number(tolerance) << 7) | (buy ? 0x40 : 0));
+    if (buy) assert.equal(bytes[37], 1, "only buyGem declares a maximum input");
+    assert.equal(BigInt(ethers.hexlify(bytes.slice(4, 36))), plan.root.amount,
+      "the funding/request amount is not pre-rounded");
+    return { success: true, netProfit: 1n, grossProfit: 1n, gasUsed: 1n,
+      profitToken: route.tokenIn, calldata: "0x" };
+  } });
+  await selector.solve({ opportunity: { kind: "block-scan-arb", searchSeed: { searchCenter: amount },
+    flashToken: route.tokenIn, profitToken: route.tokenIn }, tokenPath: { edges },
+    maxFlashAmount: amount * 1000n, templateName: "psm-budget-contract" } as any,
+    { call() { rpcCalls++; throw new Error("unexpected RPC"); } } as any, { executor } as any,
+    { strictSession: session, deferPhase2Sim: true, quoteToleranceRawUnits: tolerance,
+      gssMaxTries: 2, deadlineAtMs: Date.now() + 10000 });
+  assert.equal(exactCalls, 0); assert.equal(quotedCalls, 0); assert.equal(rpcCalls, 0);
+  assert(simulated >= 6, "exercise production amount-selection construction");
+}
+console.log("PSM production sim budget policy and independent 0/1 flow encoding PASS (fixture execution)");

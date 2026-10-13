@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-10-13T20:49:34.875925+00:00",
+  "scope": "Public current cloud caller identity binding to already executed Aqua N/N rejection evidence; no new EVM/RPC test",
+  "sourceHead": "ccdc3d58b7404da3387431b0fe636691e76da14d",
+  "txHash": "0x36764eba7fc601d36c67d575a2e656d803ce9c07240e0cb0ad32a0aed154307a",
+  "N": 26151137,
+  "currentPublicExecutionIdentity": {
+    "source": {
+      "profilePath": "/opt/mev-cloud/manual-live/profile.json",
+      "profileSha256": "837269b0081f7405d31298fc6ab10424e08a0e94d404d9a33210123f2cd7e119",
+      "runContractPath": "/opt/mev-cloud/manual-live/runs/live-2026-10-13T10-33-12-337Z-fa519cf6/run-contract.json",
+      "runContractSha256": "6f442f0d0dea92a7faa110364a99f29831aa8b8ccfdde7561219ff9d5121292a"
+    },
+    "identity": {
+      "chainId": 1,
+      "wallet": "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c",
+      "executor": "0xd1E500860893B64Ba12B7B6AFDdb131B5c75A657",
+      "executorCodeHash": "0xcd7ea4439fadad254d3a26f7c33958573b138c730b3c853751d1273f591837b1",
+      "release": "/opt/mev-cloud/manual-live/releases/968ffe656f6ef9f0",
+      "releaseSha256": "09b3c060ef696ee12fd99c389c5d5ee5a0b771e7b979133fd9220a324c2b50a9"
+    },
+    "keyRead": false,
+    "oldLocalOwnerIsNotAuthority": true
+  },
+  "reuse": {
+    "currentPublicExecutionIdentity": {
+      "source": {
+        "profilePath": "/opt/mev-cloud/manual-live/profile.json",
+        "profileSha256": "837269b0081f7405d31298fc6ab10424e08a0e94d404d9a33210123f2cd7e119",
+        "runContractPath": "/opt/mev-cloud/manual-live/runs/live-2026-10-13T10-33-12-337Z-fa519cf6/run-contract.json",
+        "runContractSha256": "6f442f0d0dea92a7faa110364a99f29831aa8b8ccfdde7561219ff9d5121292a"
+      },
+      "identity": {
+        "chainId": 1,
+        "wallet": "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c",
+        "executor": "0xd1E500860893B64Ba12B7B6AFDdb131B5c75A657",
+        "executorCodeHash": "0xcd7ea4439fadad254d3a26f7c33958573b138c730b3c853751d1273f591837b1",
+        "release": "/opt/mev-cloud/manual-live/releases/968ffe656f6ef9f0",
+        "releaseSha256": "09b3c060ef696ee12fd99c389c5d5ee5a0b771e7b979133fd9220a324c2b50a9"
+      },
+      "keyRead": false,
+      "oldLocalOwnerIsNotAuthority": true
+    },
+    "priorEvidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-aqua-20261014.dts7m7vt/permission-fork-attempt01.json",
+      "sha256": "6c3b0776ccc558a8708d1fcb421b8aee2773054f8c8b5b9dbcd2316c6681ab75"
+    },
+    "reusedQuoteRejections": 12,
+    "reusedSwapRejections": 12,
+    "currentConfiguredOriginMatchesTestedActor": true,
+    "originalTransactionStrategies": 2,
+    "additionalSameBlockStrategies": 1,
+    "interpretation": "The known three strategies at N reject the currently configured cloud origin. No new EVM run, no Aqua Family or all-protocol inapplicability claim.",
+    "remaining": "Unrestricted/applicable sample and production Family remain separate unfinished scope."
+  },
+  "acceptance": {
+    "knownThreeStrategiesAtN": "current configured origin correctly rejected for absent required credential",
+    "reusedQuoteRejections": 12,
+    "reusedSwapAtomicRejections": 12,
+    "newEvmExecutions": 0,
+    "familyImplemented": false,
+    "allProtocolInapplicable": false,
+    "naturalOwnOpportunity": "not-run",
+    "performance": "not-run"
+  },
+  "artifacts": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-aqua-family-20261014.8u_veia9/public-execution-identity.json",
+      "sha256": "3a2371ba86a41d27f3ce2fa303dfcfe3c934db9fa1f9f45f1c767a04f2010bb8"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-aqua-family-20261014.8u_veia9/configured-origin-evidence-reuse.json",
+      "sha256": "f57af94c9d437c5d0819f200c21b746222d612fc2c9dbe859d9bfb4538a0409d"
+    }
+  ],
+  "remaining": "Find a legitimately applicable sample/strategy and implement the production Family; do not use competitor origin or inject qualification to force success."
+}

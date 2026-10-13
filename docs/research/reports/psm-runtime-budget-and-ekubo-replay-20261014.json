@@ -1,0 +1,1281 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-10-13T20:38:43.193295+00:00",
+  "scope": "Stage 3 IMPL Ekubo historical core replay and Family-local PSM budget correction. No stage 4 timing acceptance.",
+  "repo": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "headAtExecution": "ccdc3d58b7404da3387431b0fe636691e76da14d",
+  "dirtyBaselinePreserved": true,
+  "code": {
+    "broadSourceFingerprint": "447723ffd70d88ac4fa111f40a82f38232a078edff4e2f29d14bc3f1b6df9ad2",
+    "scopeFiles": 2006,
+    "fingerprintAlgorithm": "sha256 of canonical JSON array, sorted keys, compact separators",
+    "productionSourceFingerprint": "2043221f1f4e19b41e01cff3e7d807f9ceb5b41079b8bd1204abaabccfea2700",
+    "sourceFreezePath": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/source-freeze-after-psm.json",
+    "ownedFiles": [
+      "listener/src/searcher/generated/family-capability-shadow.generated.json",
+      "listener/src/searcher/venues/protocols/psm-family/execution.ts",
+      "listener/src/searcher/venues/protocols/psm-family/test/bidirectional.ts"
+    ],
+    "workingGeneratedArtifactHash": "20f60292191d985517627a4bbbb9207bcad77e9d67636d29d2d468c44826cd8d",
+    "generatedOwnedOnlyArtifactHash": "797c1052efa4d351903e640b774d4363473841b287c47e533f6d9a9badec840d",
+    "coffeeCheckpointSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "productionManifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/production-source-tree-manifest.json",
+      "fileSha256": "a1a42607ff7968a7fe1b7824ba0143b40f88b2f9365a94ca088408c69a0d7b6a",
+      "files": 1149,
+      "algorithm": "SHA256(JSON.stringify ordered [relativePath, fileSha256] tuples), full listener/src traversal per-directory localeCompare, skipping test/templates directories",
+      "scopeDifferenceFromBroadTypedFreeze": "1147 common listener/src rows plus README.md and UPSTREAM-LICENSE.txt; different scope/algorithm is intentional, old hashes unchanged"
+    },
+    "frozenTestedSource": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/frozen-tested-source.tar.gz",
+      "files": 2008,
+      "sha256": "143438449e404e0a2987dffef895532adfc9c1c9a0a9955b6b191411f7713efb",
+      "bytes": 5435252,
+      "basis": "Every 2006 broad-freeze file plus the two additional production-manifest files; each original byte hash checked before packing."
+    },
+    "dirtyPatch": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/working-dirty-before-publication.patch",
+      "sha256": "ccd8bdd121d22f17a71a4198401e213c92e6706985dea426e7b912d4de3d890b",
+      "scope": "Actual tested working tree; includes peer changes that this publication does not stage."
+    }
+  },
+  "transaction": {
+    "hash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+    "N": 26029876,
+    "NHash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a",
+    "B": 26029875,
+    "BHash": "0x38ca214bcbd8018d6723e9c50caad370f60b9d785fd5c4a8992402783aca675b",
+    "BStateRoot": "0xd2b69ef1b3bd22411f354c150afbf947fbd3be38e469b9a22f83fd5d70c6b072"
+  },
+  "originalFundingCorrection": {
+    "asset": "USDC",
+    "token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "borrowRaw": "8137414",
+    "repayRaw": "8137414",
+    "provider": "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb",
+    "borrowLogIndex": 1624,
+    "repayLogIndex": 1651,
+    "oldGap": "DAI was the rotated start in an older natural candidate, not the original flash asset. The current natural rank-4 route starts with admitted USDC funding.",
+    "evidence": "canonical-tx-flow.json"
+  },
+  "firstReproducedDefect": {
+    "family": "protocol:psm",
+    "target": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+    "direction": "buy-gem DAI to USDC",
+    "stage": "transaction runtime input-debit validation",
+    "before": "Natural rank-4 route P=5492700 raw USDC reverted: nested runtime input rounding.",
+    "rawDaiBudget": "5674124933591466214",
+    "rawDaiSpent": "5674124000000000000",
+    "rawDaiUnspent": "933591466214",
+    "rawUsdcReceived": "5674124",
+    "repair": "Declare existing maximum-input policy on buy-gem only. Keep sell-gem exact, quote/request amounts unchanged, in-transaction fee/integer computation unchanged, generic 0/1 tolerance independent.",
+    "centralCodeChanged": false,
+    "beforeEvidence": "failed-trial-calltrace.json",
+    "sameInputAfter": "P=5492700 succeeds with gross181424 rawUSDC, repayment and conservation true."
+  },
+  "validation": {
+    "productionBuild": "listener:build:live passed",
+    "fullBuild": "not passed: generated check passed, then cloud rustc ENOENT",
+    "bidirectionalRegression": "before failed 2 != 66; after passed both directions x 0/1 tolerance with no Exact/quoted/RPC construction",
+    "familyDual": "80/80 passed",
+    "psmIdentity": "behavioral denial and memo failure/recovery fixtures passed",
+    "psmTrialState": "4 passed;2 cached external-fixture tests skipped",
+    "amountSafety": "56/56 forge tests passed; exact/max input, 0/1, zero debit, overspend, refund/old inventory, minimum final output and native safety",
+    "unrelatedExistingFailure": {
+      "file": "special-protocol-family-plugins.ts:357",
+      "reason": "Existing assertion expects fixed weth-deposit-value node for self-burn native output; current HEAD uses common actual-native receipt wrapping. Test and implementation unchanged from HEAD and unrelated to PSM imports.",
+      "status": "failure retained; not reported as pass"
+    },
+    "formalAdapterReplay": "not-run",
+    "familyLocalFormalGate": "not-run"
+  },
+  "ready": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ready-current-N26029876.json",
+    "sha256": "076061cc8d9459490f2076739e9e04c2ede86bbc58f65ce85bc7c7cf376efe4d",
+    "range": [
+      26029876,
+      26029876
+    ],
+    "candidates": 57,
+    "verified": 48,
+    "terminalRejected": 6,
+    "retryable": 3,
+    "graphEdges": 98,
+    "generation": 1,
+    "psmImmutableMemoCurrent": true,
+    "currentProductionConsumerValidation": "passed after patch",
+    "maintenanceAttempt": "retained failure: same98 graph rows differ in order; no-op updater rejects. Old and copied checkpoint bytes unchanged. No hash was replaced to pass.",
+    "failedUpdaterPath": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ready-after-psm-exit.json",
+    "remainingDiagnostic": "Ready no-op ordered Graph comparison requires separate central/peer ownership follow-up; no new identity attestation needed for this runtime-only change."
+  },
+  "familyNCorrectness": {
+    "stateAndEnvironment": "N/N, local Anvil fork, no mined blocks, no original-call-prestate claim",
+    "actor": {
+      "executor": "0xd1E500860893B64Ba12B7B6AFDdb131B5c75A657",
+      "owner": "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c"
+    },
+    "runtimeCodeHash": "0xcea9cd55bf627d293e906c8a5322c89c0252d971b8399b881bd6fc86a9a38aee",
+    "originalActorCodePreserved": {
+      "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c": "0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b",
+      "0xd1E500860893B64Ba12B7B6AFDdb131B5c75A657": "0x"
+    },
+    "inputOverrideBoundary": "local single-leg actor input and old token inventory only plus executor code/gas; no liquidity/registry/fee/permission override. Opportunity replay used code-only override, no token balance injection.",
+    "runtimeConstruction": {
+      "directions": 2,
+      "rpcCalls": 0,
+      "exactCalls": 0,
+      "constructionAttempts": 0,
+      "quotedFallback": false,
+      "programHashes": [
+        "0x495cb310593b880369d53982a100bda67bf616c31e81fc06e2d45e6ced32d276",
+        "0xafba6eed06f2f466f0960481af8347027e4b6fcf1b83aca8d3cf315e385fe015"
+      ]
+    },
+    "groups": 6,
+    "executions": 12,
+    "samples": [
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "label": "production-P",
+        "amountIn": "5494762",
+        "quote": "5494762000000000000",
+        "inputBudget": {
+          "requested": "5494762",
+          "expectedSpent": "5494762",
+          "expectedUnspent": "0",
+          "fee": "0",
+          "inputMode": "exact"
+        },
+        "status": "pass",
+        "executionDeltas": [
+          {
+            "encoding": "quoted-fragment",
+            "quoteDelta": "0",
+            "unspentInput": "0",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          },
+          {
+            "encoding": "runtime-program",
+            "quoteDelta": "0",
+            "unspentInput": "0",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          }
+        ]
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "label": "double-production-P",
+        "amountIn": "10989524",
+        "quote": "10989524000000000000",
+        "inputBudget": {
+          "requested": "10989524",
+          "expectedSpent": "10989524",
+          "expectedUnspent": "0",
+          "fee": "0",
+          "inputMode": "exact"
+        },
+        "status": "pass",
+        "executionDeltas": [
+          {
+            "encoding": "quoted-fragment",
+            "quoteDelta": "0",
+            "unspentInput": "0",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          },
+          {
+            "encoding": "runtime-program",
+            "quoteDelta": "0",
+            "unspentInput": "0",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          }
+        ]
+      },
+      {
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "label": "original-USDC-size-at-N",
+        "amountIn": "8137414",
+        "quote": "8137414000000000000",
+        "inputBudget": {
+          "requested": "8137414",
+          "expectedSpent": "8137414",
+          "expectedUnspent": "0",
+          "fee": "0",
+          "inputMode": "exact"
+        },
+        "status": "pass",
+        "executionDeltas": [
+          {
+            "encoding": "quoted-fragment",
+            "quoteDelta": "0",
+            "unspentInput": "0",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          },
+          {
+            "encoding": "runtime-program",
+            "quoteDelta": "0",
+            "unspentInput": "0",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          }
+        ]
+      },
+      {
+        "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "label": "production-P",
+        "amountIn": "5483517075214014766",
+        "quote": "5483517",
+        "inputBudget": {
+          "requested": "5483517075214014766",
+          "expectedSpent": "5483517000000000000",
+          "expectedUnspent": "75214014766",
+          "fee": "0",
+          "inputMode": "maximum"
+        },
+        "status": "pass",
+        "executionDeltas": [
+          {
+            "encoding": "quoted-fragment",
+            "quoteDelta": "0",
+            "unspentInput": "75214014766",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          },
+          {
+            "encoding": "runtime-program",
+            "quoteDelta": "0",
+            "unspentInput": "75214014766",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          }
+        ]
+      },
+      {
+        "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "label": "double-production-P",
+        "amountIn": "10967034150428029532",
+        "quote": "10967034",
+        "inputBudget": {
+          "requested": "10967034150428029532",
+          "expectedSpent": "10967034000000000000",
+          "expectedUnspent": "150428029532",
+          "fee": "0",
+          "inputMode": "maximum"
+        },
+        "status": "pass",
+        "executionDeltas": [
+          {
+            "encoding": "quoted-fragment",
+            "quoteDelta": "0",
+            "unspentInput": "150428029532",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          },
+          {
+            "encoding": "runtime-program",
+            "quoteDelta": "0",
+            "unspentInput": "150428029532",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          }
+        ]
+      },
+      {
+        "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "label": "historical-amount-at-N",
+        "amountIn": "8137414000000000000",
+        "quote": "8137414",
+        "inputBudget": {
+          "requested": "8137414000000000000",
+          "expectedSpent": "8137414000000000000",
+          "expectedUnspent": "0",
+          "fee": "0",
+          "inputMode": "maximum"
+        },
+        "status": "pass",
+        "executionDeltas": [
+          {
+            "encoding": "quoted-fragment",
+            "quoteDelta": "0",
+            "unspentInput": "0",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          },
+          {
+            "encoding": "runtime-program",
+            "quoteDelta": "0",
+            "unspentInput": "0",
+            "oldInventoryConsumed": [
+              "0",
+              "0"
+            ]
+          }
+        ]
+      }
+    ],
+    "rpcCalls": 123,
+    "exactCalls": 6,
+    "forkStopped": true,
+    "initialAttemptFailure": "Before executing samples, old helper expected empty owner code; actual historical owner has EIP-7702 delegation. Attempt02 preserves it and verifies unchanged. Attempt01 retained.",
+    "limits": [
+      "One LitePSM instance, both directions, historical zero fee; nonzero fee is fixture coverage.",
+      "Runtime single-leg programs plus production full-loop amount-flow are separate evidence.",
+      "Formal Adapter Replay/family_local and phase4 not run."
+    ]
+  },
+  "replay": {
+    "lane": "blockscan B/B",
+    "topology": "N single-block after-the-fact Ready; no historical B discovery claim",
+    "freshOnlinePass": true,
+    "frozenCandidateContinuation": false,
+    "naturalCandidates": 56,
+    "matchedRank": 4,
+    "selectedRoutes": 1,
+    "solverSolutions": 3,
+    "solverAmountPoints": 12,
+    "successfulSizingTrials": 6,
+    "revertedSizingTrials": 6,
+    "finalSimCount": 1,
+    "finalSimSuccess": true,
+    "exactCallsDuringRuntimeSizing": 0,
+    "quotedFallback": false,
+    "requested": {
+      "scope": "current-source complete source-B historical production pass through EV; select only natural rank 4 within ordinary downstream cap, no forced route or amount",
+      "stateBlock": 26029875,
+      "expectedBlockHash": "0x38ca214bcbd8018d6723e9c50caad370f60b9d785fd5c4a8992402783aca675b",
+      "executionMode": "source-block",
+      "requestedConfig": {
+        "SEARCHER_TEST_DISABLE_DOTENV": "1",
+        "SEARCHER_DRY_RUN": "1",
+        "SEARCHER_BLOCKSCAN_SUBMIT": "0",
+        "SEARCHER_EV_GATE": "1",
+        "SEARCHER_ENABLE_BLOCK_SCAN": "1",
+        "SEARCHER_ENABLE_BACKRUN": "0",
+        "SEARCHER_ENABLE_MEMPOOL": "0",
+        "SEARCHER_ENABLE_MEV_SHARE": "0",
+        "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED": "0",
+        "SEARCHER_FAMILY_EKUBO_ENABLED": "1",
+        "SEARCHER_FAMILY_BALANCER_V3_ENABLED": "1",
+        "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED": "1",
+        "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED": "1",
+        "SEARCHER_FAMILY_TOKEN_CONVERSION_ENABLED": "1",
+        "SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE": "1",
+        "BOTVM_ADDRESS": "0xd1E500860893B64Ba12B7B6AFDdb131B5c75A657",
+        "BOTVM_OWNER": "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c",
+        "SEARCHER_REVM_SIM_BIN": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "safe.directory",
+        "GIT_CONFIG_VALUE_0": "/opt/mev-cloud/family-runtime-20261007",
+        "SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS": "2000",
+        "SEARCHER_BLOCKSCAN_MAX_HOPS": "6",
+        "SEARCHER_BLOCKSCAN_MAX_CANDIDATES": "100",
+        "SEARCHER_BLOCKSCAN_REFINE_CANDIDATES": "512",
+        "SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP": "3",
+        "SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR": "3",
+        "SEARCHER_BLOCKSCAN_ETH_SIGNAL_PAIRS_PER_TOKEN": "50",
+        "SEARCHER_BLOCKSCAN_PREFIX_PRUNING_ENABLED": "1",
+        "SEARCHER_BLOCKSCAN_MAX_PREFIX_DRAWDOWN_BPS": "0",
+        "SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED": "1",
+        "SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED": "0",
+        "SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED": "1",
+        "SEARCHER_BLOCKSCAN_ENUMERATION_METHOD": "joint-dfs",
+        "SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND": "typescript",
+        "SEARCHER_BLOCKSCAN_SOLVER_AMOUNT_GRID": "multiples",
+        "SEARCHER_BLOCKSCAN_SOLVER_GSS_MAX_TRIES": "8",
+        "SEARCHER_BLOCKSCAN_SOLVER_QUOTE_CONCURRENCY": "16",
+        "SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED": "0",
+        "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED": "0"
+      },
+      "fixedEffectiveWethInput": "0.002",
+      "spreadBps": 0,
+      "admissionBps": 0,
+      "budgetMs": 600000,
+      "wrapperWallBudgetSeconds": 660,
+      "through": "ev",
+      "amountSelector": "sim",
+      "extraFundingTokens": [],
+      "readySha256": "076061cc8d9459490f2076739e9e04c2ede86bbc58f65ce85bc7c7cf376efe4d",
+      "executorRuntimeCodeHash": "0xcea9cd55bf627d293e906c8a5322c89c0252d971b8399b881bd6fc86a9a38aee",
+      "classificationReference": "prior same-route source-B execution after production wrap-opcode migration succeeded and repaid; current round is not a final opportunity or original transaction replay",
+      "legacyDedupVar": "old SEARCHER_BLOCKSCAN_DEDUPLICATE_ROTATIONS was unused; preserve old resolved true using actual SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED=1",
+      "priorAttempt": "ev-attempt01",
+      "onlyEnumeratedRank": 4,
+      "newOnlinePass": true,
+      "frozenCandidateContinuation": false,
+      "performanceAcceptance": false,
+      "change": "PSM buy-gem declares existing maximum-input policy; no algorithm, amount, fees or tolerance changes",
+      "sourceFreezeSha256": "447723ffd70d88ac4fa111f40a82f38232a078edff4e2f29d14bc3f1b6df9ad2",
+      "readyCompatibilityEvidence": "ready-compatibility-after-psm.json",
+      "readyUpdateAttempt": "ready-after-psm-exit.json (failed; no checkpoint mutation, same 98 graph rows in different order)"
+    },
+    "resolvedConfig": {
+      "cfg": {
+        "maxHops": 6,
+        "deduplicateRotations": true,
+        "allowRepeatedPools": true,
+        "allowRepeatedTokens": false,
+        "prefixPruningEnabled": true,
+        "maxPrefixDrawdownBps": 0,
+        "enumerationMethod": "joint-dfs",
+        "enumerationBackend": "typescript",
+        "rustEnumerationThreads": 1,
+        "rustEnumerationScratchMb": 512,
+        "ethSignalPairsPerToken": 50,
+        "hopTokensPerStep": 3,
+        "hopPoolsPerPair": 3,
+        "minSpreadBps": 0,
+        "requireDislocatedPair": true,
+        "exactAdmissionSpreadBps": 0,
+        "minCapitalFraction": 0.001,
+        "maxCandidates": 100,
+        "budgetMs": 2000,
+        "pricedTokens": {
+          "$type": "map",
+          "entries": [
+            [
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              {
+                "maxBorrow": "2000000000000000000000"
+              }
+            ],
+            [
+              "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+              {
+                "maxBorrow": "5000000000"
+              }
+            ],
+            [
+              "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              {
+                "maxBorrow": "5000000000000"
+              }
+            ],
+            [
+              "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              {
+                "maxBorrow": "5000000000000"
+              }
+            ],
+            [
+              "0x6b175474e89094c44da98b954eedeac495271d0f",
+              {
+                "maxBorrow": "5000000000000000000000000"
+              }
+            ]
+          ]
+        }
+      },
+      "coarseCfg": {
+        "maxHops": 6,
+        "deduplicateRotations": true,
+        "allowRepeatedPools": true,
+        "allowRepeatedTokens": false,
+        "prefixPruningEnabled": true,
+        "maxPrefixDrawdownBps": 0,
+        "enumerationMethod": "joint-dfs",
+        "enumerationBackend": "typescript",
+        "rustEnumerationThreads": 1,
+        "rustEnumerationScratchMb": 512,
+        "ethSignalPairsPerToken": 50,
+        "hopTokensPerStep": 3,
+        "hopPoolsPerPair": 3,
+        "minSpreadBps": 0,
+        "requireDislocatedPair": true,
+        "exactAdmissionSpreadBps": 0,
+        "minCapitalFraction": 0.001,
+        "maxCandidates": 512,
+        "budgetMs": 2000,
+        "pricedTokens": {
+          "$type": "map",
+          "entries": [
+            [
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              {
+                "maxBorrow": "2000000000000000000000"
+              }
+            ],
+            [
+              "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+              {
+                "maxBorrow": "5000000000"
+              }
+            ],
+            [
+              "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              {
+                "maxBorrow": "5000000000000"
+              }
+            ],
+            [
+              "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              {
+                "maxBorrow": "5000000000000"
+              }
+            ],
+            [
+              "0x6b175474e89094c44da98b954eedeac495271d0f",
+              {
+                "maxBorrow": "5000000000000000000000000"
+              }
+            ]
+          ]
+        }
+      },
+      "policy": {
+        "dryRun": true,
+        "finalVerifyFloorBps": "7",
+        "maxProfitBpsOfFlash": "10000",
+        "profitHaircutBps": 0,
+        "bribeBps": 5000,
+        "bribeAllAboveGas": false,
+        "evGate": true,
+        "minNetEth": "0",
+        "blockScanSubmit": false,
+        "inclusionWatchBlocks": 3
+      },
+      "search": {
+        "amountGrid": "multiples",
+        "gridHalfWidth": 2,
+        "gssMaxTries": 8,
+        "quoteConcurrency": 16,
+        "quoteToleranceRawUnits": "0"
+      },
+      "fixedEffectiveWethInput": "2000000000000000",
+      "amountSelector": "sim",
+      "executionMode": "source-block"
+    },
+    "selectedInputRawUSDC": "8248315",
+    "actualProfitRawUSDC": "199689",
+    "gasUsed": "748966",
+    "netEvWei": "-25959756944325",
+    "decision": "below_ev_gate",
+    "evaluation": {
+      "valuationAvailable": true,
+      "gasMeasurementAvailable": true,
+      "feeStateAvailable": true,
+      "sourceBlockHash": "0x38ca214bcbd8018d6723e9c50caad370f60b9d785fd5c4a8992402783aca675b",
+      "ethUsd": null,
+      "ethUsdRoundId": null,
+      "ethUsdUpdatedAt": null,
+      "rawProfitEth": "72708486138087",
+      "expectedProfitEth": "72708486138087",
+      "gasUnits": "748966",
+      "maxBaseFeePerGas": "131739282",
+      "gasCostEth": "98668243082412",
+      "bidEth": "0",
+      "netEvWei": "-25959756944325"
+    },
+    "trialOutcomes": [
+      {
+        "file": "trial-1-result.json",
+        "success": true,
+        "grossProfitRaw": "181424",
+        "gasUsed": "748966",
+        "executionGasBeforeRefund": "817066",
+        "revertReason": null,
+        "repaymentVerified": true,
+        "conservationVerified": true
+      },
+      {
+        "file": "trial-2-result.json",
+        "success": false,
+        "grossProfitRaw": "0",
+        "gasUsed": "0",
+        "executionGasBeforeRefund": "772562",
+        "revertReason": "source-block final transaction reverted",
+        "repaymentVerified": false,
+        "conservationVerified": false
+      },
+      {
+        "file": "trial-3-result.json",
+        "success": false,
+        "grossProfitRaw": "0",
+        "gasUsed": "0",
+        "executionGasBeforeRefund": "772562",
+        "revertReason": "source-block final transaction reverted",
+        "repaymentVerified": false,
+        "conservationVerified": false
+      },
+      {
+        "file": "trial-4-result.json",
+        "success": false,
+        "grossProfitRaw": "0",
+        "gasUsed": "0",
+        "executionGasBeforeRefund": "772622",
+        "revertReason": "source-block final transaction reverted",
+        "repaymentVerified": false,
+        "conservationVerified": false
+      },
+      {
+        "file": "trial-5-result.json",
+        "success": false,
+        "grossProfitRaw": "0",
+        "gasUsed": "0",
+        "executionGasBeforeRefund": "772562",
+        "revertReason": "source-block final transaction reverted",
+        "repaymentVerified": false,
+        "conservationVerified": false
+      },
+      {
+        "file": "trial-6-result.json",
+        "success": false,
+        "grossProfitRaw": "0",
+        "gasUsed": "0",
+        "executionGasBeforeRefund": "772562",
+        "revertReason": "source-block final transaction reverted",
+        "repaymentVerified": false,
+        "conservationVerified": false
+      },
+      {
+        "file": "trial-7-result.json",
+        "success": false,
+        "grossProfitRaw": "0",
+        "gasUsed": "0",
+        "executionGasBeforeRefund": "772562",
+        "revertReason": "source-block final transaction reverted",
+        "repaymentVerified": false,
+        "conservationVerified": false
+      },
+      {
+        "file": "trial-8-result.json",
+        "success": true,
+        "grossProfitRaw": "130295",
+        "gasUsed": "748966",
+        "executionGasBeforeRefund": "817066",
+        "revertReason": null,
+        "repaymentVerified": true,
+        "conservationVerified": true
+      },
+      {
+        "file": "trial-9-result.json",
+        "success": true,
+        "grossProfitRaw": "187424",
+        "gasUsed": "748966",
+        "executionGasBeforeRefund": "817066",
+        "revertReason": null,
+        "repaymentVerified": true,
+        "conservationVerified": true
+      },
+      {
+        "file": "trial-10-result.json",
+        "success": true,
+        "grossProfitRaw": "199689",
+        "gasUsed": "748966",
+        "executionGasBeforeRefund": "817066",
+        "revertReason": null,
+        "repaymentVerified": true,
+        "conservationVerified": true
+      },
+      {
+        "file": "trial-11-result.json",
+        "success": true,
+        "grossProfitRaw": "198321",
+        "gasUsed": "748966",
+        "executionGasBeforeRefund": "817066",
+        "revertReason": null,
+        "repaymentVerified": true,
+        "conservationVerified": true
+      },
+      {
+        "file": "trial-12-result.json",
+        "success": true,
+        "grossProfitRaw": "197107",
+        "gasUsed": "748966",
+        "executionGasBeforeRefund": "817066",
+        "revertReason": null,
+        "repaymentVerified": true,
+        "conservationVerified": true
+      },
+      {
+        "file": "trial-13-result.json",
+        "success": true,
+        "grossProfitRaw": "199689",
+        "gasUsed": "748966",
+        "executionGasBeforeRefund": "817066",
+        "revertReason": null,
+        "repaymentVerified": true,
+        "conservationVerified": true
+      }
+    ],
+    "unspentDaiNotProfit": "706052892157 raw DAI retained in final sim; excluded from USDC profit",
+    "nativeDelta": "0",
+    "finalCalldataSha256": "2e9e7d38335041c6d4a83a5b05e436bc05fcffaf9b91f9d25451b783e53e14a2"
+  },
+  "coreMatch": {
+    "tx": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+    "core": "Same two Ekubo pools, WETH/DAI V2 and PSM DAI to USDC; callback/exact-out versus exact-in arrangement differs. Original one-unit DAI to USDS side conversion excluded.",
+    "original": {
+      "amountRawUSDC": "8137414",
+      "grossWei": "73363522571263",
+      "nativeReceiptWei": "3038441433869556",
+      "nativeWrappedAndSpentWei": "2965077911298293",
+      "builderWei": "931716736639",
+      "canonicalProfitReconciles": true
+    },
+    "replay": {
+      "amountRawUSDC": "8248315",
+      "grossRawUSDC": "199689",
+      "grossWei": "72708486138087",
+      "valuation": "Actual final-sim USDC proceeds valued by current production EV at B=26029875; original profit is already native ETH. No N ETHUSD scalar is used for the comparison.",
+      "calldataSha256": "2e9e7d38335041c6d4a83a5b05e436bc05fcffaf9b91f9d25451b783e53e14a2"
+    },
+    "absoluteDifferenceWei": "655036433176",
+    "relativeDifference": 0.008928639332165632,
+    "withinTwentyPercent": true,
+    "netEvWei": "-25959756944325",
+    "profitableReproduction": false,
+    "performanceAcceptance": "not-run"
+  },
+  "independentReview": {
+    "status": "completed, no blocking finding in the two-file PSM delta",
+    "artifactPath": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/independent-review-result.json",
+    "sha256": "cff9302aa23af38f839b4690e2b9af3fca49497ec78f30abb79bf47bd206ba28",
+    "result": {
+      "schemaVersion": 1,
+      "kind": "independent-read-only-psm-budget-review",
+      "reviewedAt": "2026-10-13T20:47:21.205Z",
+      "pack": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/psm-budget-review-20261014",
+      "ran_gate": true,
+      "verdict": "No blocking implementation defect found in the exact two-file PSM delta.",
+      "blockingImplementationFindings": [],
+      "scope": [
+        "listener/src/searcher/venues/protocols/psm-family/execution.ts",
+        "listener/src/searcher/venues/protocols/psm-family/test/bidirectional.ts"
+      ],
+      "boundaries": {
+        "rpc": false,
+        "signing": false,
+        "broadcast": false,
+        "sourceEdits": false,
+        "builds": false,
+        "newEvmExecutions": false,
+        "onlyReviewArtifactWritten": true
+      },
+      "sourceProvenance": {
+        "status": "manifest gap resolved",
+        "supplementalManifest": {
+          "path": "logs/stage3-ekubo-funding-20261014.1rjnj0zh/production-source-tree-manifest.json",
+          "bytes": 166573,
+          "sha256": "a1a42607ff7968a7fe1b7824ba0143b40f88b2f9365a94ca088408c69a0d7b6a"
+        },
+        "fileCount": 1149,
+        "recomputedSourceTreeSha256": "2043221f1f4e19b41e01cff3e7d807f9ceb5b41079b8bd1204abaabccfea2700",
+        "perDirectoryLocaleCompareOrderVerified": true,
+        "broadTypedFreezeFileCount": 2006,
+        "sharedRowsReconciled": 1147,
+        "additionalRows": [
+          [
+            "searcher/venues/protocols/badger-sett-withdraw-family/README.md",
+            "ec1b56048d52d5d64722b2187feb665d415e6b52b3e7bdd3ee5a053178097e97"
+          ],
+          [
+            "searcher/venues/swaps/balancer-v3-family/local-math/UPSTREAM-LICENSE.txt",
+            "10900c6589a6f48bc7f99c06e9713bd53511dc7e8291eccb76d5227d57b3386b"
+          ]
+        ],
+        "additionalFileBytesRead": true,
+        "note": "All 1149 manifest rows reconcile: 1147 shared hashes agree with the typed-source freeze, and the two additional README/license file byte hashes were independently checked. This is not a fresh filesystem hash of every cloud source file.",
+        "evidencePins": [
+          {
+            "path": "logs/stage3-ekubo-funding-20261014.1rjnj0zh/psm-n-dual-attempt02.json",
+            "field": "code.sourceTreeSha256",
+            "match": true
+          },
+          {
+            "path": "logs/stage3-ekubo-funding-20261014.1rjnj0zh/psm-n-dual-attempt02.json",
+            "field": "codeAfter.sourceTreeSha256",
+            "match": true
+          },
+          {
+            "path": "logs/stage3-ekubo-funding-20261014.1rjnj0zh/N-prices-after-psm-attempt01/input.json",
+            "field": "implementation.sourceTreeSha256",
+            "match": true
+          },
+          {
+            "path": "logs/stage3-ekubo-funding-20261014.1rjnj0zh/B-ev-after-psm-attempt01/simulation-1.json",
+            "field": "implementation.sourceTreeSha256",
+            "match": true
+          },
+          {
+            "path": "logs/stage3-ekubo-funding-20261014.1rjnj0zh/B-ev-after-psm-attempt01/simulation-13.json",
+            "field": "implementation.sourceTreeSha256",
+            "match": true
+          },
+          {
+            "path": "logs/stage3-ekubo-funding-20261014.1rjnj0zh/B-ev-after-psm-attempt01/ev-1.json",
+            "field": "implementation.sourceTreeSha256",
+            "match": true
+          }
+        ],
+        "transfers": [
+          {
+            "path": "transfer-manifest.json",
+            "sha256": "8b9da4f60bb7202b07f7717db3baf08d02a430ae32fe42c7e2292b67177921dd",
+            "fileCount": 18
+          },
+          {
+            "path": "after-transfer-manifest.json",
+            "sha256": "94a68c57ab88e7ff32eb4286398c70fb0c8828ef457ea8c5e13a5dd95a496de3",
+            "fileCount": 10
+          }
+        ],
+        "suppliedSourceHashesVerified": [
+          {
+            "path": "listener/src/searcher/venues/protocols/psm-family/execution.ts",
+            "sha256": "29528a9e6a1ac97813a37adbb455ba5795487d9a6938cac9870fd4a5bd5e8b0d"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/psm-family/codec.ts",
+            "sha256": "15c82c97ee1417713de459761ba4e969a60ed7abafc3e982ed774d14a9489e64"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/psm-family/test/bidirectional.ts",
+            "sha256": "eb0763c5c94d450283832ae404364cc1e89a943dcf10f427dbc5ff8fa3ad43a1"
+          },
+          {
+            "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+            "sha256": "29ad091621e689a7da0565ed45446309008a73d3aa3b47299b5f2bfda907c865"
+          },
+          {
+            "path": "listener/src/adapters/runtime-amount-program.ts",
+            "sha256": "5ab89da1040c55ffa7ecd74eafe781b9aa83c24f7b06987ffe0d8fbc91322ce6"
+          },
+          {
+            "path": "src/RuntimeAmountVM.sol",
+            "sha256": "9dd2974a39370dcaca2bf5f031a4f5a147640bee6dc1988b9f7bc2446e8b2ff8"
+          },
+          {
+            "path": "test/BotVMRuntimeAmount.t.sol",
+            "sha256": "172fa727f576f1bf702bf468fb9507df5f6457ea2b8af2c608387216f86b0933"
+          },
+          {
+            "path": "test/BotVMAmountFlow.t.sol",
+            "sha256": "505cdd38873edbbc7b23427183e1e53d61723bb0152c3a677c350c29474eff87"
+          }
+        ],
+        "additionalFileHashesVerified": [
+          {
+            "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/README.md",
+            "bytes": 7608,
+            "sha256": "ec1b56048d52d5d64722b2187feb665d415e6b52b3e7bdd3ee5a053178097e97"
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/balancer-v3-family/local-math/UPSTREAM-LICENSE.txt",
+            "bytes": 36963,
+            "sha256": "10900c6589a6f48bc7f99c06e9713bd53511dc7e8291eccb76d5227d57b3386b"
+          }
+        ]
+      },
+      "actualChecks": [
+        {
+          "id": "hash-and-diff",
+          "when": "prior review; 28 transferred hashes and eight supplied source bindings rechecked now",
+          "result": "pass",
+          "check": "SHA-256 of all transferred files; canonical source-freeze array digest; exact diff against both before-files."
+        },
+        {
+          "id": "before-after-production-flow",
+          "when": "prior review",
+          "result": "pass",
+          "check": "Independent Python byte decoder over saved calldata.",
+          "evidence": {
+            "originalInput": "5492700",
+            "beforeFlags": "0x04",
+            "afterFlags": "0x44",
+            "maximumInputMask": "0x08",
+            "allFourProgramsAndMinimaUnchanged": true,
+            "finalMinimumReturn": "5492701"
+          }
+        },
+        {
+          "id": "before-raw-trace",
+          "when": "prior review",
+          "result": "pass",
+          "check": "Independent raw call-tree and balance assertions.",
+          "evidence": {
+            "workingInputs": [
+              "5492700",
+              "7955890479331727158",
+              "2067152770963166",
+              "5674124933591466214"
+            ],
+            "psmDebit": "5674124000000000000",
+            "gemReceipt": "5674124",
+            "retainedDai": "933591466214",
+            "nativeReceivedAndWrapped": "2067152770963166",
+            "failure": "runtime input rounding: retained DAI exceeds exact-input tolerance"
+          }
+        },
+        {
+          "id": "n-dual-raw-trace-and-storage",
+          "when": "prior review",
+          "result": "pass",
+          "check": "Six groups / 12 raw call trees and pre/post actor storage differences checked independently, without trusting pass labels.",
+          "evidence": {
+            "groups": 6,
+            "executions": 12,
+            "verified": [
+              "integer quotes and debit/receipt arithmetic",
+              "production P and doubled P quantities",
+              "N prices and input hashes",
+              "original runtime input",
+              "old inventory and retained input",
+              "preserved EIP-7702 owner code"
+            ],
+            "buyProductionPRefund": "75214014766",
+            "buyDoublePRefund": "150428029532",
+            "generationScopes": {
+              "pricing": 1,
+              "ready": 26029876
+            }
+          }
+        },
+        {
+          "id": "after-full-flow-effects",
+          "when": "prior review",
+          "result": "pass",
+          "check": "Independently decoded flow bytes; reconciled transfers, wrapping, native and token effects, principal repayment and trace balance deltas.",
+          "evidence": [
+            {
+              "file": "simulation-1.json",
+              "input": "5492700",
+              "output": "5674124",
+              "repaid": "5492700",
+              "profitRawUsdc": "181424",
+              "retainedDai": "933591466214"
+            },
+            {
+              "file": "simulation-13.json",
+              "input": "8248315",
+              "output": "8448004",
+              "repaid": "8248315",
+              "profitRawUsdc": "199689",
+              "retainedDai": "706052892157"
+            }
+          ]
+        },
+        {
+          "id": "final-ev",
+          "when": "prior review",
+          "result": "pass",
+          "check": "Verified final calldata/amount binding and EV arithmetic.",
+          "evidence": {
+            "expectedProfitEthWei": "72708486138087",
+            "gasCostEthWei": "98668243082412",
+            "bidWei": "0",
+            "netEvWei": "-25959756944325",
+            "dryRun": true,
+            "evGate": true,
+            "blockScanSubmit": false
+          }
+        },
+        {
+          "id": "supplemental-production-manifest",
+          "when": "this follow-up",
+          "result": "pass",
+          "check": "Node built-in assert/fs/crypto: reconstructed directory traversal order, recomputed SHA-256, reconciled every shared row and both extra rows, matched six historical evidence source pins.",
+          "evidence": {
+            "rows": 1149,
+            "sharedRows": 1147,
+            "extraRows": 2,
+            "sourceTreeSha256": "2043221f1f4e19b41e01cff3e7d807f9ceb5b41079b8bd1204abaabccfea2700"
+          }
+        },
+        {
+          "id": "supplemental-source-bytes",
+          "when": "this follow-up after the two files were transferred",
+          "result": "pass",
+          "check": "Read both complete local files and independently computed SHA-256; both match the supplemental source-tree manifest.",
+          "evidence": [
+            {
+              "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/README.md",
+              "bytes": 7608,
+              "sha256": "ec1b56048d52d5d64722b2187feb665d415e6b52b3e7bdd3ee5a053178097e97"
+            },
+            {
+              "path": "listener/src/searcher/venues/swaps/balancer-v3-family/local-math/UPSTREAM-LICENSE.txt",
+              "bytes": 36963,
+              "sha256": "10900c6589a6f48bc7f99c06e9713bd53511dc7e8291eccb76d5227d57b3386b"
+            }
+          ]
+        }
+      ],
+      "assessment": {
+        "buyGem": "Maximum input is justified by whole-gem integer cost; the original DAI input budget is preserved.",
+        "sellGem": "Exact input remains unchanged.",
+        "preservedGuards": [
+          "positive debit",
+          "debit <= current input budget",
+          "old inventory isolation",
+          "retained budget excluded from later receipts",
+          "actual receipt chaining",
+          "final output minimum",
+          "native balance conservation",
+          "separate maximum-input and 0/1 tolerance flags"
+        ],
+        "reviewedLocations": [
+          "listener/src/searcher/venues/protocols/psm-family/execution.ts:18-33",
+          "listener/src/adapters/runtime-amount-program.ts:123-152",
+          "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts:46-101",
+          "src/RuntimeAmountVM.sol:29-128"
+        ]
+      },
+      "limitations": [
+        "No fresh EVM execution or build was run by this reviewer; saved evidence was independently reconciled offline.",
+        "The added regression uses the production selector/encoder with a mocked simulator. N/N runtime tests use standalone programs; saved P simulations exercise the full flow.",
+        "Manifest reconciliation and both omitted-file byte checks are complete. The full cloud source filesystem was not independently read.",
+        "The full Ready snapshot and original discovery receipt bytes are not supplied. Full Family discovery/performance/formal acceptance and original-transaction call-prestate parity remain outside this narrow verdict.",
+        "validation03-results.json records the retained special-protocols failure; no passing rerun is claimed.",
+        "Final EV is negative after gas; this is not a profitable-live or broadcast acceptance verdict."
+      ]
+    },
+    "cliAttempt": "Exited1, actual model/client incompatibility, no review inferred. Retained in independent-review-cli-attempt01.events.jsonl."
+  },
+  "performance": {
+    "stage4A": "not-run",
+    "stage4B": "not-run",
+    "includePsmInFinalScope": true,
+    "diagnosticWallMs": 27479,
+    "claim": "Correctness/replay wall time only; not representative latency acceptance or live P95."
+  },
+  "safety": {
+    "signed": false,
+    "broadcast": false,
+    "deployed": false,
+    "liveStarted": false,
+    "privateKeyAccess": false,
+    "peerProcessesStopped": false,
+    "originalSnapshotsOverwritten": false
+  },
+  "next": [
+    "Preserve formal Adapter Replay/family_local limits and Ready ordered no-op follow-up.",
+    "Continue remaining IMPL correctness/causal backrun items before any phase4 experiment.",
+    "Phase4 must include PSM plus all previously adapted applicable families; no success inferred from this replay."
+  ],
+  "reviewedAt": "2026-10-13T20:49:34.875925+00:00",
+  "acceptanceBoundary": {
+    "implemented": true,
+    "scopedHistoricalCorrectness": true,
+    "naturalBBlockscanCoreMatch": true,
+    "positiveNetEv": false,
+    "formalAdapterReplayAndFamilyLocal": "not-run",
+    "phase4A": "not-run",
+    "phase4B": "not-run",
+    "wholeGoal": "active, incomplete"
+  },
+  "evidence": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/publication-integrity-before.json",
+      "sha256": "a36e449adadd909aa5e3745fa2cbf517f5afec9152c38d0f5c7b397b9ea2e153",
+      "bytes": 362
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/source-freeze-after-psm.json",
+      "sha256": "83e752d72cdcfa6514c2857a78be2157e97c3d53ca3bff98138a95b9f69ccbde",
+      "bytes": 393110
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/production-source-tree-manifest.json",
+      "sha256": "a1a42607ff7968a7fe1b7824ba0143b40f88b2f9365a94ca088408c69a0d7b6a",
+      "bytes": 166573
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/independent-review-result.json",
+      "sha256": "cff9302aa23af38f839b4690e2b9af3fca49497ec78f30abb79bf47bd206ba28",
+      "bytes": 11737
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/validation-results.json",
+      "sha256": "3c4edf5b47cf03ec578c6a02d67e6015524698176751a7b9d97463453d3d8ad3",
+      "bytes": 524
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/validation02-results.json",
+      "sha256": "b3041d9f61d231ce6c5eebd1ed700b2956328a499e52304b04ed6595cbd386f5",
+      "bytes": 524
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/validation03-results.json",
+      "sha256": "e9c990bfb402f10d1fd9822f0764ace6e22ad3456ebac96748dae2827e071986",
+      "bytes": 1044
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/validation04-results.json",
+      "sha256": "10ad059463c7ca3ed8bc6292b1d3ea03a0de9158aff719c15b9e23e38d9abf68",
+      "bytes": 1544
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/psm-budget-regression-before.log",
+      "sha256": "b195d0b0002e96c40ba065a8ce68af9b7fd5baedb1438763079680544a3be124",
+      "bytes": 1693
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/psm-budget-regression-after.log",
+      "sha256": "86d232cc1e8d1f2adce05934d1df31c9de42cc76eb1f73ce2a7ea00b672ba361",
+      "bytes": 209
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/psm-n-dual-attempt01.json",
+      "sha256": "56c75d5bd0b8b31db5ec10158c75028f4e0390cde267cabaa0df8003675cb58b",
+      "bytes": 86491
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/psm-n-dual-attempt02.json",
+      "sha256": "c99da8729240f67f792375e4ea2ff4dba38ecbcd1bb47d5f6732b6c9120d288d",
+      "bytes": 467174
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/psm-n-dual-attempt02-exit.json",
+      "sha256": "f648272965e49d5deb12382700e18c05b846e83ad4218237930650185a4a0495",
+      "bytes": 247
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ready-current-N26029876.json",
+      "sha256": "076061cc8d9459490f2076739e9e04c2ede86bbc58f65ce85bc7c7cf376efe4d",
+      "bytes": 1690963
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ready-compatibility-after-psm.json",
+      "sha256": "06d3c31dfb6c85e487b303aa39b40872043a9bc3dc6289b945c0b50ad15755ce",
+      "bytes": 337
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ready-after-psm-exit.json",
+      "sha256": "8814135af57341eda02be61b251e5a1fd549293f200838a8211a876270cd4db2",
+      "bytes": 247
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/B-ev-attempt01/simulation-1.json",
+      "sha256": "8c3196960fb60be49fdebeaf815766c4099643a010a2658498b249e675aac730",
+      "bytes": 105227
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/failed-trial-calltrace.json",
+      "sha256": "ab40d61bb838c14565aad3273b99a270f766a7ac0b783a9984891373b476f11a",
+      "bytes": 76854
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/B-ev-after-psm-attempt01/input.json",
+      "sha256": "530d12b6075a7f09e056bc20371efa0aead428840112aacd208bf9b487e059d4",
+      "bytes": 75269
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/B-ev-after-psm-attempt01/summary.json",
+      "sha256": "064bfcd9adc6354d1dee4655bee4f221be5d37c331bb884e81583b3a4e196588",
+      "bytes": 77980
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/B-ev-after-psm-attempt01/simulation-1.json",
+      "sha256": "b41128748e89ca9a9e1e4cd90d72bb6854c50feeb11d9c12e62e1dc6a352b7ed",
+      "bytes": 117377
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/B-ev-after-psm-attempt01/simulation-13.json",
+      "sha256": "788e029f6144407f99013f9765303e04eec4101cc4de9039217a7105759fc81b",
+      "bytes": 117377
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/B-ev-after-psm-attempt01/ev-1.json",
+      "sha256": "39d858a1083a17ab5125ddcad3be8f36b8539396e25167aa40366bf76f04de33",
+      "bytes": 1881
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/N-prices-after-psm-attempt01/input.json",
+      "sha256": "7240cee28be6b109d9e546c9227a585468b1abde097671a2c8825ff651c30d90",
+      "bytes": 50469
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/N-prices-after-psm-attempt01/prices.json",
+      "sha256": "0864479f03b3a448f7728c8897e11292c7896a77a2c584efb275322173edac87",
+      "bytes": 927708
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/original-native-calltrace.json",
+      "sha256": "a766df8b91abf9452dfc7f7b2afe7314c8131fa826630dce68a8de0c25592bb9",
+      "bytes": 51659
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/original-core-native-manual.json",
+      "sha256": "a604556ccc222f1dc7e5c2ccd39953cc0025195cd37f188529a440ad0c13c709",
+      "bytes": 1428
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/original-core-native-manual-v2.json",
+      "sha256": "bac63966808ad62106869a98ebd2529f3db0120469a93a4a98879a917619ccf8",
+      "bytes": 1656
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/canonical-profit.json",
+      "sha256": "13f04b1a7b9193ecc7db4bb9091f3a13c9993062e6632a5402735c78ae832719",
+      "bytes": 425
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/canonical-profit-exit.json",
+      "sha256": "5f3e2f94582ac36e85f86a54fc2d2a5588bbf9f984a77187600ea1df483eab9e",
+      "bytes": 488
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/canonical-tx-flow.json",
+      "sha256": "7cdb0d0990798b70e5c7a5ebfca98a93d1b0090771ae39b349fcad0a80be5e62",
+      "bytes": 4567
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/core-profit-comparison.json",
+      "sha256": "f2e39fcd3d8c7a5d8725bb1652c1757788009d01f6bf3dee2da09b723d3ad393",
+      "bytes": 1130
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/flow-tool-selection.json",
+      "sha256": "bffb2710fbccb91dff35560a196be30e826057a3e0609b348e352eeb2cacbf9e",
+      "bytes": 4595
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/profit-tool-selection.json",
+      "sha256": "d61a4adc4d68fe45a2bbcaac4450ca4ff3df8416e5957c995b9134ba89711e0a",
+      "bytes": 5505
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ev-tool-selection.json",
+      "sha256": "b8ec9f80052657e726ba60dcb30f7ec821aaf03dcb8bc947b855acfbf5e6e621",
+      "bytes": 215004
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/owned-generated-staging-plan.json",
+      "sha256": "9868e8d7236f634da2964a123dd93ba09c6e58a4e4a8d60d0f65ce36bc6be3ac",
+      "bytes": 552
+    }
+  ]
+}

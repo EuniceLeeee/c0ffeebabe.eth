@@ -9695,7 +9695,7 @@
         "familyId": "protocol:psm",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "7a3fbecfea8f53d806575026e7451b1ad39daa28c1f373dea44f5ae3221e6b25",
+        "contentHash": "8722a44ff3e22c85fbbf35088b055e779b8f2580dfe37f9a43001e026adb7a54",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -14815,5 +14815,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "6f9c68ee4578eb6bfe9749c5e3c95dd0a4c1ffe9192d6eca5b91bfd221d57efd"
+  "artifactHash": "797c1052efa4d351903e640b774d4363473841b287c47e533f6d9a9badec840d"
 }
