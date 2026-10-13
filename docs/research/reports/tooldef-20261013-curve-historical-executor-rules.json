@@ -1,0 +1,40 @@
+{
+  "learning_case_id": "tooldef-20261013-curve-historical-executor-rules",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [
+    "swap"
+  ],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "Historical Family acceptance tool could not run the current Cancun-target BotVM under pre-Cancun fork rules; not a protocol refusal or opportunity replay.",
+  "evidence": {
+    "failed": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-original-amount-dual-attempt01.json",
+      "sha256": "6a144590c919e59dbf5384efdf8e7496cfeefbf3bac823c1304447e1ddaf2d42",
+      "bytes": 23009
+    },
+    "successful": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-original-amount-dual-attempt02.json",
+      "sha256": "089be7da24d2ad6a728fba49c314dbbe836f632b08e827c0c58cd187b0e9c818",
+      "bytes": 327054
+    },
+    "report": "docs/research/reports/curve-underlying-historical-factory-acceptance-20261013.json",
+    "independentReview": "Final non-author code/raw evidence audit passed with no blocking findings; all 72 executions and 72 zero-input controls recomputed, historical-current-rule limits retained.",
+    "independentReviewEvidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/independent-final-review-20261013.json",
+      "sha256": "e6b35b45cc9cb8f93a6a1e8a65c0b63c5e33b93bfd4c5546961e782dc35a1169",
+      "bytes": 2570
+    }
+  },
+  "tooling_defect": {
+    "tool": "listener:searcher:curve-runtime-dual-historical-fork",
+    "issue": "Historical tool combined current executor bytecode with Anvil historical opcode rules without an explicit compatible counterfactual mode or disclosure.",
+    "codify_target": "historical-runtime-dual.ts explicit flag, actual hardfork/probe evidence, safety regressions, optional shared backend startup parameter",
+    "codify_commit": "bd2e280bfeb12906b8c5a915429ea5fd105f83ad",
+    "status": "codified"
+  },
+  "created_at": "2026-10-13T11:29:01.566194+00:00",
+  "updated_at": "2026-10-13T11:29:01.566207+00:00"
+}

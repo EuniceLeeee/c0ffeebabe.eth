@@ -1,0 +1,2138 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-13",
+  "stage": 2,
+  "classification": [
+    "family-adaptation",
+    "historical-tool-compatibility"
+  ],
+  "result": "bounded current-executor dual execution passed; natural effective, original replay and performance remain unverified",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "implementationCommit": "bd2e280bfeb12906b8c5a915429ea5fd105f83ad",
+  "executedParentHead": "4cf668ab99943158a1c32187cf8e116bf30afaab",
+  "historicalQuestion": {
+    "answer": "The original transaction called the deployed Curve metapool/base pool; MetaRegistry was our lookup dependency, not a prerequisite for swaps.",
+    "family": "curve-underlying",
+    "tx": "0xaa578d4eaa5629cd61ef8d1d2b9827ca765fd816370654e57f3166a1270da464",
+    "block": 14127510,
+    "blockHash": "0x9cd3c812df6f4efacbae2b07895b72b09d89ae4202b5d2326d1c1e53a8cf8db6",
+    "logIndex": 85,
+    "pool": "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+    "direction": "FEI -> USDC",
+    "amountIn": "135000000000000000000000",
+    "originalEventAmountOut": "134977765770",
+    "blockEndQuoteAndCurrentExecutorAmountOut": "134972071035",
+    "deltaToOriginalEvent": "-5694735",
+    "originalCallPrestateRestored": false
+  },
+  "implementation": {
+    "identity": "Append legacy-factory-member only when same-source MetaRegistry getCode is exactly 0x; independently reverse-check factory base pool and contiguous coin indices. No instance allowlist, no future-registry code injection, no fallback on RPC failure.",
+    "factory": "0xB9fC157394Af804a3578134A6585C0dc9cc990d4",
+    "registryLookup": "get_base_pool+get_underlying_coins",
+    "receipt": "Production binding resolver plus fresh same-source factory base and coin order; old MetaRegistry variants retained.",
+    "model": "Existing source-bound classic meta/3pool model; factory base must match bound model. Existing each-block refresh reused.",
+    "sharedChange": "Optional explicit counterfactualHardfork constructor parameter on owned Anvil backend, default absent. All three spawn sites preserve choice. Only historical CLI exposes --executor-hardfork cancun; no live configuration or protocol branch."
+  },
+  "rampState": {
+    "metaInitialAPrecise": "1000",
+    "metaFutureAPrecise": "10000",
+    "metaCurrentAPrecise": "5678",
+    "metaInitialATime": 1643509333,
+    "metaFutureATime": 1644100839,
+    "blockTimestamp": 1643816802,
+    "baseA": "2000",
+    "baseRamp": "fixed",
+    "claim": "One real metapool upward-ramp state, including fractional meta A; not simultaneous/base-fractional combination coverage."
+  },
+  "source": {
+    "productionHash": "31495b06479452cfcdb1ae883b6343dd26153058be599d7b9d2b5c172f69f918",
+    "manualHash": "df9d51da8dacf5c5b5bb0a2e31c88ecacbc52387360cc0997a819fd4089b6eda",
+    "productionFiles": 1143,
+    "manualFiles": 1153,
+    "commonFiles": 1140,
+    "mismatches": 0,
+    "readyProductionHash": "433da0a4a5f0f6ccf1fe9cbd9a7ddfcf434e15a55d37ef36b9d719b4f91deee5",
+    "originalFailureManualHash": "ed3a894eb6a71a2057a6a2b53d5667b39b663b37232c89a6c07ef227c2a34b63",
+    "interveningProductionChange": "Only optional shared fork hardfork parameter; default behavior preserved. No Family/Ready/prices mutation."
+  },
+  "sourceInventory": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/source-inventory-final.json",
+    "sha256": "955af1f82b5f6ae2fa59a1384dd53311e75c7a3f3a95b7ea7f94c406c8171f53",
+    "bytes": 346426
+  },
+  "canonicalIdentityEvidence": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/historical-factory-attempt01.json",
+    "sha256": "90483d526b7ce65395792a89dfac6a145ccc7ab06ce41a8b0e520bc3b0000fe4",
+    "bytes": 63401
+  },
+  "productionIntegration": {
+    "baselineReady": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt01/ready.json",
+      "sha256": "2ceb4d85336cc055da49d5f49051a0ac564cc736256a19f318c4344fa8e0da1d",
+      "bytes": 8270
+    },
+    "baseline": "same-block candidate seen but no admission through undeployed MetaRegistry",
+    "candidateReady": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+      "sha256": "5152f386d7d2cfc6bc9a83692eec4a617cedccc70507638f70db86c78aefa582",
+      "bytes": 202637
+    },
+    "candidateSummary": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready-summary.json",
+      "sha256": "14611a16d73b7f321bd9e39588360c412c4397bc01b83628ecf7de214a67a750",
+      "bytes": 10467
+    },
+    "targetInstances": 1,
+    "naturalGraphDirections": 12,
+    "rawMids": 12,
+    "effectiveMissingValuation": 12,
+    "pricingOutcome": "degraded; effective-missing-valuation, no WETH valuation path in the single-family graph",
+    "prices": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+      "sha256": "7fb945413046ec842db1d00f3119208f216777ce504b2e45197c229939c01089",
+      "bytes": 96093
+    },
+    "input": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+      "sha256": "959189a603c4238a4c5837636f71a45341a89a14be1f0df27b932de45481c5ab",
+      "bytes": 45803
+    },
+    "manualInputDoesNotPromoteNaturalPriceStatus": true,
+    "noNewReadyRebuildForToolHardforkChange": true
+  },
+  "executionEnvironment": {
+    "rules": {
+      "mode": "counterfactual-current-executor",
+      "artifactTarget": "cancun",
+      "requestedHardfork": "cancun",
+      "actualHardfork": "Cancun",
+      "originalTransactionReplay": false
+    },
+    "actualProbe": {
+      "number": "14127510",
+      "timestamp": "1643816802",
+      "baseFee": "106022199063",
+      "transientRoundTrip": "1",
+      "opcode44": "100624510903256903856275928907428583176480957461139676015521061040547634490844",
+      "codeHash": "0xc32c894abdec85be76ea7de2be5552a26be451a1655029efa60b5dc77c00cc07"
+    },
+    "headerBefore": {
+      "number": 14127510,
+      "hash": "0x9cd3c812df6f4efacbae2b07895b72b09d89ae4202b5d2326d1c1e53a8cf8db6",
+      "timestamp": 1643816802,
+      "baseFeePerGas": "0x18af6a5f17"
+    },
+    "headerAfter": {
+      "number": 14127510,
+      "hash": "0x9cd3c812df6f4efacbae2b07895b72b09d89ae4202b5d2326d1c1e53a8cf8db6",
+      "timestamp": 1643816802,
+      "baseFeePerGas": "0x18af6a5f17"
+    },
+    "executorArtifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+    "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "claim": "Historical N state, checked N number/timestamp/basefee and current executor Cancun rules. Not historical EVM equivalence or original-TX replay; opcode44 is disclosed separately. No mined blocks or protocol state/code overrides."
+  },
+  "dual": {
+    "groups": 24,
+    "directions": 12,
+    "primaryQuotedAndRuntimeExecutions": 48,
+    "separateMinimumOneDiagnostics": 24,
+    "zeroInputRollbackControls": 72,
+    "allQuoteMinusActualDeltas": "0",
+    "oldInputInventory": "101 preserved",
+    "oldOutputInventory": "103 plus actual received",
+    "nativeInventory": "17 unchanged",
+    "allowance": "Existing production standing-grant semantics; zero-input controls revert authorization atomically.",
+    "constructionRpcAttempts": 0,
+    "constructionExactAndQuotedFallback": "Existing current production 80-case dual suite uses throwing stubs; no new complete-route opportunity evidence.",
+    "plan": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-coverage-plan.json",
+      "sha256": "5daec6556d150c77afa473665e481c020fb7b52722a502c9796c75798fd2166e",
+      "bytes": 27138
+    },
+    "amountSources": {
+      "0x956f47f50a910163d8bf957cf5846d573e7f87ca": {
+        "kind": "original-transaction-input",
+        "amountIn": "135000000000000000000000",
+        "receipt": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/receipt.json",
+        "receiptSha256": "5d673cd048c44198dbe1c868ae95eb3bc4013acb0f86e2564bd5a5a2238cd00b",
+        "tx": "0xaa578d4eaa5629cd61ef8d1d2b9827ca765fd816370654e57f3166a1270da464",
+        "logIndex": 85
+      },
+      "0x6b175474e89094c44da98b954eedeac495271d0f": {
+        "kind": "saved-production-input-only",
+        "amountIn": "5056416543622737857",
+        "rowId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0x6b175474e89094c44da98b954eedeac495271d0f>0x8e870d67f660d95d5be530380d0ec0bd388289e1\u001f02e3ecd64b953807a3012ff0be8aef1ccfe3cf6cb166ce19919a54a85ceb9648",
+        "source": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        },
+        "freshness": "fresh",
+        "donorPrices": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/single-N22871578-attempt01/prices/prices.json",
+        "donorPricesSha256": "1d6d9e9e094908c3551ac93505af2e08591e12ad00229dea7ad33dcf316acb53",
+        "donorInputSha256": "3303619d415b9969c9641544530f7f3dc6ad9b7e182682ae1222d5d99bd86996",
+        "cfg": {
+          "maxHops": 6,
+          "deduplicateRotations": true,
+          "allowRepeatedPools": true,
+          "allowRepeatedTokens": false,
+          "prefixPruningEnabled": true,
+          "maxPrefixDrawdownBps": 0,
+          "enumerationMethod": "joint-dfs",
+          "enumerationBackend": "typescript",
+          "rustEnumerationThreads": 1,
+          "rustEnumerationScratchMb": 512,
+          "ethSignalPairsPerToken": 50,
+          "hopTokensPerStep": 3,
+          "hopPoolsPerPair": 3,
+          "minSpreadBps": 0,
+          "requireDislocatedPair": true,
+          "exactAdmissionSpreadBps": 0,
+          "minCapitalFraction": 0.001,
+          "maxCandidates": 100,
+          "budgetMs": 2000,
+          "pricedTokens": {
+            "$type": "map",
+            "entries": [
+              [
+                "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "2000000000000000000000"
+                  }
+                }
+              ],
+              [
+                "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000"
+                  }
+                }
+              ],
+              [
+                "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000"
+                  }
+                }
+              ],
+              [
+                "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000"
+                  }
+                }
+              ],
+              [
+                "0x6b175474e89094c44da98b954eedeac495271d0f",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000000000000000"
+                  }
+                }
+              ]
+            ]
+          }
+        }
+      },
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+        "kind": "saved-production-input-only",
+        "amountIn": "5057048",
+        "rowId": "univ3-standard\u001f0x5ae13baaef0620fdae1d355495dc51a17adb4082\u001f0x5ae13baaef0620fdae1d355495dc51a17adb4082\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x45804880de22913dafe09f4980848ece6ecbaf78\u001f8ec67b64a82d369e4a5af01e172af8fccefbd488e7abfd30a2d2c81601a79ffb",
+        "source": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        },
+        "freshness": "fresh",
+        "donorPrices": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/single-N22871578-attempt01/prices/prices.json",
+        "donorPricesSha256": "1d6d9e9e094908c3551ac93505af2e08591e12ad00229dea7ad33dcf316acb53",
+        "donorInputSha256": "3303619d415b9969c9641544530f7f3dc6ad9b7e182682ae1222d5d99bd86996",
+        "cfg": {
+          "maxHops": 6,
+          "deduplicateRotations": true,
+          "allowRepeatedPools": true,
+          "allowRepeatedTokens": false,
+          "prefixPruningEnabled": true,
+          "maxPrefixDrawdownBps": 0,
+          "enumerationMethod": "joint-dfs",
+          "enumerationBackend": "typescript",
+          "rustEnumerationThreads": 1,
+          "rustEnumerationScratchMb": 512,
+          "ethSignalPairsPerToken": 50,
+          "hopTokensPerStep": 3,
+          "hopPoolsPerPair": 3,
+          "minSpreadBps": 0,
+          "requireDislocatedPair": true,
+          "exactAdmissionSpreadBps": 0,
+          "minCapitalFraction": 0.001,
+          "maxCandidates": 100,
+          "budgetMs": 2000,
+          "pricedTokens": {
+            "$type": "map",
+            "entries": [
+              [
+                "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "2000000000000000000000"
+                  }
+                }
+              ],
+              [
+                "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000"
+                  }
+                }
+              ],
+              [
+                "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000"
+                  }
+                }
+              ],
+              [
+                "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000"
+                  }
+                }
+              ],
+              [
+                "0x6b175474e89094c44da98b954eedeac495271d0f",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000000000000000"
+                  }
+                }
+              ]
+            ]
+          }
+        }
+      },
+      "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+        "kind": "saved-production-input-only",
+        "amountIn": "5056583",
+        "rowId": "univ3-standard\u001f0x09aa63b7a22eefc372196aacd5b53441ed390bfb\u001f0x09aa63b7a22eefc372196aacd5b53441ed390bfb\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xc18360217d8f7ab5e7c516566761ea12ce7f9d72\u001fa05688b69fbb7bb0ceaa144a360a983eb21bed045e96c7f08e5d08f9ee85f2d2",
+        "source": {
+          "number": 22871578,
+          "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+          "generation": 1
+        },
+        "freshness": "fresh",
+        "donorPrices": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/single-N22871578-attempt01/prices/prices.json",
+        "donorPricesSha256": "1d6d9e9e094908c3551ac93505af2e08591e12ad00229dea7ad33dcf316acb53",
+        "donorInputSha256": "3303619d415b9969c9641544530f7f3dc6ad9b7e182682ae1222d5d99bd86996",
+        "cfg": {
+          "maxHops": 6,
+          "deduplicateRotations": true,
+          "allowRepeatedPools": true,
+          "allowRepeatedTokens": false,
+          "prefixPruningEnabled": true,
+          "maxPrefixDrawdownBps": 0,
+          "enumerationMethod": "joint-dfs",
+          "enumerationBackend": "typescript",
+          "rustEnumerationThreads": 1,
+          "rustEnumerationScratchMb": 512,
+          "ethSignalPairsPerToken": 50,
+          "hopTokensPerStep": 3,
+          "hopPoolsPerPair": 3,
+          "minSpreadBps": 0,
+          "requireDislocatedPair": true,
+          "exactAdmissionSpreadBps": 0,
+          "minCapitalFraction": 0.001,
+          "maxCandidates": 100,
+          "budgetMs": 2000,
+          "pricedTokens": {
+            "$type": "map",
+            "entries": [
+              [
+                "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "2000000000000000000000"
+                  }
+                }
+              ],
+              [
+                "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000"
+                  }
+                }
+              ],
+              [
+                "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000"
+                  }
+                }
+              ],
+              [
+                "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000"
+                  }
+                }
+              ],
+              [
+                "0x6b175474e89094c44da98b954eedeac495271d0f",
+                {
+                  "maxBorrow": {
+                    "$type": "bigint",
+                    "value": "5000000000000000000000000"
+                  }
+                }
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "samples": [
+      {
+        "direction": [
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "amountIn": "135000000000000000000000",
+        "quoteAmountOut": "134973211765020842883257",
+        "actualAmountsOut": {
+          "old-fragment": "134973211765020842883257",
+          "runtime-program": "134973211765020842883257",
+          "quoted-minimum-1-diagnostic": "134973211765020842883257"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-00-x1-attempt01.json",
+          "sha256": "99c279a269730cfbfccc1f1ebdefbd0b0d250281fced8808a68fb75c4e3902b4",
+          "bytes": 352701
+        }
+      },
+      {
+        "direction": [
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "amountIn": "270000000000000000000000",
+        "quoteAmountOut": "269940729965033261422638",
+        "actualAmountsOut": {
+          "old-fragment": "269940729965033261422638",
+          "runtime-program": "269940729965033261422638",
+          "quoted-minimum-1-diagnostic": "269940729965033261422638"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-00-x2-attempt01.json",
+          "sha256": "c8b2689259f9cef1cc31aabf57077d91077b18dbaa68e56f3d6f2a418e0f4f0f",
+          "bytes": 352701
+        }
+      },
+      {
+        "direction": [
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        ],
+        "amountIn": "135000000000000000000000",
+        "quoteAmountOut": "134972071035",
+        "actualAmountsOut": {
+          "old-fragment": "134972071035",
+          "runtime-program": "134972071035",
+          "quoted-minimum-1-diagnostic": "134972071035"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": true,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-original-amount-dual-attempt02.json",
+          "sha256": "089be7da24d2ad6a728fba49c314dbbe836f632b08e827c0c58cd187b0e9c818",
+          "bytes": 327054
+        }
+      },
+      {
+        "direction": [
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        ],
+        "amountIn": "270000000000000000000000",
+        "quoteAmountOut": "269938448457",
+        "actualAmountsOut": {
+          "old-fragment": "269938448457",
+          "runtime-program": "269938448457",
+          "quoted-minimum-1-diagnostic": "269938448457"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-01-x2-attempt01.json",
+          "sha256": "24f1a09874935ea4eacf925445ee13fd7c8910e6d1b777a607636d21f7fa527d",
+          "bytes": 327054
+        }
+      },
+      {
+        "direction": [
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7"
+        ],
+        "amountIn": "135000000000000000000000",
+        "quoteAmountOut": "134943313568",
+        "actualAmountsOut": {
+          "old-fragment": "134943313568",
+          "runtime-program": "134943313568",
+          "quoted-minimum-1-diagnostic": "134943313568"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-02-x1-attempt01.json",
+          "sha256": "03fc48b340a51e8d05f732a083bb54f2608af7ab785c76156f11471ac15a3201",
+          "bytes": 370758
+        }
+      },
+      {
+        "direction": [
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7"
+        ],
+        "amountIn": "270000000000000000000000",
+        "quoteAmountOut": "269880930148",
+        "actualAmountsOut": {
+          "old-fragment": "269880930148",
+          "runtime-program": "269880930148",
+          "quoted-minimum-1-diagnostic": "269880930148"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-02-x2-attempt01.json",
+          "sha256": "ed3e5782cff311b8f056df36bbc707660646789f516e4e86820c40f715c4341f",
+          "bytes": 370758
+        }
+      },
+      {
+        "direction": [
+          "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca"
+        ],
+        "amountIn": "5056416543622737857",
+        "quoteAmountOut": "5051841719046067417",
+        "actualAmountsOut": {
+          "old-fragment": "5051841719046067417",
+          "runtime-program": "5051841719046067417",
+          "quoted-minimum-1-diagnostic": "5051841719046067417"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-03-x1-attempt01.json",
+          "sha256": "ae7861c7ba9a31596fa67bc1175ba04310b81f98cfc0fe1209737096d4e36ec0",
+          "bytes": 355970
+        }
+      },
+      {
+        "direction": [
+          "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca"
+        ],
+        "amountIn": "50564165436227378570",
+        "quoteAmountOut": "50518405838407077401",
+        "actualAmountsOut": {
+          "old-fragment": "50518405838407077401",
+          "runtime-program": "50518405838407077401",
+          "quoted-minimum-1-diagnostic": "50518405838407077401"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-03-x10-attempt01.json",
+          "sha256": "f4054e777b6e5fade15f782125b2a35846b33b077bc73349e4849363454170f7",
+          "bytes": 355995
+        }
+      },
+      {
+        "direction": [
+          "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        ],
+        "amountIn": "5056416543622737857",
+        "quoteAmountOut": "5054863",
+        "actualAmountsOut": {
+          "old-fragment": "5054863",
+          "runtime-program": "5054863",
+          "quoted-minimum-1-diagnostic": "5054863"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-04-x1-attempt01.json",
+          "sha256": "6115ca54cfa969b731a08bd623f352d2607d52cb34a78cee6177e82630ee998a",
+          "bytes": 313474
+        }
+      },
+      {
+        "direction": [
+          "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        ],
+        "amountIn": "50564165436227378570",
+        "quoteAmountOut": "50548633",
+        "actualAmountsOut": {
+          "old-fragment": "50548633",
+          "runtime-program": "50548633",
+          "quoted-minimum-1-diagnostic": "50548633"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-04-x10-attempt01.json",
+          "sha256": "acddfa7f6b8b1ad06478d2710adaf14488c390da553d8a7145150e0e13c682a1",
+          "bytes": 313499
+        }
+      },
+      {
+        "direction": [
+          "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7"
+        ],
+        "amountIn": "5056416543622737857",
+        "quoteAmountOut": "5053905",
+        "actualAmountsOut": {
+          "old-fragment": "5053905",
+          "runtime-program": "5053905",
+          "quoted-minimum-1-diagnostic": "5053905"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-05-x1-attempt01.json",
+          "sha256": "c5e8846747aff84d3c762e21fd2d0e2a8aa2422e41147842d1c1caaa7dd74840",
+          "bytes": 357178
+        }
+      },
+      {
+        "direction": [
+          "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7"
+        ],
+        "amountIn": "50564165436227378570",
+        "quoteAmountOut": "50539056",
+        "actualAmountsOut": {
+          "old-fragment": "50539056",
+          "runtime-program": "50539056",
+          "quoted-minimum-1-diagnostic": "50539056"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-05-x10-attempt01.json",
+          "sha256": "1186c5c5953aa305f7e0f4171c5d05f6a7fda3f8b7144f4feb8276016ce0e942",
+          "bytes": 357203
+        }
+      },
+      {
+        "direction": [
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca"
+        ],
+        "amountIn": "5057048",
+        "quoteAmountOut": "5052502506498578497",
+        "actualAmountsOut": {
+          "old-fragment": "5052502506498578497",
+          "runtime-program": "5052502506498578497",
+          "quoted-minimum-1-diagnostic": "5052502506498578497"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-06-x1-attempt01.json",
+          "sha256": "b7a90c3f92ff7889b0b7a9ae5087dbd16121089a43358f044877908e6738574d",
+          "bytes": 343523
+        }
+      },
+      {
+        "direction": [
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca"
+        ],
+        "amountIn": "50570480",
+        "quoteAmountOut": "50525013712832186034",
+        "actualAmountsOut": {
+          "old-fragment": "50525013712832186034",
+          "runtime-program": "50525013712832186034",
+          "quoted-minimum-1-diagnostic": "50525013712832186034"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-06-x10-attempt01.json",
+          "sha256": "692709af61d0650f3fe862f246ef23529ef06495c1f9b8f24499119320e93da4",
+          "bytes": 343548
+        }
+      },
+      {
+        "direction": [
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "amountIn": "5057048",
+        "quoteAmountOut": "5055567179921153637",
+        "actualAmountsOut": {
+          "old-fragment": "5055567179921153637",
+          "runtime-program": "5055567179921153637",
+          "quoted-minimum-1-diagnostic": "5055567179921153637"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-07-x1-attempt01.json",
+          "sha256": "2943abec0ddf632353fd0ed1ad43a013a1bdc3d79a412af2bd1bb13ca2f683f8",
+          "bytes": 326677
+        }
+      },
+      {
+        "direction": [
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "amountIn": "50570480",
+        "quoteAmountOut": "50555671798450801713",
+        "actualAmountsOut": {
+          "old-fragment": "50555671798450801713",
+          "runtime-program": "50555671798450801713",
+          "quoted-minimum-1-diagnostic": "50555671798450801713"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-07-x10-attempt01.json",
+          "sha256": "17ca2a605efcba347d8e939e9f8d3b09964a98da77516f72b284fd11fa32b0de",
+          "bytes": 326702
+        }
+      },
+      {
+        "direction": [
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7"
+        ],
+        "amountIn": "5057048",
+        "quoteAmountOut": "5054573",
+        "actualAmountsOut": {
+          "old-fragment": "5054573",
+          "runtime-program": "5054573",
+          "quoted-minimum-1-diagnostic": "5054573"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-08-x1-attempt01.json",
+          "sha256": "81e88eeb36f4c69e62f1b035c7e7c45f8f8eb02a7abec7dbff1cb6ccd31a1a16",
+          "bytes": 344734
+        }
+      },
+      {
+        "direction": [
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7"
+        ],
+        "amountIn": "50570480",
+        "quoteAmountOut": "50545731",
+        "actualAmountsOut": {
+          "old-fragment": "50545731",
+          "runtime-program": "50545731",
+          "quoted-minimum-1-diagnostic": "50545731"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-08-x10-attempt01.json",
+          "sha256": "e2c838e107e8cbb3b080143870214390ca088d42634745d99ee3862a6253aad5",
+          "bytes": 344759
+        }
+      },
+      {
+        "direction": [
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca"
+        ],
+        "amountIn": "5056583",
+        "quoteAmountOut": "5052875312607315836",
+        "actualAmountsOut": {
+          "old-fragment": "5052875312607315836",
+          "runtime-program": "5052875312607315836",
+          "quoted-minimum-1-diagnostic": "5052875312607315836"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-09-x1-attempt01.json",
+          "sha256": "9f8f4011803f043699cf21d8f4d0149c9ca5b0bb636ed82524c17121e9389972",
+          "bytes": 376145
+        }
+      },
+      {
+        "direction": [
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0x956f47f50a910163d8bf957cf5846d573e7f87ca"
+        ],
+        "amountIn": "50565830",
+        "quoteAmountOut": "50528748769605908031",
+        "actualAmountsOut": {
+          "old-fragment": "50528748769605908031",
+          "runtime-program": "50528748769605908031",
+          "quoted-minimum-1-diagnostic": "50528748769605908031"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-09-x10-attempt01.json",
+          "sha256": "d2d82b563cb015f0c4252488bafcb6c95c9ed40ca28a769c1a75e0fae9acaf8f",
+          "bytes": 376170
+        }
+      },
+      {
+        "direction": [
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "amountIn": "5056583",
+        "quoteAmountOut": "5056060196094147013",
+        "actualAmountsOut": {
+          "old-fragment": "5056060196094147013",
+          "runtime-program": "5056060196094147013",
+          "quoted-minimum-1-diagnostic": "5056060196094147013"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-10-x1-attempt01.json",
+          "sha256": "ef7421bd6f7318204b8cb18d1c5017dfc991a8074de2e8397b8bbcd9ea5b7926",
+          "bytes": 359299
+        }
+      },
+      {
+        "direction": [
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "amountIn": "50565830",
+        "quoteAmountOut": "50560601959741988298",
+        "actualAmountsOut": {
+          "old-fragment": "50560601959741988298",
+          "runtime-program": "50560601959741988298",
+          "quoted-minimum-1-diagnostic": "50560601959741988298"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-10-x10-attempt01.json",
+          "sha256": "43b9c2ddb8bd3e78755c08ac5c9fb1f0a1196b512fd2ccb4ff267dd1d3a87494",
+          "bytes": 359324
+        }
+      },
+      {
+        "direction": [
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        ],
+        "amountIn": "5056583",
+        "quoteAmountOut": "5056023",
+        "actualAmountsOut": {
+          "old-fragment": "5056023",
+          "runtime-program": "5056023",
+          "quoted-minimum-1-diagnostic": "5056023"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-11-x1-attempt01.json",
+          "sha256": "83881c3fda5fe90ebccfe3cd00960a1a76bfcf2fbfb4eb025e5b0ddb87e4de0a",
+          "bytes": 333652
+        }
+      },
+      {
+        "direction": [
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        ],
+        "amountIn": "50565830",
+        "quoteAmountOut": "50560238",
+        "actualAmountsOut": {
+          "old-fragment": "50560238",
+          "runtime-program": "50560238",
+          "quoted-minimum-1-diagnostic": "50560238"
+        },
+        "inputSource": "manual-cli; external provenance in the immutable coverage plan",
+        "reused": false,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-11-x10-attempt01.json",
+          "sha256": "2ab7b552944ddf492a8b2843b78ca8fd074f1b38a9d5ce0cd66a6e9d4dedd3d9",
+          "bytes": 333677
+        }
+      }
+    ]
+  },
+  "regressions": {
+    "currentBuild": "build:live passed after optional shared backend change",
+    "familyContracts": {
+      "passed": 96,
+      "invocationFailed": 1,
+      "reason": "Wildcard node --test included archived-receipt-observation CLI without mandatory --checkpoint. Original old checkpoint unavailable; no old hash changed."
+    },
+    "newLegacyFactoryTests": 9,
+    "receiptTests": 11,
+    "productionDualExecution": 80,
+    "currentHistoricalSafetyTests": 10,
+    "strictReady": "passed",
+    "forkCancellation": "passed",
+    "callDeadline": "passed",
+    "validationReceipts": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/factory-validation-attempt01-status.json",
+        "sha256": "5fdfed3092c9a3d35aac698550d6616650cff54493eb98b4e3d4e455fbae3efe",
+        "bytes": 2607
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/factory-validation-attempt02-status.json",
+        "sha256": "8ac8b30fb99e27c41567daee128a65f521a650118d057fef276bed5261c154e4",
+        "bytes": 3220
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/hardfork-tool-validation-attempt01-status.json",
+        "sha256": "81c18b4e27f3dd93bbd119c53e25db865baa5ea889777ef61eaeabc6312d7cbd",
+        "bytes": 1731
+      }
+    ],
+    "finalSafetyLog": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/hardfork-tool-final-safety.log",
+      "sha256": "61d91629e33a2020a7b27bde6b73b55294486f4f3b9cabb358aedf7ebec07c9a",
+      "bytes": 1176
+    },
+    "finalGeneratedReadOnlyCheck": {
+      "exitCode": 0,
+      "seconds": 44.035,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/final-generated-check.log",
+      "sha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef"
+    }
+  },
+  "retainedFailures": [
+    {
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt01/failure.json",
+        "sha256": "348bb0843f29827ed31601aabc5fcd112e2351c31b30819183655f4350dfdcb5",
+        "bytes": 106
+      },
+      "classification": "historical identity-source gap, not a pool rejection"
+    },
+    {
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-original-amount-dual-attempt01.json",
+        "sha256": "6a144590c919e59dbf5384efdf8e7496cfeefbf3bac823c1304447e1ddaf2d42",
+        "bytes": 23009
+      },
+      "classification": "Three root NotActivated failures before pool calls; production runtime PUSH0 at dispatcher PC31 unavailable under historical fork rules. No execution support claim."
+    },
+    {
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/factory-validation-attempt01-family-contracts.log",
+        "sha256": "11e93d7ec51b84d268b7f32fa1ca42b10f1ab05e54a36fa3705c9fb7b0380a54",
+        "bytes": 10018
+      },
+      "classification": "archival CLI invocation error, separate from 96 passed real tests"
+    },
+    {
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/hardfork-tool-validation-attempt01-tool-index.log",
+        "sha256": "344737b4ab77783d43ac5fa336efcdd77bd2109bba5db8d584124910021c4bbf",
+        "bytes": 1949
+      },
+      "classification": "read-only index invocation lacked safe.directory under sudo; corrected scoped environment, no source/chain rerun"
+    },
+    {
+      "classification": "Two gcloud read-only status requests failed TLS/SSL EOF; original processes/products inspected through existing SSH; no duplicate job was launched."
+    }
+  ],
+  "toolReconciliation": {
+    "query": "curve-underlying-ready,curve,underlying",
+    "candidateManifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/tool-selection-factory-candidate.json",
+      "sha256": "e925153b30867d35bd97c1a613cb6ad5e35218f470366e3d9ea5d2d466cbba89",
+      "bytes": 11334
+    },
+    "finalManifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/tool-selection-factory-final.json",
+      "sha256": "7661e294f9fec9db083109bb27b9cce5b7db4db0e9144c81beee414cfdde5e67",
+      "bytes": 51626
+    },
+    "candidateExecutions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-underlying-family-plugin",
+        "descriptor_sha256": "c936dc96e471069d5fea3d9f1a26335d57cb44ee651e70bd3c0f2c25aa7b452a",
+        "started_at": "2026-10-13T10:51:37.404Z",
+        "finished_at": "2026-10-13T10:51:38.312Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "9774b32543509a85cfc62b81dc08570cefa1e22859beced03aa625b3c52febab",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-underlying-family-plugin",
+          "--"
+        ],
+        "stdout_sha256": "8029c99386232062052ebafe0e4018c295048d0939f07edb6ac82a3c8c332c0d",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1201,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-plain-historical-ready",
+        "descriptor_sha256": "f917eaca4f5e11ef39ebe019f83ce0464d8945cd3ec514d5034e3d5a78448609",
+        "started_at": "2026-10-13T10:51:38.703Z",
+        "finished_at": "2026-10-13T10:51:43.419Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "da86137195c8cbf3d05eb320461c99789c633ca32ad78299071f36c54fde9d27",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-plain-historical-ready",
+          "--",
+          "--tx",
+          "0xaa578d4eaa5629cd61ef8d1d2b9827ca765fd816370654e57f3166a1270da464",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02",
+          "--executor",
+          "0x1000000000000000000000000000000000000002",
+          "--owner",
+          "0x1000000000000000000000000000000000000001",
+          "--revm-bin",
+          "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+          "--expect-pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--families",
+          "curve-underlying",
+          "--reuse-ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt01/ready.json"
+        ],
+        "stdout_sha256": "0765e75e5cb7b2b471d909b850ac9b65769cdb0eab46a4ad75581d36d5210930",
+        "stderr_sha256": "b7f05375346cf9948ceb55c9875a66c74c897eda52fcffc6d7c163cdb011d0ff",
+        "stdout_bytes": 9417,
+        "stderr_bytes": 90
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:04:17.658Z",
+        "finished_at": "2026-10-13T11:04:20.371Z",
+        "exit_code": 1,
+        "cwd": "listener",
+        "argv_sha256": "d48acf2d83b02b1d1d7e125ee1c096c18a92c7cfb2ab8f22c32066fb206f9edf",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-original-amount-dual-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x956F47F50A910163D8BF957Cf5846D573E7f87CA\", \"tokenOut\": \"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\", \"amountIn\": \"135000000000000000000000\"}"
+        ],
+        "stdout_sha256": "1aae584f14f6a2d18637160d0bf60b64576af2c027f3b7298b14e507e04df65e",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1316,
+        "stderr_bytes": 0
+      }
+    ],
+    "finalExecutions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:12:59.813Z",
+        "finished_at": "2026-10-13T11:13:02.410Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "96c6d945a48e6a80e15a4ed2bfd20d7a878e138886148490416c59f00cd53841",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-original-amount-dual-attempt02.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x956F47F50A910163D8BF957Cf5846D573E7f87CA\", \"tokenOut\": \"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\", \"amountIn\": \"135000000000000000000000\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "c3e04ceb5b6130b8d511912caef0535eb90461e59f949392c9fd102c110f7a06",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1243,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:16:37.433Z",
+        "finished_at": "2026-10-13T11:16:40.311Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "06ae21a983ae69fbbc3ade0bec5cae8ef285e979e8c7d1295da82d9eca6b038e",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-00-x1-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x956f47f50a910163d8bf957cf5846d573e7f87ca\", \"tokenOut\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"amountIn\": \"135000000000000000000000\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "1d67edb38e2b9aceb085037d787cdf198028ac30d94837ac5e7fd083b1052830",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1233,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:16:40.609Z",
+        "finished_at": "2026-10-13T11:16:42.659Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "d20d6491ac6db3eb13d2955b627d465c2c75c529ee5e580f2fe6b880f1a4cf2e",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-00-x2-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x956f47f50a910163d8bf957cf5846d573e7f87ca\", \"tokenOut\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"amountIn\": \"270000000000000000000000\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "f6336a37a5c9a4e1162702f5384963b50b53682621e41a7c8fe97cfe4d7e82aa",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1233,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:16:42.954Z",
+        "finished_at": "2026-10-13T11:16:45.004Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "e1f089b72ba1ee651eee92627a938ed20e99c4aa023d4ab3e36d023e8c672005",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-01-x2-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x956f47f50a910163d8bf957cf5846d573e7f87ca\", \"tokenOut\": \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\", \"amountIn\": \"270000000000000000000000\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "c9e29265c5ec989ea1cab67ac781dc97dbaf0d0016f12ae57c8735c72ee4ca0f",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1233,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:16:45.303Z",
+        "finished_at": "2026-10-13T11:16:47.490Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "bd4de3b375b4d1a5bfbbd43f24d05f38122b5c775ef6a8cee60c741200307b51",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-02-x1-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x956f47f50a910163d8bf957cf5846d573e7f87ca\", \"tokenOut\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"amountIn\": \"135000000000000000000000\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "29cf67d6f286eb3a07c7a12c9c25d73ad178b9688dc29a046a3614dbd64dc9f7",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1233,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:16:47.794Z",
+        "finished_at": "2026-10-13T11:16:50.711Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "d9bc8054a4cad7ef6ed0679fb084bb9abfba62382febb0f2b7c9a38a61a044ec",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-02-x2-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x956f47f50a910163d8bf957cf5846d573e7f87ca\", \"tokenOut\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"amountIn\": \"270000000000000000000000\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "0a2e716b8f6a5c377aede94e1a1ae569624a197262adcfa9009b334f605bc268",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1233,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:16:51.199Z",
+        "finished_at": "2026-10-13T11:16:53.547Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "f4c81191d1683cfefd2c65b0a0c5c1d82f2dfb4eb9ce28a39c725a5f1b1a1925",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-03-x1-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"tokenOut\": \"0x956f47f50a910163d8bf957cf5846d573e7f87ca\", \"amountIn\": \"5056416543622737857\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "b4fae35b128c00e1e3caa2ebf5bd50b5a64995b9499fbb7e1ac32d2c80cf836b",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1228,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:16:53.861Z",
+        "finished_at": "2026-10-13T11:16:55.897Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "9971454267806fcc8f29983af4f63e9178ac9d4adfa957a5b70358d304d23df7",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-03-x10-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"tokenOut\": \"0x956f47f50a910163d8bf957cf5846d573e7f87ca\", \"amountIn\": \"50564165436227378570\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "c6c56fb5afb0f7546fe6dacc12a23153332bcc1ba01d237b79eb351567abbb36",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1231,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:16:56.208Z",
+        "finished_at": "2026-10-13T11:16:58.223Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "3feaef6fd076638fa331e6626f96a24c48c3c38f4442ad061d6dce46d98ab60e",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-04-x1-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"tokenOut\": \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\", \"amountIn\": \"5056416543622737857\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "a827cff96f0d359bedd53ca6b2649b46b9eaec0685c9997b783b9f65e6570564",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1228,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:16:58.526Z",
+        "finished_at": "2026-10-13T11:17:00.572Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "59e0954742945283bffca3e976ef925aabaa3f6d948950838b4ca6bcab5deb47",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-04-x10-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"tokenOut\": \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\", \"amountIn\": \"50564165436227378570\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "96edb821749b8baa7cd29a5b12fe77270beaffad052e474b7805eff8ecc50ebf",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1231,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:00.869Z",
+        "finished_at": "2026-10-13T11:17:03.124Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "859fdd362fe313edbf96a95dde85ad78ea7a836a54832cea1263b52a8bd8c58c",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-05-x1-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"tokenOut\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"amountIn\": \"5056416543622737857\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "4d0db72f704cd76b8a4ee4ad7ea606493a265e7620b8efddbe2b6e071e6ec48a",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1228,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:03.594Z",
+        "finished_at": "2026-10-13T11:17:06.589Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "0d59d47a4af69ad4dd7a92835eed9f88b03ac1f267a2bbb3c2eb33817f72b7d4",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-05-x10-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"tokenOut\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"amountIn\": \"50564165436227378570\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "5c37e7d903462e2cd7ea058f4027977d74f0723d5f1a0e1abf0dd2bbec9f5558",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1231,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:07.097Z",
+        "finished_at": "2026-10-13T11:17:09.712Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "7d942409cdde864eeaf9f2cd9fcc03b5fa117210405468fe6158680e72e42ba0",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-06-x1-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\", \"tokenOut\": \"0x956f47f50a910163d8bf957cf5846d573e7f87ca\", \"amountIn\": \"5057048\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "fc7fa6e2fac543e2ec4ffb0c06c7ed6ce596a93bc6c787da2345841471a99a22",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1216,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:10.009Z",
+        "finished_at": "2026-10-13T11:17:12.076Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "e2c0e34a8f2374c5de4c78b2b70b869468ffb7406c2471330079e726bf2dfb0d",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-06-x10-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\", \"tokenOut\": \"0x956f47f50a910163d8bf957cf5846d573e7f87ca\", \"amountIn\": \"50570480\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "d88bff1f79b92668999e37568233d0311af7bf82b808ee9e81dd15a6fb5e9066",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1219,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:12.372Z",
+        "finished_at": "2026-10-13T11:17:14.468Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "f962ea56a5e77574065b46ab4d81c34f1e82812d19216406bd888d87fe81bdab",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-07-x1-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\", \"tokenOut\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"amountIn\": \"5057048\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "cb6fcdcc5825db0df43e2cbcc35d091986f4324cad5eaae88af0792a7af5c4e1",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1216,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:14.941Z",
+        "finished_at": "2026-10-13T11:17:17.841Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "e559640ed8b35976d7eef5b546e660fdbee5d1b1b9c73510726879ec72b63388",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-07-x10-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\", \"tokenOut\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"amountIn\": \"50570480\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "31a3c35200b8efc23fcf1ee84f44db82abffbdcfee816b8c7277f31de97cec2d",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1219,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:18.311Z",
+        "finished_at": "2026-10-13T11:17:21.070Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "d0e038dabe57451c3ddcbb48fef4e07515c037e93ad748a332f1b253558fa747",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-08-x1-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\", \"tokenOut\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"amountIn\": \"5057048\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "32f7fb8e6a94dfbd5ba7eab8c4b15b2b60edb8469294af561eeda8fb24d6755c",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1216,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:21.368Z",
+        "finished_at": "2026-10-13T11:17:23.438Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "5dad27693bd956d7514552a531f7fd6a4befc0ed59d9f973dd3b6536346effa4",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-08-x10-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\", \"tokenOut\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"amountIn\": \"50570480\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "f2b7c69c7a14ce7adb3dbe3c8fb8856400164e8162e961c83680e13dc33d7797",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1219,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:23.737Z",
+        "finished_at": "2026-10-13T11:17:26.158Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "a6e7372b0c8fd54a8022f0b31d5b37b031c0ac8212112d7901efecd385b3c1f1",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-09-x1-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"tokenOut\": \"0x956f47f50a910163d8bf957cf5846d573e7f87ca\", \"amountIn\": \"5056583\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "092ea1515d8de8bf67818438f7cae975990a871fec0e78523f3d6cc30b4ece5b",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1216,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:26.691Z",
+        "finished_at": "2026-10-13T11:17:29.704Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "f84e0c640494e9700e6f93ff31c499c532c64c6927e2674967e5ccfd89fcaf58",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-09-x10-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"tokenOut\": \"0x956f47f50a910163d8bf957cf5846d573e7f87ca\", \"amountIn\": \"50565830\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "07bd4ae3dd977b1314f1af4dcb151130218312930b4820714b469b043e6e2f56",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1219,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:30.057Z",
+        "finished_at": "2026-10-13T11:17:32.128Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "5e4dcdd4fe8afc75e343af61d4286f23b8d10fc3da486e747cd8ca631f21f800",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-10-x1-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"tokenOut\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"amountIn\": \"5056583\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "da2f190acff8e49b59e9757774e8e8a7d3284ae422d98ef67dc58c73de3044c2",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1216,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:32.431Z",
+        "finished_at": "2026-10-13T11:17:34.484Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "08658a9727a02a38825a4eab710e9f94ed4621a558282484d7d8315058875320",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-10-x10-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"tokenOut\": \"0x6b175474e89094c44da98b954eedeac495271d0f\", \"amountIn\": \"50565830\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "429ce98d96fe84c2541cc1a925495cb4dafce82f3330a7bd13d4c1fb51d03161",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1219,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:34.782Z",
+        "finished_at": "2026-10-13T11:17:36.839Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "2354c5f163a4b8c4120179d749ab408007942660e061ff456dc19623af6878ca",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-11-x1-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"tokenOut\": \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\", \"amountIn\": \"5056583\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "9fa2c87ee6495cd1ed65c17557dcfccac687b5ac408eca572cfd0ecc43faed7b",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1216,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-runtime-dual-historical-fork",
+        "descriptor_sha256": "b23b46cc79be58e1dc1cff3f1ae69afa7ccfdede3acd8e77772362e5677a0dea",
+        "started_at": "2026-10-13T11:17:37.208Z",
+        "finished_at": "2026-10-13T11:17:40.234Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "7f0eedaa4b3f228889db0f9768eb0a6c42d21b39397e63f073e609a2cc489969",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-runtime-dual-historical-fork",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/prices.json",
+          "--price-input",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/single-N14127510-attempt02/prices/input.json",
+          "--pool",
+          "0x06cb22615ba53e60d67bf6c341a0fd5e718e1655",
+          "--family",
+          "curve-underlying",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/fei-direction-11-x10-attempt01.json",
+          "--port",
+          "8591",
+          "--manual-input",
+          "{\"tokenIn\": \"0xdac17f958d2ee523a2206206994597c13d831ec7\", \"tokenOut\": \"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\", \"amountIn\": \"50565830\"}",
+          "--executor-hardfork",
+          "cancun"
+        ],
+        "stdout_sha256": "c3a6434ad8633147f793e48120dc5bc01498e00b39c968388fb1c8544b5e7a8f",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1219,
+        "stderr_bytes": 0
+      }
+    ],
+    "case": "docs/research/reports/tooldef-20261013-curve-historical-executor-rules.json",
+    "codifyCommit": "bd2e280bfeb12906b8c5a915429ea5fd105f83ad"
+  },
+  "independentReview": {
+    "status": "passed-bounded-read-only-review",
+    "reviewer": "/root/curve_ready_review",
+    "findings": [],
+    "ran_gate": true,
+    "scope": "Final code and saved raw evidence independently audited; prior 54 offline identity/receipt checks reused. No independent RPC/EVM, build or test rerun during final evidence audit.",
+    "identity": "Legacy factory only after explicit empty MetaRegistry code; failures remain closed; reverse registry membership, ordered coins, base/model and receipt source bindings preserved.",
+    "execution": {
+      "groups": 24,
+      "primaryQuotedAndRuntime": 48,
+      "minimumOneDiagnostics": 24,
+      "rawStateDiffAndTransferAudits": 72,
+      "zeroInputRootReverts": 72,
+      "inputDebit": "exact requested input",
+      "output": "unit-exact quote match",
+      "oldInputInventory": "101 preserved",
+      "oldOutputInventory": "103 preserved plus received amount",
+      "nativeInventory": "17 preserved",
+      "rollbackResidual": "owner gas/nonce only"
+    },
+    "environment": "Raw historical header hash independently recomputed; N14127510, timestamp 1643816802, basefee 106022199063, explicit Cancun hardfork and artifact/patched runtime/program hashes verified. Original NotActivated retained.",
+    "readyAndInputs": "Ready/memo/descriptor/Graph/prices bindings consistent; 12 positive raw mids but all 12 effective missing-valuation. FEI original amount decoded from receipt log85. All 3 donor production rows independently verified with N22871578 source, hashes, freshness, quotes and cfg.",
+    "source": "1153 manual-scope files recomputed to df9d51da8dacf5c5b5bb0a2e31c88ecacbc52387360cc0997a819fd4089b6eda. Only replacing optional backend with saved before-image reconstructs prior Ready and failed-run source pins. 1140 common files have no content differences.",
+    "toolManifests": {
+      "totalExecutions": 27,
+      "exitZero": 26,
+      "retainedOriginalDualFailure": 1,
+      "verified": "Current descriptors, argv, child stdout/stderr byte counts and SHA-256; union covers capability query."
+    },
+    "finalGeneratedCheck": "Read-only check exit 0 and saved log hash verified.",
+    "learningCase": "Codify commit bd2e280bfeb12906b8c5a915429ea5fd105f83ad verified in corresponding LearningCase.",
+    "limitations": [
+      "Historical-state current-executor counterfactual test, not original transaction pre-call replay or historical EVM equivalence.",
+      "Does not establish natural effective valuation, simultaneous meta/base ramp or other uncovered variants, opportunity replay, Adapter Replay/family_local merge gates, or any stage4 performance."
+    ],
+    "evidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/independent-final-review-20261013.json",
+      "sha256": "e6b35b45cc9cb8f93a6a1e8a65c0b63c5e33b93bfd4c5546961e782dc35a1169",
+      "bytes": 2570
+    }
+  },
+  "preservation": {
+    "precommit": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/precommit-preservation.json",
+      "sha256": "c8b8729016efcc6dda0eec1f5a5e16753c9eca0af27033f132024205de96c1bd",
+      "bytes": 6660
+    },
+    "postcommit": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-meta-ramp-20261013.p6ipkvfz/postcommit-preservation.json",
+      "sha256": "38f0d92526827fe22ba771074b8eff22f326eb276634ec9d274a5290997bbeda",
+      "bytes": 689
+    },
+    "coffeeSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "originalReadyAndPricesUnchanged": true,
+    "otherTrackedDirty": 24,
+    "otherUntracked": 7,
+    "newBranchOrWorktree": false,
+    "liveStarted": false,
+    "peerProcessesStopped": false,
+    "deployment": false,
+    "signing": false,
+    "broadcast": false,
+    "privateKeyAccess": false
+  },
+  "implIncrement": {
+    "sha256Observed": "c093e86fbfcc7a6e29b69e4191bff30bdb174459947cfe11972e852e7bbde2d1",
+    "newWork": "Few wrapping/unwrapping and separate GMX-V1-style Vault swap; Ring V2 already admitted. Defer to stage3 in prescribed order; preserve original new row."
+  },
+  "limitations": [
+    "Natural target effective valuation remains missing; borrowed inputs are from N22871578, not naturally generated at target N14127510.",
+    "Historical MetaRegistry absence is not protocol swap refusal.",
+    "Both meta and base active together, other rate/precision combinations and remaining protocol variants are unverified.",
+    "Original pre-call state, opportunity lane replay, formal Adapter Replay merge gates and complete-route final sim/EV have not been established by this task increment.",
+    "All stage4A and representative stage4B performance remain NOT RUN; no timing from correctness jobs is performance acceptance.",
+    "Stage2 and full four-stage goal remain active."
+  ],
+  "toolingDefectLearningCase": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/tooldef-20261013-curve-historical-executor-rules.json",
+    "sha256": "54e217977d51161bded25efa4ecad72c807f0050c80df60bfc13d4fad80ea7c5",
+    "bytes": 2193
+  }
+}
