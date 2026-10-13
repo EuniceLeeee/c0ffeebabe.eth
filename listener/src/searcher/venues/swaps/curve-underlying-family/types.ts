@@ -32,12 +32,13 @@ export interface CurveUnderlyingVerifiedDirection {
   readonly behaviorProbeAmountOut: bigint;
 }
 
-export interface CurveUnderlyingRegistryBinding {
+export type CurveUnderlyingRegistryBinding = {
   readonly registry: string;
   readonly handlers: readonly string[];
-  readonly lookupSemantics:
-    "get_registry_handlers_from_pool+get_underlying_coins";
-}
+} & (
+  | { readonly lookupSemantics: "get_registry_handlers_from_pool+get_underlying_coins" }
+  | { readonly lookupSemantics: "get_base_pool+get_underlying_coins"; readonly basePool: string }
+);
 
 /** Semantics bound by immutable implementation code plus on-chain coin/LP topology.
  * Not an admission allowlist and not a universal Curve math model. */
@@ -134,6 +135,7 @@ export type CurveUnderlyingIdentityEvidence =
       readonly phase: "registry-surface";
       readonly pool: string;
       readonly handlers: readonly string[];
+      readonly registryBinding?: CurveUnderlyingRegistryBinding;
       readonly coins: readonly string[];
       readonly poolHasCode: boolean;
       readonly poolCode: string;
@@ -142,6 +144,7 @@ export type CurveUnderlyingIdentityEvidence =
       readonly phase: "behavior-proof";
       readonly pool: string;
       readonly handlers: readonly string[];
+      readonly registryBinding?: CurveUnderlyingRegistryBinding;
       readonly coins: readonly string[];
       readonly verifiedDirections: readonly CurveUnderlyingVerifiedDirection[];
       readonly quoteModel?: CurveUnderlyingClassicMetaBinding;

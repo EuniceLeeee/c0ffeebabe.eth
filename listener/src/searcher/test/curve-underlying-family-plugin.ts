@@ -1,3 +1,4 @@
+import "../venues/swaps/curve-underlying-family/test/legacy-factory-contract.js";
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import {

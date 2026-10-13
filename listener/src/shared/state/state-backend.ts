@@ -196,7 +196,13 @@ export class AnvilStateBackend implements StateBackend {
     private readonly rpcUrl: string,
     readonly anvilUrl = "http://127.0.0.1:8555",
     private readonly port = 8555,
+    // Explicit counterfactual executor tests only; ordinary callers retain
+    // Anvil's historical hardfork selection.
+    private readonly counterfactualHardfork?: "cancun",
   ) {
+    if (counterfactualHardfork !== undefined && counterfactualHardfork !== "cancun") {
+      throw new Error("unsupported counterfactual hardfork");
+    }
     this.provider = makeAnvilProvider(anvilUrl);
   }
 
@@ -208,6 +214,7 @@ export class AnvilStateBackend implements StateBackend {
     let stderrTail = "";
     const proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
+      ...(this.counterfactualHardfork ? ["--hardfork", this.counterfactualHardfork] : []),
       "--accounts", "0",
       "--port", String(this.port),
       "--silent",
@@ -380,6 +387,7 @@ export class AnvilStateBackend implements StateBackend {
     this.resetProvider();
     const proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
+      ...(this.counterfactualHardfork ? ["--hardfork", this.counterfactualHardfork] : []),
       "--fork-block-number", String(blockNumber),
       "--accounts", "0",
       "--port", String(this.port),
@@ -423,6 +431,7 @@ export class AnvilStateBackend implements StateBackend {
     this.resetProvider();
     const proc = spawn("anvil", [
       "--fork-url", this.rpcUrl,
+      ...(this.counterfactualHardfork ? ["--hardfork", this.counterfactualHardfork] : []),
       "--fork-transaction-hash", txHash,
       "--accounts", "0",
       "--port", String(this.port),

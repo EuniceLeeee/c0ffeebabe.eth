@@ -1,3 +1,6 @@
+import { ethers } from "ethers";
+import { CURVE_LEGACY_FACTORY, CURVE_LEGACY_FACTORY_INTERFACE, CURVE_LEGACY_FACTORY_LOOKUP,
+  decodeLegacyFactoryBasePool, decodeLegacyFactoryCoins } from "./legacy-factory.js";
 import { hasClassicUnderlyingQuoteModel, underlyingQuoteModelBindingRequests, decodeUnderlyingQuoteModel,
   curveUnderlyingQuoteModelProjection } from "./quote-model.js";
 import { curveUnderlyingNativeIdentity } from "./native-identity.js";
@@ -12,6 +15,7 @@ import type {
 } from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
 import {
+  assertSameSource,
   canonicalAddress,
   CURVE_BEHAVIOR_PROBE_AMOUNTS,
   CURVE_METAREGISTRY,
@@ -25,6 +29,7 @@ import {
 } from "./codec.js";
 import {
   CURVE_UNDERLYING_FAMILY_ID,
+  CURVE_UNDERLYING_FACTORY_LINEAGE_ID,
   CURVE_UNDERLYING_REGISTRY_LINEAGE_ID,
 } from "./manifest.js";
 import type {
@@ -37,6 +42,85 @@ import type {
 const REGISTRY_HANDLERS_ID = "registry-handlers";
 const REGISTRY_COINS_ID = "registry-underlying-coins";
 const POOL_CODE_ID = "pool-code";
+
+const FACTORY_BASE_POOL_ID = "factory-base-pool";
+const METAREGISTRY_CODE_ID = "historical-metaregistry-code";
+interface FactoryAvailabilityEvidence {
+  readonly phase: "factory-availability";
+  readonly metaregistryHasCode: boolean;
+}
+
+const curveUnderlyingHistoricalFactoryIdentity = {
+  id: "legacy-factory-member",
+  kind: "registry-member" as const,
+  lineageId: CURVE_UNDERLYING_FACTORY_LINEAGE_ID,
+  applies: () => true,
+  requirements(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>) {
+    const evidence = factoryIdentityEvidence(input.evidence);
+    if (evidence === undefined) return { transports: ["get-code" as const] };
+    if (evidence.phase === "factory-availability") return { transports: ["eth-call" as const, "get-code" as const] };
+    return evidence.phase === "registry-surface" && hasClassicUnderlyingQuoteModel(evidence.poolCode)
+      ? { transports: ["eth-call" as const, "get-code" as const, "get-storage" as const] }
+      : { transports: ["eth-call" as const] };
+  },
+  buildRequests(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>): readonly AdapterRequest[] {
+    const evidence = factoryIdentityEvidence(input.evidence);
+    if (evidence === undefined) return [{ id: METAREGISTRY_CODE_ID, kind: "get-code", address: CURVE_METAREGISTRY }];
+    if (evidence.phase === "factory-availability") return [
+      { id: FACTORY_BASE_POOL_ID, kind: "eth-call", to: CURVE_LEGACY_FACTORY,
+        data: CURVE_LEGACY_FACTORY_INTERFACE.encodeFunctionData("get_base_pool", [input.candidate.pool]),
+        completion: "return-data" },
+      { id: REGISTRY_COINS_ID, kind: "eth-call", to: CURVE_LEGACY_FACTORY,
+        data: CURVE_LEGACY_FACTORY_INTERFACE.encodeFunctionData("get_underlying_coins", [input.candidate.pool]),
+        completion: "return-or-revert-data" },
+      { id: POOL_CODE_ID, kind: "get-code", address: canonicalAddress(input.candidate.pool) },
+    ];
+    return evidence.phase === "registry-surface" ? behaviorRequests(evidence) : [];
+  },
+  decode(input: { readonly step: IdentityStepInput<CurveUnderlyingCandidate, unknown>;
+    readonly results: readonly AdapterRequestResult[]; }): FactoryAvailabilityEvidence | CurveUnderlyingIdentityEvidence {
+    const prior = factoryIdentityEvidence(input.step.evidence);
+    if (prior === undefined) {
+      const code = requireSuccessfulResult(input.results, METAREGISTRY_CODE_ID).data;
+      if (!ethers.isHexString(code)) throw new Error("curve-underlying malformed metaregistry code");
+      return Object.freeze({ phase: "factory-availability", metaregistryHasCode: code !== "0x" });
+    }
+    if (prior.phase !== "factory-availability") return decodeBehaviorProof(prior, input.results);
+    if (prior.metaregistryHasCode) throw new Error("curve-underlying historical factory requires absent MetaRegistry");
+    const baseResult = requireSuccessfulResult(input.results, FACTORY_BASE_POOL_ID);
+    const codeResult = requireSuccessfulResult(input.results, POOL_CODE_ID);
+    const basePool = decodeLegacyFactoryBasePool(baseResult.data);
+    const coinsResult = basePool === ethers.ZeroAddress ? undefined : requireSuccessfulResult(input.results, REGISTRY_COINS_ID);
+    assertSameSource([baseResult, codeResult, ...(coinsResult ? [coinsResult] : [])]);
+    return Object.freeze({
+      phase: "registry-surface",
+      pool: canonicalAddress(input.step.candidate.pool),
+      handlers: Object.freeze([]),
+      coins: coinsResult ? decodeLegacyFactoryCoins(coinsResult.data) : Object.freeze([]),
+      poolHasCode: codeResult.data !== "0x",
+      poolCode: codeResult.data,
+      registryBinding: Object.freeze({ registry: CURVE_LEGACY_FACTORY, handlers: Object.freeze([]),
+        lookupSemantics: CURVE_LEGACY_FACTORY_LOOKUP, basePool }),
+    });
+  },
+  decide(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>): IdentityDecision<CurveUnderlyingIdentity> {
+    const evidence = factoryIdentityEvidence(input.evidence);
+    if (evidence?.phase === "factory-availability") return evidence.metaregistryHasCode
+      ? { status: "chain-proven-rejected", reasonCode: "metaregistry_already_deployed", evidenceRequestIds: [METAREGISTRY_CODE_ID] }
+      : { status: "continue" };
+    return decideIdentity(input, evidence);
+  },
+};
+
+function factoryIdentityEvidence(value: unknown): FactoryAvailabilityEvidence | CurveUnderlyingIdentityEvidence | undefined {
+  if (value !== null && typeof value === "object" && "phase" in value && value.phase === "factory-availability") {
+    if (!("metaregistryHasCode" in value) || typeof value.metaregistryHasCode !== "boolean") {
+      throw new Error("curve-underlying malformed factory availability evidence");
+    }
+    return value as FactoryAvailabilityEvidence;
+  }
+  return identityEvidence(value);
+}
 
 export const curveUnderlyingIdentity = {
   variants: [{
@@ -71,7 +155,7 @@ export const curveUnderlyingIdentity = {
     decide(input: IdentityStepInput<CurveUnderlyingCandidate, unknown>) {
       return decideIdentity(input, identityEvidence(input.evidence));
     },
-  }, curveUnderlyingNativeIdentity],
+  }, curveUnderlyingNativeIdentity, curveUnderlyingHistoricalFactoryIdentity],
   identityKey: (identity) => lowerAddress(identity.subject),
 } satisfies IdentitySemantics<CurveUnderlyingCandidate, CurveUnderlyingIdentity>;
 
@@ -191,10 +275,15 @@ function decodeBehaviorProof(
     }
   }
   const quoteModel = decodeUnderlyingQuoteModel(prior.poolCode, prior.pool, prior.coins, results);
+  if (quoteModel && prior.registryBinding?.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP &&
+      lowerAddress(prior.registryBinding.basePool) !== lowerAddress(quoteModel.basePool)) {
+    throw new Error("curve-underlying factory base pool conflicts with bound implementation");
+  }
   return Object.freeze({
     phase: "behavior-proof" as const,
     pool: prior.pool,
     handlers: prior.handlers,
+    ...(prior.registryBinding ? { registryBinding: prior.registryBinding } : {}),
     coins: prior.coins,
     verifiedDirections: Object.freeze(verifiedDirections),
     ...(quoteModel ? { quoteModel } : {}),
@@ -223,7 +312,7 @@ function decideIdentity(
   if (evidence === undefined) return { status: "continue" };
   if (evidence.phase === "registry-surface") {
     // Chain-proven at the fixed cutoff: no code at the pool address, no
-    // metaregistry handler reverse-binds the pool, or the underlying coin
+    // registry source reverse-binds the pool, or the underlying coin
     // domain is outside the supported surface.
     if (!evidence.poolHasCode) {
       return {
@@ -232,11 +321,13 @@ function decideIdentity(
         evidenceRequestIds: [POOL_CODE_ID],
       };
     }
-    if (evidence.handlers.length === 0) {
+    const factoryBinding = evidence.registryBinding?.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP
+      ? evidence.registryBinding : undefined;
+    if (factoryBinding ? factoryBinding.basePool === ethers.ZeroAddress : evidence.handlers.length === 0) {
       return {
         status: "chain-proven-rejected",
         reasonCode: "registry_reverse_binding_failed",
-        evidenceRequestIds: [REGISTRY_HANDLERS_ID],
+        evidenceRequestIds: [factoryBinding ? FACTORY_BASE_POOL_ID : REGISTRY_HANDLERS_ID],
       };
     }
     if (evidence.coins.length < 2 || evidence.coins.length > 8) {
@@ -271,7 +362,7 @@ function decideIdentity(
       evidenceRequestIds: [],
     };
   }
-  const registryBinding = Object.freeze({
+  const registryBinding = evidence.registryBinding ?? Object.freeze({
     registry: CURVE_METAREGISTRY,
     handlers: Object.freeze([...evidence.handlers]),
     lookupSemantics:
@@ -285,6 +376,7 @@ function decideIdentity(
       registry: registryBinding.registry,
       handlers: registryBinding.handlers,
       lookupSemantics: registryBinding.lookupSemantics,
+      ...(registryBinding.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP ? { basePool: registryBinding.basePool } : {}),
     },
     verifiedDirections: evidence.verifiedDirections.map((direction) => ({
       i: direction.i,
@@ -299,11 +391,13 @@ function decideIdentity(
     status: "verified",
     identity: Object.freeze({
       familyId: CURVE_UNDERLYING_FAMILY_ID,
-      lineageId: CURVE_UNDERLYING_REGISTRY_LINEAGE_ID,
+      lineageId: registryBinding.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP
+        ? CURVE_UNDERLYING_FACTORY_LINEAGE_ID : CURVE_UNDERLYING_REGISTRY_LINEAGE_ID,
       subject: evidence.pool,
       provenance: Object.freeze([Object.freeze({
-        kind: "curve-metaregistry-reverse-behavior-proof",
-        subject: CURVE_METAREGISTRY,
+        kind: registryBinding.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP
+          ? "curve-factory-reverse-behavior-proof" : "curve-metaregistry-reverse-behavior-proof",
+        subject: registryBinding.registry,
         evidenceHash,
       })]),
       facts: Object.freeze({

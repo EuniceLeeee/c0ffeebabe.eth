@@ -91,7 +91,7 @@ export function curveHistoricalManualInput(value?: string): CurveManualInput | u
 
 function options(argv: string[]) {
   const names = ["--ready", "--prices", "--pool", "--family", "--rpc-file", "--out", "--port"];
-  const allowedNames = [...names, "--reference-executions", "--price-input", "--reference-prices", "--reference-edges", "--manual-input"];
+  const allowedNames = [...names, "--executor-hardfork", "--reference-executions", "--price-input", "--reference-prices", "--reference-edges", "--manual-input"];
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     assert(allowedNames.includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
@@ -102,6 +102,8 @@ function options(argv: string[]) {
   assert.equal(values.has("--reference-prices"), values.has("--reference-edges"), "donor requires prices and edge keys");
   assert(!(values.has("--reference-executions") && values.has("--reference-prices")), "choose saved execution or donor inputs, not both");
   const manual = curveHistoricalManualInput(values.get("--manual-input"));
+  const hardfork = values.get("--executor-hardfork");
+  assert(hardfork === undefined || hardfork === "cancun", "executor hardfork must be explicit cancun");
   assert(!manual || (!values.has("--reference-executions") && !values.has("--reference-prices")), "manual input cannot mix with reference modes");
   const referenceEdges: unknown = JSON.parse(values.get("--reference-edges") ?? "[]");
   assert(Array.isArray(referenceEdges) && referenceEdges.every(key => typeof key === "string" && key.length > 0));
@@ -119,9 +121,34 @@ function options(argv: string[]) {
     priceInput: values.has("--price-input") ? realpathSync(values.get("--price-input")!) : undefined,
     reference: values.has("--reference-executions") ? realpathSync(values.get("--reference-executions")!) : undefined,
     referencePrices: values.has("--reference-prices") ? realpathSync(values.get("--reference-prices")!) : undefined,
-    referenceEdges: referenceEdges as string[], manual,
+    referenceEdges: referenceEdges as string[], manual, hardfork,
     name, rpcFile: realpathSync(values.get("--rpc-file")!), pool: lower(ethers.getAddress(
       values.get("--pool")!.startsWith("0x") ? values.get("--pool")! : `0x${values.get("--pool")!}`)), out };
+}
+
+/** Keep current-executor compatibility distinct from historical EVM replay. */
+export function curveHistoricalExecutionRules(requested: string | undefined, artifactTarget: unknown, actual: unknown) {
+  assert(requested === undefined || requested === "cancun", "unsupported executor hardfork");
+  assert(typeof artifactTarget === "string" && artifactTarget.length > 0, "missing artifact EVM target");
+  assert(typeof actual === "string" && actual.length > 0, "missing node hardfork");
+  if (requested) {
+    assert.equal(artifactTarget, requested, "counterfactual hardfork differs from compiled executor");
+    assert.equal(actual.toLowerCase(), requested, "node did not apply requested hardfork");
+  }
+  return { mode: requested ? "counterfactual-current-executor" : "historical-fork-default",
+    artifactTarget, requestedHardfork: requested ?? null, actualHardfork: actual,
+    originalTransactionReplay: false };
+}
+
+export function curveHistoricalExecutionProbe(data: string, header: { number: number; timestamp: number; baseFeePerGas: bigint }) {
+  assert.equal(data.length, 2 + 5 * 64, "environment probe must return exactly five words");
+  const [number, timestamp, baseFee, transientRoundTrip, opcode44] =
+    ethers.AbiCoder.defaultAbiCoder().decode(["uint256", "uint256", "uint256", "uint256", "uint256"], data) as unknown as bigint[];
+  assert.equal(number, BigInt(header.number), "EVM NUMBER differs from source");
+  assert.equal(timestamp, BigInt(header.timestamp), "EVM TIMESTAMP differs from source");
+  assert.equal(baseFee, header.baseFeePerGas, "EVM BASEFEE differs from source");
+  assert.equal(transientRoundTrip, 1n, "current executor transient storage unavailable");
+  return { number, timestamp, baseFee, transientRoundTrip, opcode44 };
 }
 
 function currentBotVm() {
@@ -137,7 +164,7 @@ function currentBotVm() {
   const groups = Object.values(artifact.deployedBytecode.immutableReferences) as { start: number; length: number }[][];
   assert.equal(groups.length, 1, "only BotVM.owner may be patched");
   assert(groups[0].length > 0 && groups[0].every(ref => ref.length === 32));
-  return loadBotVmRuntimeCode(OWNER);
+  return { ...loadBotVmRuntimeCode(OWNER), compilationEvmVersion: metadata.settings.evmVersion };
 }
 
 // diffMode omits unchanged slots from BOTH sides. Absence is zero only when
@@ -334,7 +361,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     assert(typeof privateConfig.MAINNET_RPC_URL === "string", "rpc-file requires MAINNET_RPC_URL");
     secret = privateConfig.MAINNET_RPC_URL;
     assert(["http:", "https:"].includes(new URL(secret).protocol), "HTTP archive RPC required");
-    const allowed = new Set(["web3_clientVersion", "eth_chainId", "eth_getBlockByNumber", "eth_call",
+    const allowed = new Set(["anvil_nodeInfo", "web3_clientVersion", "eth_chainId", "eth_getBlockByNumber", "eth_call",
       "eth_getCode", "eth_getStorageAt", "eth_createAccessList", "debug_traceCall"]);
     const rpc: Rpc = async (method, params) => {
       if (constructing) { constructionAttempts++; throw new Error("RPC during runtime construction"); }
@@ -358,16 +385,29 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       return { number: source.number, hash: h.hash, timestamp: Number(BigInt(h.timestamp)), baseFeePerGas: h.baseFeePerGas };
     };
     stage = "owned-fork-start";
-    backend = new AnvilStateBackend(secret, loopback, 8591);
+    backend = new AnvilStateBackend(secret, loopback, 8591, args.hardfork);
     await backend.forkAt(source.number, { signal: abort.signal, deadlineAtMs: deadline });
     report.client = await rpc("web3_clientVersion", []); assert(/anvil/i.test(report.client));
     assert.equal(BigInt(await rpc("eth_chainId", [])), 1n);
     report.headerBefore = await headerCheck();
+    // The node response includes its upstream URL: retain only the non-secret rule.
+    const actualHardfork = (await rpc("anvil_nodeInfo", [])).hardFork;
+    report.executionRules = curveHistoricalExecutionRules(args.hardfork, botvm.compilationEvmVersion, actualHardfork);
     const call = (to: string, data: string, overrides: Overrides = {}) => rpc("eth_call", [{ to, data, from: OWNER }, pin, overrides]);
     const balance = async (token: string, holder: string, overrides: Overrides = {}) =>
       BigInt(await call(token, ERC20.encodeFunctionData("balanceOf", [holder]), overrides));
     stage = "actor-balance-mapping";
     for (const actor of [OWNER, EXECUTOR]) assert.equal(await rpc("eth_getCode", [actor, pin]), "0x", "actor already has source code");
+    if (args.hardfork) {
+      // Read execution-visible fields and exercise Cancun TSTORE/TLOAD without
+      // mining or overriding any protocol account. Opcode 0x44 is disclosed,
+      // not asserted equivalent to the historical pre-merge DIFFICULTY.
+      const probeCode = "0x436000524260205248604052600160005d60005c6060524460805260a06000f3";
+      report.executionEnvironmentProbe = {
+        ...curveHistoricalExecutionProbe(await call(EXECUTOR, "0x", { [EXECUTOR]: { code: probeCode } }), header),
+        codeHash: ethers.keccak256(probeCode),
+      };
+    }
     const slots = new Map<string, string>();
     report.balanceMappings = [];
     for (const token of tokens) assert.equal(await balance(token, EXECUTOR), 0n, "actor already has source inventory");
@@ -685,6 +725,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--price-input INPUT_JSON] [--reference-executions SAVED_JSON | --reference-prices PRICES_JSON --reference-edges JSON_ARRAY | --manual-input JSON_TOKEN_PAIR_AND_AMOUNT]");
+  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--executor-hardfork cancun] [--price-input INPUT_JSON] [--reference-executions SAVED_JSON | --reference-prices PRICES_JSON --reference-edges JSON_ARRAY | --manual-input JSON_TOKEN_PAIR_AND_AMOUNT]");
   else main().catch(() => { console.error("historical-runtime-dual: input/output setup failed; no RPC started if no receipt was reserved"); process.exitCode = 1; });
 }

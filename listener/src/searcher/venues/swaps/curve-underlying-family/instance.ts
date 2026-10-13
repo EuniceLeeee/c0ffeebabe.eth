@@ -69,6 +69,8 @@ export function curveUnderlyingStaticBindingProjection(
       registry: descriptor.registryBinding.registry,
       handlers: descriptor.registryBinding.handlers,
       lookupSemantics: descriptor.registryBinding.lookupSemantics,
+      ...(descriptor.registryBinding.lookupSemantics === "get_base_pool+get_underlying_coins"
+        ? { basePool: descriptor.registryBinding.basePool } : {}),
     },
     verifiedDirections: descriptor.verifiedDirections.map((direction) => ({
       i: direction.i,

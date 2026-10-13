@@ -1,3 +1,7 @@
+import { CURVE_LEGACY_FACTORY, CURVE_LEGACY_FACTORY_INTERFACE, CURVE_LEGACY_FACTORY_LOOKUP,
+  decodeLegacyFactoryBasePool } from "./legacy-factory.js";
+import { CURVE_UNDERLYING_FAMILY_ID } from "./manifest.js";
+import type { CurveUnderlyingDescriptor } from "./types.js";
 import { ethers } from "ethers";
 import type {
   ObservedSwapImpact,
@@ -109,7 +113,30 @@ export const curveUnderlyingReceiptObservation: SwapObservationCapability = {
         if (edges.length === 0) throw new Error("curve-underlying swap has no admitted pool");
         let coins = coinsByPool.get(pool);
         if (!coins) {
-          coins = decodeCoins(await ctx.tokenQuery.call({ to: CURVE_METAREGISTRY,
+          let registry = CURVE_METAREGISTRY;
+          const binding = ctx.resolveBinding?.(edges[0]);
+          if (binding?.familyId === CURVE_UNDERLYING_FAMILY_ID) {
+            const descriptor = binding.descriptor as CurveUnderlyingDescriptor;
+            if (descriptor.registryBinding?.lookupSemantics === CURVE_LEGACY_FACTORY_LOOKUP) {
+              if (descriptor.pool.toLowerCase() !== pool ||
+                  descriptor.instanceKey.toLowerCase() !== pool ||
+                  descriptor.registryBinding.registry.toLowerCase() !== CURVE_LEGACY_FACTORY.toLowerCase()) {
+                throw new Error("curve-underlying historical receipt binding mismatch");
+              }
+              // Read registration again at the observation source; do not use
+              // descriptor/Graph coin order as the directional authority.
+              open();
+              const base = decodeLegacyFactoryBasePool(await ctx.tokenQuery.call({ to: CURVE_LEGACY_FACTORY,
+                data: CURVE_LEGACY_FACTORY_INTERFACE.encodeFunctionData("get_base_pool", [swap.pool]),
+                blockTag: sourceBlock }, ctx.control));
+              if (base === ethers.ZeroAddress || base.toLowerCase() !== descriptor.registryBinding.basePool.toLowerCase()) {
+                throw new Error("curve-underlying historical receipt reverse binding failed");
+              }
+              registry = CURVE_LEGACY_FACTORY;
+            }
+          }
+          open();
+          coins = decodeCoins(await ctx.tokenQuery.call({ to: registry,
             data: CURVE_UNDERLYING_META_INTERFACE.encodeFunctionData("get_underlying_coins", [swap.pool]),
             blockTag: sourceBlock }, ctx.control));
           coinsByPool.set(pool, coins);

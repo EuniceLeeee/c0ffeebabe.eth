@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
-import { assertNoInputRollback, curveHistoricalManualInput, curveHistoricalQuoteTargets, curveHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
+import { curveHistoricalExecutionProbe, curveHistoricalExecutionRules, assertNoInputRollback, curveHistoricalManualInput, curveHistoricalQuoteTargets, curveHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
 import { curveRefreshGuardRequests } from "../refresh-scope.js";
 import type { CurvePlainDescriptor } from "../types.js";
 import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
@@ -159,4 +159,32 @@ test("manual CLI rejects zero, precision loss, overflow, alien fields and invali
     assert.throws(() => curveHistoricalManualInput(JSON.stringify(value)));
   }
   assert.equal(curveHistoricalManualInput(JSON.stringify({ ...input, amountIn: String(ethers.MaxUint256 - 101n) }))!.amountIn, ethers.MaxUint256 - 101n);
+});
+
+test("counterfactual current executor rules must be explicit and match compiled and actual VM", () => {
+  const historical = curveHistoricalExecutionRules(undefined, "cancun", "London");
+  assert.equal(historical.mode, "historical-fork-default");
+  assert.equal(historical.requestedHardfork, null);
+  assert.equal(historical.actualHardfork, "London");
+  const current = curveHistoricalExecutionRules("cancun", "cancun", "Cancun");
+  assert.equal(current.mode, "counterfactual-current-executor");
+  assert.equal(current.originalTransactionReplay, false);
+  assert.throws(() => curveHistoricalExecutionRules("cancun", "shanghai", "Cancun"), /compiled executor/);
+  assert.throws(() => curveHistoricalExecutionRules("cancun", "cancun", "London"), /did not apply/);
+  for (const hardfork of ["latest", "london", "", "--no-mining"])
+    assert.throws(() => curveHistoricalExecutionRules(hardfork, "cancun", "Cancun"));
+  assert.throws(() => curveHistoricalExecutionRules("cancun", null, "Cancun"), /EVM target/);
+  assert.throws(() => curveHistoricalExecutionRules("cancun", "cancun", null), /node hardfork/);
+});
+
+test("current executor probe checks execution-visible block, time, base fee and transient storage", () => {
+  const header = { number: 14127510, timestamp: 1643816802, baseFeePerGas: 106022199063n };
+  const words = [BigInt(header.number), BigInt(header.timestamp), header.baseFeePerGas, 1n, 99n];
+  const encode = (v: bigint[]) => ethers.AbiCoder.defaultAbiCoder().encode(Array(v.length).fill("uint256"), v);
+  assert.equal(curveHistoricalExecutionProbe(encode(words), header).opcode44, 99n);
+  for (let i = 0; i < 4; i++) {
+    const wrong = [...words]; wrong[i]++;
+    assert.throws(() => curveHistoricalExecutionProbe(encode(wrong), header));
+  }
+  assert.throws(() => curveHistoricalExecutionProbe(encode(words.slice(0, 4)), header), /five words/);
 });
