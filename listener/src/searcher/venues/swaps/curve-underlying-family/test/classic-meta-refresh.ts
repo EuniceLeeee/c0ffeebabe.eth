@@ -74,6 +74,7 @@ type Activity = { kind: "call"; target: string; data: string; nested?: boolean }
 
 async function setup() {
   let state = structuredClone(BASELINE), failBalances = false, previous = START, sequence = 0;
+  let ramping: string | undefined;
   const quotedEdges: string[] = [];
   const cache = createAdapterFamilyExactQuoteCache();
   function runtime(source: CanonicalSource) {
@@ -113,7 +114,10 @@ async function setup() {
             return word(BigInt(DIRECT.decodeFunctionData("get_dy", tx.data)[2]));
           }
           const saved = fixture.calls.find(row => same(row.to, tx.to) && same(row.data, tx.data));
-          assert(saved, `unexpected offline call ${tx.to} ${tx.data}`); return saved.result;
+          assert(saved, `unexpected offline call ${tx.to} ${tx.data}`);
+          // Synthetic ramp transition; the real historical refusal is accepted separately.
+          return ramping && same(tx.to, ramping) && tx.data === ethers.id("future_A()").slice(0, 10)
+            ? word(BigInt(saved.result) + 1n) : saved.result;
         },
         async getCode(address, block) {
           assert.equal(block, source.number);
@@ -215,6 +219,7 @@ async function setup() {
   return { step, descriptor, route, key,
     donate() { state = { ...state, balances: [state.balances[0] + 10n ** 23n, ...state.balances.slice(1)] }; },
     fail() { failBalances = true; },
+    ramp(address: string | undefined) { ramping = address; },
     expected() { return classicBaseExchangeAmount(state, 0, 1, INPUT); },
   };
 }
@@ -286,6 +291,35 @@ test("a failed donation refresh cannot republish the old quote, including the ne
   assert.equal(clean.row.status, "quote-failed"); assert.equal(clean.row.amountOut, null);
   assert.equal(clean.row.quotedAt, undefined);
 });
+
+for (const at of [BASE, POOL]) {
+  test(`${at === BASE ? "base" : "meta"} A ramp rejects refreshed quotes, stays failed on a clean block, then recovers`, async () => {
+    const h = await setup(), before = await h.step();
+    assert.equal(before.row.status, "quoted");
+    h.ramp(at);
+    const failed = await h.step({ kind: "log", address: at,
+      topics: [ethers.id("RampA(uint256,uint256,uint256,uint256)")], data: "0x" });
+    assert(failed.touched.has(h.route.routeKey.toLowerCase()));
+    assert(failed.calls.includes(h.key));
+    assert.equal(failed.row.status, "quote-failed");
+    assert.equal(failed.row.amountOut, null); assert.equal(failed.row.effectiveMid, null);
+    assert.equal(failed.row.quotedAt, undefined);
+    assert(failed.snapshot.coverage.unresolvedEdgeKeys.includes(h.key));
+    const clean = await h.step();
+    assert.equal(clean.row.status, "quote-failed"); assert.equal(clean.row.amountOut, null);
+    assert.equal(clean.row.quotedAt, undefined);
+    h.ramp(undefined);
+    const recovered = await h.step({ kind: "log", address: at,
+      topics: [ethers.id("StopRampA(uint256,uint256)")], data: "0x" });
+    assert(recovered.touched.has(h.route.routeKey.toLowerCase()));
+    assert(recovered.calls.includes(h.key));
+    assert.equal(recovered.row.status, "quoted");
+    assert.equal(recovered.row.amountOut, h.expected());
+    assert.deepEqual(recovered.row.quotedAt, recovered.source);
+    assert.notStrictEqual(recovered.row, before.row);
+    assert(!recovered.snapshot.coverage.unresolvedEdgeKeys.includes(h.key));
+  });
+}
 
 test("bound LP ordinary transfers and approvals carry quotes; mint/burn and unknown events refresh", async () => {
   const h = await setup(), before = await h.step();

@@ -1,0 +1,131 @@
+{
+  "learning_case_id": "tooldef-20261013-curve-underlying-ready-receipt",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [
+    "swap"
+  ],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "Historical Family acceptance CLI receipt filtering was inconsistent with its selected-family scope; this was a tooling defect before production discovery, not a pool admission failure.",
+  "tooling_defect": {
+    "tool": "listener:searcher:curve-plain-historical-ready",
+    "issue": "The CLI accepted --families curve-underlying but required one of three plain TokenExchange topics in the target receipt. Successful TX 0xd7ed92f013f5feca6f591cf5926fd1f18853d286aadd0a5c3f84fabc199692df only has the actual underlying int128 event at target log44 and was rejected before Ready.",
+    "codify_commit": "ff46befe40b2ebd842918578d249242f0b0f4764",
+    "status": "codified",
+    "fix": "Use Family-owned int128/uint256 underlying topic constants only when curve-underlying is selected, preserve all three existing plain/native topics, and expose curve-underlying-ready in the current tool index. Production identity/admission is unchanged."
+  },
+  "evidence": {
+    "failedAttempt": {
+      "status": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/ramp-ready-attempt01-status.json",
+        "sha256": "5b0f7568b0cde8168820b5b872e83e82fc5606b3b7e63b94628a7670d9afa6b9",
+        "bytes": 195
+      },
+      "failure": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/single-N22871578-attempt01/failure.json",
+        "sha256": "e4f2b9ab91f0110a2771a9c0c3dfd99324aaaffc972db1e160d0097eb3715898",
+        "bytes": 77
+      },
+      "receipt": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/single-N22871578-attempt01/receipt.json",
+        "sha256": "5e275fbf3886013881a33ab79f1f5b0b920da9eebbc8fc4195c561cb173dbce2",
+        "bytes": 24016
+      },
+      "preserved": true
+    },
+    "successfulCanonicalAttempt": {
+      "status": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/ramp-ready-attempt02-status.json",
+        "sha256": "5f2b004f6a1384e03de85a7b51c5b2e6f4ef90f54531965be15ece1453bd7b70",
+        "bytes": 196
+      },
+      "readySummary": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/single-N22871578-attempt02/ready-summary.json",
+        "sha256": "0c0a10633438fca0ba862e8939af51180ab91a3a77bce97528da7d723b2247b5",
+        "bytes": 11209
+      },
+      "targetDirections": 12,
+      "rawDirections": 12,
+      "effectiveStatuses": {
+        "missing-valuation": 6,
+        "quote-failed": 6,
+        "quoted": 0
+      },
+      "scope": "Ready workflow succeeds; no successful active-ramp execution claim"
+    },
+    "regressions": {
+      "nativeContract": 14,
+      "underlyingFamilyPlugin": "PASS",
+      "toolIndex": 20,
+      "analysisBuild": "PASS",
+      "productionBuildLive": "PASS",
+      "logs": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/offline02-native-contract.stdout.log",
+          "sha256": "9e65a5edf9b1f2c006989af85d5bf43ad638514db7f45c9c27ec45d53ab99711",
+          "bytes": 1937
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/offline02-underlying-family-plugin.stdout.log",
+          "sha256": "4e227946122ff0540a1721387e2e67e0ee211fc1828fc68be9d6f4f0081093c2",
+          "bytes": 412
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/offline02-tool-index-test.stdout.log",
+          "sha256": "0ffed2b85e01e85121ff6f0e0a980e6983ba1b4bfa7d3e26d5a7d85e5b8012f8",
+          "bytes": 2162
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/offline02-analysis-build.stdout.log",
+          "sha256": "168d2ca5bea753743319658219c72512de6b58e4607ef4bf5c7f4efd95edff6e",
+          "bytes": 44
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/production-build-status.json",
+          "sha256": "e55f79abe666f470162d4198595c995b2e6ec1805b26da7d7243056bd114b7f2",
+          "bytes": 179
+        }
+      ]
+    },
+    "independentReview": {
+      "agent": "curve_ready_review",
+      "pass1": "Confirmed exact old predicate rejects the authentic receipt; independently decoded event and controls.",
+      "pass1ManifestSha256": "1a63eb11c5a4ff9e79c81e90839230a41f62ed0def5c9f1190a87c8112c8eb45",
+      "pass2": "No actionable finding; 152 independent assertions on frozen implementation, family selection, old-topic retention and fixture identity.",
+      "pass2ManifestSha256": "ec7ca0ef95df48f00f91f7ef6b6f0e9a0f312bff3402b60ab3963eca5216d132",
+      "limits": "All three independent passes were offline. Actual canonical rerun and same-N manual fork evidence are independently inspected saved outputs, not a claim of reviewer-run RPC.",
+      "pass3": {
+        "agent": "curve_ready_review",
+        "pass": 3,
+        "ranGate": "PASS",
+        "finding": "No blocking finding for the scoped conclusion: the recorded active-ramp state is correctly refused by current production Exact. This establishes refusal, not active-ramp execution support.",
+        "manifestSha256": "d9efef149922e4b948edff6d4aa9d1b129ae379723f1b4799aa73175baf33fd8",
+        "independentGuardAssertions": 40,
+        "method": "offline frozen-evidence checks and extracted production guard functions; no RPC, cloud operations, source edits or full module imports",
+        "verified": [
+          "35-file 2080738-byte manifest",
+          "exact refresh patch and 10 passing recorded tests",
+          "141 source-bound saved fork reads and EVM number/timestamp",
+          "three bytecode hashes, bound topology and independently interpolated base A=4919",
+          "eight explicit current Exact active-ramp rejections",
+          "12 target raw/Graph directions, six quote failures and six missing valuations",
+          "unchanged Ready/prices",
+          "canonical execution receipt/capability union, production build and codify commit"
+        ],
+        "limits": [
+          "manual 1152-file inventory verified; production source-scope reconciliation was not part of frozen pass3 and is separately primary-agent-verified",
+          "generic prices historicalNaturalDiscoveryProven remains false; receipt-backed single-block candidate evidence is narrower",
+          "no manual quoted/runtime swaps, historical stop/recovery, original transaction replay or performance"
+        ]
+      }
+    },
+    "manifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-scope-20261013.xvjzxyy_/tool-selection-ready-fixed02.json",
+      "sha256": "be1bff9098a23a7afbd6a077bccc1940b84c595723dfb4b0ce1303459b6d120f",
+      "bytes": 8270
+    },
+    "report": "docs/research/reports/curve-underlying-ramp-acceptance-20261013.json"
+  }
+}
