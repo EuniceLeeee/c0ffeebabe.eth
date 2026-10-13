@@ -1,0 +1,582 @@
+{
+  "schemaVersion": 1,
+  "reviewId": "curve-boundary-tool-independent-review-20261014-supplement01",
+  "reviewer": "/root/curve_ready_review",
+  "reviewType": "fresh non-author adversarial read-only source and saved-evidence review",
+  "scope": {
+    "remoteRoot": "/opt/mev-cloud/family-runtime-20261007",
+    "observedHead": "b2f9d7e9dc31b8fa03ee9f20c19efb993dcdc5f1",
+    "baseline": "fba759d2daf6d0f4080dd8b402cdd2895ffea7c3",
+    "candidate": "ec82f9d114a528605f4f536972c38f6b2a7d884d",
+    "reviewedChanges": "Four boundary tooling/test files plus the new tooling_defect LearningCase row. No new Curve semantics, execution or live review.",
+    "author": "Parent /root; reviewer made no production/cloud source changes",
+    "priorReview": {
+      "path": "/Users/eunice/src/MEV/logs/curve-boundary-tool-independent-review-20261014-attempt01.json",
+      "sha256": "514d8371b25620019564856418c07399debb83e3224e2bf03ca3427d1d1a585b",
+      "independentChecks": 13
+    }
+  },
+  "decision": {
+    "blockingFindings": [],
+    "verdict": "No blocking defect found in the pinned repair. Both confirmed tooling defects are addressed by the reviewed implementation and saved regressions. The actual compared Curve commit still correctly returns framework; this is not family_local or adapter_merge_ready.",
+    "learningCase": "tooldef-20261014-family-boundary-strict-catalog",
+    "codifyCommit": null,
+    "codificationStatusAtRead": "open; author must bind the subsequent implementation commit before closing the same round"
+  },
+  "sourcePins": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/analysis/src/adapter-family-boundary.ts",
+      "sha256": "b00f64e1ee43f842ee8e4d0b7e8f4297cd1608f3d2e490c2fa8f7c9df9d644c7",
+      "bytes": 16741
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/analysis/src/cli/adapter-family-boundary-gate.ts",
+      "sha256": "74505e16a731ac1635fc0f13389c9828e854b8c0a76ea2df99bce242dfadaee3",
+      "bytes": 8041
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/analysis/src/test/adapter-family-boundary.ts",
+      "sha256": "bec7bbd8593593ffccbecc4789288224841ab18abc28f988dc4b3d88aabb39a1",
+      "bytes": 25493
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-ownership-manifest.ts",
+      "sha256": "071f43962aed55f8b2432e37091dd1c89fb4f3387d5e47a7860c58809d3984f4",
+      "bytes": 30546
+    }
+  ],
+  "sourcePatchSha256": "9839fa39ce618136202742137ba71ff9b0f70bbd64b3888436f8276253667241",
+  "findings": [
+    {
+      "id": "F1",
+      "status": "confirmed original defect; repair accepted within scope",
+      "detail": "Both compared commits lack the old production-registry and retain the same obsolete collector; the compatibility projection explicitly excludes itself from acceptance. The original canonical run aborted before classification. The repair uses current trusted worker code to load each detached target root's actual strict production composition independently.",
+      "refs": [
+        {
+          "file": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-ownership-manifest.ts",
+          "lines": [
+            59,
+            107,
+            205,
+            244,
+            247,
+            290
+          ]
+        },
+        {
+          "file": "/opt/mev-cloud/family-runtime-20261007/analysis/src/cli/adapter-family-boundary-gate.ts",
+          "lines": [
+            41,
+            106,
+            215,
+            245
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "status": "confirmed additional false rejection; narrow repair accepted",
+      "detail": "The old supplemental rule admitted only central searcher/test files although gates.md and the Family scaffold explicitly allow private Family test/fixtures. The added rule requires a direct runtime source anchor in the exact directory from the real base/candidate manifests, no other Family source anywhere in that directory, .ts/.json extension, and no runtime reference to the test. The worker now rejects runtime imports of every /test/ path. No name-substring waiver is used by this new rule.",
+      "authority": [
+        {
+          "file": "/opt/mev-cloud/family-runtime-20261007/docs/research/gates.md",
+          "lines": [
+            304,
+            307,
+            801,
+            804
+          ]
+        },
+        {
+          "file": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/templates/family-plugin/README.md",
+          "lines": [
+            11,
+            28
+          ]
+        }
+      ],
+      "refs": [
+        {
+          "file": "/opt/mev-cloud/family-runtime-20261007/analysis/src/adapter-family-boundary.ts",
+          "lines": [
+            297,
+            367
+          ]
+        },
+        {
+          "file": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-ownership-manifest.ts",
+          "lines": [
+            382,
+            405,
+            657,
+            668
+          ]
+        },
+        {
+          "file": "/opt/mev-cloud/family-runtime-20261007/analysis/src/test/adapter-family-boundary.ts",
+          "lines": [
+            607,
+            653
+          ]
+        }
+      ],
+      "redGreenEvidence": {
+        "before": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/private-tests-before-fix.log",
+          "sha256": "e6ae2c7f3059b986d23327d521c4641ba710ce040f7af83b81817b551f72879c",
+          "bytes": 1378
+        },
+        "beforeCounts": {
+          "tests": 2,
+          "pass": 1,
+          "fail": 1
+        },
+        "after": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-unit-final.log",
+          "sha256": "d2d6a6a6708d967cc3bc33b43f9655cc28bf3c361a8844e662a44eff7d6f36d6",
+          "bytes": 1766
+        },
+        "afterCounts": {
+          "tests": 19,
+          "pass": 19,
+          "fail": 0
+        }
+      }
+    }
+  ],
+  "reviewedSafeguards": [
+    {
+      "name": "Installed and active authority remain separate",
+      "detail": "43 installed definitions include disabledPlugins; full activation declaration, manifest and definitionBoundaryHash enter activation_sha256. Actual active action catalog is separately checked against active plugins plus actual infra objects. Saved baseline has 59 active actions and candidate 60."
+    },
+    {
+      "name": "Root and action bindings",
+      "detail": "Generated namespace import paths and sourceFile names are cross-checked against actual target-root modules and order/cardinality. Infrastructure AST imports are dynamically loaded from that root and checked by object identity. Every owned and required action resolves to an implementation closure; duplicate action sources reject."
+    },
+    {
+      "name": "Independent baseline/candidate",
+      "detail": "Two detached checkouts remain separate, same current worker receives each source root in a fresh subprocess, runtime imports are target-root absolute file URLs, sourceAt still reads the corresponding Git commit. Minimal child environment and dotenv-disable are preserved. No candidate manifest or candidate hash is copied to baseline."
+    },
+    {
+      "name": "Central and cross-Family safety",
+      "detail": "Unowned/shared/central/generated sources still classify framework; existing other-Family source closure and activation hashes are compared independently. Old byte-exact skeleton checks, missing-source failure, shared infra ownership rejection, trusted-producer guards and pre-existing-source ownership guards remain. Import guard now includes real strict bootstrap and private test paths."
+    },
+    {
+      "name": "Deleted legacy helpers",
+      "detail": "Removed static object-ID/mapped-action collectors were callers of the obsolete legacy registry/action AST shapes. Their authority checks are replaced by strict production load validation, static entry bindings, actual action object binding and retained transitive source hashing. Exported legacy skeleton support remains and the actual old PRODUCTION_ADAPTER_FAMILIES variable name is restored for existing negative cases."
+    },
+    {
+      "name": "Path and side-effect boundaries",
+      "detail": "The gate supplies its own two detached roots; entry file names use an exact simple .production.ts basename pattern. All 1,537 side-specific source objects recomputed here were existing, safe listener-relative paths. Read HEAD has no tracked symlink files. The reviewer did not execute target production imports or mutate cloud files."
+    }
+  ],
+  "independentRecomputation": {
+    "ran_gate": "Read-only source inspection and independent saved JSON/log/Git-object hash recomputation; not an independent rerun of the production gate, tests or EVM.",
+    "checks": [
+      {
+        "name": "baseline manifest bytes hash",
+        "pass": true,
+        "actual": "3dfda3ef5078e54f9448703d7b7b4b517682d6567967ec5ad166c59821e25254",
+        "expected": "3dfda3ef5078e54f9448703d7b7b4b517682d6567967ec5ad166c59821e25254"
+      },
+      {
+        "name": "baseline family cardinality",
+        "pass": true,
+        "actual": 43,
+        "expected": 43
+      },
+      {
+        "name": "baseline unique family IDs",
+        "pass": true,
+        "actual": 43,
+        "expected": 43
+      },
+      {
+        "name": "baseline root order binding",
+        "pass": true,
+        "actualItemCount": 43,
+        "expectedItemCount": 43
+      },
+      {
+        "name": "baseline safe listener-relative source names",
+        "pass": true,
+        "actual": true,
+        "expected": true
+      },
+      {
+        "name": "baseline all manifest-owned files exist",
+        "pass": true,
+        "actual": [],
+        "expected": []
+      },
+      {
+        "name": "baseline independently rebuilt other-family closure",
+        "pass": true,
+        "actual": "2b5458e28e2411d6fd10ced8c0ee9f8730b8c17cdcab261adeae0b78e3e8f288",
+        "expected": "2b5458e28e2411d6fd10ced8c0ee9f8730b8c17cdcab261adeae0b78e3e8f288"
+      },
+      {
+        "name": "candidate manifest bytes hash",
+        "pass": true,
+        "actual": "afdb4f047b306d8dee279547f32ad8e48c4c3b1a2a3043323b5714597df98985",
+        "expected": "afdb4f047b306d8dee279547f32ad8e48c4c3b1a2a3043323b5714597df98985"
+      },
+      {
+        "name": "candidate family cardinality",
+        "pass": true,
+        "actual": 43,
+        "expected": 43
+      },
+      {
+        "name": "candidate unique family IDs",
+        "pass": true,
+        "actual": 43,
+        "expected": 43
+      },
+      {
+        "name": "candidate root order binding",
+        "pass": true,
+        "actualItemCount": 43,
+        "expectedItemCount": 43
+      },
+      {
+        "name": "candidate safe listener-relative source names",
+        "pass": true,
+        "actual": true,
+        "expected": true
+      },
+      {
+        "name": "candidate all manifest-owned files exist",
+        "pass": true,
+        "actual": [],
+        "expected": []
+      },
+      {
+        "name": "candidate independently rebuilt other-family closure",
+        "pass": true,
+        "actual": "2b5458e28e2411d6fd10ced8c0ee9f8730b8c17cdcab261adeae0b78e3e8f288",
+        "expected": "2b5458e28e2411d6fd10ced8c0ee9f8730b8c17cdcab261adeae0b78e3e8f288"
+      },
+      {
+        "name": "manifests are actually different",
+        "pass": true,
+        "actual": false,
+        "expected": false
+      },
+      {
+        "name": "only Curve underlying family manifest changes",
+        "pass": true,
+        "actual": [
+          "curve-underlying"
+        ],
+        "expected": [
+          "curve-underlying"
+        ]
+      },
+      {
+        "name": "active action delta",
+        "pass": true,
+        "actual": [
+          "curve-exchange-underlying-lending"
+        ],
+        "expected": [
+          "curve-exchange-underlying-lending"
+        ]
+      },
+      {
+        "name": "no active action removals",
+        "pass": true,
+        "actual": [],
+        "expected": []
+      },
+      {
+        "name": "machine-recorded stdout hash",
+        "pass": true,
+        "actual": "3127bd47fbbe8afc10a397d7928013a3cef907433969ecd4e7ef6b14b80c7cb2",
+        "expected": "3127bd47fbbe8afc10a397d7928013a3cef907433969ecd4e7ef6b14b80c7cb2"
+      },
+      {
+        "name": "machine-recorded stdout bytes",
+        "pass": true,
+        "actual": 4253,
+        "expected": 4253
+      },
+      {
+        "name": "formal classification preserved",
+        "pass": true,
+        "actual": "framework",
+        "expected": "framework"
+      },
+      {
+        "name": "independent receipt semantic hash",
+        "pass": true,
+        "actual": "c67b988d10dbf7c0422a895d952bc6054677c661f55d31c0bcbfa7d4a1fcd540",
+        "expected": "c67b988d10dbf7c0422a895d952bc6054677c661f55d31c0bcbfa7d4a1fcd540"
+      },
+      {
+        "name": "worker source hash matches run",
+        "pass": true,
+        "actual": "30fd5bc7c6f51423e37a49d4f1d5ea446b804366c9e983538971e0c3271609f5",
+        "expected": "30fd5bc7c6f51423e37a49d4f1d5ea446b804366c9e983538971e0c3271609f5"
+      },
+      {
+        "name": "final worker hash matches current",
+        "pass": true,
+        "actual": "071f43962aed55f8b2432e37091dd1c89fb4f3387d5e47a7860c58809d3984f4",
+        "expected": "071f43962aed55f8b2432e37091dd1c89fb4f3387d5e47a7860c58809d3984f4"
+      },
+      {
+        "name": "baseline final saved manifest bound",
+        "pass": true,
+        "actual": "3dfda3ef5078e54f9448703d7b7b4b517682d6567967ec5ad166c59821e25254",
+        "expected": "3dfda3ef5078e54f9448703d7b7b4b517682d6567967ec5ad166c59821e25254"
+      },
+      {
+        "name": "baseline unchanged manifest after only test path policy repair",
+        "pass": true,
+        "actual": "3dfda3ef5078e54f9448703d7b7b4b517682d6567967ec5ad166c59821e25254",
+        "expected": "3dfda3ef5078e54f9448703d7b7b4b517682d6567967ec5ad166c59821e25254"
+      },
+      {
+        "name": "candidate final saved manifest bound",
+        "pass": true,
+        "actual": "afdb4f047b306d8dee279547f32ad8e48c4c3b1a2a3043323b5714597df98985",
+        "expected": "afdb4f047b306d8dee279547f32ad8e48c4c3b1a2a3043323b5714597df98985"
+      },
+      {
+        "name": "candidate unchanged manifest after only test path policy repair",
+        "pass": true,
+        "actual": "afdb4f047b306d8dee279547f32ad8e48c4c3b1a2a3043323b5714597df98985",
+        "expected": "afdb4f047b306d8dee279547f32ad8e48c4c3b1a2a3043323b5714597df98985"
+      },
+      {
+        "name": "final receipt semantic hash",
+        "pass": true,
+        "actual": "8166b984a3f883462a5b618f8de0b2cea5404873cd1fbd9509b529918d075dab",
+        "expected": "8166b984a3f883462a5b618f8de0b2cea5404873cd1fbd9509b529918d075dab"
+      },
+      {
+        "name": "final tool-run stdout hash",
+        "pass": true,
+        "actual": "b710bca155a06ec014975be5172b9bafd399284e1670fe7b1a936c21de02dc3e",
+        "expected": "b710bca155a06ec014975be5172b9bafd399284e1670fe7b1a936c21de02dc3e"
+      },
+      {
+        "name": "formal result still framework",
+        "pass": true,
+        "actual": "framework",
+        "expected": "framework"
+      },
+      {
+        "name": "four actual remaining boundaries",
+        "pass": true,
+        "actual": 4,
+        "expected": 4
+      }
+    ],
+    "count": 32,
+    "passed": 32,
+    "failures": [],
+    "baseline": {
+      "label": "baselineClosure",
+      "commit": "fba759d2daf6d0f4080dd8b402cdd2895ffea7c3",
+      "manifestSha": "3dfda3ef5078e54f9448703d7b7b4b517682d6567967ec5ad166c59821e25254",
+      "manifestBytes": 115991,
+      "totalFamilies": 43,
+      "otherFamilies": 42,
+      "uniqueSourceFiles": 767,
+      "totalSourceBindings": 930,
+      "otherClosureHash": "2b5458e28e2411d6fd10ced8c0ee9f8730b8c17cdcab261adeae0b78e3e8f288",
+      "activeActionCount": 59,
+      "roots": [
+        {
+          "root": "src/searcher/venues/production-families/curve-underlying.production.ts",
+          "activation": "75bf0ba5a237e78c92416e9039f435c012366dfc5f12288bc0fac959be848648",
+          "files": 31,
+          "actions": [
+            "curve-exchange-underlying",
+            "curve-exchange-underlying-uint-native"
+          ]
+        }
+      ]
+    },
+    "candidate": {
+      "label": "candidateClosure",
+      "commit": "ec82f9d114a528605f4f536972c38f6b2a7d884d",
+      "manifestSha": "afdb4f047b306d8dee279547f32ad8e48c4c3b1a2a3043323b5714597df98985",
+      "manifestBytes": 116582,
+      "totalFamilies": 43,
+      "otherFamilies": 42,
+      "uniqueSourceFiles": 770,
+      "totalSourceBindings": 933,
+      "otherClosureHash": "2b5458e28e2411d6fd10ced8c0ee9f8730b8c17cdcab261adeae0b78e3e8f288",
+      "activeActionCount": 60,
+      "roots": [
+        {
+          "root": "src/searcher/venues/production-families/curve-underlying.production.ts",
+          "activation": "269945cdb3879d10d9a8bb183e581b234a9527742e29190e07ad27ba091f2038",
+          "files": 34,
+          "actions": [
+            "curve-exchange-underlying",
+            "curve-exchange-underlying-lending",
+            "curve-exchange-underlying-uint-native"
+          ]
+        }
+      ]
+    },
+    "note": "All unique manifest source objects were read from their own pinned Git commits using cat-file, then each of the 42 other-Family semantic/source closures was rebuilt. Final manifests are byte-identical to the already independently recomputed pair. Parent-supplied pass labels were not used as the hash result."
+  },
+  "observedCanonicalExecution": {
+    "reviewerExecuted": false,
+    "capabilityQuery": [
+      "adapter",
+      "boundary"
+    ],
+    "selectionManifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/tool-selection-final.json",
+      "sha256": "00f5467b57eb08f5589d8343f5b7462bc8b032bd08869a23be3285b9d74e3096",
+      "bytes": 38977
+    },
+    "machineReceipt": {
+      "schema_version": 1,
+      "tool_id": "analysis:adapter-family-boundary-gate",
+      "descriptor_sha256": "33f9bb4574f0b22846b2a16d84e8ac6fcbce178dbcba3fd173187908c239f801",
+      "started_at": "2026-10-13T22:06:19.509Z",
+      "finished_at": "2026-10-13T22:06:40.484Z",
+      "exit_code": 1,
+      "cwd": "analysis",
+      "argv_sha256": "7119096ce4ba543f719ab41f0a093d863435cef0bf00fcd5348730325fb2d10d",
+      "argv_redacted": [
+        "npm",
+        "run",
+        "adapter-family-boundary-gate",
+        "--",
+        "--baseline",
+        "fba759d2daf6d0f4080dd8b402cdd2895ffea7c3",
+        "--candidate",
+        "ec82f9d114a528605f4f536972c38f6b2a7d884d",
+        "--out",
+        "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.json"
+      ],
+      "stdout_sha256": "b710bca155a06ec014975be5172b9bafd399284e1670fe7b1a936c21de02dc3e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 3430,
+      "stderr_bytes": 0
+    },
+    "result": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.json",
+      "sha256": "af16f7974acd290a20e40d1714692959e496a24d4169ee30e376813a83cd491c",
+      "bytes": 3672
+    },
+    "semanticReceiptSha256": "8166b984a3f883462a5b618f8de0b2cea5404873cd1fbd9509b529918d075dab",
+    "classification": "framework",
+    "impactedFamilyIds": [
+      "curve-underlying"
+    ],
+    "remainingReasons": [
+      "runtime path has no family owner: listener/src/searcher/generated/family-capability-shadow.generated.json",
+      "runtime path has no family owner: listener/src/searcher/venues/swaps/curve-underlying-family-plugin.ts",
+      "repository path is outside the family boundary: listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual-safety.test.ts",
+      "repository path is outside the family boundary: listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts"
+    ],
+    "otherFamilyBaseline": "2b5458e28e2411d6fd10ced8c0ee9f8730b8c17cdcab261adeae0b78e3e8f288",
+    "otherFamilyCandidate": "2b5458e28e2411d6fd10ced8c0ee9f8730b8c17cdcab261adeae0b78e3e8f288",
+    "manifests": {
+      "worker_source": "listener/src/searcher/test/family-ownership-manifest.ts",
+      "worker_sha256": "071f43962aed55f8b2432e37091dd1c89fb4f3387d5e47a7860c58809d3984f4",
+      "baseline": {
+        "commit": "fba759d2daf6d0f4080dd8b402cdd2895ffea7c3",
+        "source_root": "/tmp/adapter-family-boundary-VRXqOz/baseline",
+        "manifest_path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.json.baseline-manifest.json",
+        "manifest_sha256": "3dfda3ef5078e54f9448703d7b7b4b517682d6567967ec5ad166c59821e25254"
+      },
+      "candidate": {
+        "commit": "ec82f9d114a528605f4f536972c38f6b2a7d884d",
+        "source_root": "/tmp/adapter-family-boundary-VRXqOz/candidate",
+        "manifest_path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.json.candidate-manifest.json",
+        "manifest_sha256": "afdb4f047b306d8dee279547f32ad8e48c4c3b1a2a3043323b5714597df98985"
+      }
+    },
+    "note": "Exit 1 is expected for the explicit framework classification. A complete receipt and independently bound manifests now exist, unlike the initial failed run."
+  },
+  "observedValidation": {
+    "finalRuns": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/validation-final-runs.json",
+      "sha256": "7761ece603ad0868927235bbe02dcf509c0e3013448a1e8e4b48f3d3cd768349",
+      "bytes": 200
+    },
+    "unitFinal": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-unit-final.log",
+      "sha256": "d2d6a6a6708d967cc3bc33b43f9655cc28bf3c361a8844e662a44eff7d6f36d6",
+      "bytes": 1766,
+      "tests": 19,
+      "passed": 19,
+      "failed": 0,
+      "exitCode": 0
+    },
+    "firstUnitFailure": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-unit-after.log",
+      "sha256": "822d6ccf7ca488774ca38d8b0daf74618c2465e353fb1603a4a9a2ed0ca802d0",
+      "bytes": 7113,
+      "tests": 17,
+      "passed": 12,
+      "failed": 5,
+      "detail": "Preserved missing legacy registry-array-name failures; not rewritten as success."
+    },
+    "repairedFirstStage": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-unit-after-attempt02.log",
+      "sha256": "b1e30a95a0b2cd5b9a035a33731af05833431c4598f54120cd6325866b5954e0",
+      "bytes": 1562,
+      "tests": 17,
+      "passed": 17,
+      "failed": 0
+    },
+    "privatePathBeforeFix": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/private-tests-before-fix.log",
+      "sha256": "e6ae2c7f3059b986d23327d521c4641ba710ce040f7af83b81817b551f72879c",
+      "bytes": 1378,
+      "tests": 2,
+      "passed": 1,
+      "failed": 1
+    },
+    "finalScopedTypes": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/owned-types-final.log",
+      "sha256": "04cea5ea33205ee9a19794e3618b517daa2253c5b41bb205c53479a8d77ec8a2",
+      "bytes": 993,
+      "ownedDiagnostics": 0,
+      "dependencyDiagnostics": [
+        {
+          "code": 4023,
+          "file": "listener/src/searcher/venues/production-families/curve-lp.production.ts",
+          "detail": "Exported plugin references the external Snapshot type which cannot be named."
+        }
+      ],
+      "claim": "Four edited files have no owned diagnostics; this is not a clean whole-repository typecheck."
+    },
+    "firstScopedTypeFailure": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/owned-types-attempt01.log",
+      "sha256": "36b1af6ed69233ca82ff0d76786be926927ead0922ab83eba35cfe7810e7fac4",
+      "bytes": 2389,
+      "detail": "Preserved TS6059 rootDir-scope diagnostics from the first scoped checker attempt."
+    },
+    "buildLive": {
+      "authorReported": "pass",
+      "reviewerReexecuted": false,
+      "savedLog": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/build-live.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "limit": "The empty saved build log does not independently prove an exit status; the pass is author-observed, not a reviewer build execution."
+    }
+  },
+  "limits": [
+    "No RPC, fork/EVM, live, process control, tests, build, catalog generation or production module imports were run by the reviewer.",
+    "Only a dedicated local ignored JSON report was written; cloud source, peers, credentials and existing evidence were not modified or read beyond the authorized source/evidence scope.",
+    "The repair remains uncommitted at the pinned read. LearningCase codify_commit and its final closure are the author's remaining same-round bookkeeping.",
+    "The original Curve commit is framework because shared generated catalog, an unreferenced compatibility wrapper and two curve-plain shared harness files remain outside the single Family boundary.",
+    "No formal Adapter Replay flip, family_local acceptance, profitable opportunity, stage4 or performance success follows from this tooling review.",
+    "Existing source-root validation is assessed for the trusted gate's internally created detached worktrees; this is not a general sandbox or adversarial package-execution security audit."
+  ]
+}

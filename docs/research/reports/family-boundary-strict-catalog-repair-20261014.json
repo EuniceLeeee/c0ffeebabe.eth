@@ -1,0 +1,353 @@
+{
+  "schemaVersion": 1,
+  "reportKind": "family-boundary-tooling-correctness",
+  "createdAt": "2026-10-13T22:13:49.553624+00:00",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "baseHead": "b2f9d7e9dc31b8fa03ee9f20c19efb993dcdc5f1",
+  "implementationCommit": "5356cf3de6384a0921dd9a2e1e70bc32dc4dd4ac",
+  "summary": "Two independently confirmed boundary tool defects repaired. Formal Curve comparison now yields a complete, correctly restrictive framework receipt; no new Family execution, opportunity or performance acceptance is claimed.",
+  "implementation": {
+    "files": [
+      "analysis/src/adapter-family-boundary.ts",
+      "analysis/src/cli/adapter-family-boundary-gate.ts",
+      "analysis/src/test/adapter-family-boundary.ts",
+      "listener/src/searcher/test/family-ownership-manifest.ts"
+    ],
+    "strictOwnership": "Load each detached historical source root independently through its actual strict composition. Validate generated root bindings; include all 43 installed and disabled definitions, activation declarations, manifest hashes, real active action objects, infra and transitive source closure.",
+    "currentFrameworkGuards": "Reject strict bootstrap, generated catalog/capability sources and any /test/ runtime import. Preserve old skeleton, other-Family closure, shared infrastructure and old-source ownership guards.",
+    "privateTests": "Only .ts/.json under the exact test directory of a Family with a direct production source anchor from either real manifest; any other Family ownership or runtime test reference rejects. No name or address allowlist."
+  },
+  "historicalComparison": {
+    "schema_version": 1,
+    "gate": "adapter-family-boundary",
+    "baseline_commit": "fba759d2daf6d0f4080dd8b402cdd2895ffea7c3",
+    "candidate_commit": "ec82f9d114a528605f4f536972c38f6b2a7d884d",
+    "ownership_evidence": {
+      "worker_source": "listener/src/searcher/test/family-ownership-manifest.ts",
+      "worker_sha256": "071f43962aed55f8b2432e37091dd1c89fb4f3387d5e47a7860c58809d3984f4",
+      "baseline": {
+        "commit": "fba759d2daf6d0f4080dd8b402cdd2895ffea7c3",
+        "source_root": "/tmp/adapter-family-boundary-VRXqOz/baseline",
+        "manifest_path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.json.baseline-manifest.json",
+        "manifest_sha256": "3dfda3ef5078e54f9448703d7b7b4b517682d6567967ec5ad166c59821e25254"
+      },
+      "candidate": {
+        "commit": "ec82f9d114a528605f4f536972c38f6b2a7d884d",
+        "source_root": "/tmp/adapter-family-boundary-VRXqOz/candidate",
+        "manifest_path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.json.candidate-manifest.json",
+        "manifest_sha256": "afdb4f047b306d8dee279547f32ad8e48c4c3b1a2a3043323b5714597df98985"
+      }
+    },
+    "classification": "framework",
+    "impacted_family_ids": [
+      "curve-underlying"
+    ],
+    "changed_runtime_files": [
+      "listener/src/searcher/generated/family-capability-shadow.generated.json",
+      "listener/src/searcher/venues/production-families/curve-underlying.production.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family-plugin.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/action.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/exact.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/identity.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/lending-execution.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/lending-identity.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/lending.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/pricing.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/receipt-observation.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/reverse-binding.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/routes.ts",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/types.ts"
+    ],
+    "reasons": [
+      "runtime path has no family owner: listener/src/searcher/generated/family-capability-shadow.generated.json",
+      "runtime path has no family owner: listener/src/searcher/venues/swaps/curve-underlying-family-plugin.ts",
+      "repository path is outside the family boundary: listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual-safety.test.ts",
+      "repository path is outside the family boundary: listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts"
+    ],
+    "other_family_source_set_baseline_sha256": "2b5458e28e2411d6fd10ced8c0ee9f8730b8c17cdcab261adeae0b78e3e8f288",
+    "other_family_source_set_candidate_sha256": "2b5458e28e2411d6fd10ced8c0ee9f8730b8c17cdcab261adeae0b78e3e8f288",
+    "required_action": "keep family-local work here; move every listed non-family change to a separate branch before continuing",
+    "receipt_sha256": "8166b984a3f883462a5b618f8de0b2cea5404873cd1fbd9509b529918d075dab"
+  },
+  "canonicalReconciliation": {
+    "capabilityQuery": [
+      "adapter",
+      "boundary"
+    ],
+    "selectedTool": "analysis:adapter-family-boundary-gate",
+    "selectionManifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/tool-selection-final.json",
+      "sha256": "00f5467b57eb08f5589d8343f5b7462bc8b032bd08869a23be3285b9d74e3096",
+      "bytes": 38977
+    },
+    "execution": {
+      "schema_version": 1,
+      "tool_id": "analysis:adapter-family-boundary-gate",
+      "descriptor_sha256": "33f9bb4574f0b22846b2a16d84e8ac6fcbce178dbcba3fd173187908c239f801",
+      "started_at": "2026-10-13T22:06:19.509Z",
+      "finished_at": "2026-10-13T22:06:40.484Z",
+      "exit_code": 1,
+      "cwd": "analysis",
+      "argv_sha256": "7119096ce4ba543f719ab41f0a093d863435cef0bf00fcd5348730325fb2d10d",
+      "argv_redacted": [
+        "npm",
+        "run",
+        "adapter-family-boundary-gate",
+        "--",
+        "--baseline",
+        "fba759d2daf6d0f4080dd8b402cdd2895ffea7c3",
+        "--candidate",
+        "ec82f9d114a528605f4f536972c38f6b2a7d884d",
+        "--out",
+        "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.json"
+      ],
+      "stdout_sha256": "b710bca155a06ec014975be5172b9bafd399284e1670fe7b1a936c21de02dc3e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 3430,
+      "stderr_bytes": 0
+    },
+    "interpretation": "Exit 1 is a completed framework verdict, not the earlier missing-file abort."
+  },
+  "correctness": {
+    "unitTests": {
+      "count": 19,
+      "passed": 19,
+      "failed": 0,
+      "receipt": [
+        {
+          "log": "boundary-unit-final.log",
+          "exitCode": 0
+        },
+        {
+          "log": "tool-query-final.log",
+          "exitCode": 0
+        },
+        {
+          "log": "boundary-fixed-attempt02.log",
+          "exitCode": 1
+        }
+      ]
+    },
+    "redGreen": "First canonical run aborted; first unit run retained 5 legacy symbol failures, then 17/17 passed. New private-test positive failed before the second fix; final 19/19 pass with shared/lookalike/other-Family/unanchored/runtime-test negatives.",
+    "buildLive": {
+      "authorObservedExitCode": 0,
+      "savedLog": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/build-live.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "scope": "Actual production build was completed before the final offline boundary-policy/test-only change; no production runtime changed in this repair. Empty log alone is not independent exit evidence; reviewer did not rerun the build."
+    },
+    "scopedTypes": {
+      "editedFiles": 4,
+      "ownedDiagnostics": 0,
+      "dependencyDiagnostics": [
+        {
+          "code": 4023,
+          "file": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/production-families/curve-lp.production.ts",
+          "message": "Exported variable 'plugin' has or is using name 'Snapshot' from external module \"/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/curve-lp-family/pricing\" but cannot be named."
+        }
+      ],
+      "claim": "Not a clean whole-repository typecheck. Initial rootDir checker failure retained."
+    }
+  },
+  "independentReview": {
+    "artifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/independent-review/curve-boundary-tool-independent-review-20261014-supplement01.json",
+      "sha256": "fcd8054e53e85f806c40dd2c7a8ded7e23b704e6d08f41ab4700b6d46f8b3736",
+      "bytes": 25732
+    },
+    "publicReport": "docs/research/reports/family-boundary-strict-catalog-independent-review-20261014.json",
+    "blockingFindings": [],
+    "recomputedChecks": 32,
+    "scope": "Read-only code and saved logs/JSON/Git-object review. Separate 767/770 source objects and 42 other-Family closures recomputed; no tests, RPC, EVM, build or gate execution by reviewer."
+  },
+  "sourceFreeze": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/source-freeze-candidate01.json",
+    "files": 2006,
+    "priorFingerprint": "b854000b4f98ba6432d8b312cc3790db194d8b98dc82da62f8d9c1f224ee76fb",
+    "fingerprint": "f6bb9f7d32f07dc84a3f8654536479fd54bf8be11f27cd728d2eec459fdb2412",
+    "changedSourcePaths": [
+      "analysis/src/adapter-family-boundary.ts",
+      "analysis/src/cli/adapter-family-boundary-gate.ts",
+      "analysis/src/test/adapter-family-boundary.ts",
+      "listener/src/searcher/test/family-ownership-manifest.ts"
+    ],
+    "algorithm": "sha256 of canonical JSON array, sorted keys, compact separators",
+    "allPreviousHashesPreserved": true
+  },
+  "preservation": {
+    "at": "2026-10-13T22:08:07.369087+00:00",
+    "head": "b2f9d7e9dc31b8fa03ee9f20c19efb993dcdc5f1",
+    "branch": "codex/family-runtime-actual-20261007",
+    "sourceFingerprint": "f6bb9f7d32f07dc84a3f8654536479fd54bf8be11f27cd728d2eec459fdb2412",
+    "sourceFileCount": 2006,
+    "ownedChangedSourcePaths": [
+      "analysis/src/adapter-family-boundary.ts",
+      "analysis/src/cli/adapter-family-boundary-gate.ts",
+      "analysis/src/test/adapter-family-boundary.ts",
+      "listener/src/searcher/test/family-ownership-manifest.ts"
+    ],
+    "peerDiffSha256": "ce572307e36097940f32849c4ef8134c4200942e498c5781da9b2b9a68a8eb37",
+    "peerDiffByteIdenticalToStart": true,
+    "indexEmpty": true,
+    "worktreesReturnedToOriginalSet": true,
+    "coffeeSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "resourceSnapshotIsNotStage4IdleConfirmation": true
+  },
+  "learningCase": {
+    "id": "tooldef-20261014-family-boundary-strict-catalog",
+    "store": "analysis/learning-cases/store.json",
+    "existing37CasesPreserved": true,
+    "toolingDefectStatus": "codified",
+    "codifyCommit": "5356cf3de6384a0921dd9a2e1e70bc32dc4dd4ac",
+    "caseStatus": "manual_required",
+    "meaning": "Tooling closure only, not an opportunity status promotion."
+  },
+  "evidence": {
+    "request.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/request.json",
+      "sha256": "0afa5c5af9d9a9d57a497d9b64646a2394fa1e18d8c056c546dfb4b15332052c",
+      "bytes": 15142
+    },
+    "boundary-after.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-after.json",
+      "sha256": "aac7b2ca7b7b5bec28cf1bfb1a0704443a733c3b3526958a75afe0be863d10ce",
+      "bytes": 255
+    },
+    "boundary-run.log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-run.log",
+      "sha256": "db2a704944e43e18e083cb54e96bd7d92b0eaf2903829e8a984e3518986bee08",
+      "bytes": 1228
+    },
+    "tool-selection.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/tool-selection.json",
+      "sha256": "66a6bd25503b1cec23c83666a0ba449fd31e52a2793b38ab33548d6f4c0e44a5",
+      "bytes": 38969
+    },
+    "tool-selection-fixed.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/tool-selection-fixed.json",
+      "sha256": "d341ed99d4a9cd1dfaabe29f323ef1dde0cb10c12f72d8a602628fc2c4c86767",
+      "bytes": 38977
+    },
+    "tool-selection-final.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/tool-selection-final.json",
+      "sha256": "00f5467b57eb08f5589d8343f5b7462bc8b032bd08869a23be3285b9d74e3096",
+      "bytes": 38977
+    },
+    "manifest-current-attempt01.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/manifest-current-attempt01.json",
+      "sha256": "8f0a1a4a69489978d10a6cdba1020d33ab7909c0cc4834042aab64896cd7e752",
+      "bytes": 116582
+    },
+    "boundary-fixed-attempt01.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt01.json",
+      "sha256": "f345ad407d9e5c19860939ab79c7cce0f2fd4abdba56027585ca885cf6a860b9",
+      "bytes": 4525
+    },
+    "boundary-fixed-attempt01.log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt01.log",
+      "sha256": "5eccd4c7ea06018366012b89c94676c1dec44375e71351a1c7385dbdb37c2a2f",
+      "bytes": 4434
+    },
+    "boundary-fixed-attempt02.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.json",
+      "sha256": "af16f7974acd290a20e40d1714692959e496a24d4169ee30e376813a83cd491c",
+      "bytes": 3672
+    },
+    "boundary-fixed-attempt02.log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.log",
+      "sha256": "7e479016c71931377699c477ed6eb0798408a76f2823911705b7c1ce53fcfa46",
+      "bytes": 3611
+    },
+    "boundary-fixed-attempt02.json.baseline-manifest.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.json.baseline-manifest.json",
+      "sha256": "3dfda3ef5078e54f9448703d7b7b4b517682d6567967ec5ad166c59821e25254",
+      "bytes": 115991
+    },
+    "boundary-fixed-attempt02.json.candidate-manifest.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.json.candidate-manifest.json",
+      "sha256": "afdb4f047b306d8dee279547f32ad8e48c4c3b1a2a3043323b5714597df98985",
+      "bytes": 116582
+    },
+    "boundary-unit-after.log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-unit-after.log",
+      "sha256": "822d6ccf7ca488774ca38d8b0daf74618c2465e353fb1603a4a9a2ed0ca802d0",
+      "bytes": 7113
+    },
+    "boundary-unit-after-attempt02.log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-unit-after-attempt02.log",
+      "sha256": "b1e30a95a0b2cd5b9a035a33731af05833431c4598f54120cd6325866b5954e0",
+      "bytes": 1562
+    },
+    "private-tests-before-fix.log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/private-tests-before-fix.log",
+      "sha256": "e6ae2c7f3059b986d23327d521c4641ba710ce040f7af83b81817b551f72879c",
+      "bytes": 1378
+    },
+    "boundary-unit-final.log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-unit-final.log",
+      "sha256": "d2d6a6a6708d967cc3bc33b43f9655cc28bf3c361a8844e662a44eff7d6f36d6",
+      "bytes": 1766
+    },
+    "validation-final-runs.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/validation-final-runs.json",
+      "sha256": "7761ece603ad0868927235bbe02dcf509c0e3013448a1e8e4b48f3d3cd768349",
+      "bytes": 200
+    },
+    "owned-types-attempt01.log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/owned-types-attempt01.log",
+      "sha256": "36b1af6ed69233ca82ff0d76786be926927ead0922ab83eba35cfe7810e7fac4",
+      "bytes": 2389
+    },
+    "owned-types-attempt02.log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/owned-types-attempt02.log",
+      "sha256": "9d0727a50556c5f5f175d661383baad04a30a04f0f0d71e87a23aac40471e616",
+      "bytes": 487
+    },
+    "owned-types-final.log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/owned-types-final.log",
+      "sha256": "04cea5ea33205ee9a19794e3618b517daa2253c5b41bb205c53479a8d77ec8a2",
+      "bytes": 993
+    },
+    "build-live.log": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/build-live.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "source-freeze-candidate01.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/source-freeze-candidate01.json",
+      "sha256": "671a7c456c926721890a91bc07eb281904ead32845c9f98ed4ccf631d1895c26",
+      "bytes": 393100
+    },
+    "preservation-before-commit.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/preservation-before-commit.json",
+      "sha256": "dc51562b4d1dfa00278154555bb519a0e51b086601daa209d1dbe52bcf621c62",
+      "bytes": 857
+    },
+    "owned-candidate.diff": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/owned-candidate.diff",
+      "sha256": "9839fa39ce618136202742137ba71ff9b0f70bbd64b3888436f8276253667241",
+      "bytes": 43197
+    },
+    "learning-case-final.json": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/learning-case-final.json",
+      "sha256": "85e282c0184e8e9f52cbb38451a0cbe5c0b8980a8a410f7053d67d2e8ce3499b",
+      "bytes": 3770
+    }
+  },
+  "limits": [
+    "Actual compared Curve commit remains framework: shared generated capability shadow, an unused compatibility wrapper and two shared Curve-plain harness files remain outside this Family boundary.",
+    "User requires the existing main task branch/workspace, so no new main branch or rewritten historical commit was created to alter classification. Temporary detached gate checkouts were cleaned by their owning gate; original worktree set restored.",
+    "No adapter_fixed, family_local, adapter_merge_ready, profitable opportunity, stage4A or stage4B pass follows. No new replay of already-covered FEI, ramp, V1, sUSD or lending samples.",
+    "Current dirty root has separate peer changes; paired committed-tree boundary evidence is not proof for all those working-tree changes.",
+    "No RPC, EVM, live start, deployment, signing, broadcast or phase4 performance experiment in this tooling repair. Resource observations are not a stage4 idle authorization."
+  ],
+  "goalStatus": "active",
+  "phase4A": "not-run",
+  "phase4B": "not-run"
+}

@@ -1187,6 +1187,70 @@
       },
       "created_at": "2026-10-13T21:17:22.653677+00:00",
       "updated_at": "2026-10-13T21:29:34.560000+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261014-family-boundary-strict-catalog",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Formal boundary tooling used removed legacy registry/action shapes and falsely rejected privately owned Family tests. Both tool defects are fixed; the compared Curve commit still correctly classifies framework. This is not an opportunity replay or Family merge acceptance.",
+      "target_block": 25979013,
+      "evidence": {
+        "baseline": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-run.log",
+          "sha256": "db2a704944e43e18e083cb54e96bd7d92b0eaf2903829e8a984e3518986bee08"
+        },
+        "commits": {
+          "baseline": "fba759d2daf6d0f4080dd8b402cdd2895ffea7c3",
+          "candidate": "ec82f9d114a528605f4f536972c38f6b2a7d884d"
+        },
+        "independentReview": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/independent-review/curve-boundary-tool-independent-review-20261014-supplement01.json",
+          "sha256": "fcd8054e53e85f806c40dd2c7a8ded7e23b704e6d08f41ab4700b6d46f8b3736",
+          "bytes": 25732,
+          "independentRecomputations": 32,
+          "blockingFindings": 0,
+          "scope": "Read-only code and saved-evidence review; no reviewer EVM or gate rerun."
+        },
+        "after": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-fixed-attempt02.json",
+          "sha256": "af16f7974acd290a20e40d1714692959e496a24d4169ee30e376813a83cd491c",
+          "bytes": 3672
+        },
+        "regression": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/boundary-unit-final.log",
+          "sha256": "d2d6a6a6708d967cc3bc33b43f9655cc28bf3c361a8844e662a44eff7d6f36d6",
+          "bytes": 1766,
+          "tests": 19,
+          "passed": 19,
+          "failed": 0
+        },
+        "privateTestRedRegression": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/private-tests-before-fix.log",
+          "sha256": "e6ae2c7f3059b986d23327d521c4641ba710ce040f7af83b81817b551f72879c",
+          "bytes": 1378
+        },
+        "sourceFreeze": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage2-curve-boundary-20261014.q56lxnjs/source-freeze-candidate01.json",
+          "sha256": "671a7c456c926721890a91bc07eb281904ead32845c9f98ed4ccf631d1895c26",
+          "bytes": 393100
+        }
+      },
+      "tooling_defect": {
+        "tool": "analysis:adapter-family-boundary-gate",
+        "issue": "The collector read removed legacy registry/action shapes and a test-only compatibility projection; the supplemental path policy also falsely rejected private Family test/fixtures allowed by the current scaffold and validation contract.",
+        "evidence": "Original canonical run aborted on missing production-registry.ts; independent review confirmed obsolete action AST. Added private-test positive regression failed before its narrow policy fix. Final 19/19 tests and independent 32/32 saved-evidence recomputations pass. Same historical pair produces an honest framework receipt with four actual scope reasons.",
+        "codify_target": "Current worker independently loads each pinned strict source root, preserves installed/disabled definitions, activation/action/infra/source bindings and all framework guards; permit only anchored, exclusive private Family .ts/.json tests with no runtime imports.",
+        "status": "codified",
+        "codify_commit": "5356cf3de6384a0921dd9a2e1e70bc32dc4dd4ac"
+      },
+      "created_at": "2026-10-13T21:54:59.428518+00:00",
+      "updated_at": "2026-10-13T22:13:49.287193+00:00"
     }
   ]
 }
