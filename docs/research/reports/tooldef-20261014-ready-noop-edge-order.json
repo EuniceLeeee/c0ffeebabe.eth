@@ -1,0 +1,50 @@
+{
+  "learning_case_id": "tooldef-20261014-ready-noop-edge-order",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [
+    "swap"
+  ],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "Central Ready no-op maintenance falsely rejects the same validated strict graph when discovery order and catalog rehydration order differ; existing Ready remains valid. This is not a failed swap or opportunity replay.",
+  "target_block": 26029876,
+  "evidence": {
+    "baseline": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/regression-before-fix-attempt02.log",
+      "sha256": "9fcb41a0520d10433ecfb478c015fa92ffb25cdb7382956d91d9aa311e6efd3f",
+      "bytes": 751
+    },
+    "historicalFailure": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ready-after-psm-exit.json",
+      "sha256": "8814135af57341eda02be61b251e5a1fd549293f200838a8211a876270cd4db2",
+      "bytes": 247
+    },
+    "historicalReadySha256": "076061cc8d9459490f2076739e9e04c2ede86bbc58f65ce85bc7c7cf376efe4d",
+    "independentReview": {
+      "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/ready-order-review-20261014/review.json",
+      "sha256": "3394168e893b53b6f0a048996b6542b7fa5ddc5bf287f80d50626a6e8029d657",
+      "result": "Independent frozen-production rehydration and both no-op failures reproduced offline; 98-edge full multiset parity; head checks stubbed, zero network."
+    },
+    "after": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/historical-restrict-result.json",
+      "sha256": "2c372041bed65075751c0ecb9cdbecd9e37b05610624d252ae0a9a5045803165"
+    },
+    "independentFinalReview": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/independent-review/final-review.json",
+      "sha256": "2d0fd49e7bdaf39733d00423afaa1c0e88633a7dd40e3b22ce4cc1ac1725d718",
+      "decision": "approve_current_actual_baseline_fix"
+    }
+  },
+  "tooling_defect": {
+    "tool": "listener/src/searcher/ready-family-update-cli.ts; updateReadyFamilies/restrictReadyFamilies",
+    "issue": "Two no-op comparisons require positional equality after independently validated reconstruction despite candidate-order vs catalog-order family enumeration.",
+    "evidence": "Real N26029876 Ready and new runner regression reproduce both updateReadyFamilies and restrictReadyFamilies rejection with identical metadata and complete edge multiset.",
+    "codify_target": "listener/src/searcher/universe-rebuild-runner.ts no-op comparisons plus workflow regression; retain exact incumbent, all graph validators and source/revision/CAS fences.",
+    "status": "codified",
+    "codify_commit": "8bae4fce35c1f3bb8414bf8098642a71b876131b"
+  },
+  "created_at": "2026-10-13T21:17:22.653677+00:00",
+  "updated_at": "2026-10-13T21:29:34.560000+00:00"
+}

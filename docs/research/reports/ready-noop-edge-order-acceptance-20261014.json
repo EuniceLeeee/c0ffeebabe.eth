@@ -1,0 +1,505 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-14",
+  "stage": 3,
+  "classification": "central Ready maintenance tooling correctness",
+  "result": "Both no-op workflows accept a validated strict graph edge permutation and return the exact incumbent; real historical maintenance and negative workflow regression passed on the current actual dirty baseline.",
+  "repo": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "headAtExecution": "350f1d3fdcfbcbcde2cf8cfc5fd59cea63b019a3",
+  "source": {
+    "testedDirtyTree": true,
+    "scope": "2006 existing broadly frozen source files; exactly two changed since the prior published actual baseline. Additional source archive binds two text files and six runtime JSON assets separately.",
+    "sourceFingerprint": "b854000b4f98ba6432d8b312cc3790db194d8b98dc82da62f8d9c1f224ee76fb",
+    "manifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/source-freeze-current.json",
+      "sha256": "461fbc6e7471322ad639344cb2ec5ea184de3e1601e5afd41ef8fcc827516340",
+      "bytes": 392999
+    },
+    "archiveManifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/source-archive-manifest.json",
+      "sha256": "8039929208c75c362e8d9bd5752bf75b9cfbb200febf279412add522cf06f65c",
+      "bytes": 394506
+    },
+    "workingState": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/post-validation-source-state.json",
+      "sha256": "773e0e609f72a7ec45c2ebd91222f83708dc6592f51a9deee3a7e5e9d2682b2a",
+      "bytes": 2357
+    },
+    "changedFiles": [
+      "listener/src/searcher/test/universe-rebuild-runner.ts",
+      "listener/src/searcher/universe-rebuild-runner.ts"
+    ],
+    "independentCleanCommitTreeTested": false
+  },
+  "transactionContext": {
+    "tx": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+    "block": 26029876,
+    "blockHash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a",
+    "meaning": "This existing Ekubo/PSM case exposed maintenance rejection. No new opportunity replay or Family execution was performed in this round. Existing prior PSM/Ekubo results and failure records remain separate."
+  },
+  "rootCause": {
+    "initialRebuild": "Candidate order drives first family insertion during aggregation.",
+    "maintenance": "activeReadyMemos / prepareReadyFamilyUpdate use familyInstanceKey order.",
+    "result": "All 98 full graph edges changed array position with identical complete metadata and edge multiset; graph projection validator passed but ordered incumbent comparison rejected both update and restriction."
+  },
+  "implementation": {
+    "files": [
+      "listener/src/searcher/test/universe-rebuild-runner.ts",
+      "listener/src/searcher/universe-rebuild-runner.ts"
+    ],
+    "patch": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/owned-change.diff",
+      "sha256": "8b859f8d413ce8675a6d9fec96223dcbbe96e9487602e4bc9d39a2a4a2771472",
+      "bytes": 8203
+    },
+    "scope": "Only the two no-op incumbent comparisons use canonicalReadyGraphContent for strict-rebuild-graph-v1; unknown formats retain ordered canonical equality.",
+    "comparison": "Full metadata plus sorted canonical serialization of each entire edge, retaining duplicate multiplicity and nested array order. No partial IDs or Set-based comparison.",
+    "publication": "Existing ordered production graph validator still runs first. Successful no-op returns the exact incumbent; no graph reorder, no new graphHash, no generation/revision increment, no CAS write.",
+    "retainedGuards": [
+      "current family and discovery definitions",
+      "active memo membership and sealed roots",
+      "source coverage",
+      "independent graph projection and runtime ownership validation",
+      "both canonical head fences",
+      "revision reload",
+      "normal mutation graph receipt and CAS"
+    ],
+    "familyProtocolSemanticsChanged": false
+  },
+  "baseline": {
+    "originalHistoricalFailure": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ready-after-psm-exit.json",
+      "sha256": "8814135af57341eda02be61b251e5a1fd549293f200838a8211a876270cd4db2",
+      "bytes": 247
+    },
+    "originalHistoricalFailureLog": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ready-after-psm.redacted.log",
+      "sha256": "038dc4ec9b8a7bc28edbea1e7226ade2200e5a86a1c7aa1aa2116b894d3bb85e",
+      "bytes": 53
+    },
+    "originalReady": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ready-current-N26029876.json",
+      "sha256": "076061cc8d9459490f2076739e9e04c2ede86bbc58f65ce85bc7c7cf376efe4d",
+      "bytes": 1690963
+    },
+    "existingFixturesPassed": {
+      "state": "completed",
+      "jobs": [
+        {
+          "label": "runner",
+          "tool": "listener:searcher:universe-rebuild-runner",
+          "exitCode": 0,
+          "startedAt": "2026-10-13T21:08:03.401043+00:00",
+          "endedAt": "2026-10-13T21:08:06.385562+00:00"
+        },
+        {
+          "label": "startup",
+          "tool": "listener:searcher:startup-universe-rebuild",
+          "exitCode": 0,
+          "startedAt": "2026-10-13T21:08:06.385790+00:00",
+          "endedAt": "2026-10-13T21:08:06.973795+00:00"
+        }
+      ]
+    },
+    "newRegressionBeforeFix": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/regression-before-fix-attempt02.log",
+      "sha256": "9fcb41a0520d10433ecfb478c015fa92ffb25cdb7382956d91d9aa311e6efd3f",
+      "bytes": 751
+    },
+    "newRegressionExpectedFailures": [
+      "Ready Family no-op validation differs from incumbent",
+      "Ready restriction no-op Graph differs from incumbent"
+    ]
+  },
+  "validation": {
+    "workflowPositiveCases": 2,
+    "workflowNegativeCases": 20,
+    "negativeCases": "Eight complete-content mutations, independent validator failure and unknown-format reorder, each through update and restrict. Existing source/definition/coverage/head/revision/CAS and activation mutation tests remain enabled.",
+    "canonicalRegressionResults": [
+      {
+        "phase": "runner",
+        "pid": 499100,
+        "tool": "listener:searcher:universe-rebuild-runner",
+        "startedAt": "2026-10-13T21:17:45.172744+00:00",
+        "status": "completed",
+        "exitCode": 0,
+        "endedAt": "2026-10-13T21:17:48.271003+00:00",
+        "logSha256": "96fcf459caf67fba5957ac767ffcc669170e824f18936f9ed98e8ced6468a3b8"
+      },
+      {
+        "phase": "startup",
+        "pid": 499169,
+        "tool": "listener:searcher:startup-universe-rebuild",
+        "startedAt": "2026-10-13T21:17:48.271781+00:00",
+        "status": "completed",
+        "exitCode": 0,
+        "endedAt": "2026-10-13T21:17:48.843823+00:00",
+        "logSha256": "d446d97a79275f2343bf67b96c3d8e48d6498d9d5e950628e976beeff85eb6af"
+      },
+      {
+        "phase": "checkpoint",
+        "pid": 499232,
+        "tool": "listener:searcher:universe-rebuild-checkpoint",
+        "startedAt": "2026-10-13T21:17:48.844574+00:00",
+        "status": "completed",
+        "exitCode": 0,
+        "endedAt": "2026-10-13T21:17:49.498181+00:00",
+        "logSha256": "95c0092ace8ca81e0422f495b76ade1fd687e392367bb01ba508e3cb160f38de"
+      },
+      {
+        "phase": "production",
+        "pid": 499296,
+        "tool": "listener:searcher:universe-rebuild-production",
+        "startedAt": "2026-10-13T21:17:49.498876+00:00",
+        "status": "completed",
+        "exitCode": 0,
+        "endedAt": "2026-10-13T21:17:52.401442+00:00",
+        "logSha256": "363fa318f6147d0893d1fe5c92da2bc766bddaf334f53b66af862e2233ac3a40"
+      }
+    ],
+    "productionBuild": {
+      "pid": 499361,
+      "status": "completed",
+      "startedAt": "2026-10-13T21:18:20.170270+00:00",
+      "exitCode": 0,
+      "endedAt": "2026-10-13T21:18:28.031996+00:00",
+      "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    "historicalUpdate": {
+      "mode": "update",
+      "args": [
+        "node",
+        "--import",
+        "tsx",
+        "src/searcher/ready-family-update-cli.ts",
+        "update",
+        "--checkpoint",
+        "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/ready-current-N26029876-copy.json",
+        "--archive",
+        "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ready-after-psm-activity"
+      ],
+      "startedAt": "2026-10-13T21:20:47.855257+00:00",
+      "wallBudgetSeconds": 120,
+      "status": "completed",
+      "pid": 499400,
+      "controllerPid": 499399,
+      "exitCode": 0,
+      "budgetExpired": false,
+      "endedAt": "2026-10-13T21:20:49.224188+00:00",
+      "logSha256": "fd59ce3fa797e8c4d63a7b86fe0f99f2ac00b72ce7c25288b4b505be035e42be",
+      "copyBytesUnchanged": true,
+      "originalBytesUnchanged": true
+    },
+    "historicalUpdateLog": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/historical-update.redacted.log",
+      "sha256": "fd59ce3fa797e8c4d63a7b86fe0f99f2ac00b72ce7c25288b4b505be035e42be",
+      "bytes": 127
+    },
+    "historicalRestriction": {
+      "status": "passed",
+      "mode": "restrict",
+      "canonicalHeadChecks": 2,
+      "canonicalHeadChecksStubbed": false,
+      "graphValidations": 1,
+      "scanCalls": 0,
+      "attestCalls": 0,
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a",
+        "generation": 26029876
+      },
+      "generation": 1,
+      "revision": 6,
+      "activeMemos": 48,
+      "activeInstances": 48,
+      "edges": 98,
+      "checkpointBytesUnchanged": true,
+      "checkpointSha256": "076061cc8d9459490f2076739e9e04c2ede86bbc58f65ce85bc7c7cf376efe4d",
+      "currentProductionConsumerPassed": true
+    },
+    "historicalRestrictionProcess": {
+      "mode": "restrict",
+      "args": [
+        "node",
+        "--import",
+        "tsx",
+        "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/historical-restrict-current.mts"
+      ],
+      "startedAt": "2026-10-13T21:20:49.225345+00:00",
+      "wallBudgetSeconds": 120,
+      "status": "completed",
+      "pid": 499412,
+      "controllerPid": 499399,
+      "exitCode": 0,
+      "budgetExpired": false,
+      "endedAt": "2026-10-13T21:20:50.596542+00:00",
+      "logSha256": "1742f8876f143a543f01213a115c35bdda620288eebc673e892b51f1dbe47209",
+      "copyBytesUnchanged": true,
+      "originalBytesUnchanged": true
+    },
+    "actualHistoricalScope": "Copied existing N-only Ready. Actual production CLI update uses no supplemental family. Restriction invokes current production wiring, including two real RPC canonical checks and its full graph validator; scan and attestation throw if called. Current production Ready consumer accepts the returned incumbent.",
+    "request": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/historical-request.json",
+      "sha256": "34ca13c870005a14deeb89f2b42e4329459ffa5c72eb0553e59d6143e51c600f",
+      "bytes": 2597
+    }
+  },
+  "toolReconciliation": {
+    "capabilityQuery": [
+      "rebuild",
+      "startup",
+      "universe",
+      "verification"
+    ],
+    "manifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/tool-selection.json",
+      "sha256": "c9aca1f8a2b2b3ce9bd7801bd2859433f09f282224733e8676b2a9df6f4131cc",
+      "bytes": 215349
+    },
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-runner",
+        "descriptor_sha256": "e527bb18f1fefeb709fc2afb2cb4ff4cf4572feabe848f112a216b30c060cce7",
+        "started_at": "2026-10-13T21:08:03.684Z",
+        "finished_at": "2026-10-13T21:08:06.372Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "bff6f6ff05593fe9f4e7da45bc458c82aa1edb34d0d0db64cf949da4d75a9686",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-runner",
+          "--"
+        ],
+        "stdout_sha256": "159e80b36342eab07c027229f28353462e801dc5773570937f3cd66df052fef0",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 364,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:startup-universe-rebuild",
+        "descriptor_sha256": "9acba32042127b5a8df18fbd4a2659fb051c8c95eab2843ccaf4c3b3dd93d72d",
+        "started_at": "2026-10-13T21:08:06.667Z",
+        "finished_at": "2026-10-13T21:08:06.959Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "9b8c3ed2bdf486925625271ccf0f10aa9b68dd333ad3d261c413903b0e520c7d",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:startup-universe-rebuild",
+          "--"
+        ],
+        "stdout_sha256": "eb765956fb8744f94d62f0726b6fd86d776522c156b78eec74588b9e8f18fe13",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 39,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-runner",
+        "descriptor_sha256": "e527bb18f1fefeb709fc2afb2cb4ff4cf4572feabe848f112a216b30c060cce7",
+        "started_at": "2026-10-13T21:15:36.484Z",
+        "finished_at": "2026-10-13T21:15:37.724Z",
+        "exit_code": 1,
+        "cwd": "listener",
+        "argv_sha256": "bff6f6ff05593fe9f4e7da45bc458c82aa1edb34d0d0db64cf949da4d75a9686",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-runner",
+          "--"
+        ],
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "31b41b0cc318ed01ce2fbb65eb63da457068ca709796dbaf99e821cb4846171d",
+        "stdout_bytes": 0,
+        "stderr_bytes": 176
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-runner",
+        "descriptor_sha256": "e527bb18f1fefeb709fc2afb2cb4ff4cf4572feabe848f112a216b30c060cce7",
+        "started_at": "2026-10-13T21:16:17.828Z",
+        "finished_at": "2026-10-13T21:16:19.071Z",
+        "exit_code": 1,
+        "cwd": "listener",
+        "argv_sha256": "bff6f6ff05593fe9f4e7da45bc458c82aa1edb34d0d0db64cf949da4d75a9686",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-runner",
+          "--"
+        ],
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "c8cea3fed045f7bab14e688aed3e180c3a656ff9f969b47381fbceb542b1e0dd",
+        "stdout_bytes": 0,
+        "stderr_bytes": 575
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-runner",
+        "descriptor_sha256": "e527bb18f1fefeb709fc2afb2cb4ff4cf4572feabe848f112a216b30c060cce7",
+        "started_at": "2026-10-13T21:17:45.470Z",
+        "finished_at": "2026-10-13T21:17:48.252Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "bff6f6ff05593fe9f4e7da45bc458c82aa1edb34d0d0db64cf949da4d75a9686",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-runner",
+          "--"
+        ],
+        "stdout_sha256": "865ec125e2e8fb398127125914afa3fec59c31ef16993df889b9b71186bc5a06",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 484,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:startup-universe-rebuild",
+        "descriptor_sha256": "9acba32042127b5a8df18fbd4a2659fb051c8c95eab2843ccaf4c3b3dd93d72d",
+        "started_at": "2026-10-13T21:17:48.565Z",
+        "finished_at": "2026-10-13T21:17:48.825Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "9b8c3ed2bdf486925625271ccf0f10aa9b68dd333ad3d261c413903b0e520c7d",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:startup-universe-rebuild",
+          "--"
+        ],
+        "stdout_sha256": "eb765956fb8744f94d62f0726b6fd86d776522c156b78eec74588b9e8f18fe13",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 39,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-checkpoint",
+        "descriptor_sha256": "7890523c5502673223ac72e59209554d0dc78ae70b7ef452b79665e2d4ed9b3c",
+        "started_at": "2026-10-13T21:17:49.128Z",
+        "finished_at": "2026-10-13T21:17:49.484Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "abd60351955b96ca6683d9ff91383adb56618bfd0886c893bbedd56a58d4dd74",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-checkpoint",
+          "--"
+        ],
+        "stdout_sha256": "8beb5ab4825bb03b2f5a863d2717b79dccef6e967a263ab62e1d487f00973824",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 33,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:universe-rebuild-production",
+        "descriptor_sha256": "d0d08f1b0258bc29f08dac1e218a692e8b4dfd070eb0625e87b187dd183e6b06",
+        "started_at": "2026-10-13T21:17:49.792Z",
+        "finished_at": "2026-10-13T21:17:52.382Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "71bfb62efe096d36d52a4a0fbc09b916757072dbfd9fc755320afa6787dcbc52",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:universe-rebuild-production",
+          "--"
+        ],
+        "stdout_sha256": "e83f2b8cd25fc186a5aa41a13433403de67567fe52130e3bec5d0fe97735977e",
+        "stderr_sha256": "c6641e3749c89175b46d02c592c3cb52b63975fc73f7aab69cd3d8795156ae73",
+        "stdout_bytes": 4755,
+        "stderr_bytes": 429
+      }
+    ],
+    "selectedToolIds": [
+      "listener:searcher:universe-rebuild-runner",
+      "listener:searcher:startup-universe-rebuild",
+      "listener:searcher:universe-rebuild-checkpoint",
+      "listener:searcher:universe-rebuild-production"
+    ],
+    "manualVsCanonical": "The initial real failure and independent full-graph analysis revealed missing fixture coverage. Current indexed runner regression was made to fail on both paths before the fix and pass after it.",
+    "productionMaintenanceEntry": "listener/src/searcher/ready-family-update-cli.ts is an existing trusted writer/production entry invoked directly. It has no current npm indexed script; no invented tool ID is claimed."
+  },
+  "retainedFailures": [
+    {
+      "kind": "original historical no-op error",
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ekubo-funding-20261014.1rjnj0zh/ready-after-psm-exit.json",
+        "sha256": "8814135af57341eda02be61b251e5a1fd549293f200838a8211a876270cd4db2",
+        "bytes": 247
+      }
+    },
+    {
+      "kind": "first new test fixture referenced its noWork helper before declaration; corrected before the actual before-fix reproduction",
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/regression-before-fix.log",
+        "sha256": "5ce029ee2c87b48171b119d81107474dfcc5db71262a3452efd14a415744ef4c",
+        "bytes": 352
+      }
+    },
+    {
+      "kind": "expected before-fix regression failure on both production workflows",
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/regression-before-fix-attempt02.log",
+        "sha256": "9fcb41a0520d10433ecfb478c015fa92ffb25cdb7382956d91d9aa311e6efd3f",
+        "bytes": 751
+      }
+    },
+    {
+      "kind": "first new source manifest inherited obsolete baseline sha256 metadata; correct new fingerprint field was already present, superseded by explicit current manifest without rewriting prior files",
+      "artifact": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/source-freeze-attempt01-correction.json",
+        "sha256": "bec092575f3a3cd5d52f1d9f71d829a35250a945a8660a15931872fe0bd7ad4a",
+        "bytes": 350
+      }
+    }
+  ],
+  "preservation": {
+    "originalReadyAndWorkingCopyBytesUnchanged": true,
+    "originalReadySha256": "076061cc8d9459490f2076739e9e04c2ede86bbc58f65ce85bc7c7cf376efe4d",
+    "readyGeneration": 1,
+    "checkpointRevision": 6,
+    "activeInstances": 48,
+    "graphEdges": 98,
+    "peerChanges": "Only the helper/two comparisons and isolated new workflow test insertion are owned. All peer source bytes retained; no shared generated/catalog regeneration. Source commit alone is not the whole tested dirty state."
+  },
+  "limits": [
+    "This is a current-baseline Ready tool correctness fix, not new swap execution or opportunity evidence.",
+    "No new formal route-pinned Adapter Replay or family_local evidence.",
+    "All stage4A and stage4B performance remain not run; bounded command durations are not latency acceptance.",
+    "No live, deployment or broadcast started; no existing process stopped.",
+    "Remaining Stage2/Stage3 correctness and opportunity items persist in the original IMPL table; full goal remains active."
+  ],
+  "goalStatus": "active",
+  "implementationCommit": "8bae4fce35c1f3bb8414bf8098642a71b876131b",
+  "toolingDefectLearningCase": {
+    "path": "docs/research/reports/tooldef-20261014-ready-noop-edge-order.json",
+    "codify_commit": "8bae4fce35c1f3bb8414bf8098642a71b876131b",
+    "status": "codified"
+  },
+  "independentReview": {
+    "decision": "approve_current_actual_baseline_fix",
+    "blockingFindings": [],
+    "evidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-ready-order-20261014.mkkdtw4i/independent-review/final-review.json",
+      "sha256": "2d0fd49e7bdaf39733d00423afaa1c0e88633a7dd40e3b22ce4cc1ac1725d718",
+      "decision": "approve_current_actual_baseline_fix"
+    },
+    "independentCandidateNegativeCases": 20,
+    "limitations": [
+      "Approval covers the supplied actual dirty baseline and exact two-file patch, not an independently built clean commit tree or other peer changes.",
+      "Reviewer independently verified all local bundle/candidate bytes and artifact bindings, but did not perform a new full-cloud filesystem read.",
+      "Historical cloud RPC results are inspected execution evidence from the parent; reviewer independently reran only offline production functions and safety negatives.",
+      "No EVM, opportunity replay, live, latency/phase4 or representative performance conclusion follows from this Ready no-op repair.",
+      "LearningCase final codify_commit, doc/IMPL publication and push are parent follow-up actions, not yet verified in this final review."
+    ]
+  }
+}
