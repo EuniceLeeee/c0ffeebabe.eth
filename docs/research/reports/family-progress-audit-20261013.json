@@ -1,0 +1,2344 @@
+{
+  "schemaVersion": "family-task-progress-audit/v1",
+  "date": "2026-10-13",
+  "timezone": "Asia/Shanghai",
+  "claim": "Progress reconciliation only: current cloud source, dirty state, processes, existing source-bound evidence and remaining work. No new fork/RPC/correctness/performance/replay acceptance.",
+  "workspaceSelection": {
+    "observedAt": "2026-10-13T03:09:02.682793+00:00",
+    "workspaces": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007",
+        "branch": "codex/family-runtime-actual-20261007",
+        "head": "6a133d4a437ccec0280eb31b38a3b7e3bbbf051b",
+        "status": "M listener/src/searcher/generated/family-capability-shadow.generated.json\n M listener/src/searcher/main.ts\n M listener/src/searcher/ready-family-update-cli.ts\n M listener/src/searcher/strict-ready-runtime.ts\n M listener/src/searcher/test/family-dual-execution.ts\n M listener/src/searcher/test/strict-ready-runtime.ts\n M listener/src/searcher/test/universe-rebuild-production.ts\n M listener/src/searcher/test/universe-rebuild-runner.ts\n M listener/src/searcher/test/universe-rebuild-startup-cli.ts\n M listener/src/searcher/universe-rebuild-checkpoint.ts\n M listener/src/searcher/universe-rebuild-production.ts\n M listener/src/searcher/universe-rebuild-runner.ts\n M listener/src/searcher/universe-rebuild-startup-cli.ts\n M listener/src/searcher/venues/swaps/univ1-family/codec.ts\n M listener/src/searcher/venues/swaps/univ1-family/exact.ts\n M listener/src/searcher/venues/swaps/univ1-family/execution.ts\n M listener/src/searcher/venues/swaps/univ1-family/identity.ts\n M listener/src/searcher/venues/swaps/univ1-family/manifest.ts\n M listener/src/searcher/venues/swaps/univ1-family/pricing.ts\n M listener/src/searcher/venues/swaps/univ1-family/routes.ts\n M listener/src/searcher/venues/swaps/univ1-family/state.ts\n M listener/src/searcher/venues/swaps/univ1-family/test/contract.ts\n M listener/src/searcher/venues/swaps/univ1-family/test/fixtures.ts\n M listener/src/searcher/venues/swaps/univ1-family/types.ts\n?? analysis/node_modules\n?? listener/node_modules\n?? listener/src/searcher/ready-transaction-input.ts\n?? listener/src/searcher/test/ready-transaction-input.ts\n?? listener/src/searcher/venues/swaps/univ1-family/test/historical-dual.ts\n?? listener/src/searcher/venues/swaps/univ1-family/test/historical-ready.ts\n?? listener/src/searcher/venues/swaps/univ1-family/test/implementation-bytecode.json",
+        "recentCommits": "6a133d4 docs: append Curve anchor evidence to original IMPL table\na12f692 docs: record two Curve underlying historical anchor checks\nbfd7bbf docs: record Curve ERC20 single-block acceptance in IMPL\n6e76c16 fix(curve-underlying): admit proven pure ERC20 uint aliases\n056ca5a docs: record Curve cohort acceptance and retained gaps\n532f6ab test(curve): cover all native underlying pool directions\n570e612 docs: record native stETH evidence in original IMPL table\nf54b727 fix(curve): project native stETH receipts and reject zero debit\n9257322 docs: record native Underlying acceptance in original IMPL row\n049c15f feat(curve): add guarded native-alias underlying execution\n0920d0d docs: record donor reference guard evidence and IMPL status\n89a77ea test: reject failed target quotes as borrowed reference gaps\n8b9040b docs: record Curve BTC same-state dual validation in IMPL\n41e2321 test(curve): verify dual execution with recorded production inputs\n170c571 docs: record bounded Curve atomic strict evidence in IMPL\n446a441 fix(strict): preserve nested halts in atomic Curve probes",
+        "worktrees": "worktree /opt/mev-cloud/six-round-20261006/analysis-tooling-repo-3b22ae81\nbare\n\nworktree /opt/mev-cloud/deepseek-four-families-20261008\nHEAD 22e5180d93b86f90770dd1387a858ba6fe29a738\nbranch refs/heads/codex/deepseek-four-families-20261008\n\nworktree /opt/mev-cloud/family-runtime-20261007\nHEAD 6a133d4a437ccec0280eb31b38a3b7e3bbbf051b\nbranch refs/heads/codex/family-runtime-actual-20261007",
+        "productionEntryCount": 43,
+        "productionEntries": [
+          "listener/src/searcher/venues/production-families/algebra-integral.production.ts",
+          "listener/src/searcher/venues/production-families/angstrom-v4.production.ts",
+          "listener/src/searcher/venues/production-families/astra-multitoken.production.ts",
+          "listener/src/searcher/venues/production-families/badger-sett-withdraw.production.ts",
+          "listener/src/searcher/venues/production-families/balancer-flash.production.ts",
+          "listener/src/searcher/venues/production-families/balancer-v1.production.ts",
+          "listener/src/searcher/venues/production-families/balancer-v2.production.ts",
+          "listener/src/searcher/venues/production-families/balancer-v3.production.ts",
+          "listener/src/searcher/venues/production-families/compound-ctoken.production.ts",
+          "listener/src/searcher/venues/production-families/curve-lp.production.ts",
+          "listener/src/searcher/venues/production-families/curve-plain.production.ts",
+          "listener/src/searcher/venues/production-families/curve-underlying.production.ts",
+          "listener/src/searcher/venues/production-families/dodo-v2.production.ts",
+          "listener/src/searcher/venues/production-families/eigenpie.production.ts",
+          "listener/src/searcher/venues/production-families/ekubo.production.ts",
+          "listener/src/searcher/venues/production-families/ella-exchange.production.ts",
+          "listener/src/searcher/venues/production-families/erc4626-silo-redeem.production.ts",
+          "listener/src/searcher/venues/production-families/erc4626.production.ts",
+          "listener/src/searcher/venues/production-families/ethertoken-native-redeem.production.ts",
+          "listener/src/searcher/venues/production-families/fluid-credit.production.ts",
+          "listener/src/searcher/venues/production-families/fluid-dex.production.ts",
+          "listener/src/searcher/venues/production-families/goldx.production.ts",
+          "listener/src/searcher/venues/production-families/kyberswap-elastic.production.ts",
+          "listener/src/searcher/venues/production-families/metronome-hgusdc.production.ts",
+          "listener/src/searcher/venues/production-families/metronome-synth.production.ts",
+          "listener/src/searcher/venues/production-families/mooniswap.production.ts",
+          "listener/src/searcher/venues/production-families/morpho-flash.production.ts",
+          "listener/src/searcher/venues/production-families/peapods-debond.production.ts",
+          "listener/src/searcher/venues/production-families/psm.production.ts",
+          "listener/src/searcher/venues/production-families/psv.production.ts",
+          "listener/src/searcher/venues/production-families/rocksolid.production.ts",
+          "listener/src/searcher/venues/production-families/self-burn-native.production.ts",
+          "listener/src/searcher/venues/production-families/set-redemption.production.ts",
+          "listener/src/searcher/venues/production-families/token-conversion.production.ts",
+          "listener/src/searcher/venues/production-families/token-migration.production.ts",
+          "listener/src/searcher/venues/production-families/uniswap-v1.production.ts",
+          "listener/src/searcher/venues/production-families/univ2-standard.production.ts",
+          "listener/src/searcher/venues/production-families/univ3-standard.production.ts",
+          "listener/src/searcher/venues/production-families/univ4-fee-hook.production.ts",
+          "listener/src/searcher/venues/production-families/univ4.production.ts",
+          "listener/src/searcher/venues/production-families/wsteth.production.ts",
+          "listener/src/searcher/venues/production-families/yearn-auction.production.ts",
+          "listener/src/searcher/venues/production-families/yieldbasis-lt.production.ts"
+        ],
+        "remotes": "origin\t/opt/mev-cloud/seven-amount-20261005-xHmFvp/runtime-actual-debt-20261006.4j0Nqv (fetch)\norigin\t/opt/mev-cloud/seven-amount-20261005-xHmFvp/runtime-actual-debt-20261006.4j0Nqv (push)",
+        "trackedDiffSha256": "2776910e5aeb29d5467103d67141cded583a6da8a3e293946318b05ed030a4cb",
+        "auditCodeFiles": 1972,
+        "auditCodeSha256": "d49e0122b67c68c2b3824be8a24e95ca47429669d65ad980f1b8aae2683d7fe0"
+      },
+      {
+        "path": "/opt/mev-cloud/deepseek-four-families-20261008",
+        "branch": "codex/deepseek-four-families-20261008",
+        "head": "22e5180d93b86f90770dd1387a858ba6fe29a738",
+        "status": "",
+        "recentCommits": "22e5180 test(family): add family-scoped single-block Ready harnesses for kyberswap + algebra\ne568a32 test(family): compound cToken same-block dual-interface evidence harness\n993dc8b fix(family): compound cToken Redeem event has no indexed parameters\n3c35a21 chore(catalog): register yieldbasis-lt in the generated catalog and shared gates\nb87187e feat(family): add Yield Basis LT single-asset withdraw family\n940c501 fix(family): compound cToken oneShare was double-exponentiated, dropping every instance\n81be98e chore(catalog): register algebra-integral in the generated catalog and shared gates\n99bc42b feat(family): add Algebra Integral 1.2.1 swap family (static-fee variant)\n0281ea5 feat(family): compound cToken plugin-owned nomination + family-local single-block harness\n04cf42a chore(catalog): register kyberswap-elastic in the generated catalog and shared gates\n12adddf feat(family): add KyberSwap Elastic concentrated-liquidity swap family\n13a8d67 feat(family): make the compound cToken family discoverable from transaction seeds\n9967c84 feat(family): add Compound V2 cToken share-redemption plugin family\n8442bb0 chore(baseline): import frozen Codex source baseline 7d9aa1d + 29-file uncommitted snapshot\n7d9aa1d docs: ship family adaptation skill and isolated handoff rules\nc471b5a test(families): authenticate saved V1 proof and close scoped cloud audit",
+        "worktrees": "worktree /opt/mev-cloud/six-round-20261006/analysis-tooling-repo-3b22ae81\nbare\n\nworktree /opt/mev-cloud/deepseek-four-families-20261008\nHEAD 22e5180d93b86f90770dd1387a858ba6fe29a738\nbranch refs/heads/codex/deepseek-four-families-20261008\n\nworktree /opt/mev-cloud/family-runtime-20261007\nHEAD 6a133d4a437ccec0280eb31b38a3b7e3bbbf051b\nbranch refs/heads/codex/family-runtime-actual-20261007",
+        "productionEntryCount": 39,
+        "productionEntries": [
+          "listener/src/searcher/venues/production-families/algebra-integral.production.ts",
+          "listener/src/searcher/venues/production-families/angstrom-v4.production.ts",
+          "listener/src/searcher/venues/production-families/astra-multitoken.production.ts",
+          "listener/src/searcher/venues/production-families/badger-sett-withdraw.production.ts",
+          "listener/src/searcher/venues/production-families/balancer-flash.production.ts",
+          "listener/src/searcher/venues/production-families/balancer-v1.production.ts",
+          "listener/src/searcher/venues/production-families/balancer-v2.production.ts",
+          "listener/src/searcher/venues/production-families/balancer-v3.production.ts",
+          "listener/src/searcher/venues/production-families/compound-ctoken.production.ts",
+          "listener/src/searcher/venues/production-families/curve-plain.production.ts",
+          "listener/src/searcher/venues/production-families/curve-underlying.production.ts",
+          "listener/src/searcher/venues/production-families/dodo-v2.production.ts",
+          "listener/src/searcher/venues/production-families/eigenpie.production.ts",
+          "listener/src/searcher/venues/production-families/ekubo.production.ts",
+          "listener/src/searcher/venues/production-families/ella-exchange.production.ts",
+          "listener/src/searcher/venues/production-families/erc4626-silo-redeem.production.ts",
+          "listener/src/searcher/venues/production-families/erc4626.production.ts",
+          "listener/src/searcher/venues/production-families/ethertoken-native-redeem.production.ts",
+          "listener/src/searcher/venues/production-families/fluid-credit.production.ts",
+          "listener/src/searcher/venues/production-families/fluid-dex.production.ts",
+          "listener/src/searcher/venues/production-families/goldx.production.ts",
+          "listener/src/searcher/venues/production-families/kyberswap-elastic.production.ts",
+          "listener/src/searcher/venues/production-families/metronome-hgusdc.production.ts",
+          "listener/src/searcher/venues/production-families/metronome-synth.production.ts",
+          "listener/src/searcher/venues/production-families/mooniswap.production.ts",
+          "listener/src/searcher/venues/production-families/morpho-flash.production.ts",
+          "listener/src/searcher/venues/production-families/psm.production.ts",
+          "listener/src/searcher/venues/production-families/rocksolid.production.ts",
+          "listener/src/searcher/venues/production-families/self-burn-native.production.ts",
+          "listener/src/searcher/venues/production-families/set-redemption.production.ts",
+          "listener/src/searcher/venues/production-families/token-conversion.production.ts",
+          "listener/src/searcher/venues/production-families/token-migration.production.ts",
+          "listener/src/searcher/venues/production-families/uniswap-v1.production.ts",
+          "listener/src/searcher/venues/production-families/univ2-standard.production.ts",
+          "listener/src/searcher/venues/production-families/univ3-standard.production.ts",
+          "listener/src/searcher/venues/production-families/univ4-fee-hook.production.ts",
+          "listener/src/searcher/venues/production-families/univ4.production.ts",
+          "listener/src/searcher/venues/production-families/wsteth.production.ts",
+          "listener/src/searcher/venues/production-families/yieldbasis-lt.production.ts"
+        ],
+        "remotes": "origin\t/opt/mev-cloud/seven-amount-20261005-xHmFvp/runtime-actual-debt-20261006.4j0Nqv (fetch)\norigin\t/opt/mev-cloud/seven-amount-20261005-xHmFvp/runtime-actual-debt-20261006.4j0Nqv (push)",
+        "trackedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "auditCodeFiles": 1757,
+        "auditCodeSha256": "05c70ef15d2bb00bdb42751d616c7d0d9d5b7a0d185d999ecce91018105d2c49"
+      }
+    ],
+    "processes": [
+      {
+        "pid": 399605,
+        "comm": "bash",
+        "cwd": "/opt/mev-cloud/family-runtime-20261007",
+        "entrypoints": []
+      },
+      {
+        "pid": 434368,
+        "comm": "bash",
+        "cwd": "/opt/mev-cloud/app-run2/analysis",
+        "entrypoints": []
+      }
+    ],
+    "resources": " 03:09:03 up 5 days, 23:29, 10 users,  load average: 0.08, 0.02, 0.01\n               total        used        free      shared  buff/cache   available\nMem:            6926         692        1299           1        5237        6233\nSwap:              0           0           0\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/root       154G  132G   23G  86% /\n"
+  },
+  "actualSourceFingerprint": {
+    "algorithm": "sha256(sorted path + NUL + sha256(file) binary + LF)",
+    "count": 2045,
+    "sha256": "ec80c348f47ad113f07fdc8fa16be02da9b03dc68b677fdca8bb916335858b09",
+    "scope": "tracked plus untracked code/config in src,test,script,scripts,listener,analysis; exclude node_modules/logs/runtime/cache/out/dist/target and env/secret/credential paths; includes Solidity and Rust"
+  },
+  "impl": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "beforeSha256": "02241492e4ddd798e21ed81e790c174cabaa7aaf290f8335b04e9c9a935e8b0f",
+    "protocolRows": 28,
+    "soleMaintainedMainTable": true
+  },
+  "sourceAndRegistration": {
+    "productionEntries": 43,
+    "otherWorkspaceEntries": 39,
+    "fourDeepseekEntriesPresentInGeneratedProductionCatalog": true,
+    "fourDeepseekCodeDefaultsEnabled": false,
+    "note": "Installed descriptor count is not acceptance, runtime enabling, deployed code or live coverage."
+  },
+  "existingEvidence": {
+    "reports": [
+      {
+        "path": "docs/research/reports/impl-curve-anchor-update-20261013.json",
+        "sha256": "dbad76cab1892c44567a189846add6b404ef130cfe1747a9f34d3b3ba327b794"
+      },
+      {
+        "path": "docs/research/reports/curve-underlying-anchor-acceptance-20261013.json",
+        "sha256": "a74dddd824f453ce08a125a18d8277460bc54448c5ad9ec85e3b1b421b17f994"
+      },
+      {
+        "path": "docs/research/reports/curve-underlying-erc20-acceptance-20261013.json",
+        "sha256": "b345abb24d5c66fbc4a21c29b59a7a2b146c036a1aac291f2a2e02f6e9de224e"
+      },
+      {
+        "path": "docs/research/reports/curve-underlying-cohort-acceptance-20261013.json",
+        "sha256": "c9738ff4762ad16510da8d60206811a71a02d35517807a32a51cbe8e00eba2d1"
+      },
+      {
+        "path": "docs/research/reports/curve-plain-native-steth-acceptance-20261013.json",
+        "sha256": "845999c0dc1ae4c4489201eef8bdfe26e202156189eff4a75f42b26cd4926b68"
+      },
+      {
+        "path": "docs/research/reports/stage1-evidence-reuse-audit-20261012.json",
+        "sha256": "b71efb45de08e1f3d7141a75bd3325fa7872480dfd6c211f2f0fb9fe8250fdde"
+      },
+      {
+        "path": "docs/research/reports/cuni-multi-amount-acceptance-20261012.json",
+        "sha256": "6b50574b2896a551e2d9784008fdb75f7342e59982b7740ae81d314c39ce6988"
+      },
+      {
+        "path": "docs/research/reports/current-executor-acceptance-20261012.json",
+        "sha256": "42cf4b0b5f30505910bb08085ce3d9f7066a743780f5b2efc73d6598379ec496"
+      },
+      {
+        "path": "docs/research/reports/algebra-current-executor-acceptance-20261012.json",
+        "sha256": "f1bc9424fef2dc69208102d3a16c2bdd9da6dda74c16a457fb197623899ac7d0"
+      },
+      {
+        "path": "docs/research/reports/kyber9-mid-acceptance-20261012.json",
+        "sha256": "4d99c8c45885e2f8ddc68e50d23ef5ba6cff3cf0b0b5715f74e1c82a58a0283f"
+      },
+      {
+        "path": "docs/research/reports/v3-donor-reference-guard-20261012.json",
+        "sha256": "010eae734da967fae67aac47a84f988c13c8fb0613c73f866bb2382f06e7cf96"
+      },
+      {
+        "path": "docs/research/reports/family-goal-closeout-20261008.json",
+        "sha256": "7214299210946311904ac8af6b063faa00fe048d374b5a55e4e4423a07517da3"
+      },
+      {
+        "path": "docs/research/reports/set-legacy-natural-reference-20261010.json",
+        "sha256": "2bad4c461b585fa4e27d78ed9caa1deaa76bf93b79580fe2aaa0b335aa6d55ac"
+      },
+      {
+        "path": "docs/research/reports/set-legacy-issuance-acceptance-20261009.json",
+        "sha256": "2448c3d32e92b7a6a4d0cacd3573a2574891d4ad0fe57309205f00ef874e5e23"
+      },
+      {
+        "path": "docs/research/reports/dodo-gsp-acceptance-20261009.json",
+        "sha256": "c05a5c329d3aba1770aec4e3159f6971d4b65b0d1af01702b5519b203a0359cf"
+      },
+      {
+        "path": "docs/research/reports/frax-custodian-acceptance-20261010.json",
+        "sha256": "098b5243b380e775ac2c1fc36e9e2557ec1998afe42b939affb9a5a97e54a7d5"
+      },
+      {
+        "path": "docs/research/reports/xwin-natural-reference-acceptance-20261010.json",
+        "sha256": "aac0df1430270738e43d029e3d4fefb6198992d99f57709957542356f0a442fa"
+      },
+      {
+        "path": "docs/research/reports/ekubo-coffee-acceptance-20261010.json",
+        "sha256": "bee7058c03e433623353a13838f1bdfc5dd969117764de3f9444641064c5a1e9"
+      },
+      {
+        "path": "docs/research/reports/balancer-v3-v4-natural-reference-20261010.json",
+        "sha256": "310479e9f38cf33059299a0460f72c33f2ed182e3568a874f063e5090ee5fa8f"
+      },
+      {
+        "path": "docs/research/reports/native-asset-rounding-acceptance-20261010.json",
+        "sha256": "c3c50b95b1b99f1e25df5eaf0ba4227fcd7db7a8e45267564fc482eb8dab502d"
+      }
+    ],
+    "directAbsoluteCloudReferenceChecks": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26018534-attempt01/ready.json",
+        "expectedSha256": "e28129c60d00881c0a59c37dedb51138078ae2895c4c8a5b8a4dca4881440ec7",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "e28129c60d00881c0a59c37dedb51138078ae2895c4c8a5b8a4dca4881440ec7",
+        "matches": true,
+        "bytes": 115224
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra-prices/prices.json",
+        "expectedSha256": "0ccf6cf981731b976ae0f2f43525e9d0fee102b2612cf3f79b98384d8c67df4a",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "0ccf6cf981731b976ae0f2f43525e9d0fee102b2612cf3f79b98384d8c67df4a",
+        "matches": true,
+        "bytes": 44508
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra-dual.json",
+        "expectedSha256": "dfc6b6d429c103e9c33e46e43b504457574fdf5ebdca57f9587f83cba8f10f16",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "dfc6b6d429c103e9c33e46e43b504457574fdf5ebdca57f9587f83cba8f10f16",
+        "matches": true,
+        "bytes": 3352187
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26030898-attempt01/ready.json",
+        "expectedSha256": "0d61db3cb5f7e611271db8a8ce965ca50d0f7e982e577e70ad06d0e2522c8957",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "0d61db3cb5f7e611271db8a8ce965ca50d0f7e982e577e70ad06d0e2522c8957",
+        "matches": true,
+        "bytes": 145303
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra2-prices/prices.json",
+        "expectedSha256": "c10e8a32143d019c3c21f800f909363d0bc91a2c2ad3a5e6f6a5e33e2358a1fd",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "c10e8a32143d019c3c21f800f909363d0bc91a2c2ad3a5e6f6a5e33e2358a1fd",
+        "matches": true,
+        "bytes": 29215
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra2-dual.json",
+        "expectedSha256": "9086063f5d9d6ef23e7f4175e01350171900ac95fdb1d046ec931a97547834eb",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "9086063f5d9d6ef23e7f4175e01350171900ac95fdb1d046ec931a97547834eb",
+        "matches": true,
+        "bytes": 2273339
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26013785-attempt01/ready.json",
+        "expectedSha256": "a4b650e98c1a66f18096989b100d3b7c497d6240ee949d7efefafbe6b57f1cf4",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "a4b650e98c1a66f18096989b100d3b7c497d6240ee949d7efefafbe6b57f1cf4",
+        "matches": true,
+        "bytes": 118257
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra3-prices/prices.json",
+        "expectedSha256": "8641fff938eec6f74c0ccb8340886af1305a7642d30344551524bee78ba48aae",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "8641fff938eec6f74c0ccb8340886af1305a7642d30344551524bee78ba48aae",
+        "matches": true,
+        "bytes": 29284
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra3-dual.json",
+        "expectedSha256": "c94fb01a61b831125a539b5eace77682fd708b1212332ec3677c22df82611be7",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "c94fb01a61b831125a539b5eace77682fd708b1212332ec3677c22df82611be7",
+        "matches": true,
+        "bytes": 1996144
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25946003-attempt01/ready.json",
+        "expectedSha256": "8ea38feb6dfb6eb3bee2e606d17b1c9f5215f8f11d3afedd5869cb04378bbdcd",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "8ea38feb6dfb6eb3bee2e606d17b1c9f5215f8f11d3afedd5869cb04378bbdcd",
+        "matches": true,
+        "bytes": 127553
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra4-prices/prices.json",
+        "expectedSha256": "ed8ed2388f6a1d9c98bbb4ab9cb4951e45d1c42320129b60130645b6280739d8",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "ed8ed2388f6a1d9c98bbb4ab9cb4951e45d1c42320129b60130645b6280739d8",
+        "matches": true,
+        "bytes": 59996
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra4-dual.json",
+        "expectedSha256": "f0bc281e068c629b15cd2ce5f31fba1ec81bbcc895cc76b778edc90002e1e4c6",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "f0bc281e068c629b15cd2ce5f31fba1ec81bbcc895cc76b778edc90002e1e4c6",
+        "matches": true,
+        "bytes": 2161413
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25930616-attempt01/ready.json",
+        "expectedSha256": "dc8e67ae8d1acb65488d51a39ef805cb715a10debb6eb32071a577fd677c7f5d",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "dc8e67ae8d1acb65488d51a39ef805cb715a10debb6eb32071a577fd677c7f5d",
+        "matches": true,
+        "bytes": 152301
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra5-prices/prices.json",
+        "expectedSha256": "24d20741600bbfefcd9bab314727673f16d7735c59ea8f9bcd667adb51abfac2",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "24d20741600bbfefcd9bab314727673f16d7735c59ea8f9bcd667adb51abfac2",
+        "matches": true,
+        "bytes": 29293
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra5-dual.json",
+        "expectedSha256": "004bff0950efcfa2a829aee9c3683c777fc00eaaf63301520a97a8946247a289",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "004bff0950efcfa2a829aee9c3683c777fc00eaaf63301520a97a8946247a289",
+        "matches": true,
+        "bytes": 2585884
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25975130-attempt01/ready.json",
+        "expectedSha256": "524b58e59de633230d50835a1b38b2bb580f6d79ef0621c7ddf541960cc98ae6",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "524b58e59de633230d50835a1b38b2bb580f6d79ef0621c7ddf541960cc98ae6",
+        "matches": true,
+        "bytes": 94338
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra6-prices/prices.json",
+        "expectedSha256": "c5ad4d0ecbc30d58d66083a9c838821280c7ca89ad82a806d52a4c2bc80c2bc0",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "c5ad4d0ecbc30d58d66083a9c838821280c7ca89ad82a806d52a4c2bc80c2bc0",
+        "matches": true,
+        "bytes": 29216
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra6-dual.json",
+        "expectedSha256": "133a8e80202c2bbfe765d23069e2ede8a8cc1ed4191417f72e0626e07f77a791",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "133a8e80202c2bbfe765d23069e2ede8a8cc1ed4191417f72e0626e07f77a791",
+        "matches": true,
+        "bytes": 2356201
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/tools.json",
+        "expectedSha256": "3a4e3cca4800bc40fe85af8686ab299bdd11f3db3f2bea0ebbfb92ca7f54be6c",
+        "referencedBy": [
+          "algebra-current-executor-acceptance-20261012.json"
+        ],
+        "exists": true,
+        "actualSha256": "3a4e3cca4800bc40fe85af8686ab299bdd11f3db3f2bea0ebbfb92ca7f54be6c",
+        "matches": true,
+        "bytes": 35027
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/acceptance-status01.json",
+        "expectedSha256": "073891e82e1d047da0e25a05876d18079afd3e93d06ac60d1483efdf6c1a0932",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "073891e82e1d047da0e25a05876d18079afd3e93d06ac60d1483efdf6c1a0932",
+        "matches": true,
+        "bytes": 2533
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/swaps/curve-plain-family/test/historical-native-dual.ts",
+        "expectedSha256": "905e97771aa88b2cbe3922b549d4d1f18cae1dab1665fb206d3a01572548f598",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "905e97771aa88b2cbe3922b549d4d1f18cae1dab1665fb206d3a01572548f598",
+        "matches": true,
+        "bytes": 21314
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/anchors01.json",
+        "expectedSha256": "5611473096348f42a5751f355ecba1cbc07cf6c1f75e07244256ce8bc54fc3a4",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "5611473096348f42a5751f355ecba1cbc07cf6c1f75e07244256ce8bc54fc3a4",
+        "matches": true,
+        "bytes": 6594
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-7f8601/receipt.json",
+        "expectedSha256": "a382b59ff3b575002a69667703b3402df4e35bcbf27cfd5767f23b235c32ed87",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "a382b59ff3b575002a69667703b3402df4e35bcbf27cfd5767f23b235c32ed87",
+        "matches": true,
+        "bytes": 118341
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-7f8601/ready.json",
+        "expectedSha256": "d16f54ff68526d586b58ad180fc8ef04a6f5c95518f744208371aecda959e23a",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "d16f54ff68526d586b58ad180fc8ef04a6f5c95518f744208371aecda959e23a",
+        "matches": true,
+        "bytes": 96559
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-7f8601/prices/prices.json",
+        "expectedSha256": "d82648bc12e53576283df4aff7b711a71a3c928821631b0c219e33aee281f41a",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "d82648bc12e53576283df4aff7b711a71a3c928821631b0c219e33aee281f41a",
+        "matches": true,
+        "bytes": 57704
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/dual-7f8601.json",
+        "expectedSha256": "20bc648ba0f6f0736dcd0fc52b81daa53b8f77deb3ba703f157d50d86738a984",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "20bc648ba0f6f0736dcd0fc52b81daa53b8f77deb3ba703f157d50d86738a984",
+        "matches": true,
+        "bytes": 2167161
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-8a4f01/receipt.json",
+        "expectedSha256": "53f9a7e0292b263ac2bdd4d8f5374962afe8e669a005361123ad1b7a3abdedaa",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "53f9a7e0292b263ac2bdd4d8f5374962afe8e669a005361123ad1b7a3abdedaa",
+        "matches": true,
+        "bytes": 32877
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-8a4f01/ready.json",
+        "expectedSha256": "beedc792c1a931cc4f0c10965732679df94aabd3427b1e4e807f394f1faf32c6",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "beedc792c1a931cc4f0c10965732679df94aabd3427b1e4e807f394f1faf32c6",
+        "matches": true,
+        "bytes": 96943
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/ready-8a4f01/prices/prices.json",
+        "expectedSha256": "a45595950cfe351034517ee83380cc6eaa3f1aaa3f8530da73514a5244b7a045",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "a45595950cfe351034517ee83380cc6eaa3f1aaa3f8530da73514a5244b7a045",
+        "matches": true,
+        "bytes": 57828
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/dual-8a4f01.json",
+        "expectedSha256": "7fc913bb9cc6879a66b056650fd4e9aa3409e8f3b2cd078c0339470438d57345",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "7fc913bb9cc6879a66b056650fd4e9aa3409e8f3b2cd078c0339470438d57345",
+        "matches": true,
+        "bytes": 2145265
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/curve-underlying-cohort-acceptance-20261013.json",
+        "expectedSha256": "c9738ff4762ad16510da8d60206811a71a02d35517807a32a51cbe8e00eba2d1",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json",
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "c9738ff4762ad16510da8d60206811a71a02d35517807a32a51cbe8e00eba2d1",
+        "matches": true,
+        "bytes": 64970
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/docs/research/reports/curve-underlying-erc20-acceptance-20261013.json",
+        "expectedSha256": "b345abb24d5c66fbc4a21c29b59a7a2b146c036a1aac291f2a2e02f6e9de224e",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "b345abb24d5c66fbc4a21c29b59a7a2b146c036a1aac291f2a2e02f6e9de224e",
+        "matches": true,
+        "bytes": 26543
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-underlying-anchors-20261013.QEwwuZ/tools02.json",
+        "expectedSha256": "cafd2aed120290f82dd393f7e96711e235f04714b39c176487503cc3dcf16f48",
+        "referencedBy": [
+          "curve-underlying-anchor-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "cafd2aed120290f82dd393f7e96711e235f04714b39c176487503cc3dcf16f48",
+        "matches": true,
+        "bytes": 10132
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-atomic-ready-current-attempt02/strict-030.json",
+        "expectedSha256": "0e2b3bce6bb1df4cb37d4451b25453bf9a411decb3d1e5ef0d3823d2a866467d",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "0e2b3bce6bb1df4cb37d4451b25453bf9a411decb3d1e5ef0d3823d2a866467d",
+        "matches": true,
+        "bytes": 39652
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/replay01/replay-report.json",
+        "expectedSha256": "a12461e475063d45c6d78b66a2f0250203577341561dbee2046c605a39f0b3f2",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "a12461e475063d45c6d78b66a2f0250203577341561dbee2046c605a39f0b3f2",
+        "matches": true,
+        "bytes": 5278
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/share-check01.json",
+        "expectedSha256": "e6b6ba500d4766acbef42ffe829cbffcadaf1dc11bbad9754abb9d53d8986118",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "e6b6ba500d4766acbef42ffe829cbffcadaf1dc11bbad9754abb9d53d8986118",
+        "matches": true,
+        "bytes": 1119
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/ready-candidate02/strict-030.json",
+        "expectedSha256": "7e8a58f066dc08e90f892b02d0a9776f2516166c9328650c75215b0090cceaea",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "7e8a58f066dc08e90f892b02d0a9776f2516166c9328650c75215b0090cceaea",
+        "matches": true,
+        "bytes": 41874
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/ready-candidate02/ready.json",
+        "expectedSha256": "4ded190045eb6dd0781df670ad23034cbe11352ac80e6f99cfc0a89395508b20",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "4ded190045eb6dd0781df670ad23034cbe11352ac80e6f99cfc0a89395508b20",
+        "matches": true,
+        "bytes": 194425
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/ready-candidate02/prices/prices.json",
+        "expectedSha256": "09d5da3a8c8749e94d5f2510e37700eb665c0885e3ca80741f8bc05385f8557c",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "09d5da3a8c8749e94d5f2510e37700eb665c0885e3ca80741f8bc05385f8557c",
+        "matches": true,
+        "bytes": 84447
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/native21-dual02.json",
+        "expectedSha256": "3d685aaf0f17e70d4cc6e9a7ba4852c9c45b53a235f3a45d070c1a3af040d504",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "3d685aaf0f17e70d4cc6e9a7ba4852c9c45b53a235f3a45d070c1a3af040d504",
+        "matches": true,
+        "bytes": 760985
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/nativedc-dual02.json",
+        "expectedSha256": "b6569ec6323f109b2fe4b167100361e78828228780dacc7bac871ed9185f1a71",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "b6569ec6323f109b2fe4b167100361e78828228780dacc7bac871ed9185f1a71",
+        "matches": true,
+        "bytes": 760985
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/build-live03.txt",
+        "expectedSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+        "matches": true,
+        "bytes": 71
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/catalog-generate02.txt",
+        "expectedSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+        "matches": true,
+        "bytes": 136
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/native-contract04-indexed.txt",
+        "expectedSha256": "2198539c0800f80e4e8a2e60eab05fb7e254e2c52de5f8896450ee523e9e37eb",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "2198539c0800f80e4e8a2e60eab05fb7e254e2c52de5f8896450ee523e9e37eb",
+        "matches": true,
+        "bytes": 1907
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/plain-regressions01.txt",
+        "expectedSha256": "74373a8b661d6e571960546178b58de4ee9b4f9aac9e30c5aa7077f7e192769f",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "74373a8b661d6e571960546178b58de4ee9b4f9aac9e30c5aa7077f7e192769f",
+        "matches": true,
+        "bytes": 2548
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/regression-execution-asset-boundary-01.txt",
+        "expectedSha256": "4a19a2b3c1cf794a4a7571d4cae42b8864247db7e4269bb3c3d1f6509ca2f41e",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "4a19a2b3c1cf794a4a7571d4cae42b8864247db7e4269bb3c3d1f6509ca2f41e",
+        "matches": true,
+        "bytes": 1022
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/regression-execution-asset-boundary-evm-01.txt",
+        "expectedSha256": "5a9170fe9ecfdbfced3539d15d9dd2c4575259ee31f1db8909d2bffcc32c5bd7",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "5a9170fe9ecfdbfced3539d15d9dd2c4575259ee31f1db8909d2bffcc32c5bd7",
+        "matches": true,
+        "bytes": 1634
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/regression-family-dual-execution-01.txt",
+        "expectedSha256": "9c4bd786812e6ec61aacdac48258f55d2b90ed7453aef2df8d566cef886a3782",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "9c4bd786812e6ec61aacdac48258f55d2b90ed7453aef2df8d566cef886a3782",
+        "matches": true,
+        "bytes": 10224
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/regression-strict-execution-projection-01.txt",
+        "expectedSha256": "301c8b5b462617d454b6c5011c435799bf757d2146cc9282f12e18438c55fa3b",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "301c8b5b462617d454b6c5011c435799bf757d2146cc9282f12e18438c55fa3b",
+        "matches": true,
+        "bytes": 614
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/regression-strict-central-adapter-runtime-02.txt",
+        "expectedSha256": "882115dfa9b9104f77681e02d00d8a71772d85dfc46330b628c2a1bb181f41d3",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "882115dfa9b9104f77681e02d00d8a71772d85dfc46330b628c2a1bb181f41d3",
+        "matches": true,
+        "bytes": 17072
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/regression-adapter-family-exact-quote-cache-01.txt",
+        "expectedSha256": "58952bc61af76431c2160050c2e3d591c5f5ef28140f59db6bb74c9d9feb9c41",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "58952bc61af76431c2160050c2e3d591c5f5ef28140f59db6bb74c9d9feb9c41",
+        "matches": true,
+        "bytes": 573
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/staged-generate01.txt",
+        "expectedSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+        "matches": true,
+        "bytes": 136
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/staged-manifest01.txt",
+        "expectedSha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef",
+        "matches": true,
+        "bytes": 133
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/staged-build01.txt",
+        "expectedSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+        "matches": true,
+        "bytes": 71
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/staged-native01.txt",
+        "expectedSha256": "b98fe77aad84727d1ae47ffc74f2f94a88eba1cf83b69815ccea0260a5310d8c",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "b98fe77aad84727d1ae47ffc74f2f94a88eba1cf83b69815ccea0260a5310d8c",
+        "matches": true,
+        "bytes": 1511
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/staged-dual01.txt",
+        "expectedSha256": "2bd165f4ad96715c387b169ce9610122426e2b8c088c2cf8f195bf5bf6f07830",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "2bd165f4ad96715c387b169ce9610122426e2b8c088c2cf8f195bf5bf6f07830",
+        "matches": true,
+        "bytes": 9723
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/curve-plain-native-steth-review-20261013.json",
+        "expectedSha256": "30f1cc8f21904c4bb73f6dce79370c685b36e9fa9f4eedc394da25b6e8cb0863",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "30f1cc8f21904c4bb73f6dce79370c685b36e9fa9f4eedc394da25b6e8cb0863",
+        "matches": true,
+        "bytes": 2052
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/native-boundary-evm-XE8e3T/result.json",
+        "expectedSha256": "eef71b471c4f1d5ec741c35a9b9441105c65c3c8d2043f0e4a0a1702a97af5d4",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "eef71b471c4f1d5ec741c35a9b9441105c65c3c8d2043f0e4a0a1702a97af5d4",
+        "matches": true,
+        "bytes": 1290
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/tools-positive-debit04.json",
+        "expectedSha256": "f5b7dadab7eca97408da332d593b16a10471350096316d16b5974787d69f76aa",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "f5b7dadab7eca97408da332d593b16a10471350096316d16b5974787d69f76aa",
+        "matches": true,
+        "bytes": 11156
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/regression-tools02.json",
+        "expectedSha256": "70f877a411832483d022892e4db33c006f3191cd7da1e8c0e6fc0ae45e6edcf4",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "70f877a411832483d022892e4db33c006f3191cd7da1e8c0e6fc0ae45e6edcf4",
+        "matches": true,
+        "bytes": 27979
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/central-tools01.json",
+        "expectedSha256": "a8ac71575afac1a8c271fc801ce3abba2355699eae198dd74917682d2a4bed8d",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "a8ac71575afac1a8c271fc801ce3abba2355699eae198dd74917682d2a4bed8d",
+        "matches": true,
+        "bytes": 33503
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/build-live01.txt",
+        "expectedSha256": "f114958d405fbdd2b4aeab16365859f194114629c0865c799fa9a79917166a59",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "f114958d405fbdd2b4aeab16365859f194114629c0865c799fa9a79917166a59",
+        "matches": true,
+        "bytes": 4263
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/native-contract03-indexed.txt",
+        "expectedSha256": "4e0264c86251c19b4a6bb3193bc977ca756ea2f798a070e3aaf3e08cd7afa691",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "4e0264c86251c19b4a6bb3193bc977ca756ea2f798a070e3aaf3e08cd7afa691",
+        "matches": true,
+        "bytes": 2857
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/regression-strict-central-adapter-runtime-01.txt",
+        "expectedSha256": "ec84db7d3896499aa655a7cc88ab5df8a177a4fd200a4a46ac01a3c18b96820a",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "ec84db7d3896499aa655a7cc88ab5df8a177a4fd200a4a46ac01a3c18b96820a",
+        "matches": true,
+        "bytes": 845
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/generated/family-capability-shadow.generated.json",
+        "expectedSha256": "f2062185d8f02c07002337fabeb3f0715b15a8c49394b48d8966cfbafc69860d",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "d453cb3b17d8bfa0d83305633875c87db18149c0f5bff64a06626e3ba09869c8",
+        "matches": false,
+        "bytes": 606171
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/native21-trace.fwdmyo/staged-source.9a8pYD/listener/src/searcher/generated/family-capability-shadow.generated.json",
+        "expectedSha256": "fcbf66ca2cc0485cd95f19851990ad1a26e7f761614d04f0c147a9b7450f1d49",
+        "referencedBy": [
+          "curve-plain-native-steth-acceptance-20261013.json"
+        ],
+        "exists": true,
+        "actualSha256": "fcbf66ca2cc0485cd95f19851990ad1a26e7f761614d04f0c147a9b7450f1d49",
+        "matches": true,
+        "bytes": 606171
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/ready/prices/input.json",
+        "expectedSha256": "b3922a5fb15a17f77118a89309ce01bae0981512604fc464cc3a774120ed69bf",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json",
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "b3922a5fb15a17f77118a89309ce01bae0981512604fc464cc3a774120ed69bf",
+        "matches": true,
+        "bytes": 46816
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/report-draft.json",
+        "expectedSha256": "acadb91726632e17cd282e76a5311384b22a4226931be3ab34139c1088be8f12",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "acadb91726632e17cd282e76a5311384b22a4226931be3ab34139c1088be8f12",
+        "matches": true,
+        "bytes": 15698
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/tool-selection.json",
+        "expectedSha256": "a41a438b98cbfcefd48dca83c149ea7d2ab52464ef3f9de7e8d2e3da7a10ff54",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "a41a438b98cbfcefd48dca83c149ea7d2ab52464ef3f9de7e8d2e3da7a10ff54",
+        "matches": true,
+        "bytes": 11660
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/canonical-status.log",
+        "expectedSha256": "2cb62927937830a46628e91179318a24eda0d72f8c198b5872af1a20aea72344",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "2cb62927937830a46628e91179318a24eda0d72f8c198b5872af1a20aea72344",
+        "matches": true,
+        "bytes": 452643
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-active-20261010.GKBY3K/ready-4/ready.json",
+        "expectedSha256": "676d0de90bf1c20a4fc644a47c686aa22ea251c5fa3659e4f45eb70d60f7ca4d",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "676d0de90bf1c20a4fc644a47c686aa22ea251c5fa3659e4f45eb70d60f7ca4d",
+        "matches": true,
+        "bytes": 30661
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/coffee-tx-ready-20261008/checkpoint.json",
+        "expectedSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+        "matches": true,
+        "bytes": 116851618
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/runner.mts",
+        "expectedSha256": "852ddf04ef46cb879273186fa5b8e773255bc3a6c3793b4ca3e36a8c17537782",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "852ddf04ef46cb879273186fa5b8e773255bc3a6c3793b4ca3e36a8c17537782",
+        "matches": true,
+        "bytes": 6669
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/ready.log",
+        "expectedSha256": "6d8a9ed0530e17250837e432da8e921af92ef3cb7d08e0beb179e3418a6d7d80",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "6d8a9ed0530e17250837e432da8e921af92ef3cb7d08e0beb179e3418a6d7d80",
+        "matches": true,
+        "bytes": 10022
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/ready/input-provenance.json",
+        "expectedSha256": "6d27a0c006b58b2d2426d2ef4a8fa9dcb26193d627940cd839406f7d786add5a",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "6d27a0c006b58b2d2426d2ef4a8fa9dcb26193d627940cd839406f7d786add5a",
+        "matches": true,
+        "bytes": 661
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/ready/ready.json",
+        "expectedSha256": "dfafe55569d56e827efdce4271aa6c2905c3003bf3ac513534dd80315bd8f596",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "dfafe55569d56e827efdce4271aa6c2905c3003bf3ac513534dd80315bd8f596",
+        "matches": true,
+        "bytes": 293810
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/ready/ready-summary.json",
+        "expectedSha256": "5af9253bb7d0dd9fda7931f91b493005046314c09fae3860cbc45d3bb4cf20f2",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "5af9253bb7d0dd9fda7931f91b493005046314c09fae3860cbc45d3bb4cf20f2",
+        "matches": true,
+        "bytes": 2940
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/ready/prices/prices.json",
+        "expectedSha256": "802d6d64f355c1f7cb535765b6d6fde85810005f9326c80f68d040919d3c4aae",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "802d6d64f355c1f7cb535765b6d6fde85810005f9326c80f68d040919d3c4aae",
+        "matches": true,
+        "bytes": 200813
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/ready/source-before.json",
+        "expectedSha256": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "matches": true,
+        "bytes": 1209
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/ready/source-after.json",
+        "expectedSha256": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "373016c7d566f1c60fb04ab6b10a5603bd2ee5bdd892dccf6f9acc9d084bc50a",
+        "matches": true,
+        "bytes": 1209
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/dual-mint-1.json",
+        "expectedSha256": "18215594c26e521fa2e8e50c435722affb078b02d32fd4a47169e9f478fb660b",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "18215594c26e521fa2e8e50c435722affb078b02d32fd4a47169e9f478fb660b",
+        "matches": true,
+        "bytes": 2349775
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/xwin-natural-valuation-20261010.YgLfZB/dual-redeem-1.json",
+        "expectedSha256": "0b7f2320fb2a40a66413f13eb9637d8da5f16786b976fec3caa36004910cd66f",
+        "referencedBy": [
+          "xwin-natural-reference-acceptance-20261010.json"
+        ],
+        "exists": true,
+        "actualSha256": "0b7f2320fb2a40a66413f13eb9637d8da5f16786b976fec3caa36004910cd66f",
+        "matches": true,
+        "bytes": 2484255
+      }
+    ],
+    "unresolvedRelativeOrOtherHostReferenceCount": 97,
+    "unresolvedReferences": [
+      {
+        "path": "yb-weth-ready-current-attempt01/prices/prices.json",
+        "expectedSha256": "88cdc54a465cf67aee46123c055ad8a7f5efe1be57f2afdbaf7f478404512ab1",
+        "report": "current-executor-acceptance-20261012.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "yb-weth-dual-current-attempt01.json",
+        "expectedSha256": "d0b84ab8dbd177c3e185ba03bf44e794098509a782416e0c2065f3e5190f7020",
+        "report": "current-executor-acceptance-20261012.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "compound-current-executor-20261012/prices-source-block/prices.json",
+        "expectedSha256": "e2a408e32422a4989c9eec209c6af648ea9aa921c689a36858e26b7954470b4a",
+        "report": "current-executor-acceptance-20261012.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "compound-current-executor-20261012/dual-source-block.json",
+        "expectedSha256": "9a5196a018a604d98338a0be0fec5d892b025675476de4026626b298dc1be7a3",
+        "report": "current-executor-acceptance-20261012.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/algebra-current-executor-20261012/summary.json",
+        "expectedSha256": "34409a9b01ede098e9fd20f856b5b24000060ad588278e380d958fe73fc649ee",
+        "report": "algebra-current-executor-acceptance-20261012.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/four-family-coverage-20261012.zHKuWX/cuni-ready-attempt01/ready.json",
+        "expectedSha256": "9a74a9378da13d66e190e11cc318ecef4260fe66f1eec62d518e162b2f1599c3",
+        "report": "cuni-multi-amount-acceptance-20261012.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "docs/research/reports/cuni-multi-independent-review-20261012.json",
+        "expectedSha256": "38e5722ef7fc863a6a6efc4af2adf4d7ddac23e7dcd4f495f885b312117b5001",
+        "report": "cuni-multi-amount-acceptance-20261012.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "docs/research/reports/stage1-evidence-reuse-audit-20261012.json",
+        "expectedSha256": "b71efb45de08e1f3d7141a75bd3325fa7872480dfd6c211f2f0fb9fe8250fdde",
+        "report": "cuni-multi-amount-acceptance-20261012.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../three-family/historical-input-observations.ts",
+        "expectedSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "report": "xwin-natural-reference-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+        "expectedSha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3",
+        "report": "xwin-natural-reference-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+        "expectedSha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5",
+        "report": "xwin-natural-reference-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+        "expectedSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "report": "xwin-natural-reference-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "expectedSha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5",
+        "report": "xwin-natural-reference-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../three-family/historical-input-observations.ts",
+        "expectedSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+        "expectedSha256": "694f9f84100b9ef8b1479f5e7859cea53526e7beaefcd4d87949b776751f8269",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+        "expectedSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "expectedSha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../three-family/historical-input-observations.ts",
+        "expectedSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+        "expectedSha256": "694f9f84100b9ef8b1479f5e7859cea53526e7beaefcd4d87949b776751f8269",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+        "expectedSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "expectedSha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/observations-hardened-1.log",
+        "expectedSha256": "d76f794c22ec4cb884bb31c7a17f1ddb30277334b82c379c9a9e9e83000cd76b",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/hardened-cached-originals-1.log",
+        "expectedSha256": "f92e56b7478615889c0cc7d05df034f51ea9c5428a2ea5d960241ac26533eabd",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/staged-final-checks.log",
+        "expectedSha256": "a64a1ce138649252b3bb68dab00068b18bcda7fb0aa6d2ea20afa7f296824b6a",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo-family/test/history-evidence.ts",
+        "expectedSha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/native-ready-final-2/ready.json",
+        "expectedSha256": "aa763d92921ba7e13ffdf657035432bff33340d0932545154fa1032ed091fbb5",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/native-ready-final-2/prices/prices.json",
+        "expectedSha256": "47c2a413de2e7c5777322d0128c351511b7cb4fb6a10ffd27ee4025f10943f81",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/native-dual-2.json",
+        "expectedSha256": "df56a33e4cd25018e1f141dc47979631b2dc4265563378b9c486d1bd9c9a26b0",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/native-ready-final-2/prices/input.json",
+        "expectedSha256": "52943dc779afa605633604c82896d999137de8bae436f0fdbb27d7efdc346277",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/erc20-ready/ready.json",
+        "expectedSha256": "3c12dae2bf36ce6c2c1f80ab14d6d12c662a615f8225d64f12b7e10df3e78897",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/erc20-ready/prices/prices.json",
+        "expectedSha256": "1e7248922e9479b1bc3f58c963edae68262f0eeb6b74c2ba12551d2f90fee027",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/erc20-dual-1.json",
+        "expectedSha256": "c6bc59ac02dd9f7f9a636de3649aa4e80d6709b045c25d76c215fc1d0389cb26",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/erc20-ready/prices/input.json",
+        "expectedSha256": "254c2659a1fa84f7e34ac6ba9dc5c66396bcee7b39c6f2c3b1de87fc132ed5ad",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/identity-diagnostic-1.json",
+        "expectedSha256": "f9f05feb5060fbee09793825da4f3db22a5cf46de77d074fe8fa3641d76b7df9",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/pricing-diagnostic-1.json",
+        "expectedSha256": "aab8b6837e1294f9b1ceb48eb02d5a048ed450e7e3bbbb94050c8fe77c845187",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/native-ready/failure.json",
+        "expectedSha256": "aa0f74f65df240f849e1e5c100f899a60f544483418c9bd1527c5c1cf6861ec0",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/depth-contract-1.log",
+        "expectedSha256": "0524eff3bd829c4a7746a401736b33c4a0bc5aac34946e0e48f3e1f7453b7d93",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/native-dual-1.json",
+        "expectedSha256": "61fa63fe45dfe1f5aa409cf496795dafe6fc6d6cfbeb4de423544c4897435709",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/native-prices-final.log",
+        "expectedSha256": "95d8463820d47e1c811d1e8112502c9bbf807af3ad4067631705cf8918bba666",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/native-ready-final.log",
+        "expectedSha256": "80550bac0202b2b95c052f0c982d1746a9f3127ad3e6615aa595132cc45e6648",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/family-tests-final.log",
+        "expectedSha256": "ed0c360193fc2520e9c23862fe7cccd1dada80adcaf9c01dbf98d9841265a851",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/family-contracts-final-2.log",
+        "expectedSha256": "973d7d87e11394c0a8d3918a8f82e2b27b13e1b41508dccd09e6c6057c2beba9",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/shared-dual-final.log",
+        "expectedSha256": "10d0defcea8071aba723a55460676b55df57f58a1d25431b0233d7f8bc3e5400",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/observations-1.log",
+        "expectedSha256": "ea0eadca14a4182c15bec233243669ae090009cd79f7fdc57baa27d94a658a28",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/strict-declarations-final.log",
+        "expectedSha256": "116c154208b1ee31e557be02138d0c4ac2fb7e5987d8b83ea522880daaca846c",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/build-live-1.log",
+        "expectedSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/manifest-check-1.log",
+        "expectedSha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/staged-checks.log",
+        "expectedSha256": "04a4125edc1583c39ef7b2638b0a501281f31ef58a86e07811ad91bdf7950dd4",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/native-canonical-status.log",
+        "expectedSha256": "f7c17d6f30064a83f68e145e493d173d3a9f9c4f18e1f9c7000cce5e3a616a12",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/ekubo-coffee-20261010.wauxqp/erc20-canonical-status.log",
+        "expectedSha256": "2bd0698e90a3e280d15f4fb8f0877433645c9bf7974b80ed47f959e4ed7648af",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo-family/pricing.ts",
+        "expectedSha256": "3d23cd69b3bdac1236805a8dcea155871cee5e5701b0126dcb97297313705d18",
+        "report": "ekubo-coffee-acceptance-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/ready.json",
+        "expectedSha256": "e9906fcddd7218f65f6caa32bdb525a7569437da1dda7e124beee6560609a945",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/receipt.json",
+        "expectedSha256": "cb76e32d93298cdadb4db1b0cc5d7df982f611c86e39aaa11bf037996f2b6dd0",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/header.json",
+        "expectedSha256": "25230adf15ed525585030e942600cf8df7f4d8ea63fe0c5653df667f941c01d8",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/ready-summary.json",
+        "expectedSha256": "a4a52161fcc4ba68fb345323d7b1fe657f59925163f3fb852812ec36a94e8f76",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/prices/prices.json",
+        "expectedSha256": "760b5889b66a31c8de2b476c056283b445c7cfe2c59ea29409f80b70db79a685",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/prices/input.json",
+        "expectedSha256": "53422dbb2f95b81be3d659fbede974797fa43717e29e53bcd18da5b075703e34",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/source-before.json",
+        "expectedSha256": "39345a6735ef227ade40f707e9e5c17c2de26b29e3372aba91a7d65354ea0f03",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/source-after.json",
+        "expectedSha256": "39345a6735ef227ade40f707e9e5c17c2de26b29e3372aba91a7d65354ea0f03",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/input-provenance.json",
+        "expectedSha256": "ec870647ce0eaa40d945adc4b8c05d087f916c60b382765ea00c5803dd91f296",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25936827-v4-1/result.json",
+        "expectedSha256": "abd8389526b5c05c16201ccf6605aaf3ec25acc13cb51bdac2938b8c060bbed9",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/ready.json",
+        "expectedSha256": "bcf2f68513d70de8784f461c1940b0fd78c900179ef0a53031dd6e10deb85643",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/receipt.json",
+        "expectedSha256": "c5c1995946639f37ef2716af64033a30359e7ec4f1fb5e75d8c55f56c9d0fdc6",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/header.json",
+        "expectedSha256": "08eef866eb48fe888a33480e6d87d8c71472f31d84daedf375ead7334fa65ed5",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/ready-summary.json",
+        "expectedSha256": "bd6dfb269c318119cb7d662f256a9748cf923e2e53c5138fb82e709c5538b546",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/prices/prices.json",
+        "expectedSha256": "4bdfb0044998fa3cdb64c2b114396491570f0c6a684c34acda1244ea1ebea563",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/prices/input.json",
+        "expectedSha256": "ebc6000e6c6b62a05cea8be528ad2088f1c2baeccd6afcc92840cb9efc741ef6",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/source-before.json",
+        "expectedSha256": "39345a6735ef227ade40f707e9e5c17c2de26b29e3372aba91a7d65354ea0f03",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/source-after.json",
+        "expectedSha256": "39345a6735ef227ade40f707e9e5c17c2de26b29e3372aba91a7d65354ea0f03",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/input-provenance.json",
+        "expectedSha256": "9bab1c0ea4be32c94211af8cc6b9a1306883b382e610fb208573ba4c9cb9cf5a",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/single-N25944594-v2v4-1/result.json",
+        "expectedSha256": "08573da4e52e174d866ac5fc54617c5af37347479c8965a0e7d978d561db9a30",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/dual-N25936827-1.json",
+        "expectedSha256": "0d69f3e1b11f2d4b4b49ccc8f9d6d492370e93c2c1a495b4ebe97173adea56a9",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "docs/research/reports/siusd-refresh-natural-reference-20261010.json",
+        "expectedSha256": "ceb48fca6879ffc92be15c7d9884468f0229923d8eec07353a202d990546a5c3",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-balancer.log",
+        "expectedSha256": "0b37ae2cb6ee5b097c3fe2fe3783586a58071492d86659b0a74e366ad612890a",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-dual.log",
+        "expectedSha256": "53c631bfa1cc79006cd29cf5340dff70aaf7b5892b8e090168a3dc69e309210a",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-ready.log",
+        "expectedSha256": "b1ca12663910f970bc3876916fcd25e9522d4864496f348a7d5682a1984b5035",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-ready-siusd.log",
+        "expectedSha256": "0b2fe0f5f1e6bb215d193cd60ed6fc6099729c571d5ea3396605e4a34fa9d656",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-ready.json",
+        "expectedSha256": "c0079f2288dac8f7de69dad8deb0a8a4337bf23efdf3b06f4c7f0a8308e3513f",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-dual.json",
+        "expectedSha256": "36644ea5916720900ed926c0e1b8ac3d0606b71848f56b62ecac33d7d58ff81d",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-dual.log",
+        "expectedSha256": "7a6714e8d0ff7eff9a6825e397fdb675dacdd94cf5f438600281c2c01260fcf4",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/token-surface.json",
+        "expectedSha256": "f53ba8a4553810b4e5ae52a855b2aee5e39a34e4927209a62aacc489b3df813d",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/token-surface.mts",
+        "expectedSha256": "b01a78a4306b1ed4e796e089402a23ffba5116afb48ce21eadf8b576b601f38e",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/dual-N25936827-1.log",
+        "expectedSha256": "863edd433b2350e34ea22fbbdc6bc0bd00a4b826075360beb69553f98e04cd47",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-dual-corrected.json",
+        "expectedSha256": "dfdb94bea70633db8ea3df6bb8d735a99d4a98cc3f74a9625da0ae9f2f19e44d",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-balancer-corrected.log",
+        "expectedSha256": "63974115a184fb7ab5a7fc514d6165b530c5f134e6b1e5a54733377eecb32998",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/canonical-dual-corrected.log",
+        "expectedSha256": "a0af689b80da6138d6df50ab1edb303e7be88e99a6bb6c92c0120f04c18ad56b",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/build-live.log",
+        "expectedSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/verify-evidence.log",
+        "expectedSha256": "66fe36e5d0cb217388b68d9ef6cd62b5c9c43aa89c8a586d44b0867875fee490",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/verify-supplement.mjs",
+        "expectedSha256": "31bfb8185b3e0a88bc8fcf2734bfc29c7bdb0d7923575e9758e1bc9ee68b9f4d",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/tool-test.patch",
+        "expectedSha256": "f7f39ff7e26c9b2c5d151542f41aefe9b7ad9fa757dff90574145641195e8b20",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-ready.json",
+        "expectedSha256": "c0079f2288dac8f7de69dad8deb0a8a4337bf23efdf3b06f4c7f0a8308e3513f",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-dual.json",
+        "expectedSha256": "36644ea5916720900ed926c0e1b8ac3d0606b71848f56b62ecac33d7d58ff81d",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "logs/v3-reference-gap-20261010.OrsLv8/tools-dual-corrected.json",
+        "expectedSha256": "dfdb94bea70633db8ea3df6bb8d735a99d4a98cc3f74a9625da0ae9f2f19e44d",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "listener/src/searcher/test/balancer-v3.ts",
+        "expectedSha256": "6b897a73921c024a834749db46125d2f87c130a2f28db50848d1f746c9e8b8cd",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "listener/package.json",
+        "expectedSha256": "1e438e9972d25a8e0adec3b7b30ed85a485a82378ad65bc6f7eed64818ee26c1",
+        "report": "balancer-v3-v4-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "tools.json",
+        "expectedSha256": "f83c0edc6ef5e9554b3a3f1ed5706aad187bb396322273a40e43b92ab0a3c835",
+        "report": "set-legacy-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      },
+      {
+        "path": "tools-dual.json",
+        "expectedSha256": "fe9a98433d3b3099de73df31cae8d03e985a4a763e21e88bbe309b758f68b183",
+        "report": "set-legacy-natural-reference-20261010.json",
+        "reason": "relative-or-other-host; not inferred"
+      }
+    ],
+    "interpretation": "81 of 82 direct cloud references matched. The one different file is the mutable generated shadow after subsequent source changes; old report remains source-bound. Current canonical manifest check passes; no old hash was edited. Relative/other-host references not resolved by this bounded audit are not claimed authenticated."
+  },
+  "immutableAndCanonicalToolChecks": {
+    "/opt/mev-cloud/family-runtime-20261007/logs/coffee-tx-ready-20261008/checkpoint.json": {
+      "sha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+      "bytes": 116851618
+    },
+    "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/detached-recovery-20261009-partial-comparison.json": {
+      "sha256": "a77dc560c484abb87e6ef80a022c1676831f39bffab36fcf495dcc61a7598933",
+      "bytes": 43882
+    },
+    "/opt/mev-cloud/family-runtime-20261007/logs/progress-audit-20261013.5VQLT9/manifest-tools.json": {
+      "sha256": "e1062985cbc194143703bf0e3cbd4080dc2c7762b6fa4d3601c93bf2874fff21",
+      "bytes": 6670,
+      "manifest": {
+        "schema_version": 2,
+        "repo_root": "/opt/mev-cloud/family-runtime-20261007",
+        "pending_nonce": "4b4b6c33-3a64-4728-b851-7b2d9538e0ec",
+        "requested_capabilities": [
+          "capability",
+          "manifest",
+          "check"
+        ],
+        "recommended_tools": [
+          {
+            "id": "listener:family-capability-manifest:check",
+            "package": "listener",
+            "script": "family-capability-manifest:check",
+            "command": "cd listener && npm run family-capability-manifest:check --",
+            "implementation": "src/searcher/build-family-capability-manifest.ts",
+            "kind": "ops",
+            "capabilities": [
+              "capability",
+              "check",
+              "family",
+              "listener",
+              "manifest",
+              "ops"
+            ],
+            "cost": "zero-cu",
+            "summary": "listener package script: family-capability-manifest:check",
+            "priority": 10,
+            "curated": false,
+            "window_binding": null
+          }
+        ],
+        "related_tools": [
+          {
+            "id": "listener:family-capability-manifest:check",
+            "package": "listener",
+            "script": "family-capability-manifest:check",
+            "command": "cd listener && npm run family-capability-manifest:check --",
+            "implementation": "src/searcher/build-family-capability-manifest.ts",
+            "kind": "ops",
+            "capabilities": [
+              "capability",
+              "check",
+              "family",
+              "listener",
+              "manifest",
+              "ops"
+            ],
+            "cost": "zero-cu",
+            "summary": "listener package script: family-capability-manifest:check",
+            "priority": 10,
+            "curated": false,
+            "window_binding": null
+          },
+          {
+            "id": "listener:family-capability-manifest:generate",
+            "package": "listener",
+            "script": "family-capability-manifest:generate",
+            "command": "cd listener && npm run family-capability-manifest:generate --",
+            "implementation": "src/searcher/build-family-capability-manifest.ts",
+            "kind": "ops",
+            "capabilities": [
+              "capability",
+              "family",
+              "generate",
+              "listener",
+              "manifest",
+              "ops"
+            ],
+            "cost": "zero-cu",
+            "summary": "listener package script: family-capability-manifest:generate",
+            "priority": 10,
+            "curated": false,
+            "window_binding": null
+          },
+          {
+            "id": "listener:searcher:family-capability-manifest",
+            "package": "listener",
+            "script": "searcher:family-capability-manifest",
+            "command": "cd listener && npm run searcher:family-capability-manifest --",
+            "implementation": "src/searcher/test/build-family-capability-manifest.ts",
+            "kind": "replay",
+            "capabilities": [
+              "capability",
+              "family",
+              "listener",
+              "manifest",
+              "replay",
+              "searcher",
+              "verification"
+            ],
+            "cost": "zero-cu",
+            "summary": "listener package script: searcher:family-capability-manifest",
+            "priority": 10,
+            "curated": false,
+            "window_binding": null
+          },
+          {
+            "id": "listener:searcher:adapter-family-blind-manifest",
+            "package": "listener",
+            "script": "searcher:adapter-family-blind-manifest",
+            "command": "cd listener && npm run searcher:adapter-family-blind-manifest --",
+            "implementation": "src/searcher/test/adapter-family-blind-manifest.ts",
+            "kind": "replay",
+            "capabilities": [
+              "adapter",
+              "blind",
+              "family",
+              "listener",
+              "manifest",
+              "replay",
+              "searcher",
+              "verification"
+            ],
+            "cost": "zero-cu",
+            "summary": "listener package script: searcher:adapter-family-blind-manifest",
+            "priority": 10,
+            "curated": false,
+            "window_binding": null
+          },
+          {
+            "id": "listener:searcher:capability-content-hash",
+            "package": "listener",
+            "script": "searcher:capability-content-hash",
+            "command": "cd listener && npm run searcher:capability-content-hash --",
+            "implementation": "src/searcher/test/capability-content-hash.ts",
+            "kind": "replay",
+            "capabilities": [
+              "capability",
+              "content",
+              "hash",
+              "listener",
+              "replay",
+              "searcher",
+              "verification"
+            ],
+            "cost": "zero-cu",
+            "summary": "listener package script: searcher:capability-content-hash",
+            "priority": 10,
+            "curated": false,
+            "window_binding": null
+          },
+          {
+            "id": "listener:searcher:family-capability-catalog",
+            "package": "listener",
+            "script": "searcher:family-capability-catalog",
+            "command": "cd listener && npm run searcher:family-capability-catalog --",
+            "implementation": "src/searcher/test/family-capability-catalog.ts",
+            "kind": "replay",
+            "capabilities": [
+              "capability",
+              "catalog",
+              "family",
+              "listener",
+              "replay",
+              "searcher",
+              "verification"
+            ],
+            "cost": "zero-cu",
+            "summary": "listener package script: searcher:family-capability-catalog",
+            "priority": 10,
+            "curated": false,
+            "window_binding": null
+          },
+          {
+            "id": "listener:searcher:production-family-startup-manifest",
+            "package": "listener",
+            "script": "searcher:production-family-startup-manifest",
+            "command": "cd listener && npm run searcher:production-family-startup-manifest --",
+            "implementation": "src/searcher/test/production-family-startup-manifest.ts",
+            "kind": "replay",
+            "capabilities": [
+              "family",
+              "listener",
+              "manifest",
+              "production",
+              "replay",
+              "searcher",
+              "startup",
+              "verification"
+            ],
+            "cost": "zero-cu",
+            "summary": "listener package script: searcher:production-family-startup-manifest",
+            "priority": 10,
+            "curated": false,
+            "window_binding": null
+          }
+        ],
+        "executions": [
+          {
+            "schema_version": 1,
+            "tool_id": "listener:family-capability-manifest:check",
+            "descriptor_sha256": "1ba96f9164e172b1e4da6f366aad9787df53aee893ac6929e2b6353a6316f267",
+            "started_at": "2026-10-13T03:14:55.018Z",
+            "finished_at": "2026-10-13T03:15:33.906Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "86be98c1a300398e5ba4064211ae2d89697704a7f8d0f760d031d5019e0d26e1",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "family-capability-manifest:check",
+              "--"
+            ],
+            "stdout_sha256": "b3be6ef74072e2fbc029fe5e83ca26bdb841dd5960444e91b1ee5d1e762368ef",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 133,
+            "stderr_bytes": 0
+          }
+        ],
+        "generated_at": "2026-10-13T03:13:46.278Z",
+        "updated_at": "2026-10-13T03:15:33.906Z"
+      }
+    }
+  },
+  "stageStatus": [
+    {
+      "stage": 1,
+      "status": "incomplete",
+      "resumeFirst": "Compound cUNI production-reference amount gate at N26037262 remains unverified (historical-amount and double-amount executions passed; those are not the production reference).",
+      "reuse": [
+        "Yield Basis WETH/cbBTC/WBTC deposit and ordinary withdrawal historical results, including current-executor WETH supplement. BTC singleton natural valuation remains absent; authorized input-only borrowing is separate.",
+        "Kyber cross-tick and ninth-pool marginal-price fixes and multi-pool dual evidence. Retain each original source binding; do not recertify earlier pools under later changed hashes.",
+        "cUSDC/cDAI borrowed production-input dual evidence and cUNI multi-amount local evidence. redeem(shares) does not imply original redeemUnderlying/pre-call/wrapper reproduction.",
+        "Six Algebra pools, 12 directions and 96 quoted/runtime executions under reported plugin/source boundaries. No arbitrary-plugin extrapolation."
+      ],
+      "remaining": [
+        "Resolve actual supported direction/variant and production-reference gaps; perform only checks invalidated by a relevant source/actor/runtime change.",
+        "Confirm required offline safety/build and independent acceptance on the real current source before closing stage 1; historical evidence is not a new current-tree run."
+      ],
+      "performance": "deferred to stage 4"
+    },
+    {
+      "stage": 2,
+      "status": "incomplete",
+      "reuse": [
+        "Legacy Set two variants/four-direction local evidence and BasicIssuance support; WBTC issue input 6312 correctly rejected by 400-unit divisibility, without rounding input.",
+        "DODO GSP two pools with GSPFactory reverse membership, four-direction natural pricing and dual execution.",
+        "xWin N26075823 natural reference/dual evidence; cutoff26144845 paused state is a separate correct retryable rejection.",
+        "Ekubo native and ERC20 cohorts with source-bound dual execution; borrowed ERC20 input does not become natural valuation.",
+        "Frax synchronous Custodian variant implemented within existing ERC4626; no duplicate new Family needed.",
+        "Curve plain stETH rounding/current quoted-runtime evidence and underlying seven-pool cohort/anchor followups. Resolved ERC20 uint and failed-TX anchor tasks must not be reopened."
+      ],
+      "remaining": [
+        "Legacy Set three directions still lack production-reference amounts; nonzero entry-fee historical sample remains unverified.",
+        "Balancer V3 cumulative 36/36 measured directions but only 35/36 production references: siUSD→sUSDe at N25944594 remains missing. Related InfiniFi siUSD redemption reference is not closed by borrowed iUSD deposit.",
+        "Any remaining Curve variant/active-ramp claim must be tested or explicitly bounded; seven historical pools are not whole-family/current-source blanket certification.",
+        "Keep natural valuation limitations on borrowed-input-only samples explicit; do not invalidate valid same-state dual evidence solely for absent small-graph valuation."
+      ],
+      "performance": "deferred to stage 4"
+    },
+    {
+      "stage": 3,
+      "status": "incomplete; reconcile new/updated IMPL items each round and phase change",
+      "classification": [
+        "Family adaptation/correction",
+        "historical opportunity reproduction with lane attribution",
+        "Ready/config wiring",
+        "central pipeline defect"
+      ],
+      "centralStatus": "Shared ETH/WETH, debit/receipt/refund/inventory and 0/1-raw-unit guards have implementation and scoped evidence, including 2026-10-13 stETH and positive-debit corrections. Preserve these; finish only genuinely uncovered strict/quoted/runtime and applicable native-family cases. Peer Ready/UniV1 dirty changes are not delivered or committed by this audit.",
+      "remainingExamples": [
+        "Curve/Fluid five-hop 0x5b6114… has unresolved causal/current live backrun→selector→independent final sim→EV acceptance. Preserve old header failure, monthly quota 429 and offline planner diagnostics separately; quota recovery not probed this audit.",
+        "eUSD PSV core gross-profit match passed while production EV correctly rejected; do not label profitable reproduction passed or loosen EV.",
+        "Ekubo original DAI-start opportunity had a Ready/Funding gap; native coffee Family acceptance does not close it.",
+        "Aqua/SwapVM original calldata success does not prove our Family or authorized caller; historical credential denial remains a constraint, no credential or private-path workaround.",
+        "Old quoted-fallback opportunity results stay source-bound, not current runtime Exact=0 evidence. Reuse accepted Yearn, Set BasicIssuance and other completed cases; no duplicate replay merely for checklist form.",
+        "Fluid Credit retained-position historical record is outside this task current position-conserving scope; preserve but do not extend its former authorization."
+      ],
+      "roundingContract": {
+        "requestOrQuoteInputReduced": false,
+        "nextHop": "actual current-flow receipt",
+        "inputDebit": "strictly positive; never exceeds requested; under-debit separately bounded by selected 0/1 raw-unit tolerance",
+        "outputShortfall": "separate signed delta and explicit 0/1 boundary",
+        "unchangedSafety": [
+          "old inventory",
+          "native exactness",
+          "repayment",
+          "minimum profit",
+          "conservation",
+          "mandatory final simulation"
+        ]
+      },
+      "performance": "no heavy tests before correctness stages finish"
+    },
+    {
+      "stage": "4A",
+      "status": "not started in this audit; pending correctness prerequisites",
+      "scope": "All applicable adapted/repaired protocols from this task and new IMPL items, including DeepSeek four, own adaptations, Balancer V2/V3 and Curve plain/underlying.",
+      "procedure": "Re-read IMPL; freeze actual source and dirty fingerprint/config/sample/workload; verify other live is stopped and resources idle without stopping peer processes. Serial real single-block Ready and current live production stages, real target change plus no-change/unrelated controls. Diagnose/fix proven bottlenecks, then local acceptance. Existing old partial measurements remain evidence, not current full pass."
+    },
+    {
+      "stage": "4B",
+      "status": "not started; gated after all 4A applicable items",
+      "procedure": "Re-read IMPL and freeze again; representative production background graph with all applicable families jointly scheduled through existing live stages. Default 3 changed blocks ×3 repetitions before/after, medians plus negative controls; budgets declared from current production policy before measuring. Preserve setup, head-to-effective-publication plus drain, selector-to-sim-drain boundaries, source/fresh/carried/failed, requests/batches/dependency/queue/response/local/tail and all failed/unrun/interrupted samples. No full live launch; 3×3 is not long-term live P95."
+    }
+  ],
+  "balancerV2RetainedBaseline": {
+    "sha256": "f2d4c554231f45395f2ee83eb120e49f05e17e7f7243dd3eed750e368df3563e",
+    "report": {
+      "schemaVersion": 1,
+      "reportType": "redacted-partial-family-latency-observation",
+      "date": "2026-10-09",
+      "family": "balancer-v2",
+      "latestUserPriority": "Balancer V2 remaining acceptance is deferred until after the other Families. Preserve these results; every other Family requires both correctness and representative latency acceptance.",
+      "verdict": {
+        "implementation": "implemented; cloud offline regressions passed",
+        "observedCompletedPricePairs": "7 pairs identical in row semantics and request workload",
+        "representativePerformanceAcceptance": "NOT PASSED: incomplete cohort, heavy-block prices exceed combined state/enumeration budget, and outstanding coverage",
+        "systemicLive": "NOT RUN",
+        "adapterMergeReady": "NOT CLAIMED",
+        "productionGapFixed": "NOT CLAIMED",
+        "goalComplete": false
+      },
+      "source": {
+        "vm": "mev-impl-c4d-20261002",
+        "zone": "us-east1-b",
+        "workspace": "/opt/mev-cloud/family-runtime-20261007",
+        "branch": "codex/family-runtime-actual-20261007",
+        "baseCommit": "2a2243bdf009ac1951644794ed38cb9e98d138e4",
+        "frozenSharedProductionSourceSha256": "dd183def76110b2caecea598bd39e923c15878cbf73387527e042ebaf2740176",
+        "configurationSha256": "ac3eff5a4bf9999e4b6ca2e846e28e819f03ae4078731de37198020a4944bd7f",
+        "baselineCodecSha256": "d640c0270e72924557ea50a0f14341932b368dd9e46ed342880638ab9141fc91",
+        "candidateCodecSha256": "b7d349c2c0ff739d831f16b100b9706ebe25baa7518f5c115e674a615fa7f4a3",
+        "codecEquivalenceTestSha256": "353cb505dd1eff9e88c113b67946bd2319093aecf32e01747191a37a7d9bc56b",
+        "codecCostTestSha256": "06d3211f404245988ffeff82316ded7fac9f0a183ca426ad970b01440030959c",
+        "committedManifestSha256": "0a224eba27bbcecce26d574b996a989023fc220f4ddd3b7a588076aff0f4f81f",
+        "benchmarkSourceIncludesOtherUncommittedChanges": true,
+        "commitScope": "Only Balancer V2 codec, its two new tests, generator-derived V2 capability changes and this redacted report. Unrelated Ready/Uniswap V1 changes remain uncommitted and untouched.",
+        "packagingCheck": "The exact base commit plus these V2 files was materialized as a temporary, non-Git source fixture. The production generator and build:live plus 30 V2/codec tests passed locally, avoiding concurrent cloud load. This is an additional packaging check, not a new cloud historical or performance run."
+      },
+      "change": {
+        "productionFile": "listener/src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+        "scope": [
+          "Bounded 2048-entry cache of successful address validation, keyed by original spelling; lowercase 20-byte (40-hex-digit) addresses use shape validation and mixed-case retains checksum checks",
+          "Precompile the existing one-step, two-asset, empty-userData queryBatchSwap ABI shape and fill its six variable words",
+          "Decode only canonical 128-byte two-delta returns, preserving signed range, input equality, zero-output policy and malformed-data rejection"
+        ],
+        "unchanged": [
+          "quote mathematics and amounts",
+          "RPC requests, transport, concurrency and budgets",
+          "each-block refresh policy",
+          "identity, source and execution safety gates",
+          "default activation set and central pipeline"
+        ]
+      },
+      "experiment": {
+        "candidateEpoch": "detached-recovery-20261009",
+        "comparisonPlanSha256": "68b5407b0dc2c6f71e587270137c64980d58bcc2237606ce01ae1250f7994603",
+        "recoveryPlanSha256": "9e4033bdf530dc037d82b6d1ab5298d2b04e3cb52a996464084a9f70322d0c82",
+        "baselineReadySha256": "1f35bd03e7ea9429059c59f198f4929ea87183e9f24349c9f4a955e53666b38b",
+        "candidateReadySha256": "b6a7a579f7fd4cc9a7241c729410f8f85ff42357247ba7ed5a795256353b2b40",
+        "graphEdges": 28040,
+        "activeInstances": 13781,
+        "targetInstances": 94,
+        "targetEdges": 727,
+        "graphCorrection": "The initially frozen old graph had 28038 edges. Both versions were revalidated through production to the same 28040-edge topology before these paired measurements; neither graph was manually patched.",
+        "productionEntry": "listener/benchmarks/effective-update.ts -> live-stage.ts -> BlockScanRuntimeLoop.schedule()/waitForIdle()",
+        "through": "prices",
+        "effectiveBoundary": "Received head through price publication and drain; publicationReadyMs is also retained in original artifacts",
+        "setupExcluded": true,
+        "enumerationMeasured": false,
+        "simMeasured": false,
+        "predeclaredBudget": {
+          "combinedStateAndEnumerationMs": 4000,
+          "perBlockNoMedianRegression": true,
+          "twoSlowBlocksMustImprove": true,
+          "diagnosticDeadlineIsNotRealtimeAcceptance": true
+        },
+        "completedCandidateRepetitions": 7,
+        "plannedCandidateRepetitions": 9,
+        "observations": [
+          {
+            "block": 26146938,
+            "blockHash": "0x300437c730d09431cb74d03d572c0d14d83bf893092ae1527a7db478172f8d09",
+            "baselineStageMs": [
+              9032.728667999967,
+              9197.875670999987,
+              8985.93592999992
+            ],
+            "candidateStageMs": [
+              3522.74020499998,
+              3379.7447310000425,
+              3517.870831000153
+            ],
+            "baselineMedianMs": 9032.728667999967,
+            "candidateCompleteMedianMs": 3517.870831000153,
+            "observedMedianReductionPercent": 61.054173547105094,
+            "logicalRequests": 725,
+            "physicalCallItems": 570,
+            "httpBatches": 5,
+            "comparedPairs": 3,
+            "combinedBudgetVerdict": "unverified: enumeration was not run"
+          },
+          {
+            "block": 26146969,
+            "blockHash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+            "baselineStageMs": [
+              13469.81309000001,
+              13821.26597999991,
+              14121.64049999998
+            ],
+            "candidateStageMs": [
+              4276.945360000012,
+              6167.414007000043,
+              3956.1516249999404
+            ],
+            "baselineMedianMs": 13821.26597999991,
+            "candidateCompleteMedianMs": 4276.945360000012,
+            "observedMedianReductionPercent": 69.05532846130757,
+            "logicalRequests": 887,
+            "physicalCallItems": 659,
+            "httpBatches": 6,
+            "comparedPairs": 3,
+            "combinedBudgetVerdict": "not passed: prices alone exceed 4000ms at the complete median"
+          },
+          {
+            "block": 26146977,
+            "blockHash": "0x3734f712322c645e220aec78d7ee8333825a945201807df980dcd1dfc52ceb93",
+            "baselineStageMs": [
+              3780.069131999975,
+              3746.3596039999975,
+              3850.047120000003
+            ],
+            "candidateStageMs": [
+              2790.4653800000087,
+              null,
+              null
+            ],
+            "candidateStatuses": [
+              "completed",
+              "setup_failed_http_429",
+              "not_started"
+            ],
+            "baselineMedianMs": 3780.069131999975,
+            "candidateCompleteMedianMs": null,
+            "observedMedianReductionPercent": null,
+            "logicalRequests": 677,
+            "physicalCallItems": 539,
+            "httpBatches": 5,
+            "comparedPairs": 1,
+            "combinedBudgetVerdict": "incomplete",
+            "negativeControlQualification": "light-load control only; not proven to have no target state changes"
+          }
+        ]
+      },
+      "semanticAndWorkloadComparison": {
+        "allSevenCompletedPairsIdentical": true,
+        "fields": [
+          "semantic direction",
+          "amountIn",
+          "amountOut",
+          "status",
+          "effectiveMid",
+          "source",
+          "reference",
+          "quotedAt",
+          "freshness"
+        ],
+        "sameLogicalWorkload": true,
+        "samePhysicalWorkload": true,
+        "sameQuoteOutcomes": true,
+        "targetRowsPerCompletedRun": {
+          "freshQuoted": 307,
+          "quoteFailed": 13,
+          "disabledForRun": 407,
+          "effectiveTrialDirections": 320
+        },
+        "coverageLimitation": "407 target directions were already disabled by production startup failure isolation in both versions. The codec did not remove them. These runs do not prove all 727 directions are successfully priceable; concrete causes of those disabled directions remain unclassified.",
+        "failureIsolationSource": "listener/src/searcher/strict-current-runtime-coordinator.ts: disabledEffectiveEdges() and recordFailedEffectiveInstances()"
+      },
+      "verification": {
+        "cloudOffline": {
+          "evidence": "candidate-offline-checks.json",
+          "passed": [
+            "build:live",
+            "30 Family/codec tests",
+            "family-capability-manifest check",
+            "production-family-composition",
+            "strict-production-family-declarations",
+            "strict-family-lifecycle-runner",
+            "strict-central-adapter-runtime",
+            "strict-execution-projection",
+            "family-dual-execution"
+          ],
+          "networkIsolated": true,
+          "historicalExecution": false
+        },
+        "cloudSyntheticEvm": {
+          "evidence": "candidate-runtime-safety.json",
+          "suite": "BalancerV2RuntimeTest",
+          "passed": 7,
+          "networkIsolated": true,
+          "historicalExecution": false,
+          "executorArtifactSha256": "ff8b61348f037390645448c44d923b5cb43fbda34afe0ff5a34dfaf2a3676b0b"
+        },
+        "costRegression": "1128 independently encoded multi-pool rows; zero per-direction general ABI encode/decode calls in candidate. The baseline positive-control test fails as expected. This is a work-count regression, not a realtime latency gate.",
+        "independentReview": "Two existing non-author review passes and boundary/cost regressions retained in logs/balancer-v2-codec-review2.GAol7G/; no new historical or performance pass inferred.",
+        "canonicalReconciliation": {
+          "capabilityQuery": [
+            "benchmark",
+            "stage-timing",
+            "effective-update"
+          ],
+          "manifest": "cpu-diagnostic-tool-manifest.json",
+          "selectedTool": "listener:benchmark:effective-update",
+          "descriptorSha256": "d04d6c64b2d93922ff73daef7b20c4a44ceb5a2f0a495fadcd6d5f70f1a7ffcf",
+          "actualExitCode": 1,
+          "result": "Failed during setup under monthly capacity limit. Not a successful canonical reconciliation or hot-stage CPU profile."
+        }
+      },
+      "preservedFailures": [
+        "Earlier graph-mismatch, 429 and SSH-interrupted epochs remain separate; no samples from them are mixed into this cohort.",
+        "Third block repetition 2 stopped during setup after about 176438ms with stale_state/runtime_error:JSON-RPC HTTP 429; the hot phase was never entered. Repetition 3 did not start.",
+        "The independent CPU diagnostic failed with Monthly capacity limit exceeded before any measured head; its setup/retry profile cannot identify the hot-stage CPU bottleneck.",
+        "A single chainId HTTP 200 response did not prove historical-read capacity recovery. A later actual historical block read at 2026-10-09T03:11:52Z still returned HTTP429/monthly capacity exceeded.",
+        "The failed CPU diagnostic overlapped another window's process and used a different heap limit; even a successful diagnostic wall time would not belong in the formal cohort."
+      ],
+      "remainingBeforeAcceptance": [
+        "Restore already-authorized historical RPC capacity or obtain an explicitly authorized alternate endpoint; do not change billing or credentials autonomously",
+        "Predeclare a new complete experiment after recovery, preserving this cohort's failure and null median rather than replacing them",
+        "Explain target startup failures and prove representative successful coverage without dropping pools or weakening gates",
+        "Complete real target-change and unrelated/no-change controls using the production dispatcher",
+        "Profile the remaining heavy-block critical path, then verify state plus enumeration and the applicable production sim workload within the declared budget",
+        "Report historical representative-load evidence separately from unrun live competition/tail latency"
+      ],
+      "evidence": {
+        "root": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf",
+        "comparison": "detached-recovery-20261009-partial-comparison.json",
+        "comparisonSha256": "a77dc560c484abb87e6ef80a022c1676831f39bffab36fcf495dcc61a7598933",
+        "workloadFiles": [
+          "partial-workload-26146938-1.json",
+          "partial-workload-26146938-2.json",
+          "partial-workload-26146938-3.json",
+          "partial-workload-26146969-1.json",
+          "partial-workload-26146969-2.json",
+          "partial-workload-26146969-3.json",
+          "partial-workload-26146977-1.json"
+        ],
+        "capacityProbe": "rpc-capacity-user-resume-20261009.json",
+        "capacityProbeSha256": "9806586f9392779908b79d90f75963e6ed1942f7aba03c05fd4743eb59aa0a9c"
+      },
+      "safety": {
+        "originalReadyModified": false,
+        "otherProcessesModified": false,
+        "deepseekMergeStarted": false,
+        "liveStartedByThisTask": false,
+        "deployed": false,
+        "signing": false,
+        "broadcast": false,
+        "rawLogsOrCredentialsIncluded": false
+      }
+    }
+  },
+  "priorSmallGraphPerformance": [
+    {
+      "report": "curve-underlying-refresh-latency-20261008.json",
+      "sha256": "31d04699513fd109f04d9c2fd2213c84650c2126abd50a178e55fe474c1dfe89",
+      "claim": "Historical partial small-graph measurement only; not current phase-4 or representative acceptance."
+    },
+    {
+      "report": "family-latency-20261007-single-block.json",
+      "sha256": "a5dd99f0e26d2147f518c4dd0383feb4cecab466bf924551f262951f4bd8916d",
+      "claim": "Historical partial small-graph measurement only; not current phase-4 or representative acceptance."
+    }
+  ],
+  "actionsThisAudit": {
+    "chainRpc": 0,
+    "forkExecution": 0,
+    "correctnessReruns": 0,
+    "performanceRuns": 0,
+    "liveStarts": 0,
+    "deployments": 0,
+    "signingOrBroadcast": 0,
+    "peerProcessesStopped": 0,
+    "newBranchOrWorktree": 0,
+    "catalogGeneration": 0,
+    "canonicalReadOnlyManifestCheck": true
+  },
+  "goalDisposition": {
+    "status": "active/incomplete",
+    "currentExecutionStage": 1,
+    "complete": false,
+    "basis": "First explicit unresolved correctness gate is cUNI production-reference coverage; all four-stage requirements remain in force."
+  },
+  "scopeNote": "This JSON is a redacted evidence audit; the original Obsidian IMPL remains the only maintained main table. No auto learning capture requested or performed.",
+  "postReadOnlyCheck": {
+    "observedAt": "2026-10-13T03:18:07.803669+00:00",
+    "workspacesUnchanged": true,
+    "processes": [
+      {
+        "pid": 434368,
+        "comm": "bash",
+        "cwd": "/opt/mev-cloud/app-run2/analysis",
+        "entrypoints": []
+      }
+    ],
+    "resources": " 03:18:07 up 5 days, 23:38, 10 users,  load average: 0.06, 0.12, 0.06\n               total        used        free      shared  buff/cache   available\nMem:            6926         699        1844           1        4685        6226\nSwap:              0           0           0\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/root       154G  132G   23G  86% /\n"
+  }
+}
