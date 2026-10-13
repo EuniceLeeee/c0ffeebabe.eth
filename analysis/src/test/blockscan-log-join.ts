@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
   blockScanActivityAtBlock,
+  blockScanActivityFromLog,
+  blockScanEvidenceForTarget,
   blockScanSubmissionCycleTokenSets,
   blockScanSourceBlockForTarget,
   competitorArbTokenSet,
@@ -117,4 +122,73 @@ test("budget-censored complete pass remains explicit instead of claiming a cover
   const activity = blockScanActivityAtBlock(log, 200);
   assert.equal(activity.detailComplete, true);
   assert.equal(activity.status, "budget_exceeded");
+});
+
+const modernTiming = {
+  type: "block_scan_timing",
+  source_block: 99,
+  outcome: "degraded",
+  candidates: 10,
+  planned: 10,
+  quote_positive: 0,
+  decision: "no_positive_quote",
+  total_ms: 3297.963736000005,
+  stages: {
+    state: { status: "ran", stage_ms: 2490.108351000119 },
+    enumeration: { status: "ran", stage_ms: 458.5091989999637 },
+    planner_solver: { status: "ran", stage_ms: 237.87733300030231 },
+    final_sim: { status: "not-run", stage_ms: 0 },
+    ev: { status: "not-run", stage_ms: 0 },
+  },
+};
+const timingLine = (record: Record<string, unknown> = modernTiming): string => `[searcher/blockscan-family] ${JSON.stringify(record)}`;
+
+test("modern timing binds the source pass and preserves stage evidence without inventing route coverage", () => {
+  const log = [timingLine(), timingLine({ ...modernTiming, source_block: 100, decision: "different-pass" })].join("\n");
+  const activity = blockScanActivityAtBlock(log, 99);
+  assert.equal(activity.status, "incomplete");
+  assert.equal(activity.ran, true);
+  assert.equal(activity.detailComplete, false);
+  assert.equal(activity.timing?.source_block, 99);
+  assert.equal(activity.timing?.decision, "no_positive_quote");
+  assert.equal(activity.timing?.total_ms, modernTiming.total_ms);
+  assert.deepEqual(activity.timing?.stages, modernTiming.stages);
+  assert.equal(activity.minBlock, 99);
+  assert.equal(activity.maxBlock, 100);
+  assert.equal(blockScanActivityAtBlock(timingLine().slice(0, -10), 99).status, "unknown_log_empty");
+  assert.equal(blockScanActivityAtBlock(timingLine({ ...modernTiming, stages: {} }), 99).ran, false);
+});
+
+test("streaming preserves legacy attribution across read chunks, CRLF and an unterminated final line", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "postmortem-blockscan-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "live.log");
+  const text = "x".repeat(65520) + "\r\n" + completePassLog.replaceAll("\n", "\r\n");
+  await writeFile(path, text);
+  assert.deepEqual(await blockScanActivityFromLog(path, 99), blockScanActivityAtBlock(text, 99));
+  const evidence = await blockScanEvidenceForTarget(path, 100, new Set([WETH, USDC]), []);
+  assert.equal(evidence.status, "complete");
+  assert.equal(evidence.solve_ring_count, 2);
+  assert.equal(evidence.token_overlap_count, 2);
+});
+
+test("modern timing and unavailable logs report unknown ring counts rather than zero", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "postmortem-blockscan-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "live.log");
+  await writeFile(path, `${completePassLog}\n${timingLine()}`);
+  const evidence = await blockScanEvidenceForTarget(path, 100, new Set([WETH, USDC]), []);
+  assert.equal(evidence.source_block, 99);
+  assert.equal(evidence.ran, true);
+  assert.equal(evidence.detail_complete, false);
+  assert.equal(evidence.solve_ring_count, null);
+  assert.equal(evidence.solve_ring_token_count, null);
+  assert.equal(evidence.token_overlap_count, null);
+  assert.equal(evidence.fully_covered_by_ring_count, null);
+  assert.equal(evidence.timing?.stages?.final_sim?.status, "not-run");
+  assert.match(evidence.limitations.join(" "), /unknown without route sidecars/);
+  const missing = await blockScanEvidenceForTarget(join(directory, "missing.log"), 100, new Set(), []);
+  assert.equal(missing.status, "log_unavailable");
+  assert.equal(missing.solve_ring_count, null);
+  assert.match(missing.log_error ?? "", /ENOENT/);
 });
