@@ -1,6 +1,59 @@
 {
   "cases": [
     {
+      "learning_case_id": "tooldef-20261013-postmortem-large-modern-blockscan-log",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+      "source_block": 26182688,
+      "target_block": 26182689,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "analysis_log_read_and_timing_coverage_not_a_production_route_verdict",
+      "evidence": {
+        "baseline_code_sha256": "1d7b1b50976483a31328e0f1b0cee925df545a73e4f520db32e5f6de3ee99938",
+        "observed_log_bytes": 572982312,
+        "baseline_log_error": "Invalid string length",
+        "manual_timing_artifact": "logs/tx-c191d9-gap-20261013.aQnqxW/live-block-timings.json",
+        "manual_timing_line": 521872,
+        "manual_total_ms": 3297.963736000005,
+        "manual_decision": "no_positive_quote",
+        "manual_stages": "state/enumeration/planner_solver ran; final_sim/ev not-run",
+        "independent_defect_review": {
+          "reviewer": "/root/postmortem_coverage_review",
+          "verdict": "Whole-file UTF-8 reading causes the observed failure; the legacy-only parser independently misses modern timing. Neither absence of a readable log nor missing route sidecars proves zero routes."
+        },
+        "independent_fix_review": {
+          "reviewer": "/root",
+          "verdict": "No blocking findings: shared parser preserves legacy attribution, timing retains not-run stages, absent route sidecars remain unknown, and missing/chunked/CRLF/truncated inputs are covered."
+        },
+        "validation": {
+          "regression_tests": "25/25 passed; logs/postmortem-log-fix-20261013/tests-final.log",
+          "typecheck": "analysis TypeScript --noEmit passed; logs/postmortem-log-fix-20261013/build-final.log",
+          "baseline_artifact": "logs/postmortem-log-fix-20261013/baseline.json",
+          "actual_log_artifact": "logs/postmortem-log-fix-20261013/actual-log-final.json",
+          "actual_log_bytes": 656523979,
+          "actual_log_result": "source_block=26182688, ran=true, status=incomplete, route counts=null; timing total_ms/decision/stages exactly match independent recovery",
+          "reader_elapsed_ms": 2005.032219,
+          "reader_max_rss_kb": 198240,
+          "fixed_code_sha256": "c58e58e400da2b5f689c34a26d6d1532a2ae7f90d40fdbb446be15483d8ff1e5"
+        },
+        "scope": "Analysis reader/summary only. No route sidecar interface, production program/config changes, RPC calls or live process control."
+      },
+      "tooling_defect": {
+        "tool": "analysis:bundle-postmortem",
+        "issue": "Whole-file UTF-8 reading fails above the V8 string limit; legacy-only block-scan parsing ignores current block_scan_timing evidence and the report renders unavailable ring counts as zero.",
+        "evidence": "Source 26182688 exists at live.log line 521872 with total_ms=3297.963736000005 and decision=no_positive_quote, but the canonical report returned log_unavailable with Invalid string length for the 572982312-byte log.",
+        "codify_target": "analysis/src/cli/bundle-postmortem.ts and analysis/src/test/blockscan-log-join.ts: stream lines, preserve source-bound modern stage timing, keep missing route coverage unknown, retain legacy attribution regressions and verify the actual >512MiB log without RPC.",
+        "status": "codified",
+        "codify_commit": "b33ca4d20d6aaae729d9f9cd5df6c77f00a79a60"
+      },
+      "created_at": "2026-10-13T10:16:29Z",
+      "updated_at": "2026-10-13T10:20:47Z"
+    },
+    {
       "learning_case_id": "tooldef-20261007-prerequisite-cache-idle-socket-reset",
       "status": "manual_required",
       "strategy_kind": "block-scan",
