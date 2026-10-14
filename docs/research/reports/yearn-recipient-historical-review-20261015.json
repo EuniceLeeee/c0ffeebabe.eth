@@ -1,0 +1,508 @@
+{
+  "kind": "family-adaptation-independent-historical-progress-review-v1",
+  "family": "yearn-auction",
+  "reviewer": "/root/yearn_callback_review",
+  "reviewPass": 3,
+  "maximumReviewPasses": 3,
+  "reviewPart": "completed_N_end_historical_subset_before_actual_deferred_history",
+  "createdAt": "2026-10-14T17:55:49.971447+00:00",
+  "authoritativeWorkspace": "/opt/mev-cloud/family-runtime-20261007",
+  "parentReportedProductionCommit": "56d94de6e2f91cbbae5563abd3633b48c4ebfd4b",
+  "parentReportedDocumentationCommit": "6664f04f00589388240889b422731a3b2d685e16",
+  "commitVerificationScope": "Commit IDs supplied by parent. Reviewer did not query cloud Git. The historical CLI extension is uncommitted and pinned by its local candidate SHA, closure23 ownership record and actual run receipts.",
+  "skill": "/Users/eunice/.codex/skills/family-plugin-adaptation/SKILL.md",
+  "verdict": "valid_actual_historical_single_leg_correctness_progress_with_explicit_limits",
+  "canRecordAsActualAcceptanceProgress": true,
+  "wholeFamilyAccepted": false,
+  "goalComplete": false,
+  "blockingFindingsForThisCompletedSubset": [],
+  "conclusion": "The saved current-production historical run supports 16 positive single-leg executions over four distinct budgets, four genuinely zero-input-balance read-only quote executions, and eight declared EVM reverts at N26152335 end-state. The quoted, runtime, direct-self and direct-external programs have exact protocol debit, matching output recipient receipts, preserved old executor inventory, unchanged executor native balance and cleared allowance. The prior local code/EVM acceptance remains distinct; no actual historical deferred callback, natural target effective valuation, original transaction pre-call parity, opportunity replay or performance pass is established.",
+  "source": {
+    "number": 26152335,
+    "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+    "generation": 26152335
+  },
+  "transactionHash": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+  "actors": {
+    "executor": "0x1000000000000000000000000000000000000002",
+    "externalOutputRecipient": "0x1000000000000000000000000000000000000001",
+    "auction": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+    "proceedsReceiver": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+    "allFourDistinct": true
+  },
+  "direction": {
+    "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+    "tokenInLabel": "crvUSD",
+    "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+    "tokenOutLabel": "ALCX",
+    "instanceCount": 1,
+    "directionCount": 1,
+    "lineage": "yearn-auction:clone-1.0.4",
+    "reverseDirectionTested": false
+  },
+  "historicalAmountMatrix": [
+    {
+      "label": "borrowed-production-input-at-N",
+      "amountIn": "5137296582894235185",
+      "amountOut": "2041007520497841855",
+      "actualProtocolCost": "5137296582894235183",
+      "unspentInput": "2",
+      "capacityCapped": false
+    },
+    {
+      "label": "original-budget-at-N",
+      "amountIn": "267759246788654353808",
+      "amountOut": "106378642455288485048",
+      "actualProtocolCost": "267759246788654353808",
+      "unspentInput": "0",
+      "capacityCapped": false
+    },
+    {
+      "label": "original-budget-plus-two-wei",
+      "amountIn": "267759246788654353810",
+      "amountOut": "106378642455288485048",
+      "actualProtocolCost": "267759246788654353808",
+      "unspentInput": "2",
+      "capacityCapped": false
+    },
+    {
+      "label": "capacity-capped-budget",
+      "amountIn": "1945528466888290612819",
+      "amountOut": "772943155644044667101",
+      "actualProtocolCost": "1945528466888290612802",
+      "unspentInput": "17",
+      "capacityCapped": true
+    }
+  ],
+  "independentRecomputation": {
+    "formula": "output=min(available, floor(((budget+1)*10^18-1)/rawPrice)); protocolCost=floor(output*rawPrice/10^18); residual=budget-protocolCost",
+    "rawPrice": "2517039516660451874",
+    "available": "772943155644044667101",
+    "wantedAndSoldDecimals": 18,
+    "positiveExecutionCount": 16,
+    "positiveByMode": {
+      "quoted": 4,
+      "runtime": 4,
+      "direct-self": 4,
+      "direct-external": 4
+    },
+    "positiveTokenDeltaChecks": 128,
+    "positiveExecutorNativeDeltaChecks": 16,
+    "positiveTransferLogChecks": 32,
+    "positiveAllowancePostconditionChecks": 16,
+    "readonlyQuoteCount": 4,
+    "readonlyTokenDeltaChecks": 32,
+    "readonlyNativeDeltaChecks": 4,
+    "declaredRevertCount": 8,
+    "negativeByMode": {
+      "quoted": 2,
+      "runtime": 2,
+      "direct-self": 2,
+      "direct-external": 2
+    },
+    "negativeInputScope": "Only the borrowed-production-input-at-N budget; one zero-input and one forced post-execution revert per execution mode.",
+    "positiveTokenChecks": "Each outcome has exactly one row per expected token/account pair for two tokens and four actors. Executor want decreases by the same-N protocol cost, receiver want increases by that cost, auction sold decreases by output, selected recipient sold increases by output and all other observed token changes are zero. Per-token sum is zero.",
+    "oldInventoryChecks": "Each positive caller starts with budget+101 want and output+103 sold. Want finishes at 101+residual; the executor sold pre-existing balance is not reduced. Direct-external leaves executor sold unchanged. Executor native starts at 17 and has zero delta.",
+    "allowanceChecks": "Actual executed calldata was parsed; every positive script ends with static want.allowance(executor,auction), loads the result and enforces equality to zero. Recorded approval event amounts are [0,budget,residual,0] for all 16 positive executions.",
+    "transferChecks": "Each positive outcome contains the expected unique want transfer executor->proceedsReceiver for protocolCost and sold transfer auction->selectedRecipient for output; values reconcile to token delta rows.",
+    "readonlyChecks": "All four actual requests set executor want balance to zero, sold to 103 and native to 17. Actual calldata uses the readonly subprogram mode and checks its returned output against the independent same-N quote. All expected observed token/account rows and executor native delta are zero; logs are empty.",
+    "negativeChecks": "All eight transport results are ok=true with completion=reverted-as-declared. Zero-input cases carry Panic(0x11); forced post-execution cases carry runtime amount mismatch. Post-revert calldata is the corresponding successful program plus the intentional false equality guard. All returned effect arrays are empty; this is not a complete stateDiff rollback proof."
+  },
+  "productionWiring": {
+    "ready": "Current definition and immutable-code identity were rehydrated through createRebuildWiring and the production strict catalogue; the actual production issuer asserts the source/generation. One active target memo and one directed target edge exist.",
+    "quoted": "All four specified-amount quotes use executeFamilyExactQuote, followed by buildFamilyExecutionFragment, planFragmentNodes and production action adapter encoders.",
+    "runtime": "buildFamilyRuntimeAmountLeg returns the real maximum-input program under the construction guard; the supplied amount is not reduced before construction or execution.",
+    "direct": "Direct-self and direct-external construct current Family direct-output programs. A readonly quote program first validates the expected same-N output, and actual account deltas then validate recipient routing.",
+    "runtimeConstruction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "scope": "production issuer; maximum mask/selector and generic flow inventory safety have separate offline/EVM contracts; this historical run executes single-leg programs"
+    },
+    "recordedInvocationCounts": {
+      "exact": 4,
+      "quoted": 4,
+      "forbiddenDuringBuild": 0
+    },
+    "directReadCount": 52,
+    "constructionLimit": "Exact=0, quoted=0 and RPC=0 apply to runtime construction only. The run performs four exact quotes, four quoted builds and 52 direct reads. It does not run the production full-loop selector/final sim.",
+    "simulation": "Current pinned local REVM executes against target block state with current BotVM code overlay at the historically empty executor account and actor-only balances. Protocol code/state is not replaced; no signing, broadcasting, deployment or live run is claimed.",
+    "drained": true,
+    "protocolOverrides": false,
+    "actorOnlyFunding": true,
+    "signing": false,
+    "broadcast": false
+  },
+  "readyAndValuation": {
+    "readyReusedAndRevalidatedAtSameN": true,
+    "graphEdges": 39,
+    "activeInstances": 20,
+    "targetInstances": 1,
+    "targetDirections": 1,
+    "rawMid": 0.39729213362799176,
+    "historicalNaturalDiscoveryProven": false,
+    "topologyContainsFutureDiscovery": false,
+    "targetEffectiveStatus": "missing-valuation",
+    "targetEffectiveAmountIn": null,
+    "targetEffectiveAmountOut": null,
+    "limit": "The Ready copy is source-bound and usable for production revalidation and the raw-price stage. The result label natural-ready-prices-complete must not be read as natural discovery or effective-valuation success; the explicit provenance flag is false and the target effective row is missing-valuation. No target graph identity or amount is inferred from the reference table."
+  },
+  "borrowedInputProvenance": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+    "sha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378",
+    "edgeId": "custom-swap:ekubo-router-v1\u001f0xe85c9c02437498875821f6bafd923ce81a67defc29e8b2c42927f9bfc640a0f1\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f83d2158099287a762cbb353e4c521784b39a6af4a27af746e8f549d5333522b1",
+    "sourceFamily": "custom-swap:ekubo-router-v1",
+    "sourcePublication": {
+      "number": 26146969,
+      "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+      "generation": 2
+    },
+    "sourceQuoteBlockNumber": 26146969,
+    "sourceQuoteBlockHash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+    "sourceFreshness": "fresh at its own source publication; source quotedAt equals source publishedAt",
+    "borrowedToken": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+    "borrowedAmountIn": "5137296582894235185",
+    "unusedReferenceOutput": "5134367",
+    "referenceRowAndSerializedConfigPreservedIn": "history25/dual24.json:borrowedReference",
+    "borrowScope": "Input amount only. Current target identity, admission, output, price, capacity and actual payment all come from N26152335. The source is a different block and graph; this does not prove natural target single-block valuation.",
+    "reviewLimit": "The full original production reference file and full Ready/prices files were not exported locally. Their byte hashes are run-pinned and metadata-recorded; this reviewer did not independently rehash those cloud-only files. The saved reference cfg contains a serialized pricedTokens={} value, so a full original price-token map is not independently reconstructed from this report."
+  },
+  "identity": {
+    "memoFingerprint": "9813a1da83e6b30ee4f354a42438cbfa725816685b612d255062f9ec698e6d20",
+    "familyDefinitionHash": "83984d4a9f5d67acb8fb4d5b000f3f4a3defef192821a6e96c7c62a4f96362ea",
+    "implementation": "0xecdfb5bebb9e72ca7c8b6aeeb0ca07375c1c0b2e",
+    "implementationCodeHash": "0x7c46c5abd2d4231ed6324eeb7f2e726e4250a1ab2d70ed166f59e3307dfccb56",
+    "cloneCodeHash": "0x5f50bfc77c934475c5b91a7a70c237a9292290475b001dbe4791aa5353a47767",
+    "basis": "Compiled clone source, registered sold token and same-source budget effects; explicitly not a factory relationship. The borrowed production table is never an identity source.",
+    "independentScope": "Reviewed the current memo, descriptor, current-definition checks, source-bound evidence and actual single-leg outcomes. No new RPC identity query was run by this reviewer."
+  },
+  "sourceAndArtifactPins": {
+    "sourceBeforeAfterAndDualEqual": true,
+    "source": {
+      "sourceTreeSha256": "6abcce6d176740345e69bd8dbc8e535368b27f6ecc2a9a3b92535cc8e33c0323",
+      "harnessSha256": "6d6c5c82fd971d5a55c50817b0738d7524e7f129ec60d5f8fc24af37dffbec54",
+      "evidenceSha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27",
+      "observationHelpers": [
+        {
+          "path": "../three-family/historical-input-observations.ts",
+          "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+        },
+        {
+          "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+          "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+        },
+        {
+          "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+          "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+        },
+        {
+          "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+          "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+        },
+        {
+          "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+          "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+        },
+        {
+          "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+          "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+        },
+        {
+          "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+          "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+        },
+        {
+          "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+          "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+        },
+        {
+          "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+          "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+        }
+      ]
+    },
+    "historicalCliSha256": "00bfd6a3a4f81b13815c5a9bed43a1577303755a835d7cb4ea1b3049ab51af4e",
+    "priceInputSourceTreeMatches": true,
+    "priceInputRevmMatches": true,
+    "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+    "executorArtifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+    "executorRuntimeCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "targetStateRoot": "0xec99620cf2ece82dca5a5e1238d0c600d86e0342ae93b0436874b0367c0fc385",
+    "finalPinChecks": "The CLI rechecks its Ready/prices/input/compiled-self/reference bytes, source snapshot, executor artifact and target canonical block hash before closing and draining.",
+    "cloudArtifactMetadata": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/natural22/ready.json",
+        "sha256": "157f3501646ce9bfef48c6d34629c4ac69ce6b629aa856ab4d6e86c5ad2f45bb",
+        "bytes": 491958
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/natural22/prices/prices.json",
+        "sha256": "372f482e1c3a442e18d355f86d9fa126a9d76e7c5127aad671a5cf64e6d59763",
+        "bytes": 318683
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/natural24/ready.json",
+        "sha256": "d16506f936f0b9ffd0ef2b9e02d65a2f0ffc20b093a2946b77736de41152ccc1",
+        "bytes": 491959
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/natural24/prices/prices.json",
+        "sha256": "f8325d747ce627f4bcf68b0664c64285eaedd2a56b6724658494468b70fca36e",
+        "bytes": 318683
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/ready22.log",
+        "sha256": "1291ce0ca40b7297cd1648c48535aa79bedfa5313d9c5707b42ded4d0bf5d7a4",
+        "bytes": 10252
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/ready24.log",
+        "sha256": "b5a283420d72bf9c83fb267c8e158c51b8b334985fca8e8572ddee4d50e9022a",
+        "bytes": 10255
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/dual24.log",
+        "sha256": "c29ad91cacfce20fad9f0d0198f4dc603be4ee9a7b5dd3633f9bbff6d3a73afa",
+        "bytes": 2702
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/ready24.mts",
+        "sha256": "9b7fa59d621f91cd7d94109e1a5631bf9563ccf68c1a5888261206aacb2774c7",
+        "bytes": 7168
+      }
+    ]
+  },
+  "cliReviewNotes": [
+    {
+      "id": "YCH-E1",
+      "category": "evidence_boundary",
+      "severity": "nonblocking_for_positive_subset",
+      "location": "historical-dual.ts:237-238",
+      "finding": "Negative checks accept empty token delta arrays and do not require a full stateDiff or post-revert storage snapshot. Actual eight results contain empty token/native/log effects.",
+      "consequence": "Record declared EVM reverts only; do not count them as full-state rollback or callback rollback validation."
+    },
+    {
+      "id": "YCH-E2",
+      "category": "test_robustness",
+      "severity": "nonblocking_for_this_recorded_run",
+      "location": "historical-dual.ts:204-207",
+      "finding": "The readonly branch checks row count and zero deltas, but unlike the positive branch does not itself verify every token/account key or native-account identity.",
+      "independentResolution": "This reviewer independently checked uniqueness and the exact expected two-token/four-actor keys, the executor native account, zero-input override and actual readonly calldata in all four saved outcomes. No false positive is present in this batch.",
+      "optionalHardening": "Reuse the positive branch key-bound observation validation for future readonly reports; no historical rerun is needed to substantiate these already independently verified rows."
+    },
+    {
+      "id": "YCH-E3",
+      "category": "scope_label",
+      "severity": "nonblocking_when_limits_are_kept",
+      "finding": "The Ready result name and zero-CU descriptor label are not standalone acceptance or timing evidence.",
+      "consequence": "Keep naturalDiscovery=false, effective missing-valuation and the actual 52 reads explicit. Neither this short run nor construction RPC=0 establishes timeliness or representative performance."
+    }
+  ],
+  "remainingAcceptanceGaps": [
+    {
+      "status": "not_run",
+      "item": "Actual historical deferred four-argument callback path and its composed settlement at current production source.",
+      "nextReview": "Supplement the same third review round with the missing deferred artifacts; do not repeat rounds 1/2 source review."
+    },
+    {
+      "status": "not_proven",
+      "item": "Historical natural discovery of this target and same-block natural effective valuation; current effective row remains missing-valuation."
+    },
+    {
+      "status": "not_run",
+      "item": "Full-loop production selection/final simulation, original transaction pre-call parity and opportunity replay. The original receipt provides an input amount, not reconstructed mid-block opportunity proof."
+    },
+    {
+      "status": "not_run",
+      "item": "Phase 4 local and representative production-stage performance. No timing pass or long-run latency claim follows from this correctness subset."
+    },
+    {
+      "status": "limited",
+      "item": "Only one auction:sold instance, one take direction and this clone lineage were historically exercised. Do not extrapolate to untested variants or an entire protocol family."
+    }
+  ],
+  "ran_gate": [
+    {
+      "id": "independent-history25-receipt-and-calldata-reconciliation-v1",
+      "status": "passed",
+      "executedByReviewer": true,
+      "method": "Local read-only Python parsed saved outcomes, receipt logs, actual executor calldata and source pins; independently recomputed floor arithmetic, actor balances, conservation, allowance postconditions, zero-funded readonly quotation, exact counts and negative classifications. No RPC, repository build/test or historical rerun was launched.",
+      "positiveTokenRows": 128,
+      "positiveNativeRows": 16,
+      "positiveTransferLogs": 32,
+      "positiveAllowancePostconditions": 16,
+      "readonlyTokenRows": 32,
+      "readonlyQuotes": 4,
+      "declaredReverts": 8
+    },
+    {
+      "id": "read-only-current-cli-and-evidence-scope-review",
+      "status": "completed",
+      "executedByReviewer": true,
+      "method": "Read the complete candidate23 CLI plus supplied historical/provenance/source/build/index receipts and prior reviewed scope. Checked issuer/encoder wiring, input borrowing, rollback assertion limits and runtime construction guard. Did not repeat production code review from rounds 1/2."
+    },
+    {
+      "id": "local-file-pins-and-final-report-consistency-v1",
+      "status": "passed",
+      "executedByReviewer": true,
+      "method": "Rehashed the local reviewed evidence files; confirmed CLI ownership hash, exact dual report hash, source-before/source-after/dual equality and independently recomputed four amount rows before writing this review."
+    }
+  ],
+  "canonicalExecutionEvidence": {
+    "manifestPath": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/selection23.json",
+    "manifestSha256": "e3ecad62266a9dd0dab13933065813b2cb52259d58481833e4a3c545d750d727",
+    "requestedCapabilities": [
+      "yearn"
+    ],
+    "toolId": "listener:searcher:yearn-auction-family-historical-dual",
+    "descriptorSha256": "1bb1a02784129cc61bcc6c12295720c4f82d8195fd9765f1726880a2521d0bbd",
+    "argvSha256": "d078934cda9402dbc115edb776ac3dcf9f45727b6f1ac6ab92e6598cc45dc428",
+    "startedAt": "2026-10-14T17:40:44.975Z",
+    "finishedAt": "2026-10-14T17:40:51.768Z",
+    "exitCode": 0,
+    "stdoutSha256": "08831377a4c5365d1352e59a6e434a173f07f3f31e4ab7677c16279b7a26e5e2",
+    "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "closureChecks": [
+      {
+        "name": "generate",
+        "exitCode": 0,
+        "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+      },
+      {
+        "name": "build",
+        "exitCode": 0,
+        "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      },
+      {
+        "name": "index",
+        "exitCode": 0,
+        "logSha256": "7af11a6cd72cfc7c5119e4384e16f95b36597d647f550d2437bdecb1555edab2"
+      }
+    ],
+    "reviewerDidNotRerunTool": true,
+    "durationIsNotPerformanceAcceptance": true
+  },
+  "priorReviewEvidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/yearn-design-review.json",
+      "sha256": "ca7c3e5294a9b844239bc175f38ced6e19fe2b26e6435ae372defd183cc9282e",
+      "pass": 1,
+      "scope": "Completed design review; not reopened."
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/yearn-code-review.json",
+      "sha256": "f6aeebc3428b9320291ce2ecc3de49933f934f7a21e3c0927d3b34123ccd4ee8",
+      "pass": 2,
+      "scope": "Completed candidate source and synthetic EVM review; historical evidence is supplementary, not replacement."
+    }
+  ],
+  "evidenceManifest": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/candidate23/listener/src/searcher/venues/protocols/yearn-auction-family/test/historical-dual.ts",
+      "sha256": "00bfd6a3a4f81b13815c5a9bed43a1577303755a835d7cb4ea1b3049ab51af4e",
+      "bytes": 25024,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/dual24.json",
+      "sha256": "03d72b0af8b58a847448b00a33221fdd5ca1bbaeb7c1faf1a05d25a197f0c5ed",
+      "bytes": 541183,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/natural24/result.json",
+      "sha256": "5962129e4e108fef7d4310678484a34446047e22c3dcffb66365de9a7e568159",
+      "bytes": 2663,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/natural24/ready-summary.json",
+      "sha256": "fb78df323a1fbb57b765ea640f391970627ed78b941210c8a995f7968f42003f",
+      "bytes": 13660,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/natural24/prices/input.json",
+      "sha256": "d37eef920716ad9875169f28c7a1892f37211da6bfce455db7ff5e685e33969f",
+      "bytes": 45330,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/natural24/source-before.json",
+      "sha256": "ad96e5bb5fce91ce980d3ab7ecdd734b9840b648ed428b6adaa0d5b1cc80adfc",
+      "bytes": 1945,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/natural24/source-after.json",
+      "sha256": "ad96e5bb5fce91ce980d3ab7ecdd734b9840b648ed428b6adaa0d5b1cc80adfc",
+      "bytes": 1945,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/natural24/prior-ready.json",
+      "sha256": "8a8681be4f389b0042ac479dd507d2bb78eb4b025ef3968a1471771070f92952",
+      "bytes": 278,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/natural24/input-provenance.json",
+      "sha256": "ed367071d67bd1b50fb91ff11e4d2b243ac5517ac6f2e13bd73f99556dd3c695",
+      "bytes": 660,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/selection23.json",
+      "sha256": "e3ecad62266a9dd0dab13933065813b2cb52259d58481833e4a3c545d750d727",
+      "bytes": 5678,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/history25-metadata.json",
+      "sha256": "ee693af472372da338658d9428902f9990cadeca7fb5d422e5dc9882d71b6114",
+      "bytes": 1768,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/artifact22-receipt.json",
+      "sha256": "0f4cc1dff94658e6956fb30875166cfa4897f4a092c013fd49f7182ef310ecd0",
+      "bytes": 746,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/ready24-terminal.json",
+      "sha256": "a295a60f4e73e359319d83406c7e08cd3777f1dd781d98c2e88d9f976a3d5500",
+      "bytes": 177,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/history25/dual24-terminal.json",
+      "sha256": "4d8857392e6add4880cafbf09f5127e0382608c3a010c8a6750482ef81acf1b6",
+      "bytes": 176,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/closure23/owned23.json",
+      "sha256": "d3a3a356973450bc32d1ea0e5e1addaa9b5fb21882e22752c2ae44e6b0f94772",
+      "bytes": 255,
+      "reviewedLocally": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/closure23/checks23-results.json",
+      "sha256": "8f27d349944a41f63d91e6fe548127efbe14a1b800783a04200e95b719c07b89",
+      "bytes": 405,
+      "reviewedLocally": true
+    }
+  ],
+  "reviewerActions": {
+    "newRpcRequests": 0,
+    "buildsRun": 0,
+    "repositoryTestsRun": 0,
+    "cloudWrites": 0,
+    "gitMutations": 0,
+    "generatedFilesChanged": 0,
+    "processControls": 0,
+    "onlyWrittenFile": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/yearn-history-progress-review.json"
+  }
+}

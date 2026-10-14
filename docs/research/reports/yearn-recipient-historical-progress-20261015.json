@@ -1,0 +1,856 @@
+{
+  "schema": "yearn-recipient-historical-progress-v1",
+  "updatedAt": "2026-10-14T17:59:57.933419+00:00",
+  "implementationCommit": "56d94de6e2f91cbbae5563abd3633b48c4ebfd4b",
+  "harnessCommit": "f08be40082dda6618b504671254d28f16b51867c",
+  "testedHeadBeforeCommit": "6664f04f00589388240889b422731a3b2d685e16",
+  "actualSourceTreeSha256": "6abcce6d176740345e69bd8dbc8e535368b27f6ecc2a9a3b92535cc8e33c0323",
+  "actualSourcePins": {
+    "commonSource": [
+      {
+        "path": "listener/src/adapters/registry.ts",
+        "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/compiler.ts",
+        "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-credit-runtime.ts",
+        "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+        "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+        "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+        "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+      },
+      {
+        "path": "listener/src/searcher/adapter-funding-runtime.ts",
+        "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+      },
+      {
+        "path": "listener/src/searcher/adapter-work-intent.ts",
+        "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+      },
+      {
+        "path": "listener/src/searcher/amount-quote-continuity.ts",
+        "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+      },
+      {
+        "path": "listener/src/searcher/blockscan-route-identity.ts",
+        "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+      },
+      {
+        "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+        "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+      },
+      {
+        "path": "listener/src/searcher/exact-prefix-plan.ts",
+        "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+      },
+      {
+        "path": "listener/src/searcher/exact-trial-state.ts",
+        "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+      },
+      {
+        "path": "listener/src/searcher/execution-asset-boundary.ts",
+        "sha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0"
+      },
+      {
+        "path": "listener/src/searcher/identity-asset-metadata.ts",
+        "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+      },
+      {
+        "path": "listener/src/searcher/runtime-evidence.ts",
+        "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+      },
+      {
+        "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+        "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+      },
+      {
+        "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+        "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+        "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+        "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-bounds.ts",
+        "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-propagation.ts",
+        "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-rejection.ts",
+        "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-builder.ts",
+        "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+        "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+      },
+      {
+        "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+        "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+      },
+      {
+        "path": "listener/src/searcher/strategy-taxonomy.ts",
+        "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+      },
+      {
+        "path": "listener/src/searcher/strict-production-runtime-session.ts",
+        "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+        "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+        "sha256": "34b545c41cf72f738da01aa38b9fcbb02b27268119c0e1e7cd67ce516761bb09"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+        "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-program.ts",
+        "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+      },
+      {
+        "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+        "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+        "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+        "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-instance-identity.ts",
+        "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/shared/constants/addresses.ts",
+        "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      },
+      {
+        "path": "listener/src/shared/executor/botvm-program-entry.ts",
+        "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+      },
+      {
+        "path": "listener/src/shared/state/state-backend.ts",
+        "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+      },
+      {
+        "path": "src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+      },
+      {
+        "path": "src/BotVMEncoder.sol",
+        "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+      },
+      {
+        "path": "src/BotVMScriptBuilder.sol",
+        "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+      },
+      {
+        "path": "src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+      },
+      {
+        "path": "src/FlashArb.sol",
+        "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+      },
+      {
+        "path": "src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+      },
+      {
+        "path": "src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+      },
+      {
+        "path": "src/interfaces/IFluidVault.sol",
+        "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+      },
+      {
+        "path": "src/interfaces/IMorpho.sol",
+        "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+      },
+      {
+        "path": "src/interfaces/ISwap.sol",
+        "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+      }
+    ],
+    "source": [
+      {
+        "path": "listener/src/adapters/protocol-legs.ts",
+        "sha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+        "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/mutation-index.ts",
+        "sha256": "0c56e79ed2e34e843e7e725e774e308ea30afb716953db8805c4f973177adb81"
+      },
+      {
+        "path": "listener/src/searcher/venues/production-families/yearn-auction.production.ts",
+        "sha256": "19cc1243f8d0d4b58993004cab2940d596733ee5e0668b938d1c037f655d234a"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+        "sha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yearn-auction-family/action.ts",
+        "sha256": "775ef272928503a70de4cf6c0940702143bc4cd76ca6a4492490b445b81f3767"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yearn-auction-family/codec.ts",
+        "sha256": "685bedb67335eb70c82289ffb27a2acef44559b17ab396fda3c551d34227d7d2"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yearn-auction-family/execution.ts",
+        "sha256": "b5c86148d0dbe9638ea755f9c4d07a786da467e44004a097e18ce28307513f40"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yearn-auction-family/identity.ts",
+        "sha256": "b985d138b84716a9e69496a6d67d16f0fc20213f0665397770704e63a5e1eda6"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yearn-auction-family/instance.ts",
+        "sha256": "713b4f78b5eafd9139a95b24d67f249d3a6c75ae27bfcf47554509045067c75c"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yearn-auction-family/manifest.ts",
+        "sha256": "37e295cf1c9472961fa3887f1492973dd38f942b95f72af86124f6dfbc7462cd"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yearn-auction-family/pricing.ts",
+        "sha256": "c44e19cf3f5ac0a53387e2f7959f28276ddf0f916c8dd60005637c5bbeb364a5"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yearn-auction-family/routes.ts",
+        "sha256": "f0c917d71beff5cdcec6e0bf3d3647c5408f951daa88dba0f99c572fb15a96b4"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yearn-auction-family/runtime-settlement.ts",
+        "sha256": "add4b063ad894a88173dde59b2f1b3b72ab6ca0159112dcaa67bb5de16e58043"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yearn-auction-family/runtime-shape.ts",
+        "sha256": "afb882517420d43589bf45a33b24ecdd2cdbd7ee198cfcb12f4ae5d5edb97fc6"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yearn-auction-family/state.ts",
+        "sha256": "6be90dca7fa9959d7e66ae0fd7edf6d1653f59e43017c089e6d20808a32c09bd"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      },
+      {
+        "path": "listener/src/shared/executor/botvm-program-entry.ts",
+        "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+      }
+    ]
+  },
+  "ownedSource": {
+    "listener/package.json": "9e9759f5d53b632448b4b9660a0f41ed87c1d0205b2c7e910981a250feed7519",
+    "listener/src/searcher/venues/protocols/yearn-auction-family/test/historical-dual.ts": "00bfd6a3a4f81b13815c5a9bed43a1577303755a835d7cb4ea1b3049ab51af4e"
+  },
+  "catalog": {
+    "method": "Canonical generator on immutable HEAD plus hash-checked owned source. Ignored generator input artifact only; actual workspace and peer files are unchanged.",
+    "workingSha256": "feebb4204cdafa456b1d6b5f4080a13c87c9797dda85a4ea93c35bde7e8f831a",
+    "ownedSha256": "146d51b6ea45f48a32368053d2b389bdc67ac90deec8044f5cf51a69b4888b33",
+    "peerOnlyDifferences": [
+      "custom-swap:uniswap-v1:capture",
+      "custom-swap:uniswap-v1:discovery",
+      "custom-swap:uniswap-v1:exact",
+      "custom-swap:uniswap-v1:execution",
+      "custom-swap:uniswap-v1:identity",
+      "custom-swap:uniswap-v1:instance",
+      "custom-swap:uniswap-v1:pricing",
+      "custom-swap:uniswap-v1:routes",
+      "custom-swap:uniswap-v1:victim"
+    ]
+  },
+  "scope": "N26152335 block-end actual deployed Yearn clone; current production strict/Ready, quote and funded/default/recipient issuer programs. No full opportunity or actual deferred callback.",
+  "source": {
+    "number": 26152335,
+    "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+    "generation": 26152335
+  },
+  "tx": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+  "transactionIndex": 188,
+  "stateRoot": "0xec99620cf2ece82dca5a5e1238d0c600d86e0342ae93b0436874b0367c0fc385",
+  "actors": {
+    "executor": "0x1000000000000000000000000000000000000002",
+    "owner": "0x1000000000000000000000000000000000000001"
+  },
+  "identity": {
+    "verifiedIdentity": {
+      "familyId": "protocol:yearn-auction",
+      "lineageId": "yearn-auction:clone-1.0.4",
+      "source": {
+        "generation": 26152335,
+        "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+        "number": 26152335
+      },
+      "subject": "0xA00E6b35C23442fa9D5149Cba5dd94623fFE6693"
+    },
+    "compiledDescriptor": {
+      "cloneCodeHash": "0x5f50bfc77c934475c5b91a7a70c237a9292290475b001dbe4791aa5353a47767",
+      "familyId": "protocol:yearn-auction",
+      "implementation": "0xecdfb5bebb9e72ca7c8b6aeeb0ca07375c1c0b2e",
+      "implementationCodeHash": "0x7c46c5abd2d4231ed6324eeb7f2e726e4250a1ab2d70ed166f59e3307dfccb56",
+      "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+      "lineageId": "yearn-auction:clone-1.0.4",
+      "provenance": [
+        {
+          "evidenceHash": "6f93907975501a0a40909ef1891837b35af885df022c3979193198be2f38e952",
+          "kind": "compiled-clone-source-registered-token-and-budget-effects-not-factory",
+          "subject": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693"
+        }
+      ],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "sold": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+      "soldCodeHash": "0x7ed5fbbd93fd174456aa5a52eab2c19ac15bbb6e07f08667b859ac41819f5208",
+      "soldDecimals": 18,
+      "target": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+      "want": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+      "wantCodeHash": "0x7d33300cc75c4738e04e1f8c838b8b4fbb1c40d046131088463f70f9c712325f",
+      "wantDecimals": 18
+    },
+    "admission": {
+      "memoFingerprint": "9813a1da83e6b30ee4f354a42438cbfa725816685b612d255062f9ec698e6d20",
+      "familyDefinitionHash": "83984d4a9f5d67acb8fb4d5b000f3f4a3defef192821a6e96c7c62a4f96362ea",
+      "candidate": {
+        "adapter": "yearn-auction",
+        "address": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+        "blockHash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+        "blockNumber": 26152335,
+        "candidateKind": "yearn-auction",
+        "familyId": "protocol:yearn-auction",
+        "pluginCandidateKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+        "sold": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+        "target": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+        "transactionHash": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b"
+      }
+    }
+  },
+  "ready": {
+    "activeInstances": 20,
+    "totalEdges": 39,
+    "targetEdges": 1,
+    "prior": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/natural22/ready.json",
+      "sha256": "157f3501646ce9bfef48c6d34629c4ac69ce6b629aa856ab4d6e86c5ad2f45bb",
+      "policy": "copy and revalidate through current production; no fingerprint edits"
+    },
+    "historicalNaturalDiscoveryProven": false,
+    "topologyContainsFutureDiscovery": false,
+    "targetRaw": true,
+    "targetEffective": {
+      "edgeId": "protocol:yearn-auction\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f900617634d7d9cfc76f0c8fa0b95065d298e69b5a2296b389e0908961010f1ca",
+      "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+      "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+      "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+      "amountIn": null,
+      "status": "missing-valuation",
+      "amountOut": null,
+      "effectiveMid": null
+    },
+    "limit": "Completed existing one-block Ready copied and revalidated by current production. Global naturalDiscovery=false and target missing-valuation retained; no complete natural integration claim."
+  },
+  "amounts": {
+    "originalReceipt": {
+      "amountIn": "267759246788654353808",
+      "amountOut": "106378642455288485048",
+      "actor": "0xE08D97e151473A848C3d9CA3f323Cb720472D015",
+      "receiver": "0xb911Fcce8D5AFCEc73E072653107260bb23C1eE8",
+      "scope": "original receipt only; N end is not original pre-call state"
+    },
+    "borrowedProductionReference": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+      "sha256": "7228e47135d2e5e88351e2002bc984f04601cb70fac436cb6687b6475f25f378",
+      "edgeId": "custom-swap:ekubo-router-v1\u001f0xe85c9c02437498875821f6bafd923ce81a67defc29e8b2c42927f9bfc640a0f1\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f83d2158099287a762cbb353e4c521784b39a6af4a27af746e8f549d5333522b1",
+      "row": {
+        "edgeId": "custom-swap:ekubo-router-v1\u001f0xe85c9c02437498875821f6bafd923ce81a67defc29e8b2c42927f9bfc640a0f1\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f83d2158099287a762cbb353e4c521784b39a6af4a27af746e8f549d5333522b1",
+        "instanceKey": "0xe85c9c02437498875821f6bafd923ce81a67defc29e8b2c42927f9bfc640a0f1",
+        "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "5137296582894235185",
+        "status": "quoted",
+        "amountOut": "5134367",
+        "effectiveMid": 9.994297423076585e-13,
+        "quotedAt": {
+          "number": 26146969,
+          "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+          "generation": 2
+        }
+      },
+      "cfg": {
+        "maxHops": 6,
+        "deduplicateRotations": true,
+        "allowRepeatedPools": true,
+        "allowRepeatedTokens": false,
+        "prefixPruningEnabled": true,
+        "maxPrefixDrawdownBps": 0,
+        "enumerationMethod": "joint-dfs",
+        "enumerationBackend": "typescript",
+        "rustEnumerationThreads": 1,
+        "rustEnumerationScratchMb": 512,
+        "ethSignalPairsPerToken": 50,
+        "hopTokensPerStep": 3,
+        "hopPoolsPerPair": 3,
+        "minSpreadBps": 0,
+        "requireDislocatedPair": true,
+        "exactAdmissionSpreadBps": 0,
+        "minCapitalFraction": 0.001,
+        "maxCandidates": 100,
+        "budgetMs": 2000,
+        "pricedTokens": {}
+      },
+      "publishedAt": {
+        "number": 26146969,
+        "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+        "generation": 2
+      },
+      "scope": "only amountIn borrowed; no target identity/output/valuation is borrowed; not natural target effective acceptance"
+    },
+    "borrowedFreshness": "fresh",
+    "scope": "Only amountIn borrowed. No borrowed output, identity, admission or target valuation. All quotes and executions bind target N; original price files unchanged.",
+    "residualPolicy": "Residuals2/0/2/17 are maximum-budget unused input according to exact protocol cost. Actual debit-cost discrepancy=0; no widening of generic0/1 tolerance."
+  },
+  "counts": {
+    "positive": 16,
+    "declaredReverts": 8,
+    "readonly": 4
+  },
+  "construction": {
+    "exactCalls": 0,
+    "quotedCalls": 0,
+    "rpcCalls": 0,
+    "quotedFallback": false,
+    "scope": "production issuer; maximum mask/selector and generic flow inventory safety have separate offline/EVM contracts; this historical run executes single-leg programs"
+  },
+  "guards": {
+    "exact": 4,
+    "quoted": 4,
+    "forbiddenDuringBuild": 0
+  },
+  "executor": {
+    "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+    "runtimeCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "provisioning": {
+      "historicalHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "runtimeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "replacement": false,
+      "historicalRuntimeExecuted": false,
+      "scope": "local eth_call/debug_traceCall code overlay only; same executor/origin; no protocol or permission override"
+    },
+    "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+    "artifactReuse": {
+      "method": "Reuse existing successful current-source EVM compiler output; identical compiler/settings, all Solidity metadata checked. Original artifact preserved before atomic publication to the normal local artifact path.",
+      "source": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-settlement-evm-9zMZ0d/out/BotVM.sol/BotVM.json",
+      "destination": "/opt/mev-cloud/family-runtime-20261007/out/BotVM.sol/BotVM.json",
+      "oldSha256": "54e05272c587f192eb238c2475d42689e62b7c0b8d7072932e45e51e0cc8abb8",
+      "newSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "sourceFiles": [
+        "src/BotVM.sol",
+        "src/Constants.sol",
+        "src/RuntimeAmountVM.sol",
+        "src/interfaces/IERC20.sol"
+      ],
+      "deployment": false
+    }
+  },
+  "validation": {
+    "currentProductionBuild": [
+      {
+        "name": "generate",
+        "exitCode": 0,
+        "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+      },
+      {
+        "name": "build",
+        "exitCode": 0,
+        "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      },
+      {
+        "name": "index",
+        "exitCode": 0,
+        "logSha256": "7af11a6cd72cfc7c5119e4384e16f95b36597d647f550d2437bdecb1555edab2"
+      }
+    ],
+    "commitInputBuild": [
+      {
+        "name": "catalog",
+        "exitCode": 0,
+        "logSha256": "b4eabd7a3bb0b58bacb86c8f1f19eb2fb8ffe3d759db911baed1aaa3212b620e"
+      },
+      {
+        "name": "owned-build",
+        "exitCode": 0,
+        "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      }
+    ],
+    "existingLocalSafety": "Existing VM55/common11/strict174/all-Family301 and owned298 evidence remains at prior pins; this batch changes only historical CLI and registration. Actual local EVM9 includes production under-debit failure-to-pass.",
+    "sourceStable": true,
+    "drained": true,
+    "independentReview": "docs/research/reports/yearn-recipient-historical-review-20261015.json"
+  },
+  "canonicalReconciliation": {
+    "query": [
+      "yearn"
+    ],
+    "recommended": [
+      "listener:searcher:yearn-auction-family"
+    ],
+    "related": [
+      "listener:searcher:yearn-auction-family",
+      "listener:searcher:yearn-auction-family-callback-evm",
+      "listener:searcher:yearn-auction-family-direct-recipient",
+      "listener:searcher:yearn-auction-family-historical-dual"
+    ],
+    "selected": [
+      "listener:searcher:yearn-auction-family-historical-dual"
+    ],
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/selection23.json",
+    "sha256": "e3ecad62266a9dd0dab13933065813b2cb52259d58481833e4a3c545d750d727",
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:yearn-auction-family-historical-dual",
+        "descriptor_sha256": "1bb1a02784129cc61bcc6c12295720c4f82d8195fd9765f1726880a2521d0bbd",
+        "started_at": "2026-10-14T17:40:44.975Z",
+        "finished_at": "2026-10-14T17:40:51.768Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "d078934cda9402dbc115edb776ac3dcf9f45727b6f1ac6ab92e6598cc45dc428",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:yearn-auction-family-historical-dual",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/natural24/ready.json",
+          "--prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/natural24/prices/prices.json",
+          "--reference-prices",
+          "/opt/mev-cloud/family-runtime-20261007/logs/balancer-v2-latency-rework-20261008.dpUavf/candidate-detached-recovery-20261009-effective-26146969/prices-1-26146969.json",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--revm-bin",
+          "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/dual24.json"
+        ],
+        "stdout_sha256": "08831377a4c5365d1352e59a6e434a173f07f3f31e4ab7677c16279b7a26e5e2",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1628,
+        "stderr_bytes": 0
+      }
+    ],
+    "reconciliation": "Manual source/amount analysis followed by the generated inventory and actual canonical historical CLI execution; receipts match the manual comparison."
+  },
+  "artifacts": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/natural22/ready.json",
+      "sha256": "157f3501646ce9bfef48c6d34629c4ac69ce6b629aa856ab4d6e86c5ad2f45bb",
+      "bytes": 491958
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/natural22/prices/prices.json",
+      "sha256": "372f482e1c3a442e18d355f86d9fa126a9d76e7c5127aad671a5cf64e6d59763",
+      "bytes": 318683
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/natural24/ready.json",
+      "sha256": "d16506f936f0b9ffd0ef2b9e02d65a2f0ffc20b093a2946b77736de41152ccc1",
+      "bytes": 491959
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/natural24/prices/prices.json",
+      "sha256": "f8325d747ce627f4bcf68b0664c64285eaedd2a56b6724658494468b70fca36e",
+      "bytes": 318683
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/ready22.log",
+      "sha256": "1291ce0ca40b7297cd1648c48535aa79bedfa5313d9c5707b42ded4d0bf5d7a4",
+      "bytes": 10252
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/ready24.log",
+      "sha256": "b5a283420d72bf9c83fb267c8e158c51b8b334985fca8e8572ddee4d50e9022a",
+      "bytes": 10255
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/dual24.log",
+      "sha256": "c29ad91cacfce20fad9f0d0198f4dc603be4ee9a7b5dd3633f9bbff6d3a73afa",
+      "bytes": 2702
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/ready24.mts",
+      "sha256": "9b7fa59d621f91cd7d94109e1a5631bf9563ccf68c1a5888261206aacb2774c7",
+      "bytes": 7168
+    }
+  ],
+  "status": {
+    "fundedAndRecipientHistory": "passed_for_one_instance_direction_and_four_amounts",
+    "quoteReadonlyHistory": "passed_at_zero_input_balance",
+    "actualDeferredHistory": "not_run",
+    "completeNaturalValuation": "not_passed",
+    "formalAdapterReplay": "incomplete",
+    "allFamilyDelivery": "incomplete",
+    "opportunityReplay": "deferred",
+    "performance4A": "not_run",
+    "performance4B": "not_run",
+    "goalComplete": false
+  },
+  "remaining": [
+    "Actual historical 4-argument nonempty-data callback and common composition with a real supported payment prefix.",
+    "Additional applicable decimals/capacity/status variants; final whole-Family acceptance.",
+    "Complete natural valuation where applicable; old original-opportunity evidence remains at its own mode.",
+    "Unified replay after adaptation, and later serial4A/4B performance."
+  ],
+  "targetPricingMetadata": {
+    "pricingKeys": [
+      "perBlockRefreshStateKeys",
+      "generation",
+      "sourceBlock",
+      "sourceBlockHash",
+      "graph",
+      "mids",
+      "coverageByReadKey",
+      "coverageByEdgeKey",
+      "freshnessByReadKey",
+      "stateByStateKey",
+      "resolvedFamilyIds",
+      "incompleteFamilyIds",
+      "coverage",
+      "pricingProvenanceByEdgeKey",
+      "pricingStateKeyByEdgeKey",
+      "pricingFamilyIdByEdgeKey",
+      "laneTelemetry",
+      "familyTelemetry",
+      "rawMidSource",
+      "effectiveMids"
+    ],
+    "runtimeKeys": [
+      "completeness",
+      "generation",
+      "sourceBlock",
+      "sourceBlockHash",
+      "graph",
+      "pricing",
+      "funding"
+    ],
+    "targetMetadata": {
+      "perBlockRefreshStateKeys": [
+        "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df"
+      ],
+      "generation": 1,
+      "sourceBlock": 26152335,
+      "sourceBlockHash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+      "mids": [
+        [
+          "protocol:yearn-auction\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f900617634d7d9cfc76f0c8fa0b95065d298e69b5a2296b389e0908961010f1ca",
+          {
+            "kind": "protocol",
+            "pool": "0xA00E6b35C23442fa9D5149Cba5dd94623fFE6693",
+            "edges": [
+              {
+                "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "executionVariantKey": "900617634d7d9cfc76f0c8fa0b95065d298e69b5a2296b389e0908961010f1ca",
+                "adapterId": "yearn-auction",
+                "target": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "slotKind": "protocol",
+                "protocolAction": "convert",
+                "edgeKind": "protocol",
+                "leavesStandingPosition": false,
+                "score": 0,
+                "canonicalEdgeId": "protocol:yearn-auction\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f900617634d7d9cfc76f0c8fa0b95065d298e69b5a2296b389e0908961010f1ca"
+              }
+            ],
+            "mid": 0.39729213362799176,
+            "feeBps": 0,
+            "reserveA": {
+              "$type": "bigint",
+              "value": "25170395166604518740000"
+            },
+            "reserveB": {
+              "$type": "bigint",
+              "value": "10000000000000000000000"
+            },
+            "depthProxy": 1e+22
+          }
+        ]
+      ],
+      "coverageByEdgeKey": [
+        [
+          "protocol:yearn-auction\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f900617634d7d9cfc76f0c8fa0b95065d298e69b5a2296b389e0908961010f1ca",
+          {
+            "status": "unresolved",
+            "reason": "effective-missing-valuation"
+          }
+        ]
+      ],
+      "resolvedFamilyIds": [
+        "univ3-standard"
+      ],
+      "incompleteFamilyIds": [
+        "protocol:yearn-auction",
+        "univ2-standard"
+      ],
+      "pricingProvenanceByEdgeKey": [
+        [
+          "protocol:yearn-auction\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f900617634d7d9cfc76f0c8fa0b95065d298e69b5a2296b389e0908961010f1ca",
+          "unresolved"
+        ]
+      ],
+      "pricingStateKeyByEdgeKey": [
+        [
+          "protocol:yearn-auction\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f900617634d7d9cfc76f0c8fa0b95065d298e69b5a2296b389e0908961010f1ca",
+          "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df"
+        ]
+      ],
+      "pricingFamilyIdByEdgeKey": [
+        [
+          "protocol:yearn-auction\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f0xa00e6b35c23442fa9d5149cba5dd94623ffe6693\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xdbdb4d16eda451d0503b854cf79d55697f90c8df\u001f900617634d7d9cfc76f0c8fa0b95065d298e69b5a2296b389e0908961010f1ca",
+          "protocol:yearn-auction"
+        ]
+      ],
+      "laneTelemetry": [],
+      "familyTelemetry": [],
+      "rawMidSource": {
+        "number": 26152335,
+        "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+        "generation": 1
+      }
+    }
+  },
+  "publicationPreparation": {
+    "firstCommitAttempt": "stopped_before_commit_at_expected_staged_paths_assertion",
+    "cause": "Canonical owned generated catalog equals HEAD, so Git staged only the two intended changed source files. Initial scratch packaging incorrectly required an unchanged catalog in staged diff.",
+    "audit": {
+      "head": "6664f04f00589388240889b422731a3b2d685e16",
+      "staged": "M\tlistener/package.json\nM\tlistener/src/searcher/venues/protocols/yearn-auction-family/test/historical-dual.ts",
+      "stat": "listener/package.json                              |  1 +\n .../yearn-auction-family/test/historical-dual.ts   | 68 +++++++++++++++++-----\n 2 files changed, 54 insertions(+), 15 deletions(-)",
+      "pins": {
+        "listener/package.json": {
+          "HEAD": "cc206c4be658b947e1e2903825d3ac43ac669928",
+          "index": "1d1398f0c82355dcd70256a3fc9d70c7c0441946",
+          "expected": "1d1398f0c82355dcd70256a3fc9d70c7c0441946"
+        },
+        "listener/src/searcher/venues/protocols/yearn-auction-family/test/historical-dual.ts": {
+          "HEAD": "62fafc0ab6d02ef5f937256a242e73ec3d78b139",
+          "index": "362d69d2ac88ba7c8ad0eb0cc9b50341a42b693c",
+          "expected": "362d69d2ac88ba7c8ad0eb0cc9b50341a42b693c"
+        },
+        "listener/src/searcher/generated/family-capability-shadow.generated.json": {
+          "HEAD": "c19417e6c6b24634c15583621b77077e6221bea3",
+          "index": "c19417e6c6b24634c15583621b77077e6221bea3",
+          "expected": "c19417e6c6b24634c15583621b77077e6221bea3"
+        }
+      }
+    },
+    "failureEvidence": {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/commit27.stderr",
+      "sha256": "d9ea0351e38468c65d13bd68ece0c8e27acb654380ffee23111f76655edf8c49"
+    },
+    "recovery": "Resumed the verified existing staged bytes; no test rerun, no hash change, no peer edits, no artificial generated diff."
+  }
+}

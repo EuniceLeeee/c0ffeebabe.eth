@@ -1,0 +1,3289 @@
+{
+  "scope": "Curated actual N-end effects; complete raw requests and responses remain in pinned ignored artifact. No deferred history.",
+  "rawArtifact": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/dual24.json",
+    "sha256": "03d72b0af8b58a847448b00a33221fdd5ca1bbaeb7c1faf1a05d25a197f0c5ed"
+  },
+  "samples": [
+    {
+      "label": "borrowed-production-input-at-N",
+      "amountIn": "5137296582894235185",
+      "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+      "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+      "chainCost": "5137296582894235183",
+      "residual": "2",
+      "available": "772943155644044667101",
+      "status": "pass",
+      "quote": {
+        "status": "resolved",
+        "familyId": "protocol:yearn-auction",
+        "candidateKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+        "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+        "routeKey": "protocol:yearn-auction:0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df:take",
+        "source": {
+          "number": 26152335,
+          "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+          "generation": 26152335
+        },
+        "generation": 26152335,
+        "amountIn": "5137296582894235185",
+        "amountOut": "2041007520497841855",
+        "methodId": "current-auction-budget",
+        "methodIndex": 1,
+        "methodOrderFingerprint": "87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+        "cacheCompatibilityFingerprint": "9b5b435997541a40f2224c82b96af1103bada0e88e1099e78b6c1af556a63114",
+        "evidenceRefs": [
+          "exact-method-order:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+          "exact-method:0:zero:local:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d:not-applicable:c160d8b4a83d6fdb54661c67d52aad285845a3ec249ad96d72b2ddb219d830d0",
+          "exact-method:1:current-auction-budget:request-program:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+          "exact-round:0:d5a694091fb422e3f214c5ed20e859afecf6f6733a3109b6c5f1117a20001c56",
+          "transport:2f89730dfa2b53a44c5a081a01776ce269535886629ce18c3efea187015c4571"
+        ],
+        "outcome": {
+          "familyId": "protocol:yearn-auction",
+          "lineageId": "yearn-auction:clone-1.0.4",
+          "candidateKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "routeKey": "protocol:yearn-auction:0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df:take",
+          "stage": "exact",
+          "status": "verified",
+          "reasonCode": "request-exact-derived",
+          "source": {
+            "number": 26152335,
+            "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+            "generation": 26152335
+          },
+          "evidenceRefs": [
+            "exact-method-order:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+            "exact-method:0:zero:local:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d:not-applicable:c160d8b4a83d6fdb54661c67d52aad285845a3ec249ad96d72b2ddb219d830d0",
+            "exact-method:1:current-auction-budget:request-program:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+            "exact-round:0:d5a694091fb422e3f214c5ed20e859afecf6f6733a3109b6c5f1117a20001c56",
+            "transport:2f89730dfa2b53a44c5a081a01776ce269535886629ce18c3efea187015c4571"
+          ]
+        }
+      },
+      "executions": [
+        {
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "5be891de0aa4716b0e707d9d568af94433a65420db2241c8cc17880e8b10ea1e",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "5137296582894235286"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "7a8dc3184a081ab6aa69d9fa6b6e0d131a89300aca5649b85fd00a1850563969"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-5137296582894235183"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "5137296582894235183"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "2041007520497841855"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-2041007520497841855"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000474b5806093d2e31"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000001c531d86b32cb6bf"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000002"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000474b5806093d2e2f"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "no-input",
+          "status": "pass",
+          "requestSha256": "014744653378799c443b393edf7cc66e416428e12f7b73c99b2ad31231bf7295",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "0"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "c03a59e8df733b36b170979edd7bed2a63a598222152a644491d2b3ec5c7f589"
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "logs": []
+            }
+          }
+        },
+        {
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "post-execution-revert",
+          "status": "pass",
+          "requestSha256": "721abd27ecc8aca6196f655b99fff508df3928d0428cb908e26f853b6a1ab8ea",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "5137296582894235286"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "c39e98c7d3dd1c37f04513f311e4f370c2525da0e28631e303157b21ed6008dd"
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "logs": []
+            }
+          }
+        },
+        {
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "072995787f7b0c64a1e6437e2937464ab6c8976d06c0c6b0f42dfce6762e0e2b",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "5137296582894235286"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "63deac073aed5bc3c0d0385bf9fdc78e0ba19bb37943cedd83b9b288cbad21c7"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-5137296582894235183"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "5137296582894235183"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "2041007520497841855"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-2041007520497841855"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000474b5806093d2e31"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000001c531d86b32cb6bf"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000002"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000474b5806093d2e2f"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "no-input",
+          "status": "pass",
+          "requestSha256": "29425d77352f6b60f0890144f7ec749ae64f474d902a715f9b329097bbfaf34d",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "0"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "bc6228d51fc7deb64930ab765bb77c81c15a9edfd38643bf6f5ba5f0e1911aa4"
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "logs": []
+            }
+          }
+        },
+        {
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "post-execution-revert",
+          "status": "pass",
+          "requestSha256": "6e84835980278ccd59ddaaf3b66deefd792aa0344e267769c572841bbe3f5626",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "5137296582894235286"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "36cf1fcdcbf9c6864365514bbf2c4599ed1b6c30aa32734bf32c45c5615748a1"
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "logs": []
+            }
+          }
+        },
+        {
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "b083797966173ddec120263211b5098e780829f1594b7a704085e1c6514db91f",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "5137296582894235286"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "5e9f6eb925f209afb9642db84d76121c8ee0e3a39fe038898389af63c6e2b8ce"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-5137296582894235183"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "5137296582894235183"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "2041007520497841855"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-2041007520497841855"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000474b5806093d2e31"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000001c531d86b32cb6bf"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000002"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000474b5806093d2e2f"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "no-input",
+          "status": "pass",
+          "requestSha256": "86ddb877563718a8ae169aa129865696175a293ded0fa3c286f408c6b1a9cff5",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "0"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "83d8280628a1eef25545b1ef0a20424ef533a37c0d4e7b94d87cabdc33a15956"
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "logs": []
+            }
+          }
+        },
+        {
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "post-execution-revert",
+          "status": "pass",
+          "requestSha256": "6b5144a3e76e2b687d1cf5da57d4c2fd58fd03fd99486f77fa3186c9b282ff5c",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "5137296582894235286"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "ad11e55f5c0228acc397a56bd7703109f10978aa142570b0c13d28dbf6dae1e9"
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "logs": []
+            }
+          }
+        },
+        {
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "2a1ac34a7caecb941a83bdcb0506d3d06bbb374e2e406bccddd3cdee3a6e7b72",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "5137296582894235286"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "0db9b418358ec7ff60e982d3aff8d2a97e4a41391ac0af1cd91d1920236ae581"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-5137296582894235183"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "5137296582894235183"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "2041007520497841855"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-2041007520497841855"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000474b5806093d2e31"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000001c531d86b32cb6bf"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000002"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000474b5806093d2e2f"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "negative": "no-input",
+          "status": "pass",
+          "requestSha256": "28ea6e8a129a61b2923391a4f3de5a4cb96c84e9a5aa63e8ab6bd0fc90a9eb62",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "0"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "a67b026a023f89d63b01467b8105e7ed5f71d7e58bce16f8274d9a13852ceda4"
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "logs": []
+            }
+          }
+        },
+        {
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "negative": "post-execution-revert",
+          "status": "pass",
+          "requestSha256": "ade24c45c67830a6723f31914a3ce2a457b420a82fade700ccd1fd889933f66f",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "5137296582894235286"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "2041007520497841958"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "7b2a1e5a2ebd9f889a742eb90f54fe333a7cac14370f3f1392c079220f8cecec"
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "logs": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "label": "original-budget-at-N",
+      "amountIn": "267759246788654353808",
+      "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+      "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+      "chainCost": "267759246788654353808",
+      "residual": "0",
+      "available": "772943155644044667101",
+      "status": "pass",
+      "quote": {
+        "status": "resolved",
+        "familyId": "protocol:yearn-auction",
+        "candidateKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+        "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+        "routeKey": "protocol:yearn-auction:0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df:take",
+        "source": {
+          "number": 26152335,
+          "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+          "generation": 26152335
+        },
+        "generation": 26152335,
+        "amountIn": "267759246788654353808",
+        "amountOut": "106378642455288485048",
+        "methodId": "current-auction-budget",
+        "methodIndex": 1,
+        "methodOrderFingerprint": "87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+        "cacheCompatibilityFingerprint": "9b5b435997541a40f2224c82b96af1103bada0e88e1099e78b6c1af556a63114",
+        "evidenceRefs": [
+          "exact-method-order:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+          "exact-method:0:zero:local:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d:not-applicable:c160d8b4a83d6fdb54661c67d52aad285845a3ec249ad96d72b2ddb219d830d0",
+          "exact-method:1:current-auction-budget:request-program:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+          "exact-round:0:d5a694091fb422e3f214c5ed20e859afecf6f6733a3109b6c5f1117a20001c56",
+          "transport:2f89730dfa2b53a44c5a081a01776ce269535886629ce18c3efea187015c4571"
+        ],
+        "outcome": {
+          "familyId": "protocol:yearn-auction",
+          "lineageId": "yearn-auction:clone-1.0.4",
+          "candidateKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "routeKey": "protocol:yearn-auction:0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df:take",
+          "stage": "exact",
+          "status": "verified",
+          "reasonCode": "request-exact-derived",
+          "source": {
+            "number": 26152335,
+            "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+            "generation": 26152335
+          },
+          "evidenceRefs": [
+            "exact-method-order:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+            "exact-method:0:zero:local:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d:not-applicable:c160d8b4a83d6fdb54661c67d52aad285845a3ec249ad96d72b2ddb219d830d0",
+            "exact-method:1:current-auction-budget:request-program:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+            "exact-round:0:d5a694091fb422e3f214c5ed20e859afecf6f6733a3109b6c5f1117a20001c56",
+            "transport:2f89730dfa2b53a44c5a081a01776ce269535886629ce18c3efea187015c4571"
+          ]
+        }
+      },
+      "executions": [
+        {
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "f37f6a4106649e361e63279615a5c888d0073941da1b207cf3895cb3d689bdc9",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "267759246788654353909"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "106378642455288485151"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "45dad3b9890c105744ce3d23a45d27350239127eac0d52f52a728797ec8e3289"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "106378642455288485048"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-106378642455288485048"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000005c44cdbb1e3c214b8"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "f00fb82867d5d93242e246d5f5b43ea50e8303f774a907c9bf3127b357f11e87",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "267759246788654353909"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "106378642455288485151"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "bc6fca24ac298f88ad551ea2f88753f402f1ba02f1dfcf874c254c3cecb1244b"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "106378642455288485048"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-106378642455288485048"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000005c44cdbb1e3c214b8"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "523bc51125f0665cd689e80517b16366366ad067514866b1050874b4e3a09008",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "267759246788654353909"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "106378642455288485151"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "b5b198302d7af66cc1fbcc23478292653a2adb8b21d7d5c07b413990937102f7"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "106378642455288485048"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-106378642455288485048"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000005c44cdbb1e3c214b8"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "842ee41b7b6c3434d2a70c7887dbbb86189508f16525e004068c7ddcd37929eb",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "267759246788654353909"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "106378642455288485151"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "25ff930ba052db5b8feaf4d724c954cff99d376c1b6ed0bf4f341419c947c982"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "106378642455288485048"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-106378642455288485048"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000005c44cdbb1e3c214b8"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "label": "original-budget-plus-two-wei",
+      "amountIn": "267759246788654353810",
+      "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+      "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+      "chainCost": "267759246788654353808",
+      "residual": "2",
+      "available": "772943155644044667101",
+      "status": "pass",
+      "quote": {
+        "status": "resolved",
+        "familyId": "protocol:yearn-auction",
+        "candidateKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+        "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+        "routeKey": "protocol:yearn-auction:0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df:take",
+        "source": {
+          "number": 26152335,
+          "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+          "generation": 26152335
+        },
+        "generation": 26152335,
+        "amountIn": "267759246788654353810",
+        "amountOut": "106378642455288485048",
+        "methodId": "current-auction-budget",
+        "methodIndex": 1,
+        "methodOrderFingerprint": "87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+        "cacheCompatibilityFingerprint": "9b5b435997541a40f2224c82b96af1103bada0e88e1099e78b6c1af556a63114",
+        "evidenceRefs": [
+          "exact-method-order:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+          "exact-method:0:zero:local:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d:not-applicable:c160d8b4a83d6fdb54661c67d52aad285845a3ec249ad96d72b2ddb219d830d0",
+          "exact-method:1:current-auction-budget:request-program:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+          "exact-round:0:d5a694091fb422e3f214c5ed20e859afecf6f6733a3109b6c5f1117a20001c56",
+          "transport:2f89730dfa2b53a44c5a081a01776ce269535886629ce18c3efea187015c4571"
+        ],
+        "outcome": {
+          "familyId": "protocol:yearn-auction",
+          "lineageId": "yearn-auction:clone-1.0.4",
+          "candidateKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "routeKey": "protocol:yearn-auction:0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df:take",
+          "stage": "exact",
+          "status": "verified",
+          "reasonCode": "request-exact-derived",
+          "source": {
+            "number": 26152335,
+            "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+            "generation": 26152335
+          },
+          "evidenceRefs": [
+            "exact-method-order:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+            "exact-method:0:zero:local:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d:not-applicable:c160d8b4a83d6fdb54661c67d52aad285845a3ec249ad96d72b2ddb219d830d0",
+            "exact-method:1:current-auction-budget:request-program:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+            "exact-round:0:d5a694091fb422e3f214c5ed20e859afecf6f6733a3109b6c5f1117a20001c56",
+            "transport:2f89730dfa2b53a44c5a081a01776ce269535886629ce18c3efea187015c4571"
+          ]
+        }
+      },
+      "executions": [
+        {
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "ef48973158abb901dd4c50f7830610929801aa00799c94229a515f1b3dcaf70b",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "267759246788654353911"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "106378642455288485151"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "63fbb0eda778515de4ca7716698c8cf40b5eb544674db34265eeacf66471e122"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "106378642455288485048"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-106378642455288485048"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d92"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000005c44cdbb1e3c214b8"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000002"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "545740cecd274dbe7b6f47d3ec0d80d290a55408dda036a473fb2ec5055ddb1c",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "267759246788654353911"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "106378642455288485151"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "d0229df0dfefc845b11eb1b4f5d11a2d98f8832443486ab4f5b8a1d56e3b1e7e"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "106378642455288485048"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-106378642455288485048"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d92"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000005c44cdbb1e3c214b8"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000002"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "4c3041eda70003968214ab4f5aff7c512d02df2ca44968a7b58b7624f6f3ad1c",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "267759246788654353911"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "106378642455288485151"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "4e1589095c092cda6ef213bb8033b4f54bca805285ccc64b41385a44380f8e33"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "106378642455288485048"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-106378642455288485048"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d92"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000005c44cdbb1e3c214b8"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000002"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "7cadaaf920f0a8c40211fe49ea7b67ca142dbc7d490d65b464c3d535930150d8",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "267759246788654353911"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "106378642455288485151"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "77221b69c804510df8e5c46dc2ac85aa7b6da7f71950ff826302f1f4ba4ace96"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "267759246788654353808"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "106378642455288485048"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-106378642455288485048"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d92"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000005c44cdbb1e3c214b8"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000002"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000000e83e7f04e13e54d90"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "label": "capacity-capped-budget",
+      "amountIn": "1945528466888290612819",
+      "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+      "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+      "chainCost": "1945528466888290612802",
+      "residual": "17",
+      "available": "772943155644044667101",
+      "status": "pass",
+      "quote": {
+        "status": "resolved",
+        "familyId": "protocol:yearn-auction",
+        "candidateKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+        "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+        "routeKey": "protocol:yearn-auction:0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df:take",
+        "source": {
+          "number": 26152335,
+          "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+          "generation": 26152335
+        },
+        "generation": 26152335,
+        "amountIn": "1945528466888290612819",
+        "amountOut": "772943155644044667101",
+        "methodId": "current-auction-budget",
+        "methodIndex": 1,
+        "methodOrderFingerprint": "87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+        "cacheCompatibilityFingerprint": "9b5b435997541a40f2224c82b96af1103bada0e88e1099e78b6c1af556a63114",
+        "evidenceRefs": [
+          "exact-method-order:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+          "exact-method:0:zero:local:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d:not-applicable:c160d8b4a83d6fdb54661c67d52aad285845a3ec249ad96d72b2ddb219d830d0",
+          "exact-method:1:current-auction-budget:request-program:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+          "exact-round:0:d5a694091fb422e3f214c5ed20e859afecf6f6733a3109b6c5f1117a20001c56",
+          "transport:2f89730dfa2b53a44c5a081a01776ce269535886629ce18c3efea187015c4571"
+        ],
+        "outcome": {
+          "familyId": "protocol:yearn-auction",
+          "lineageId": "yearn-auction:clone-1.0.4",
+          "candidateKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "routeKey": "protocol:yearn-auction:0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df:take",
+          "stage": "exact",
+          "status": "verified",
+          "reasonCode": "request-exact-derived",
+          "source": {
+            "number": 26152335,
+            "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+            "generation": 26152335
+          },
+          "evidenceRefs": [
+            "exact-method-order:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+            "exact-method:0:zero:local:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d:not-applicable:c160d8b4a83d6fdb54661c67d52aad285845a3ec249ad96d72b2ddb219d830d0",
+            "exact-method:1:current-auction-budget:request-program:87c09cd196df6730bdf786a0b0aad42aedf436a393c8db3f23d78940da4cd65d",
+            "exact-round:0:d5a694091fb422e3f214c5ed20e859afecf6f6733a3109b6c5f1117a20001c56",
+            "transport:2f89730dfa2b53a44c5a081a01776ce269535886629ce18c3efea187015c4571"
+          ]
+        }
+      },
+      "executions": [
+        {
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "79f69e3ae9310d5cb767bb355178aa2aed55839721c0041651afc3810a38afd8",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "1945528466888290612920"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "772943155644044667204"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "a14fcc8b072cddfdabc1682e30857cb232684c33848bafd04c656b86b2093d06"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1945528466888290612802"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "1945528466888290612802"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "772943155644044667101"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-772943155644044667101"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000006977a198c886e23653"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000029e6bdb8d474bfe8dd"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000011"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000006977a198c886e23642"
+                },
+                {
+                  "address": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "topics": [
+                    "0x3539af76bcb13fa381f2ec32e6d90b9c5e95055778ebdca0e7a192ba07755881",
+                    "0x000000000000000000000000dbdb4d16eda451d0503b854cf79d55697f90c8df"
+                  ],
+                  "data": "0x"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "37e48ade3e2a0e01612c2373a0b1b11ed723e0c008c362ed38a254af7db18494",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "1945528466888290612920"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "772943155644044667204"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "48655af267d28fd0399389bd6066c0f4ef257b637a16c2b633288037ffeb04d7"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1945528466888290612802"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "1945528466888290612802"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "772943155644044667101"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-772943155644044667101"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000006977a198c886e23653"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000029e6bdb8d474bfe8dd"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000011"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000006977a198c886e23642"
+                },
+                {
+                  "address": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "topics": [
+                    "0x3539af76bcb13fa381f2ec32e6d90b9c5e95055778ebdca0e7a192ba07755881",
+                    "0x000000000000000000000000dbdb4d16eda451d0503b854cf79d55697f90c8df"
+                  ],
+                  "data": "0x"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "a1765c7f4ef9b12039da479091623eec08d8daa2732c50ac186a0e3e820f77aa",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "1945528466888290612920"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "772943155644044667204"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "52f44f13fbcb7a1f5f932b6a369c4d5c0fa41bc754980fb3c0e843d0e5778f98"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1945528466888290612802"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "1945528466888290612802"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "772943155644044667101"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-772943155644044667101"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000006977a198c886e23653"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000029e6bdb8d474bfe8dd"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000011"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000006977a198c886e23642"
+                },
+                {
+                  "address": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "topics": [
+                    "0x3539af76bcb13fa381f2ec32e6d90b9c5e95055778ebdca0e7a192ba07755881",
+                    "0x000000000000000000000000dbdb4d16eda451d0503b854cf79d55697f90c8df"
+                  ],
+                  "data": "0x"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "negative": "none",
+          "status": "pass",
+          "requestSha256": "a11259cbdccfa4b38dfa02537e09b2a591db5c6ab72ca15bbd25e3e1e0b86a8f",
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                "amount": "1945528466888290612920"
+              },
+              {
+                "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                "amount": "772943155644044667204"
+              }
+            ]
+          },
+          "response": {
+            "id": "yearn-execute",
+            "ok": true,
+            "source": {
+              "number": 26152335,
+              "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+              "generation": 26152335
+            },
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "16e300a756f7e8723e798e217abbb2ce5b6db2819ba2c8c67b700e819a817bbe"
+            },
+            "completion": "returned",
+            "data": "0x",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1945528466888290612802"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "1945528466888290612802"
+                },
+                {
+                  "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "772943155644044667101"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "delta": "-772943155644044667101"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000006977a198c886e23653"
+                },
+                {
+                  "address": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000029e6bdb8d474bfe8dd"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000011"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000b911fcce8d5afcec73e072653107260bb23c1ee8"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000006977a198c886e23642"
+                },
+                {
+                  "address": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+                  "topics": [
+                    "0x3539af76bcb13fa381f2ec32e6d90b9c5e95055778ebdca0e7a192ba07755881",
+                    "0x000000000000000000000000dbdb4d16eda451d0503b854cf79d55697f90c8df"
+                  ],
+                  "data": "0x"
+                },
+                {
+                  "address": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000a00e6b35c23442fa9d5149cba5dd94623ffe6693"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "readonlyQuotes": [
+    {
+      "label": "borrowed-production-input-at-N",
+      "amountIn": "5137296582894235185",
+      "expectedOutput": "2041007520497841855",
+      "status": "pass",
+      "overrideIntent": {
+        "caller": {
+          "kind": "executor"
+        },
+        "nativeBalanceWei": "17",
+        "tokenBalances": [
+          {
+            "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+            "amount": "0"
+          },
+          {
+            "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+            "amount": "103"
+          }
+        ]
+      },
+      "response": {
+        "id": "yearn-readonly",
+        "ok": true,
+        "source": {
+          "number": 26152335,
+          "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+          "generation": 26152335
+        },
+        "provenance": {
+          "kind": "strict-simulation-transport",
+          "fingerprint": "0bb1be81383689cd0fb4b64c89112a82f0fa0078cef6e3ad359e9e56230b8508"
+        },
+        "completion": "returned",
+        "data": "0x",
+        "effects": {
+          "tokenDeltas": [
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0x1000000000000000000000000000000000000001",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0x1000000000000000000000000000000000000001",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+              "delta": "0"
+            }
+          ],
+          "nativeDeltas": [
+            {
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            }
+          ],
+          "logs": []
+        }
+      }
+    },
+    {
+      "label": "original-budget-at-N",
+      "amountIn": "267759246788654353808",
+      "expectedOutput": "106378642455288485048",
+      "status": "pass",
+      "overrideIntent": {
+        "caller": {
+          "kind": "executor"
+        },
+        "nativeBalanceWei": "17",
+        "tokenBalances": [
+          {
+            "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+            "amount": "0"
+          },
+          {
+            "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+            "amount": "103"
+          }
+        ]
+      },
+      "response": {
+        "id": "yearn-readonly",
+        "ok": true,
+        "source": {
+          "number": 26152335,
+          "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+          "generation": 26152335
+        },
+        "provenance": {
+          "kind": "strict-simulation-transport",
+          "fingerprint": "aed67765735b7fdd6d05652a5cc802bccab78d9572611bdb9aa1fb43564572be"
+        },
+        "completion": "returned",
+        "data": "0x",
+        "effects": {
+          "tokenDeltas": [
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0x1000000000000000000000000000000000000001",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0x1000000000000000000000000000000000000001",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+              "delta": "0"
+            }
+          ],
+          "nativeDeltas": [
+            {
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            }
+          ],
+          "logs": []
+        }
+      }
+    },
+    {
+      "label": "original-budget-plus-two-wei",
+      "amountIn": "267759246788654353810",
+      "expectedOutput": "106378642455288485048",
+      "status": "pass",
+      "overrideIntent": {
+        "caller": {
+          "kind": "executor"
+        },
+        "nativeBalanceWei": "17",
+        "tokenBalances": [
+          {
+            "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+            "amount": "0"
+          },
+          {
+            "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+            "amount": "103"
+          }
+        ]
+      },
+      "response": {
+        "id": "yearn-readonly",
+        "ok": true,
+        "source": {
+          "number": 26152335,
+          "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+          "generation": 26152335
+        },
+        "provenance": {
+          "kind": "strict-simulation-transport",
+          "fingerprint": "966c477de373890ee0ad06fb6ad52b5385901d1ec6e2d9d3155501a2fa4ecce8"
+        },
+        "completion": "returned",
+        "data": "0x",
+        "effects": {
+          "tokenDeltas": [
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0x1000000000000000000000000000000000000001",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0x1000000000000000000000000000000000000001",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+              "delta": "0"
+            }
+          ],
+          "nativeDeltas": [
+            {
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            }
+          ],
+          "logs": []
+        }
+      }
+    },
+    {
+      "label": "capacity-capped-budget",
+      "amountIn": "1945528466888290612819",
+      "expectedOutput": "772943155644044667101",
+      "status": "pass",
+      "overrideIntent": {
+        "caller": {
+          "kind": "executor"
+        },
+        "nativeBalanceWei": "17",
+        "tokenBalances": [
+          {
+            "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+            "amount": "0"
+          },
+          {
+            "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+            "amount": "103"
+          }
+        ]
+      },
+      "response": {
+        "id": "yearn-readonly",
+        "ok": true,
+        "source": {
+          "number": 26152335,
+          "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+          "generation": 26152335
+        },
+        "provenance": {
+          "kind": "strict-simulation-transport",
+          "fingerprint": "fcd5386ac4d0080a352483cf3a23dc2086c95ba1b81d93195c7ba8c5dc78ebb8"
+        },
+        "completion": "returned",
+        "data": "0x",
+        "effects": {
+          "tokenDeltas": [
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0x1000000000000000000000000000000000000001",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+              "delta": "0"
+            },
+            {
+              "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+              "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0x1000000000000000000000000000000000000001",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0xb911fcce8d5afcec73e072653107260bb23c1ee8",
+              "delta": "0"
+            },
+            {
+              "token": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+              "account": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+              "delta": "0"
+            }
+          ],
+          "nativeDeltas": [
+            {
+              "account": "0x1000000000000000000000000000000000000002",
+              "delta": "0"
+            }
+          ],
+          "logs": []
+        }
+      }
+    }
+  ],
+  "counts": {
+    "positive": 16,
+    "declaredReverts": 8,
+    "readonly": 4
+  },
+  "negativeLimit": "Declared revert only. Effects are empty and do not establish complete historical stateDiff rollback; separate real local EVM fixtures cover atomicity."
+}
