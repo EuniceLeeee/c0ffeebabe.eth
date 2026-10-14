@@ -1,0 +1,792 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-14",
+  "stage": 3,
+  "classification": "historical-blockscan-opportunity",
+  "result": "Core route naturally reproduced and actual gross profit within20%; current production net EV correctly rejects. No full-profitable or merge-ready claim.",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "executedHead": "6a16989a798cafd33c4390d34b428857b913c974",
+  "source": {
+    "productionPin": {
+      "sourceTreeSha256": "80af4f387d9fdf1e14c589533451a4d964694d19f971ae6fe028ac53c0e2f612",
+      "revmBinarySha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6"
+    },
+    "fullSourceFiles": 2054,
+    "fullSourceTreeSha256": "2116966221407cc0dcf52782f7202e0b0a22bc7e464e9ee78831caa49f5fac50",
+    "sourceFreeze": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/combined-N26182689-attempt01/preflight.json",
+      "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts01/combined-N26182689-attempt01/preflight.json",
+      "sha256": "fdc85f3670214175ee8b66682a0b2a0e0729672138f2c80256266c8e2c2fbe86",
+      "bytes": 407609
+    },
+    "dirtyPeerTracked": 24,
+    "dirtyPeerUntracked": 7,
+    "unchangedDuringRuns": {
+      "head": "6a16989a798cafd33c4390d34b428857b913c974",
+      "sourceFilesCompared": 2054,
+      "sourceChangedFiles": [],
+      "dirtyStatusUnchanged": true,
+      "trackedDiffUnchanged": true,
+      "indexEmpty": true,
+      "processes": [],
+      "coffeeSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+      "originalFewReadySha256": "7725c0b43c4fedf3837b3097a7d02782fa250e62833f924a41ecdc56eff41223"
+    },
+    "sourceSimulatorSha256": "5dd5f3f25a29abe097414fa9b33468b4f265bc6879fc1226af95a622e70fbaa1"
+  },
+  "sample": {
+    "tx": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+    "N": 26182689,
+    "NHash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c",
+    "B": 26182688,
+    "BHash": "0x7e0f19531125fe111e576140a23420692fb40a531487c236f3b3fa4eb1687b84",
+    "BStateRoot": "0x030c61416eb58ba54cfffe16c36e95545fbb46b8590d419679d96f174d29a10b",
+    "lane": "blockscan",
+    "state": "parent block end",
+    "environment": "parent block",
+    "prefix": null,
+    "classificationBasis": "Previously captured original calldata succeeds, conserves and has positive net in B/B. Reused authenticated evidence; no new original-calldata replay or B/N causal claim.",
+    "originalEvidence": {
+      "path": "/Users/eunice/src/MEV/logs/tx-c191d9-gap-20261013.aLSQSV/cloud-evidence/economics-and-causality.json",
+      "localPath": "/Users/eunice/src/MEV/logs/tx-c191d9-gap-20261013.aLSQSV/cloud-evidence/economics-and-causality.json",
+      "sha256": "9bc162cf70e3b45dd8d9853bc3eb84a8259cf9da7b38767f4d35643de40e0839",
+      "bytes": 2198
+    }
+  },
+  "ready": {
+    "productionEntry": "ready-family-update-cli update -> scoped rebuildUniverse -> updateReadyFamilies on a copy of the existing N-only Few Ready",
+    "evidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/combined-N26182689-attempt01/ready.json",
+      "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts01/combined-N26182689-attempt01/ready.json",
+      "sha256": "75ca4d9ecc6424e56157f3609b7b44400e798b56ff3902cb8dd056b5cc0fa228",
+      "bytes": 738077
+    },
+    "reusedSource": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-few-wrap-20261014.0uzwngmn/single-N26182689-attempt04/ready.json",
+      "sha256": "7725c0b43c4fedf3837b3097a7d02782fa250e62833f924a41ecdc56eff41223",
+      "bytes": 105218
+    },
+    "range": {
+      "fromBlock": 26182689,
+      "toBlock": 26182689
+    },
+    "generation": 5,
+    "activeInstances": 30,
+    "swapProtocolInstances": 29,
+    "graphDirections": 58,
+    "fundingAssets": 1,
+    "reusedFewMemos": 4,
+    "unchangedFewMemos": 4,
+    "supplementalFamilies": [
+      "flash-loan:morpho",
+      "univ2-standard",
+      "vault-spot"
+    ],
+    "supplementCandidates": 29,
+    "supplementVerified": 26,
+    "residualRetryable": 3,
+    "postNTopology": true,
+    "historicalPreBDiscoveryProven": false,
+    "handInsertedGraphOrIdentity": false
+  },
+  "configuration": {
+    "firstRun": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/combined-replay01-plan.json",
+      "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts01/combined-replay01-plan.json",
+      "sha256": "0a05d92be87c5bd12b69f209d30582b036352f9660563afed301df9eea761d50",
+      "bytes": 3813
+    },
+    "secondRun": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/combined-replay02-plan.json",
+      "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/combined-replay02-plan.json",
+      "sha256": "8a09db3a3d92e9089f066b1994179ffe716f013b8bd9f9eb502e4953033c383f",
+      "bytes": 4482
+    },
+    "changedOnlyBetweenRuns": "Historical fixed P0.02 ->0.002; new tables and unchanged original/defaults. No selected route/amount passed to producer.",
+    "enabledFamilies": {
+      "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED": "0",
+      "SEARCHER_FAMILY_ETHERTOKEN_NATIVE_REDEEM_ENABLED": "0",
+      "SEARCHER_FAMILY_BALANCER_V1_ENABLED": "0",
+      "SEARCHER_FAMILY_GOLDX_ENABLED": "0",
+      "SEARCHER_FAMILY_UNIV4_ENABLED": "0",
+      "SEARCHER_FAMILY_BALANCER_V3_ENABLED": "0",
+      "SEARCHER_FAMILY_ALGEBRA_INTEGRAL_ENABLED": "0",
+      "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED": "0",
+      "SEARCHER_FAMILY_PSM_ENABLED": "0",
+      "SEARCHER_FAMILY_UNISWAP_V1_ENABLED": "0",
+      "SEARCHER_FAMILY_ERC4626_SILO_REDEEM_ENABLED": "0",
+      "SEARCHER_FAMILY_PSV_ENABLED": "0",
+      "SEARCHER_FAMILY_YIELDBASIS_LT_ENABLED": "0",
+      "SEARCHER_FAMILY_SELF_BURN_NATIVE_ENABLED": "0",
+      "SEARCHER_FAMILY_COMPOUND_CTOKEN_ENABLED": "0",
+      "SEARCHER_FAMILY_BADGER_SETT_WITHDRAW_ENABLED": "0",
+      "SEARCHER_FAMILY_ASTRA_MULTITOKEN_ENABLED": "0",
+      "SEARCHER_FAMILY_VAULT_SPOT_ENABLED": "1",
+      "SEARCHER_FAMILY_ROCKSOLID_ENABLED": "0",
+      "SEARCHER_FAMILY_FEW_WRAPPED_ENABLED": "1",
+      "SEARCHER_FAMILY_UNIV3_STANDARD_ENABLED": "0",
+      "SEARCHER_FAMILY_EKUBO_ENABLED": "0",
+      "SEARCHER_FAMILY_METRONOME_HGUSDC_ENABLED": "0",
+      "SEARCHER_FAMILY_EIGENPIE_ENABLED": "0",
+      "SEARCHER_FAMILY_DODO_V2_ENABLED": "0",
+      "SEARCHER_FAMILY_UNIV2_STANDARD_ENABLED": "1",
+      "SEARCHER_FAMILY_METRONOME_SYNTH_ENABLED": "0",
+      "SEARCHER_FAMILY_TOKEN_CONVERSION_ENABLED": "0",
+      "SEARCHER_FAMILY_BALANCER_V2_ENABLED": "0",
+      "SEARCHER_FAMILY_CURVE_LP_ENABLED": "0",
+      "SEARCHER_FAMILY_MOONISWAP_ENABLED": "0",
+      "SEARCHER_FAMILY_FLUID_DEX_ENABLED": "0",
+      "SEARCHER_FAMILY_KYBERSWAP_ELASTIC_ENABLED": "0",
+      "SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED": "0",
+      "SEARCHER_FAMILY_ERC4626_ENABLED": "0",
+      "SEARCHER_FAMILY_ANGSTROM_V4_ENABLED": "0",
+      "SEARCHER_FAMILY_SET_REDEMPTION_ENABLED": "0",
+      "SEARCHER_FAMILY_YEARN_AUCTION_ENABLED": "0",
+      "SEARCHER_FAMILY_BALANCER_FLASH_ENABLED": "0",
+      "SEARCHER_FAMILY_WSTETH_ENABLED": "0",
+      "SEARCHER_FAMILY_TOKEN_MIGRATION_ENABLED": "0",
+      "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED": "1",
+      "SEARCHER_FAMILY_PEAPODS_DEBOND_ENABLED": "0",
+      "SEARCHER_FAMILY_ELLA_EXCHANGE_ENABLED": "0",
+      "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED": "0"
+    },
+    "resolvedSearch": {
+      "amountGrid": "multiples",
+      "gridHalfWidth": 2,
+      "gssMaxTries": 8,
+      "quoteConcurrency": 16,
+      "quoteToleranceRawUnits": 1
+    },
+    "resolvedPolicy": {
+      "dryRun": true,
+      "finalVerifyFloorBps": 7,
+      "maxProfitBpsOfFlash": 10000,
+      "profitHaircutBps": 0,
+      "bribeBps": 9900,
+      "bribeAllAboveGas": false,
+      "evGate": true,
+      "minNetEth": 0,
+      "blockScanSubmit": false,
+      "inclusionWatchBlocks": 3
+    },
+    "maxHops": 6,
+    "coarseCandidates": 512,
+    "downstreamCandidates": 10,
+    "runBudgetMs": 120000,
+    "executionMode": "source-block",
+    "amountSelector": "sim",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "owner": "0x1000000000000000000000000000000000000001",
+    "counterfactualExecutorCode": {
+      "address": "0x1000000000000000000000000000000000000002",
+      "keccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec"
+    },
+    "overrides": "Only hash-bound executor code; no token/native balance, nonce, permission, protocol state or block override."
+  },
+  "prices": [
+    {
+      "referenceWethInput": "20000000000000000",
+      "source": {
+        "number": 26182688,
+        "hash": "0x7e0f19531125fe111e576140a23420692fb40a531487c236f3b3fa4eb1687b84",
+        "generation": 1
+      },
+      "statusCounts": {
+        "quoted": 56,
+        "quote-failed": 2
+      },
+      "freshQuoted": 56,
+      "carried": 0,
+      "vaultRows": [
+        {
+          "edgeId": "vault-spot\u001f0x2d0aff409bde00451334011d55c141aff2103744:0x4d224452801aced8b2f0aebe155379bb5d594381:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f0x2d0aff409bde00451334011d55c141aff2103744\u001f0x4d224452801aced8b2f0aebe155379bb5d594381>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fd6034cb9e399e536bbd75d10ec657f7bcca4690c394d9546e6ef52e8564441df",
+          "instanceKey": "0x2d0aff409bde00451334011d55c141aff2103744:0x4d224452801aced8b2f0aebe155379bb5d594381:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "327492082715294370495",
+          "status": "quote-failed",
+          "amountOut": null,
+          "effectiveMid": null
+        },
+        {
+          "edgeId": "vault-spot\u001f0x2d0aff409bde00451334011d55c141aff2103744:0x4d224452801aced8b2f0aebe155379bb5d594381:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f0x2d0aff409bde00451334011d55c141aff2103744\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x4d224452801aced8b2f0aebe155379bb5d594381\u001f94c2fe2ce07c5f633856ed08fa4798f5102522be3d96bc1f0147b8697f20ab10",
+          "instanceKey": "0x2d0aff409bde00451334011d55c141aff2103744:0x4d224452801aced8b2f0aebe155379bb5d594381:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+          "amountIn": "20000000000000000",
+          "status": "quote-failed",
+          "amountOut": null,
+          "effectiveMid": null
+        }
+      ],
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P002-attempt01/prices.json",
+        "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts01/replay-B26182688-P002-attempt01/prices.json",
+        "sha256": "7ca9aa7ad9c9bbb8dd63510d795b4997e3e66cedef94966390a566ff5f410906",
+        "bytes": 458197
+      }
+    },
+    {
+      "referenceWethInput": "2000000000000000",
+      "source": {
+        "number": 26182688,
+        "hash": "0x7e0f19531125fe111e576140a23420692fb40a531487c236f3b3fa4eb1687b84",
+        "generation": 1
+      },
+      "statusCounts": {
+        "quoted": 57,
+        "quote-failed": 1
+      },
+      "freshQuoted": 57,
+      "carried": 0,
+      "vaultRows": [
+        {
+          "edgeId": "vault-spot\u001f0x2d0aff409bde00451334011d55c141aff2103744:0x4d224452801aced8b2f0aebe155379bb5d594381:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f0x2d0aff409bde00451334011d55c141aff2103744\u001f0x4d224452801aced8b2f0aebe155379bb5d594381>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fd6034cb9e399e536bbd75d10ec657f7bcca4690c394d9546e6ef52e8564441df",
+          "instanceKey": "0x2d0aff409bde00451334011d55c141aff2103744:0x4d224452801aced8b2f0aebe155379bb5d594381:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "32758666151827812286",
+          "status": "quoted",
+          "amountOut": "2020078871498491",
+          "effectiveMid": 6.166547997210741e-05,
+          "quotedAt": {
+            "number": 26182688,
+            "hash": "0x7e0f19531125fe111e576140a23420692fb40a531487c236f3b3fa4eb1687b84",
+            "generation": 1
+          }
+        },
+        {
+          "edgeId": "vault-spot\u001f0x2d0aff409bde00451334011d55c141aff2103744:0x4d224452801aced8b2f0aebe155379bb5d594381:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f0x2d0aff409bde00451334011d55c141aff2103744\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x4d224452801aced8b2f0aebe155379bb5d594381\u001f94c2fe2ce07c5f633856ed08fa4798f5102522be3d96bc1f0147b8697f20ab10",
+          "instanceKey": "0x2d0aff409bde00451334011d55c141aff2103744:0x4d224452801aced8b2f0aebe155379bb5d594381:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+          "amountIn": "2000000000000000",
+          "status": "quote-failed",
+          "amountOut": null,
+          "effectiveMid": null
+        }
+      ],
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/prices.json",
+        "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/prices.json",
+        "sha256": "5574d4090987d5b1e9a4b04a8130f54ca96304365052c742caaa1b3849411ff9",
+        "bytes": 458714
+      }
+    }
+  ],
+  "enumeration": {
+    "P002": {
+      "routes": 0,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P002-attempt01/enumeration.json",
+        "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts01/replay-B26182688-P002-attempt01/enumeration.json",
+        "sha256": "13cee47ad36aa041609b49dd27bd1e2ead97962a9ac746f32366c2ba70bafa3f",
+        "bytes": 1988
+      }
+    },
+    "P0002": {
+      "routes": 1,
+      "fullOriginalCoreRank": 1,
+      "forcedSelectionCount": 0,
+      "deadlineHit": false,
+      "evidence": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/enumeration.json",
+        "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/enumeration.json",
+        "sha256": "8af976ff3fe73560e7361e03a1a8fbcb4ffae166e31cf2717cc0bb9536f61b45",
+        "bytes": 7191
+      },
+      "route": [
+        {
+          "adapterId": "few-wrap",
+          "target": "0xa250CC729Bb3323e7933022a67B52200fE354767",
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xa250CC729Bb3323e7933022a67B52200fE354767",
+          "slotKind": "protocol"
+        },
+        {
+          "adapterId": "univ2-swap",
+          "target": "0x22238C5F73357D9315F6BdBda11B064C23D633C6",
+          "tokenIn": "0xa250CC729Bb3323e7933022a67B52200fE354767",
+          "tokenOut": "0x0e3FE143de98c73E72942C8F760a2e69D98bC1cB",
+          "slotKind": "swap"
+        },
+        {
+          "adapterId": "few-unwrap",
+          "target": "0x0e3FE143de98c73E72942C8F760a2e69D98bC1cB",
+          "tokenIn": "0x0e3FE143de98c73E72942C8F760a2e69D98bC1cB",
+          "tokenOut": "0x4d224452801ACEd8B2F0aebE155379bb5D594381",
+          "slotKind": "protocol"
+        },
+        {
+          "adapterId": "vault-spot-swap",
+          "target": "0x2d0aff409bde00451334011d55c141aff2103744",
+          "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "slotKind": "swap"
+        }
+      ]
+    },
+    "completeness": "58 raw; P0.002 has57 fresh quoted and1 Vault reverse quote-failed. No missing valuation. Table is degraded; this does not prove every market executable."
+  },
+  "sizingAndExecution": {
+    "sizingTrials": 12,
+    "successfulSizingTrials": 5,
+    "realRevertSizingTrials": 7,
+    "retainedPositiveFinalists": 3,
+    "independentFinalSimCalls": 1,
+    "selectedInput": "4243343352032000",
+    "selectedInputSource": "Production sim selector; initial P from first-edge effective row, multipliers and GSS use existing production algorithm.",
+    "chainExternalHopExactCalls": 0,
+    "quotedFallback": "Current runtime construction and previously passed82-case production throwing-stub suite; no newly instrumented quoted-counter claim.",
+    "trials": [
+      {
+        "trial": 1,
+        "stage": "production-sim-sizing",
+        "amountIn": "2000000000000000",
+        "success": true,
+        "grossProfit": "20078871498491",
+        "chargedGasUsed": "757199",
+        "rejection": null,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-1.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-1.json",
+          "sha256": "bd354b05835f5e1d80e66ab334ceb18923f244ca9e1d9a031312eec5773a752e",
+          "bytes": 116739
+        }
+      },
+      {
+        "trial": 2,
+        "stage": "production-sim-sizing",
+        "amountIn": "20000000000000000",
+        "success": false,
+        "grossProfit": "0",
+        "chargedGasUsed": null,
+        "rejection": {
+          "kind": "Revert",
+          "output": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+          "phase": "main",
+          "nestedHalt": null
+        },
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-2.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-2.json",
+          "sha256": "0fd038548d35c8b1e66d79245fbf3ca868678ec2bb36b2ae3253cbeaacffb8b6",
+          "bytes": 102675
+        }
+      },
+      {
+        "trial": 3,
+        "stage": "production-sim-sizing",
+        "amountIn": "200000000000000000",
+        "success": false,
+        "grossProfit": "0",
+        "chargedGasUsed": null,
+        "rejection": {
+          "kind": "Revert",
+          "output": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+          "phase": "main",
+          "nestedHalt": null
+        },
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-3.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-3.json",
+          "sha256": "838b96c3edcf840e99fd97aa40cfb67bb93b9c4f343e057b7fb1ff93088c6bcb",
+          "bytes": 102676
+        }
+      },
+      {
+        "trial": 4,
+        "stage": "production-sim-sizing",
+        "amountIn": "2000000000000000000",
+        "success": false,
+        "grossProfit": "0",
+        "chargedGasUsed": null,
+        "rejection": {
+          "kind": "Revert",
+          "output": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+          "phase": "main",
+          "nestedHalt": null
+        },
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-4.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-4.json",
+          "sha256": "6207020ed0c4fd11bb722e76508157d991bdf2938fb182ceca3abfb3e51818f0",
+          "bytes": 102677
+        }
+      },
+      {
+        "trial": 5,
+        "stage": "production-sim-sizing",
+        "amountIn": "8876000000000000",
+        "success": false,
+        "grossProfit": "0",
+        "chargedGasUsed": null,
+        "rejection": {
+          "kind": "Revert",
+          "output": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+          "phase": "main",
+          "nestedHalt": null
+        },
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-5.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-5.json",
+          "sha256": "97b346de92454bf47f24711b76092d5f4217a92fa6d3f716d04acbcc7ed76044",
+          "bytes": 102674
+        }
+      },
+      {
+        "trial": 6,
+        "stage": "production-sim-sizing",
+        "amountIn": "13124000000000000",
+        "success": false,
+        "grossProfit": "0",
+        "chargedGasUsed": null,
+        "rejection": {
+          "kind": "Revert",
+          "output": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+          "phase": "main",
+          "nestedHalt": null
+        },
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-6.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-6.json",
+          "sha256": "12555f3c33e76d2fd1ae5365319aa12122a21c2fba6453fb3693b23a7fc744a6",
+          "bytes": 102675
+        }
+      },
+      {
+        "trial": 7,
+        "stage": "production-sim-sizing",
+        "amountIn": "6249368000000000",
+        "success": false,
+        "grossProfit": "0",
+        "chargedGasUsed": null,
+        "rejection": {
+          "kind": "Revert",
+          "output": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+          "phase": "main",
+          "nestedHalt": null
+        },
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-7.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-7.json",
+          "sha256": "02116df705140cb4b33cf36e8d409a7468aee726cab5e06cb35875f8a84198ef",
+          "bytes": 102674
+        }
+      },
+      {
+        "trial": 8,
+        "stage": "production-sim-sizing",
+        "amountIn": "4626632000000000",
+        "success": false,
+        "grossProfit": "0",
+        "chargedGasUsed": null,
+        "rejection": {
+          "kind": "Revert",
+          "output": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+          "phase": "main",
+          "nestedHalt": null
+        },
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-8.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-8.json",
+          "sha256": "a7cfaf3107f25926cc0176ad48450e9a71221da2d1edfe0b9224945296913152",
+          "bytes": 102674
+        }
+      },
+      {
+        "trial": 9,
+        "stage": "production-sim-sizing",
+        "amountIn": "3623258576000000",
+        "success": true,
+        "grossProfit": "36280162535143",
+        "chargedGasUsed": "757450",
+        "rejection": null,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-9.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-9.json",
+          "sha256": "7208d9cf2ca09641380c9e407651bd7135f7d1b07b9964cca84425f84eefcee6",
+          "bytes": 116739
+        }
+      },
+      {
+        "trial": 10,
+        "stage": "production-sim-sizing",
+        "amountIn": "3003373424000000",
+        "success": true,
+        "grossProfit": "30103340355883",
+        "chargedGasUsed": "757259",
+        "rejection": null,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-10.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-10.json",
+          "sha256": "726853671de2136b5dfdae2f62d9011b99d40e4d97c5d7518c72bcd52b6f0170",
+          "bytes": 116739
+        }
+      },
+      {
+        "trial": 11,
+        "stage": "production-sim-sizing",
+        "amountIn": "4006547223968000",
+        "success": true,
+        "grossProfit": "40093197404950",
+        "chargedGasUsed": "757450",
+        "rejection": null,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-11.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-11.json",
+          "sha256": "73ba18f082dcb3eefc495bcff19bf9089842e9980b353ac82db2736ac2e602d4",
+          "bytes": 116739
+        }
+      },
+      {
+        "trial": 12,
+        "stage": "production-sim-sizing",
+        "amountIn": "4243343352032000",
+        "success": true,
+        "grossProfit": "42446515147407",
+        "chargedGasUsed": "757450",
+        "rejection": null,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-12.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-12.json",
+          "sha256": "930b48cac5a388e2cb24adb17a52f32dc113367e6d8c55086f41888533c134aa",
+          "bytes": 116739
+        }
+      },
+      {
+        "trial": 13,
+        "stage": "independent-final-sim",
+        "amountIn": "4243343352032000",
+        "success": true,
+        "grossProfit": "42446515147407",
+        "chargedGasUsed": "757450",
+        "rejection": null,
+        "evidence": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-13.json",
+          "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-13.json",
+          "sha256": "930b48cac5a388e2cb24adb17a52f32dc113367e6d8c55086f41888533c134aa",
+          "bytes": 116739
+        }
+      }
+    ],
+    "finalTransfers": [
+      {
+        "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "from": "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb",
+        "to": "0x1000000000000000000000000000000000000002",
+        "amount": "4243343352032000"
+      },
+      {
+        "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "from": "0x1000000000000000000000000000000000000002",
+        "to": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "amount": "4243343352032000"
+      },
+      {
+        "token": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "from": "0x0000000000000000000000000000000000000000",
+        "to": "0x1000000000000000000000000000000000000002",
+        "amount": "4243343352032000"
+      },
+      {
+        "token": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "from": "0x1000000000000000000000000000000000000002",
+        "to": "0x22238c5f73357d9315f6bdbda11b064c23d633c6",
+        "amount": "4243343352032000"
+      },
+      {
+        "token": "0x0e3fe143de98c73e72942c8f760a2e69d98bc1cb",
+        "from": "0x22238c5f73357d9315f6bdbda11b064c23d633c6",
+        "to": "0x1000000000000000000000000000000000000002",
+        "amount": "69500632592464323380"
+      },
+      {
+        "token": "0x0e3fe143de98c73e72942c8f760a2e69d98bc1cb",
+        "from": "0x1000000000000000000000000000000000000002",
+        "to": "0x0000000000000000000000000000000000000000",
+        "amount": "69500632592464323380"
+      },
+      {
+        "token": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+        "from": "0x0e3fe143de98c73e72942c8f760a2e69d98bc1cb",
+        "to": "0x1000000000000000000000000000000000000002",
+        "amount": "69500632592464323380"
+      },
+      {
+        "token": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+        "from": "0x1000000000000000000000000000000000000002",
+        "to": "0x2d0aff409bde00451334011d55c141aff2103744",
+        "amount": "69500632592464323380"
+      },
+      {
+        "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "from": "0x2d0aff409bde00451334011d55c141aff2103744",
+        "to": "0x1000000000000000000000000000000000000002",
+        "amount": "4285789867179407"
+      },
+      {
+        "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "from": "0x1000000000000000000000000000000000000002",
+        "to": "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb",
+        "amount": "4243343352032000"
+      }
+    ],
+    "actualVaultInputAPE": "69500632592464323380",
+    "actualVaultOutputWETH": "4285789867179407",
+    "profitAfterFullRepayment": "42446515147407",
+    "tokenDeltas": [
+      {
+        "token": "0x0e3fe143de98c73e72942c8f760a2e69d98bc1cb",
+        "account": "0x1000000000000000000000000000000000000002",
+        "delta": "0"
+      },
+      {
+        "token": "0x0e3fe143de98c73e72942c8f760a2e69d98bc1cb",
+        "account": "0x1000000000000000000000000000000000000001",
+        "delta": "0"
+      },
+      {
+        "token": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+        "account": "0x1000000000000000000000000000000000000002",
+        "delta": "0"
+      },
+      {
+        "token": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+        "account": "0x1000000000000000000000000000000000000001",
+        "delta": "0"
+      },
+      {
+        "token": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "account": "0x1000000000000000000000000000000000000002",
+        "delta": "0"
+      },
+      {
+        "token": "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "account": "0x1000000000000000000000000000000000000001",
+        "delta": "0"
+      },
+      {
+        "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "account": "0x1000000000000000000000000000000000000002",
+        "delta": "42446515147407"
+      },
+      {
+        "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "account": "0x1000000000000000000000000000000000000001",
+        "delta": "0"
+      },
+      {
+        "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "account": "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb",
+        "delta": "0"
+      }
+    ],
+    "nativeDeltas": [
+      {
+        "account": "0x1000000000000000000000000000000000000002",
+        "before": "2156933575291000",
+        "after": "2156933575291000",
+        "delta": "0"
+      }
+    ],
+    "independentTraceBalanceDeltas": [
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "42446515147407",
+      "0",
+      "0",
+      "0"
+    ],
+    "repaymentVerified": true,
+    "conservationVerified": true,
+    "totalSupplyObserved": false,
+    "chargedGasUsed": "757450",
+    "revmUnrefundedExecutionGas": "868150",
+    "independentFinalSimulator": "SourceBlockSimulator constructs a new strict client per invocation and executes REVM plus debug_traceCall plus trace-write-set balance observations, then closes/drains. Trial13 is a separate final invocation; identical output hash to trial12 is expected.",
+    "evidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/simulation-13.json",
+      "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/simulation-13.json",
+      "sha256": "930b48cac5a388e2cb24adb17a52f32dc113367e6d8c55086f41888533c134aa",
+      "bytes": 116739
+    }
+  },
+  "coreGrossMatch": {
+    "originalInput": "4387060682263585",
+    "originalOutput": "4430934597103818",
+    "originalGross": "43873914840233",
+    "ourInput": "4243343352032000",
+    "ourOutput": "4285789867179407",
+    "ourGross": "42446515147407",
+    "signedDelta": "-1427399692826",
+    "absoluteDifferencePercent": "3.25341309984276649855795351691565614",
+    "thresholdPercent": 20,
+    "passed": true,
+    "scope": "Same complete four-leg conserving core in WETH. Amount chosen independently and differs; no claim of original call-prestate per-leg exact parity."
+  },
+  "ev": {
+    "evidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/replay-B26182688-P0002-attempt02/ev-1.json",
+      "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/replay-B26182688-P0002-attempt02/ev-1.json",
+      "sha256": "f87c464145602dd50e167c57a1ef6db5f4ce3c617ccfd18ebe39596e3af1ac86",
+      "bytes": 1889
+    },
+    "evaluation": {
+      "valuationAvailable": true,
+      "gasMeasurementAvailable": true,
+      "feeStateAvailable": true,
+      "sourceBlockHash": "0x7e0f19531125fe111e576140a23420692fb40a531487c236f3b3fa4eb1687b84",
+      "ethUsd": null,
+      "ethUsdRoundId": null,
+      "ethUsdUpdatedAt": null,
+      "rawProfitEth": 42446515147407,
+      "expectedProfitEth": 42446515147407,
+      "gasUnits": 757450,
+      "maxBaseFeePerGas": 78494253,
+      "gasCostEth": 59455471934850,
+      "bidEth": 0,
+      "netEvWei": -17008956787443
+    },
+    "passed": false,
+    "submitted": false,
+    "reason": "Measured charged gas at B base fee exceeds gross profit. Production9900bps bid policy retained; evaluator computes zero bid when no positive surplus remains."
+  },
+  "checks": {
+    "authorSavedEvidenceAssertions": 99,
+    "freshNonAuthorReview": false,
+    "newBuildOrTestRun": "Not needed: production source unchanged; previous Vault build/contracts/lifecycle/82-case shared dual evidence reused within its scope.",
+    "canonicalQuery": "universe,at,block",
+    "canonicalExecutedTools": [
+      "listener:searcher:universe-rebuild-status",
+      "listener:searcher:at-block"
+    ],
+    "canonicalManifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/tool-selection09-production.json",
+      "localPath": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/combined-replay-artifacts02/tool-selection09-production.json",
+      "sha256": "515c0075f118f2de61a78089990b67c728ec0ad8d0f451ad6eb6b58a0aebc6bb",
+      "bytes": 17068
+    }
+  },
+  "remaining": [
+    "Positive net EV not achieved",
+    "Default historical-live P0.02 has no target candidate; P0.002 is a disclosed diagnostic setting",
+    "Few/Vault current-executor original call-prestate exact parity not run",
+    "Fresh non-author Vault acceptance review not performed",
+    "Formal Adapter Replay/conformance/family_local not passed",
+    "PreB natural discovery not proven; topology uses N",
+    "All applicable stage4A/4B representative performance remains NOT_RUN; incidental timings are not acceptance"
+  ],
+  "preservedFailures": [
+    "P0.02 both Vault quote-failed and zero opportunities",
+    "P0.002 opposite Vault direction quote-failed",
+    "Seven sizing EVM reverts",
+    "Negative production EV",
+    "Three Ready residual retryable outcomes"
+  ],
+  "goalStatus": "active"
+}
