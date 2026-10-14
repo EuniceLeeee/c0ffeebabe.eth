@@ -1,0 +1,306 @@
+{
+  "schemaVersion": 1,
+  "at": "2026-10-14T00:07:25.228512+00:00",
+  "stage": 3,
+  "status": "historical source and reverse identity preparation; Family UNIMPLEMENTED",
+  "scope": "Read-only N-end state plus original receipt/trace inspection. Not new strict admission, Ready/Graph, amount quote, EVM execution, correct-rejection acceptance, opportunity replay or performance.",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "sourceHead": "1be6abaa1a7b77b6dfeddde61a11cf390c85c4d1",
+  "sourceFingerprint": "1980bc697cfd91c6237cce22948ce97ed2553fe048575faefd1ca88eb0156e22",
+  "taskFrozenFiles": 2029,
+  "source": {
+    "number": 26182689,
+    "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c"
+  },
+  "tx": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+  "vault": "0x2d0aff409bde00451334011d55c141aff2103744",
+  "tokens": [
+    "0x4d224452801aced8b2f0aebe155379bb5d594381",
+    "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+  ],
+  "sourceBinding": {
+    "sourcePage": "https://etherscan.io/address/0x2d0aff409bde00451334011d55c141aff2103744#code",
+    "displayedCreationBytes": 24454,
+    "runtimeBytes": 24296,
+    "runtimeKeccak256": "0xf5f6dbf69a182d5921afa3cf1afa500c028f3551ad414d63116acb5ad74f8c44",
+    "creationRuntimeSuffixExact": true,
+    "oldBCodeEqualsN": true,
+    "independentCompilerRun": false
+  },
+  "publicSourceExtraction": {
+    "htmlSource": "/Users/eunice/src/MEV/logs/tx-c191d9-gap-20261013.aLSQSV/vault-etherscan.html",
+    "htmlSha256": "db199573c9f39b559dd144cf39b63b557f305672eed7d8f346f36c8038fbdb36",
+    "source": "Saved Etherscan verified source display; runtime binding not yet established",
+    "files": [
+      {
+        "path": "contracts/core/interfaces/IVault.sol",
+        "sha256": "a7c1d06b76271eac285ae4864500c212eae85961b6c9c7d177993a12e33b88dc",
+        "bytes": 7372
+      },
+      {
+        "path": "contracts/core/interfaces/IVaultPriceFeed.sol",
+        "sha256": "a6299b0d5bef6d37fa2c5d126dbae03412c2f688e542e7ed20947260f067c90d",
+        "bytes": 1472
+      },
+      {
+        "path": "contracts/core/interfaces/IVaultUtils.sol",
+        "sha256": "a4a439e8bf2ea14337307b531398b6f468e6b74cda7abc9cebd6ed177f64873e",
+        "bytes": 1691
+      },
+      {
+        "path": "contracts/core/Vault.sol",
+        "sha256": "9831c2b7c6ff64e633b03fa7c3d9c3a8b3e74b86872ba078e17437c8585f3963",
+        "bytes": 47814
+      },
+      {
+        "path": "contracts/libraries/math/SafeMath.sol",
+        "sha256": "a60c5e6a4c16e42c5c6333bae2c816003e755e8f979538ef65a63d40854588b2",
+        "bytes": 5201
+      },
+      {
+        "path": "contracts/libraries/token/IERC20.sol",
+        "sha256": "ef4e2497a840d900716a22e46ec10e1a9c0da9e1aea6f7fe7769e55eb4bea341",
+        "bytes": 2696
+      },
+      {
+        "path": "contracts/libraries/token/SafeERC20.sol",
+        "sha256": "469f4c41d6981195fa6750598e636ab70c1a49ef7a9864c0a06b6138b3fe84d2",
+        "bytes": 3707
+      },
+      {
+        "path": "contracts/libraries/utils/Address.sol",
+        "sha256": "32f7be26a2029f9c750526674d75bce203126e5f444634dedefb14bf7809489e",
+        "bytes": 7811
+      },
+      {
+        "path": "contracts/libraries/utils/ReentrancyGuard.sol",
+        "sha256": "94a473911f78904092a142a1e660ab6549935f06d69c8b065c76de6c93559a3e",
+        "bytes": 2595
+      },
+      {
+        "path": "contracts/tokens/interfaces/IUSDG.sol",
+        "sha256": "d5dd81dfb0b8180185cf28d54791bfad8c227f23b5e2533d3afd9b14f6c85abb",
+        "bytes": 303
+      }
+    ]
+  },
+  "originalSwap": {
+    "callPath": [
+      0,
+      1,
+      4
+    ],
+    "tokenIn": "0x4d224452801ACEd8B2F0aebE155379bb5D594381",
+    "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "sender": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+    "receiver": "0xE08D97e151473A848C3d9CA3f323Cb720472D015",
+    "amountIn": "71854376210288490340",
+    "preFeeAmountOut": "4444267399301724",
+    "actualAmountOut": "4430934597103818",
+    "feeBasisPoints": "30",
+    "logIndex": "0x38e"
+  },
+  "root": {
+    "isInitialized": true,
+    "isSwapEnabled": true,
+    "router": "0x13cec16f5a479e6cF28c82FC28183565cAAd72A9",
+    "priceFeed": "0xfB12632365c6B8DD26Ac9AA676d8285a93190d45",
+    "usdg": "0x790275Ef6bDb0142C4068E9343BCa9747de2998f",
+    "vaultUtils": "0x73D258969b084bb2c4cffAaEE3ebDa58faC49305",
+    "whitelistedTokenCount": "4",
+    "allWhitelistedTokensLength": "4",
+    "hasDynamicFees": true,
+    "swapFeeBasisPoints": "20",
+    "stableSwapFeeBasisPoints": "1",
+    "includeAmmPrice": true
+  },
+  "reverseIdentity": {
+    "routerVault": "0x2D0afF409BdE00451334011D55c141AfF2103744",
+    "routerUsdg": "0x790275Ef6bDb0142C4068E9343BCa9747de2998f",
+    "usdgVaultMember": true,
+    "vaultUtilsVault": "0x2D0afF409BdE00451334011D55c141AfF2103744",
+    "interpretation": "Mutual registry/pointer registration, not a deployment-ancestry or canonical GMX branding proof."
+  },
+  "capacityAndFees": [
+    {
+      "token": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "data": "0x1ce9cb8f0000000000000000000000004d224452801aced8b2f0aebe155379bb5d594381",
+      "raw": "0x00000000000000000000000000000000000000000000000093fa477d6f66a4b1",
+      "feeReserves": "10662913671818552497",
+      "poolAmounts": "71855779489055351661",
+      "actualBalance": "82518693160873904158",
+      "balanceEqualsPoolPlusFees": true
+    },
+    {
+      "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "data": "0x1ce9cb8f000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "raw": "0x0000000000000000000000000000000000000000000000000002367f225d0886",
+      "feeReserves": "622869618690182",
+      "poolAmounts": "5728257630",
+      "actualBalance": "622875346947812",
+      "balanceEqualsPoolPlusFees": true
+    }
+  ],
+  "readOnlyRequests": 69,
+  "requestFailures": 0,
+  "codeBindings": [
+    {
+      "target": "0x2d0aff409bde00451334011d55c141aff2103744",
+      "keccak256": "0xf5f6dbf69a182d5921afa3cf1afa500c028f3551ad414d63116acb5ad74f8c44",
+      "bytes": 24296
+    },
+    {
+      "target": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "keccak256": "0x86cc3092a7d90269edf27eb088feea0d277b77a77bfbbe06dff0a1b1affbfb9e",
+      "bytes": 2244
+    },
+    {
+      "target": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "keccak256": "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23",
+      "bytes": 3124
+    },
+    {
+      "target": "0x13cec16f5a479e6cf28c82fc28183565caad72a9",
+      "keccak256": "0xa200a2bbf2586db83a41184ee42863943c642f40af8d29fde8df7ed73c04b00d",
+      "bytes": 9179
+    },
+    {
+      "target": "0xfb12632365c6b8dd26ac9aa676d8285a93190d45",
+      "keccak256": "0xb27eb43fae9aaf9e7892558471105c2318109de36baf5d42d3e83e9e46eec93c",
+      "bytes": 8457
+    },
+    {
+      "target": "0x790275ef6bdb0142c4068e9343bca9747de2998f",
+      "keccak256": "0xfffc9c3ddb3d278c38cd932b6d7eda8e9312100dd5e4b0e71a6de33d1ce33c59",
+      "bytes": 8652
+    },
+    {
+      "target": "0x73d258969b084bb2c4cffaaee3ebda58fac49305",
+      "keccak256": "0xdb565a3a2c9c73f4f132e46fce76e0946a4050f43adbd55ce095ba4f9b477004",
+      "bytes": 5743
+    },
+    {
+      "target": "0xd10abbc76679a20055e167bb80a24ac851b37056",
+      "keccak256": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2",
+      "bytes": 9571
+    },
+    {
+      "target": "0x88db96ca551e0a0a2d8646999410b60197979311",
+      "keccak256": "0x16f41184f797cb8f8918680df0ebf2a97cc3192aa6b104615f61096fc674f2aa",
+      "bytes": 22337
+    },
+    {
+      "target": "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419",
+      "keccak256": "0x4b79b5c8aee6da0f7b393e8b53e6265ef7320a1d16184c65bd3841b5aa3d700d",
+      "bytes": 9571
+    },
+    {
+      "target": "0x7d4e742018fb52e48b08be73d041c18b21de6fb5",
+      "keccak256": "0x16f41184f797cb8f8918680df0ebf2a97cc3192aa6b104615f61096fc674f2aa",
+      "bytes": 22337
+    }
+  ],
+  "manualSourceChecks": {
+    "inputSemantics": "Vault swap consumes balanceOf(tokenIn,vault)-tokenBalances(tokenIn), after a separate input transfer.",
+    "pricingSemantics": "swap sets useSwapPricing=true before oracle reads; external getMinPrice/getMaxPrice in resting state do not by themselves establish the same mode.",
+    "dynamicFees": true,
+    "originalEventFeeBps": "30",
+    "baseSwapFeeBpsAtN": "20",
+    "rawGrossFormulaAtN": "4444267399301724",
+    "grossFormulaScope": "Independent source/view arithmetic for this original amount and same 18-decimal pair; not a production Exact quote or executed swap.",
+    "capacityConclusion": "N poolAmounts(WETH)=5728257630, smaller than the original amount gross output; fee reserves are not spendable pool capacity. The predicted rejection still needs actual N-end production quote/execution after adaptation.",
+    "unaccountedInputObservation": "For both target tokens, recorded tokenBalances equals observed Vault token balance at N; no pending unaccounted input in this snapshot."
+  },
+  "canonicalReconciliation": {
+    "query": [
+      "adapter",
+      "family"
+    ],
+    "manifestPath": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/tool-selection01.json",
+    "manifestSha256": "c7ed9ed4c10f403dd63d80eeb0c35d4918ff3dd655c48df74d0af0edac50a959",
+    "executedTools": [
+      "listener:searcher:adapter-family-plugin",
+      "listener:searcher:strict-production-family-declarations"
+    ],
+    "scope": "Existing generic Family plugin and production declaration baseline only; it does not validate unimplemented Vault protocol semantics.",
+    "vaultFamilyImplemented": false
+  },
+  "evidence": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/identity-audit-N-attempt01.json",
+      "sha256": "21d6f5419301daa7c139f73cd42a1b53a3d46aa218f393e40d9c93ccf7b06005",
+      "bytes": 306012
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/fee-reserves-N-attempt01.json",
+      "sha256": "a8cf08d78ea64b1b3404c3ce082d6e54344e90781089e2e08e9adb5086fbd02c",
+      "bytes": 1091
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/audit-N.mjs",
+      "sha256": "3ff1add639032560cfa222328f2f67cb3cd2d5b01e983f10d0cc9106ec3fbbe1",
+      "bytes": 8320
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/fee-reserves-N-attempt01.mjs",
+      "sha256": "064a797f753f26484031025b1289095dbb9d2d23b52334626d3e92e98feb0ee8",
+      "bytes": 2356
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/vault-abi.json",
+      "sha256": "6ba73eef9371552dd46ce038a2f3611a755d8a518d14ec0bf8f9640187107888",
+      "bytes": 61756
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/etherscan-creation-bytecode.txt",
+      "sha256": "3fc2e271ce52f49b7556a8087bbefbdddb65f0628aa67dc2988c685a380d6025",
+      "bytes": 48909
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/receipt.json",
+      "sha256": "7e7e6ad0694d7d3cbf9e9525e58da641943f91123932e75f3956c0637110eeaa",
+      "bytes": 19753
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/trace.json",
+      "sha256": "e67a003ed38f92cd0807c8f7eb7a0cc5652d89871d5b2b2781eb7119ed8c513a",
+      "bytes": 49889
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/tool-selection01.json",
+      "sha256": "c7ed9ed4c10f403dd63d80eeb0c35d4918ff3dd655c48df74d0af0edac50a959",
+      "bytes": 63308
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/family-contract-baseline01.log",
+      "sha256": "cdd9cb23411eab75fec703a3d9086a2d7f0b03d79f6a1f8fd6b080d6701cc71c",
+      "bytes": 606
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/declarations-baseline01.log",
+      "sha256": "8cfeb60d305d916355486f5b2180019f182114eb54db4d1db71934b0005aaceb",
+      "bytes": 620
+    }
+  ],
+  "preservation": {
+    "actualSourceFilesUnchanged": 2029,
+    "peerDirtyStatusUnchanged": true,
+    "coffeeSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517",
+    "oldReadyOrPricesModified": false
+  },
+  "remaining": [
+    "Implement reverse-registered Vault spot-swap Family in existing cloud source; no leverage/position/credit expansion",
+    "Use production quote/quoted and real-receipt runtime with full requested input, actual debit/credit, minimum receipt and old-inventory protection",
+    "Natural N-only Ready/Graph/raw/effective and supported directions/amounts; mark capacity rejection only after actual execution",
+    "Original call-prestate and full opportunity separately; prior c191 parent replay is reused evidence, not a new current-pipeline success",
+    "Formal Adapter Replay/family_local and all applicable stage4A/4B remain unrun"
+  ],
+  "independentProtocolAcceptanceReview": "not run; no implementation/acceptance exists yet",
+  "newEvmExecutions": 0,
+  "liveStarted": false,
+  "deployment": false,
+  "signing": false,
+  "broadcast": false,
+  "goalStatus": "active"
+}
