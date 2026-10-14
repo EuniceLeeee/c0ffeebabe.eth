@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "at": "2026-10-14T02:27:51.259370+00:00",
+  "originalTable": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "before": {
+    "sha256": "86e587b60fa90fb5e22b717dd39915c62aaf352118ababa39476a4cbaf2556f1",
+    "bytes": 277185
+  },
+  "after": {
+    "sha256": "caae2b8e4dbfdc1ca7cb5d601ac8a61a73f044f06c372b4dd57fde80bf3d830d",
+    "bytes": 279526
+  },
+  "changedLines": [
+    7,
+    25
+  ],
+  "scope": "Append current Curve plain / Fluid prefix dependency evidence; preserve other rows and all earlier failure evidence.",
+  "sourceHead": "1ad5c3bc137f4e7f35140a56538af9b4328626bc",
+  "report": "docs/research/reports/curve-fluid-prefix-dependency-20261014.json",
+  "reportSha256": "ff1702667d492bb2876bdd21f023506349884b1a3b7f4b3f52d71e810078506b",
+  "archive": {
+    "path": "/Users/eunice/src/MEV/logs/replay-history/1/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663/20261014-curve-fluid-prefix-dependency-zjxu28bh.json",
+    "sha256": "4eb497835568a276e446063880207c356e8c9a4026ba8dc661642adf42984aa3"
+  },
+  "archiveFirstPutFailure": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/replay-history-put01.json",
+  "archiveCorrectedPut": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/replay-history-put02.json",
+  "goalStatus": "active"
+}

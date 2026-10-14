@@ -1,0 +1,734 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-14",
+  "stage": 3,
+  "classification": [
+    "historical-opportunity-causality",
+    "historical-execution-environment-gap"
+  ],
+  "result": "Additional prefix dependency localized under measured noncanonical environment; strict causal and natural production replay remain unverified.",
+  "source": {
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "head": "1ad5c3bc137f4e7f35140a56538af9b4328626bc",
+    "actualDirtyTree": true,
+    "sourceFileCount": 2054,
+    "sourceInventorySha256": "2116966221407cc0dcf52782f7202e0b0a22bc7e464e9ee78831caa49f5fac50",
+    "sourceInventoryAlgorithm": "SHA256 of sorted-key compact JSON of the ordered preflight sourceFiles list; not comparable to earlier differently scoped/serialized fingerprints.",
+    "preflightSha256": "e6d19063afaec7edead84e3c97d09b564949953565dbc62ac70a3a2d98fde325",
+    "backendSha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15",
+    "productionCodeChanged": false
+  },
+  "sample": {
+    "tx": "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+    "B": 26152606,
+    "N": 26152607,
+    "parentHash": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+    "parentStateRoot": "0xb013ee88cd486c5e84d01f7d0c0d702e692d94240c84151e959c40ba185e0924",
+    "canonicalNHash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369"
+  },
+  "familyScope": "Curve plain / Fluid five-hop opportunity; this is separate from the FEI Curve underlying historical identity case.",
+  "priorEvidence": [
+    {
+      "runId": "20261011-native-fivehop-prefix-0wjxkh",
+      "checked": 41,
+      "allMatched": true
+    },
+    {
+      "runId": "20261012-backrun-cli-degree10-planner-lexpxg",
+      "checked": 30,
+      "allMatched": true
+    }
+  ],
+  "compatibility": {
+    "old429": "This run forwarded 2243 read requests across two retained attempts without HTTP429; quota recovery is observed for these runs only.",
+    "oldDifficulty": "Current production historical reset produced actual post-Merge difficulty=0 in all five real mined branches; prior synthetic-only evidence is supplemented. No independent final SourceBlockSimulator was run.",
+    "oldReady": "Unchanged and unused for these fixed-calldata attribution calls; no new Ready discovery, pricing, planner or Solver.",
+    "backrunParameters": "User degree10 / cap500 and all live defaults unchanged; not executed or revalidated here."
+  },
+  "retainedFailure": {
+    "attempt": "attempt01",
+    "status": "five preparation failures before branch mining or winner calls",
+    "cause": "anvil_setPrevRandao is absent in installed Anvil; prior failure was not overwritten",
+    "subsequentChange": "Diagnostic records the unsupported setter and measures the actual environment; does not claim canonical PREVRANDAO."
+  },
+  "environment": {
+    "anvilVersion": "anvil Version: 1.7.1\nCommit SHA: 4072e48705af9d93e3c0f6e29e93b5e9a40caed8\nBuild Timestamp: 2026-05-08T07:50:55.527285345Z (1778226655)\nBuild Profile: dist",
+    "parentIdentityVerified": true,
+    "sameNNumberTimestampBaseFeeCoinbaseGasLimit": true,
+    "postMergeDifficultyZero": true,
+    "noncanonicalFields": {
+      "actual": "0x8e21d907f6ec036f8baabd76ee6a979b21a9ea2228767a3ddb75156e74d92c45",
+      "expected": "0xe159cb45d4a0a7e20a3d98847b72a6bf76830ca691d4a29163057a42cd0743c0",
+      "match": false
+    },
+    "systemSlots": [
+      {
+        "label": "beacon timestamp",
+        "address": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
+        "slot": "2729",
+        "actual": "0x000000000000000000000000000000000000000000000000000000006ac6f457",
+        "expected": "0x6ac8744b",
+        "match": false
+      },
+      {
+        "label": "parent beacon root",
+        "address": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
+        "slot": "10920",
+        "actual": "0x5fdfdc8d7beb2479d6c5d67be7c4491b24638929e76cb752087bf5c8d4fe3198",
+        "expected": "0x57e24305f0105f988d714c6dc2f6438de1104bcb593841abb116907bdd058efe",
+        "match": false
+      },
+      {
+        "label": "parent execution hash",
+        "address": "0x0000f90827f1c53a10cb7a02335b175320002935",
+        "slot": "6934",
+        "actual": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+        "expected": "0xf34b8011af4129936cd3a32bddab0719a1a96d131463425f5c8bf1696bb73ffa",
+        "match": true
+      }
+    ],
+    "evmProbe": {
+      "fields": [
+        "number",
+        "timestamp",
+        "baseFee",
+        "coinbase",
+        "prevRandao",
+        "gasLimit"
+      ],
+      "observed": [
+        "26152607",
+        "1791521867",
+        "118205216",
+        "1235979551852605441010908428385700818791173803414",
+        "64288228345642308094628699693410646928409478556558156952747029092881529384005",
+        "59941408"
+      ],
+      "expected": [
+        "26152607",
+        "1791521867",
+        "118205216",
+        "1235979551852605441010908428385700818791173803414",
+        "101929043257137227900730298867595782312829594798485879696054499951104217269184",
+        "59941408"
+      ],
+      "match": false
+    },
+    "strictEnvironmentPassed": false,
+    "accountOrSystemStorageInjected": false,
+    "rpcHeaderRewritten": false,
+    "probeCodeOverride": "Only an isolated read-only synthetic address for six EVM environment fields; no winner/trigger actor changes."
+  },
+  "cases": [
+    {
+      "name": "boundary",
+      "indices": [],
+      "status": "diagnostic-completed",
+      "receiptsExact": true,
+      "trustedEnvironment": false,
+      "triggerCallSuccess": false,
+      "triggerReceiptStatus": null,
+      "winnerCallSuccess": false,
+      "winnerGasUsed": 733738,
+      "flow": null,
+      "derivedFingerprint": "f3bd0332898807e22980ae18b0a7617d096c88c2892320e0862413bd0deb7c3e"
+    },
+    {
+      "name": "trigger-only",
+      "indices": [
+        3
+      ],
+      "status": "diagnostic-completed",
+      "receiptsExact": false,
+      "trustedEnvironment": false,
+      "triggerCallSuccess": null,
+      "triggerReceiptStatus": "0x0",
+      "winnerCallSuccess": false,
+      "winnerGasUsed": 733738,
+      "flow": null,
+      "derivedFingerprint": "9805f755b47c5e58f2f66beab89431e2aa393b95214aafa6fe86925a39f7bab4"
+    },
+    {
+      "name": "prerequisites-012",
+      "indices": [
+        0,
+        1,
+        2
+      ],
+      "status": "diagnostic-completed",
+      "receiptsExact": true,
+      "trustedEnvironment": false,
+      "triggerCallSuccess": true,
+      "triggerReceiptStatus": null,
+      "winnerCallSuccess": false,
+      "winnerGasUsed": 733738,
+      "flow": null,
+      "derivedFingerprint": "98386b6e5175a81a9d87b8aa0600da04f1da16441a4187904d722497dd7f1c0e"
+    },
+    {
+      "name": "prerequisites-012-trigger3",
+      "indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "status": "diagnostic-completed",
+      "receiptsExact": true,
+      "trustedEnvironment": false,
+      "triggerCallSuccess": null,
+      "triggerReceiptStatus": null,
+      "winnerCallSuccess": true,
+      "winnerGasUsed": 664608,
+      "flow": {
+        "borrowedAndRepaidWethRaw": "752645725294836224",
+        "grossWethBeforeUnwrapRaw": "773290759263276",
+        "residualUsdcRaw": "6302",
+        "consumedOldWeethRaw": "1",
+        "observation": "Current read-only call trace and Transfer/native flows; independent current balanceOf/stateDiff was not recorded. WETH gross is subsequently unwrapped, not the final WETH account delta."
+      },
+      "derivedFingerprint": "c1802b63e7078256a41e8159e872b0df7eccd660447efa6d33e1d1bc488d1b24"
+    },
+    {
+      "name": "full-prefix-0-54",
+      "indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54
+      ],
+      "status": "diagnostic-completed",
+      "receiptsExact": true,
+      "trustedEnvironment": false,
+      "triggerCallSuccess": null,
+      "triggerReceiptStatus": null,
+      "winnerCallSuccess": true,
+      "winnerGasUsed": 664146,
+      "flow": {
+        "borrowedAndRepaidWethRaw": "752645725294836224",
+        "grossWethBeforeUnwrapRaw": "773290759263276",
+        "residualUsdcRaw": "6101",
+        "consumedOldWeethRaw": "1",
+        "observation": "Current read-only call trace and Transfer/native flows; independent current balanceOf/stateDiff was not recorded. WETH gross is subsequently unwrapped, not the final WETH account delta."
+      },
+      "derivedFingerprint": "18ff9c079c41ee2e27d0047cb3deff244154f1e8fa21a55e9f225a284f69c4a5"
+    }
+  ],
+  "interpretation": {
+    "triggerFailure": "Isolated index3 reverts at the inner WETH transfer; both nested V3 swap frames report IIA. The same trigger read-only call succeeds after indices0-2.",
+    "groupDependency": "Within the measured environment, indices0-2 alone leave the winner reverting. Adding index3 flips the fixed winner to success. This is not a minimal-prerequisite proof and does not certify a single-trigger lane.",
+    "prefixDifference": "Indices0-3 and full0-54 have equal WETH gross; the shorter prefix leaves 201 more raw USDC and uses 462 more gas. They are not byte-equivalent states or outputs.",
+    "fullPrefix": "All 55 canonical receipt status/gas/logs match, including 10 reverted transactions. Original calldata remains inventory-dependent by one raw weETH.",
+    "causalGate": "NOT PASSED: canonical PREVRANDAO/EIP4788 missing; trigger-only fails; own natural route/sizing/final-sim/EV unrun."
+  },
+  "resources": [
+    {
+      "startedAt": "2026-10-14T02:15:10.956Z",
+      "endedAt": "2026-10-14T02:15:18.775Z",
+      "upstreamRequests": 145,
+      "requestLimit": 6000,
+      "wallLimitMs": 720000,
+      "http429": 0,
+      "forwardedRpcErrors": 0,
+      "preForwardUnsupportedReadRejections": {
+        "eth_gasPrice": 10,
+        "eth_getAccountInfo": 4
+      }
+    },
+    {
+      "startedAt": "2026-10-14T02:17:58.047Z",
+      "endedAt": "2026-10-14T02:18:39.476Z",
+      "upstreamRequests": 2098,
+      "requestLimit": 6000,
+      "wallLimitMs": 720000,
+      "http429": 0,
+      "forwardedRpcErrors": 0,
+      "preForwardUnsupportedReadRejections": {
+        "eth_gasPrice": 10,
+        "eth_getAccountInfo": 5
+      }
+    }
+  ],
+  "toolReconciliation": {
+    "query": [
+      "backrun"
+    ],
+    "selectedTool": "analysis:tx-source-shape",
+    "manifestCloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/tool-selection01.json",
+    "manifestSha256": "38ee888786d702779cba61353fd8f594244964a7520b7c9a8c58086f078e182e",
+    "execution": {
+      "schema_version": 1,
+      "tool_id": "analysis:tx-source-shape",
+      "descriptor_sha256": "973ff39a28d014188d03cc6e6818e2ba643937d8308303e731033e6429217db6",
+      "started_at": "2026-10-14T02:21:28.662Z",
+      "finished_at": "2026-10-14T02:21:29.164Z",
+      "exit_code": 0,
+      "cwd": "analysis",
+      "argv_sha256": "77d76f42ccd22cf3b2f387bdc090e09e8ee35f8b442e513e7b99b3b2f3f5f33c",
+      "argv_redacted": [
+        "npm",
+        "run",
+        "tx-source-shape",
+        "--",
+        "--tx",
+        "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663"
+      ],
+      "stdout_sha256": "1921ff413bad4653a65027f8211196e04cd322d0cb877481e93a74d7a54fcaaa",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 151,
+      "stderr_bytes": 0
+    },
+    "source": "immutable canonical receipts served read-only; zero external RPC for reconciliation",
+    "result": "victim",
+    "scope": "Same-pool shape hint agrees; it does not attest to trigger independence or environment fidelity. No canonical tool defect found."
+  },
+  "acceptance": {
+    "newFamilyCorrectness": "NOT RUN; existing valid Family evidence reused",
+    "strictCausality": "NOT PASSED",
+    "naturalProductionHintDetectorPlannerSizingFinalSimEV": "NOT RUN THIS ROUND",
+    "opportunityFixed": false,
+    "localPerformance": "NOT RUN",
+    "representativePerformance": "NOT RUN",
+    "goalStatus": "active"
+  },
+  "remaining": [
+    "Prepare and verify the real N PREVRANDAO and applicable block-start system state using a supported backend; retain unsupported-method evidence.",
+    "In a trusted environment, find a permitted trigger/minimal prerequisite group and repeat the corresponding causal comparison.",
+    "Revalidate changed Family memos on a copy of the saved single-N Ready before current live backrun production use; retain degree10/cap500 and document its target-leg exclusion.",
+    "Own natural planning, sizing, independent final sim and EV remain mandatory; all stage4 work stays deferred."
+  ],
+  "preservation": {
+    "at": 1791944489.2276464,
+    "head": "1ad5c3bc137f4e7f35140a56538af9b4328626bc",
+    "changedSourceFiles": [],
+    "sourceFileCount": 2054,
+    "dirtyUnchanged": true,
+    "indexEmpty": true,
+    "processes": [],
+    "portsReleased": [
+      18994,
+      19024,
+      19025
+    ],
+    "oldReadyUnchanged": true,
+    "coffeeUnchanged": true,
+    "anvilVersion": "anvil Version: 1.7.1\nCommit SHA: 4072e48705af9d93e3c0f6e29e93b5e9a40caed8\nBuild Timestamp: 2026-05-08T07:50:55.527285345Z (1778226655)\nBuild Profile: dist"
+  },
+  "safety": {
+    "liveStarted": false,
+    "deployed": false,
+    "signed": false,
+    "publicBroadcast": false,
+    "privateKeysRead": false,
+    "realActorBalanceNoncePermissionOverrides": false,
+    "originalReadyOrCoffeeModified": false
+  },
+  "artifacts": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/preflight.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/preflight.json",
+      "sha256": "e6d19063afaec7edead84e3c97d09b564949953565dbc62ac70a3a2d98fde325",
+      "bytes": 404813
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/exit02.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/exit02.json",
+      "sha256": "26b978ae63d381e5f205d864aebc7bd33f49a74d7790ff2b1982bbe727f4fba3",
+      "bytes": 42
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/started.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/started.json",
+      "sha256": "1ac278fe015feff08443c1538e90e932eabc80a655fc8f346500e297b2aa6c4e",
+      "bytes": 143
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/preservation01.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/preservation01.json",
+      "sha256": "5ecc45e4d6d254355facc97fca899d04414562633ae319255ce5828dbe01b09d",
+      "bytes": 500
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/exit.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/exit.json",
+      "sha256": "a460b55c6dc027ef948f0c011ec4635a85428ffd849551f8ef741cd596512ff4",
+      "bytes": 41
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/causal-prerequisites02.mjs",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/causal-prerequisites02.mjs",
+      "sha256": "896950a9acbc0ed247d2eecf58eb55944bf1a7710a9bc370778da6235737bb49",
+      "bytes": 11070
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/reconcile01-launch.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/reconcile01-launch.json",
+      "sha256": "fa6cae2fea99c7535ac5aa812a427e9f1a6a635de755c8951db754a464869730",
+      "bytes": 73
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/tool-selection01.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/tool-selection01.json",
+      "sha256": "38ee888786d702779cba61353fd8f594244964a7520b7c9a8c58086f078e182e",
+      "bytes": 3895
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/readonly-proxy-v2.mjs",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/readonly-proxy-v2.mjs",
+      "sha256": "ead731459edbf9c09e1dc18fe44bfaf7e8c7ccbb475d047c230e58c433480aec",
+      "bytes": 3144
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/causal-prerequisites01.mjs",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/causal-prerequisites01.mjs",
+      "sha256": "e4cdfb7cde9d544e8464a3bf2994fd3c4c0da5c8bc93a3ec3fb4d0de7ebd85e5",
+      "bytes": 10807
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt01.log",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt01.log",
+      "sha256": "bf8201f0ce1710d72a5d7bb5409d725e275066169a44daf987eb39f85f2db430",
+      "bytes": 2153
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/tool-index01.log",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/tool-index01.log",
+      "sha256": "6eb3b98c9eb96a0d1269be3ef895b0a36728772d56b8d34a8a5a72ed3126d5de",
+      "bytes": 1004
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02.log",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02.log",
+      "sha256": "b7371faba0e007c676519699c61c9a88e283918b1fbc5731a1700663cb3108c5",
+      "bytes": 1035
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/reconcile-current01.mjs",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/reconcile-current01.mjs",
+      "sha256": "088c5881b0529b8c3195eed904c539b4bdae9e063adaac5eff179594c9899b62",
+      "bytes": 3363
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/started02.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/started02.json",
+      "sha256": "2440e16c07431d3bc88cc2f86ea4bfb06659f6c5cac98ab3f2faa0ef0d95a39d",
+      "bytes": 42
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/reconcile01/canonical-source-shape-v2.stdout.txt",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/reconcile01/canonical-source-shape-v2.stdout.txt",
+      "sha256": "430273c42705ee7cca3f5b402411da12a6a14a123247e578ea929a8970f9550a",
+      "bytes": 430
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/reconcile01/canonical-source-shape-v2-exit.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/reconcile01/canonical-source-shape-v2-exit.json",
+      "sha256": "739b28e912640f8f202b6fed018a1e951701c98dab226d3d955a07029497f62b",
+      "bytes": 1506
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/reconcile01/canonical-source-shape-v2.stderr.txt",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/reconcile01/canonical-source-shape-v2.stderr.txt",
+      "sha256": "7e6088523faf10b25c56334c21ae887a7b98de3fb96799ed311ee48c93eb1a7a",
+      "bytes": 161
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt01/prerequisites-012-result.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt01/prerequisites-012-result.json",
+      "sha256": "1f70a98ae0e3c2608cd3bbaaf08f56cdb3ef670841b9d27daa51eb2aa71cdf1e",
+      "bytes": 417
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt01/trigger-only-result.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt01/trigger-only-result.json",
+      "sha256": "4ae55c23b7fb5658a77a3bb16591ca85f5178fbe6d219613f04d0c8d9955f6b1",
+      "bytes": 398
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt01/results.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt01/results.json",
+      "sha256": "54b2d6fe87ee9d01addeb0f433ef204a94de6e47d24bcea64f340741365c68f8",
+      "bytes": 2991
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt01/prerequisites-012-trigger3-result.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt01/prerequisites-012-trigger3-result.json",
+      "sha256": "ab66d9b5f6473112c97df4b54f03bcef79d20306157038bd717859b2a5be21c2",
+      "bytes": 433
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt01/scope.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt01/scope.json",
+      "sha256": "bae96934a3be8262ab3efac4a539567e83b49c5837439e9a770c7e1e198c88dd",
+      "bytes": 2231
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt01/full-prefix-0-54-result.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt01/full-prefix-0-54-result.json",
+      "sha256": "40ae9bca061543e803a10bb08015732950bf02c5be3ebf4fe88c59f48c221448",
+      "bytes": 825
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt01/boundary-result.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt01/boundary-result.json",
+      "sha256": "755abd868ca98950f441d7abca50f19a6d8a0088f8776f79cb78d0ca7e645c03",
+      "bytes": 385
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt01/readiness.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt01/readiness.json",
+      "sha256": "af8687531facda03f76564a248d9bff5d7a94c89aa9e1ad01004fdd5fca813f4",
+      "bytes": 286
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt01/accounting.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt01/accounting.json",
+      "sha256": "3a106de4bd2bf86da0357918ce397053c032e97bea350465f3550af46357ae50",
+      "bytes": 20203
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/boundary-receipts.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/boundary-receipts.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/prerequisites-012-result.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/prerequisites-012-result.json",
+      "sha256": "c32cd4038594d96b9d77a186dbad3be191607623a5960d989f28974a2b57d881",
+      "bytes": 5753
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/trigger-only-result.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/trigger-only-result.json",
+      "sha256": "dff43ff0fd5fa53a5e246e2178ff524104736d6274f68f869175a7ff026fef9d",
+      "bytes": 6149
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/prerequisites-012-receipts.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/prerequisites-012-receipts.json",
+      "sha256": "1e003b3dfaa77f64ab00477f99a5cb8a1c0b1b6d478bf22a84097509c3f52b26",
+      "bytes": 12893
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/results.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/results.json",
+      "sha256": "f950e64932af562aed3f96e6b30945fe61cc1158375a91197c1c5e236d2385c4",
+      "bytes": 58050
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/full-prefix-0-54-receipts.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/full-prefix-0-54-receipts.json",
+      "sha256": "f8bb0cef989568b6b0e4ab1ffedfa53837f56b2301449df8bad61f3f7db8f432",
+      "bytes": 208197
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/boundary-winner-trace.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/boundary-winner-trace.json",
+      "sha256": "47db232e458c2ad2e1819ba72c4c9f6ca2a952541f1f43f054c925970b06b2fc",
+      "bytes": 82079
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/trigger-only-receipts.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/trigger-only-receipts.json",
+      "sha256": "a4837f201e0650a0703c756d0fdde4911f47ccddcac918c272b4b44f0e38cae6",
+      "bytes": 1171
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/prerequisites-012-trigger3-result.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/prerequisites-012-trigger3-result.json",
+      "sha256": "984d3352de428349f577975487bf30d023437e0644e2f476031e189e2387154a",
+      "bytes": 8499
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/boundary-environment-probe.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/boundary-environment-probe.json",
+      "sha256": "5c1dca79738812e7ec7b7d3d024d6e944eb863c3d63ba378ae221c3c26bf90c1",
+      "bytes": 611
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/full-prefix-0-54-environment-probe.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/full-prefix-0-54-environment-probe.json",
+      "sha256": "5c1dca79738812e7ec7b7d3d024d6e944eb863c3d63ba378ae221c3c26bf90c1",
+      "bytes": 611
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/prerequisites-012-trigger3-header.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/prerequisites-012-trigger3-header.json",
+      "sha256": "b67d0824f3f760277db30ba6cff8171cc0b054472445b67fcc84bd883d6faf6c",
+      "bytes": 2143
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/boundary-trigger-call-trace.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/boundary-trigger-call-trace.json",
+      "sha256": "b3182acff305c0759b5d050e699364fb7443a5789f75e080c58e828e8660e597",
+      "bytes": 9707
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/boundary-header.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/boundary-header.json",
+      "sha256": "59c6f035b84ec1746d06f0e470cc23e0a7765798784729a5df844af862c1e55c",
+      "bytes": 1841
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/prerequisites-012-winner-trace.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/prerequisites-012-winner-trace.json",
+      "sha256": "47db232e458c2ad2e1819ba72c4c9f6ca2a952541f1f43f054c925970b06b2fc",
+      "bytes": 82079
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/trigger-only-environment-probe.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/trigger-only-environment-probe.json",
+      "sha256": "5c1dca79738812e7ec7b7d3d024d6e944eb863c3d63ba378ae221c3c26bf90c1",
+      "bytes": 611
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/scope.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/scope.json",
+      "sha256": "260d572a47f76515e9ae8a34c07b91b6404ccebdd4ba733915546578ec153bc5",
+      "bytes": 2231
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/prerequisites-012-environment-probe.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/prerequisites-012-environment-probe.json",
+      "sha256": "5c1dca79738812e7ec7b7d3d024d6e944eb863c3d63ba378ae221c3c26bf90c1",
+      "bytes": 611
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/full-prefix-0-54-result.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/full-prefix-0-54-result.json",
+      "sha256": "ca38a16770b2f3e7aa55739586b26a42bfbc411dc42add24b8871608eefaf6f3",
+      "bytes": 24696
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/prerequisites-012-trigger3-environment-probe.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/prerequisites-012-trigger3-environment-probe.json",
+      "sha256": "5c1dca79738812e7ec7b7d3d024d6e944eb863c3d63ba378ae221c3c26bf90c1",
+      "bytes": 611
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/prerequisites-012-trigger3-receipts.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/prerequisites-012-trigger3-receipts.json",
+      "sha256": "e98cf8b31b0defe96bc68473d89c105ccf2e8d95a51ac90c9538fe09d3a315d1",
+      "bytes": 18522
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/prerequisites-012-trigger-call-trace.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/prerequisites-012-trigger-call-trace.json",
+      "sha256": "efe58d2e6d512f92eeeea1054ba05a42fbcd24c4bcb10e93a5e2ec2f8b62fb0e",
+      "bytes": 13187
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/trigger-only-winner-trace.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/trigger-only-winner-trace.json",
+      "sha256": "47db232e458c2ad2e1819ba72c4c9f6ca2a952541f1f43f054c925970b06b2fc",
+      "bytes": 82079
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/full-prefix-0-54-winner-trace.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/full-prefix-0-54-winner-trace.json",
+      "sha256": "392997c0a37e427d077e243ae112ec1f0c84aac187ebd6078fd0990ef18dc84b",
+      "bytes": 100665
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/prerequisites-012-header.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/prerequisites-012-header.json",
+      "sha256": "92d54136df0731050684f18c417471161d85ba439db603bc1ed7a0a31646d6ae",
+      "bytes": 2069
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/trigger-only-trigger-trace.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/trigger-only-trigger-trace.json",
+      "sha256": "e63c3bc4776c188b6d37d35b593bde7df99c7eb5bafe43fad5268b5b003036ec",
+      "bytes": 9704
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/boundary-result.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/boundary-result.json",
+      "sha256": "e71484cf0eea633bce7ca11d07a9871339446a8652d033460db5185165010838",
+      "bytes": 5940
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/prerequisites-012-trigger3-winner-trace.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/prerequisites-012-trigger3-winner-trace.json",
+      "sha256": "22db78f98aefbbbe5d0276dd1c6daea4179b80d53a775690a2b42e706c85279b",
+      "bytes": 100665
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/readiness.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/readiness.json",
+      "sha256": "af8687531facda03f76564a248d9bff5d7a94c89aa9e1ad01004fdd5fca813f4",
+      "bytes": 286
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/trigger-only-header.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/trigger-only-header.json",
+      "sha256": "15067796fdabb76e158fa532bba0b0731b459a5a675712b33e13650d37f069b0",
+      "bytes": 1921
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/accounting.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/accounting.json",
+      "sha256": "814cbaaca7aa6e5299c86fc6f23b840e7353099820f3b31faebc06b3743864ac",
+      "bytes": 258679
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/curve-fluid-preparation-20261014/cloud-evidence01/attempt02/full-prefix-0-54-header.json",
+      "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/curve-fluid-causal-20261014.zjxu28bh/attempt02/full-prefix-0-54-header.json",
+      "sha256": "8ac809bcc72ff8aa9b98f5476990521eb21d1b0d48798220d752987d12e34f83",
+      "bytes": 5919
+    }
+  ]
+}
