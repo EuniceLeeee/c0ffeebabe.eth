@@ -16,15 +16,18 @@ contract NativeBoundaryExchange {
     constructor(RuntimePaymentToken t) { token = t; }
     function configure(uint256 d, uint256 o, uint256 x) external { debt = d; output = o; extra = x; }
     function exchange(bool nativeInput, uint256 amount) external payable {
+        exchangeTo(nativeInput, amount, msg.sender);
+    }
+    function exchangeTo(bool nativeInput, uint256 amount, address recipient) public payable {
         requested = amount;
         if (nativeInput) {
             require(msg.value == amount && debt <= amount, "native call value");
             if (amount > debt) { (bool ok,) = msg.sender.call{value: amount - debt}(""); require(ok); }
-            token.mint(msg.sender, output);
+            token.mint(recipient, output);
         } else {
             require(msg.value == 0, "erc20 call value");
             token.burn(msg.sender, debt + extra);
-            (bool ok,) = msg.sender.call{value: output}(""); require(ok);
+            (bool ok,) = recipient.call{value: output}(""); require(ok);
         }
     }
     receive() external payable {}
@@ -33,6 +36,7 @@ contract NativeBoundaryExchange {
 contract ExecutionAssetBoundaryTest is Test {
     address constant ACTOR = 0x2222222222222222222222222222222222222222;
     address constant TARGET = 0x3333333333333333333333333333333333333333;
+    address constant RECEIVER = 0x5555555555555555555555555555555555555555;
     address constant TOKEN = 0x1111111111111111111111111111111111111111;
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     uint256 constant STOCK = 777;
@@ -126,6 +130,41 @@ contract ExecutionAssetBoundaryTest is Test {
             bytes memory script = vm.envBytes(string.concat("NATIVE_BOUNDARY_quotedZeroDebit", nativeInput ? "Input" : "Output"));
             vm.expectRevert(); BotVM(payable(ACTOR)).execute(script);
             balances(nativeInput, 1, 0);
+        }
+    }
+
+    function directProgram(bool nativeInput, bool externalReceiver) internal view returns (bytes memory) {
+        return vm.envBytes(string.concat("NATIVE_BOUNDARY_direct", nativeInput ? "Input" : "Output", externalReceiver ? "External" : "Self"));
+    }
+    function receiverInventory() internal {
+        bytes32 slot = keccak256(abi.encode(RECEIVER, uint256(0)));
+        vm.store(WETH, slot, bytes32(STOCK)); vm.store(TOKEN, slot, bytes32(STOCK)); vm.deal(RECEIVER, STOCK);
+    }
+    function testDirectNativeBothDirectionsSelfExternalActualCredit() public {
+        for (uint256 dir; dir < 2; ++dir) for (uint256 recv; recv < 2; ++recv) {
+            bool nativeInput = dir == 0; bool externalReceiver = recv == 1;
+            prepare(nativeInput, INPUT, 200, 0); receiverInventory();
+            BotVM(payable(ACTOR)).execute(directProgram(nativeInput, externalReceiver));
+            balances(nativeInput, 0, externalReceiver ? 0 : 200);
+            assertEq(RuntimePaymentToken(payable(nativeInput ? TOKEN : WETH)).balanceOf(RECEIVER), STOCK + (externalReceiver ? 200 : 0));
+            assertEq(RuntimePaymentToken(payable(nativeInput ? WETH : TOKEN)).balanceOf(RECEIVER), STOCK);
+            assertEq(RECEIVER.balance, STOCK);
+        }
+    }
+    function testDirectNativeRequiresExactPositiveDebitAndAtomicRollback() public {
+        for (uint256 dir; dir < 2; ++dir) for (uint256 recv; recv < 2; ++recv) for (uint256 fault; fault < 4; ++fault) {
+            bool nativeInput = dir == 0; bool externalReceiver = recv == 1;
+            uint256 debt = fault == 0 ? 0 : fault == 1 ? INPUT - 1 : INPUT;
+            prepare(nativeInput, debt, fault == 2 ? 0 : 200, fault == 3 ? 1 : 0); receiverInventory();
+            // Native extra-debit is separately covered by overspendNative;
+            // the raw fixture's extra applies only to ERC20 debit.
+            if (nativeInput && fault == 3) continue;
+            bytes memory data = directProgram(nativeInput, externalReceiver);
+            vm.expectRevert(); BotVM(payable(ACTOR)).execute(data);
+            balances(nativeInput, INPUT, 0);
+            assertEq(RuntimePaymentToken(payable(WETH)).balanceOf(RECEIVER), STOCK);
+            assertEq(RuntimePaymentToken(payable(TOKEN)).balanceOf(RECEIVER), STOCK);
+            assertEq(RECEIVER.balance, STOCK);
         }
     }
 }

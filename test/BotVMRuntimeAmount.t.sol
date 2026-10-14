@@ -69,6 +69,25 @@ contract RuntimeTestNative {
 contract RuntimeTestWrapped is RuntimeTestToken {
     function deposit() external payable { balanceOf[msg.sender] += msg.value; }
 }
+contract RuntimeTestRevertingProbe {
+    RuntimeTestToken immutable token;
+    uint256 public calls;
+    error ProbeResult(uint256 amount);
+    constructor(RuntimeTestToken t) { token = t; }
+    function probe(uint256 input, uint8 mode) external {
+        calls++;
+        token.mint(msg.sender, input); // These writes MUST be rolled back.
+        if (mode == 2) revert("different error");
+        if (mode == 3) assembly { revert(0, 0) }
+        if (mode == 4) {
+            (bool ok, bytes memory reason) = msg.sender.call(abi.encodeWithSignature("callback(bytes)", hex"05"));
+            require(!ok && keccak256(reason) == keccak256(abi.encodeWithSignature("Error(string)", "runtime callback sender")), "probe callback isolation");
+        }
+        bytes memory data = abi.encodeWithSelector(ProbeResult.selector, input * 2);
+        if (mode == 1) assembly { return(add(data, 32), mload(data)) }
+        assembly { revert(add(data, 32), mload(data)) }
+    }
+}
 contract BotVMRuntimeAmountTest is Test {
     BotVM bot;
     RuntimeTestToken a;
@@ -516,5 +535,69 @@ contract BotVMRuntimeAmountTest is Test {
         bytes memory payload = abi.encodeCall(RuntimeTestCallback.run, (script(swapProgram(a, b, 20, 0), 10)));
         bot.execute(abi.encodePacked(hex"02000044", script(p, 1), uint8(0), address(cb), uint24(payload.length), payload));
         assertEq(pool.received(), 10);
+    }
+
+    function revertQuote(RuntimeTestRevertingProbe probe, uint8 mode, uint24 expected) internal pure returns(bytes memory) {
+        bytes memory payload = abi.encodeCall(RuntimeTestRevertingProbe.probe, (0, mode));
+        return abi.encodePacked(hex"0101", address(probe), uint8(2), uint8(255), uint24(0), uint24(0), uint8(1),
+            expected, uint24(4), uint8(0), uint24(payload.length), payload,
+            hex"0601000000", hex"0002", uint256(224), hex"0204010102",
+            hex"0002", uint256(uint32(RuntimeTestRevertingProbe.ProbeResult.selector)), hex"030102", hex"0600000004");
+    }
+    function testRevertQuoteReadonlyRollbackAndInputPatching() public {
+        RuntimeTestRevertingProbe probe = new RuntimeTestRevertingProbe(a);
+        for (uint256 amount = 1; amount <= 1000; amount *= 10) {
+            bytes memory child = revertQuote(probe, 0, 36);
+            bytes memory nested = abi.encodePacked(uint8(1), runOp(child, 0, 0, 0));
+            bytes memory p = abi.encodePacked(uint8(1), runOp(nested, 0, 2, 1),
+                hex"0003", amount * 2, hex"030203");
+            bot.execute(script(p, amount));
+            assertEq(probe.calls(), 0); assertEq(a.balanceOf(address(bot)), 1100);
+        }
+    }
+    function testRevertQuoteRejectsSuccessWrongSizeAndEmptyRevert() public {
+        RuntimeTestRevertingProbe probe = new RuntimeTestRevertingProbe(a);
+        for (uint8 mode = 1; mode <= 3; ++mode) {
+            vm.expectRevert("runtime expected revert");
+            bot.execute(script(revertQuote(probe, mode, 36), 10));
+            assertEq(probe.calls(), 0); assertEq(a.balanceOf(address(bot)), 1100);
+        }
+        for (uint24 size = 35; size <= 37; size += 2) {
+            vm.expectRevert("runtime expected revert"); bot.execute(script(revertQuote(probe, 0, size), 10));
+        }
+    }
+    function testRevertQuoteCannotSpendValueInstallCallbackOrExceedBound() public {
+        RuntimeTestRevertingProbe probe = new RuntimeTestRevertingProbe(a);
+        bytes memory base = revertQuote(probe, 0, 36);
+        // Offsets are in the independently encoded instruction, including version/op.
+        bytes memory p = bytes.concat(base); p[23] = bytes1(uint8(0));
+        vm.expectRevert("runtime static config"); bot.execute(script(p, 10));
+        p = bytes.concat(base); p[26] = bytes1(uint8(1));
+        vm.expectRevert("runtime static config"); bot.execute(script(p, 10));
+        p = bytes.concat(base); p[29] = bytes1(uint8(1));
+        vm.expectRevert("runtime reverted call config"); bot.execute(script(p, 10));
+        vm.expectRevert("runtime reverted call config"); bot.execute(script(revertQuote(probe, 0, 65537), 10));
+        assertEq(probe.calls(), 0); assertEq(a.balanceOf(address(bot)), 1100);
+    }
+    function testRevertQuoteBlocksReentryInsideConsumedCallback() public {
+        RuntimeTestRevertingProbe probe = new RuntimeTestRevertingProbe(a);
+        RuntimeTestCallback cb = new RuntimeTestCallback();
+        bytes memory quote = revertQuote(probe, 4, 36);
+        bytes memory p = abi.encodePacked(uint8(1), runOp(quote, 0, 2, 1), hex"0003", uint256(20), hex"030203");
+        bot.execute(script(callbackProgram(cb, script(p, 10)), 10));
+        bot.execute(script(callbackProgram(cb, script(swapProgram(a, b, 25, 0), 10)), 10));
+        assertEq(probe.calls(), 0); assertEq(a.balanceOf(address(bot)), 1090); assertEq(b.balanceOf(address(bot)), 802);
+    }
+
+    function testRevertQuoteRestoresPendingLegacyCallbackWithoutReinstallation() public {
+        RuntimeTestRevertingProbe probe = new RuntimeTestRevertingProbe(a);
+        RuntimeTestCallback cb = new RuntimeTestCallback();
+        bytes memory p = revertQuote(probe, 4, 36);
+        bytes memory payload = abi.encodeCall(RuntimeTestCallback.run, (script(swapProgram(a, b, 20, 0), 10)));
+        // Field2 is installed before the quote, and no opcode reinstalls it or
+        // clears the quote's CALLBACK_TARGET guard before this legal callback.
+        bot.execute(abi.encodePacked(hex"02000044", script(p, 10), uint8(0), address(cb), uint24(payload.length), payload));
+        assertEq(pool.received(), 10); assertEq(probe.calls(), 0);
+        assertEq(a.balanceOf(address(bot)), 1090); assertEq(b.balanceOf(address(bot)), 797);
     }
 }

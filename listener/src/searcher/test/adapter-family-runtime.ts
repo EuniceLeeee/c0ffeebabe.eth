@@ -1885,13 +1885,16 @@ async function testRequestExactAndOwnedExecution(): Promise<void> {
 }
 
 async function testRuntimeSettlementIssuerAuthority(): Promise<void> {
-  for (const native of [false, true]) {
+  for (const side of ["erc20", "input", "output"] as const) {
+    const native = side !== "erc20";
     const raw = ethers.hexlify(new RuntimeAmountProgram().constant(1, 7n).bytes());
     const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0, runtimeProgram: raw,
-      routeAssets: () => ({ tokenIn: ADDR.WETH.toLowerCase(), tokenOut: TOKEN1,
-        ...(native ? { executionAssets: { input: "native" as const, output: "erc20" as const } } : {}) }),
+      routeAssets: () => ({ tokenIn: side === "output" ? TOKEN1 : ADDR.WETH.toLowerCase(),
+        tokenOut: side === "output" ? ADDR.WETH.toLowerCase() : TOKEN1,
+        ...(native ? { executionAssets: { input: side === "input" ? "native" as const : "erc20" as const,
+          output: side === "output" ? "native" as const : "erc20" as const } } : {}) }),
       runtimeSettlement: { quoteOutput: true, directOutput: true, deferredInput: GOOD } };
-    const family = defineFixture(`settlement-authority-${native}`, controls);
+    const family = defineFixture(`settlement-authority-${side}`, controls);
     const scheduler = new TestScheduler();
     const prepared = await run({ family, pools: [GOOD], scheduler });
     const route = issuedRoute(prepared.publications[0].instances[0]);
@@ -1904,20 +1907,36 @@ async function testRuntimeSettlementIssuerAuthority(): Promise<void> {
       runtimeEvidence: [], actionOwnership: ownershipFor(family) };
     const before = [...scheduler.requestIds];
     const ordinary = buildFamilyRuntimeAmountLeg(invocation); assert(ordinary);
-    assert.equal(ordinary.settlement === undefined, native, "native routes cannot advertise output-first settlement");
+    assert.deepEqual(ordinary.settlement, { quoteOutput: true, directOutput: true,
+      ...(native ? {} : { deferredInput: GOOD }) }, "native quote/direct survive, deferred is filtered");
     const request: RuntimeSettlementRequest = { kind: "direct-output", recipient: OTHER };
     assert.equal(buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request }), null,
       "an emitter ignoring the request must never silently retain its original recipient");
     controls.runtimeSettlementRequest = { kind: "direct-output", recipient: GOOD };
     assert.equal(buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request }), null, "wrong receiver echo declines");
-    controls.runtimeSettlementRequest = request;
+    const mapped = side === "output" ? { ...request, recipient: EXECUTOR } : request;
+    controls.runtimeSettlementRequest = mapped;
     const issued = buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request });
-    assert.deepEqual(controls.lastRuntimeInput?.settlement, request);
+    assert.deepEqual(controls.lastRuntimeInput?.settlement, mapped);
     assert(Object.isFrozen(controls.lastRuntimeInput)); assert(Object.isFrozen(controls.lastRuntimeInput?.settlement));
-    if (native) assert.equal(issued, null, "native requested settlement must use the existing funded wrapper");
-    else {
-      assert(issued); assert.deepEqual(issued.settlementRequest, request);
-      assert(Object.isFrozen(issued)); assert(Object.isFrozen(issued.settlement)); assert(Object.isFrozen(issued.settlementRequest));
+    assert(issued); assert.deepEqual(issued.settlementRequest, request);
+    assert(Object.isFrozen(issued)); assert(Object.isFrozen(issued.settlement)); assert(Object.isFrozen(issued.settlementRequest));
+    for (const recipient of [undefined, EXECUTOR, OTHER]) {
+      const quote: RuntimeSettlementRequest = { kind: "quote-output", ...(recipient ? { recipient } : {}) };
+      const mappedQuote = side === "output" ? { ...quote, recipient: EXECUTOR } : quote;
+      controls.runtimeSettlementRequest = mappedQuote;
+      const quoted = buildFamilyRuntimeAmountLeg({ ...invocation, settlement: quote }); assert(quoted);
+      assert.equal(quoted.program, raw, "unfunded quote must bypass unwrap, self-call and wrap");
+      assert.deepEqual(quoted.settlementRequest, quote); assert.deepEqual(controls.lastRuntimeInput?.settlement, mappedQuote);
+    }
+    controls.runtimeSettlementRequest = mapped;
+    controls.runtimeSettlement = {};
+    assert.equal(buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request }), null, "echo without capability is insufficient");
+    controls.runtimeSettlement = { quoteOutput: true, directOutput: true, deferredInput: GOOD };
+    if (native) {
+      assert.equal(buildFamilyRuntimeAmountLeg({ ...invocation, settlement: { kind: "deferred-input", paymentAmount: 1n, paymentProgram: raw } }), null);
+      for (const recipient of [ethers.ZeroAddress, TOKEN1, ADDR.WETH]) assert.throws(() =>
+        buildFamilyRuntimeAmountLeg({ ...invocation, settlement: { kind: "direct-output", recipient } }), /invalid executor/);
     }
     assert.throws(() => buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request,
       actionOwnership: { ownerOfAction: () => familyId("protocol:foreign") } }), /ownership/);

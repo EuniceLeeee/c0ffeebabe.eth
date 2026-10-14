@@ -155,7 +155,8 @@ abstract contract RuntimeAmountVM {
                 require(ip + 33 <= data.length, "runtime constant bounds");
                 r[uint8(data[ip])] = _word(data, ip + 1); ip += 33;
             } else if (op == 1) {
-                if (readOnly) require(ip + 29 <= data.length && uint8(data[ip + 20]) == 1, "runtime readonly call");
+                if (readOnly) require(ip + 29 <= data.length &&
+                    (uint8(data[ip + 20]) == 1 || uint8(data[ip + 20]) == 2), "runtime readonly call");
                 (ip, returned, context.lastTarget) = _runtimeCall(data, ip, r, context);
             } else if (op == 2) {
                 require(ip + 4 <= data.length, "runtime math bounds");
@@ -223,6 +224,12 @@ abstract contract RuntimeAmountVM {
         uint256 outgoing = _u24(data, ip + 25);
         uint256 patches = uint8(data[ip + 28]);
         ip += 29;
+        if (mode == 2) {
+            require(outgoing == 0, "runtime reverted call config");
+            // Mode 2 cannot install a callback; reuse its scratch offset for
+            // the separately encoded expected revert length.
+            outgoing = _u24(data, ip); ip += 3;
+        }
         uint256 patchStart = ip;
         ip += patches * 4;
         uint256 size = _u24(data, ip);
@@ -234,8 +241,9 @@ abstract contract RuntimeAmountVM {
             uint256 value = r[uint8(data[patchStart + i * 4 + 3])];
             assembly { mstore(add(add(payload, 32), offset), value) }
         }
-        require(target.code.length > 0 && mode <= 1, "runtime call target");
+        require(target.code.length > 0 && mode <= 2, "runtime call target");
         require(mode == 0 || (valueReg == 255 && incoming == 0), "runtime static config");
+        require(mode != 2 || outgoing <= 65536, "runtime reverted call config");
         uint256 oldTarget = _getTransient(CALLBACK_TARGET);
         uint256 oldHash = _getTransient(CALLBACK_HASH);
         uint256 oldState = _getTransient(VM_STATE);
@@ -249,7 +257,11 @@ abstract contract RuntimeAmountVM {
         bool ok;
         if (mode == 1) (ok, result) = target.staticcall(payload);
         else (ok, result) = target.call{value: valueReg == 255 ? 0 : r[valueReg]}(payload);
-        if (!ok) _runtimeHopFailure(context, target, result, "runtime external call");
+        // Mode 2 can be used by a readonly subprogram only because every
+        // accepted external call has reverted all of its descendant effects.
+        // A successful return, even with matching bytes, reverts this VM call.
+        if (mode == 2) require(!ok && result.length == outgoing, "runtime expected revert");
+        else if (!ok) _runtimeHopFailure(context, target, result, "runtime external call");
         if (incoming != 0 && _getTransient(CALLBACK_TARGET) != 1) {
             _runtimeHopGuard(context, target, "runtime callback missing");
         }

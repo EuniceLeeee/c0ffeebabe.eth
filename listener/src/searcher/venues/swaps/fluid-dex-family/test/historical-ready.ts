@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -12,6 +12,7 @@ const RPC_FILE = "/tmp/ds-rpc.json";
 const HELP = `Usage: node --import tsx historical-ready.ts
   --tx HASH --block N --expect-pool ADDRESS --out NEW_DIRECTORY
   --executor ADDRESS --owner ADDRESS --revm-bin EXISTING_BINARY
+  --prior-ready FILE  Copy an existing natural same-block Ready; production revalidates it.
   --check  Validate arguments only; no RPC/config reads, imports or output writes.
 RPC comes only from /tmp/ds-rpc.json MAINNET_RPC_URL; no .env or private keys.
 Runs Fluid-only natural from=N/to=N rebuild, then production source-block prices.
@@ -22,7 +23,7 @@ export function parseHistoricalReadyArgs(argv: string[]) {
   const { values: v } = parseArgs({ args: argv, allowPositionals: false, options: {
     tx: { type: "string" }, block: { type: "string" }, "expect-pool": { type: "string" },
     out: { type: "string" }, executor: { type: "string" }, owner: { type: "string" },
-    "revm-bin": { type: "string" }, check: { type: "boolean" }, help: { type: "boolean" },
+    "revm-bin": { type: "string" }, "prior-ready": { type: "string" }, check: { type: "boolean" }, help: { type: "boolean" },
   } });
   if (v.help) return null;
   assert(v.tx && /^0x[\da-fA-F]{64}$/.test(v.tx), "--tx must be a transaction hash");
@@ -35,7 +36,7 @@ export function parseHistoricalReadyArgs(argv: string[]) {
   assert(v.out && v["revm-bin"], "--out and --revm-bin are required");
   return { tx: v.tx.toLowerCase(), block, expected: address(v["expect-pool"], "--expect-pool"),
     executor: address(v.executor, "--executor"), owner: address(v.owner, "--owner"),
-    out: resolve(v.out), revmBin: resolve(v["revm-bin"]), check: v.check === true };
+    out: resolve(v.out), revmBin: resolve(v["revm-bin"]), priorReady: v["prior-ready"] ? resolve(v["prior-ready"]) : undefined, check: v.check === true };
 }
 
 const sha256 = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -67,7 +68,8 @@ function sourceFingerprint(revmBin: string) {
     "listener/src/searcher/generated/production-family-entries.generated.ts",
     "listener/src/searcher/generated/family-capability-shadow.generated.json",
     "listener/src/shared/executor/botvm-executor.ts",
-    "out/BotVM.sol/BotVM.json",
+    "out/BotVM.sol/BotVM.json", "src/BotVM.sol", "src/RuntimeAmountVM.sol",
+    "listener/src/adapters/runtime-amount-program.ts",
   ];
   const visit = (directory: string) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -168,10 +170,21 @@ async function main() {
     const checkpoint = resolve(args.out, "ready.json");
     const wiring = createRebuildWiring({ rpcUrl, familyIds: [FLUID_DEX_FAMILY_ID],
       executionIdentity: { executor: args.executor, transactionOrigin: args.owner } });
+    if (args.priorReady) {
+      const bytes = readFileSync(args.priorReady);
+      const prior = await new UniverseRebuildCheckpointStore({ path: args.priorReady }).load();
+      assert(prior && !prior.inProgressRun && prior.readyGeneration, "prior Ready must be completed");
+      assert.equal(prior.readyGeneration.cutoff.number, block); assert.equal(prior.readyGeneration.cutoff.hash.toLowerCase(), header.hash.toLowerCase());
+      assert.equal(prior.readyGeneration.observationScope, undefined, "sparse scope is not full single-block discovery");
+      copyFileSync(args.priorReady, checkpoint, constants.COPYFILE_EXCL);
+      save("prior-ready.json", { path: args.priorReady, sha256: sha256(bytes), policy: "copy; current production selective revalidation; no fingerprint edits" });
+    }
     // Neither TX nor expected pool is supplied to the production discovery/strict pipeline.
     const ready = await rebuildUniverse({ ...wiring, store: new UniverseRebuildCheckpointStore({ path: checkpoint }),
       runId: `fluid-single-${block}`, observationRange: { fromBlock: block, toBlock: block },
       attestationConcurrency: 1, log: message => console.log(redact(message)) });
+    if (args.priorReady) assert.equal(sha256(readFileSync(args.priorReady)),
+      JSON.parse(readFileSync(resolve(args.out, "prior-ready.json"), "utf8")).sha256, "prior Ready changed");
     assert.equal(ready.cutoff.number, block); assert.equal(ready.cutoff.hash.toLowerCase(), header.hash.toLowerCase());
     stage = "post-publication-target-assertions";
     const { graph } = resolveStrictReadyRuntime(ready);

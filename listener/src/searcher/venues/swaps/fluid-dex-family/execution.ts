@@ -1,12 +1,12 @@
 import { ethers } from "ethers";
 import { runtimeLeg, assertProjectedRuntimeRoute } from "../../runtime-execution.js";
 import { fluidDexRoutes } from "./routes.js";
-import { fluidDexRawProgram } from "./raw-execution.js";
+import { fluidDexRawProgram, fluidDexRuntimeQuote } from "./raw-execution.js";
 import {
   hopTargetExecutionRuntimeProjection,
   type ExecutionSemantics,
 } from "../../adapter-family-plugin.js";
-import { sameAddress } from "./codec.js";
+import { sameAddress, FLUID_DEX_ADDRESS_DEAD } from "./codec.js";
 import type {
   FluidDexDescriptor,
   FluidDexExactEvidence,
@@ -17,10 +17,23 @@ export const fluidDexExecution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertProjectedRuntimeRoute(r, fluidDexRoutes.project({ descriptor: d }));
+    const request = input.settlement;
+    // dexCallback pays input before output: it is not deferred settlement.
+    if (request && request.kind !== "quote-output" && request.kind !== "direct-output") return null;
+    const recipient = request?.kind === "direct-output" || request?.recipient !== undefined
+      ? ethers.getAddress(request.recipient!) : executor;
+    if ([ethers.ZeroAddress, FLUID_DEX_ADDRESS_DEAD, d.pool, r.tokenIn, r.tokenOut].some(a => sameAddress(a, recipient))) {
+      throw new Error("fluid-dex output recipient");
+    }
+    const finish = (p: ReturnType<typeof fluidDexRawProgram>) => ({ ...runtimeLeg("fluid-dex-swap", p),
+      settlement: { quoteOutput: true as const, directOutput: true as const },
+      ...(request === undefined ? {} : { settlementRequest: request }) });
+    if (request?.kind === "quote-output") return finish(fluidDexRuntimeQuote(d.pool, r.swap0To1));
     const p = fluidDexRawProgram({ pool: d.pool, tokenIn: r.tokenIn, tokenOut: r.tokenOut, executor,
       swap0To1: r.swap0To1, nativeInput: r.executionAssets!.input === "native",
-      nativeOutput: r.executionAssets!.output === "native", minimum: 1n });
-    return runtimeLeg("fluid-dex-swap", p);
+      nativeOutput: r.executionAssets!.output === "native", minimum: 1n,
+      recipient, direct: request?.kind === "direct-output" });
+    return finish(p);
   },
   runtimeProjection: hopTargetExecutionRuntimeProjection,
   buildFragment(input) {

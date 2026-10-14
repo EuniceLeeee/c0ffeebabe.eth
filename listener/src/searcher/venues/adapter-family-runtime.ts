@@ -69,7 +69,7 @@ import { ExactAmountRejectedError } from "./adapter-amount-rejection.js";
 import { applyExactTrialState, emptyExactTrialState, ExactTrialStateConflictError,
   type ExactTrialSnapshot } from "../exact-trial-state.js";
 import { compileExactPrefix } from "../exact-prefix-plan.js";
-import { applyRuntimeAssetBoundary, applyQuotedAssetBoundary, executionNativeSides } from "../execution-asset-boundary.js";
+import { applyRuntimeAssetBoundary, mapRuntimeAssetSettlementRequest, applyQuotedAssetBoundary, executionNativeSides } from "../execution-asset-boundary.js";
 import type {
   FamilyCapabilityCatalog,
   LoadedFamilyBox,
@@ -2786,10 +2786,13 @@ export function buildFamilyRuntimeAmountLeg(input: {
   input.runtime.generationFence.assertCurrent(input.source.generation, input.source);
   const builder = input.family.plugin.execution.buildRuntimeLeg;
   if (!builder) return null;
+  const native = executionNativeSides(record.route);
+  const requested = mapRuntimeAssetSettlementRequest({ route: record.route, executor: input.executor, request: input.settlement });
+  if (requested === null) return null;
   const leg = builder(Object.freeze({ descriptor: record.instance.descriptor, route: record.route,
     source: Object.freeze({ ...input.source }),
     executor: input.executor, runtimeEvidence: Object.freeze([...input.runtimeEvidence]),
-    ...(input.settlement === undefined ? {} : { settlement: Object.freeze({ ...input.settlement }) }),
+    ...(requested === undefined ? {} : { settlement: Object.freeze({ ...requested }) }),
     ...(caller.transactionOrigin === undefined ? {} : { transactionOrigin: caller.transactionOrigin }) }));
   input.runtime.generationFence.assertCurrent(input.source.generation, input.source);
   const current = snapshotCentralCallerAuthority(input.runtime.callerAuthority.bind(binding));
@@ -2798,7 +2801,7 @@ export function buildFamilyRuntimeAmountLeg(input: {
   }
   if (leg === null) return null;
   // Existing emitters cannot silently ignore a receiver or payment request.
-  if (!isDeepStrictEqual(leg.settlementRequest, input.settlement)) return null;
+  if (!isDeepStrictEqual(leg.settlementRequest, requested)) return null;
   if (!input.family.plugin.manifest.ownedActionAdapterIds.includes(leg.actionAdapterId) ||
       input.actionOwnership.ownerOfAction(leg.actionAdapterId) !== input.family.plugin.manifest.familyId ||
       (leg.inputMode !== undefined && leg.inputMode !== "maximum") ||
@@ -2808,12 +2811,15 @@ export function buildFamilyRuntimeAmountLeg(input: {
   if (leg.settlement?.deferredInput !== undefined) assertAddress(leg.settlement.deferredInput, "deferred input recipient");
   if (leg.settlement?.directOutput !== undefined && leg.settlement.directOutput !== true ||
       leg.settlement?.quoteOutput !== undefined && leg.settlement.quoteOutput !== true) throw new Error("runtime settlement capabilities");
-  // Native execution retains the shared wrap/refund path. Its pre-funded
-  // lifecycle cannot be reused as an output-first callback without a separate
-  // native boundary proof. Keep those routes on their existing runtime path.
-  const native = executionNativeSides(record.route);
-  if (input.settlement !== undefined && native) return null;
-  const settlement = native ? undefined : leg.settlement;
+  if (requested?.kind === "quote-output" && leg.settlement?.quoteOutput !== true ||
+      requested?.kind === "direct-output" && leg.settlement?.directOutput !== true ||
+      requested?.kind === "deferred-input" && leg.settlement?.deferredInput === undefined) return null;
+  // Native quote/direct use the same Family contract. A native deferred
+  // callback still lacks a proven boundary and remains unavailable.
+  const settlement = native && leg.settlement ? {
+    ...(leg.settlement.quoteOutput ? { quoteOutput: true as const } : {}),
+    ...(leg.settlement.directOutput ? { directOutput: true as const } : {}),
+  } : leg.settlement;
   return applyRuntimeAssetBoundary({ route: record.route, executor: input.executor,
     leg: Object.freeze({ actionAdapterId: leg.actionAdapterId, program: leg.program,
       ...(leg.inputMode === undefined ? {} : { inputMode: leg.inputMode }),

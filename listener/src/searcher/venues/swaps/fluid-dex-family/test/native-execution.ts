@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ethers } from "ethers";
+import { RuntimeAmountProgram, runtimeDeferredOpeningFloor, runtimeDeferredPayment, type RuntimeSettlementRequest } from "../../../../../adapters/runtime-amount-program.js";
 import { ADDR } from "../../../../../shared/constants/addresses.js";
 import { inspectRuntime, type RuntimeCall } from "../../../../test/runtime-program-testkit.js";
-import { applyRuntimeAssetBoundary, applyQuotedAssetBoundary, executionAssetBoundaryAdapter } from "../../../../execution-asset-boundary.js";
+import { applyRuntimeAssetBoundary, applyQuotedAssetBoundary, executionAssetBoundaryAdapter, mapRuntimeAssetSettlementRequest } from "../../../../execution-asset-boundary.js";
 import { RUNTIME_ERC20, RUNTIME_WRAP } from "../../../runtime-execution.js";
 import { createIdentityAssetMetadataPlan } from "../../../../identity-asset-metadata.js";
 import type { AdapterRequestResult } from "../../../adapter-request-program.js";
@@ -190,5 +191,195 @@ test("old ETH/WETH/token inventory cannot subsidize a native leg or stand in for
     for (const nativeIn of [true, false]) for (const failure of ["no-output", "native-loss"] as const) {
       assert.throws(() => centralBoundaryCase(nativeIn, isQuoted, failure), /checked uint256/);
     }
+  }
+});
+
+// These are contract fixtures. The historical runner separately binds actual
+// deployment code, source, production issuer, balances and transaction receipts.
+const debtABI = new ethers.Interface(["function borrow(uint256,bytes)", "function settle(uint256,bytes)"]);
+const receiver = ethers.getAddress("0x5555555555555555555555555555555555555555");
+const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+type DirectFault = "zero-debit" | "under-debit" | "over-debit" | "zero-output" | "short-output" | "extra-output" |
+  "wrong-recipient" | "old-output" | "receiver-input" | "native-loss" | "short-wrap" | "short-transfer";
+function rawSettlement(d: FluidDexDescriptor, r: FluidDexRoute, settlement?: RuntimeSettlementRequest) {
+  const input = { descriptor: d, route: r, executor: actor, source, runtimeEvidence: [], ...(settlement ? { settlement } : {}) };
+  for (const key of ["amountIn", "quotedAmountOut", "exactEvidence", "exact", "quote"]) Object.defineProperty(input, key, {
+    get() { throw new Error(`runtime read forbidden ${key}`); },
+  });
+  return family.execution.buildRuntimeLeg!(input);
+}
+function directCase(d: FluidDexDescriptor, r: FluidDexRoute, recipient: string, amount: bigint, fault?: DirectFault, rootProgram?: string) {
+  const nativeIn = r.executionAssets!.input === "native", nativeOut = r.executionAssets!.output === "native";
+  const request = { kind: "direct-output" as const, recipient };
+  // Mirrors the common issuer's raw/native mapping; the actual issuer is
+  // exercised in the separately bound historical matrix, not claimed here.
+  const raw = rawSettlement(d, r, { ...request, recipient: nativeOut ? actor : recipient }); assert(raw);
+  const leg = applyRuntimeAssetBoundary({ route: r, executor: actor, leg: { ...raw, settlementRequest: request } });
+  const balances = new Map<string, bigint>(), key = (t: string, a: string) => t.toLowerCase() + ":" + a.toLowerCase();
+  const get = (t: string, a: string) => balances.get(key(t, a)) ?? 0n;
+  const add = (t: string, a: string, v: bigint) => { const next = get(t, a) + v; assert(next >= 0n); balances.set(key(t, a), next); };
+  add(r.tokenIn, actor, amount + 101n); add(r.tokenOut, actor, 103n);
+  add(r.tokenIn, receiver, 107n); add(r.tokenOut, receiver, 10n ** 30n);
+  const before = new Map(balances); let native = 211n, allowance = 999n, swaps = 0, quotes = 0;
+  const expected = amount * 2n;
+  const revertedCall = (c: RuntimeCall) => {
+    assert(same(c.target, pool)); assert.equal(c.revertBytes, 36); assert.equal(c.value, 0n);
+    assert.equal(c.incoming, 0); assert.equal(c.outgoing, 0);
+    const args = FLUID_DEX_INTERFACE.decodeFunctionData("swapIn", c.data);
+    assert.equal(args[0], r.swap0To1); assert.equal(args[1], amount); assert.equal(args[2], 0n);
+    assert.equal(args[3], FLUID_DEX_ADDRESS_DEAD); quotes++;
+    return { success: false, data: FLUID_DEX_INTERFACE.encodeErrorResult("FluidDexSwapResult", [expected]) };
+  };
+  const call = (c: RuntimeCall): string => {
+    if (same(c.target, receiver) && c.data.startsWith(debtABI.getFunction("borrow")!.selector)) {
+      assert(rootProgram); const args = debtABI.decodeFunctionData("borrow", c.data); assert.equal(args[0], expected);
+      add(r.tokenIn, actor, amount + 1n);
+      const bytes = ethers.getBytes(args[1]), cap = BigInt(ethers.hexlify(bytes.slice(1, 33))); assert.equal(cap, expected);
+      inspectRuntime(ethers.hexlify(bytes.slice(36)), cap, { call, revertedCall, nativeBalance: () => native,
+        calldata: debtABI.encodeFunctionData("settle", [expected, args[1]]) }); return "0x";
+    }
+    if (same(c.target, actor)) {
+      const script = ethers.getBytes(subscript.decodeFunctionData("execSubscript", c.data)[0]);
+      inspectRuntime(scriptProgram(script, amount), amount, { call, revertedCall, nativeBalance: () => native }); return "0x";
+    }
+    if (c.data.startsWith(RUNTIME_ERC20.getFunction("balanceOf")!.selector)) {
+      assert(c.static); return word(get(c.target, RUNTIME_ERC20.decodeFunctionData("balanceOf", c.data)[0]));
+    }
+    if (c.data.startsWith(RUNTIME_ERC20.getFunction("approve")!.selector)) {
+      const args = RUNTIME_ERC20.decodeFunctionData("approve", c.data); assert(same(args[0], pool));
+      allowance = args[1]; return word(1n);
+    }
+    if (same(c.target, pool)) {
+      const args = FLUID_DEX_INTERFACE.decodeFunctionData("swapIn", c.data);
+      assert.equal(args[0], r.swap0To1); assert.equal(args[1], amount); assert.equal(args[2], 1n);
+      assert(same(args[3], nativeOut ? actor : recipient)); swaps++;
+      const debit = fault === "zero-debit" ? 0n : amount + (fault === "under-debit" ? -1n : fault === "over-debit" ? 1n : 0n);
+      const credit = fault === "zero-output" ? 0n : expected + (fault === "short-output" ? -1n : fault === "extra-output" ? 1n : 0n);
+      assert.equal(c.value, nativeIn ? amount : 0n);
+      if (nativeIn) native -= debit;
+      else { assert.equal(allowance, amount); add(r.tokenIn, actor, -debit); }
+      if (nativeOut) native += fault === "wrong-recipient" ? 0n : credit;
+      else add(r.tokenOut, fault === "wrong-recipient" ? same(recipient, actor) ? receiver : actor : recipient, credit);
+      if (fault === "old-output") add(r.tokenOut, actor, -1n);
+      if (fault === "receiver-input") add(r.tokenIn, receiver, -1n);
+      if (fault === "native-loss") native--;
+      return word(expected);
+    }
+    assert(same(c.target, ADDR.WETH));
+    if (c.data.startsWith(RUNTIME_ERC20.getFunction("transfer")!.selector)) {
+      const args = RUNTIME_ERC20.decodeFunctionData("transfer", c.data); assert(same(args[0], recipient));
+      add(ADDR.WETH, actor, -args[1]); add(ADDR.WETH, recipient, args[1] - (fault === "short-transfer" ? 1n : 0n)); return word(1n);
+    }
+    const args = RUNTIME_WRAP.parseTransaction({ data: c.data })!;
+    if (args.name === "withdraw") { add(ADDR.WETH, actor, -args.args[0]); native += args.args[0]; }
+    else { assert.equal(args.name, "deposit"); native -= c.value; add(ADDR.WETH, actor, c.value - (fault === "short-wrap" ? 1n : 0n)); }
+    return "0x";
+  };
+  inspectRuntime(rootProgram ?? leg.program, amount, { call, revertedCall, nativeBalance: () => native });
+  if (fault !== undefined) return; // Negative fixtures must fail inside the emitted program.
+  assert.equal(quotes, rootProgram ? 2 : 1); assert.equal(swaps, 1); assert.equal(native, 211n);
+  assert.equal(get(r.tokenIn, actor), rootProgram ? amount + 102n : 101n);
+  assert.equal(get(r.tokenOut, recipient), before.get(key(r.tokenOut, recipient))! + expected);
+  if (!same(recipient, actor)) { assert.equal(get(r.tokenOut, actor), 103n); assert.equal(get(r.tokenIn, receiver), 107n); }
+  if (!nativeIn) assert.equal(allowance, 0n);
+}
+
+for (const [name, t0, t1] of [["native0", FLUID_DEX_NATIVE_TOKEN, token], ["native1", token, FLUID_DEX_NATIVE_TOKEN],
+  ["WETH ERC20", ADDR.WETH, token], ["ERC20", token, other]] as const) {
+  test(`${name}: explicit direct debit/receipt and quote declarations preserve default bytes`, () => {
+    const d = fixture(t0, t1);
+    for (const r of family.routes.project({ descriptor: d })) {
+      const leg = rawSettlement(d, r); assert(leg); assert.deepEqual(leg.settlement, { quoteOutput: true, directOutput: true });
+      const old = new RuntimeAmountProgram();
+      if (r.executionAssets!.input !== "native") {
+        old.call(r.tokenIn, RUNTIME_ERC20.encodeFunctionData("approve", [pool, 0n]))
+          .call(r.tokenIn, RUNTIME_ERC20.encodeFunctionData("approve", [pool, 0n]), { patches: [{ offset: 36, reg: 0 }] });
+      }
+      old.call(pool, FLUID_DEX_INTERFACE.encodeFunctionData("swapIn", [r.swap0To1, 0n, 1n, actor]), {
+        patches: [{ offset: 36, reg: 0 }], ...(r.executionAssets!.input === "native" ? { valueReg: 0 } : {}),
+      });
+      if (r.executionAssets!.input !== "native") old.call(r.tokenIn, RUNTIME_ERC20.encodeFunctionData("approve", [pool, 0n]));
+      assert.equal(leg.program, ethers.hexlify(old.bytes()));
+      assert.equal(rawSettlement(d, r, { kind: "deferred-input", paymentAmount: 1n, paymentProgram: "0x" }), null);
+      for (const recipient of [actor, receiver]) for (const amount of [1n, 100n, 1234567890123456789n]) directCase(d, r, recipient, amount);
+      for (const kind of ["quote-output", "direct-output"] as const) for (const recipient of
+        [ethers.ZeroAddress, FLUID_DEX_ADDRESS_DEAD, pool, r.tokenIn, r.tokenOut, "invalid"]) {
+        assert.throws(() => rawSettlement(d, r, { kind, recipient }));
+      }
+      for (const recipient of [actor, receiver]) {
+        for (const fault of ["zero-debit", "under-debit", "over-debit", "zero-output", "short-output", "extra-output", "wrong-recipient", "native-loss"] as const)
+          assert.throws(() => directCase(d, r, recipient, 100n, fault), fault);
+        if (!same(recipient, actor)) for (const fault of ["old-output", "receiver-input"] as const)
+          assert.throws(() => directCase(d, r, recipient, 100n, fault), fault);
+        if (r.executionAssets!.output === "native") {
+          assert.throws(() => directCase(d, r, recipient, 100n, "short-wrap"));
+          if (!same(recipient, actor)) assert.throws(() => directCase(d, r, recipient, 100n, "short-transfer"));
+        }
+        assert.throws(() => directCase(d, r, recipient, 0n));
+      }
+    }
+  });
+  test(`${name}: unfunded quote accepts only the declared revert and positive output`, () => {
+    const d = fixture(t0, t1);
+    for (const r of family.routes.project({ descriptor: d })) for (const recipient of [undefined, actor, receiver]) {
+      const leg = rawSettlement(d, r, { kind: "quote-output", ...(recipient ? { recipient } : {}) }); assert(leg);
+      const bounded = applyRuntimeAssetBoundary({ route: r, executor: actor, leg }); assert.equal(bounded, leg);
+      const run = (amount: bigint, success: boolean, data: string) => inspectRuntime(leg.program, amount, {
+        call() { throw Error("quote must not fund, approve, unwrap or wrap"); },
+        nativeBalance() { throw Error("quote must not read actor funding"); },
+        revertedCall(c) { assert.equal(c.value, 0n); const args = FLUID_DEX_INTERFACE.decodeFunctionData("swapIn", c.data);
+          assert.equal(args[1], amount); assert.equal(args[3], FLUID_DEX_ADDRESS_DEAD); return { success, data }; },
+      }, { output: true, readOnly: true });
+      const good = FLUID_DEX_INTERFACE.encodeErrorResult("FluidDexSwapResult", [13n]);
+      assert.equal(run(7n, false, good).registers[0], 13n);
+      for (const data of ["0x", good + "00", good.slice(0, -2), "0xdeadbeef" + good.slice(10),
+        FLUID_DEX_INTERFACE.encodeErrorResult("FluidDexError", [51049n]), FLUID_DEX_INTERFACE.encodeErrorResult("FluidDexSwapResult", [0n])]) {
+        assert.throws(() => run(7n, false, data));
+      }
+      assert.throws(() => run(7n, true, good)); assert.throws(() => run(0n, false, good));
+    }
+  });
+}
+test("revert-call emitter rejects value, callbacks, static ambiguity and excessive length", () => {
+  for (const config of [{ revertBytes: -1 }, { revertBytes: 65537 }, { revertBytes: 1.5 },
+    { revertBytes: 36, static: true }, { revertBytes: 36, valueReg: 0 },
+    { revertBytes: 36, callback: { incomingOffset: 0, outgoingOffset: 0 } }]) {
+    assert.throws(() => new RuntimeAmountProgram().call(pool, "0x", config));
+  }
+});
+
+test("production sim selector composes Fluid declared-revert/native direct without external Exact or quoted fallback", async () => {
+  const { createBlockScanSimAmountSelector } = await import("../../../../simulator/blockscan-sim-amount-selector.js");
+  for (const d of [fixture(FLUID_DEX_NATIVE_TOKEN, token), fixture(token, other)]) for (const r of family.routes.project({ descriptor: d })) {
+    let exact = 0, quoted = 0, simulations = 0;
+    const edges = [{ adapterId: "fluid-dex-swap", target: pool, tokenIn: r.tokenIn, tokenOut: r.tokenOut },
+      { adapterId: "fixture-deferred", target: receiver, tokenIn: r.tokenOut, tokenOut: r.tokenIn }];
+    const selector = createBlockScanSimAmountSelector({ source, executor: actor, async simulate(plan) {
+      simulations++; assert.equal(plan.root.adapterId, "runtime-amount-flow"); assert(plan.root.params.settlementProgram);
+      directCase(d, r, receiver, plan.flashAmount, undefined, plan.root.params.settlementProgram as string);
+      return { success: true, netProfit: 1n, grossProfit: 1n, gasUsed: 1n, profitToken: r.tokenIn, calldata: "0x" };
+    } });
+    const session: any = { source, blocksPrefixInversion: () => false, fundingActionIds: () => [],
+      buildRuntimeAmountLeg({ edge, settlement }: any) {
+        if (edge === edges[0]) {
+          const mapped = mapRuntimeAssetSettlementRequest({ route: r, executor: actor, request: settlement });
+          if (mapped === null) return null;
+          const raw = rawSettlement(d, r, mapped); if (!raw) return null;
+          return applyRuntimeAssetBoundary({ route: r, executor: actor, leg: { ...raw, settlementRequest: settlement } });
+        }
+        if (!settlement) return { actionAdapterId: "fixture-deferred", program: "0x010001" + "00".repeat(32), settlement: { deferredInput: receiver } };
+        assert.equal(settlement.kind, "deferred-input");
+        const payment = runtimeDeferredPayment({ tokenOut: r.tokenIn, executor: actor, debtOffset: 4, ...settlement });
+        const p = new RuntimeAmountProgram(); runtimeDeferredOpeningFloor(p, r.tokenIn, actor, settlement.paymentAmount);
+        p.call(receiver, debtABI.encodeFunctionData("borrow", [0n, payment.script]), { callback: { incomingOffset: 100, outgoingOffset: 100 },
+          patches: [{ offset: 4, reg: 0 }, { offset: 100 + payment.limitOffset, reg: 0 }, { offset: 100 + payment.floorOffset, reg: 13 }] });
+        return { actionAdapterId: "fixture-deferred", program: ethers.hexlify(p.bytes()), settlementRequest: settlement };
+      }, issueExact() { exact++; throw Error("Exact forbidden"); }, buildExecution() { quoted++; throw Error("quoted forbidden"); },
+    };
+    await selector.solve({ opportunity: { kind: "block-scan-arb", searchSeed: { searchCenter: 1000000n }, flashToken: r.tokenIn,
+      profitToken: r.tokenIn, targetNetProfit: 1n }, tokenPath: { edges }, maxFlashAmount: 2000000n, templateName: "Fluid fixture" } as any,
+      { call() { throw Error("RPC forbidden"); } } as any, { executor: actor } as any,
+      { strictSession: session, deferPhase2Sim: true, gssMaxTries: 0, deadlineAtMs: Date.now() + 10000 });
+    assert(simulations > 0); assert.equal(exact, 0); assert.equal(quoted, 0);
   }
 });

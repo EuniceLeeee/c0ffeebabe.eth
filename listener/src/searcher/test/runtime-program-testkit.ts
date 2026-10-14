@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 
 export interface RuntimeCall {
   target: string; data: string; template: string; static: boolean; value: bigint;
+  revertBytes?: number;
   incoming: number; outgoing: number; patches: { offset: number; reg: number }[];
 }
 export interface RuntimeAllowance { token: string; spender: string; minimum: bigint; grant: bigint }
@@ -10,6 +11,7 @@ export interface RuntimeAllowance { token: string; spender: string; minimum: big
  * admission evidence. The actual VM is covered by BotVMRuntimeAmount.t.sol. */
 export function inspectRuntime(program: string, amount: bigint, input: {
   call?: (call: RuntimeCall) => string;
+  revertedCall?: (call: RuntimeCall) => { success: boolean; data: string };
   allowance?: (grant: RuntimeAllowance) => void;
   nativeBalance?: () => bigint;
   calldata?: string;
@@ -33,9 +35,12 @@ export function inspectRuntime(program: string, amount: bigint, input: {
       case 0: { const d = reg(); set(d, uint(32)); break; }
       case 1: {
         const target = ethers.getAddress(ethers.hexlify(take(20))), callMode = byte(), vr = byte();
-        assert(callMode <= 1 && (vr === 255 || vr < 16));
-        assert(!mode.readOnly || callMode === 1, "runtime readonly call");
+        assert(callMode <= 2 && (vr === 255 || vr < 16));
+        assert(!mode.readOnly || callMode === 1 || callMode === 2, "runtime readonly call");
         const incoming = Number(uint(3)), outgoing = Number(uint(3)), n = byte();
+        const revertBytes = callMode === 2 ? Number(uint(3)) : undefined;
+        assert(callMode === 0 || vr === 255 && incoming === 0, "runtime static config");
+        assert(revertBytes === undefined || outgoing === 0 && revertBytes <= 65536, "runtime reverted call config");
         const patches = Array.from({ length: n }, () => ({ offset: Number(uint(3)), reg: reg() }));
         const data = take(Number(uint(3))), template = ethers.hexlify(data);
         for (const patch of patches) {
@@ -43,8 +48,15 @@ export function inspectRuntime(program: string, amount: bigint, input: {
           data.set(ethers.getBytes(ethers.toBeHex(r[patch.reg], 32)), patch.offset);
         }
         const call = { target, data: ethers.hexlify(data), template, static: callMode === 1,
-          value: vr === 255 ? 0n : r[vr], incoming, outgoing, patches };
-        calls.push(call); returned = ethers.getBytes(input.call?.(call) ?? "0x");
+          value: vr === 255 ? 0n : r[vr], incoming, outgoing, patches,
+          ...(revertBytes === undefined ? {} : { revertBytes }) };
+        calls.push(call);
+        if (revertBytes === undefined) returned = ethers.getBytes(input.call?.(call) ?? "0x");
+        else {
+          assert(input.revertedCall, "reverted call fixture required");
+          const result = input.revertedCall(call); returned = ethers.getBytes(result.data);
+          assert(!result.success && returned.length === revertBytes, "runtime expected revert");
+        }
         break;
       }
       case 2: {

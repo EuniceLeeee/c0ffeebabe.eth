@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { ADDR } from "../shared/constants/addresses.js";
-import { RuntimeAmountProgram, runtimeProgramScript, type RuntimeAmountLeg } from "../adapters/runtime-amount-program.js";
+import { RuntimeAmountProgram, runtimeProgramScript, type RuntimeAmountLeg, type RuntimeSettlementRequest } from "../adapters/runtime-amount-program.js";
 import { assertSubscriptCalldata, buildSubscriptCalldata } from "../shared/executor/botvm-program-entry.js";
 import type { ActionAdapter } from "../types.js";
 import type { PlanFragment } from "./venues/route-leg-adapter.js";
@@ -65,6 +65,21 @@ export function executionNativeSides(route: RouteAssets): { input: boolean; outp
   return { input, output };
 }
 
+/** Translate graph-asset delivery to the raw operation's receiver. The issuer
+ * validates the Family echo against this request, then exposes the unchanged
+ * original request after applying the measured native boundary. */
+export function mapRuntimeAssetSettlementRequest(input: {
+  route: RouteAssets; executor: string; request?: RuntimeSettlementRequest;
+}): RuntimeSettlementRequest | null | undefined {
+  const native = executionNativeSides(input.route), request = input.request;
+  if (!native || request === undefined) return request;
+  if (request.kind !== "quote-output" && request.kind !== "direct-output") return null;
+  const recipient = request.recipient ?? (request.kind === "quote-output" ? input.executor : undefined);
+  if (typeof recipient !== "string") throw new Error("native settlement recipient missing");
+  runtimeExecutor(recipient, input.route.tokenIn, input.route.tokenOut);
+  return native.output ? Object.freeze({ ...request, recipient: input.executor }) : request;
+}
+
 /** A nested program keeps boundary registers private even for callback-heavy
  * operations. Only existing VM instructions are used; no protocol ABI enters
  * the central envelope. All safety checks execute inside the same transaction. */
@@ -72,28 +87,60 @@ function envelope(input: {
   route: RouteAssets; executor: string; script: Uint8Array;
   amountPatch?: number; minimum: bigint;
   inputToleranceRawUnits?: bigint;
+  recipient?: string;
 }): RuntimeAmountProgram {
   const sides = executionNativeSides(input.route);
   if (!sides || input.minimum < 0n || input.minimum > ethers.MaxUint256) throw new Error("execution asset envelope");
   if (input.inputToleranceRawUnits !== undefined) assertExecutionRounding(input.inputToleranceRawUnits);
   const actor = runtimeExecutor(input.executor, input.route.tokenIn, input.route.tokenOut);
+  const recipient = input.recipient === undefined ? actor : runtimeExecutor(input.recipient, input.route.tokenIn, input.route.tokenOut);
+  const external = recipient.toLowerCase() !== actor.toLowerCase();
   const balance = RUNTIME_ERC20.encodeFunctionData("balanceOf", [actor]);
+  const receivedBalance = RUNTIME_ERC20.encodeFunctionData("balanceOf", [recipient]);
   const p = new RuntimeAmountProgram();
   const native = runtimeNativeBoundary(p, ADDR.WETH);
   p.call(input.route.tokenIn, balance, { static: true }).load(1, 0).math("sub", 2, 1, 0)
     .call(input.route.tokenOut, balance, { static: true }).load(3, 0);
+  if (input.recipient !== undefined) {
+    p.constant(5, 1n).math("sub", 6, 0, 5);
+    if (external) p.call(input.route.tokenOut, receivedBalance, { static: true }).load(7, 0)
+      .call(input.route.tokenIn, receivedBalance, { static: true }).load(8, 0);
+  }
   if (sides.input) native.unwrapInput();
   p.call(actor, buildSubscriptCalldata(input.script), input.amountPatch === undefined ? {} : {
     patches: [{ offset: 68 + input.amountPatch, reg: 0 }],
   });
   // Native input may be partially spent. Only its unspent amount is rewrapped;
   // native output is independently measured, never a quoted transfer quantity.
+  if (input.recipient !== undefined && sides.output) p.nativeBalance(10).math("sub", 10, 10, 13);
   native.wrapOutput();
   native.assertRestored();
+  if (input.recipient !== undefined && sides.output) p.call(input.route.tokenOut, balance, { static: true })
+    .load(9, 0).math("sub", 9, 9, 3).equal(9, 10);
   // An individual operation may spend less, but never subsidize itself from
   // old inventory. The enclosing flow retains its exact intermediate-token and
   // final repayment/conservation checks.
   p.call(input.route.tokenIn, balance, { static: true }).load(4, 0).math("sub", 4, 4, 2);
+  if (input.recipient !== undefined) {
+    // Explicit direct settlement uses exact positive debit, as does the
+    // settlement composer. The default/quoted refund policy is unchanged.
+    p.constant(5, 0n).equal(4, 5);
+    if (external) {
+      if (sides.output) p.call(input.route.tokenOut, balance, { static: true }).load(9, 0).math("sub", 9, 9, 3)
+        .call(input.route.tokenOut, RUNTIME_ERC20.encodeFunctionData("transfer", [recipient, 0n]), {
+          patches: [{ offset: 36, reg: 9 }],
+        });
+      p.call(input.route.tokenOut, balance, { static: true }).load(4, 0).equal(4, 3)
+        .call(input.route.tokenIn, receivedBalance, { static: true }).load(4, 0).equal(4, 8)
+        .call(input.route.tokenOut, receivedBalance, { static: true }).load(4, 0).math("sub", 4, 4, 7);
+      if (sides.output) p.equal(4, 9);
+    } else p.call(input.route.tokenOut, balance, { static: true }).load(4, 0).math("sub", 4, 4, 3);
+    p.constant(5, input.minimum).math("sub", 4, 4, 5);
+    // Output transfers cannot spend the executor's original ETH or retain a
+    // newly received native amount. External receiver ETH is not observed here.
+    native.assertRestored();
+    return p;
+  }
   if (input.inputToleranceRawUnits !== undefined) {
     // Residual is nonnegative above, so old inventory cannot be used. Quoted
     // live legs also enforce the 0/1 policy and require a positive debit.
@@ -110,7 +157,11 @@ export function applyRuntimeAssetBoundary(input: {
   route: RouteAssets; executor: string; leg: RuntimeAmountLeg;
 }): RuntimeAmountLeg {
   if (!executionNativeSides(input.route)) return input.leg;
-  const program = envelope({ ...input, script: runtimeProgramScript(ethers.getBytes(input.leg.program)),
+  if (input.leg.settlementRequest?.kind === "quote-output") return input.leg;
+  if (input.leg.settlementRequest?.kind === "deferred-input") throw new Error("native deferred settlement unsupported");
+  const program = envelope({ ...input,
+    ...(input.leg.settlementRequest?.kind === "direct-output" ? { recipient: input.leg.settlementRequest.recipient } : {}),
+    script: runtimeProgramScript(ethers.getBytes(input.leg.program)),
     amountPatch: 1, minimum: 1n });
   return Object.freeze({ ...input.leg, program: ethers.hexlify(program.bytes()) });
 }

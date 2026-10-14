@@ -14,7 +14,7 @@ import { declareRequestProgram, type AdapterRequest } from "../venues/adapter-re
 const token = "0x1111111111111111111111111111111111111111";
 const actor = "0x2222222222222222222222222222222222222222";
 const target = "0x3333333333333333333333333333333333333333";
-const rawABI = new ethers.Interface(["function exchange(bool,uint256) payable"]);
+const rawABI = new ethers.Interface(["function exchange(bool,uint256) payable", "function exchangeTo(bool,uint256,address) payable"]);
 const subscript = new ethers.Interface(["function execSubscript(bytes)"]);
 const fixtures: Record<string, string> = {};
 const amount = 100n;
@@ -30,6 +30,15 @@ for (const nativeIn of [true, false]) {
   const side = nativeIn ? "Input" : "Output";
   fixtures[`runtime${side}`] = ethers.hexlify(runtimeProgramScript(ethers.getBytes(
     applyRuntimeAssetBoundary({ route, executor: actor, leg }).program), amount));
+  for (const recipient of [actor, "0x5555555555555555555555555555555555555555"]) {
+    const direct = new RuntimeAmountProgram().call(target,
+      rawABI.encodeFunctionData("exchangeTo", [nativeIn, 0n, nativeIn ? recipient : actor]), {
+        patches: [{ offset: 36, reg: 0 }], ...(nativeIn ? { valueReg: 0 } : {}),
+      });
+    fixtures[`direct${side}${recipient === actor ? "Self" : "External"}`] = ethers.hexlify(runtimeProgramScript(ethers.getBytes(
+      applyRuntimeAssetBoundary({ route, executor: actor, leg: { actionAdapterId: "fixture-native", program: ethers.hexlify(direct.bytes()),
+        settlementRequest: { kind: "direct-output", recipient } } }).program), amount));
+  }
   const fragment = applyQuotedAssetBoundary({ route, executor: actor, amountIn: amount, minimum: 200n,
     fragment: { requirements: [], nodes: [{ adapterId: leg.actionAdapterId, target, tokenIn: route.tokenIn,
       tokenOut: route.tokenOut, amount, params: {}, children: [] }] } });

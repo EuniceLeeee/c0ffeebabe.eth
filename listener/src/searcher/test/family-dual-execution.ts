@@ -8,7 +8,7 @@ import { RuntimeAmountProgram } from "../../adapters/runtime-amount-program.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_LOAD as load } from "../venues/production-family-composition.js";
 import { createBlockScanSimAmountSelector } from "../simulator/blockscan-sim-amount-selector.js";
 import { inspectRuntime, type RuntimeCall } from "./runtime-program-testkit.js";
-import { applyRuntimeAssetBoundary } from "../execution-asset-boundary.js";
+import { applyRuntimeAssetBoundary, mapRuntimeAssetSettlementRequest } from "../execution-asset-boundary.js";
 import { PSM_INTERFACE, PSM_WAD, psmBuyQuote, psmBuyCost } from "../venues/protocols/psm-family/codec.js";
 import { MODES, EXECUTION, executionFunction, pullsInput } from "../venues/swaps/curve-plain-family/codec.js";
 import { ROUTER, PERMIT2, PERMIT2_ABI, ROUTER_ABI } from "../venues/swaps/balancer-v3-family/codec.js";
@@ -486,7 +486,9 @@ test(`settlement: request binding and unchanged default ${d.familyId}/${d.varian
     const supported = request.kind === "quote-output" ? normal.settlement?.quoteOutput === true :
       request.kind === "direct-output" ? normal.settlement?.directOutput === true :
       typeof normal.settlement?.deferredInput === "string";
-    const actual = p.execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: request });
+    const mapped = mapRuntimeAssetSettlementRequest({ route: r, executor: inputFor(d, r).executor,
+      request: request as import("../../adapters/runtime-amount-program.js").RuntimeSettlementRequest });
+    const actual = mapped === null ? null : p.execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: mapped });
     if (!supported) {
       // A legacy raw emitter may ignore an unknown field. The central issuer
       // rejects that unchanged result because it does not echo the request.
@@ -497,7 +499,7 @@ test(`settlement: request binding and unchanged default ${d.familyId}/${d.varian
       }
     } else {
       assert(actual, "declared request must construct for this already valid route");
-      assert.deepEqual(actual.settlementRequest, request, "Family must bind the complete request");
+      assert.deepEqual(actual.settlementRequest, mapped, "raw Family must bind the complete mapped request; issuer separately preserves the original receiver");
       assert(p.manifest.ownedActionAdapterIds.includes(actual.actionAdapterId));
       if (request.kind !== "quote-output") assert.equal(actual.inputMode, normal.inputMode);
     }

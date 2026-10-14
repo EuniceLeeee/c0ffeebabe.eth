@@ -36,16 +36,23 @@ export class RuntimeAmountProgram {
   call(target: string, data: string | Uint8Array, input: {
     static?: boolean; valueReg?: number; patches?: readonly { offset: number; reg: number }[];
     callback?: { incomingOffset: number; outgoingOffset: number };
+    /** Accept only a reverted call with this exact byte length. No value or
+     * callback is permitted; the Family validates the returned ABI bytes. */
+    revertBytes?: number;
   } = {}): this {
     const bytes = ethers.getBytes(data), patches = input.patches ?? [];
     if (patches.length > 255 || patches.some(p => !Number.isSafeInteger(p.offset) || p.offset < 4 || p.offset + 32 > bytes.length)) {
       throw new Error("runtime call patch bounds");
     }
     if (input.static && (input.valueReg !== undefined || input.callback)) throw new Error("runtime static call configuration");
+    if (input.revertBytes !== undefined && (!Number.isSafeInteger(input.revertBytes) ||
+        input.revertBytes < 0 || input.revertBytes > 65536 || input.static ||
+        input.valueReg !== undefined || input.callback)) throw new Error("runtime reverted call configuration");
     return this.push(new Uint8Array([1]), addressToBytes(target),
-      new Uint8Array([input.static ? 1 : 0, input.valueReg === undefined ? 255 : reg(input.valueReg)]),
+      new Uint8Array([input.revertBytes !== undefined ? 2 : input.static ? 1 : 0, input.valueReg === undefined ? 255 : reg(input.valueReg)]),
       uint24ToBytes(input.callback?.incomingOffset ?? 0), uint24ToBytes(input.callback?.outgoingOffset ?? 0),
       new Uint8Array([patches.length]),
+      ...(input.revertBytes === undefined ? [] : [uint24ToBytes(input.revertBytes)]),
       ...patches.map(p => concatBytes(uint24ToBytes(p.offset), new Uint8Array([reg(p.reg)]))),
       uint24ToBytes(bytes.length), bytes);
   }
