@@ -1,0 +1,230 @@
+{
+  "kind": "family-adaptation-independent-design-review-v1",
+  "family": "yearn-auction",
+  "reviewer": "/root/yearn_callback_review",
+  "reviewPass": 1,
+  "maximumReviewPasses": 3,
+  "createdAt": "2026-10-14T16:42:40.270776+00:00",
+  "authoritativeWorkspace": "/opt/mev-cloud/family-runtime-20261007",
+  "authoritativeHead": "180d11c5344ba930dcd2983428bc75e828714e73",
+  "scope": "Read-only non-author design review of the initial brief plus the parent clarification received during this same review pass. This is not a code review of an implemented candidate and not an execution or acceptance pass.",
+  "verdict": "revised_design_acceptable_pending_implementation_and_validation",
+  "blockingFindings": [],
+  "resolvedDesignFindings": [
+    {
+      "id": "YDC-D1",
+      "severity": "blocking_in_initial_proposal",
+      "status": "resolved_by_restricting_deferred_maximum_to_last_leg",
+      "finding": "The original proposal admitted maximum-input prefix legs while Yearn required post-prefix sold == oldSold + amountOut - paymentAmount and want == oldWant + budget - needed. A prefix maximum refund violates those equalities despite valid debit and credit.",
+      "counterexample": {
+        "oldSold": "1000",
+        "amountOut": "120",
+        "paymentAmount": "100",
+        "actualFirstMaximumDebit": "99",
+        "actualSoldAfter": "1021",
+        "initialProposalRequiredSoldAfter": "1020"
+      },
+      "revisedConstraint": "Only the final deferred leg may have inputMode=maximum, and its declared deferredInput account must equal executor. Every prefix leg remains exact-input with strictly positive actual debit equal to its current measured input. Any maximum-input prefix preserves the existing funded-runtime fallback and cannot enter settlementProgram. The encoder accepts a nonzero maximum mask only when it is exactly the final-leg bit.",
+      "whyResolved": "Exact prefix debit leaves no retained prefix input. Yearn can therefore preserve both exact outer balance equalities, with its own final want remainder exactly budget-needed. Only the final maximum leg tokenIn may increase at the common final inventory check; all other intermediate assets remain exact."
+    }
+  ],
+  "nonBlockingFindings": [
+    {
+      "id": "YDC-N1",
+      "topic": "protocol order and ABI",
+      "finding": "The supplied implementation transfers sold to takerReceiver, calls auctionTakeCallback(from,msg.sender,amountTaken,needed,data), then transferFrom pulls want from the original caller to the configured receiver. The proposed callback receiver must be executor. Callback words are at 4/36/68/100/132 and its dynamic data begins at 196; four-argument take dynamic data begins at 164."
+    },
+    {
+      "id": "YDC-N2",
+      "topic": "budget arithmetic",
+      "finding": "The full raw-price probe and floor inverse agree with the supplied _getAmountNeeded expression. min(available, inverse) is required for output quotation. Positive output and positive cost must be separately enforced; checked uint256 overflows or rawPrice below wantScaler remain explicit rejection, not silent substitutions."
+    },
+    {
+      "id": "YDC-N3",
+      "topic": "generic boundary",
+      "finding": "Appending a generic min arithmetic kind, adding optional maximum semantics to the shared payment helper, and allowing only a final maximum deferred leg are framework changes. Protocol calldata, sender/debt layout, price formula, approval-pull semantics and receipt equations remain in the Yearn Family. This is not family_local."
+    },
+    {
+      "id": "YDC-N4",
+      "topic": "evidence limit",
+      "finding": "Current supplied source still returns null for Yearn quote-output/deferred-input and rejects all maximum settlement compositions. The design review and bounded sanity checks do not demonstrate that new paths are implemented or that any historical execution, replay, Ready update or performance acceptance passed."
+    }
+  ],
+  "recommendedChanges": [
+    {
+      "priority": "required_implementation_invariant",
+      "change": "Keep the corrected last-only maximum guard at both common composition and settlementProgram encoding. Reject maximum prefix or a maximum deferred funding recipient other than executor before constructing a callback root, with the ordinary funded runtime still available."
+    },
+    {
+      "priority": "required_implementation_invariant",
+      "change": "Preserve exact prefix debit >0 and == current amount, measured recipient credit, invocation-local registers, and the first-leg newly delivered output floor. For the final maximum leg, bind positive debt<=budget and actual prefix receipt==budget, then approve only debt. Clear temporary allowance and retain exact Family post-pull want/sold/native equations."
+    },
+    {
+      "priority": "required_implementation_invariant",
+      "change": "Authenticate callback through the existing target/hash guard and compare from, sender, amountTaken and needed with outer expectations. Patch the exact encoded script offsets after construction; nesting custom validators must not reuse helper offsets without rebasing them. Keep the callback single-use and the old transient execution context restoration."
+    },
+    {
+      "priority": "required_implementation_invariant",
+      "change": "Only the final maximum leg input asset may have a positive final residual in central settlement composition. Its old balance must not decrease. Other intermediate balances, full profit minimum, native balance, repayment and final simulation gates remain unchanged. Quote/request amounts are never reduced to handle rounding."
+    },
+    {
+      "priority": "required_validation",
+      "change": "Add real VM arithmetic boundary checks, a true output-before-callback-before-pull Yearn-style EVM case, and explicit maximum-final success cases with both floor and capacity residuals. Retain positive default/two-argument and direct/three-argument cases. Reject wrong caller/script/from/sender/debt/amount, zero debt or debit, input shortage, old output bridging, allowance/native changes and atomic-failure cases."
+    },
+    {
+      "priority": "required_validation",
+      "change": "Test maximum prefix rejection/funded fallback separately from the newly accepted final maximum callback path. Keep zero/one rounding boundaries and production selector Exact=0 plus no quoted fallback. The actual historical same-state quote/quoted/default/direct/deferred receipts and strict/Ready source identity remain necessary after implementation."
+    }
+  ],
+  "ran_gate": {
+    "id": "readonly-source-order-abi-floor-and-refund-sanity-v1",
+    "status": "passed_with_initial_design_counterexample_then_revised_constraint_reviewed",
+    "execution": "Executed a bounded local Python read-only structural/ABI/integer sanity check over the supplied evidence. Did not execute repository tests or candidate code.",
+    "checks": [
+      {
+        "name": "source export hashes",
+        "result": "matched where present in audit/export payload",
+        "verifiedInspectedFiles": 10
+      },
+      {
+        "name": "_take order",
+        "result": "positive debt guard precedes sold transfer, callback follows transfer, want pull follows callback"
+      },
+      {
+        "name": "ABI static/dynamic layout",
+        "result": "constructed canonical words confirm callback data=196, callback debt=100, take data=164"
+      },
+      {
+        "name": "raw probe / floor inverse",
+        "result": "four bounded independent arithmetic vectors satisfy cost<=budget and inverse+1 exceeds budget when not capacity capped",
+        "vectors": [
+          {
+            "soldDecimals": 18,
+            "wantDecimals": 18,
+            "budget": "10",
+            "available": "100",
+            "amountOut": "3",
+            "cost": "9",
+            "residual": "1"
+          },
+          {
+            "soldDecimals": 18,
+            "wantDecimals": 6,
+            "budget": "1000000",
+            "available": "1000000000000000000",
+            "amountOut": "810000817290007356",
+            "cost": "1000000",
+            "residual": "0"
+          },
+          {
+            "soldDecimals": 6,
+            "wantDecimals": 18,
+            "budget": "1000000000000000000",
+            "available": "1000000",
+            "amountOut": "333333",
+            "cost": "999999000000000000",
+            "residual": "1000000000000"
+          },
+          {
+            "soldDecimals": 18,
+            "wantDecimals": 18,
+            "budget": "200",
+            "available": "120",
+            "amountOut": "120",
+            "cost": "120",
+            "residual": "80"
+          }
+        ]
+      },
+      {
+        "name": "maximum-prefix refund counterexample",
+        "result": "initial fixed sold equality rejects legal one-unit prefix refund; revised design disallows that callback composition and keeps funded fallback"
+      }
+    ],
+    "notRun": [
+      "RPC",
+      "build",
+      "repository test",
+      "EVM execution",
+      "historical strict/Ready",
+      "opportunity replay",
+      "performance experiment",
+      "live",
+      "process control",
+      "Git/generated mutation"
+    ]
+  },
+  "inspectedSourcePins": [
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "a35a3210ea97e59e5a57dcaeba28004dfc5be4b84b8825f68ecfdcaf9340f4dc",
+      "bytes": 12882,
+      "matchesExportedPin": true
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "6f628154f9641367ada5015c0776115981a7c3f8bc5609685d5bd89723c67655",
+      "bytes": 17631,
+      "matchesExportedPin": true
+    },
+    {
+      "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+      "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5",
+      "bytes": 4346,
+      "matchesExportedPin": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/yearn-auction-family/execution.ts",
+      "sha256": "06048173f5f171fb590501f165b3ca6cbcb8d4eeae2e3715053c50c443f1a548",
+      "bytes": 4903,
+      "matchesExportedPin": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/yearn-auction-family/codec.ts",
+      "sha256": "685bedb67335eb70c82289ffb27a2acef44559b17ab396fda3c551d34227d7d2",
+      "bytes": 3837,
+      "matchesExportedPin": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/yearn-auction-family/state.ts",
+      "sha256": "6be90dca7fa9959d7e66ae0fd7edf6d1653f59e43017c089e6d20808a32c09bd",
+      "bytes": 3909,
+      "matchesExportedPin": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/yearn-auction-family/runtime-shape.ts",
+      "sha256": "afb882517420d43589bf45a33b24ecdd2cdbd7ee198cfcb12f4ae5d5edb97fc6",
+      "bytes": 718,
+      "matchesExportedPin": true
+    },
+    {
+      "path": "listener/src/searcher/test/runtime-settlement.ts",
+      "sha256": "1d19a3f5b78b572fc3eb18d4b0667a846ac254049ce1de2031201b7ec260e6de",
+      "bytes": 12719,
+      "matchesExportedPin": true
+    },
+    {
+      "path": "listener/src/searcher/test/yearn-auction-direct-recipient.ts",
+      "sha256": "68a4bf7a6097e39fab6f9b5a6a4c69507ee726eb56b29579eb9a6f2b76a58dcb",
+      "bytes": 11068,
+      "matchesExportedPin": true
+    },
+    {
+      "path": "docs/research/design/s1-unified-adapter-family-plugin-architecture.md",
+      "sha256": "b8bcee3b7a3dff124286c8830f34c18e2f7c64e3d417f438849cb8475be7246d",
+      "bytes": 204899,
+      "matchesExportedPin": true
+    },
+    {
+      "path": "verified/yearn-implementation.sol",
+      "sha256": "613c3093d933f2536c0cd3df313e0bdaa659cc2dd28202b30b01c25a645cd961",
+      "bytes": 27152,
+      "bindingLimit": "Verified implementation source supplied in evidence; this review did not independently query on-chain bytecode or a deployment."
+    }
+  ],
+  "evidenceLimits": [
+    "Baseline and exported source pins are evidence from the parent snapshot; no new cloud HEAD query was performed by this reviewer.",
+    "Only the final JSON review artifact is written by this reviewer.",
+    "No implementation, historical support, whole-family completion, replay success, or performance conclusion follows from this design verdict."
+  ]
+}

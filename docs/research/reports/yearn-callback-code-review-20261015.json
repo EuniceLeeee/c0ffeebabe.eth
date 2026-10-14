@@ -1,0 +1,334 @@
+{
+  "kind": "family-adaptation-independent-code-review-v1",
+  "family": "yearn-auction",
+  "reviewer": "/root/yearn_callback_review",
+  "reviewPass": 2,
+  "maximumReviewPasses": 3,
+  "createdAt": "2026-10-14T17:13:16.373088+00:00",
+  "authoritativeWorkspace": "/opt/mev-cloud/family-runtime-20261007",
+  "authoritativeHead": "180d11c5344ba930dcd2983428bc75e828714e73",
+  "candidateAuthority": "Parent CAS-installed candidate in the original cloud workspace; reviewer read the hash-bound candidate evidence copy and actual executed-program artifacts, not local repository production source.",
+  "verdict": "no_remaining_code_blockers_in_reviewed_candidate_local_correctness_only",
+  "implementationClassification": "authorized_framework_and_family_change_not_family_local",
+  "blockingFindings": [],
+  "resolvedFindings": [
+    {
+      "id": "YCC-C1",
+      "severity": "blocking_before_fix",
+      "category": "production_correctness",
+      "status": "resolved_with_real_evm_failure_to_pass",
+      "location": "listener/src/searcher/venues/protocols/yearn-auction-family/execution.ts:takeProgram",
+      "finding": "The initial candidate checked actual debit against the protocol cost only when minimum was defined. Default buildRuntimeLeg supplied no minimum/recipient, skipped that block and could accept needed-1 as maximum-budget refund. Generic maximum flow positivity and spent<=budget cannot distinguish this debt shortage.",
+      "failureEvidence": "underdebit08-output.log: testAllFundedModesRejectUnderDebitAndProtectBalances failed with next call did not revert as expected; this was a real EVM behavior failure, not a compilation failure.",
+      "resolution": "minimum now defaults to 1 for all ordinary paths; all paths snapshot input/output/native balances and check positive actual debit, debit<=budget, debit==floor(returnedOutput*scaledRawPrice/denominator), output receipt==returned output, positive output floor, allowance cleanup and native restoration.",
+      "verification": "checks09 Family/issuer tests pass with default and quoted needed-1 cases; checks11 real EVM funded-mode fault matrix passes for default, quoted-program and direct paths. Legitimate budget-needed refund remains valid."
+    },
+    {
+      "id": "YCC-T1",
+      "severity": "test_defect",
+      "category": "tooling_fixture",
+      "status": "resolved_with_negative_and_positive_control",
+      "location": "test/YearnAuctionSettlement.t.sol:YearnSettlementAuction._take fault 18",
+      "finding": "After the production fix, checks09 still failed because fault18 sent native currency to taker. In direct mode taker is the external output receiver, so executor native inventory did not change and the successful transaction satisfied the executor safety contract. The test incorrectly required a revert for an external gift.",
+      "failureEvidence": "checks09-output.log and cloud logs/yearn-settlement-evm-BeIaMd retain 7 passed / 1 failed after the production under-debit fix.",
+      "resolution": "fault18 now sends 1 wei to msg.sender/executor for every mode. Separate fault21 preserves the external taker gift; testExternalRecipientNativeGiftDoesNotChangeExecutorInventory explicitly succeeds while asserting unchanged executor inventory and the receiver gift.",
+      "verification": "checks11 real EVM 9/9 passes, including all funded fault modes and the external-recipient positive control. Production native or conservation checks were not loosened.",
+      "followUp": "Parent must retain the prior failure and codify the agreed tooling defect according to repository rules."
+    },
+    {
+      "id": "YCC-T2",
+      "severity": "evidence_scope",
+      "category": "fixture_funding",
+      "status": "resolved",
+      "finding": "The initial EVM quote test used old want balance 777 with budget 361; it proved no net funding consumption but did not prove a quote at zero input balance.",
+      "resolution": "The final quote-capacity cases set executor want balance to zero and assert it remains zero.",
+      "verification": "The corrected zero-want cases pass in underdebit08, checks09 and final checks11; the initial checks07 result remains preserved with its narrower scope."
+    }
+  ],
+  "reviewedInvariants": [
+    {
+      "topic": "callback order and ABI",
+      "result": "matches verified source and emitted bytes",
+      "details": "Yearn transfers sold, invokes receiver callback, then pulls want from original msg.sender. Callback from/sender/amountTaken/needed fields at offsets 4/36/68/100 are checked against sold/executor/outer expected output/outer expected positive debt. VM authenticates target and script, enforces one callback, and restores the prior callback context. Incoming data offset is 196; outgoing take data offset is 164."
+    },
+    {
+      "topic": "rebased script patches",
+      "result": "independently parsed from actually executed programs",
+      "details": "Within callback script, cap is at 1, expected output constant at 39, debt at 73, old want at 107 and helper opening floor at 293. The nested helper receives r0 cap and its registers are invocation-local. Both standalone deferred and composed root carry the expected fields and bounds."
+    },
+    {
+      "topic": "maximum and residual semantics",
+      "result": "corrected last-only design preserved",
+      "details": "Prefix maximum operations still return null from common callback composition and use existing funded runtime. A maximum final deferred leg must declare executor as the funding account. Encoding accepts a nonzero maximum mask only at the last bit. Exact prefix hops retain positive exact debit and independently measured real credit. Only the last maximum input asset can increase at the final common inventory check."
+    },
+    {
+      "topic": "deferred receipt and debt",
+      "result": "protocol cost remains distinct from full input cap",
+      "details": "The unchanged shared payment helper without debtOffset requires real prefix result equal the cap; Yearn independently requires positive expected debt<=cap, newly delivered sold above the old sold+paymentAmount opening floor, and measured want increase equal cap. It approves only actual debt. After pull it requires want=oldWant+cap-debt, sold=oldSold+amountOut-paymentAmount, exact native restoration and zero temporary allowance."
+    },
+    {
+      "topic": "amount arithmetic and limits",
+      "result": "protocol math remains Family-owned",
+      "details": "The raw-price probe and checked inverse floor are shared by ordinary and callback paths. Quote/deferred terms apply the appended uint256 min operation to current capacity, reject nonpositive output/debt, and retain the unmodified requested budget. VM and fixture interpreter append min as kind 8; old opcode meanings remain unchanged."
+    },
+    {
+      "topic": "strict issuer and production selector",
+      "result": "local construction evidence only",
+      "details": "Current tests build through the real strict issuer, cover quote-output and deferred declarations, and run the production sim selector with Exact, quoted construction and RPC traps. They show construction counts zero in those fixtures; they do not establish historical admission, final sim or a real opportunity."
+    },
+    {
+      "topic": "final safety",
+      "result": "preserved in reviewed source",
+      "details": "Executor old inventory, positive profit, exact native restoration and per-hop debit/credit checks remain in the common composer. Ordinary funded maximum flow, its repayment/final-return contract and existing 0/1 rounding policy are unchanged. No protocol address, ABI, price formula or Yearn branch was introduced into common code."
+    }
+  ],
+  "ran_gate": [
+    {
+      "id": "independent-readonly-emitted-program-layout-v1",
+      "status": "passed",
+      "executedByReviewer": true,
+      "method": "Local read-only Python decoder of runtime script, call headers, patches and nested program bytes from evm07/programs.json; no repository source execution, build or test launch.",
+      "artifactSha256": "cf010a573bd7fc190e3773cb5e563ad9f5b1c959948a6b47b58729a42b7e271e",
+      "observations": {
+        "callbackInstructions": 24,
+        "deferredOuterInstructions": 55,
+        "rootOuterInstructions": 19,
+        "callbackIncomingOffset": 196,
+        "callDataStart": 164,
+        "capOffset": 1,
+        "outputConstantOffset": 39,
+        "debtConstantOffset": 73,
+        "oldWantOffset": 107,
+        "openingFloorOffset": 293
+      }
+    },
+    {
+      "id": "readonly-current-executed-artifact-source-consistency-v1",
+      "status": "passed",
+      "executedByReviewer": true,
+      "method": "Verified final EVM fixture hash, success result, all eight recorded source hashes against current candidate/source copies, and byte equality of deferred/root programs to the independently parsed earlier artifact.",
+      "artifactSha256": "2504ae2fb9fce60ef44c53c400acbe268259c6e19e92c8ff8bdf31e2bbf130f9",
+      "sourcePinsMatched": 8,
+      "deferredAndRootProgramsUnchanged": true,
+      "defaultAndQuotedProgramsUpdated": true
+    },
+    {
+      "id": "read-only-candidate-diff-and-test-content-review",
+      "status": "completed",
+      "executedByReviewer": true,
+      "method": "Read all candidate diffs, complete Yearn callback implementation, shared composer/VM/encoder changes, local issuer and EVM harnesses; compared supplied verified source order and read preserved baseline/failure/current test logs. No tests or RPC were run by this reviewer."
+    }
+  ],
+  "observedValidation": {
+    "baseline05": {
+      "minimumOpcodeEvm": "0/2 passed; both fail on old runtime math opcode",
+      "issuerNewCapability": "0/1 passed; absent quoteOutput fails"
+    },
+    "checks07": {
+      "family": 18,
+      "issuerQuoteSelector": 5,
+      "syntheticProtocolEvm": 7,
+      "runtimeVm": 55,
+      "sharedSettlement": 11,
+      "status": "all passed at the earlier candidate; initial quote funding limitation retained"
+    },
+    "underdebit08": {
+      "syntheticProtocolEvmPassed": 7,
+      "syntheticProtocolEvmFailed": 1,
+      "status": "real default debit validation defect reproduced"
+    },
+    "checks09": {
+      "productionBuild": "passed",
+      "family": 18,
+      "issuerQuoteSelector": 5,
+      "allFamilyDual": 301,
+      "strictCentral": 174,
+      "issuerRuntime": "passed",
+      "strictLifecycle": "passed",
+      "executionProjection": "passed",
+      "syntheticProtocolEvmPassed": 7,
+      "syntheticProtocolEvmFailed": 1,
+      "status": "production debit correction passed; fixture fault18 remained wrong"
+    },
+    "checks11": {
+      "syntheticProtocolEvm": 9,
+      "status": "all passed",
+      "coverage": "20 callback fault cases; 3 funded modes x 8 faults; input debit/receipt changes; wrong returned values; atomic rollback; floor/capacity refunds; zero-want quotes; actor native negative and external-receiver gift positive controls"
+    },
+    "reusedValidationScope": "VM55/shared settlement11 were inspected from checks07; their relevant production source remained unchanged. Later changes were Yearn ordinary-path validation and targeted test fixtures."
+  },
+  "nonBlockingFindings": [
+    {
+      "id": "YCC-S1",
+      "finding": "The EVM fixture labelled quoted directly calls production takeProgram, while buildFragment quote-evidence validation is exercised by contract tests. Report the EVM sample as quoted-program behavior, not a newly completed historical quoted-issuer execution."
+    },
+    {
+      "id": "YCC-S2",
+      "finding": "All EVM protocol tests use a synthetic auction/tokens/prefix with current production encoders. The deployed historical Yearn clone/implementation, current N strict/Ready, real quote/quoted/default/direct/deferred receipts and applicable actual decimal/capacity samples still require independent evidence."
+    },
+    {
+      "id": "YCC-S3",
+      "finding": "Framework source changed. No family_local, merge-ready, opportunity replay, whole-family delivery or performance claim follows from the reviewed local correctness results."
+    }
+  ],
+  "remainingAcceptance": [
+    "Current-source historical clone/implementation identity and strict revalidation",
+    "Current production single-block Ready/Graph/raw/effective evidence",
+    "Same-state actual quote/quoted/default/direct/deferred debit, receipt and residual comparison at required amounts",
+    "Applicable boundary/variant coverage and explicit state rejections",
+    "Later opportunity replay and performance phases remain outside this code-review scope"
+  ],
+  "inspectedSourcePins": [
+    {
+      "path": "listener/package.json",
+      "candidateSha256": "952872bcb7d2d35c5d676da2bd2e9aff802e72295e82067b262ad9cb11c03ab4",
+      "baselineSha256": "a882321f4344808d57b715fc0af460b02770ab45b3ecc75fb8b146c64f7e0fa1",
+      "bytes": 44791
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "candidateSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+      "baselineSha256": "a35a3210ea97e59e5a57dcaeba28004dfc5be4b84b8825f68ecfdcaf9340f4dc",
+      "bytes": 12960
+    },
+    {
+      "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+      "candidateSha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5",
+      "baselineSha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5",
+      "bytes": 4585
+    },
+    {
+      "path": "listener/src/searcher/test/runtime-program-testkit.ts",
+      "candidateSha256": "e9f2ffebeaefa91702798413e6fb9d8afcbe3fdbc6b56751cca06702f33d37cf",
+      "baselineSha256": "c28920fba420109ac233b8a91e065c0c5e7f2805fbb3e7146584d8e5199213a1",
+      "bytes": 5763
+    },
+    {
+      "path": "listener/src/searcher/test/runtime-settlement.ts",
+      "candidateSha256": "1ba6c5b039ea1a9785efcf8d5016b138cbeca40b22994edb95d67718ed8f1b08",
+      "baselineSha256": "1d19a3f5b78b572fc3eb18d4b0667a846ac254049ce1de2031201b7ec260e6de",
+      "bytes": 12739
+    },
+    {
+      "path": "listener/src/searcher/test/yearn-auction-direct-recipient.ts",
+      "candidateSha256": "8ab9d03bd6df0140606c09e444f3a5bd72e2a4c7c9df71518db45b1089f1c131",
+      "baselineSha256": "68a4bf7a6097e39fab6f9b5a6a4c69507ee726eb56b29579eb9a6f2b76a58dcb",
+      "bytes": 15686
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/yearn-auction-family/execution.ts",
+      "candidateSha256": "b5c86148d0dbe9638ea755f9c4d07a786da467e44004a097e18ce28307513f40",
+      "baselineSha256": "06048173f5f171fb590501f165b3ca6cbcb8d4eeae2e3715053c50c443f1a548",
+      "bytes": 4689
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/yearn-auction-family/runtime-settlement.ts",
+      "candidateSha256": "add4b063ad894a88173dde59b2f1b3b72ab6ca0159112dcaa67bb5de16e58043",
+      "baselineSha256": null,
+      "bytes": 4851
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/yearn-auction-family/test/contract.ts",
+      "candidateSha256": "10819f33418d96f6ef2209a1dadf543146d2c963ca76e2aae3d561664060bb1b",
+      "baselineSha256": "35ed52407c67cebbb73fc0c1734c0eaecf8b840726e20a1699fb922848b54b6e",
+      "bytes": 13414
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/yearn-auction-family/test/runtime-settlement-evm.ts",
+      "candidateSha256": "b61a9bdf8ac43abf7c319ccee1f96df17544a46da3bd5793571d249fb634521b",
+      "baselineSha256": null,
+      "bytes": 5094
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "candidateSha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+      "baselineSha256": "6f628154f9641367ada5015c0776115981a7c3f8bc5609685d5bd89723c67655",
+      "bytes": 17691
+    },
+    {
+      "path": "test/BotVMRuntimeAmount.t.sol",
+      "candidateSha256": "db182a5063fc0f0db335ffdf0df5cc2a48136991d82b8a9fad6efa8d9aeb6765",
+      "baselineSha256": "f8616c2fc56eb078860ff30e53d857c3dde6b27b66b749168d359fcb0acfda86",
+      "bytes": 37937
+    },
+    {
+      "path": "test/YearnAuctionSettlement.t.sol",
+      "candidateSha256": "ac9f4ed61f5aaaaec213d6023178f2f8f276b926bfbff8341dc92da87c1ea42a",
+      "baselineSha256": null,
+      "bytes": 12443
+    }
+  ],
+  "additionalInspectedPins": [
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "verified/yearn-implementation.sol",
+      "sha256": "613c3093d933f2536c0cd3df313e0bdaa659cc2dd28202b30b01c25a645cd961"
+    }
+  ],
+  "evidenceArtifacts": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/baseline05-output.log",
+      "sha256": "d2aff9df251db24319613df1921946f22011ee39f867c27886c4af8930e51c21",
+      "bytes": 2144
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/candidate06-output.log",
+      "sha256": "02892c3a4357712e114a807f5ce60a3e69c140b62fcdbe6a5891a4834d524d01",
+      "bytes": 4094
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/checks07-output.log",
+      "sha256": "8d1b08edd7b52aaadf42aa0cfb8ad4fce4114edbd484d3ca64343b323a6271ce",
+      "bytes": 11499
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/underdebit08-output.log",
+      "sha256": "388c59e161b9f08cebcd3bf3e07fc487461a7ebf92bd5781b813d2e1963f9b77",
+      "bytes": 4545
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/checks09-output.log",
+      "sha256": "0390cb9629a486154c68a9dbca0509dcc039b92d9f2a7d701a48a656e7dd7c39",
+      "bytes": 15811
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/checks11-output.log",
+      "sha256": "15fcfb384bafcfc0aa37bad749f1d05e17c26ce4d9c8503e5044324156825123",
+      "bytes": 8068
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/evm07/programs.json",
+      "sha256": "cf010a573bd7fc190e3773cb5e563ad9f5b1c959948a6b47b58729a42b7e271e",
+      "bytes": 19466
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/evm07/result.json",
+      "sha256": "b21a73b5e2ac052be404b5ee6d6f96dc0ad41c0ac0194aa6505b521385a3a70a",
+      "bytes": 1308
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/evm11/programs.json",
+      "sha256": "2504ae2fb9fce60ef44c53c400acbe268259c6e19e92c8ff8bdf31e2bbf130f9",
+      "bytes": 20246
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/evm11/result.json",
+      "sha256": "ba14992ae73255f3110e2c28eab0a9df99949ee845143f1392a0705e48f249bd",
+      "bytes": 1308
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/yearn-callback-20261015.bke29otw/yearn-design-review.json",
+      "sha256": "ca7c3e5294a9b844239bc175f38ced6e19fe2b26e6435ae372defd183cc9282e",
+      "bytes": 12187
+    }
+  ],
+  "reviewerRestrictionsObserved": [
+    "No production/source/generated/IMPL/Git edits",
+    "No RPC, build, test, live, signing, broadcast, deployment or process control",
+    "Only this final JSON review artifact was written"
+  ],
+  "completionClaim": "implemented and locally validated for the explicitly tested scope only; full goal remains active"
+}

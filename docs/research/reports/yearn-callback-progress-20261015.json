@@ -1,0 +1,265 @@
+{
+  "schema": "yearn-callback-progress-v1",
+  "updatedAt": "2026-10-14T17:23:32.007215+00:00",
+  "master": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "base": "180d11c5344ba930dcd2983428bc75e828714e73",
+  "sourceCommit": "56d94de6e2f91cbbae5563abd3633b48c4ebfd4b",
+  "status": {
+    "implemented": true,
+    "localCorrectness": "passed_for_declared_matrix",
+    "independentCodeReview": "passed_with_explicit_historical_limits",
+    "historicalCurrentCallback": "not_run",
+    "currentNaturalReady": "not_run",
+    "wholeOpportunityReplay": "deferred_until_adaptations_complete",
+    "formalAdapterReplay": "not_complete",
+    "familyLocal": false,
+    "mergeReady": false,
+    "performance4A": "not_run",
+    "performance4B": "not_run",
+    "completeDelivery": false
+  },
+  "anchor": {
+    "tx": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+    "block": 26152335,
+    "transactionIndex": 188,
+    "parent": 26152334,
+    "auction": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693",
+    "sold": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+    "want": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+    "originalReceiptInput": "267759246788654353808",
+    "originalReceiptOutput": "106378642455288485048",
+    "use": "Retained historical anchor only. No new RPC, history or actual deployed callback acceptance in this batch."
+  },
+  "changes": [
+    "Family owns raw-price inverse floor, current capacity min, 4-argument ABI and callback fields/order: sold delivered, callback executed, want pulled from original caller.",
+    "Preserves default 2-argument and direct recipient 3-argument paths. Every funded mode now validates positive actual debit equal protocol cost, actual receipt, positive output floor, allowance cleanup and executor native inventory.",
+    "Callback requires authenticated caller/script and matching from/sender/amountTaken/needed. It uses only newly delivered output, measured prefix credit and bounded actual debt approval; then verifies old inventories, residual and native balance.",
+    "Common composer allows maximum input only at final deferred leg with executor funding account. Prefix maximum remains ordinary funded fallback. Only final budget-token residual may grow; profit/native/other inventory checks are unchanged.",
+    "Append checked uint256 min as math kind8 without changing meanings0-7. Central code contains no Yearn address, ABI, price formula or callback branch."
+  ],
+  "coverage": {
+    "familyContract": 18,
+    "actualWorkspaceAllFamily": 301,
+    "ownedCommitInputAllFamily": 298,
+    "strictCentral": 174,
+    "runtimeVm": 55,
+    "commonSettlement": 11,
+    "issuerSelector": 5,
+    "actualLocalEvmTests": 9,
+    "callbackFaultCases": 20,
+    "fundedModes": 3,
+    "fundedFaultsPerMode": 8,
+    "roundingResiduals": [
+      "0",
+      "1",
+      "31"
+    ],
+    "notes": [
+      "Quoted-program EVM directly exercises takeProgram; buildFragment quote-evidence validation is in Family contract tests. This is not a new historical quoted-issuer pass.",
+      "VM55 and common settlement11 are reused from checks07 with relevant production source unchanged.",
+      "All new EVM tests use synthetic auction/tokens/prefix; actual historic clone behavior and decimals/capacity still need same-state evidence.",
+      "Construction trap cases prove Exact=0, quoted=0 and RPC=0 in local production-selector fixtures, not an actual historical full pipeline."
+    ]
+  },
+  "preservation": {
+    "peerProtectedFiles": 29,
+    "peerContentsUnchangedExceptCanonicalCatalog": true,
+    "catalogMethod": {
+      "method": "Canonical generator on immutable HEAD plus hash-checked owned source. Ignored generator input artifact only; actual workspace and peer files are unchanged.",
+      "workingSha256": "feebb4204cdafa456b1d6b5f4080a13c87c9797dda85a4ea93c35bde7e8f831a",
+      "ownedSha256": "146d51b6ea45f48a32368053d2b389bdc67ac90deec8044f5cf51a69b4888b33",
+      "peerOnlyDifferences": [
+        "custom-swap:uniswap-v1:capture",
+        "custom-swap:uniswap-v1:discovery",
+        "custom-swap:uniswap-v1:exact",
+        "custom-swap:uniswap-v1:execution",
+        "custom-swap:uniswap-v1:identity",
+        "custom-swap:uniswap-v1:instance",
+        "custom-swap:uniswap-v1:pricing",
+        "custom-swap:uniswap-v1:routes",
+        "custom-swap:uniswap-v1:victim"
+      ]
+    },
+    "oldReadyAndPriceTables": "untouched",
+    "failedRuns": "preserved",
+    "productionArtifact": {
+      "path": "out/BotVM.sol/BotVM.json",
+      "sha256": "54e05272c587f192eb238c2475d42689e62b7c0b8d7072932e45e51e0cc8abb8",
+      "scope": "Existing artifact not rebuilt by this local-EVM batch; current EVM tests used isolated output/cache."
+    },
+    "originalOpportunity": "Existing B/B diagnostic and manually driven production-stage achievements remain valid at original source/config/mode. Old quoted fallback is not upgraded."
+  },
+  "pending": [
+    "Revalidate current source and on-chain clone identity through the production historical strict and one-block Ready/Graph/raw/effective stages.",
+    "At same historical N validate actual quote+quoted/default/direct/deferred execution and debit/receipt/refunds; separately record manual original transaction amount or sourced amountIn without modifying original price rows.",
+    "Cover applicable decimals/capacity/status cases or state explicit inapplicability.",
+    "Only after adaptations complete, perform unified opportunity replay; heavy performance4A/4B remains later."
+  ],
+  "evidence": [
+    "docs/research/reports/yearn-callback-validation-20261015.json",
+    "docs/research/reports/yearn-callback-design-review-20261015.json",
+    "docs/research/reports/yearn-callback-code-review-20261015.json",
+    "docs/research/reports/yearn-callback-tooling-case-20261015.json"
+  ],
+  "sourceReceipt": {
+    "at": "2026-10-14T17:20:32.373403+00:00",
+    "base": "180d11c5344ba930dcd2983428bc75e828714e73",
+    "sourceCommit": "56d94de6e2f91cbbae5563abd3633b48c4ebfd4b",
+    "branch": "codex/family-runtime-actual-20261007",
+    "ownedHashes": {
+      "listener/package.json": "952872bcb7d2d35c5d676da2bd2e9aff802e72295e82067b262ad9cb11c03ab4",
+      "test/BotVMRuntimeAmount.t.sol": "db182a5063fc0f0db335ffdf0df5cc2a48136991d82b8a9fad6efa8d9aeb6765",
+      "test/YearnAuctionSettlement.t.sol": "ac9f4ed61f5aaaaec213d6023178f2f8f276b926bfbff8341dc92da87c1ea42a",
+      "src/RuntimeAmountVM.sol": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+      "listener/src/adapters/runtime-amount-program.ts": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+      "listener/src/searcher/test/yearn-auction-direct-recipient.ts": "8ab9d03bd6df0140606c09e444f3a5bd72e2a4c7c9df71518db45b1089f1c131",
+      "listener/src/searcher/test/runtime-program-testkit.ts": "e9f2ffebeaefa91702798413e6fb9d8afcbe3fdbc6b56751cca06702f33d37cf",
+      "listener/src/searcher/test/runtime-settlement.ts": "1ba6c5b039ea1a9785efcf8d5016b138cbeca40b22994edb95d67718ed8f1b08",
+      "listener/src/searcher/simulator/runtime-settlement.ts": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/runtime-settlement.ts": "add4b063ad894a88173dde59b2f1b3b72ab6ca0159112dcaa67bb5de16e58043",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/execution.ts": "b5c86148d0dbe9638ea755f9c4d07a786da467e44004a097e18ce28307513f40",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/test/contract.ts": "10819f33418d96f6ef2209a1dadf543146d2c963ca76e2aae3d561664060bb1b",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/test/runtime-settlement-evm.ts": "b61a9bdf8ac43abf7c319ccee1f96df17544a46da3bd5793571d249fb634521b"
+    },
+    "peerFilesPreserved": [
+      {
+        "path": "listener/src/searcher/test/strict-ready-runtime.ts",
+        "sha256": "7c58d8cd2c15f479432ed870e42e01313a4c4bed5c7783ded996da72e5ec7a2b"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/contract.ts",
+        "sha256": "d80ba2c61adc63e07acea44e6f4171b8e9b89cb9a9ffe49c095b55fb8709f78e"
+      },
+      {
+        "path": "listener/src/searcher/test/universe-rebuild-startup-cli.ts",
+        "sha256": "3c4a1e80cf917cacaa3d9ac200748306ffdfb7a32968d92a3c9334fa6bc0cb9d"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/state.ts",
+        "sha256": "7e6761bc12151dee18713e90fa229fcc73642122265e31883623b3c34c1e1e41"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/historical-dual.ts",
+        "sha256": "d543cc0ef0403f14d1924e316d9cfb4bcaccd5bbb50156377e0d63a2ec7f3ae6"
+      },
+      {
+        "path": "listener/src/searcher/test/universe-rebuild-production.ts",
+        "sha256": "81eda9a66f645be2a523f7057de088b156de3f2365c0a510a56d58293a4f798f"
+      },
+      {
+        "path": "listener/src/searcher/generated/family-capability-shadow.generated.json",
+        "sha256": "1ca11ae40e2dec154a103665dd01686218c5e2b793bfb5a08e71485f00b00505"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/pricing.ts",
+        "sha256": "da500d7bf3a14a97f0a15718cd83b2d15966edaeb327d06f1644bcdaad1f33cc"
+      },
+      {
+        "path": "listener/src/searcher/ready-family-update-cli.ts",
+        "sha256": "e1380bf6ac4070f15b6145f1d659b339770cd98b6c821c5887af6bdec5087be7"
+      },
+      {
+        "path": "listener/src/searcher/ready-transaction-input.ts",
+        "sha256": "413ce646cb757444e369aaa3408611a85a17c591589b958ebd197c6f48488273"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/types.ts",
+        "sha256": "8773662fc9658eea814d8a244426597652bf0f58ef649e00e538b534fbad24d7"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/historical-ready.ts",
+        "sha256": "cccf015d9a3bd5a179746edeff4d8016fa6dc7556f7497f3289b5153d8d6a950"
+      },
+      {
+        "path": "listener/src/searcher/test/universe-rebuild-runner.ts",
+        "sha256": "217a8f482efa05527a583cb50f70164fab7b1d7acd8040a058bbfda8d093b680"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/implementation-bytecode.json",
+        "sha256": "73d6b8058303119a0b9b08df28a0d01f9274c8273819bd9ca4886d90779e1134"
+      },
+      {
+        "path": "listener/src/searcher/test/family-dual-execution.ts",
+        "sha256": "b05c4a7234f071b11ed92fa70c78f1d55b7e566906c8a749946743b1ffc35e83"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/fixtures.ts",
+        "sha256": "57ca6bfb7cb1f2de27d4cc93dc0136763156ecd6c954f77dadb31b6259bdb6a0"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/routes.ts",
+        "sha256": "f06ed74374da44522c1615d33bf7f6ea80feb23424c7e5e2e97282ddbd8d7296"
+      },
+      {
+        "path": "listener/src/searcher/main.ts",
+        "sha256": "ef78cf7e36734c4044245dc9547a3175ff95409cf84d59dc398717849a57c5fc"
+      },
+      {
+        "path": "listener/src/searcher/universe-rebuild-checkpoint.ts",
+        "sha256": "21e545de626609e2bf464eee9c2db071ce55377636f1a21c4a1bdad42b005d98"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/execution.ts",
+        "sha256": "081c4a47efbcc76ce01420925fce19d2be74093a935846361735e9a8d00ea32a"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/exact.ts",
+        "sha256": "69fa1cb8d07dfc0bbfda561408fcbf85dea7ad6b6085d57008823488ef5a39bc"
+      },
+      {
+        "path": "listener/src/searcher/universe-rebuild-production.ts",
+        "sha256": "17d2a99d27593de5a8e77f6fd2c7d1c202d934449025871314b2e4d3a465adac"
+      },
+      {
+        "path": "listener/src/searcher/universe-rebuild-startup-cli.ts",
+        "sha256": "eef31a9f53e546fed8d9ddf345bbe1f700962f8a664b793d3869a9d40f501104"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/identity.ts",
+        "sha256": "b7c9d7d9ff003642043ac85c999bd804698ac0347119c5bec1c303e346b44605"
+      },
+      {
+        "path": "listener/src/searcher/universe-rebuild-runner.ts",
+        "sha256": "1b47829e48f57a1460a7c4101da9d9846240d64d954cbe90f5403832f2ea104d"
+      },
+      {
+        "path": "listener/src/searcher/test/ready-transaction-input.ts",
+        "sha256": "5eef53f090ef4ec396f842b789561b227eea00cad16346249d4222efe71ec7d3"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/codec.ts",
+        "sha256": "7493e7654e3a352b5280d5884511663eacf654c7420f0a90fca3307dc5eb9f44"
+      },
+      {
+        "path": "listener/src/searcher/strict-ready-runtime.ts",
+        "sha256": "b2dbc86a38d8da9785f9bef6a6181eedbc49bbe97806911a96a46fce9f6955fa"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/manifest.ts",
+        "sha256": "c85d7b98fecbe822418f19f7d10767691418500aa0b999311ee73fafacc589d5"
+      }
+    ],
+    "catalog": {
+      "method": "Canonical generator on immutable HEAD plus hash-checked owned source. Ignored generator input artifact only; actual workspace and peer files are unchanged.",
+      "workingSha256": "feebb4204cdafa456b1d6b5f4080a13c87c9797dda85a4ea93c35bde7e8f831a",
+      "ownedSha256": "146d51b6ea45f48a32368053d2b389bdc67ac90deec8044f5cf51a69b4888b33",
+      "peerOnlyDifferences": [
+        "custom-swap:uniswap-v1:capture",
+        "custom-swap:uniswap-v1:discovery",
+        "custom-swap:uniswap-v1:exact",
+        "custom-swap:uniswap-v1:execution",
+        "custom-swap:uniswap-v1:identity",
+        "custom-swap:uniswap-v1:instance",
+        "custom-swap:uniswap-v1:pricing",
+        "custom-swap:uniswap-v1:routes",
+        "custom-swap:uniswap-v1:victim"
+      ]
+    },
+    "independentReviewSha256": "f6aeebc3428b9320291ce2ecc3de49933f934f7a21e3c0927d3b34123ccd4ee8",
+    "stat": " listener/package.json                              |   1 +\n listener/src/adapters/runtime-amount-program.ts    |   7 +-\n .../family-capability-shadow.generated.json        | 110 +++++------\n .../src/searcher/simulator/runtime-settlement.ts   |   6 +-\n .../src/searcher/test/runtime-program-testkit.ts   |   1 +\n listener/src/searcher/test/runtime-settlement.ts   |   2 +-\n .../test/yearn-auction-direct-recipient.ts         |  72 ++++++-\n .../protocols/yearn-auction-family/execution.ts    |  28 +--\n .../yearn-auction-family/runtime-settlement.ts     |  77 ++++++++\n .../yearn-auction-family/test/contract.ts          |   4 +-\n .../test/runtime-settlement-evm.ts                 |  71 +++++++\n src/RuntimeAmountVM.sol                            |   1 +\n test/BotVMRuntimeAmount.t.sol                      |  20 +-\n test/YearnAuctionSettlement.t.sol                  | 206 +++++++++++++++++++++\n 14 files changed, 523 insertions(+), 83 deletions(-)\n",
+    "commitOutput": "[codex/family-runtime-actual-20261007 56d94de] feat(yearn): settle output-first auctions with measured budget debt\n Committer: root <root@mev-impl-c4d-20261002.us-east1-b.c.eth-token-480803.internal>\nYour name and email address were configured automatically based\non your username and hostname. Please check that they are accurate.\nYou can suppress this message by setting them explicitly:\n\n    git config --global user.name \"Your Name\"\n    git config --global user.email you@example.com\n\nAfter doing this, you may fix the identity used for this commit with:\n\n    git commit --amend --reset-author\n\n 14 files changed, 523 insertions(+), 83 deletions(-)\n create mode 100644 listener/src/searcher/venues/protocols/yearn-auction-family/runtime-settlement.ts\n create mode 100644 listener/src/searcher/venues/protocols/yearn-auction-family/test/runtime-settlement-evm.ts\n create mode 100644 test/YearnAuctionSettlement.t.sol\n",
+    "limits": "Authorized framework and Family change. Local correctness only. New callback actual historical strict/Ready and same-state receipts remain unverified; no family_local, merge-ready, complete adaptation, opportunity replay or performance claim."
+  }
+}
