@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "at": "2026-10-14T00:12:48.166510+00:00",
+  "sourceHead": "1be6abaa1a7b77b6dfeddde61a11cf390c85c4d1",
+  "reportCommit": "df4641bed475323c203952e3c8026553c12d36e4",
+  "tablePath": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "before": {
+    "sha256": "f08504ac9ec4bde06cac34757b5fbb2af72e9a250c494959f1cbd87d79d5a6c4",
+    "bytes": 269278,
+    "backup": "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/vault-preparation-20261014/impl-before-vault-preparation-f08504ac9ec4bde0.md"
+  },
+  "after": {
+    "sha256": "95f5cd71a278aa7a90ea2329d9ee9abbdf2c5cd0d8558f34dba1e88ad99d661b",
+    "bytes": 271072
+  },
+  "changedLines": {
+    "row": 18,
+    "stage3": 7
+  },
+  "updates": {
+    "rowAppend": " <br> **2026-10-14 Vault适配前置核对（df4641be，未实施Family）：** 对同一N26182689完成69次有区块hash绑定的只读请求，无失败；router.vault、router.usdg、USDG.vaults(Vault)及VaultUtils.vault反向一致，Vault 24296字节runtime与保存的Etherscan已验证源码页面creation bytecode末段逐字节相同，且B／N代码相同。此为源码／注册关系核对，不冒称创建归属或官方GMX品牌。 原交易Vault腿71854376210288490340 APE→4430934597103818 WETH，事件30bps、返回和ERC20收款一致；该N块末hasDynamicFees=true、基础swapFee为20bps，不能固定套用原交易30bps。 块末WETH余额622875346947812＝可兑换poolAmounts 5728257630＋feeReserves 622869618690182；两币实际余额均等于已记账tokenBalances，无待认领输入。swap先收转账余额增量，并在兑换内设置useSwapPricing=true；不得把手续费库存当可兑换深度，或用静止模式外部价格直接代替指定金额quote。 **本轮仅前置证据：Vault Family、strict／自然Ready／Graph／raw／effective、quote／quoted／runtime及当前N原金额实际拒绝均未运行，完整机会和4A／4B未通过。容量读数只提示后续应检验真实拒绝，不把静态推算记成执行验收。** [源码、身份与容量前置证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/df4641bed475323c203952e3c8026553c12d36e4/docs/research/reports/vault-swap-historical-preparation-20261014.json)。",
+    "stage3Append": " **Vault后续前置核对：** 已绑定同块源码与反向注册、原交易实际收款及可兑换储备／手续费储备分离；只读69次、无新EVM执行。Family仍未实现，待补生产双接口和同N容量边界，不能把前置核对列为执行支持或状态性拒绝通过。"
+  },
+  "allOtherLinesPreserved": true,
+  "report": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/df4641bed475323c203952e3c8026553c12d36e4/docs/research/reports/vault-swap-historical-preparation-20261014.json",
+  "goalStatus": "active",
+  "vaultFamilyImplemented": false,
+  "newEvmExecutions": 0,
+  "allPerformanceNotRun": true
+}
