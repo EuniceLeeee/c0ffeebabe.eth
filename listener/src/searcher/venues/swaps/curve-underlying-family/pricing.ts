@@ -1,3 +1,5 @@
+import { assertClassicMetaUpdate, classicMetaUpdateRequests } from "./classic-meta-update.js";
+import { classicMetaChecksUpdate } from "./quote-model.js";
 import { lendingGuardRequests, assertLendingGuards, lendingSwapRequest, decodeLendingSwap,
   lendingSimulationRequirements, lendingProjection } from "./lending.js";
 import { acceptLegacyPlainControlCall, legacyPlainQuoteRequests, decodeLegacyPlainState, quoteLegacyPlain } from "./legacy-plain.js";
@@ -106,7 +108,9 @@ export const curveUnderlyingPricing = {
     coins: Object.freeze([...draft.coins]),
   }),
   current: {
-    requirements: ({ descriptor }) => ({ transports: descriptor.legacyPlain || descriptor.lending ? ["eth-call", "get-code", "get-storage"] : ["eth-call"] }),
+    requirements: ({ descriptor }) => ({ transports: descriptor.legacyPlain || descriptor.lending
+      ? ["eth-call", "get-code", "get-storage"]
+      : classicMetaChecksUpdate(descriptor.quoteModel) ? ["eth-call", "get-code"] : ["eth-call"] }),
     buildRequests({ descriptor }) {
       if (descriptor.lending) return [...lendingGuardRequests(descriptor.pool, descriptor.lending), {
         id: TOKEN_DECIMALS_ID, kind: "eth-call" as const, to: descriptor.route.tokenIn,
@@ -114,6 +118,7 @@ export const curveUnderlyingPricing = {
       }];
       return Object.freeze([
         ...(descriptor.legacyPlain ? legacyPlainQuoteRequests(descriptor.pool) : []),
+        ...classicMetaUpdateRequests(descriptor),
         Object.freeze({
           id: REGISTRY_DECIMALS_ID,
           kind: "eth-call" as const,
@@ -164,6 +169,7 @@ export const curveUnderlyingPricing = {
           lendingCurrentRequest(current.descriptor, amount, index + 1)));
       }
       if (current.descriptor.legacyPlain) return null;
+      assertClassicMetaUpdate(current.descriptor, current.source, initialResults);
       const priorResults = collectRequestProgramResults(
         initialResults,
         priorEvidence,
@@ -226,6 +232,7 @@ export const curveUnderlyingPricing = {
         results,
         quoteRequestId(quote.index),
       );
+      assertClassicMetaUpdate(descriptor, quoteResult.source, initialResults);
       const scale = decodeInputScale(descriptor, results);
       return Object.freeze({
         source: quoteResult.source,

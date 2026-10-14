@@ -27,12 +27,23 @@ const BASE_HASH = "0x954a1e212c557c85043985931498ffa3e2fcbe7dfe9cd61513f36eb47d6
 const CLONE = "0x363d3d373d3d3d363d73" + IMPLEMENTATION.slice(2) + "5af43d82803e903d91602b57fd5bf3";
 const V1_IMPLEMENTATION = "0x2c7796c0590cc100d70af473993890d457cb2ac9";
 const V1_CLONE = "0x366000600037611000600036600073" + V1_IMPLEMENTATION.slice(2) + "5af4602c57600080fd5b6110006000f3";
+const UPDATE_IMPLEMENTATION = "0x5f890841f657d90e081babdb532a05996af79fe6";
+const UPDATE_CLONE = "0x366000600037611000600036600073" + UPDATE_IMPLEMENTATION.slice(2) + "5af4602c57600080fd5b6110006000f3";
+// Code-bound read-only clock; all requests still use the central source/scheduler.
+export const CLASSIC_META_UPDATE_CLOCK = Object.freeze({
+  address: "0xeefba1e63905ef1d7acba5a8513c70307c1ce441",
+  codeHash: "0x88004e820ef1c3d1dab4dc3a2419967e640b9977c6dee6a60a03d7d10da54187",
+});
 const PROFILES = [
-  { implementation: IMPLEMENTATION, implementationHash: IMPLEMENTATION_HASH, code: CLONE, rateSlot: 16, underlyingReceiver: true },
+  { implementation: IMPLEMENTATION, implementationHash: IMPLEMENTATION_HASH, code: CLONE, rateSlot: 16, underlyingReceiver: true, forwarderBytes: 32, checksUpdate: false },
   // Vyper 0.2.8 allocates one root per declaration (arrays use hashed roots).
   // initialize bytecode writes 10**(36-decimals) with PUSH1 0x0a / SSTORE.
   { implementation: V1_IMPLEMENTATION, implementationHash: "0xdf4543ae0cb4d3878072c1da2c56ebec96a64237051a7291429a2fb66d5f54da",
-    code: V1_CLONE, rateSlot: 10, underlyingReceiver: true },
+    code: V1_CLONE, rateSlot: 10, underlyingReceiver: true, forwarderBytes: 4096, checksUpdate: false },
+  // Vyper 0.2.8 cumulative-price implementation: rate root 12; exchange first
+  // checks timestamp subtraction and cumulative balance arithmetic in _update.
+  { implementation: UPDATE_IMPLEMENTATION, implementationHash: "0x260a286cc14e91f4a2d4a966e2e5f5030543a7d2f090a623f5fa15ba174a50f3",
+    code: UPDATE_CLONE, rateSlot: 12, underlyingReceiver: true, forwarderBytes: 4096, checksUpdate: true },
 ].map(profile => ({ ...profile, poolCodeHash: ethers.keccak256(profile.code) }));
 function profileForCode(code: string | undefined) {
   return PROFILES.find(profile => profile.code === code?.toLowerCase());
@@ -47,7 +58,13 @@ export function classicMetaRateSlot(model: CurveUnderlyingClassicMetaBinding): n
   if (!profile) throw new Error("curve-underlying unknown classic implementation profile");
   return profile.rateSlot;
 }
-/** Both bound classic implementations expose the optional receiver overload.
+export function classicMetaChecksUpdate(model: CurveUnderlyingClassicMetaBinding | undefined): boolean {
+  return model !== undefined && PROFILES.some(profile => profile.checksUpdate &&
+    profile.implementation === model.implementation.toLowerCase() &&
+    profile.implementationHash === model.implementationCodeHash.toLowerCase() &&
+    profile.poolCodeHash === model.poolCodeHash.toLowerCase());
+}
+/** The bound classic implementations expose the optional receiver overload.
  * This describes already admitted code; registry identity remains mandatory. */
 export function supportsClassicUnderlyingRecipient(model: CurveUnderlyingClassicMetaBinding | undefined): boolean {
   return model !== undefined && PROFILES.some(profile => profile.underlyingReceiver &&
@@ -59,7 +76,8 @@ export function supportsClassicUnderlyingRecipient(model: CurveUnderlyingClassic
  * Normalize only its known one-word pool getters; the tail can contain calldata.
  * Registry/base/storage responses keep their existing canonical length checks. */
 export function classicMetaScalar(model: Pick<CurveUnderlyingClassicMetaBinding, "implementationCodeHash">, data: string): string {
-  if (model.implementationCodeHash.toLowerCase() !== PROFILES[1].implementationHash) return data;
+  if (!PROFILES.some(profile => profile.forwarderBytes === 4096 &&
+      profile.implementationHash === model.implementationCodeHash.toLowerCase())) return data;
   if (!ethers.isHexString(data, 4096)) throw new Error("curve-underlying invalid V1 forwarder return");
   return ethers.dataSlice(data, 0, 32);
 }
@@ -142,7 +160,8 @@ export function curveUnderlyingRefreshAddresses(descriptor: {
   readonly pool: string; readonly quoteModel?: CurveUnderlyingClassicMetaBinding;
 }): readonly string[] {
   const model = descriptor.quoteModel;
-  return model ? [descriptor.pool, model.basePool, model.baseLPToken, model.implementation, model.baseCoins[2]] : [descriptor.pool];
+  return model ? [descriptor.pool, model.basePool, model.baseLPToken, model.implementation, model.baseCoins[2],
+    ...(classicMetaChecksUpdate(model) ? [CLASSIC_META_UPDATE_CLOCK.address] : [])] : [descriptor.pool];
 }
 
 const USDT_CONTROL_TOPICS = new Set([

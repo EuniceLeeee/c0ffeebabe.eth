@@ -1,3 +1,4 @@
+import "../venues/swaps/curve-underlying-family/test/classic-meta-update.js";
 import "../venues/swaps/curve-underlying-family/test/lending-contract.js";
 import "../venues/swaps/curve-underlying-family/test/legacy-plain-contract.js";
 import "../venues/swaps/curve-underlying-family/test/v1-factory-contract.js";

@@ -39,6 +39,7 @@ import { lower, same, MAX_UINT, pullsInput } from "../codec.js";
 import type { CurvePlainDescriptor } from "../types.js";
 import type { CurveUnderlyingDescriptor } from "../../curve-underlying-family/types.js";
 import { curveRefreshAddresses } from "../refresh-scope.js";
+import { curveUnderlyingRefreshAddresses } from "../../curve-underlying-family/quote-model.js";
 const MAX_INPUT = MAX_UINT;
 
 const ROOT = fileURLToPath(new URL("../../../../../../../", import.meta.url));
@@ -91,9 +92,55 @@ export function curveHistoricalManualInput(value?: string): CurveManualInput | u
   return { tokenIn, tokenOut, amountIn };
 }
 
+/** A separate empty test actor; never a protocol/token account or the payer. */
+export function curveHistoricalRecipient(value?: string, reserved: readonly string[] = []): string | undefined {
+  if (value === undefined) return undefined;
+  const recipient = lower(ethers.getAddress(value));
+  assert(![ethers.ZeroAddress, OWNER, EXECUTOR, ...reserved].some(a => same(a, recipient)),
+    "recipient must be an independent test actor");
+  return recipient;
+}
+
+export function assertCurveHistoricalDirectLeg(
+  leg: ReturnType<typeof buildFamilyRuntimeAmountLeg>, recipient: string,
+): asserts leg is NonNullable<ReturnType<typeof buildFamilyRuntimeAmountLeg>> {
+  assert(leg, "Family does not support requested direct-output settlement");
+  assert.equal(leg.settlement?.directOutput, true, "direct-output capability is not declared");
+  assert.deepEqual(leg.settlementRequest, { kind: "direct-output", recipient },
+    "Family ignored or changed the requested recipient");
+}
+
+/** Prove one actor's getter slot without changing any control holder's balance. */
+export async function curveHistoricalBalanceMapping(input: {
+  candidates: readonly string[]; token: string; actor: string;
+  controls: readonly { actor: string; balance: bigint }[];
+  balance: (token: string, actor: string, overrides: Overrides) => Promise<bigint>;
+}): Promise<string> {
+  assert(input.candidates.length > 0 && input.candidates.length <= 16, "bounded actor balance read slots required");
+  assert(input.controls.length > 0 && input.controls.every(c => !same(c.actor, input.actor)),
+    "balance proof needs independent control actors");
+  let key = "";
+  for (const candidate of [...new Set(input.candidates)]) {
+    let matches = true;
+    for (const probe of [717171717171n, 919191919193n]) {
+      const override = { [lower(input.token)]: { stateDiff: { [candidate]: word(probe) } } };
+      try {
+        if (await input.balance(input.token, input.actor, override) !== probe) { matches = false; break; }
+        for (const control of input.controls) {
+          if (await input.balance(input.token, control.actor, override) !== control.balance) matches = false;
+        }
+      } catch { matches = false; }
+      if (!matches) break;
+    }
+    if (matches) { assert.equal(key, "", "ambiguous actor balance mapping"); key = candidate; }
+  }
+  assert(key, "actor balance read-slot proof unresolved; no execution overrides created");
+  return key;
+}
+
 function options(argv: string[]) {
   const names = ["--ready", "--prices", "--pool", "--family", "--rpc-file", "--out", "--port"];
-  const allowedNames = [...names, "--revm-bin", "--executor-hardfork", "--reference-executions", "--price-input", "--reference-prices", "--reference-edges", "--manual-input", "--expect-output-error"];
+  const allowedNames = [...names, "--revm-bin", "--executor-hardfork", "--reference-executions", "--price-input", "--reference-prices", "--reference-edges", "--manual-input", "--expect-output-error", "--recipient"];
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     assert(allowedNames.includes(argv[i]) && !values.has(argv[i]), "unknown/duplicate option");
@@ -107,6 +154,8 @@ function options(argv: string[]) {
   const expectedOutputError = values.get("--expect-output-error");
   assert(expectedOutputError === undefined || (manual && expectedOutputError.length <= 160),
     "expected output rejection requires one manual direction and a bounded exact reason");
+  const recipient = curveHistoricalRecipient(values.get("--recipient"));
+  assert(!recipient || !expectedOutputError, "recipient acceptance cannot mix with expected output rejection");
   const hardfork = values.get("--executor-hardfork");
   assert(hardfork === undefined || hardfork === "cancun", "executor hardfork must be explicit cancun");
   assert(!manual || (!values.has("--reference-executions") && !values.has("--reference-prices")), "manual input cannot mix with reference modes");
@@ -126,7 +175,7 @@ function options(argv: string[]) {
     priceInput: values.has("--price-input") ? realpathSync(values.get("--price-input")!) : undefined,
     reference: values.has("--reference-executions") ? realpathSync(values.get("--reference-executions")!) : undefined,
     referencePrices: values.has("--reference-prices") ? realpathSync(values.get("--reference-prices")!) : undefined,
-    referenceEdges: referenceEdges as string[], manual, hardfork, expectedOutputError,
+    referenceEdges: referenceEdges as string[], manual, hardfork, expectedOutputError, recipient,
     revmBin: values.has("--revm-bin") ? realpathSync(values.get("--revm-bin")!) : undefined,
     name, rpcFile: realpathSync(values.get("--rpc-file")!), pool: lower(ethers.getAddress(
       values.get("--pool")!.startsWith("0x") ? values.get("--pool")! : `0x${values.get("--pool")!}`)), out };
@@ -214,10 +263,35 @@ export function observedNativeInventory(diff: any, address: string, initial: big
   return { before, after, delta: after - before };
 }
 
+interface CurveRecipientInventory {
+  readonly address: string;
+  readonly inSlot: string;
+  readonly outSlot: string;
+  readonly inputBefore: bigint;
+  readonly outputBefore: bigint;
+  readonly nativeBefore: bigint;
+}
+
+/** Observed trace slots only: no transfer return value or expected output is used. */
+export function assertCurveRecipientInventory(input: {
+  diff: any; tokenIn: string; tokenOut: string; executorOutSlot: string; executorOutputBefore: bigint;
+  recipient: CurveRecipientInventory; requireOutputChange?: boolean;
+}) {
+  const executorOutput = observed(input.diff, input.tokenOut, input.executorOutSlot, input.executorOutputBefore, false);
+  const recipientInput = observed(input.diff, input.tokenIn, input.recipient.inSlot, input.recipient.inputBefore, false);
+  assert.equal(executorOutput.delta, 0n, "direct-output changed executor output inventory");
+  assert.equal(recipientInput.delta, 0n, "direct-output changed recipient input inventory");
+  const recipientNative = observedNativeInventory(input.diff, input.recipient.address, input.recipient.nativeBefore);
+  const recipientOutput = observed(input.diff, input.tokenOut, input.recipient.outSlot,
+    input.recipient.outputBefore, input.requireOutputChange !== false);
+  if (input.requireOutputChange !== false) assert(recipientOutput.delta > 0n, "recipient did not receive new output");
+  return { executorOutput, recipientInput, recipientNative, recipientOutput };
+}
+
 export function assertNoInputRollback(input: {
   trace: { error?: string }; diff: any; tokenIn: string; inSlot: string;
   tokenOut: string; outSlot: string; outputBefore: bigint; nativeBefore: bigint;
-  finalAllowances: bigint[][];
+  finalAllowances: bigint[][]; recipient?: CurveRecipientInventory;
 }) {
   assert.equal(input.trace?.error, "execution reverted", "zero-input control did not revert atomically");
   assert(input.diff?.pre && input.diff?.post, "negative-control prestate diff unavailable");
@@ -234,6 +308,13 @@ export function assertNoInputRollback(input: {
       assert(Object.keys(account as object).every(key => key === "balance" || key === "nonce"),
         "failed control changed sender code/storage");
     }
+  }
+  if (input.recipient) {
+    const inventory = assertCurveRecipientInventory({ diff: input.diff, tokenIn: input.tokenIn, tokenOut: input.tokenOut,
+      executorOutSlot: input.outSlot, executorOutputBefore: input.outputBefore, recipient: input.recipient,
+      requireOutputChange: false });
+    assert.equal(inventory.recipientOutput.delta, 0n, "failed control changed recipient output inventory");
+    return { input: spent, output: received, native, recipient: inventory };
   }
   return { input: spent, output: received, native };
 }
@@ -287,7 +368,7 @@ export function assertOutputRejection(input: {
 export function curveHistoricalQuoteTargets(descriptor: CurvePlainDescriptor | CurveUnderlyingDescriptor): Set<string> {
   if ("binding" in descriptor) return new Set(curveRefreshAddresses(descriptor).map(lower));
   const model = descriptor.quoteModel;
-  return new Set([descriptor.pool, ...(descriptor.lending ? [descriptor.lending.lpToken,
+  return new Set([...curveUnderlyingRefreshAddresses(descriptor), ...(descriptor.lending ? [descriptor.lending.lpToken,
     ...descriptor.lending.wrappedCoins, ...descriptor.coins] : []), ...(model
     ? [model.basePool, model.baseLPToken, model.implementation, ...model.baseCoins] : [])].map(lower));
 }
@@ -336,6 +417,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   const failure = (error: unknown) => ({ stage, message: redact(error instanceof Error ? error.message : error) });
   let calls = 0, constructing = false, constructionAttempts = 0;
   try {
+    if (args.recipient) {
+      report.actor.recipient = args.recipient;
+      report.claim = "Supplementary direct-only acceptance at N: fresh production Exact vs external-recipient runtime execution; no new quoted-fragment/default-runtime/diagnostic execution conclusion, original-TX replay, latency or merge acceptance";
+      report.recipientAcceptance = { kind: "direct-output", recipient: args.recipient,
+        scope: "supplementary direct-only; reuses accepted default evidence and runs only direct-output plus same-calldata no-input rollback; no new quoted execution conclusion" };
+    }
     if (args.expectedOutputError) report.claim =
       "Explicit source-state output rejection through production quoted/runtime encoders; NOT successful swap, original replay or performance";
     const startPin = sourcePin(args.name); report.code = { headAtStart: git("rev-parse", "HEAD").trim(), ...startPin };
@@ -382,6 +469,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const tokens = "binding" in descriptor ? descriptor.binding.coins : descriptor.coins;
     assert(same(descriptor.pool, args.pool));
     assert(tokens.length >= 2 && tokens.length <= 4, "bounded ERC20 two-to-four-token pool sample");
+    if (args.recipient) curveHistoricalRecipient(args.recipient, [...tokens, ...curveHistoricalQuoteTargets(descriptor)]);
     const edges = graph.filter(e => e.instanceKey === instance.instanceKey && same(e.target, args.pool));
     assert.equal(edges.length, instance.routes.length, "every admitted direction must already be in the production graph");
     assert(edges.length >= 2 && edges.length <= 12);
@@ -465,7 +553,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const balance = async (token: string, holder: string, overrides: Overrides = {}) =>
       BigInt(await call(token, ERC20.encodeFunctionData("balanceOf", [holder]), overrides));
     stage = "actor-balance-mapping";
-    for (const actor of [OWNER, EXECUTOR]) assert.equal(await rpc("eth_getCode", [actor, pin]), "0x", "actor already has source code");
+    const balanceActors = [EXECUTOR, ...(args.recipient ? [args.recipient] : [])];
+    for (const actor of [OWNER, ...balanceActors]) assert.equal(await rpc("eth_getCode", [actor, pin]), "0x", "actor already has source code");
     if (args.hardfork) {
       // Read execution-visible fields and exercise Cancun TSTORE/TLOAD without
       // mining or overriding any protocol account. Opcode 0x44 is disclosed,
@@ -476,73 +565,66 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         codeHash: ethers.keccak256(probeCode),
       };
     }
-    const slots = new Map<string, string>();
+    const slots = new Map<string, string>(), recipientSlots = new Map<string, string>();
     report.balanceMappings = [];
-    for (const token of tokens) assert.equal(await balance(token, EXECUTOR), 0n, "actor already has source inventory");
+    for (const actor of balanceActors) for (const token of tokens)
+      assert.equal(await balance(token, actor), 0n, "actor already has source inventory");
     // Only admitted directions need controllable balances. An unadmitted,
     // suspended coin must not block testing the independently admitted pair.
-    for (const token of measuredTokens) {
-      if (args.expectedOutputError && same(token, args.manual!.tokenOut)) {
-        assert.equal(await balance(token, EXECUTOR), 0n, "unseeded rejection output must have no actor inventory");
-        const code = await rpc("eth_getCode", [token, pin]); assert(code !== "0x");
-        report.unseededOutput = { token, actorBalance: 0n, poolBalance: await balance(token, args.pool),
-          codeHash: ethers.keccak256(code), expectedError: args.expectedOutputError,
-          scope: "real output state; no output balance override and no successful swap claim" };
-        continue;
-      }
-      assert(![OWNER, EXECUTOR, args.pool].some(a => same(a, token)),
-        "actor/token/protocol addresses must not alias");
-      assert.equal(await balance(token, EXECUTOR), 0n, "actor already has source inventory");
-      // Underlying coins may sit in a base pool. Look only among existing
-      // graph targets; this supplies a positive holder, never admission or state.
-      const holders = [...new Set([args.pool, ...graph.filter(e =>
-        same(e.tokenIn, token) || same(e.tokenOut, token)).map(e => lower(e.target))])].slice(0, 32);
-      let holder = "", holderBalance = 0n;
-      for (const candidate of holders) {
-        holderBalance = await balance(token, candidate);
-        if (holderBalance > 0n) { holder = candidate; break; }
-      }
-      // A single-block Graph need not contain the underlying base pool.
-      // Without a positive holder, use a second empty actor as the independence
-      // control; the fast mapper returns null and actual getter slots are probed.
-      if (!holder) {
-        holder = OWNER; holderBalance = await balance(token, holder);
-        assert.equal(holderBalance, 0n, "control actor already owns this token");
-      }
-      const index = await resolveErc20BalanceSlot(token, holder, { balanceOf: balance,
-        getStorage: async (t, key) => BigInt(await rpc("eth_getStorageAt", [t, key, pin])) });
-      // The production fast mapper intentionally returns null for nonstandard
-      // layouts (e.g. Vyper). Test-only fallback uses slots actually read by
-      // balanceOf(actor), not a guessed Solidity/Vyper storage index.
-      const candidates: string[] = [];
-      if (index !== null) candidates.push(balanceStorageKey(EXECUTOR, index).toLowerCase());
-      else {
-        const access = await rpc("eth_createAccessList", [{ from: OWNER, to: token,
-          data: ERC20.encodeFunctionData("balanceOf", [EXECUTOR]), gas: "0x100000" }, ethers.toQuantity(source.number)]);
-        assert(!access.error && Array.isArray(access.accessList), "actor balance access list unavailable");
-        (report.balanceGetterReadSets ??= []).push({ token, source, access });
-        candidates.push(...access.accessList.filter((a: any) => same(a.address, token))
-          .flatMap((a: any) => a.storageKeys.map((key: string) => word(key))));
-      }
-      assert(candidates.length > 0 && candidates.length <= 16, "bounded actor balance read slots required");
-      let key = "";
-      for (const candidate of [...new Set(candidates)]) {
-        let matches = true;
-        for (const probe of [717171717171n, 919191919193n]) {
-          const override = { [lower(token)]: { stateDiff: { [candidate]: word(probe) } } };
-          // A wrong proxy/guard slot may revert. It must never be accepted.
-          let observedBalance: bigint | undefined;
-          try { observedBalance = await balance(token, EXECUTOR, override); } catch { matches = false; break; }
-          if (observedBalance !== probe || await balance(token, holder, override) !== holderBalance) {
-            matches = false; break;
-          }
+    for (const actor of balanceActors) {
+      const actorSlots = same(actor, EXECUTOR) ? slots : recipientSlots;
+      for (const token of measuredTokens) {
+        if (args.expectedOutputError && same(token, args.manual!.tokenOut)) {
+          assert.equal(await balance(token, actor), 0n, "unseeded rejection output must have no actor inventory");
+          const code = await rpc("eth_getCode", [token, pin]); assert(code !== "0x");
+          report.unseededOutput = { token, actorBalance: 0n, poolBalance: await balance(token, args.pool),
+            codeHash: ethers.keccak256(code), expectedError: args.expectedOutputError,
+            scope: "real output state; no output balance override and no successful swap claim" };
+          continue;
         }
-        if (matches) { assert.equal(key, "", "ambiguous actor balance mapping"); key = candidate; }
+        assert(![OWNER, ...balanceActors, args.pool].some(a => same(a, token)),
+          "actor/token/protocol addresses must not alias");
+        assert.equal(await balance(token, actor), 0n, "actor already has source inventory");
+        // Underlying coins may sit in a base pool. Look only among existing
+        // graph targets; this supplies a positive holder, never admission or state.
+        const holders = [...new Set([args.pool, ...graph.filter(e =>
+          same(e.tokenIn, token) || same(e.tokenOut, token)).map(e => lower(e.target))])].slice(0, 32);
+        let holder = "", holderBalance = 0n;
+        for (const candidate of holders) {
+          holderBalance = await balance(token, candidate);
+          if (holderBalance > 0n) { holder = candidate; break; }
+        }
+        // A single-block Graph need not contain the underlying base pool.
+        // Without a positive holder, use a second empty actor as the independence
+        // control; the fast mapper returns null and actual getter slots are probed.
+        if (!holder) {
+          holder = OWNER; holderBalance = await balance(token, holder);
+          assert.equal(holderBalance, 0n, "control actor already owns this token");
+        }
+        const index = await resolveErc20BalanceSlot(token, holder, { balanceOf: balance,
+          getStorage: async (t, key) => BigInt(await rpc("eth_getStorageAt", [t, key, pin])) });
+        // The production fast mapper intentionally returns null for nonstandard
+        // layouts (e.g. Vyper). Test-only fallback uses slots actually read by
+        // balanceOf(actor), not a guessed Solidity/Vyper storage index.
+        const candidates: string[] = [];
+        if (index !== null) candidates.push(balanceStorageKey(actor, index).toLowerCase());
+        else {
+          const access = await rpc("eth_createAccessList", [{ from: OWNER, to: token,
+            data: ERC20.encodeFunctionData("balanceOf", [actor]), gas: "0x100000" }, ethers.toQuantity(source.number)]);
+          assert(!access.error && Array.isArray(access.accessList), "actor balance access list unavailable");
+          (report.balanceGetterReadSets ??= []).push({ token, source, access, ...(same(actor, EXECUTOR) ? {} : { actor }) });
+          candidates.push(...access.accessList.filter((a: any) => same(a.address, token))
+            .flatMap((a: any) => a.storageKeys.map((key: string) => word(key))));
+        }
+        const controls = [{ actor: holder, balance: holderBalance }];
+        for (const other of balanceActors.filter(a => !same(a, actor) && !same(a, holder))) {
+          controls.push({ actor: other, balance: await balance(token, other) });
+        }
+        const key = await curveHistoricalBalanceMapping({ candidates, token, actor, controls, balance });
+        actorSlots.set(lower(token), key); report.balanceMappings.push({ token, holder, holderBalance, slotIndex: index,
+          discovery: index === null ? "actual-getter-access-list" : "production-fast-mapping",
+          actorStorageKey: key, verifiedProbes: 2, ...(same(actor, EXECUTOR) ? {} : { actor, independentOfExecutor: true }) });
       }
-      assert(key, "actor balance read-slot proof unresolved; no execution overrides created");
-      slots.set(lower(token), key); report.balanceMappings.push({ token, holder, holderBalance, slotIndex: index,
-        discovery: index === null ? "actual-getter-access-list" : "production-fast-mapping",
-        actorStorageKey: key, verifiedProbes: 2 });
     }
     const adapters = [...family.plugin.actionAdapters, ...PRODUCTION_INFRA_ACTION_ADAPTERS];
     const compile = (node: ResolvedPlanNode): Uint8Array => {
@@ -602,6 +684,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const beforeCalls = calls;
       constructing = true;
       let leg: ReturnType<typeof buildFamilyRuntimeAmountLeg>;
+      let recipientLeg: ReturnType<typeof buildFamilyRuntimeAmountLeg> = null;
       try {
         // Deliberately before Exact and before selecting P/10P. These forbidden
         // getters also detect accidental future coupling at the central API.
@@ -609,6 +692,13 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         Object.defineProperties(input, { amountIn: { get() { throw new Error("runtime builder accessed amountIn"); } },
           exact: { get() { throw new Error("runtime builder accessed Exact"); } } });
         leg = buildFamilyRuntimeAmountLeg(input);
+        if (args.recipient) {
+          const directInput = { ...input, settlement: { kind: "direct-output" as const, recipient: args.recipient } };
+          Object.defineProperties(directInput, { amountIn: { get() { throw new Error("runtime builder accessed amountIn"); } },
+            exact: { get() { throw new Error("runtime builder accessed Exact"); } } });
+          recipientLeg = buildFamilyRuntimeAmountLeg(directInput);
+          assertCurveHistoricalDirectLeg(recipientLeg, args.recipient);
+        }
       } finally { constructing = false; }
       assert(leg, "Family returned null runtime leg");
       assert.equal(calls - beforeCalls, 0); assert.equal(constructionAttempts, 0);
@@ -617,6 +707,15 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         const inputSentinel = 101n, outputSentinel = 103n, nativeSentinel = 17n;
         const tokenIn = lower(row.tokenIn), tokenOut = lower(row.tokenOut);
         const inSlot = slots.get(tokenIn)!, outSlot = slots.get(tokenOut)!;
+        const recipientInventory: CurveRecipientInventory | undefined = args.recipient ? {
+          address: args.recipient, inSlot: recipientSlots.get(tokenIn)!, outSlot: recipientSlots.get(tokenOut)!,
+          inputBefore: 107n, outputBefore: 109n, nativeBefore: 19n,
+        } : undefined;
+        if (recipientInventory) {
+          assert(recipientInventory.inSlot && recipientInventory.outSlot, "recipient slots were not independently proved");
+          assert.notEqual(recipientInventory.inSlot, inSlot, "recipient input mapping aliases executor");
+          assert.notEqual(recipientInventory.outSlot, outSlot, "recipient output mapping aliases executor");
+        }
         overrides = { [OWNER]: { balance: ethers.toQuantity(100n * 10n ** 18n) },
           [EXECUTOR]: { code: botvm.code, balance: ethers.toQuantity(nativeSentinel) },
           [tokenIn]: { stateDiff: { [inSlot]: word(amountIn + inputSentinel) } },
@@ -626,7 +725,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           multiplier, amountIn, productionP: args.manual ? null : amountRow.amountIn,
           referenceAmountIn: amountRow.amountIn, targetPriceAmountIn: row.amountIn, targetPriceStatus: row.status,
           savedPriceOut: row.amountOut, borrowedInput: referenceInput.borrowed,
-          runtimeConstructionRpc: 0, programHash: ethers.keccak256(leg.program), status: "failed", executions: [] };
+          runtimeConstructionRpc: 0, programHash: ethers.keccak256((args.recipient ? recipientLeg! : leg).program), status: "failed", executions: [] };
         report.samples.push(sample);
         try {
           stage = "production-exact";
@@ -668,6 +767,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
             scripts.push(["quoted-minimum-1-diagnostic",
               concatBytes(...planFragmentNodes(diagnostic.fragment, tokenIn, amountIn).map(compile))]);
           }
+          if (recipientLeg) {
+            // Supplement existing default evidence without repeating those executions.
+            scripts.length = 0;
+            scripts.push(["runtime-direct-output",
+              runtimeProgramScript(ethers.getBytes(recipientLeg.program), amountIn)]);
+          }
           const allowanceCalls = [{ to: tokenIn, data: ERC20.encodeFunctionData("allowance", [EXECUTOR, args.pool]), size: 1 }];
           const readAllowances = async (state: Overrides) => {
             const result: bigint[][] = [];
@@ -693,40 +798,59 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           }
           for (const [encoding, script] of scripts) {
             stage = encoding;
-            const result: Record<string, any> = { encoding, status: "failed", scriptHash: ethers.keccak256(script) };
+            const direct = encoding === "runtime-direct-output";
+            const recipient = direct ? recipientInventory : undefined;
+            assert(!direct || recipient, "direct-output script missing recipient");
+            const executionOverrides = structuredClone(overrides);
+            if (recipient) {
+              executionOverrides[recipient.address] = { balance: ethers.toQuantity(recipient.nativeBefore) };
+              executionOverrides[tokenIn].stateDiff![recipient.inSlot] = word(recipient.inputBefore);
+              executionOverrides[tokenOut].stateDiff![recipient.outSlot] = word(recipient.outputBefore);
+            }
+            const outputActor = recipient?.address ?? EXECUTOR, outputSlot = recipient?.outSlot ?? outSlot;
+            const outputBefore = recipient?.outputBefore ?? outputSentinel;
+            const result: Record<string, any> = { encoding, status: "failed", scriptHash: ethers.keccak256(script),
+              ...(recipient ? { settlementRequest: { kind: "direct-output", recipient: recipient.address },
+                programHash: ethers.keccak256(recipientLeg!.program) } : {}) };
             sample.executions.push(result);
             try {
-              assert.equal(await balance(tokenIn, EXECUTOR, overrides), amountIn + inputSentinel);
-              assert.equal(await balance(tokenOut, EXECUTOR, overrides), args.expectedOutputError ? 0n : outputSentinel);
+              assert.equal(await balance(tokenIn, EXECUTOR, executionOverrides), amountIn + inputSentinel);
+              assert.equal(await balance(tokenOut, EXECUTOR, executionOverrides), args.expectedOutputError ? 0n : outputSentinel);
+              if (recipient) {
+                assert.equal(await balance(tokenIn, recipient.address, executionOverrides), recipient.inputBefore);
+                assert.equal(await balance(tokenOut, recipient.address, executionOverrides), recipient.outputBefore);
+              }
               const tx = { from: OWNER, to: EXECUTOR, data: buildExecuteCalldata(script), gas: "0x800000",
                 gasPrice: ethers.toQuantity(header.baseFeePerGas!) };
               result.calldataHash = ethers.keccak256(tx.data);
-              result.callTrace = await rpc("debug_traceCall", [tx, pin, { tracer: "callTracer", timeout: "30s", stateOverrides: overrides }]);
+              result.callTrace = await rpc("debug_traceCall", [tx, pin, { tracer: "callTracer", timeout: "30s", stateOverrides: executionOverrides }]);
               result.evmSucceeded = !result.callTrace.error;
               if (args.expectedOutputError) {
                 result.stateDiff = await rpc("debug_traceCall", [tx, pin,
-                  { tracer: "prestateTracer", tracerConfig: { diffMode: true }, timeout: "30s", stateOverrides: overrides }]);
+                  { tracer: "prestateTracer", tracerConfig: { diffMode: true }, timeout: "30s", stateOverrides: executionOverrides }]);
                 result.rejection = assertOutputRejection({ trace: result.callTrace, diff: result.stateDiff,
                   pool: args.pool, tokenOut, expectedReason: args.expectedOutputError, tokenIn, inSlot,
                   inputBefore: amountIn + inputSentinel, nativeBefore: nativeSentinel, quotedAmountOut: quote.amountOut, requestedAmountIn: amountIn });
-                result.finalAllowances = await readAllowances(overrides);
+                result.finalAllowances = await readAllowances(executionOverrides);
                 assert.deepEqual(result.finalAllowances, [[0n]]);
-                assert.equal(await balance(tokenOut, EXECUTOR, overrides), 0n);
+                assert.equal(await balance(tokenOut, EXECUTOR, executionOverrides), 0n);
                 result.status = "state-rejected";
                 continue;
               }
               assert(result.evmSucceeded, "encoded BotVM execution reverted");
               result.stateDiff = await rpc("debug_traceCall", [tx, pin,
-                { tracer: "prestateTracer", tracerConfig: { diffMode: true }, timeout: "30s", stateOverrides: overrides }]);
+                { tracer: "prestateTracer", tracerConfig: { diffMode: true }, timeout: "30s", stateOverrides: executionOverrides }]);
               const diff = result.stateDiff; assert(diff?.pre && diff?.post, "independent prestate diff unavailable");
               const input = observed(diff, tokenIn, inSlot, amountIn + inputSentinel);
-              const output = observed(diff, tokenOut, outSlot, outputSentinel);
+              const output = observed(diff, tokenOut, outputSlot, outputBefore);
               result.balances = { input, output }; // Save mismatch evidence before asserting.
               result.nativeInventory = observedNativeInventory(diff, EXECUTOR, nativeSentinel);
+              if (recipient) result.recipientInventory = assertCurveRecipientInventory({ diff, tokenIn, tokenOut,
+                executorOutSlot: outSlot, executorOutputBefore: outputSentinel, recipient });
               result.quoteDelta = output.delta - quote.amountOut;
               assert.equal(input.delta, -amountIn); assert(output.delta > 0n);
-              assert.equal(input.after, inputSentinel); assert.equal(output.after, outputSentinel + output.delta);
-              const post: Overrides = structuredClone(overrides);
+              assert.equal(input.after, inputSentinel); assert.equal(output.after, outputBefore + output.delta);
+              const post: Overrides = structuredClone(executionOverrides);
               for (const [token, keys] of allowanceSlots) {
                 const preStorage = storage(diff, "pre", token), postStorage = storage(diff, "post", token);
                 const changes = post[token] ??= {}; changes.stateDiff ??= {};
@@ -736,26 +860,36 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
                 }
               }
               post[tokenIn].stateDiff![inSlot] = word(input.after);
-              post[tokenOut].stateDiff![outSlot] = word(output.after);
+              post[tokenOut].stateDiff![outputSlot] = word(output.after);
               assert.equal(await balance(tokenIn, EXECUTOR, post), input.after);
-              assert.equal(await balance(tokenOut, EXECUTOR, post), output.after);
+              assert.equal(await balance(tokenOut, outputActor, post), output.after);
+              if (recipient) {
+                assert.equal(await balance(tokenOut, EXECUTOR, post), outputSentinel);
+                assert.equal(await balance(tokenIn, recipient.address, post), recipient.inputBefore);
+              }
               result.finalAllowances = await readAllowances(post);
               const mode = "executionMode" in definition ? String(definition.executionMode) : "exchange-underlying";
-              result.allowancePolicy = curveHistoricalAllowancePolicy(leg.actionAdapterId, mode,
+              result.allowancePolicy = curveHistoricalAllowancePolicy((direct ? recipientLeg! : leg).actionAdapterId, mode,
                 amountIn, result.finalAllowances[0][0]);
 
               stage = `${encoding}-no-input-control`;
               // Preserve enough OLD output for either observed or quoted output,
               // including successful underlying diagnostics with quote mismatch.
               const noInputOutput = (quote.amountOut > output.delta ? quote.amountOut : output.delta) + outputSentinel;
-              const noInputOverrides = structuredClone(overrides);
+              const noInputOverrides = structuredClone(executionOverrides);
               noInputOverrides[tokenIn].stateDiff![inSlot] = word(0n);
               noInputOverrides[tokenOut].stateDiff![outSlot] = word(noInputOutput);
+              const noInputRecipient = recipient ? { ...recipient, outputBefore: noInputOutput } : undefined;
+              if (noInputRecipient) noInputOverrides[tokenOut].stateDiff![noInputRecipient.outSlot] = word(noInputOutput);
               const control: Record<string, any> = { status: "failed", calldataHash: result.calldataHash,
                 inputBefore: 0n, outputBefore: noInputOutput, nativeBefore: nativeSentinel };
               result.noInputControl = control;
               assert.equal(await balance(tokenIn, EXECUTOR, noInputOverrides), 0n);
               assert.equal(await balance(tokenOut, EXECUTOR, noInputOverrides), noInputOutput);
+              if (noInputRecipient) {
+                assert.equal(await balance(tokenIn, noInputRecipient.address, noInputOverrides), noInputRecipient.inputBefore);
+                assert.equal(await balance(tokenOut, noInputRecipient.address, noInputOverrides), noInputRecipient.outputBefore);
+              }
               // Reuse the SAME tx/calldata, source, gas and native override.
               control.callTrace = await rpc("debug_traceCall", [tx, pin,
                 { tracer: "callTracer", timeout: "30s", stateOverrides: noInputOverrides }]);
@@ -773,7 +907,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               control.finalAllowances = await readAllowances(failedPost);
               control.balances = assertNoInputRollback({ trace: control.callTrace, diff: control.stateDiff,
                 tokenIn, inSlot, tokenOut, outSlot, outputBefore: noInputOutput,
-                nativeBefore: nativeSentinel, finalAllowances: control.finalAllowances });
+                nativeBefore: nativeSentinel, finalAllowances: control.finalAllowances,
+                ...(noInputRecipient ? { recipient: noInputRecipient } : {}) });
               control.status = "pass";
               stage = encoding;
               result.oldInventoryConsumed = 0n; result.executionChecks = "pass";
@@ -790,7 +925,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
             sample.status = "state-rejected";
             continue;
           }
-          if (args.name === "curve-underlying") {
+          if (!args.recipient && args.name === "curve-underlying") {
             const actual = sample.executions.find((e: any) => e.encoding === "runtime-program");
             const diagnostic = sample.executions.find((e: any) => e.encoding === "quoted-minimum-1-diagnostic");
             assert.equal(actual.executionChecks, "pass"); assert.equal(diagnostic.executionChecks, "pass");
@@ -799,7 +934,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
             sample.executionEncodingParity = "pass"; // Separate from quote correctness below.
           }
           assert(sample.executions.length === scripts.length && sample.executions.every((e: any) => e.status === "pass"));
-          assert.deepEqual(sample.executions[0].finalAllowances, sample.executions[1].finalAllowances,
+          if (!args.recipient) assert.deepEqual(sample.executions[0].finalAllowances, sample.executions[1].finalAllowances,
             "quoted/runtime allowance policy differs");
           sample.status = "pass";
         } catch (error) { sample.error = failure(error); }
@@ -810,6 +945,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     report.headerAfter = await headerCheck();
     for (const token of tokens) assert.equal(await balance(token, EXECUTOR), 0n, "trace persisted state");
     assert.equal(await rpc("eth_getCode", [EXECUTOR, pin]), "0x", "actor code override persisted");
+    if (args.recipient) {
+      for (const token of tokens) assert.equal(await balance(token, args.recipient), 0n, "recipient trace persisted state");
+      assert.equal(await rpc("eth_getCode", [args.recipient, pin]), "0x", "recipient acquired source code");
+    }
     assert.equal(sha(readFileSync(args.ready)), report.inputs.readySha256);
     assert.equal(sha(readFileSync(args.prices)), report.inputs.pricesSha256);
     if (args.priceInput) assert.equal(sha(readFileSync(args.priceInput)), report.priceInput.sha256);
@@ -842,6 +981,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--executor-hardfork cancun] [--price-input INPUT_JSON] [--reference-executions SAVED_JSON | --reference-prices PRICES_JSON --reference-edges JSON_ARRAY | --manual-input JSON_TOKEN_PAIR_AND_AMOUNT] [--expect-output-error EXACT_REASON]");
+  if (process.argv.slice(2).includes("--help")) console.log("--ready FILE --prices FILE --pool ADDRESS --family curve-plain|curve-underlying --rpc-file FILE --out NEW_IGNORED_JSON --port 8591 [--executor-hardfork cancun] [--price-input INPUT_JSON] [--reference-executions SAVED_JSON | --reference-prices PRICES_JSON --reference-edges JSON_ARRAY | --manual-input JSON_TOKEN_PAIR_AND_AMOUNT] [--expect-output-error EXACT_REASON] [--recipient INDEPENDENT_EMPTY_ACTOR]");
   else main().catch(() => { console.error("historical-runtime-dual: input/output setup failed; no RPC started if no receipt was reserved"); process.exitCode = 1; });
 }

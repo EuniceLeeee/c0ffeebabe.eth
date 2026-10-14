@@ -72,9 +72,13 @@ const DIRECT = new ethers.Interface(["function get_dy(int128,int128,uint256) vie
 type Activity = { kind: "call"; target: string; data: string; nested?: boolean } |
   { kind: "log"; address: string; topics: readonly string[]; data: string };
 
-async function setup() {
+const updateFixture = JSON.parse(readFileSync(new URL("./fixtures/classic-meta-update-binding.json", import.meta.url), "utf8"));
+const updateCodes = JSON.parse(gunzipSync(Buffer.from(updateFixture.codesGzipBase64, "base64")).toString());
+
+async function setup(withUpdate = false) {
   let state = structuredClone(BASELINE), failBalances = false, previous = START, sequence = 0;
-  let metaAmplification = 100000n;
+  let metaAmplification = 100000n, failCumulative = false;
+  const poolResult = (data: string) => withUpdate ? data.padEnd(8194, "0") : data;
   const quotedEdges: string[] = [];
   const cache = createAdapterFamilyExactQuoteCache();
   function runtime(source: CanonicalSource) {
@@ -85,6 +89,19 @@ async function setup() {
       } }, provider: {
         async call(tx, block) {
           assert.equal(block, source.number);
+          if (withUpdate && same(tx.to, updateFixture.clock)) {
+            assert.equal(tx.data, ethers.id("getCurrentBlockTimestamp()").slice(0, 10));
+            return word(BigInt(updateFixture.source.timestamp + sequence));
+          }
+          if (withUpdate && same(tx.to, POOL)) {
+            const row = updateFixture.calls.find((r: any) => r.label !== "getCurrentBlockTimestamp" && r.params[0].data === tx.data);
+            if (row) {
+              if (failCumulative && row.label === "get_price_cumulative_last") {
+                return "0x" + word((1n << 256n) - 1n).slice(2).repeat(2).padEnd(8192, "0");
+              }
+              return row.result;
+            }
+          }
           if (same(tx.to, CURVE_METAREGISTRY)) {
             const parsed = REGISTRY.parseTransaction({ data: tx.data }); assert(parsed);
             const values: Record<string, unknown[]> = {
@@ -108,25 +125,31 @@ async function setup() {
             // ABI-valid synthetic behavior/raw view only. The selected base->base
             // Exact method reads balances and runs its real local execution math.
             const [i, j, amount] = POOL_ABI.decodeFunctionData("get_dy_underlying", tx.data);
-            return word(BigInt(amount) * UNITS[Number(j)] / UNITS[Number(i)]);
+            return poolResult(word(BigInt(amount) * UNITS[Number(j)] / UNITS[Number(i)]));
           }
           if (same(tx.to, POOL) && tx.data.startsWith(DIRECT.getFunction("get_dy")!.selector)) {
-            return word(BigInt(DIRECT.decodeFunctionData("get_dy", tx.data)[2]));
+            return poolResult(word(BigInt(DIRECT.decodeFunctionData("get_dy", tx.data)[2])));
           }
           const saved = fixture.calls.find(row => same(row.to, tx.to) && same(row.data, tx.data));
           assert(saved, `unexpected offline call ${tx.to} ${tx.data}`);
           // Synthetic timestamp-dependent A values; historical execution is separate.
           if (same(tx.to, BASE) && tx.data === ethers.id("A()").slice(0, 10)) return word(state.amplification);
-          if (same(tx.to, POOL) && tx.data === ethers.id("A_precise()").slice(0, 10)) return word(metaAmplification);
-          return saved.result;
+          if (same(tx.to, POOL) && tx.data === ethers.id("A_precise()").slice(0, 10)) return poolResult(word(metaAmplification));
+          return same(tx.to, POOL) ? poolResult(saved.result) : saved.result;
         },
         async getCode(address, block) {
           assert.equal(block, source.number);
+          if (withUpdate) {
+            if (same(address, POOL)) return updateCodes.pool;
+            if (same(address, updateFixture.implementation)) return updateCodes.implementation;
+            if (same(address, updateFixture.clock)) return updateCodes.clock;
+          }
           const saved = Object.values(codes).find(row => same(row.address, address));
           assert(saved, `unexpected offline code ${address}`); return saved.code;
         },
         async getStorage(address, slot, block) {
           assert.equal(block, source.number);
+          if (withUpdate && same(address, POOL) && BigInt(slot) === 12n) return word(10n ** 18n);
           const saved = fixture.storage.find(row => same(row.address, address) && BigInt(row.slot) === BigInt(slot));
           assert(saved, `unexpected offline storage ${address} ${slot}`); return saved.result;
         },
@@ -220,6 +243,8 @@ async function setup() {
   return { step, descriptor, route, key,
     donate() { state = { ...state, balances: [state.balances[0] + 10n ** 23n, ...state.balances.slice(1)] }; },
     fail() { failBalances = true; },
+    updateFailure(value: boolean) { failCumulative = value; },
+    rampBoth(base: bigint, meta: bigint) { state = { ...state, amplification: base }; metaAmplification = meta; },
     ramp(address: string | undefined, amplification?: bigint) {
       state = { ...state, amplification: address && same(address, BASE) ? amplification! : BASELINE.amplification };
       metaAmplification = address && same(address, POOL) ? amplification! : 100000n;
@@ -379,4 +404,29 @@ test("LP filtering remains bound-model-only and compiled/uncompiled mutation agr
     assert.deepEqual(new Set(index.affectedStateKeys({ observation })), new Set(direct));
     assert.equal(direct.length, 2);
   }
+});
+
+
+test("5f simultaneous ramps refresh on clean blocks; failed cumulative updates withdraw and recover", async () => {
+  const h = await setup(true), before = await h.step();
+  assert.equal(before.row.status, "quoted");
+  h.rampBoth(4500n, 110123n);
+  const changed = await h.step();
+  assert(!changed.touched.has(h.route.routeKey.toLowerCase()));
+  assert(changed.calls.includes(h.key));
+  assert.equal(changed.row.status, "quoted"); assert.equal(changed.row.amountOut, h.expected());
+  assert.notEqual(changed.row.amountOut, before.row.amountOut);
+  assert.deepEqual(changed.row.quotedAt, changed.source);
+  h.updateFailure(true);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const failed = await h.step();
+    assert.equal(failed.row.amountOut, null, "failed pricing must not carry its last valid output");
+    assert.equal(failed.row.quotedAt, undefined);
+    assert(failed.snapshot.coverage.unresolvedEdgeKeys.includes(h.key));
+  }
+  h.updateFailure(false);
+  const recovered = await h.step();
+  assert.equal(recovered.row.status, "quoted"); assert.equal(recovered.row.amountOut, h.expected());
+  assert.deepEqual(recovered.row.quotedAt, recovered.source);
+  assert(!recovered.snapshot.coverage.unresolvedEdgeKeys.includes(h.key));
 });

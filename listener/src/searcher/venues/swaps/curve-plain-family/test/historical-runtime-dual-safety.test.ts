@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+import { classicMetaUpdateRequests } from "../../curve-underlying-family/classic-meta-update.js";
+import type { CurveUnderlyingDescriptor } from "../../curve-underlying-family/types.js";
 import { ethers } from "ethers";
-import { curveHistoricalAllowancePolicy, assertOutputRejection, curveHistoricalExecutionProbe, curveHistoricalExecutionRules, assertNoInputRollback, curveHistoricalManualInput, curveHistoricalQuoteTargets, curveHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
+import { curveHistoricalRecipient, assertCurveHistoricalDirectLeg, curveHistoricalBalanceMapping, assertCurveRecipientInventory, curveHistoricalAllowancePolicy, assertOutputRejection, curveHistoricalExecutionProbe, curveHistoricalExecutionRules, assertNoInputRollback, curveHistoricalManualInput, curveHistoricalQuoteTargets, curveHistoricalReferenceInput, observedNativeInventory } from "./historical-runtime-dual.js";
 import { curveRefreshGuardRequests } from "../refresh-scope.js";
 import type { CurvePlainDescriptor } from "../types.js";
 import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
@@ -245,4 +249,138 @@ test("historical allowance checks distinguish cleared Family programs from legac
   }
   assert.equal(curveHistoricalAllowancePolicy("curve-exchange", "received", 73n, 0n), "no-grant");
   assert.throws(() => curveHistoricalAllowancePolicy("curve-exchange", "received", 73n, 1n), /policy mismatch/);
+});
+
+test("underlying historical reads retain the bound clock and exclude unrelated targets", () => {
+  const fixture = JSON.parse(readFileSync(new URL("../../curve-underlying-family/test/fixtures/classic-meta-update-binding.json", import.meta.url), "utf8"));
+  const code = JSON.parse(gunzipSync(Buffer.from(fixture.codesGzipBase64, "base64")).toString());
+  const model = {
+    kind: "classic-meta-base-3pool-v1", poolCodeHash: ethers.keccak256(code.pool),
+    metaRateMultiplier: 10n ** 18n, implementation: fixture.implementation,
+    implementationCodeHash: ethers.keccak256(code.implementation),
+    basePool: "0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7",
+    baseCodeHash: "0x954a1e212c557c85043985931498ffa3e2fcbe7dfe9cd61513f36eb47d6f4dfc",
+    baseLPToken: "0x6c3f90f043a72fa612cbac8115ee7e52bde6e490",
+    baseCoins: ["0x6b175474e89094c44da98b954eedeac495271d0f", "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "0xdac17f958d2ee523a2206206994597c13d831ec7"],
+    basePrecisions: [1n, 10n ** 12n, 10n ** 12n],
+  };
+  const descriptor = { pool: fixture.pool, quoteModel: model } as CurveUnderlyingDescriptor;
+  const targets = curveHistoricalQuoteTargets(descriptor);
+  assert(targets.has(fixture.clock), "bound underlying clock was excluded");
+  assert.deepEqual([...targets].sort(), [fixture.pool, fixture.clock, fixture.implementation,
+    model.basePool, model.baseLPToken, ...model.baseCoins].sort());
+  for (const request of classicMetaUpdateRequests(descriptor)) {
+    const address = request.kind === "eth-call" ? request.to : request.kind === "get-code" ? request.address : null;
+    assert(address && targets.has(address.toLowerCase()), request.id);
+  }
+  assert(!targets.has(OWNER) && !targets.has(EXECUTOR) && !targets.has(TOKEN_IN));
+  const unknown = { ...descriptor, quoteModel: { ...descriptor.quoteModel!, implementationCodeHash: ethers.ZeroHash } };
+  assert(!curveHistoricalQuoteTargets(unknown).has(fixture.clock));
+  const oldImplementation = "0x2c7796c0590cc100d70af473993890d457cb2ac9";
+  const legacy = { ...descriptor, quoteModel: { ...descriptor.quoteModel!, implementation: oldImplementation,
+    poolCodeHash: ethers.keccak256("0x366000600037611000600036600073" + oldImplementation.slice(2) + "5af4602c57600080fd5b6110006000f3"),
+    implementationCodeHash: "0xdf4543ae0cb4d3878072c1da2c56ebec96a64237051a7291429a2fb66d5f54da" } };
+  assert(!curveHistoricalQuoteTargets(legacy).has(fixture.clock));
+  assert.deepEqual([...curveHistoricalQuoteTargets({ pool: fixture.pool } as CurveUnderlyingDescriptor)], [fixture.pool]);
+  const lending = { pool: fixture.pool, coins: [TOKEN_OUT], lending: { lpToken: TOKEN_IN, wrappedCoins: [EXECUTOR] } } as CurveUnderlyingDescriptor;
+  assert.deepEqual([...curveHistoricalQuoteTargets(lending)].sort(), [fixture.pool, TOKEN_IN, TOKEN_OUT, EXECUTOR].sort());
+});
+
+const RECIPIENT = "0x1000000000000000000000000000000000000004";
+const RECIPIENT_IN_SLOT = word(31n), RECIPIENT_OUT_SLOT = word(32n), EXECUTOR_OUT_SLOT = word(22n);
+const recipientInventory = { address: RECIPIENT, inSlot: RECIPIENT_IN_SLOT, outSlot: RECIPIENT_OUT_SLOT,
+  inputBefore: 107n, outputBefore: 109n, nativeBefore: 19n };
+
+test("optional recipient is a distinct valid test actor, never payer, token or protocol", () => {
+  assert.equal(curveHistoricalRecipient(), undefined);
+  assert.equal(curveHistoricalRecipient(RECIPIENT, [TOKEN_IN, TOKEN_OUT]), RECIPIENT);
+  for (const value of ["invalid", "", ethers.ZeroAddress, OWNER, EXECUTOR])
+    assert.throws(() => curveHistoricalRecipient(value));
+  for (const reserved of [TOKEN_IN, TOKEN_OUT, RECIPIENT])
+    assert.throws(() => curveHistoricalRecipient(reserved, [reserved]), /independent test actor/);
+});
+
+test("direct mode cannot accept null, undeclared capability or ignored/misdirected recipient", () => {
+  const leg = { actionAdapterId: "curve-exchange-underlying", program: "0x0100",
+    settlement: { directOutput: true }, settlementRequest: { kind: "direct-output", recipient: RECIPIENT } } as const;
+  assert.doesNotThrow(() => assertCurveHistoricalDirectLeg(leg, RECIPIENT));
+  assert.throws(() => assertCurveHistoricalDirectLeg(null, RECIPIENT), /does not support/);
+  assert.throws(() => assertCurveHistoricalDirectLeg({ ...leg, settlement: undefined }, RECIPIENT), /not declared/);
+  assert.throws(() => assertCurveHistoricalDirectLeg({ ...leg, settlementRequest: undefined }, RECIPIENT), /ignored or changed/);
+  assert.throws(() => assertCurveHistoricalDirectLeg(leg, OWNER), /ignored or changed/);
+});
+
+test("recipient mapping independently proves two probes and preserves executor/holder controls", async () => {
+  const good = word(31n), global = word(99n), bad = word(98n);
+  const balance = async (_token: string, actor: string, overrides: any) => {
+    const state = overrides[TOKEN_IN].stateDiff;
+    if (bad in state) throw new Error("wrong proxy slot");
+    if (global in state) return BigInt(state[global]);
+    return actor === RECIPIENT ? BigInt(state[good] ?? 0n) : actor === EXECUTOR ? 0n : 41n;
+  };
+  const input = { token: TOKEN_IN, actor: RECIPIENT, controls: [
+    { actor: EXECUTOR, balance: 0n }, { actor: OWNER, balance: 41n },
+  ], candidates: [bad, global, good], balance };
+  assert.equal(await curveHistoricalBalanceMapping(input), good);
+  await assert.rejects(() => curveHistoricalBalanceMapping({ ...input, candidates: [global] }), /unresolved/);
+  await assert.rejects(() => curveHistoricalBalanceMapping({ ...input, candidates: [bad] }), /unresolved/);
+  await assert.rejects(() => curveHistoricalBalanceMapping({ ...input, controls: [] }), /independent control/);
+  await assert.rejects(() => curveHistoricalBalanceMapping({ ...input, controls: [{ actor: RECIPIENT, balance: 0n }] }), /independent control/);
+  const onlyFirstProbe = async (token: string, actor: string, overrides: any) => {
+    const value = await balance(token, actor, overrides);
+    return actor === RECIPIENT && value === 919191919193n ? value - 1n : value;
+  };
+  await assert.rejects(() => curveHistoricalBalanceMapping({ ...input, balance: onlyFirstProbe }), /unresolved/);
+});
+
+function directDiff() {
+  return { pre: { [TOKEN_OUT]: { storage: { [RECIPIENT_OUT_SLOT]: word(109n) } } },
+    post: { [TOKEN_OUT]: { storage: { [RECIPIENT_OUT_SLOT]: word(182n) } } } };
+}
+const directObservation = (diff: any) => assertCurveRecipientInventory({ diff, tokenIn: TOKEN_IN,
+  tokenOut: TOKEN_OUT, executorOutSlot: EXECUTOR_OUT_SLOT, executorOutputBefore: 103n, recipient: recipientInventory });
+
+test("direct receipt is an independent recipient delta; old input/output/native inventory cannot supply it", () => {
+  const result = directObservation(directDiff());
+  assert.equal(result.recipientOutput.delta, 73n);
+  assert.equal(result.executorOutput.delta, 0n);
+  assert.equal(result.recipientInput.delta, 0n);
+  assert.equal(result.recipientNative.delta, 0n);
+  assert.throws(() => directObservation({ pre: {}, post: {} }), /did not change/);
+  assert.throws(() => directObservation({ pre: {}, post: {}, transferReturn: word(1n), quotedOutput: 73n }), /did not change/);
+  for (const after of [108n, 109n]) {
+    const diff = directDiff(); diff.post[TOKEN_OUT].storage[RECIPIENT_OUT_SLOT] = word(after);
+    assert.throws(() => directObservation(diff), /did not receive new output/);
+  }
+  for (const [token, slot, before, after] of [
+    [TOKEN_OUT, EXECUTOR_OUT_SLOT, 103n, 102n], [TOKEN_OUT, EXECUTOR_OUT_SLOT, 103n, 176n],
+    [TOKEN_IN, RECIPIENT_IN_SLOT, 107n, 106n], [TOKEN_IN, RECIPIENT_IN_SLOT, 107n, 108n],
+  ] as const) {
+    const diff: any = directDiff();
+    (diff.pre[token] ??= { storage: {} }).storage[slot] = word(before);
+    (diff.post[token] ??= { storage: {} }).storage[slot] = word(after);
+    assert.throws(() => directObservation(diff), /inventory/);
+  }
+  const native: any = directDiff();
+  native.pre[RECIPIENT] = { balance: "0x13" }; native.post[RECIPIENT] = { balance: "0x12" };
+  assert.throws(() => directObservation(native), /native inventory/);
+});
+
+test("same-calldata no-input control also protects all recipient inventory", () => {
+  const input = { trace: { error: "execution reverted" }, diff: { pre: {}, post: {} } as any,
+    tokenIn: TOKEN_IN, inSlot: word(21n), tokenOut: TOKEN_OUT, outSlot: EXECUTOR_OUT_SLOT,
+    outputBefore: 1000000n, nativeBefore: 17n, finalAllowances: [[0n]],
+    recipient: { ...recipientInventory, outputBefore: 1000000n } };
+  const result = assertNoInputRollback(input);
+  assert("recipient" in result && result.recipient);
+  assert.equal(result.recipient.recipientOutput.delta, 0n);
+  assert.equal(result.recipient.recipientInput.delta, 0n);
+  assert.equal(result.recipient.recipientNative.delta, 0n);
+  for (const [address, field] of [[TOKEN_IN, RECIPIENT_IN_SLOT], [TOKEN_OUT, RECIPIENT_OUT_SLOT]] as const) {
+    assert.throws(() => assertNoInputRollback({ ...input, diff: { pre: {},
+      post: { [address]: { storage: { [field]: word(1n) } } } } }), /non-sender/);
+  }
+  assert.throws(() => assertNoInputRollback({ ...input, diff: { pre: {},
+    post: { [RECIPIENT]: { balance: "0x12" } } } }), /non-sender/);
+  assert.throws(() => assertNoInputRollback({ ...input, trace: {} }), /did not revert atomically/);
 });

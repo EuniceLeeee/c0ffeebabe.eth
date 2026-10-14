@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { assertClassicMetaUpdate, classicMetaUpdateRequests } from "./classic-meta-update.js";
 import { classicMetaRateSlot, classicMetaScalar } from "./quote-model.js";
 import { bindRequestResultRound, collectRequestProgramResults } from "../../adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
@@ -55,6 +56,7 @@ function call(id: string, to: string, name: string, args: readonly unknown[] = [
 export function classicUnderlyingQuoteRequests(input: Input): readonly AdapterRequest[] {
   const model = binding(input);
   const guards: AdapterRequest[] = [
+    ...classicMetaUpdateRequests(input.descriptor),
     { id: "classic-pool-code", kind: "get-code", address: input.descriptor.pool },
     { id: "classic-implementation-code", kind: "get-code", address: model.implementation },
     { id: "classic-base-code", kind: "get-code", address: model.basePool },
@@ -134,6 +136,7 @@ function guards(input: Input, results: readonly AdapterRequestResult[]): CurveUn
       throw new Error("curve-underlying USDT transfer mode is outside the bound zero-fee execution model");
     }
   }
+  assertClassicMetaUpdate(input.descriptor, input.source, results);
   return model;
 }
 function needsComposedWithdrawal(input: Input): boolean {
