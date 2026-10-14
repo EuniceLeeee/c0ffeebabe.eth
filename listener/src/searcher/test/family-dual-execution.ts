@@ -1,3 +1,4 @@
+import { descriptor as aquaFixture } from "../venues/swaps/aqua-swapvm-family/test/fixtures.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -51,6 +52,7 @@ const raw = JSON.parse(readFileSync(new URL("./fixtures/runtime-family-descripto
 const fixtures: any[] = raw.descriptors;
 fixtures.push(fewWrappedFixture());
 fixtures.push(vaultSpotFixture());
+fixtures.push(aquaFixture());
 // These saved Fluid fixtures are ERC20-only. Upgrade their test shape, not
 // production Ready: real stale descriptors must still be re-attested.
 for (const d of fixtures.filter(d => d.familyId === "fluid-dex")) {
@@ -191,6 +193,7 @@ test("production sim selector uses each real Family emitter, never Exact, and re
       { adapterId: "fixture-return", target: executor, tokenIn: r.tokenOut, tokenOut: r.tokenIn }];
     let exact = 0, builds = 0, simulated = 0; const events: any[] = [];
     const session: any = { source, fundingActionIds: () => ["verified-fixture-funding"],
+      blocksPrefixInversion: () => false,
       buildRuntimeAmountLeg({ edge }: any) { return edge === edges[0] ? build(d, r) :
         { actionAdapterId: "fixture-return", program: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()) }; },
       issueExact() { exact++; throw Error("unexpected chain-external hop quote"); },
@@ -450,5 +453,570 @@ test("V4 fee hook executes the shared actual-debt callback with Family hookData,
     assert.equal(args[1][1], -551n); assert.equal(args[2], hookDataFor(d, executor, zero));
     const take = inner.calls.find(c => c.data.startsWith(abi.getFunction("take")!.selector))!;
     assert.deepEqual([...abi.decodeFunctionData("take", take.data)], [r.realTokenOut, executor, out]);
+  }
+});
+
+// Exercise request binding across every installed Family and retained variant.
+// These emitter models complement the real historical execution fixtures.
+
+test("settlement: all installed domains remain covered by their existing fixtures", () => {
+  assert.deepEqual([...new Set(fixtures.map(d => d.familyId))].sort(), priced.map(x => x.familyId).sort());
+  assert.equal(installed.length, 46, "update the audit deliberately when the installed set changes");
+  for (const entry of installed.filter(x => !priced.includes(x))) {
+    assert(["funding", "credit"].includes(entry.plugin.manifest.domain));
+    assert((entry.plugin as any)[entry.plugin.manifest.domain], "funding/credit keeps its own contract");
+  }
+});
+
+for (const d of fixtures) for (const r of routes(d))
+test(`settlement: request binding and unchanged default ${d.familyId}/${d.variant ?? "default"}/${r.routeKey}`, () => {
+  const p = family(d.familyId), normal = build(d, r);
+  const paymentProgram = ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes());
+  // Keep the receiver distinct from every fixture-bound protocol address.
+  // `foreign` intentionally aliases a synthetic ERC4626 vault elsewhere.
+  const recipient = ethers.getAddress("0x9000000000000000000000000000000000000009");
+  assert(!JSON.stringify(d, (_key, value) => typeof value === "bigint" ? value.toString() : value)
+    .toLowerCase().includes(recipient.toLowerCase()));
+  const requests = [
+    { kind: "quote-output" },
+    { kind: "direct-output", recipient },
+    { kind: "deferred-input", paymentAmount: 91n, paymentProgram },
+  ];
+  for (const request of requests) {
+    const supported = request.kind === "quote-output" ? normal.settlement?.quoteOutput === true :
+      request.kind === "direct-output" ? normal.settlement?.directOutput === true :
+      typeof normal.settlement?.deferredInput === "string";
+    const actual = p.execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: request });
+    if (!supported) {
+      // A legacy raw emitter may ignore an unknown field. The central issuer
+      // rejects that unchanged result because it does not echo the request.
+      // The matching issuer fixture below tests its mandatory null result.
+      if (actual !== null) {
+        assert.notDeepEqual(actual.settlementRequest, request, "an undeclared request cannot be accepted");
+        assert.deepEqual(actual, normal, "legacy unsupported request cannot alter the default emitter");
+      }
+    } else {
+      assert(actual, "declared request must construct for this already valid route");
+      assert.deepEqual(actual.settlementRequest, request, "Family must bind the complete request");
+      assert(p.manifest.ownedActionAdapterIds.includes(actual.actionAdapterId));
+      if (request.kind !== "quote-output") assert.equal(actual.inputMode, normal.inputMode);
+    }
+    assert.deepEqual(build(d, r), normal, "unsupported or supported requests cannot mutate the default emitter");
+  }
+  if (d.familyId === "curve-underlying") {
+    assert.equal(normal.settlement?.deferredInput, undefined,
+      "reviewed Curve underlying profiles have no output-first deferred settlement");
+  }
+});
+
+
+// Append to the existing family-dual-execution.ts. Synthetic emitter behavior,
+// never Ready/admission, public-chain execution, or VM authentication evidence.
+test("settlement: V2 requests use actual recipient and emitted payment across existing quote profiles", () => {
+  const abi = new ethers.Interface(["function getReserves() view returns(uint112,uint112,uint32)",
+    "function getAmountOut(address,uint256) view returns(uint256)",
+    "function swap(uint256,uint256,address,bytes)"]);
+  for (const d of fixtures.filter(d => d.familyId === "univ2-standard")) for (const r of routes(d)) {
+    const cap = 1000n, reserve = 1000000n, marker = "0x5eed0002";
+    const tokenModel = d.tokenTransfers?.[r.direction === "zero-for-one" ? 0 : 1];
+    const poolCredit = tokenModel?.kind === "verified-transfer-tax" && !same(d.pool, tokenModel.token)
+      ? cap - cap * tokenModel.taxNumerator / tokenModel.taxDenominator : cap;
+    const quoteCall = (c: RuntimeCall): string => {
+      assert(c.static, "quote must only issue static calls");
+      const parsed = abi.parseTransaction({ data: c.data }); assert(parsed);
+      if (parsed.name === "getReserves") return abi.encodeFunctionResult(parsed.name, [reserve, reserve, 0]);
+      assert.equal(parsed.name, "getAmountOut");
+      assert(same(parsed.args[0], r.tokenIn)); assert.equal(parsed.args[1], poolCredit);
+      return abi.encodeFunctionResult(parsed.name, [997n]);
+    };
+    const quoteRequest = { kind: "quote-output" };
+    const quoted = family(d.familyId).execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: quoteRequest });
+    assert(quoted); assert.deepEqual(quoted.settlementRequest, quoteRequest);
+    const quote = inspectRuntime(quoted.program, cap, { call: quoteCall }, { output: true, readOnly: true });
+    const expectedOut = d.quoteModel.kind === "pool-get-amount-out" ? 997n :
+      poolCredit * (10000n - d.feeRule.feeBps) * reserve / (reserve * 10000n + poolCredit * (10000n - d.feeRule.feeBps));
+    assert.equal(quote.registers[0], expectedOut); assert(expectedOut > 0n);
+    for (const mode of ["direct-output", "deferred-input"]) {
+      const paymentProgram = ethers.hexlify(new RuntimeAmountProgram().call(foreign, marker)
+        .constant(1, cap).call(r.tokenIn, erc20.encodeFunctionData("transfer", [d.pool, 0n]), { patches: [{ offset: 36, reg: 1 }] })
+        .constant(0, cap).bytes());
+      const request = mode === "direct-output" ? { kind: mode, recipient: foreign } :
+        { kind: mode, paymentAmount: 1n, paymentProgram };
+      const leg = family(d.familyId).execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: request });
+      if (mode === "direct-output" && d.quoteModel.kind === "pool-get-amount-out") {
+        assert.equal(build(d, r).settlement?.directOutput, undefined,
+          "pool-quote callback recipient is the swap output recipient, not an independent payer");
+        assert.equal(leg, null, "external recipient must not receive the executor's payment continuation");
+        continue;
+      }
+      assert(leg);
+      assert.deepEqual(leg.settlementRequest, request);
+      let paid = 0n, credited = 0n, output = 0n, markerCalls = 0, callbacks = 0;
+      const events: string[] = [];
+      const call = (c: RuntimeCall): string => {
+        if (same(c.target, foreign) && c.data === marker) { markerCalls++; events.push("requested-payment"); return "0x"; }
+        const t = (() => { try { return erc20.parseTransaction({ data: c.data }); } catch { return null; } })();
+        if (t?.name === "balanceOf") {
+          const value = same(c.target, r.tokenIn) && same(t.args[0], d.pool) ? reserve + credited :
+            same(c.target, r.tokenOut) && same(t.args[0], executor) ? 23n + output : 23n;
+          return erc20.encodeFunctionResult("balanceOf", [value]);
+        }
+        if (t?.name === "transfer") {
+          assert(same(c.target, r.tokenIn)); assert(same(t.args[0], d.pool)); assert.equal(t.args[1], cap);
+          paid += cap; credited += poolCredit; events.push("debt-paid"); return erc20.encodeFunctionResult("transfer", [true]);
+        }
+        const a = abi.parseTransaction({ data: c.data }); assert(a);
+        if (a.name !== "swap") return quoteCall(c);
+        assert(same(a.args[2], mode === "direct-output" ? foreign : executor));
+        assert.equal(a.args[r.direction === "zero-for-one" ? 1 : 0], expectedOut);
+        assert.equal(a.args[r.direction === "zero-for-one" ? 0 : 1], 0n);
+        output += expectedOut; events.push("output-released");
+        if (a.args[3] !== "0x") {
+          assert(same(a.args[2], executor), "pair callback is delivered to swap.to, not msg.sender");
+          const script = ethers.getBytes(a.args[3]); assert.equal(script[0], 0x0e);
+          const callbackAmount = BigInt(ethers.hexlify(script.slice(1, 33)));
+          const size = Number(BigInt(ethers.hexlify(script.slice(33, 36))));
+          assert.equal(callbackAmount, cap); assert(c.incoming > 0 && c.outgoing > 0); callbacks++;
+          inspectRuntime(ethers.hexlify(script.slice(36, 36 + size)), callbackAmount, { call });
+        }
+        return "0x";
+      };
+      inspectRuntime(leg.program, cap, { call });
+      assert.equal(paid, cap); assert.equal(output, expectedOut);
+      assert.equal(markerCalls, mode === "deferred-input" ? 1 : 0);
+      assert.equal(callbacks, mode === "deferred-input" || d.quoteModel.kind === "pool-get-amount-out" ? 1 : 0);
+      assert.equal(events.indexOf("output-released") < events.indexOf("debt-paid"),
+        mode === "deferred-input" || d.quoteModel.kind === "pool-get-amount-out");
+    }
+  }
+});
+
+test("settlement: both V4 owners bind receiver and requested payment; native requests stay unsupported", () => {
+  const abi = new ethers.Interface(["function unlock(bytes)",
+    "function swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes) returns(int256)",
+    "function take(address,address,uint256)", "function sync(address)", "function settle() payable returns(uint256)"]);
+  for (const d of fixtures.filter(d => ["univ4", "univ4-fee-hook"].includes(d.familyId))) for (const r of routes(d)) {
+    const cap = 91n, credit = 97n, manager = d.managerBinding.manager, marker = "0x5eed0004";
+    const paymentProgram = ethers.hexlify(new RuntimeAmountProgram().call(foreign, marker)
+      .call(r.tokenIn, erc20.encodeFunctionData("transfer", [manager, 0n]), { patches: [{ offset: 36, reg: 0 }] }).bytes());
+    const requests = [{ kind: "direct-output", recipient: foreign }, { kind: "deferred-input", paymentAmount: cap, paymentProgram }];
+    const native = same(r.realTokenIn, ethers.ZeroAddress) || same(r.realTokenOut, ethers.ZeroAddress);
+    for (const request of requests) {
+      const leg = family(d.familyId).execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: request });
+      if (native) { assert.equal(leg, null); assert.equal(build(d, r).settlement, undefined); continue; }
+      assert(leg); assert.deepEqual(leg.settlementRequest, request);
+      assert(same(leg.settlement.deferredInput, manager)); assert.equal(leg.settlement.directOutput, true);
+      let output = 0n, paid = 0n, markers = 0; const events: string[] = [];
+      const zero = r.direction === "zero-for-one";
+      const packed = zero ? (BigInt.asUintN(128, -cap) << 128n) | credit : (credit << 128n) | BigInt.asUintN(128, -cap);
+      const call = (c: RuntimeCall): string => {
+        if (same(c.target, foreign) && c.data === marker) { markers++; events.push("requested-payment"); return "0x"; }
+        const t = (() => { try { return erc20.parseTransaction({ data: c.data }); } catch { return null; } })();
+        if (t?.name === "balanceOf") {
+          assert(same(c.target, r.tokenOut)); assert(same(t.args[0], executor));
+          return erc20.encodeFunctionResult("balanceOf", [2000n + output]);
+        }
+        if (t?.name === "transfer") {
+          assert(same(c.target, r.tokenIn)); assert(same(t.args[0], manager)); assert.equal(t.args[1], cap);
+          paid += cap; events.push("debt-paid"); return erc20.encodeFunctionResult("transfer", [true]);
+        }
+        assert(same(c.target, manager)); const a = abi.parseTransaction({ data: c.data }); assert(a);
+        if (a.name === "unlock") {
+          assert.equal(c.incoming, 68); assert.equal(c.outgoing, 68);
+          const script = ethers.getBytes(a.args[0]); assert.equal(script[0], 0x0e);
+          const amount = BigInt(ethers.hexlify(script.slice(1, 33))), size = Number(BigInt(ethers.hexlify(script.slice(33, 36))));
+          assert.equal(amount, cap); inspectRuntime(ethers.hexlify(script.slice(36, 36 + size)), amount, { call }); return "0x";
+        }
+        if (a.name === "swap") {
+          assert.equal(a.args[1][1], -cap);
+          assert.equal(a.args[2], d.familyId === "univ4-fee-hook" ? hookDataFor(d, executor, zero) : "0x");
+          return word(packed);
+        }
+        if (a.name === "take") {
+          assert(same(a.args[0], r.tokenOut)); assert.equal(a.args[2], credit);
+          assert(same(a.args[1], request.kind === "direct-output" ? foreign : executor));
+          output += credit; events.push("output-released"); return "0x";
+        }
+        if (a.name === "sync") { assert(same(a.args[0], r.tokenIn)); events.push("sync"); return "0x"; }
+        assert.equal(a.name, "settle"); assert.equal(c.value, 0n); assert.equal(paid, cap); events.push("settled"); return word(paid);
+      };
+      inspectRuntime(leg.program, cap, { call });
+      assert.equal(output, credit); assert.equal(paid, cap); assert.equal(markers, request.kind === "deferred-input" ? 1 : 0);
+      assert(events.indexOf("output-released") < events.indexOf("debt-paid"));
+      assert(events.indexOf("sync") < events.indexOf("debt-paid"));
+      assert(events.indexOf("debt-paid") < events.indexOf("settled"));
+    }
+  }
+});
+
+// Current V3 emitter behavior using the existing Family descriptor.
+// The protocol model invokes the emitted callback, not a test-created default
+// payment. Authentication and one-shot rejection still require actual VM tests.
+for (const id of ["univ3-standard"])
+test(`settlement: ${id} binds the requested recipient and executes the requested payment continuation`, () => {
+  const abi = new ethers.Interface([id === "kyberswap-elastic"
+    ? "function swap(address recipient,int256 swapQty,bool isToken0,uint160 limit,bytes data) returns(int256,int256)"
+    : "function swap(address recipient,bool zeroForOne,int256 amount,uint160 limit,bytes data) returns(int256,int256)"]);
+  const ds = fixtures.filter(d => d.familyId === id); assert(ds.length);
+  for (const d of ds) for (const r of routes(d)) for (const invalidExecutor of [ethers.ZeroAddress, d.pool]) {
+    assert.throws(() => family(id).execution.buildRuntimeLeg({ ...inputFor(d, r), executor: invalidExecutor,
+      settlement: { kind: "direct-output", recipient: foreign } }),
+    "a foreign requested recipient must not weaken the original executor-address guard");
+  }
+  for (const d of ds) for (const r of routes(d)) for (const mode of ["direct-output", "deferred-input"]) {
+    const cap = 91n, credit = 97n, zero = id === "kyberswap-elastic" ? r.isToken0 : r.direction === "zero-for-one";
+    for (const debt of mode === "deferred-input" ? [cap, cap - 1n] : [cap]) {
+    const marker = "0x5eed0001";
+    // Model the upstream continuation delivering input directly to the pool.
+    // The terminal executor's input-token balance must remain unchanged in the
+    // deferred case; requiring it to fall by cap would reject valid composition.
+    const paymentProgram = ethers.hexlify(new RuntimeAmountProgram()
+      .call(foreign, marker)
+      .constant(0, debt).bytes());
+    const request = mode === "direct-output" ? { kind: mode, recipient: foreign } :
+      { kind: mode, paymentProgram, paymentAmount: cap };
+    const normal = build(d, r);
+    assert.equal(normal.settlement?.directOutput, true, "declared recipient capability");
+    assert(same(normal.settlement?.deferredInput ?? ethers.ZeroAddress, d.pool), "declared debt recipient");
+    const leg = family(id).execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: request }); assert(leg);
+    assert.deepEqual(leg.settlementRequest, request); assert.equal(leg.inputMode, normal.inputMode);
+    let paid = 0n, output = 0n, markerCalls = 0, callbacks = 0;
+    const events: string[] = [];
+    const balance = (token: string, account: string) => same(token, r.tokenIn) && same(account, executor) ? 1000n + cap - (mode === "direct-output" ? paid : 0n) :
+      same(token, r.tokenOut) && same(account, mode === "direct-output" ? foreign : executor) ? 2000n + output : 2000n;
+    const settleCall = (c: RuntimeCall): string => {
+      if (same(c.target, foreign) && c.data === marker) {
+        markerCalls++; events.push("requested-payment"); paid += debt; events.push("debt-paid"); return "0x";
+      }
+      const tokenCall = (() => { try { return erc20.parseTransaction({ data: c.data }); } catch { return null; } })();
+      if (tokenCall?.name === "balanceOf") return erc20.encodeFunctionResult("balanceOf", [balance(c.target, tokenCall.args[0])]);
+      if (tokenCall?.name === "transfer") {
+        assert.equal(mode, "direct-output", "deferred request cannot silently use the default executor transfer");
+        assert(same(c.target, r.tokenIn)); assert(same(tokenCall.args[0], d.pool)); assert.equal(tokenCall.args[1], cap);
+        paid += tokenCall.args[1]; events.push("debt-paid"); return erc20.encodeFunctionResult("transfer", [true]);
+      }
+      assert.fail("unexpected callback operation");
+    };
+    const execute = () => inspectRuntime(leg.program, cap, { nativeBalance: () => 17n, call(c) {
+      if (!same(c.target, d.pool)) return settleCall(c);
+      const a = abi.decodeFunctionData("swap", c.data);
+      assert(same(a[0], mode === "direct-output" ? foreign : executor));
+      assert.equal(id === "kyberswap-elastic" ? a[1] : a[2], cap);
+      output = credit; events.push("output-released");
+      const script = ethers.getBytes(a[4]); assert.equal(script[0], 0x0e);
+      const callbackCap = BigInt(ethers.hexlify(script.slice(1, 33)));
+      const size = Number(BigInt(ethers.hexlify(script.slice(33, 36))));
+      assert.equal(callbackCap, cap); assert(c.incoming > 0 && c.outgoing > 0);
+      const deltas = zero ? [debt, -credit] : [-credit, debt];
+      const calldata = "0x00000000" + ethers.AbiCoder.defaultAbiCoder().encode(["int256", "int256", "bytes"], [...deltas, a[4]]).slice(2);
+      callbacks++; events.push("callback-entered");
+      inspectRuntime(ethers.hexlify(script.slice(36, 36 + size)), callbackCap, { calldata, nativeBalance: () => 17n, call: settleCall });
+      assert.equal(paid, debt, "callback must actually pay the input token debt");
+      return abi.encodeFunctionResult("swap", deltas);
+    } });
+    if (debt < cap) {
+      assert.throws(execute, /runtime amount mismatch/, "deferred partial debt must fail for funded fallback");
+      assert.equal(markerCalls, 1, "the rejection must occur after the requested continuation, not before callback execution");
+      continue;
+    }
+    execute();
+    assert.equal(callbacks, 1); assert.equal(output, credit); assert.equal(paid, cap);
+    assert.equal(markerCalls, mode === "deferred-input" ? 1 : 0,
+      "default callback payment cannot satisfy a requested continuation");
+    assert(events.indexOf("output-released") < events.indexOf("callback-entered"));
+    if (mode === "deferred-input") assert(events.indexOf("requested-payment") < events.indexOf("debt-paid"));
+    if (mode === "deferred-input") assert.equal(balance(r.tokenIn, executor), 1000n + cap,
+      "valid deferred settlement does not require a terminal executor input debit");
+    }
+  }
+});
+
+import { ABI as settlementFewAbi } from "../venues/protocols/few-wrapped-family/codec.js";
+import { ABI as settlementVaultAbi } from "../venues/swaps/vault-spot-family/codec.js";
+import { psmSellQuote as settlementPsmSellQuote } from "../venues/protocols/psm-family/codec.js";
+
+// Capability tests must not silently skip undeclared supported behavior.
+// The protocol models extend the same balances/ABIs as existing Family tests;
+// they are emitter behavior evidence, not historical or EVM execution evidence.
+for (const id of ["protocol:few-wrapped", "vault-spot", "protocol:psm"])
+test(`settlement: ${id} sends each direction's actual output to the requested recipient`, () => {
+  const ds = fixtures.filter(d => d.familyId === id); assert(ds.length);
+  for (const d of ds) for (const r of routes(d)) {
+    const cap = id === "protocol:psm" && r.direction === "buy-gem" ? 1234567890123456789n : 91n;
+    const request = { kind: "direct-output", recipient: foreign };
+    const normal = build(d, r);
+    assert.equal(normal.settlement?.directOutput, true, "receiver capability");
+    assert.equal(normal.settlement?.deferredInput, undefined, "these selected operations are not flash settlement");
+    const leg = family(id).execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: request });
+    assert(leg); assert.deepEqual(leg.settlementRequest, request);
+    assert.equal(leg.inputMode, normal.inputMode);
+    const key = (token: string, account: string) => `${token.toLowerCase()}:${account.toLowerCase()}`;
+    const balances = new Map([
+      [key(r.tokenIn, executor), 101n + cap], [key(r.tokenOut, executor), 103n],
+      [key(r.tokenOut, foreign), 107n], [key(r.tokenIn, d.vault ?? d.target), 1000n],
+    ]);
+    const get = (token: string, account: string) => balances.get(key(token, account)) ?? 0n;
+    const move = (token: string, from: string, to: string, amount: bigint) => {
+      assert(get(token, from) >= amount);
+      balances.set(key(token, from), get(token, from) - amount);
+      balances.set(key(token, to), get(token, to) + amount);
+    };
+    let allowance = 0n, swapped = false, protocolCalls = 0, expectedCredit = 0n, debit = 0n;
+    const pool = d.vault ?? d.target, fee = 10n ** 15n;
+    const protocolAbi = id === "protocol:few-wrapped" ? settlementFewAbi :
+      id === "vault-spot" ? settlementVaultAbi : PSM_INTERFACE;
+    const trace = inspectRuntime(leg.program, cap, { nativeBalance: () => 17n, call(c) {
+      const tokenCall = (() => { try { return erc20.parseTransaction({ data: c.data }); } catch { return null; } })();
+      if (tokenCall?.name === "balanceOf") return erc20.encodeFunctionResult("balanceOf", [get(c.target, tokenCall.args[0])]);
+      if (tokenCall?.name === "approve") { allowance = tokenCall.args[1]; return erc20.encodeFunctionResult("approve", [true]); }
+      if (c.data.slice(0, 10) === "0xdd62ed3e") return ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [allowance]);
+      if (tokenCall?.name === "transfer") {
+        assert.equal(id, "vault-spot"); assert(same(tokenCall.args[0], pool)); assert.equal(tokenCall.args[1], cap);
+        move(r.tokenIn, executor, pool, cap); debit += cap;
+        return erc20.encodeFunctionResult("transfer", [true]);
+      }
+      const a = protocolAbi.parseTransaction({ data: c.data }); assert(a);
+      if (a.name === "tin" || a.name === "tout") return protocolAbi.encodeFunctionResult(a.name, [fee]);
+      if (a.name === "tokenBalances") return protocolAbi.encodeFunctionResult(a.name, [1000n + (swapped ? cap : 0n)]);
+      protocolCalls++;
+      let recipient: string;
+      if (id === "protocol:few-wrapped") {
+        assert.equal(a.name, `${r.direction}To`); assert.equal(a.args[0], cap); recipient = a.args[1];
+        debit = cap; expectedCredit = cap;
+      } else if (id === "vault-spot") {
+        assert.equal(a.name, "swap"); assert(same(a.args[0], r.tokenIn) && same(a.args[1], r.tokenOut));
+        assert.equal(get(r.tokenIn, pool) - 1000n, cap, "pool receives input before output");
+        recipient = a.args[2]; expectedCredit = 97n;
+      } else {
+        const sell = r.direction === "sell-gem";
+        assert.equal(a.name, sell ? "sellGem" : "buyGem"); recipient = a.args[0];
+        const gem = a.args[1];
+        if (sell) { assert.equal(gem, cap); debit = cap; expectedCredit = settlementPsmSellQuote(cap, fee, d.decimalScale); }
+        else { assert.equal(gem, psmBuyQuote(cap, fee, d.decimalScale)); debit = psmBuyCost(gem, fee, d.decimalScale); expectedCredit = gem; }
+      }
+      assert(same(recipient, foreign), "decode the actual recipient from emitted calldata");
+      if (id !== "vault-spot") move(r.tokenIn, executor, pool, debit);
+      balances.set(key(r.tokenOut, recipient), get(r.tokenOut, recipient) + expectedCredit);
+      swapped = true;
+      return id === "protocol:psm" ? "0x" : protocolAbi.encodeFunctionResult(a.name, [expectedCredit]);
+    } });
+    assert.equal(protocolCalls, 1); assert.equal(trace.registers[0], cap);
+    assert.equal(get(r.tokenOut, foreign) - 107n, expectedCredit); assert(expectedCredit > 0n);
+    assert.equal(get(r.tokenOut, executor), 103n, "old executor output cannot stand in for receiver credit");
+    assert.equal(101n + cap - get(r.tokenIn, executor), debit); assert(debit > 0n && debit <= cap);
+    if (id === "protocol:psm" && r.direction === "buy-gem") {
+      assert.equal(leg.inputMode, "maximum");
+      if (d.decimalScale === 1000000000000n) assert(cap - debit > 1n);
+    } else { assert.equal(debit, cap); assert.equal(leg.inputMode, undefined); }
+    if (id === "protocol:few-wrapped") assert.equal(allowance, 0n);
+  }
+});
+
+// Positive callback behavior for the two newly adapted callback Families.
+// The protocol model invokes the emitted callback, not a test-created default
+// payment. Authentication and one-shot rejection still require actual VM tests.
+for (const id of ["swap:algebra-integral", "kyberswap-elastic"])
+test(`settlement: ${id} binds the requested recipient and executes the requested payment continuation`, () => {
+  const abi = new ethers.Interface([id === "kyberswap-elastic"
+    ? "function swap(address recipient,int256 swapQty,bool isToken0,uint160 limit,bytes data) returns(int256,int256)"
+    : "function swap(address recipient,bool zeroForOne,int256 amount,uint160 limit,bytes data) returns(int256,int256)"]);
+  const ds = fixtures.filter(d => d.familyId === id); assert(ds.length);
+  for (const d of ds) for (const r of routes(d)) for (const invalidExecutor of [ethers.ZeroAddress, d.pool]) {
+    assert.throws(() => family(id).execution.buildRuntimeLeg({ ...inputFor(d, r), executor: invalidExecutor,
+      settlement: { kind: "direct-output", recipient: foreign } }),
+    "a foreign requested recipient must not weaken the original executor-address guard");
+  }
+  for (const d of ds) for (const r of routes(d)) for (const mode of ["direct-output", "deferred-input"]) {
+    const cap = 91n, credit = 97n, zero = id === "kyberswap-elastic" ? r.isToken0 : r.direction === "zero-for-one";
+    for (const debt of mode === "deferred-input" ? [cap, cap - 1n] : [cap]) {
+    const marker = "0x5eed0001";
+    // Model the upstream continuation delivering input directly to the pool.
+    // The terminal executor's input-token balance must remain unchanged in the
+    // deferred case; requiring it to fall by cap would reject valid composition.
+    const paymentProgram = ethers.hexlify(new RuntimeAmountProgram()
+      .call(foreign, marker)
+      .constant(0, debt).bytes());
+    const request = mode === "direct-output" ? { kind: mode, recipient: foreign } :
+      { kind: mode, paymentProgram, paymentAmount: cap };
+    const normal = build(d, r);
+    assert.equal(normal.settlement?.directOutput, true, "recipient capability");
+    assert(same(normal.settlement?.deferredInput ?? ethers.ZeroAddress, d.pool), "deferred debt sink");
+    const leg = family(id).execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: request }); assert(leg);
+    assert.deepEqual(leg.settlementRequest, request); assert.equal(leg.inputMode, normal.inputMode);
+    let paid = 0n, output = 0n, markerCalls = 0, callbacks = 0;
+    const events: string[] = [];
+    const balance = (token: string, account: string) => same(token, r.tokenIn) && same(account, executor) ? 1000n + cap - (mode === "direct-output" ? paid : 0n) :
+      same(token, r.tokenOut) && same(account, mode === "direct-output" ? foreign : executor) ? 2000n + output : 2000n;
+    const settleCall = (c: RuntimeCall): string => {
+      if (same(c.target, foreign) && c.data === marker) {
+        markerCalls++; events.push("requested-payment"); paid += debt; events.push("debt-paid"); return "0x";
+      }
+      const tokenCall = (() => { try { return erc20.parseTransaction({ data: c.data }); } catch { return null; } })();
+      if (tokenCall?.name === "balanceOf") return erc20.encodeFunctionResult("balanceOf", [balance(c.target, tokenCall.args[0])]);
+      if (tokenCall?.name === "transfer") {
+        assert.equal(mode, "direct-output", "deferred request cannot silently use the default executor transfer");
+        assert(same(c.target, r.tokenIn)); assert(same(tokenCall.args[0], d.pool)); assert.equal(tokenCall.args[1], cap);
+        paid += tokenCall.args[1]; events.push("debt-paid"); return erc20.encodeFunctionResult("transfer", [true]);
+      }
+      assert.fail("unexpected callback operation");
+    };
+    const execute = () => inspectRuntime(leg.program, cap, { nativeBalance: () => 17n, call(c) {
+      if (!same(c.target, d.pool)) return settleCall(c);
+      const a = abi.decodeFunctionData("swap", c.data);
+      assert(same(a[0], mode === "direct-output" ? foreign : executor));
+      assert.equal(id === "kyberswap-elastic" ? a[1] : a[2], cap);
+      output = credit; events.push("output-released");
+      const script = ethers.getBytes(a[4]); assert.equal(script[0], 0x0e);
+      const callbackCap = BigInt(ethers.hexlify(script.slice(1, 33)));
+      const size = Number(BigInt(ethers.hexlify(script.slice(33, 36))));
+      assert.equal(callbackCap, cap); assert(c.incoming > 0 && c.outgoing > 0);
+      const deltas = zero ? [debt, -credit] : [-credit, debt];
+      const calldata = "0x00000000" + ethers.AbiCoder.defaultAbiCoder().encode(["int256", "int256", "bytes"], [...deltas, a[4]]).slice(2);
+      callbacks++; events.push("callback-entered");
+      inspectRuntime(ethers.hexlify(script.slice(36, 36 + size)), callbackCap, { calldata, nativeBalance: () => 17n, call: settleCall });
+      assert.equal(paid, debt, "callback must actually pay the input token debt");
+      return abi.encodeFunctionResult("swap", deltas);
+    } });
+    if (debt < cap) {
+      assert.throws(execute, /runtime amount mismatch/, "deferred partial debt must fail for funded fallback");
+      assert.equal(markerCalls, 1, "the rejection must occur after the requested continuation, not before callback execution");
+      continue;
+    }
+    execute();
+    assert.equal(callbacks, 1); assert.equal(output, credit); assert.equal(paid, cap);
+    assert.equal(markerCalls, mode === "deferred-input" ? 1 : 0,
+      "default callback payment cannot satisfy a requested continuation");
+    assert(events.indexOf("output-released") < events.indexOf("callback-entered"));
+    if (mode === "deferred-input") assert(events.indexOf("requested-payment") < events.indexOf("debt-paid"));
+    if (mode === "deferred-input") assert.equal(balance(r.tokenIn, executor), 1000n + cap,
+      "valid deferred settlement does not require a terminal executor input debit");
+    }
+  }
+});
+
+import { ABI as aquaSettlementAbi } from "../venues/swaps/aqua-swapvm-family/codec.js";
+
+// Append to the existing family-dual suite. Uses its fixtures, build/inputFor,
+// routes, inspectRuntime and balance conventions; this is NOT EVM evidence.
+// Requires descriptor(sampleIndex=0) from the fixture candidate in this pack.
+const aquaCallbackAbi = new ethers.Interface([
+  "function preTransferInCallback(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,bytes32 orderHash,bytes data)",
+]);
+function aquaTakerSlices(data: string) {
+  const bytes = ethers.getBytes(data), head = BigInt(ethers.hexlify(bytes.slice(0, 22)));
+  const ends = Array.from({ length: 10 }, (_, i) => Number((head >> BigInt(16 + 16 * i)) & 65535n));
+  return { flags: head & 65535n, at: (i: number) => ethers.hexlify(bytes.slice(22 + (i ? ends[i - 1]! : 0), 22 + ends[i]!)) };
+}
+test("settlement: Aqua v1 both admitted strategies and directions bind recipient, quote and output-first callback", () => {
+  for (const d of [aquaFixture(0), aquaFixture(1)]) for (const r of routes(d)) for (const cap of [1n, 91n]) {
+    const id = d.familyId, gross = cap + 6n, paymentAmount = cap;
+    assert.deepEqual(build(d, r).settlement, { quoteOutput: true, directOutput: true, deferredInput: executor.toLowerCase() });
+    const emit = (request: any, actor = executor) => family(id).execution.buildRuntimeLeg({ ...inputFor(d, r), executor: actor, settlement: request });
+    for (const actor of [ethers.ZeroAddress, d.router, d.aqua, d.order.maker, ...d.tokens]) {
+      assert.throws(() => emit({ kind: "direct-output", recipient: foreign }, actor));
+    }
+    for (const recipient of [ethers.ZeroAddress, d.router, d.aqua, d.order.maker, ...d.tokens]) {
+      assert.throws(() => emit({ kind: "direct-output", recipient }));
+    }
+    assert.equal(emit({ kind: "unknown" }), null, "unknown request must not silently run funded mode");
+    for (const fault of ["none", "amount-in", "order-hash", "zero-output"]) {
+      const request = { kind: "quote-output" }, leg = emit(request); assert(leg); assert.deepEqual(leg.settlementRequest, request);
+      let calls = 0;
+      const run = () => inspectRuntime(leg.program, cap, { call(c) {
+        calls++; assert(c.static); assert(same(c.target, d.router));
+        const q = aquaSettlementAbi.decodeFunctionData("quote", c.data);
+        assert.equal(q.amount, cap); assert(same(q.tokenIn, r.tokenIn) && same(q.tokenOut, r.tokenOut));
+        assert.equal(aquaTakerSlices(q.takerTraitsAndData).flags, 0x61n);
+        return aquaSettlementAbi.encodeFunctionResult("quote", [fault === "amount-in" ? cap - 1n : cap,
+          fault === "zero-output" ? 0n : gross, fault === "order-hash" ? word(1n) : d.strategyHash]);
+      } }, { output: true, readOnly: true });
+      if (fault === "none") assert.equal(run().registers[0], gross); else assert.throws(run);
+      assert.equal(calls, 1);
+    }
+    for (const mode of ["direct-output", "deferred-input"] as const) {
+      const faults = mode === "direct-output" ? ["none", "wrong-recipient", "input-short", "zero-debit", "native-changed"] :
+        ["none", "no-release", "short-receipt", "input-short", "input-over", "zero-debit", "spend-old-output", "partial-debt", "over-debt", "native-changed"];
+      for (const fault of faults) {
+        const key = (token: string, account: string) => `${token.toLowerCase()}:${account.toLowerCase()}`;
+        const balances = new Map<string, bigint>([
+          [key(r.tokenIn, executor), 101n + (mode === "direct-output" ? cap : 0n)],
+          [key(r.tokenOut, executor), 103n], [key(r.tokenOut, foreign), 107n],
+          [key(r.tokenIn, foreign), 10000n], [key(r.tokenIn, d.order.maker), 10000n], [key(r.tokenOut, d.order.maker), 10000n],
+        ]);
+        const get = (token: string, account: string) => balances.get(key(token, account)) ?? 0n;
+        const move = (token: string, from: string, to: string, value: bigint) => {
+          assert(value >= 0n && get(token, from) >= value); balances.set(key(token, from), get(token, from) - value);
+          balances.set(key(token, to), get(token, to) + value);
+        };
+        const marker = "0x5eed0002", events: string[] = [];
+        let allowance = 0n, callbackCalls = 0, paymentCalls = 0, native = 17n, ledgerIn = 10000n, ledgerOut = 10000n;
+        const debt = fault === "partial-debt" ? cap - 1n : fault === "over-debt" ? cap + 1n : cap;
+        const paymentProgram = ethers.hexlify(new RuntimeAmountProgram().call(foreign, marker).constant(0, debt).bytes());
+        const request = mode === "direct-output" ? { kind: mode, recipient: foreign } : { kind: mode, paymentAmount, paymentProgram };
+        const leg = emit(request); assert(leg); assert.deepEqual(leg.settlementRequest, request); assert.equal(leg.inputMode, undefined);
+        const onCall = (c: RuntimeCall): string => {
+          if (same(c.target, foreign) && c.data === marker) {
+            paymentCalls++; events.push("prefix-payment");
+            move(r.tokenOut, executor, foreign, paymentAmount + (fault === "spend-old-output" ? 1n : 0n));
+            move(r.tokenIn, foreign, executor, debt + (fault === "input-short" ? -1n : fault === "input-over" ? 1n : 0n));
+            return "0x";
+          }
+          const tokenCall = (() => { try { return aquaSettlementAbi.parseTransaction({ data: c.data }); } catch { return null; } })();
+          if (tokenCall?.name === "balanceOf") return word(get(c.target, tokenCall.args[0]));
+          if (tokenCall?.name === "approve") { assert(same(c.target, r.tokenIn)); assert(same(tokenCall.args[0], d.router)); allowance = tokenCall.args[1]; return word(1n); }
+          if (tokenCall?.name === "allowance") return word(allowance);
+          assert(same(c.target, d.router)); assert(!c.static); const a = aquaSettlementAbi.decodeFunctionData("swap", c.data);
+          assert.equal(a.amount, cap); assert(same(a.tokenIn, r.tokenIn) && same(a.tokenOut, r.tokenOut));
+          assert.equal(a[0].data, d.order.data); assert.equal(a[0].traits, BigInt(d.order.traits));
+          const traits = aquaTakerSlices(a.takerTraitsAndData);
+          assert.equal(traits.flags, mode === "direct-output" ? 0x61n : 0x45n);
+          const receiver = traits.at(1) === "0x" ? executor : ethers.getAddress(traits.at(1));
+          assert(same(receiver, mode === "direct-output" ? foreign : executor));
+          const pullAndPush = () => {
+            assert(allowance >= debt); events.push("router-transferFrom");
+            const debit = fault === "zero-debit" ? 0n : mode === "direct-output" && fault === "input-short" ? cap - 1n : debt;
+            move(r.tokenIn, executor, d.router, debit); allowance -= debit;
+            // Model the actual router push: both maker balance and strategy ledger
+            // must change. Direct payment to maker cannot replace this operation.
+            move(r.tokenIn, d.router, d.order.maker, debit); ledgerIn += debit; events.push("aqua-push");
+          };
+          const release = () => {
+            const actual = fault === "no-release" ? 0n : fault === "short-receipt" ? gross - 1n : gross;
+            move(r.tokenOut, d.order.maker, fault === "wrong-recipient" ? executor : receiver, actual); ledgerOut -= actual; events.push("aqua-pull-output");
+          };
+          if (mode === "direct-output") { assert.equal(traits.at(7), "0x"); assert.equal(c.incoming, 0); pullAndPush(); release(); }
+          else {
+            release(); callbackCalls++; events.push("callback");
+            const callbackData = aquaCallbackAbi.encodeFunctionData("preTransferInCallback", [d.order.maker, executor, r.tokenIn, r.tokenOut, debt, gross, d.strategyHash, traits.at(7)]);
+            const [scriptHex] = ethers.AbiCoder.defaultAbiCoder().decode(["bytes"], traits.at(7));
+            const script = ethers.getBytes(scriptHex), size = Number(BigInt(ethers.hexlify(script.slice(33, 36))));
+            assert.equal(c.incoming, 356); assert.equal(BigInt(ethers.dataSlice(callbackData, 132, 164)), debt);
+            assert.equal(ethers.dataSlice(callbackData, c.incoming - 32, c.incoming), word(BigInt(script.length)));
+            assert.equal(ethers.dataSlice(callbackData, c.incoming, c.incoming + script.length), scriptHex);
+            assert.equal(ethers.dataSlice(c.data, c.outgoing, c.outgoing + script.length), scriptHex);
+            assert.equal(BigInt(ethers.hexlify(script.slice(1, 33))), cap); assert.equal(script[0], 0x0e);
+            inspectRuntime(ethers.hexlify(script.slice(36, 36 + size)), cap, { call: onCall, calldata: callbackData, nativeBalance: () => native });
+            pullAndPush();
+          }
+          if (fault === "native-changed") native++;
+          return aquaSettlementAbi.encodeFunctionResult("swap", [debt, gross, d.strategyHash]);
+        };
+        const run = () => inspectRuntime(leg.program, cap, { call: onCall, nativeBalance: () => native });
+        if (fault !== "none") { assert.throws(run, `${mode}/${fault}`); continue; }
+        run(); assert.equal(allowance, 0n); assert.equal(native, 17n); assert.equal(get(r.tokenIn, executor), 101n);
+        assert.equal(ledgerIn, 10000n + cap); assert.equal(ledgerOut, 10000n - gross);
+        assert.equal(get(r.tokenIn, d.order.maker), 10000n + cap);
+        assert.equal(callbackCalls, mode === "deferred-input" ? 1 : 0); assert.equal(paymentCalls, callbackCalls);
+        if (mode === "deferred-input") {
+          assert.equal(get(r.tokenOut, executor) - 103n + paymentAmount, gross);
+          assert(events.indexOf("aqua-pull-output") < events.indexOf("callback"));
+          assert(events.indexOf("prefix-payment") < events.indexOf("router-transferFrom"));
+          assert(events.indexOf("router-transferFrom") < events.indexOf("aqua-push"));
+        } else { assert.equal(get(r.tokenOut, foreign), 107n + gross); assert.equal(get(r.tokenOut, executor), 103n); }
+      }
+    }
+    const unchanged = build(d, r); let touched = false;
+    assert.throws(() => inspectRuntime(unchanged.program, 0n, { call() { touched = true; return "0x"; }, nativeBalance: () => 17n }));
+    assert.equal(touched, false, "zero input fails before a protocol call");
   }
 });

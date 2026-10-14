@@ -1,6 +1,6 @@
 import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
 import { runtimeLeg, runtimeExecutor, RUNTIME_ERC20 } from "../../runtime-execution.js";
-import { executionData } from "./codec.js";
+import { executionData, hasReceiver } from "./codec.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { MAX_UINT, pullsInput, isNativeCoin, isNativeMode } from "./codec.js";
 import { nativeExchangeProgram } from "./native.js";
@@ -11,6 +11,9 @@ export const curvePlainExecution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertRoute(d, r); runtimeExecutor(executor, d.pool);
+    const request = input.settlement;
+    if (request && (request.kind !== "direct-output" || !hasReceiver(r.executionMode))) return null;
+    const recipient = request ? runtimeExecutor(request.recipient, d.pool, r.tokenIn, r.tokenOut) : executor;
     if (isNativeMode(r.executionMode)) return runtimeLeg(actionId(r.executionMode), nativeExchangeProgram(
       d.pool, r.tokenIn, r.tokenOut, r.i, r.j, r.executionMode, executor, isNativeCoin(d.binding.coins[r.i])));
     const p = new RuntimeAmountProgram(), pulls = pullsInput(r.executionMode);
@@ -22,9 +25,10 @@ export const curvePlainExecution = {
         .call(r.tokenIn, RUNTIME_ERC20.encodeFunctionData("transfer", [d.pool, 0n]), { patches: [{ offset: 36, reg: 0 }] })
         .call(r.tokenIn, balance, { static: true }).load(2, 0).math("sub", 3, 2, 1);
     }
-    p.call(d.pool, executionData(r.executionMode, r.i, r.j, 0n, 1n, executor),
+    p.call(d.pool, executionData(r.executionMode, r.i, r.j, 0n, 1n, recipient),
       { patches: [{ offset: 68, reg: pulls ? 0 : 3 }] });
-    return runtimeLeg(actionId(r.executionMode), p);
+    return { ...runtimeLeg(actionId(r.executionMode), p), ...(hasReceiver(r.executionMode) ? { settlement: { directOutput: true as const } } : {}),
+      ...(request ? { settlementRequest: request } : {}) };
   },
   runtimeProjection: ({ hop }) => ({ allowanceSpender: ["curve-exchange-plain", "curve-exchange-uint"].includes(hop.adapterId) ? hop.target : null,
     prewarmQuoteCalls: [] }),

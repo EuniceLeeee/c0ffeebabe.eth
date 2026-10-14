@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
-import { RuntimeAmountProgram, runtimeProgramScript } from "../../adapters/runtime-amount-program.js";
+import { RuntimeAmountProgram, runtimeProgramScript, type RuntimeSettlementRequest, type RuntimeSettlementCapabilities } from "../../adapters/runtime-amount-program.js";
 import {
   identityAssetRequestId,
   type IdentityAssetDeclaration,
@@ -185,6 +185,10 @@ interface FixtureControls {
   readonly routeAssets?: (pool: string) => Pick<FamilyRouteDescriptor, "tokenIn" | "tokenOut" | "executionAssets">;
   readonly runtimeProgram?: string;
   runtimeInputMode?: "maximum";
+  runtimeSettlement?: RuntimeSettlementCapabilities;
+  runtimeSettlementRequest?: RuntimeSettlementRequest;
+  lastRuntimeInput?: { readonly settlement?: RuntimeSettlementRequest };
+  onRuntimeBuild?: () => void;
   runtimeBuildCalls?: number;
   readonly omitClassifyUnavailable?: boolean;
   readonly sharedBindingKey?: "pool" | "token0";
@@ -722,10 +726,13 @@ function defineFixture(name: string, controls: FixtureControls) {
     },
     execution: {
       ...(controls.runtimeProgram === undefined ? {} : {
-        buildRuntimeLeg: () => {
+        buildRuntimeLeg: (input: { readonly settlement?: RuntimeSettlementRequest }) => {
           controls.runtimeBuildCalls = (controls.runtimeBuildCalls ?? 0) + 1;
+          controls.lastRuntimeInput = input; controls.onRuntimeBuild?.();
           return { actionAdapterId: controls.executionAdapterId ?? actionId,
             program: controls.runtimeProgram!,
+            ...(controls.runtimeSettlement === undefined ? {} : { settlement: controls.runtimeSettlement }),
+            ...(controls.runtimeSettlementRequest === undefined ? {} : { settlementRequest: controls.runtimeSettlementRequest }),
             ...(controls.runtimeInputMode === undefined ? {} : { inputMode: controls.runtimeInputMode }) };
         },
       }),
@@ -1877,6 +1884,59 @@ async function testRequestExactAndOwnedExecution(): Promise<void> {
   }, TypeError);
 }
 
+async function testRuntimeSettlementIssuerAuthority(): Promise<void> {
+  for (const native of [false, true]) {
+    const raw = ethers.hexlify(new RuntimeAmountProgram().constant(1, 7n).bytes());
+    const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0, runtimeProgram: raw,
+      routeAssets: () => ({ tokenIn: ADDR.WETH.toLowerCase(), tokenOut: TOKEN1,
+        ...(native ? { executionAssets: { input: "native" as const, output: "erc20" as const } } : {}) }),
+      runtimeSettlement: { quoteOutput: true, directOutput: true, deferredInput: GOOD } };
+    const family = defineFixture(`settlement-authority-${native}`, controls);
+    const scheduler = new TestScheduler();
+    const prepared = await run({ family, pools: [GOOD], scheduler });
+    const route = issuedRoute(prepared.publications[0].instances[0]);
+    let stale = false;
+    let actor = EXECUTOR;
+    const shared: CentralAdapterRuntime = { ...runtime(scheduler),
+      callerAuthority: { bind: () => ({ executor: actor }) },
+      generationFence: { assertCurrent() { assert(!stale, "fixture source changed"); } } };
+    const invocation = { family, route, source: SOURCE, runtime: shared, executor: EXECUTOR,
+      runtimeEvidence: [], actionOwnership: ownershipFor(family) };
+    const before = [...scheduler.requestIds];
+    const ordinary = buildFamilyRuntimeAmountLeg(invocation); assert(ordinary);
+    assert.equal(ordinary.settlement === undefined, native, "native routes cannot advertise output-first settlement");
+    const request: RuntimeSettlementRequest = { kind: "direct-output", recipient: OTHER };
+    assert.equal(buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request }), null,
+      "an emitter ignoring the request must never silently retain its original recipient");
+    controls.runtimeSettlementRequest = { kind: "direct-output", recipient: GOOD };
+    assert.equal(buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request }), null, "wrong receiver echo declines");
+    controls.runtimeSettlementRequest = request;
+    const issued = buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request });
+    assert.deepEqual(controls.lastRuntimeInput?.settlement, request);
+    assert(Object.isFrozen(controls.lastRuntimeInput)); assert(Object.isFrozen(controls.lastRuntimeInput?.settlement));
+    if (native) assert.equal(issued, null, "native requested settlement must use the existing funded wrapper");
+    else {
+      assert(issued); assert.deepEqual(issued.settlementRequest, request);
+      assert(Object.isFrozen(issued)); assert(Object.isFrozen(issued.settlement)); assert(Object.isFrozen(issued.settlementRequest));
+    }
+    assert.throws(() => buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request,
+      actionOwnership: { ownerOfAction: () => familyId("protocol:foreign") } }), /ownership/);
+    assert.throws(() => buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request,
+      route: Object.freeze({ ...route }) as FamilyRouteRuntimeHandle }), /must be issued/);
+    assert.throws(() => buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request,
+      source: { ...SOURCE, generation: SOURCE.generation + 1 } }));
+    controls.onRuntimeBuild = () => { stale = true; };
+    assert.throws(() => buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request }), /source changed/);
+    stale = false; controls.onRuntimeBuild = () => { actor = OTHER; };
+    assert.throws(() => buildFamilyRuntimeAmountLeg({ ...invocation, settlement: request }), /caller changed/);
+    actor = EXECUTOR; controls.onRuntimeBuild = undefined;
+    controls.runtimeSettlementRequest = undefined;
+    controls.runtimeSettlement = { quoteOutput: false as never };
+    assert.throws(() => buildFamilyRuntimeAmountLeg(invocation), /settlement capabilities/);
+    assert.deepEqual(scheduler.requestIds, before, "settlement issuing remains pure, no Exact or transport");
+  }
+}
+
 async function testCentralExecutionAssetBoundaryIssuers(): Promise<void> {
   const weth = ADDR.WETH.toLowerCase();
   const cases: readonly {
@@ -1966,6 +2026,29 @@ async function testCentralExecutionAssetBoundaryIssuers(): Promise<void> {
     controls.runtimeInputMode = undefined;
     assert.equal(buildFamilyRuntimeAmountLeg(invocation)?.inputMode, undefined, "default remains exact-input");
     assert.deepEqual(scheduler.requestIds, requestsBeforeRuntime, "policy propagation performs no I/O");
+
+    // Legacy raw emitters may ignore a settlement field; the issued public
+    // result must reject that lack of request binding. Reuse these existing
+    // issued ERC20/native route fixtures and preserve their default programs.
+    const settlementRequests: import("../../adapters/runtime-amount-program.js").RuntimeSettlementRequest[] = [
+      { kind: "quote-output" },
+      { kind: "direct-output", recipient: "0x1000000000000000000000000000000000000004" },
+      { kind: "deferred-input", paymentAmount: 10n,
+        paymentProgram: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()) },
+    ];
+    for (const inputMode of [undefined, "maximum"] as const) {
+      controls.runtimeInputMode = inputMode;
+      const defaultLeg = buildFamilyRuntimeAmountLeg(invocation);
+      assert(defaultLeg); assert.equal(defaultLeg.inputMode, inputMode);
+      for (const settlement of settlementRequests) {
+        assert.equal(buildFamilyRuntimeAmountLeg({ ...invocation, settlement }), null,
+          `${sample.name}: ignored ${settlement.kind} must not escape the issuer`);
+        assert.deepEqual(buildFamilyRuntimeAmountLeg(invocation), defaultLeg,
+          `${sample.name}: rejected request cannot change the default native/refund/budget path`);
+      }
+    }
+    controls.runtimeInputMode = undefined;
+    assert.deepEqual(scheduler.requestIds, requestsBeforeRuntime, "settlement request binding performs no I/O");
 
     controls.onExactInput = undefined;
     controls.onExactDecode = undefined;
@@ -3859,6 +3942,7 @@ await testSharedBindingProjectionThenableIsUnresolved();
 await testCallerCannotInjectSharedBindingRefs();
 await testRequestExactAndOwnedExecution();
 await testCentralExecutionAssetBoundaryIssuers();
+await testRuntimeSettlementIssuerAuthority();
 await testNativeBoundaryCannotLaunderForeignActions();
 await testInvalidExecutionAssetsFailBeforePublication();
 await testChainAmountUsesExistingExactBoundary();

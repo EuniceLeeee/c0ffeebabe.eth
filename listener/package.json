@@ -168,6 +168,10 @@
     "searcher:curve-plain-native-contract": "node --import tsx --test src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
     "searcher:runtime-native-boundary": "node --import tsx --test src/searcher/test/runtime-native-boundary.ts",
     "searcher:runtime-maximum-input": "node --import tsx --test src/searcher/test/runtime-maximum-input.ts",
+    "searcher:runtime-settlement": "tsx src/searcher/test/runtime-settlement.ts",
+    "searcher:family-direct-recipient": "node --import tsx --test src/searcher/test/family-direct-recipient.ts",
+    "searcher:kyberswap-elastic-contract": "node --import tsx --test src/searcher/venues/swaps/kyberswap-elastic-family/test/contract.ts src/searcher/venues/swaps/kyberswap-elastic-family/test/central-exact.ts",
+    "searcher:psm-family-contract": "node --import tsx --test src/searcher/venues/protocols/psm-family/test/identity-execution.ts src/searcher/venues/protocols/psm-family/test/bidirectional.ts src/searcher/venues/protocols/psm-family/test/trial-state.ts",
     "searcher:execution-asset-boundary": "node --import tsx --test src/searcher/test/execution-asset-boundary.ts",
     "searcher:identity-asset-metadata": "node --import tsx --test src/searcher/test/identity-asset-metadata.ts",
     "searcher:execution-asset-boundary-evm": "node --import tsx src/searcher/test/execution-asset-boundary-evm.ts",
@@ -346,7 +350,18 @@
     "searcher:vault-spot-family-historical-fork-ready": "node --import tsx src/searcher/venues/swaps/vault-spot-family/test/historical-ready.ts",
     "searcher:vault-spot-family-contract": "node --import tsx --test src/searcher/venues/swaps/vault-spot-family/test/contract.ts",
     "searcher:vault-spot-family-lifecycle": "node --import tsx --test src/searcher/venues/swaps/vault-spot-family/test/lifecycle.ts",
-    "searcher:vault-spot-family-historical-dual-fork": "node --import tsx src/searcher/venues/swaps/vault-spot-family/test/historical-dual.ts"
+    "searcher:vault-spot-family-historical-dual-fork": "node --import tsx src/searcher/venues/swaps/vault-spot-family/test/historical-dual.ts",
+    "searcher:aqua-swapvm-contract": "node --import tsx --test src/searcher/venues/swaps/aqua-swapvm-family/test/contract.ts",
+    "searcher:aqua-swapvm-historical-ready": "node --import tsx src/searcher/venues/swaps/aqua-swapvm-family/test/historical-ready.ts",
+    "searcher:aqua-swapvm-historical-dual": "node --import tsx src/searcher/venues/swaps/aqua-swapvm-family/test/historical-dual.ts",
+    "searcher:curve-underlying-direct-recipient": "node --import tsx --test src/searcher/test/curve-underlying-direct-recipient.ts",
+    "searcher:yearn-auction-family-direct-recipient": "node --import tsx --test src/searcher/test/yearn-auction-direct-recipient.ts",
+    "searcher:balancer-v2-family-runtime-direct-recipient": "node --import tsx --test src/searcher/test/balancer-v2-direct-recipient.ts",
+    "searcher:balancer-v2-historical-ready": "node --import tsx src/searcher/venues/swaps/balancer-v2-family/test/historical-ready.ts",
+    "searcher:balancer-v2-family-contract": "node --import tsx --test src/searcher/venues/swaps/balancer-v2-family/test/contract.ts src/searcher/venues/swaps/balancer-v2-family/test/codec-equivalence.ts src/searcher/venues/swaps/balancer-v2-family/test/lifecycle-observation.ts",
+    "searcher:balancer-v2-historical-recipient": "node --import tsx src/searcher/venues/swaps/balancer-v2-family/test/historical-recipient.ts",
+    "searcher:family-settlement-review": "node --import tsx src/searcher/test/family-settlement-review.ts",
+    "searcher:family-settlement-review-contract": "node --import tsx --test src/searcher/test/family-settlement-review-contract.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

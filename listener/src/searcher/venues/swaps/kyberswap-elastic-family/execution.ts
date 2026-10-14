@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import {
   RuntimeAmountProgram,
-  runtimeCallbackPayment,
+  runtimeCallbackPayment, runtimeDeferredPayment, runtimeDeferredOpeningFloor, type RuntimeSettlementRequest,
 } from "../../../../adapters/runtime-amount-program.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import {
@@ -42,7 +42,7 @@ type RuntimeInput = Pick<
   | "executor"
   | "transactionOrigin"
   | "runtimeEvidence"
->;
+> & { settlement?: RuntimeSettlementRequest };
 
 /**
  * Runtime-actual leg. `swap(recipient, swapQty, isToken0, limitSqrtP, data)` is
@@ -62,21 +62,29 @@ type RuntimeInput = Pick<
 function buildKyberSwapRuntimeLeg(input: RuntimeInput) {
   const { descriptor: d, route: r } = input;
   assertKyberSwapInvocation(d, r);
-  const recipient = ethers.getAddress(input.executor);
+  const request=input.settlement;if(request?.kind==="quote-output")return null;
+  const executor=ethers.getAddress(input.executor);
+  const recipient = request?.kind==="direct-output"?ethers.getAddress(request.recipient):executor;
   if (
-    [d.pool, r.tokenIn, r.tokenOut, recipient].some(isZeroAddress) ||
+    [d.pool, r.tokenIn, r.tokenOut, executor, recipient].some(isZeroAddress) ||
     same(r.tokenIn, r.tokenOut) ||
-    same(d.pool, recipient)
+    same(d.pool, recipient) || same(d.pool, executor)
   ) {
     throw new Error("kyberswap elastic runtime invalid execution addresses");
   }
   const isToken0 = r.isToken0;
-  const payment = runtimeCallbackPayment(
+  const deferred = request?.kind === "deferred-input"
+    ? runtimeDeferredPayment({ tokenOut: r.tokenOut, executor,
+      debtOffset: isToken0 ? KYSWAP_DELTA0_OFFSET : KYSWAP_DELTA1_OFFSET, ...request })
+    : null;
+  const payment = deferred ?? runtimeCallbackPayment(
     r.tokenIn,
     d.pool,
     isToken0 ? KYSWAP_DELTA0_OFFSET : KYSWAP_DELTA1_OFFSET,
   );
-  const program = new RuntimeAmountProgram()
+  const program = new RuntimeAmountProgram();
+  if(request?.kind==="deferred-input")runtimeDeferredOpeningFloor(program,r.tokenOut,executor,request.paymentAmount);
+  program
     // `isExactInput = swapQty > 0`: a high bit must never select exact output.
     .constant(1, 255n)
     .math("shr", 2, 0, 1)
@@ -95,6 +103,7 @@ function buildKyberSwapRuntimeLeg(input: RuntimeInput) {
         patches: [
           { offset: KYSWAP_SWAP_QTY_OFFSET, reg: 0 },
           { offset: KYSWAP_SWAP_DATA_OFFSET + payment.limitOffset, reg: 0 },
+          ...(deferred ?[{offset:KYSWAP_SWAP_DATA_OFFSET+deferred.floorOffset,reg:13}]:[]),
         ],
         callback: {
           incomingOffset: KYSWAP_CALLBACK_DATA_OFFSET,
@@ -102,7 +111,9 @@ function buildKyberSwapRuntimeLeg(input: RuntimeInput) {
         },
       },
     );
+  if(request?.kind==="deferred-input")program.load(1,isToken0?0:32).equal(1,0);
   return {
+    settlement:{directOutput:true as const,deferredInput:d.pool},...(request?{settlementRequest:request}:{}),
     actionAdapterId: KYSWAP_SWAP_ACTION,
     program: ethers.hexlify(program.bytes()),
   };
@@ -119,6 +130,7 @@ export const kyberswapElasticExecution = {
   buildFragment(input) {
     assertExecutionEvidence(input);
     const leg = buildKyberSwapRuntimeLeg(input);
+    if(!leg)throw Error("quoted Kyber runtime leg unavailable");
     return Object.freeze({
       requirements: Object.freeze([]),
       nodes: Object.freeze([Object.freeze({

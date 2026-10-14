@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import {
   RuntimeAmountProgram,
-  runtimeCallbackPayment,
+  runtimeCallbackPayment, runtimeDeferredPayment, runtimeDeferredOpeningFloor, type RuntimeSettlementRequest,
   type RuntimeAmountLeg,
 } from "../../../../adapters/runtime-amount-program.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
@@ -28,7 +28,7 @@ type RuntimeInput = Pick<
     >["buildFragment"]
   >[0],
   "descriptor" | "route" | "executor" | "transactionOrigin" | "runtimeEvidence"
->;
+> & { settlement?: RuntimeSettlementRequest };
 
 /**
  * Algebra's `swap(address recipient, bool zeroToOne, int256 amountRequired,
@@ -48,7 +48,8 @@ const ERC20_BALANCE_INTERFACE = new ethers.Interface([
 
 export function buildAlgebraIntegralRuntimeLeg(
   input: RuntimeInput,
-): RuntimeAmountLeg {
+): RuntimeAmountLeg | null {
+  if(input.settlement?.kind==="quote-output")return null;
   // Output measurement/next-hop sizing remains owned by the central runtime
   // flow. This entry must never read an off-chain amount or Exact evidence.
   return buildAlgebraIntegralLeg(input);
@@ -89,10 +90,18 @@ function buildAlgebraIntegralLeg(
     throw new Error("algebra-integral runtime invalid execution addresses");
   }
 
+  const request=input.settlement;
+  const recipient=request?.kind==="direct-output"?ethers.getAddress(request.recipient):executor;
+  if([ethers.ZeroAddress,d.pool,r.tokenIn,r.tokenOut].some(a=>sameAddress(a,recipient)))throw Error("algebra-integral output recipient");
   const zeroForOne = r.direction === "zero-for-one";
-  const payment = runtimeCallbackPayment(r.tokenIn, d.pool, zeroForOne ? 4 : 36);
+  const deferred = request?.kind === "deferred-input"
+    ? runtimeDeferredPayment({ tokenOut: r.tokenOut, executor, debtOffset: zeroForOne ? 4 : 36, ...request })
+    : null;
+  const payment = deferred ?? runtimeCallbackPayment(r.tokenIn, d.pool, zeroForOne ? 4 : 36);
   const balance = ERC20_BALANCE_INTERFACE.encodeFunctionData("balanceOf", [executor]);
-  const program = new RuntimeAmountProgram()
+  const program = new RuntimeAmountProgram();
+  if(request?.kind==="deferred-input")runtimeDeferredOpeningFloor(program,r.tokenOut,executor,request.paymentAmount);
+  program
     // amountRequired is signed. A high bit must never turn exact-input into
     // exact-output: the pool reads a negative amount as an output request.
     .constant(1, 255n).math("shr", 2, 0, 1).constant(3, 0n).equal(2, 3)
@@ -103,7 +112,7 @@ function buildAlgebraIntegralLeg(
   program.call(
       d.pool,
       ALGEBRA_POOL_INTERFACE.encodeFunctionData("swap", [
-        executor,
+        recipient,
         zeroForOne,
         0n,
         zeroForOne
@@ -117,6 +126,7 @@ function buildAlgebraIntegralLeg(
         patches: [
           { offset: AMOUNT_REQUIRED_OFFSET, reg: 0 },
           { offset: OUTGOING_OFFSET + payment.limitOffset, reg: 0 },
+          ...(deferred ?[{offset:OUTGOING_OFFSET+deferred.floorOffset,reg:13}]:[]),
         ],
         callback: { incomingOffset: CALLBACK_FIELD2_OFFSET, outgoingOffset: OUTGOING_OFFSET },
       },
@@ -124,8 +134,10 @@ function buildAlgebraIntegralLeg(
     // A pool may legally stop at its price limit, but this execution contract
     // requires full exact-input consumption. Check both the returned input
     // delta and the actual executor debit; a fabricated return is not payment.
-    .load(1, zeroForOne ? 0 : 32).equal(1, 0)
-    .call(r.tokenIn, balance, { static: true }).load(1, 0)
+    .load(1, zeroForOne ? 0 : 32).equal(1, 0);
+  // Deferred input is paid directly to the pool by the measured payment
+  // program; no executor input balance is consumed by this terminal leg.
+  if(request?.kind!=="deferred-input")program.call(r.tokenIn, balance, { static: true }).load(1, 0)
     .math("sub", 2, 4, 1).equal(2, 0);
   if (minAmountOut !== undefined) {
     // Checked subtraction enforces the quoted minimum against NEW receipts.
@@ -133,7 +145,8 @@ function buildAlgebraIntegralLeg(
     program.call(r.tokenOut, balance, { static: true }).load(1, 0)
       .math("sub", 2, 1, 5).constant(3, minAmountOut).math("sub", 2, 2, 3);
   }
-  return { actionAdapterId: ALGEBRA_INTEGRAL_ADAPTER_ID, program: ethers.hexlify(program.bytes()) };
+  return { actionAdapterId: ALGEBRA_INTEGRAL_ADAPTER_ID, program: ethers.hexlify(program.bytes()),
+    settlement:{directOutput:true,deferredInput:d.pool},...(request?{settlementRequest:request}:{}) };
 }
 
 export const algebraIntegralExecution = {

@@ -7,13 +7,17 @@ import { ACTION } from "./manifest.js";
 import { assertRoute } from "./routes.js";
 import { quoteBudget } from "./state.js";
 import type { Binding, Descriptor, Evidence, Route } from "./types.js";
-export function takeProgram(d: Binding, executor: string, minimumOut?: bigint) {
+export function takeProgram(d: Binding, executor: string, minimumOut?: bigint, recipient?: string) {
   const actor = runtimeExecutor(executor, d.target, d.implementation, d.want, d.sold), s = scales(d);
+  // receiver() receives payment proceeds; this address receives the sold token.
+  const taker = recipient === undefined ? actor : runtimeExecutor(recipient, d.target, d.implementation, d.want, d.sold);
+  const minimum = minimumOut === undefined && recipient !== undefined ? 1n : minimumOut;
   const p = new RuntimeAmountProgram().constant(12, 1n);
-  if (minimumOut !== undefined) {
-    if (!uint(minimumOut)) throw new Error("Yearn auction zero output floor");
+  if (recipient !== undefined) p.nativeBalance(15);
+  if (minimum !== undefined) {
+    if (!uint(minimum)) throw new Error("Yearn auction zero output floor");
     p.call(d.want, ABI.encodeFunctionData("balanceOf", [actor]), { static: true }).load(14, 0).math("sub", 8, 14, 0)
-      .call(d.sold, ABI.encodeFunctionData("balanceOf", [actor]), { static: true }).load(13, 0);
+      .call(d.sold, ABI.encodeFunctionData("balanceOf", [taker]), { static: true }).load(13, 0);
   }
   // A scaled getAmountNeeded probe recovers the FULL raw price, including the
   // fraction discarded by price() for <18-decimal payment tokens. No Exact.
@@ -23,17 +27,22 @@ export function takeProgram(d: Binding, executor: string, minimumOut?: bigint) {
     .math("add", 2, 0, 12).math("mul", 2, 2, 10).math("sub", 2, 2, 12).math("div", 3, 2, 1)
     .call(d.want, ABI.encodeFunctionData("approve", [d.target, 0n])).load(5, 0).equal(5, 12)
     .call(d.want, ABI.encodeFunctionData("approve", [d.target, 0n]), { patches: [{ offset: 36, reg: 0 }] }).load(5, 0).equal(5, 12)
-    .call(d.target, ABI.encodeFunctionData(TAKE, [d.sold, 0n]), { patches: [{ offset: 36, reg: 3 }] }).load(4, 0)
+    .call(d.target, ABI.encodeFunctionData(recipient === undefined ? TAKE : "take(address,uint256,address)",
+      recipient === undefined ? [d.sold, 0n] : [d.sold, 0n, taker]), { patches: [{ offset: 36, reg: 3 }] }).load(4, 0)
     .call(d.want, ABI.encodeFunctionData("approve", [d.target, 0n])).load(5, 0).equal(5, 12);
-  if (minimumOut !== undefined) p.call(d.want, ABI.encodeFunctionData("balanceOf", [actor]), { static: true }).load(6, 0)
+  if (minimum !== undefined) p.call(d.want, ABI.encodeFunctionData("balanceOf", [actor]), { static: true }).load(6, 0)
     .math("sub", 7, 14, 6).math("sub", 8, 7, 12).math("sub", 8, 0, 7)
-    .call(d.sold, ABI.encodeFunctionData("balanceOf", [actor]), { static: true }).load(6, 0)
-    .math("sub", 6, 6, 13).equal(6, 4).constant(7, minimumOut).math("sub", 8, 6, 7);
+    .call(d.sold, ABI.encodeFunctionData("balanceOf", [taker]), { static: true }).load(6, 0)
+    .math("sub", 6, 6, 13).equal(6, 4).constant(7, minimum).math("sub", 8, 6, 7);
+  if (recipient !== undefined) p.nativeBalance(6).equal(6, 15);
   return p;
 }
 export const execution = {
-  buildRuntimeLeg: ({ descriptor: d, route: r, executor }) => { assertRoute(d, r);
-    return { ...runtimeLeg(ACTION, takeProgram(d, executor)), inputMode: "maximum" as const }; },
+  buildRuntimeLeg: ({ descriptor: d, route: r, executor, settlement }) => { assertRoute(d, r);
+    if (settlement && settlement.kind !== "direct-output") return null;
+    return { ...runtimeLeg(ACTION, takeProgram(d, executor, undefined, settlement?.recipient)),
+      inputMode: "maximum" as const, settlement: { directOutput: true as const },
+      ...(settlement ? { settlementRequest: settlement } : {}) }; },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(i) {
     const d = i.descriptor, r = i.route, e = i.exactEvidence; assertRoute(d, r);

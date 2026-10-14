@@ -158,10 +158,12 @@ function verifyDepositEffects(result: Extract<AdapterRequestResult, { ok: true }
  * read while constructing runtime bytes. No new central VM instruction needed.
  * This module alone does not project/admit a deposit route. */
 export function depositProgram(s: DepositSurface, executor: string,
-  options: { readonly minimumShares?: bigint; readonly quotedDebt?: bigint } = {}): RuntimeAmountProgram {
+  options: { readonly minimumShares?: bigint; readonly quotedDebt?: bigint; readonly recipient?: string } = {}): RuntimeAmountProgram {
   const actor = actorFor(s, executor), minimum = options.minimumShares ?? 1n; positive(minimum);
   if (options.quotedDebt !== undefined) positive(options.quotedDebt);
+  const recipient = actorFor(s, options.recipient ?? actor);
   const balance = TOKEN.encodeFunctionData("balanceOf", [actor]);
+  const outputBalance = TOKEN.encodeFunctionData("balanceOf", [recipient]);
   const p = new RuntimeAmountProgram().constant(12, 1n).math("sub", 11, 0, 12).nativeBalance(9);
   if (options.quotedDebt === undefined) {
     p.call(s.cryptopool, CRYPTOPOOL_INTERFACE.encodeFunctionData("balances", [0n]), { static: true }).load(1, 0)
@@ -169,19 +171,20 @@ export function depositProgram(s: DepositSurface, executor: string,
       .math("mul", 3, 0, 1).math("div", 3, 3, 2).math("sub", 11, 3, 12);
   } else p.constant(3, options.quotedDebt);
   p.call(s.asset, balance, { static: true }).load(14, 0)
-    .call(s.lt, balance, { static: true }).load(13, 0)
+    .call(s.lt, outputBalance, { static: true }).load(13, 0)
     .call(s.stablecoin, balance, { static: true }).load(15, 0);
   // Exact approval and cleanup, no permanent max allowance. Bool-returning
   // approval is the supported asset contract here, never ignored false/empty.
   p.call(s.asset, TOKEN.encodeFunctionData("approve", [s.lt, 0n])).load(1, 0).equal(1, 12)
     .call(s.asset, TOKEN.encodeFunctionData("approve", [s.lt, 0n]), { patches: [{ offset: 36, reg: 0 }] })
     .load(1, 0).equal(1, 12)
-    .call(s.lt, LT_INTERFACE.encodeFunctionData(DEPOSIT, [0n, 0n, minimum]),
+    .call(s.lt, LT_INTERFACE.encodeFunctionData(options.recipient === undefined ? DEPOSIT : "deposit(uint256,uint256,uint256,address)",
+      options.recipient === undefined ? [0n, 0n, minimum] : [0n, 0n, minimum, recipient]),
       { patches: [{ offset: 4, reg: 0 }, { offset: 36, reg: 3 }] }).load(10, 0)
     .call(s.asset, TOKEN.encodeFunctionData("approve", [s.lt, 0n])).load(1, 0).equal(1, 12)
     .call(s.asset, balance, { static: true }).load(1, 0).math("sub", 1, 14, 1).equal(1, 0)
     .call(s.stablecoin, balance, { static: true }).load(1, 0).equal(1, 15)
-    .call(s.lt, balance, { static: true }).load(1, 0).math("sub", 1, 1, 13).equal(1, 10)
+    .call(s.lt, outputBalance, { static: true }).load(1, 0).math("sub", 1, 1, 13).equal(1, 10)
     .constant(2, minimum).math("sub", 2, 1, 2)
     .nativeBalance(1).equal(1, 9);
   return p;

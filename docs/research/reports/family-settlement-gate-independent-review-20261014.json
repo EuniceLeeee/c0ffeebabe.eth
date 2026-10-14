@@ -1,0 +1,93 @@
+{
+  "schema": "family-settlement-interface-gate-independent-review-final-v1",
+  "createdUtc": "2026-10-14T09:25:12.359177+00:00",
+  "reviewer": "interface_protocols_b (non-author)",
+  "scope": "Final static review of settlement interface acceptance gate and contract tests; preserves earlier review rounds. No new investigation or code changes in this report-writing step.",
+  "reviewedFiles": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-work/listener/src/searcher/test/family-settlement-review.ts",
+      "sha256": "5c2ff6f1979e48dc2f625ef95fee8b2e938028170367ef75c80435d53c40d06c",
+      "reviewedSha256": "5c2ff6f1979e48dc2f625ef95fee8b2e938028170367ef75c80435d53c40d06c",
+      "matchesReviewedVersion": true
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-work/listener/src/searcher/test/family-settlement-review-contract.ts",
+      "sha256": "aa2ce75cdf7d7d9628b86f72ee2d216a80eaebb2c0c8bc1472bff3cf6361f4c1",
+      "reviewedSha256": "aa2ce75cdf7d7d9628b86f72ee2d216a80eaebb2c0c8bc1472bff3cf6361f4c1",
+      "matchesReviewedVersion": true
+    }
+  ],
+  "conclusion": {
+    "status": "no-new-concrete-blocker-found-by-static-review",
+    "newBlockingFindings": [],
+    "acceptancePassed": false,
+    "note": "静态复核未发现新的具体误放行阻断；不是测试、构建、部署接口或新模式行为验收通过声明。"
+  },
+  "resolvedFindings": [
+    {
+      "id": "evidence-file-integrity",
+      "resolution": "引用证据实际读文件并校验 SHA-256；缺失或内容变化阻断。"
+    },
+    {
+      "id": "variant-inventory",
+      "resolution": "Family 变体集合与 hash 绑定的独立接口报告逐一一致，解析 id 或 variant 字段；安装清单包括 disabled。"
+    },
+    {
+      "id": "family-source-closure",
+      "resolution": "Family source pins 必须等于生成能力 identity/routes/execution/funding/credit 的依赖闭包与生产入口，且再次校验当前文件 hash。"
+    },
+    {
+      "id": "stale-generated-capability-closure",
+      "resolution": "main 在读取验收表前先执行现有 family-capability-manifest:check，拒绝 stale 生成依赖集合。"
+    },
+    {
+      "id": "common-solidity-source-coverage",
+      "resolution": "共用 Solidity pins 覆盖完整 root src/**/*.sol，包含 Constants、接口与新增 helpers。"
+    },
+    {
+      "id": "common-typescript-source-coverage",
+      "resolution": "共用 TypeScript 根使用现成 generateRuntimeSourceClosure 的实际运行依赖闭包，集合与当前 hash 均比较；签名及 dependencyArtifacts.logicalId 已静态核对。"
+    },
+    {
+      "id": "execution-source-binding",
+      "resolution": "typed behavior 报告的 Family source 与 commonSource 必须精确等于本次审核 pins，防止旧执行记录移用于新接线。"
+    },
+    {
+      "id": "behavior-report-type-and-content",
+      "resolution": "execution=verified 必须同 family/variant 的 typed behavior 报告、pass 结果、safe positive integer 计数、string 数组与底层 evidence 数组，并校验底层文件 hash。"
+    },
+    {
+      "id": "behavior-assertions",
+      "resolution": "实际扣款、到账、旧库存、回滚断言必需；output-first 另要求 callback caller、债务与先出款顺序断言。"
+    },
+    {
+      "id": "not-required-bypass",
+      "resolution": "仅 callback none、recipient no 且 wiring verified 的已证明无新增模式路径可 not-required；input-first、internal-only、separate-funding 不能跳过执行证据。"
+    },
+    {
+      "id": "variant-id-type",
+      "resolution": "variant id 强制非空 string，避免 numeric id 或隐式字符串转换。"
+    },
+    {
+      "id": "regression-negative-cases",
+      "resolution": "合同测试已包含漏变体、旧 hash、非行为证据、执行 pins 不符、错误数组/计数类型、缺 common helper 与 numeric id 等静态可见反例；本审查未执行这些测试。"
+    },
+    {
+      "id": "v2-direct-self-scope-clarification",
+      "resolution": "撤回此前 direct-self 属于旧承诺路径的疑虑；pool-get-amount-out 新显式 direct-output profile 整体拒绝保持保守边界，原 default/self/deferred 路径不由该新接口承诺替代。"
+    }
+  ],
+  "validation": {
+    "testsRunByReviewer": false,
+    "buildRunByReviewer": false,
+    "rpcOrExecutionRunByReviewer": false,
+    "runner24": "Parent identified runner24 as validation of an earlier source version; its result is not carried forward to the reviewed final version.",
+    "runner25": "pending-verification; no runner25 result inspected or claimed in this static review",
+    "sourceFilesChangedByReviewer": false
+  },
+  "limitations": [
+    "该门检查证据完整性、当前源码绑定与新接线要求；不代替独立人工核实实际 ABI/实现、历史身份或行为报告结论。",
+    "未知接口/身份、漏变体、支持但未接线或新增模式缺行为实据仍必须 fail。",
+    "早轮报告原样保留；本报告是当前所列 hashes 的末轮静态结论。"
+  ]
+}

@@ -12,7 +12,7 @@ const SUBSCRIPT = new Interface(["function execSubscript(bytes)"]);
 // A legacy redemption burns the entire input, or fails. It never rounds the
 // supplied amount down and silently leaves shares behind. The quoted variant
 // additionally guards its source-bound minima against OLD inventory.
-export function legacyRuntime(d: Descriptor, actor: string, minimums?: readonly bigint[]): RuntimeAmountProgram {
+export function legacyRuntime(d: Descriptor, actor: string, minimums?: readonly bigint[], recipient = actor): RuntimeAmountProgram {
   if (!d.legacy || (minimums && minimums.length !== d.components.length)) throw new Error("set-legacy runtime binding");
   let nested: RuntimeAmountProgram | undefined;
   for (let first = Math.floor((d.components.length - 1) / 7) * 7; first >= 0; first -= 7) {
@@ -26,13 +26,13 @@ export function legacyRuntime(d: Descriptor, actor: string, minimums?: readonly 
       if (minimums) p.constant(2, minimums[n]);
       else p.call(d.set, LEGACY_SET.encodeFunctionData("getUnits"), { static: true })
         .load(2, 32).constant(3, BigInt(d.components.length)).equal(2, 3).load(2, 64 + 32 * n).math("mul", 2, 12, 2);
-      p.call(d.components[n], TOKEN.encodeFunctionData("balanceOf", [actor]), { static: true })
+      p.call(d.components[n], TOKEN.encodeFunctionData("balanceOf", [recipient]), { static: true })
         .load(4 + n - first, 0).math("add", 4 + n - first, 4 + n - first, 2);
     }
     if (nested) p.call(actor, SUBSCRIPT.encodeFunctionData("execSubscript", [runtimeProgramScript(nested.bytes())]), { patches: [{ offset: 69, reg: 0 }] });
-    else p.call(d.module, CORE.encodeFunctionData("redeemAndWithdrawTo", [d.set, actor, 0n, 0n]), { patches: [{ offset: 68, reg: 0 }] });
+    else p.call(d.module, CORE.encodeFunctionData("redeemAndWithdrawTo", [d.set, recipient, 0n, 0n]), { patches: [{ offset: 68, reg: 0 }] });
     p.call(d.set, TOKEN.encodeFunctionData("balanceOf", [actor]), { static: true }).load(2, 0).math("sub", 2, 14, 2).equal(2, 0);
-    for (let n = first; n < end; n++) p.call(d.components[n], TOKEN.encodeFunctionData("balanceOf", [actor]), { static: true })
+    for (let n = first; n < end; n++) p.call(d.components[n], TOKEN.encodeFunctionData("balanceOf", [recipient]), { static: true })
       .load(2, 0).math("sub", 2, 2, 4 + n - first);
     nested = p;
   }
@@ -44,13 +44,21 @@ export const execution = {
     const { descriptor: d, route: r, executor } = input;
     assertRoute(d, r);
     const actor = runtimeExecutor(executor, d.set, d.module, d.controller, ...d.components);
+    const request = input.settlement;
+    // The selected route tracks one token. Do not route an entire basket to a
+    // next-hop recipient without an explicit multi-asset settlement contract.
+    if (request && (request.kind !== "direct-output" || d.components.length !== 1)) return null;
+    const recipient = request ? runtimeExecutor(request.recipient, d.set, d.module, d.controller, ...d.components,
+      ...(d.legacy ? [d.legacy.factory, d.legacy.vault, ...(d.legacy.issuance ? [d.legacy.issuance.transferProxy] : [])] : [])) : actor;
+    const settle = d.components.length === 1 ? { settlement: { directOutput: true as const },
+      ...(request ? { settlementRequest: request } : {}) } : {};
     if (r.issue) {
       runtimeExecutor(actor, d.legacy!.factory, d.legacy!.vault, d.legacy!.issuance!.transferProxy);
-      return runtimeLeg(actionId(d, r), legacyIssueRuntime(d, actor));
+      return { ...runtimeLeg(actionId(d, r), legacyIssueRuntime(d, actor, undefined, recipient)), ...settle };
     }
     if (d.legacy) {
       runtimeExecutor(actor, d.legacy.factory, d.legacy.vault);
-      return runtimeLeg(actionId(d), legacyRuntime(d, actor));
+      return { ...runtimeLeg(actionId(d), legacyRuntime(d, actor, undefined, recipient)), ...settle };
     }
     // Each invocation has <=125 instructions and r4..r11 for eight receipts.
     // Parent thresholds stay live across the existing executor-only self call;
@@ -73,7 +81,7 @@ export const execution = {
         p.call(d.set, SET.encodeFunctionData("getDefaultPositionRealUnit", [token]), { static: true })
           .load(2, 0).math("sub", 3, 15, 2)
           .math("mul", 2, 0, 2).math("div", 2, 2, 1)
-          .call(token, TOKEN.encodeFunctionData("balanceOf", [actor]), { static: true })
+          .call(token, TOKEN.encodeFunctionData("balanceOf", [recipient]), { static: true })
           .load(threshold, 0).math("add", threshold, threshold, 2);
       }
       if (nested) {
@@ -84,13 +92,13 @@ export const execution = {
       } else {
         // Bound BasicIssuance entry point retains native eligibility/transfer
         // checks and burns caller Set. No approvals, fees or output routing added.
-        p.call(d.module, MODULE.encodeFunctionData("redeem", [d.set, 0n, actor]),
+        p.call(d.module, MODULE.encodeFunctionData("redeem", [d.set, 0n, recipient]),
           { patches: [{ offset: 36, reg: 0 }] });
       }
       p.call(d.set, TOKEN.encodeFunctionData("balanceOf", [actor]), { static: true })
         .load(2, 0).math("sub", 2, 14, 2).equal(2, 0);
       for (let n = first; n < end; n++)
-        p.call(d.components[n], TOKEN.encodeFunctionData("balanceOf", [actor]), { static: true })
+        p.call(d.components[n], TOKEN.encodeFunctionData("balanceOf", [recipient]), { static: true })
           .load(2, 0).math("sub", 2, 2, 4 + n - first);
       nested = p;
     }
@@ -98,7 +106,7 @@ export const execution = {
     // They never become the next hop's input: runtime-amount-flow measures the
     // actual receipt independently. Old inventory cannot cover an underpayment.
     if (!nested) throw new Error("set-redemption empty runtime basket");
-    return runtimeLeg(ACTION, nested);
+    return { ...runtimeLeg(ACTION, nested), ...settle };
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(i) {

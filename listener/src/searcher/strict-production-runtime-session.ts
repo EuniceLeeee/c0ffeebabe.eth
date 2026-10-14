@@ -1412,13 +1412,14 @@ export class StrictProductionRuntimeSession {
     readonly edge: TokenEdge;
     readonly executor: string;
     readonly runtimeEvidence: readonly RuntimeEvidence[];
+    readonly settlement?: import("../adapters/runtime-amount-program.js").RuntimeSettlementRequest;
   }): import("../adapters/runtime-amount-program.js").RuntimeAmountLeg | null {
     this.#runtime.generationFence.assertCurrent(this.source.generation, this.source);
     const route = this.#resolve(input.edge);
     if (route.kind === "credit") return null;
     return buildFamilyRuntimeAmountLeg({ family: route.family, route: route.handle,
       source: this.source, runtime: this.#runtime, executor: input.executor,
-      runtimeEvidence: input.runtimeEvidence, actionOwnership: this.#catalog });
+      runtimeEvidence: input.runtimeEvidence, settlement: input.settlement, actionOwnership: this.#catalog });
   }
 
   buildExecution(input: {

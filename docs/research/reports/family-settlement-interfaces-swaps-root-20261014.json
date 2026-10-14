@@ -1,0 +1,1763 @@
+{
+  "schema": "family-actual-interface-non-author-review-v1",
+  "createdAt": "2026-10-14T09:14:02.017530+00:00",
+  "reviewer": "/root/curve_ready_review",
+  "task": "root-owned eight swap Families: deployed implementation, callback settlement and receiver boundaries",
+  "nonAuthorOfReviewedProductionChanges": true,
+  "reviewerRoleLimit": "Balancer narrow historical CLI candidate was authored by this reviewer; production direct-output change was authored by root. Prior saved evidence recomputation is reused transparently.",
+  "scope": "Read-only local saved source/API/runtime/ABI, historical public-state/public-sample, prior independently recomputed Balancer23/Aqua20 artifacts and saved historical report references. No production or cloud file changes.",
+  "sourceSnapshotRule": "Read installed-source for unchanged Families and settlement-work for current Balancer V2/Aqua. Every source reference is hashed below. This is not a new global cloud source fingerprint or a clean-tree acceptance.",
+  "summary": {
+    "families": 8,
+    "directAlreadyImplementedWithSavedExecution": [
+      "balancer-v2",
+      "aqua-swapvm"
+    ],
+    "directCapabilityGapsInInspectedSnapshot": [
+      "custom-swap:angstrom-v4",
+      "mooniswap",
+      "fluid-dex"
+    ],
+    "directUnsupportedSelectedEntry": [
+      "balancer-v1",
+      "balancer-v3",
+      "ella-exchange"
+    ],
+    "deferredImplementedButHistoricalPending": [
+      "aqua-swapvm"
+    ],
+    "inputFirstOrInternalCallbackMustNotBeDeferred": [
+      "balancer-v2",
+      "balancer-v3",
+      "custom-swap:angstrom-v4",
+      "fluid-dex"
+    ],
+    "noNewBlockingDefectInPreviouslyMeasuredBalV2OrAquaDirectEvidence": true
+  },
+  "verdict": "Parent interface classifications are confirmed within the bound deployment/entry scopes. Three receiver wiring omissions remain actionable; three other selected swap entries do not support an independent receiver. Aqua deferred remains unverified historically.",
+  "findings": [
+    {
+      "id": "ROOT8-DIRECT-ANGSTROM",
+      "severity": "P2",
+      "classification": "verified-protocol-capability-not-yet-wired-in-inspected-Family-snapshot",
+      "familyId": "custom-swap:angstrom-v4",
+      "blocksClaim": "all supported receiver capabilities are already connected",
+      "doesNotInvalidate": "existing self-recipient/default execution",
+      "recommendedScope": "For already admitted ERC20 routes, accept direct-output and encode only its recipient while retaining executor payer, same source/attestation and final sim. Measure recipient output and executor input; do not expose manager unlock as deferred input.",
+      "requiredEvidence": [
+        "issuer selects direct-output and rejects unsupported settlement kinds",
+        "real/model recipient delta, unchanged executor old output and full executor input debit",
+        "same block attestation and source-unlocked constraints retained; no caller/origin changes",
+        "recipient distinct from manager/adapter/tokens; nonzero output/minimum failure atomically reverts"
+      ]
+    },
+    {
+      "id": "ROOT8-DIRECT-MOONISWAP",
+      "severity": "P2",
+      "classification": "verified-protocol-capability-not-yet-wired-in-inspected-Family-snapshot",
+      "familyId": "mooniswap",
+      "blocksClaim": "all supported receiver capabilities are already connected",
+      "doesNotInvalidate": "existing self-recipient/default execution",
+      "recommendedScope": "Reuse the existing swapFor ABI on the already supported sorted ERC20 profile, replacing only receiver for direct-output. Keep payer/executor and referral behavior; add real recipient delta/full-input safeguards. Native variants remain outside current profile.",
+      "requiredEvidence": [
+        "both ERC20 directions with distinct recipient and issuer selection",
+        "referral and recipient are not interchanged",
+        "old executor input/output preserved, actual receiver increment meets minimum",
+        "amount 0, insufficient input, min+1 fail; no native/callback capability accidentally declared"
+      ]
+    },
+    {
+      "id": "ROOT8-DIRECT-FLUID",
+      "severity": "P2",
+      "classification": "verified-protocol-capability-not-yet-wired-in-inspected-Family-snapshot",
+      "familyId": "fluid-dex",
+      "blocksClaim": "all supported receiver capabilities are already connected",
+      "doesNotInvalidate": "existing self-recipient/default execution",
+      "recommendedScope": "Reuse ordinary swapIn to on the already admitted ERC20/ERC20 routes, move output observations to recipient and preserve executor input/allowance and final sim. Do not substitute swapInWithCallback or broaden native output until central conversion ownership and recipient semantics are explicitly implemented/tested.",
+      "requiredEvidence": [
+        "issuer direct selection for both ERC20 directions, real recipient credit and full executor debit",
+        "Liquidity, not dex pool, is the actual token counterparty",
+        "min+1/0input/insufficient input atomically reject; no old inventory consumption",
+        "unsupported native directions and quote-dead sentinel cannot be ordinary recipients",
+        "callback remains unadvertised as deferred input"
+      ]
+    }
+  ],
+  "families": [
+    {
+      "familyId": "balancer-v1",
+      "selectedEntry": "BPool.swapExactAmountIn(address,uint256,address,uint256,uint256)",
+      "deployments": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d.json",
+          "sha256": "128fc8d6e15607b632addf3c8f3b3185d3400fdb24bb33404a3daa088d095964",
+          "address": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+          "name": "BPool",
+          "verified": true,
+          "fullyVerified": false,
+          "runtimeHash": "0x974df1c33872ba8aab782be5117ff348802441590f84ed7701d734bb9c21683e",
+          "runtimeBytes": 22537,
+          "selectedAbi": [
+            {
+              "signature": "swapExactAmountIn(address,uint256,address,uint256,uint256)",
+              "selector": "0x8201aa3f"
+            }
+          ]
+        }
+      ],
+      "identityBinding": {
+        "kind": "historical-public-bytecode-and-state",
+        "source": {
+          "number": 26138731,
+          "hash": "0x696b86358440cc2b7a0a5e80dc87c2542a2e1535cd21502b99b317fef1d4d266"
+        },
+        "pool": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+        "factory": "0x9424b1412450d0f8fc2255faf6046b98213b76bd",
+        "artifact": {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/balancer-v1-family/test/public-state.json",
+          "sha256": "8d919d1e99a31844f21929d678acfabbf96ce81c66e246c5c02fdc7c39c730ef",
+          "bytes": 99059
+        },
+        "independentlyRecomputed": "public-state.poolCode exactly equals the actual verified deployment runtime; runtime hash also matches codec profile",
+        "limit": "Read-only pinned public inputs; not strict admission or historical execution"
+      },
+      "payer": "msg.sender = executor; pool pulls input with ERC20.transferFrom",
+      "recipient": {
+        "protocol": "msg.sender only",
+        "current": "executor",
+        "directOutput": "unsupported-by-selected-entry"
+      },
+      "callback": {
+        "kind": "none",
+        "object": null,
+        "order": "pool pulls input before pushing output to msg.sender",
+        "deferredInput": "unsupported-by-selected-entry"
+      },
+      "currentEncoding": {
+        "runtime": "swapProgram(pool, tokenIn, tokenOut, executor, minimum); no recipient argument or settlement declaration",
+        "safety": "temporary exact allowance/clear+read-zero; measured executor input debit and output minimum"
+      },
+      "sourceRefs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d/BPool.sol",
+          "sha256": "f55eb758fe2d3797e4e5e851284224389fabfdae27da2f5e113058888d5f9aa0",
+          "bytes": 23247,
+          "lines": [
+            423,
+            480,
+            481,
+            701,
+            708
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/balancer-v1-family/execution.ts",
+          "sha256": "671075e018acb07a8d8536ec12e669ae1542cd135e8ae24acf1e4a660de922e7",
+          "bytes": 2043,
+          "lines": [
+            9,
+            11
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/balancer-v1-family/runtime.ts",
+          "sha256": "e3ade5fac0d95655111006dedb520920db5fa5b6c2636bc3db21c71a14c0af77",
+          "bytes": 1594,
+          "lines": [
+            7,
+            13,
+            16,
+            18,
+            20
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/balancer-v1-family/codec.ts",
+          "sha256": "b6d605ca3c3acdf00df7abe0dbc21fb60fe34a8bda265d69814da67adf6ca7c9",
+          "bytes": 4598,
+          "lines": [
+            7,
+            8,
+            9
+          ]
+        }
+      ],
+      "conclusion": "Keep the existing capability unchanged; routing a later ERC20 transfer would not be protocol direct-output support.",
+      "historicalExecutionThisReview": "not rerun; the public-state fixture proves the captured code/state binding only",
+      "coverage": "complete",
+      "variants": [
+        {
+          "id": "balancer-v1",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "none",
+          "recipient": "no",
+          "wiring": "verified",
+          "execution": "not-required",
+          "gaps": [],
+          "evidenceNote": "既有选定入口未改；N26138731 public-state runtime 与实际 verified deployment 逐字节匹配。not-required 仅表示不存在要补验的新 callback/receiver 能力，不是声称旧执行刚通过。"
+        }
+      ]
+    },
+    {
+      "familyId": "balancer-v2",
+      "selectedEntry": "Vault.swap(SingleSwap,FundManagement,uint256,uint256)",
+      "deployments": [
+        {
+          "address": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+          "artifact": {
+            "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/balancer-v2-address-check/verified-vault.json",
+            "sha256": "db714838d051688e54558eb001473615dcf74bb1e7512dd93adf20b1d9b4df5c",
+            "bytes": 429767
+          },
+          "runtimeHash": "0x9eb70db20a41bfbf4b022fd070fa7f154b7c4aec98177120dde7a958384f4e66",
+          "verification": "saved actual verified Vault source/runtime; independently rehashed"
+        }
+      ],
+      "identityBinding": {
+        "kind": "actual same-N Ready and raw effects audited previously",
+        "review": {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/balancer23-independent-review-20261014.json",
+          "sha256": "74ed9b8349524ed72391aac6ae298f788d94ed75d78f432e44e12f986b13079e",
+          "bytes": 20284
+        },
+        "sources": [
+          {
+            "number": 26138724,
+            "hash": "0xcad9e81827cbe1f29ff77fc163855dfe1647a17b8b4a44b209e900273ac4f70b",
+            "generation": 26138724
+          },
+          {
+            "number": 26138511,
+            "hash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771",
+            "generation": 26138511
+          }
+        ],
+        "reportPins": [
+          {
+            "name": "bal-recipient-A01.json",
+            "sha256": "e935b35c5a40f4784ce6b45b1c1707627be1552461c413054e13a06a6cc5346d",
+            "vaultCodeHash": "0x9eb70db20a41bfbf4b022fd070fa7f154b7c4aec98177120dde7a958384f4e66",
+            "executorArtifactSha256": "f8ce9aff9f9ee68b3080b29e882dbc49f978fde135edfdcae89e7f9e094246a7",
+            "executorCodeHash": "0xdf4a3ba377233f0581fcc45273d970d78c9d2b548e111241c97503baa77724d4"
+          },
+          {
+            "name": "bal-recipient-B01.json",
+            "sha256": "b09677a5c58a239407a95c7553bb8010c9d5f09c225b79da8b15bd1ce859da99",
+            "vaultCodeHash": "0x9eb70db20a41bfbf4b022fd070fa7f154b7c4aec98177120dde7a958384f4e66",
+            "executorArtifactSha256": "f8ce9aff9f9ee68b3080b29e882dbc49f978fde135edfdcae89e7f9e094246a7",
+            "executorCodeHash": "0xdf4a3ba377233f0581fcc45273d970d78c9d2b548e111241c97503baa77724d4"
+          }
+        ]
+      },
+      "payer": "funds.sender remains executor; Vault authenticates caller and pulls from executor with fromInternalBalance=false",
+      "recipient": {
+        "protocol": "funds.recipient is a real independent output destination; poolRequest.to also receives it",
+        "current": "direct-output request changes funds.recipient and output observation; caller, sender, owner/origin and input allowance stay fixed",
+        "directOutput": "implemented-and-historically-measured"
+      },
+      "callback": {
+        "kind": "pool-internal-onSwap",
+        "object": "registered pool, not executor settlement callback",
+        "order": "_receiveAsset(input) then _sendAsset(output)",
+        "deferredInput": "unsupported-by-selected-swap"
+      },
+      "quoteContext": "same-N queryBatchSwap uses the actual external recipient because pool.onSwap can observe poolRequest.to; queryBatchSwap is a regular call, not a STATICCALL quote-output capability.",
+      "currentEncoding": {
+        "supportedSettlement": [
+          "direct-output"
+        ],
+        "rejectedSettlement": [
+          "quote-output",
+          "deferred-input"
+        ],
+        "guards": "measured executor input debit, recipient new output equals Vault return and minimum, old inventory, executor native, exact approval and actual zero allowance"
+      },
+      "sourceRefs": [
+        {
+          "artifact": {
+            "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/balancer-v2-address-check/verified-vault.json",
+            "sha256": "db714838d051688e54558eb001473615dcf74bb1e7512dd93adf20b1d9b4df5c",
+            "bytes": 429767
+          },
+          "embeddedFile": "contracts/vault/Swaps.sol",
+          "lines": [
+            67,
+            90,
+            91,
+            100,
+            101
+          ]
+        },
+        {
+          "artifact": {
+            "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/balancer-v2-address-check/verified-vault.json",
+            "sha256": "db714838d051688e54558eb001473615dcf74bb1e7512dd93adf20b1d9b4df5c",
+            "bytes": 429767
+          },
+          "embeddedFile": "contracts/vault/AssetTransfersHandler.sol",
+          "lines": [
+            44,
+            88,
+            114
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-work/listener/src/searcher/venues/swaps/balancer-v2-family/execution.ts",
+          "sha256": "9631fb0464a64da1ac45c4abbec8402dfa794b4157bf4f0191c5c48a884552a5",
+          "bytes": 2293,
+          "lines": [
+            9,
+            11,
+            12,
+            14
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-work/listener/src/searcher/venues/swaps/balancer-v2-family/runtime.ts",
+          "sha256": "a507a2bd7e0d737a66c1b9c20391a35eb42434b7b30602a385f97bd97f3d9bdf",
+          "bytes": 2159,
+          "lines": [
+            14,
+            16,
+            19,
+            20,
+            23,
+            24,
+            26,
+            28
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-work/listener/src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+          "sha256": "22aaef03e56ed2d2f9df9ca4aa75a641af6011ab7ca06320c0e8e3f3c2845e2c",
+          "bytes": 9631,
+          "lines": [
+            115,
+            118,
+            134,
+            136
+          ]
+        }
+      ],
+      "verifiedScope": {
+        "directions": 10,
+        "poolSourceInstances": 3,
+        "amountGroups": 20,
+        "positive": 60,
+        "negative": 130,
+        "tokenDeltaRows": 360,
+        "nativeDeltaRows": 60,
+        "totalSupplyDeltaRows": 120,
+        "swapLogs": 60,
+        "inputTransfers": 60,
+        "outputTransfers": 60,
+        "allowanceSuffixes": 60,
+        "negativeByKind": {
+          "insufficient-total-input": 60,
+          "minimum-plus-one": 40,
+          "zero-input": 20,
+          "post-execution-revert": 10
+        },
+        "positiveByEncoding": {
+          "quoted": 20,
+          "runtime": 20,
+          "direct-runtime": 20
+        }
+      },
+      "conclusion": "Reused existing raw-effects recomputation supports 20 direct recipient executions across the two saved N states; it does not establish deferred settlement or arbitrary future pools/token behaviors.",
+      "reviewerRole": "Non-author of the three production recipient changes; reviewer authored the narrow historical acceptance CLI candidate. Evidence was independently recalculated from saved effects/programs, not a second EVM run.",
+      "coverage": "complete",
+      "variants": [
+        {
+          "id": "balancer-v2",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "evidenceNote": "复用 Balancer23 独立复算：两 N/三池来源实例/十方向/二十金额组，60 正例中 20 direct-runtime，130 main-Revert；包括 recipient 独立 query context。无 quoteOutput/deferred 声明。"
+        }
+      ]
+    },
+    {
+      "familyId": "balancer-v3",
+      "selectedEntry": "Router.swapSingleTokenExactIn(pool,tokenIn,tokenOut,amountIn,minOut,deadline,wethIsEth,userData)",
+      "deployments": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0xae563e3f8219521950555f5962419c8919758ea2.json",
+          "sha256": "d0a316a02fa28a1062a394f5fe1d209233560c388e425633c8724c05943b9ab8",
+          "address": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "name": "Router",
+          "verified": true,
+          "fullyVerified": true,
+          "runtimeHash": "0x76d58a2f13ee78e52e3f414f0181bc77ff0fcc65ae35b0d215a26b6fd2980a18",
+          "runtimeBytes": 22402,
+          "selectedAbi": [
+            {
+              "signature": "swapSingleTokenExactIn(address,address,address,uint256,uint256,uint256,bool,bytes)",
+              "selector": "0x750283bc"
+            }
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0xba1333333333a1ba1108e8412f11850a5c319ba9.json",
+          "sha256": "7bea379ccd8047baf8f9576a2a5d6e858d6568bd68f64d6dba849117bed34308",
+          "address": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "name": "Vault",
+          "verified": true,
+          "fullyVerified": true,
+          "runtimeHash": "0x4e7ec59a8b52b6afc9969c95d7f28c541aa3f643b5f4fe3577a1559e1c3beb4b",
+          "runtimeBytes": 24538,
+          "selectedAbi": [
+            {
+              "signature": "swap((uint8,address,address,address,uint256,uint256,bytes))",
+              "selector": "0x2bfb780c"
+            }
+          ]
+        }
+      ],
+      "identityBinding": {
+        "kind": "actual Router/Vault runtime plus saved historical acceptance references",
+        "reportContainer": {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-root-evidence-index.json",
+          "sha256": "541037a81d0f5a0fa26e07346d9eb318cb364f8e39d881e9c82fc68c26b2e529",
+          "bytes": 145455
+        },
+        "reportKey": "docs/research/reports/balancer-v3-stable-surge-acceptance-20261010.json",
+        "reportedRouterRuntime": "0x76d58a2f13ee78e52e3f414f0181bc77ff0fcc65ae35b0d215a26b6fd2980a18",
+        "samples": [
+          {
+            "pool": "0x6b31a94029fd7840d780191b6d63fa0d269bd883",
+            "N": 26030897,
+            "blockHash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6",
+            "variant": {
+              "hook": {
+                "address": "0xb18fA0cb5DE8cecB8899AAE6e38b1B7ed77885dA",
+                "codeHash": "0x6fde1481892b3cee3fffecd371ce6f4cd8da87af425427694bcac9e901ba8095",
+                "flags": [
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  true
+                ],
+                "stableSurgeModel": "stable-surge-v1"
+              },
+              "localModel": null,
+              "stableSurgePoolModel": "stable-surge-pool-v1"
+            },
+            "artifacts": [
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-dual-5.json",
+                "sha256": "4ee25b9853d0706b3d391c8ac0c7c047609b1398045bd09dde29ef6e81dcbaf1"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/ready-summary.json",
+                "sha256": "4c36fd883ea61e34a4e2412e390b245d925edf099634a0149909a1b7426edfb9"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/ready.json",
+                "sha256": "eee7ec8c1de2b42a8a6612a2d142069c18f92a03f8486c1242532c16b9a661d6"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/receipt.json",
+                "sha256": "b5403cff691a47c36e101b8be779c5290d839ee899f71f543b9c295253d59ae1"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/prices/prices.json",
+                "sha256": "6121e23f43fcc77ca152365ddd0ef186a1e81fcf513faccecafa6d9a9240ecef"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready/prices/input.json",
+                "sha256": "1825f9a848bcb5a470fcb603696b95b4ce92023b8ab9159f5b53475eff7a846d"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-final-ready-canonical-status-2.log",
+                "sha256": "4e8bda9edcc895e32842b536f61fa79407054f96eb7ea433f0db88104c8911e1"
+              }
+            ]
+          },
+          {
+            "pool": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+            "N": 25936827,
+            "blockHash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+            "variant": {
+              "hook": {
+                "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+                "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+                "flags": [
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  true
+                ],
+                "stableSurgeModel": "stable-surge-v2"
+              },
+              "localModel": null,
+              "stableSurgePoolModel": "stable-surge-pool-v2"
+            },
+            "artifacts": [
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-dual-2.json",
+                "sha256": "0cffde692c628d649a358cae0909981963780408e4f97fb1d85eeefcef5a7ed3"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/ready-summary.json",
+                "sha256": "1e13f47659c26968b793c6290b54af4bb6b058a384919f9b9e8589fc15359b9b"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/ready.json",
+                "sha256": "0df73b8b1cb1c19139540b17bdff7c4caf237d02c04e4c1e30deaca38918e1ec"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/receipt.json",
+                "sha256": "cb76e32d93298cdadb4db1b0cc5d7df982f611c86e39aaa11bf037996f2b6dd0"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/prices/prices.json",
+                "sha256": "67e73e4b940a57896c76f6b9e7312296ed4dfda5307adb0f437eaae953db45b6"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready/prices/input.json",
+                "sha256": "4fed6489a23e8cbffd78d45340ccbdcd3ce1470d85bb9a2d5b8b0a35172e3e7e"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-ready-canonical-status-2.log",
+                "sha256": "9d92b86a9a5d4b6a55077c88d955275e1e9cbf0ce7da6a8f06734b93d1c184bc"
+              }
+            ]
+          },
+          {
+            "pool": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+            "N": 26105714,
+            "blockHash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+            "variant": {
+              "hook": {
+                "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+                "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+                "flags": [
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  true
+                ],
+                "stableSurgeModel": "stable-surge-v2"
+              },
+              "localModel": null,
+              "stableSurgePoolModel": "stable-surge-pool-v3"
+            },
+            "artifacts": [
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-dual-1.json",
+                "sha256": "52a2de55795d79432bafd77509b8f391d98400603ebb841f8e417fcc006b550a"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/ready-summary.json",
+                "sha256": "c8a2180e143d092e19027aa66e9a5408865beae9cc56c2516b175712ba37ae79"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/ready.json",
+                "sha256": "31f1253dc323c6b3f074c687aab0a69da49ec1adba8a5271a4ff2a93b8472d05"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/receipt.json",
+                "sha256": "077b596a313dbd014c535b4d59784016711ad2e7abbe7ea6b029fffd831fbde3"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/prices/prices.json",
+                "sha256": "e8aded2dd5b4f5f0dc960e2c11fffef25b15cb2765d1aa4b9466b31ccf63fdef"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready/prices/input.json",
+                "sha256": "6418f5408250cc62972b6b59a4d2630ba16a3f7ea3390f3ff57c79442fced921"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-ready-canonical-status-2.log",
+                "sha256": "acf1471ae6b1dfc45efb5d5bbb23b66dda806c85645f0a9b2f63d8a1e8d91f85"
+              }
+            ]
+          },
+          {
+            "pool": "0x93bd81fe5e0359cddce996e0785d9f6cb39295a7",
+            "N": 26003625,
+            "blockHash": "0x9d417fc754cde217ca1ee8f6346f236c71ef1a449a84f0a7fb8ac887a3c38cea",
+            "variant": {
+              "hook": {
+                "address": "0x0000000000000000000000000000000000000000",
+                "codeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "flags": [
+                  false,
+                  false,
+                  false,
+                  false,
+                  false,
+                  false,
+                  false,
+                  false,
+                  false,
+                  false
+                ]
+              },
+              "localModel": "weighted-v2",
+              "stableSurgePoolModel": null
+            },
+            "artifacts": [
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-dual-1.json",
+                "sha256": "35216a79a519e8cc3941ca3c2dc1607d99fb6a655c4ca9443c1466154f0e6bb7"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready/ready-summary.json",
+                "sha256": "0f0dac6fff561e78f0e7ebc37185f78790c2502ba44d4982765366792bf7ec31"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready/ready.json",
+                "sha256": "9c3b0a293a6e57d72dbdc65d164ea55022c9b934578e56b15a51248ebd093432"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready/receipt.json",
+                "sha256": "3535bdc2eb8ea1e440b4c2ab258af7acd10292c26486db035458f9b234680bab"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready/prices/prices.json",
+                "sha256": "4b9b57dea57fa06f3a55e651e0887d7a416ed9477175358c0f46b38dcfcb3350"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready/prices/input.json",
+                "sha256": "efe34af49501cb6ee7cf51c0d6bdb17e0e0b61f4ad76e0c5ea0ca0ae364e1ea9"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-ready-canonical-status-2.log",
+                "sha256": "e709c78fb1f1cb7f43e85c57051f845214f0ba6ba0a9c2b09c81ad39ae6b0915"
+              }
+            ]
+          },
+          {
+            "pool": "0xe00e947decfe01692070e113002705bdf77ddbd3",
+            "N": 25985457,
+            "blockHash": "0x2198a9b437e37b1f0e855be03b2989e7f725d2a67c232480f92a8e960975a80b",
+            "variant": {
+              "hook": {
+                "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+                "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+                "flags": [
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  true
+                ],
+                "stableSurgeModel": "stable-surge-v2"
+              },
+              "localModel": null,
+              "stableSurgePoolModel": "stable-surge-pool-v3"
+            },
+            "artifacts": [
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-dual-1.json",
+                "sha256": "b4363598bc5ec206f2429c11ac7bf456647804663ee3e0ee9e048e5258912a3d"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/ready-summary.json",
+                "sha256": "f3f93c9108f7e8910f19e6c37ad26bacea814840a066d0089920e6ea5f126bc5"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/ready.json",
+                "sha256": "6a1f80cbdf33700a6d0c0e060061efde251469c5629f3572d648ed8d4ac28761"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/receipt.json",
+                "sha256": "ef6568b8da4bbf2aa61b71004fc829c4e43b8f8a8dd3cd7dc801ceee0a1a3ce9"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/prices/prices.json",
+                "sha256": "2f4c226dedc864139c72138b182927b6ef04703c90614787b364d624533fd008"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready/prices/input.json",
+                "sha256": "98e9ef3a34d465c6b904276a294f684fd6c705553cbfd5f97247839a40207fe8"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-ready-canonical-status-2.log",
+                "sha256": "73bab2c88dd9481cd96bf74e7e08820c2a3fa53a9a995ac53e8b84ff498f0424"
+              }
+            ]
+          },
+          {
+            "pool": "0x071828acc755314e687448703775f22194f56867",
+            "N": 25944594,
+            "blockHash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+            "variant": {
+              "hook": {
+                "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+                "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+                "flags": [
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  true
+                ],
+                "stableSurgeModel": "stable-surge-v2"
+              },
+              "localModel": null,
+              "stableSurgePoolModel": "stable-surge-pool-v2"
+            },
+            "artifacts": [
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-dual-1.json",
+                "sha256": "11cafcc5a24988d669ccb27d32ca9ce8ff8b6d4c080ab85003f77ba378ed5889"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/ready-summary.json",
+                "sha256": "7084ac66f7963c397934f673aee593de1b1e256b1bd34a7ad49c27ffe63014c4"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/ready.json",
+                "sha256": "cd8c69adb1c25cd007b3b45e6fa7e5d11ecac45b6d57e721fa2c720f65aa3a5a"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/receipt.json",
+                "sha256": "c5c1995946639f37ef2716af64033a30359e7ec4f1fb5e75d8c55f56c9d0fdc6"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/prices/prices.json",
+                "sha256": "6367fe97e524265c2f264ed0d4daec16aef3ee1e7ef4e75310b44d1ec736b485"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready/prices/input.json",
+                "sha256": "c467a144b97aec7c270bd99833d03f972d6f83d4eeae5b1574fdbd4c38324173"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-ready-canonical-status-2.log",
+                "sha256": "28318bf828bd69d8e6eb9e7cd5a5e333a188abf61e42b63e6da058f6d93810c7"
+              }
+            ]
+          },
+          {
+            "pool": "0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566",
+            "N": 25978385,
+            "blockHash": "0x3f539aa4f4cc2ac1752d883e7af0862e17371bd1e3d916893e74f1228cacd50f",
+            "variant": {
+              "hook": {
+                "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+                "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+                "flags": [
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  true
+                ],
+                "stableSurgeModel": "stable-surge-v2"
+              },
+              "localModel": null,
+              "stableSurgePoolModel": "stable-surge-pool-v2"
+            },
+            "artifacts": [
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-dual-1.json",
+                "sha256": "bb895f161ffb39a44428304459c752f065ced7830a562fe4629db31618b3ea9a"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/ready-summary.json",
+                "sha256": "1ccc99957d21e4bc7261d4e07c6917c6acb6ca175706e92ac0110eb333944f37"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/ready.json",
+                "sha256": "febf5aa22d0055ecda17b1b400c53bd92bd59f0d050e38fd1a05891df12fc668"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/receipt.json",
+                "sha256": "84605d3e96d48dff6030663419a53b19febdf26f524985f7e529409dda6a1581"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/prices/prices.json",
+                "sha256": "091579466fbb97f83e972c1925e00e9d062ac77c2a895c62b980c2c49fa542d0"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready/prices/input.json",
+                "sha256": "5af23bc8f9277574f49d3374accb16c5e233bcab00a48c56b054c3d9501ff77a"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-ready-canonical-status-2.log",
+                "sha256": "d1cee1b5c4f1ce6598437072a40242d8df9d64521687f93d0104202d81552c5d"
+              }
+            ]
+          },
+          {
+            "pool": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
+            "N": 26073941,
+            "blockHash": "0x2058fcbae74c7dead9d719d83a27404a1ef33804ca4fe76c30a89b2e77b551d4",
+            "variant": {
+              "hook": {
+                "address": "0xBDbADc891BB95DEE80eBC491699228EF0f7D6fF1",
+                "codeHash": "0x4e4b918b1e49098d4bd62c32b3064316aaee0e7eaf2c866c9e82778d88d9ffd8",
+                "flags": [
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  false,
+                  false,
+                  true,
+                  false,
+                  true
+                ],
+                "stableSurgeModel": "stable-surge-v2"
+              },
+              "localModel": null,
+              "stableSurgePoolModel": "stable-surge-pool-v2"
+            },
+            "artifacts": [
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-dual-1.json",
+                "sha256": "0cf6405e39c0afabfbc6b8d7b5e5da459de0f7433f79e74aefa6bd8ad5ecc951"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/ready-summary.json",
+                "sha256": "39828aef5c73e9ea101d5d5bdc6c12c1830e22362b9f34e31a824ec20cacca07"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/ready.json",
+                "sha256": "60a84887922af3f2fbd35ac3021ca4ab82aff1abe465bcf44f70b680e51de4c1"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/receipt.json",
+                "sha256": "f090f42e4211591daa21279336d44578e404db7da9e3a3d4c2e8e2ebf551015e"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/prices/prices.json",
+                "sha256": "e6786c0717ec80901d543280075e26435017641c335a159b2efbffaddcefc1e7"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready/prices/input.json",
+                "sha256": "266a9a8230ddd60adbf23bf738890f18a805f4d7c48df54fbccc31037162a167"
+              },
+              {
+                "path": "logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-ready-canonical-status-2.log",
+                "sha256": "e6f1af1c29711a63b98ffdc1a1a0caef59ca0b796a5ce2d231022d39cc588aad"
+              }
+            ]
+          }
+        ],
+        "limit": "This review reads the saved acceptance report and its source/hash bindings; it does not independently recompute its 196 historical executions or claim a fresh Ready."
+      },
+      "payer": "Router saves msg.sender and sets hook params.sender=msg.sender; Permit2 transfers from that sender to Vault",
+      "recipient": {
+        "protocol": "selected Router sends output to params.sender, which the public swap entry fixes to msg.sender",
+        "current": "executor",
+        "directOutput": "unsupported-by-selected-Router-entry"
+      },
+      "callback": {
+        "kind": "internal-Vault-unlock-hook",
+        "object": "Router.swapSingleTokenHook, onlyVault; not caller-chosen executor callback",
+        "order": "Router _takeTokenIn/Permit2.transferFrom/settle before _sendTokenOut/Vault.sendTo",
+        "deferredInput": "unsupported-by-selected-Router-entry"
+      },
+      "currentEncoding": "runtime calls this Router and Permit2; pool release, hook version or rate provider does not create a recipient argument on this Router signature.",
+      "sourceRefs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0xae563e3f8219521950555f5962419c8919758ea2/Router.sol",
+          "sha256": "dcafda2de87d439c31906015834f93ecc2273ebc348a9112c5d13de563e34996",
+          "bytes": 39876,
+          "lines": [
+            547,
+            556,
+            563,
+            620,
+            622,
+            627,
+            628
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0xae563e3f8219521950555f5962419c8919758ea2/RouterCommon.sol",
+          "sha256": "f706edfb70c2d8e1065ad25878b23841afa7af461459317b9c16a8c19718ef2d",
+          "bytes": 13148,
+          "lines": [
+            252,
+            259,
+            260,
+            265,
+            275
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/balancer-v3-family/execution.ts",
+          "sha256": "7ee87175da9ea5c435c43ce6c1ee78943a98240e4ed572de15097ce5d2ee4e70",
+          "bytes": 3119,
+          "lines": [
+            15,
+            18,
+            20,
+            21,
+            22
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/balancer-v3-family/identity.ts",
+          "sha256": "719555f905838d6edd43539ae60195cd792c53833927fb18813ac21b5feca3f3",
+          "bytes": 9461,
+          "lines": [
+            35,
+            36,
+            37,
+            41,
+            42,
+            43,
+            85,
+            94,
+            129
+          ]
+        }
+      ],
+      "conclusion": "Keep direct/deferred undeclared for the installed Router route. Direct Vault unlock/sendTo is a different execution variant, not an omitted field on the current Router swap.",
+      "limits": [
+        "No inference that arbitrary hooks/rate providers are caller-invariant.",
+        "Report retains missing natural valuation and unmeasured directions."
+      ],
+      "coverage": "partial",
+      "variants": [
+        {
+          "id": "balancer-v3",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "no",
+          "wiring": "verified",
+          "execution": "unverified",
+          "gaps": [
+            "原 StableSurge 验收是 8 池、33/36 已测方向、98 金额组/196 执行，仍是有效的既有普通 Router 实测事实；不是新执行。",
+            "当前 typed gate 尚未完成同 source/execution 的原证据 join，因此 gate execution 暂列 unverified；缺的是证据 join，不把它写成实现缺失或要求重跑原通过项。",
+            "原 3 未测方向与缺自然估值仍保留，不能写全路径完成。"
+          ],
+          "evidenceNote": "实际 Router sender=caller，输入先收后输出；内部 onlyVault 回调不能用 not-required 跳过执行。待父任务 join interface-root-evidence-index 中原 balancer-v3-stable-surge-acceptance-20261010.json；此处未重跑或独立重算那 196 次。"
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:angstrom-v4",
+      "selectedEntry": "AngstromAdapter.swap(key,zeroForOne,amountIn,minOut,attestations,recipient,deadline)",
+      "deployments": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0xb535aeb27335b91e1b5bccbd64888ba7574efbf8.json",
+          "sha256": "cbc103950b0127f284ec153d5d2bbf0bae6cf4b464b8b22f1919475560c2dff6",
+          "address": "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8",
+          "name": "AngstromAdapter",
+          "verified": true,
+          "fullyVerified": false,
+          "runtimeHash": "0x6280f4c65e60bb69e42628c819347aea85d7982710f7eb67b64eaf2cb1a6a6b2",
+          "runtimeBytes": 5347,
+          "selectedAbi": [
+            {
+              "signature": "swap((address,address,uint24,int24,address),bool,uint128,uint128,(uint64,bytes)[],address,uint256)",
+              "selector": "0xa88f90c1"
+            },
+            {
+              "signature": "unlockCallback(bytes)",
+              "selector": "0x91dd7346"
+            }
+          ]
+        }
+      ],
+      "identityBinding": {
+        "kind": "actual deployed adapter source/runtime; exact adapterCodeHash matches saved descriptor",
+        "descriptorArtifact": {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/runtime-family-descriptors.json",
+          "sha256": "61cb0848edc9c51c5ba4f14775c29924adee7f663ef24653aa55332ec38a2507",
+          "bytes": 32467
+        },
+        "historicalLimit": "Descriptor provenance was explicitly omitted. sourceReadySha256 is not independently located/admitted historical evidence in this review. Controller→hook, poolKey and manager binding are inspected in identity source, not re-executed."
+      },
+      "payer": "adapter captures payer=msg.sender; _settle transfers input from payer directly to PoolManager",
+      "recipient": {
+        "protocol": "params.recipient is used by PoolManager.take(outputCurrency, recipient, amount)",
+        "current": "executor hardcoded in both runtime and fragment",
+        "directOutput": "supported-by-bound-deployment-but-missing-current-wiring"
+      },
+      "callback": {
+        "kind": "internal-PoolManager-unlock",
+        "object": "AngstromAdapter.unlockCallback guarded by msg.sender==poolManager",
+        "order": "_performSwap, then _settle input, then _take output",
+        "deferredInput": "not-supported-by-this-adapter-entry"
+      },
+      "sourceRefs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0xb535aeb27335b91e1b5bccbd64888ba7574efbf8/AngstromAdapter.sol",
+          "sha256": "35f9ba8fd8d280973757b50c25d416aa97227b6de94e0617fd982fa6ac6b92da",
+          "bytes": 7447,
+          "lines": [
+            41,
+            47,
+            63,
+            64,
+            83,
+            85,
+            100,
+            109,
+            177,
+            189
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/angstrom-v4-family/execution.ts",
+          "sha256": "40dcf6d8901b2037252e917bee69f3ee93290b8db252723a482ac2029b01d714",
+          "bytes": 7039,
+          "lines": [
+            28,
+            32,
+            37,
+            86,
+            99
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/angstrom-v4-family/identity.ts",
+          "sha256": "255ca02ac97b20e5636aaf70619f913882ccd3bf9f21beecb69a900a05d72a4e",
+          "bytes": 10217,
+          "lines": [
+            182,
+            183,
+            184,
+            244,
+            297,
+            298,
+            299
+          ]
+        }
+      ],
+      "findingId": "ROOT8-DIRECT-ANGSTROM",
+      "minimalNextStep": "For already admitted ERC20 routes, accept direct-output and encode only its recipient while retaining executor payer, same source/attestation and final sim. Measure recipient output and executor input; do not expose manager unlock as deferred input.",
+      "neededTests": [
+        "issuer selects direct-output and rejects unsupported settlement kinds",
+        "real/model recipient delta, unchanged executor old output and full executor input debit",
+        "same block attestation and source-unlocked constraints retained; no caller/origin changes",
+        "recipient distinct from manager/adapter/tokens; nonzero output/minimum failure atomically reverts"
+      ],
+      "historicalDirectExecution": "not present in inspected materials",
+      "coverage": "partial",
+      "variants": [
+        {
+          "id": "custom-swap:angstrom-v4",
+          "interface": "verified",
+          "identity": "partial",
+          "callback": "internal-only",
+          "recipient": "yes",
+          "wiring": "gap",
+          "execution": "unverified",
+          "gaps": [
+            "已部署 adapter 的真实 recipient 被当前编码固定为 executor，缺 direct-output 接线与实际执行。",
+            "adapter codeHash 匹配保存 descriptor，但其 provenance 被删除，不能把 sourceReadySha 当完整历史身份证明。",
+            "内部 manager unlock 先 _settle 后 _take，不是 executor deferred callback；source/attestation 必须保留。"
+          ]
+        }
+      ]
+    },
+    {
+      "familyId": "mooniswap",
+      "selectedEntry": "Mooniswap.swapFor(src,dst,amount,minReturn,referral,receiver)",
+      "deployments": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21.json",
+          "sha256": "863553af664359013358af70f8c4be84efb8297e0412e80f8e74aedb6097c335",
+          "address": "0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21",
+          "name": "Mooniswap",
+          "verified": true,
+          "fullyVerified": true,
+          "runtimeHash": "0x4088f6416c9dd0a777577d8f4e4fef5176027e38a6b312b396f0421264cd87a0",
+          "runtimeBytes": 21340,
+          "selectedAbi": [
+            {
+              "signature": "swap(address,address,uint256,uint256,address)",
+              "selector": "0xd5bcb9b5"
+            },
+            {
+              "signature": "swapFor(address,address,uint256,uint256,address,address)",
+              "selector": "0xe331d039"
+            }
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0x57fbb3704609da720546898fcfbad910fcf49e25.json",
+          "sha256": "2233890680584e00fef33ff2bb1f3847efaf85915283bf559f3eb11dc575bab4",
+          "address": "0x57fbb3704609da720546898fcfbad910fcf49e25",
+          "name": "Mooniswap",
+          "verified": true,
+          "fullyVerified": true,
+          "runtimeHash": "0xbeb7cad9bf341aadbb651e5fb445d836f745bf645d98e5d7e980e60ea1b9b9b6",
+          "runtimeBytes": 21340,
+          "selectedAbi": [
+            {
+              "signature": "swap(address,address,uint256,uint256,address)",
+              "selector": "0xd5bcb9b5"
+            },
+            {
+              "signature": "swapFor(address,address,uint256,uint256,address,address)",
+              "selector": "0xe331d039"
+            }
+          ]
+        }
+      ],
+      "identityBinding": {
+        "kind": "two actual verified deployments with identical source, exact current immutable-normalized executable profile",
+        "normalization": [
+          {
+            "address": "0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21",
+            "tokens": [
+              "0x111111111117dc0aa78b770fa6a738034120c302",
+              "0xaaaaaa20d9e0e2461697782ef11675f668207961"
+            ],
+            "normalizedHash": "0x0f88c1b9bd3506a4f0659e1c75cba5d797d0e04d462f79da7eebd58cc51a6f90"
+          },
+          {
+            "address": "0x57fbb3704609da720546898fcfbad910fcf49e25",
+            "tokens": [
+              "0x111111111117dc0aa78b770fa6a738034120c302",
+              "0xed30dd7e50edf3581ad970efc5d9379ce2614adb"
+            ],
+            "normalizedHash": "0x0f88c1b9bd3506a4f0659e1c75cba5d797d0e04d462f79da7eebd58cc51a6f90"
+          }
+        ],
+        "descriptorArtifact": {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/runtime-family-descriptors.json",
+          "sha256": "61cb0848edc9c51c5ba4f14775c29924adee7f663ef24653aa55332ec38a2507",
+          "bytes": 32467
+        },
+        "limit": "57fb descriptor matches actual runtime but has provenance omitted; not a fresh same-N admission or execution proof."
+      },
+      "payer": "src.uniTransferFrom(msg.sender,pool,amount); confirmed balance delta is used for math",
+      "recipient": {
+        "protocol": "dst.uniTransfer(receiver,result); referral is separate fee provenance, not a receiver/callback",
+        "current": "executor as last swapFor argument",
+        "directOutput": "supported-by-current-exact-ERC20-profile-but-missing-current-wiring"
+      },
+      "callback": {
+        "kind": "none",
+        "object": null,
+        "order": "input transfer/confirmed delta then output transfer",
+        "deferredInput": "unsupported-by-selected-entry"
+      },
+      "sourceRefs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21/Mooniswap.sol",
+          "sha256": "24e36f07a388aa8079fb9f8140e31332bfe9bd56a031ab4556349015fc1fa39e",
+          "bytes": 15438,
+          "lines": [
+            224,
+            228,
+            241,
+            242,
+            258,
+            259,
+            260,
+            262
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/mooniswap-family/runtime.ts",
+          "sha256": "db26ec7dbd28226f797845507f678df50128fb3ed57fa225e0b62d0c8d8bdbe6",
+          "bytes": 1409,
+          "lines": [
+            9,
+            10,
+            13,
+            16,
+            21,
+            25
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/mooniswap-family/runtime-execution.ts",
+          "sha256": "8ed909e370277c77e84994d7004f8d068902fde97b3fc9e8a3791743e001fc42",
+          "bytes": 1499,
+          "lines": [
+            12,
+            13,
+            18
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/mooniswap-family/codec.ts",
+          "sha256": "c20d584819340d1a6105e234821b1f4e7cd9c1bf4b74c88e7f4e891be5d5bbc7",
+          "bytes": 6047,
+          "lines": [
+            94
+          ]
+        }
+      ],
+      "findingId": "ROOT8-DIRECT-MOONISWAP",
+      "minimalNextStep": "Reuse the existing swapFor ABI on the already supported sorted ERC20 profile, replacing only receiver for direct-output. Keep payer/executor and referral behavior; add real recipient delta/full-input safeguards. Native variants remain outside current profile.",
+      "neededTests": [
+        "both ERC20 directions with distinct recipient and issuer selection",
+        "referral and recipient are not interchanged",
+        "old executor input/output preserved, actual receiver increment meets minimum",
+        "amount 0, insufficient input, min+1 fail; no native/callback capability accidentally declared"
+      ],
+      "historicalDirectExecution": "not present in inspected materials",
+      "coverage": "partial",
+      "variants": [
+        {
+          "id": "mooniswap",
+          "interface": "verified",
+          "identity": "partial",
+          "callback": "none",
+          "recipient": "yes",
+          "wiring": "gap",
+          "execution": "unverified",
+          "gaps": [
+            "两个实际部署 immutable-normalized runtime 均匹配当前 ERC20 profile；57fb descriptor 仍为 provenance-stripped fixture。",
+            "swapFor(receiver) 当前固定 executor，缺 direct-output 接线和实际 receiver 执行；referral 不能当 receiver。",
+            "不推广至现 profile 之外 native 入口。"
+          ]
+        }
+      ]
+    },
+    {
+      "familyId": "ella-exchange",
+      "selectedEntries": [
+        "swapBase1() payable: ETH→token",
+        "swap1(uint256): token→ETH"
+      ],
+      "deployments": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0x33c577296b0cdece6186ea48cd8fe98bd1a6e3a4.json",
+          "sha256": "e0b306fa0fcaf2d1cb1dff67307ed87720da65d057727bb2690b0e04d5d03e89",
+          "address": "0x33c577296b0cdece6186ea48cd8fe98bd1a6e3a4",
+          "name": null,
+          "verified": false,
+          "fullyVerified": false,
+          "runtimeHash": "0x8594ea55b8367287ced36b1a73006c77397b7b0940ff3f8da685799b4d301067",
+          "runtimeBytes": 16310,
+          "selectedAbi": []
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0xd9e373f2b89ae245a981df853b27ed2970f71737.json",
+          "sha256": "14263d06d320ea95f881e8449f8164e6c01433826db8a0a9eae3d828a720c94a",
+          "address": "0xd9e373f2b89ae245a981df853b27ed2970f71737",
+          "name": null,
+          "verified": false,
+          "fullyVerified": false,
+          "runtimeHash": "0x1b4336dddecfd3e095180b0e518cdbf1944c67e1b77dfbe1340801379e79db8d",
+          "runtimeBytes": 22074,
+          "selectedAbi": []
+        }
+      ],
+      "sourceVerification": {
+        "blockscoutVerified": false,
+        "actualEtherscanFactoryExactMatch": true,
+        "html": {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/ella-factory-etherscan.html",
+          "sha256": "9ce3bd8143d7895a7b005ffa1dc891d81fe0e62eaee4c930b60dacbbdbfe6176",
+          "bytes": 729570
+        },
+        "extractedSource": {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/EllaExchangeService.sol",
+          "sha256": "d32cae16b31c6120131da2e5db30e66bea74545fdb7525184313be65676c5dac",
+          "bytes": 42458
+        },
+        "sourceVerbatimPresentInHtml": true,
+        "compiler": "v0.6.0+commit.26b70077",
+        "limit": "No independent compiler rerun this review. Parent saved verification plus byte-for-byte historical pool/factory runtime equality is reused; Blockscout unverified is not relabeled verified."
+      },
+      "identityBinding": {
+        "kind": "actual historical public sample",
+        "artifact": {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/ella-exchange-family/test/public-sample.json",
+          "sha256": "b97336e65fcc879c4c7d085d953e40ff38a732f63c9a694c966eb7ddd2322747",
+          "bytes": 79263
+        },
+        "tx": "0xef53c889b7270ffc8556569a9682227c905e32491d55689249a1c4ca7fee74da",
+        "states": [
+          {
+            "block": 26023523,
+            "blockHash": "0x8d1766496f1e8a5fc20e044f5e03c2c5ab4868aef65a6b2fd2317d7cede869e5",
+            "poolCodeHash": "0x8594ea55b8367287ced36b1a73006c77397b7b0940ff3f8da685799b4d301067",
+            "factoryCodeHash": "0x1b4336dddecfd3e095180b0e518cdbf1944c67e1b77dfbe1340801379e79db8d"
+          },
+          {
+            "block": 26023524,
+            "blockHash": "0x97c956ae1457521651e3a17b675c16fef5340483d0cf3b710d0d34d5afbb57f9",
+            "poolCodeHash": "0x8594ea55b8367287ced36b1a73006c77397b7b0940ff3f8da685799b4d301067",
+            "factoryCodeHash": "0x1b4336dddecfd3e095180b0e518cdbf1944c67e1b77dfbe1340801379e79db8d"
+          }
+        ],
+        "independentCheck": "both poolCode and factoryCode exactly equal the downloaded actual runtime; all four saved state code hashes match",
+        "acceptanceReport": {
+          "container": {
+            "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-root-evidence-index.json",
+            "sha256": "541037a81d0f5a0fa26e07346d9eb318cb364f8e39d881e9c82fc68c26b2e529",
+            "bytes": 145455
+          },
+          "key": "docs/research/reports/ella-native-historical-acceptance-20261010.json"
+        }
+      },
+      "payer": "msg.value for swapBase1; transferFrom(msg.sender,pool,amount) for swap1",
+      "recipient": {
+        "protocol": "token transfer(msg.sender) or ETH transfer to _receiver=msg.sender",
+        "current": "executor with central native conversion",
+        "directOutput": "unsupported-by-selected-swap-entries"
+      },
+      "callback": {
+        "kind": "none",
+        "object": null,
+        "order": "input already paid/pulled before output; ordinary token/ETH transfer is not a debt callback",
+        "deferredInput": "unsupported-by-selected-entry"
+      },
+      "sourceRefs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/EllaExchangeService.sol",
+          "sha256": "d32cae16b31c6120131da2e5db30e66bea74545fdb7525184313be65676c5dac",
+          "bytes": 42458,
+          "lines": [
+            629,
+            637,
+            725,
+            729,
+            736,
+            761,
+            765,
+            766,
+            775
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/ella-exchange-family/execution.ts",
+          "sha256": "906e86701cf517e22a95ceef4ce3a7919ad4df6459a8158f6e33ed704cd24fe2",
+          "bytes": 2716,
+          "lines": [
+            15,
+            16,
+            18,
+            19,
+            37,
+            38
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/ella-exchange-family/codec.ts",
+          "sha256": "e58a6e7e75f02cb4bb4ba51067cdc005c740651115e2739d9488295b04ca8f38",
+          "bytes": 3519,
+          "lines": [
+            8,
+            9,
+            11
+          ]
+        }
+      ],
+      "conclusion": "Keep receiver/deferred undeclared. withdraw(_to) refers to a separate savings/liquidity account action and cannot justify swap direct-output.",
+      "historicalLimit": "Existing report has two admitted directions but one natural quoted direction and one no-output; no new execution or universal natural-price claim.",
+      "coverage": "complete",
+      "variants": [
+        {
+          "id": "ella-exchange",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "none",
+          "recipient": "no",
+          "wiring": "verified",
+          "execution": "not-required",
+          "gaps": [],
+          "evidenceNote": "既有 swapBase1/swap1 入口未改且仅付 msg.sender；两 N public-sample 与实际 pool/factory runtime 逐字节一致，Etherscan 实际 factory 源码 Exact Match 复用。withdraw(_to) 非本 swap 能力。not-required 不抹除旧自然 no-output 范围。"
+        }
+      ]
+    },
+    {
+      "familyId": "fluid-dex",
+      "selectedEntry": "FluidDexT1.swapIn(bool,uint256,uint256,address)",
+      "deployments": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0x3c0441b42195f4ad6aa9a0978e06096ea616cda7.json",
+          "sha256": "ce5fa26102ab64726c1c7777a608c18b770e7337c34e8f5feb2eafe2b0480d76",
+          "address": "0x3c0441b42195f4ad6aa9a0978e06096ea616cda7",
+          "name": "FluidDexT1",
+          "verified": true,
+          "fullyVerified": true,
+          "runtimeHash": "0xd35415dbe163ddf5b684de8f3f5330ad6a7cd16f296ff624c365c7813c39756f",
+          "runtimeBytes": 21776,
+          "selectedAbi": [
+            {
+              "signature": "swapIn(bool,uint256,uint256,address)",
+              "selector": "0x2668dfaa"
+            },
+            {
+              "signature": "swapInWithCallback(bool,uint256,uint256,address)",
+              "selector": "0xbe17c79c"
+            }
+          ]
+        }
+      ],
+      "identityBinding": {
+        "kind": "actual verified pool runtime and reverse-factory identity implementation inspected",
+        "descriptorArtifact": {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/runtime-family-descriptors.json",
+          "sha256": "61cb0848edc9c51c5ba4f14775c29924adee7f663ef24653aa55332ec38a2507",
+          "bytes": 32467
+        },
+        "factory": "0x91716c4eda1fb55e84bf8b4c7085f84285c19085",
+        "dexId": "3",
+        "limit": "Saved descriptor omits provenance and codeHash. This establishes the deployed entry semantics and nomination identity, not an independently bound same-N execution. fluid-fixture-metadata-20261011 is explicitly synthetic, not chain acceptance."
+      },
+      "payer": "ordinary swapIn stores msg.sender; Liquidity calls pool.liquidityCallback, which transferFroms that caller to LIQUIDITY",
+      "recipient": {
+        "protocol": "to is the real withdrawTo/borrowTo output destination; zero means caller, dead means quote-only revert",
+        "current": "raw-execution encodes executor as to",
+        "directOutput": "supported-by-inspected-deployment-but-missing-current-wiring"
+      },
+      "callback": {
+        "currentEntry": "internal Liquidity→pool.liquidityCallback, isCallback=false",
+        "alternateExistingProtocolEntry": "swapInWithCallback sets isCallback=true and calls original caller.dexCallback(token,amount)",
+        "order": "LIQUIDITY.operate(input) and its payment callback complete before LIQUIDITY.operate(output)",
+        "deferredInput": "unsupported: alternate callback is input-first, not output-first credit"
+      },
+      "sourceRefs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0x3c0441b42195f4ad6aa9a0978e06096ea616cda7/main.sol",
+          "sha256": "18d1931d62e5a80262e5c13ea2884fb632d3071c89d9ce33157fed92e6e3c6fe",
+          "bytes": 43551,
+          "lines": [
+            331,
+            337,
+            339,
+            341,
+            365,
+            371,
+            380,
+            386,
+            575,
+            576,
+            580,
+            585,
+            587
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/fluid-dex-family/raw-execution.ts",
+          "sha256": "e7ebb8509033c3f2975470f076826397b3e50b42439373faaf9dbf6a367536cb",
+          "bytes": 1715,
+          "lines": [
+            21,
+            22,
+            23,
+            24,
+            25
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/fluid-dex-family/execution.ts",
+          "sha256": "f135ddb15397771160a90785c136a8186a811d4a5be87a354bcb8f11e797978e",
+          "bytes": 3891,
+          "lines": [
+            18,
+            20,
+            22
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/installed-source/listener/src/searcher/venues/swaps/fluid-dex-family/identity.ts",
+          "sha256": "0e4a4a46b7cb99b4d956cd803befaa241bb0590118942cb905d35f05295f3c1c",
+          "bytes": 12033,
+          "lines": [
+            114,
+            116,
+            258,
+            268,
+            288,
+            290
+          ]
+        }
+      ],
+      "findingId": "ROOT8-DIRECT-FLUID",
+      "minimalNextStep": "Reuse ordinary swapIn to on the already admitted ERC20/ERC20 routes, move output observations to recipient and preserve executor input/allowance and final sim. Do not substitute swapInWithCallback or broaden native output until central conversion ownership and recipient semantics are explicitly implemented/tested.",
+      "neededTests": [
+        "issuer direct selection for both ERC20 directions, real recipient credit and full executor debit",
+        "Liquidity, not dex pool, is the actual token counterparty",
+        "min+1/0input/insufficient input atomically reject; no old inventory consumption",
+        "unsupported native directions and quote-dead sentinel cannot be ordinary recipients",
+        "callback remains unadvertised as deferred input"
+      ],
+      "historicalDirectExecution": "not present in inspected materials",
+      "coverage": "partial",
+      "variants": [
+        {
+          "id": "fluid-dex",
+          "interface": "verified",
+          "identity": "partial",
+          "callback": "input-first",
+          "recipient": "yes",
+          "wiring": "gap",
+          "execution": "unverified",
+          "gaps": [
+            "普通 swapIn(to) 的真实 recipient 仍编码 executor，缺 direct-output 接线和实际 receiver 执行。",
+            "descriptor 没 provenance/codeHash，fixture-metadata 报告只是合成维护；不能作为真实历史执行绑定。",
+            "当前普通路径 callback 只在 Liquidity→pool 内部；另外 swapInWithCallback 才回调原 caller，且先 input operate 再 output operate，禁止记 deferred。",
+            "native 转换与任何未知 runtime 的指定收款边界仍需分别证明。"
+          ]
+        }
+      ]
+    },
+    {
+      "familyId": "aqua-swapvm",
+      "selectedEntry": "bound SwapVM Aqua order/profile swap with takerTraitsAndData",
+      "identityBinding": {
+        "kind": "actual registration, same-N Ready/runtime/artifact and raw effects already independently audited",
+        "review": {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/aqua-history20-independent-review-20261014.json",
+          "sha256": "445ff4daec484d13fa7ec18ea16abb3cf2146d5fd5f4b9529a95879f0b5e05a8",
+          "bytes": 45443
+        },
+        "sourceReview": {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/aqua-historical-settlement-source-review-20261014.json",
+          "sha256": "e799bb16ed8eb66a8284d4dbaa543783b5d1138458d93c0a329e1d64b1927a43",
+          "bytes": 9345
+        },
+        "sources": [
+          {
+            "source": {
+              "number": 25680170,
+              "hash": "0x5427a888c4db798a4d40ef19f3d2c6ca4afbb1eb1875a00b0c9bdfa0fc659d76"
+            },
+            "readySha256": "082726162ccb1a0a19c4ac5ca60d2d8444ed412b2ac2252cc34ebab2d22bc4ba",
+            "report": "dual-A03.json",
+            "reportSha256": "d3f59a2b5077041bdc87dabe10b87c6c0c02c6e2338732062564fe8fa7dd3457",
+            "sourceTreeSha256": "8238101c8fc895cc42cc7519aa4c9bb29afc5d8170f839da82ea156c4e311421"
+          },
+          {
+            "source": {
+              "number": 25680171,
+              "hash": "0x8a4a280896735af0405fc9ef9f749d57675fa4c16345da4dbce123ccd769a317"
+            },
+            "readySha256": "0366c52ff884a0de28c3c81dc5516eb02c5abcf403a84419cf59ba033ae96a3d",
+            "report": "dual-B02.json",
+            "reportSha256": "3337e021196b3ed4b8084a02e1d99a6db1d2003aabcd761c7a8ab58acc087bac",
+            "sourceTreeSha256": "8238101c8fc895cc42cc7519aa4c9bb29afc5d8170f839da82ea156c4e311421"
+          }
+        ]
+      },
+      "payer": "taker=executor; SwapVM pulls exact input from executor and calls Aqua.push to maker strategy. Maker receiver restriction is separate from taker output recipient.",
+      "recipient": {
+        "protocol": "takerTraits.to controls output recipient used by Aqua.pull; independent of order maker receiver",
+        "current": "direct-output encodes recipient and measures its increment; original caller/origin unchanged",
+        "directOutput": "implemented-and-historically-measured-for-two-saved-orders"
+      },
+      "callback": {
+        "kind": "explicit taker preTransferIn callback when the output-first flag is selected",
+        "object": "executor as ctx.query.taker",
+        "order": "_transferOut then preTransferInCallback then transferFrom(executor,router) and Aqua.push",
+        "deferredInput": "implemented in current local snapshot; actual historical callback execution remains pending"
+      },
+      "currentEncoding": {
+        "declared": [
+          "quote-output",
+          "direct-output",
+          "deferred-input"
+        ],
+        "paymentAccount": "executor; prefix must fund this account, not bypass router bookkeeping by transferring only to maker",
+        "callbackDebtOffset": 132,
+        "callbackIncomingOffset": 356,
+        "guards": "deferred old input unchanged, gross output = new retained output + prefix payment; old output floor; zero allowance and native invariance"
+      },
+      "sourceRefs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/verified-source/src/SwapVM.sol",
+          "sha256": "a561f4402f6e0bc4f54a9f3d95314f7a9beb1585fdd1e3ebed21f9338f23ff1a",
+          "bytes": 14514,
+          "lines": [
+            205,
+            209,
+            210,
+            224,
+            226,
+            232,
+            235,
+            237,
+            266,
+            286
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-work/listener/src/searcher/venues/swaps/aqua-swapvm-family/execution.ts",
+          "sha256": "32631f214301c4f065669138f5c1ffad8927fbe64d2488b88142d3d1f94af455",
+          "bytes": 2507,
+          "lines": [
+            14,
+            15,
+            17,
+            20
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-work/listener/src/searcher/venues/swaps/aqua-swapvm-family/runtime.ts",
+          "sha256": "c213d20e23ac341ea35f13cf563619073dbb0b845a94639e68cdfae30dea9a5a",
+          "bytes": 5134,
+          "lines": [
+            23,
+            27,
+            39,
+            41,
+            48,
+            50,
+            54,
+            58,
+            60,
+            65,
+            68
+          ]
+        }
+      ],
+      "verifiedScope": {
+        "supplemental": 8,
+        "staticQuote": 4,
+        "directOutput": 4,
+        "defaultPositive": 24,
+        "defaultRejected": 28,
+        "roundTripRejected": 4,
+        "independentChainQuoteRejected": 4
+      },
+      "conclusion": "Reuse history20 as four real static quote-output and four real direct-output measurements, with preserved default positive/negative evidence. Do not count those as any deferred execution.",
+      "limits": [
+        "Both B natural effective rows remain missing-valuation.",
+        "Effects are transport delta/log observations; reverts have empty effects by design, not independently read post-revert stateDiff.",
+        "No opportunity, performance, clean-tree integration or formal Adapter Replay inference."
+      ],
+      "coverage": "partial",
+      "variants": [
+        {
+          "id": "quote-output",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "none",
+          "recipient": "no",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "evidenceNote": "原声明原文保留。history20 的 4 次实际 static quote-output：无资金转移、与 same-N Exact 相同；不是 callback 执行。"
+        },
+        {
+          "id": "direct-output",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "none",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "evidenceNote": "原声明原文保留。history20 的 4 次实际 direct-output，两个样本×两个方向；外部 recipient 独立增量、caller/origin 不变。"
+        },
+        {
+          "id": "deferred-input",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "output-first",
+          "recipient": "conditional",
+          "wiring": "verified",
+          "execution": "unverified",
+          "gaps": [
+            "当前实现有 callback debt/prefix payment/old-inventory 保护，但真实历史 deferred 执行尚待验。",
+            "direct 与 deferred 是不同 request；deferred 输出暂归 executor 供 prefix，不能把已测 direct 收款结论移作 deferred。"
+          ],
+          "evidenceNote": "原声明原文保留。源证明 output-first→executor preTransferInCallback→router pull→Aqua.push；callback paymentAccount=executor。"
+        }
+      ],
+      "gateGaps": [
+        "B 样本两个自然 effective 仍 missing-valuation；手工同 N 成功不修复自然估值。",
+        "deferred 子项未验，不能汇总为该族全部能力 execution=verified。"
+      ]
+    }
+  ],
+  "bindingRecomputation": {
+    "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/root-eight-binding-recompute.json",
+    "sha256": "932b72627281dcbba987e3c2474fafdce63ca50bf138126bbcc88206ba8f38d0",
+    "bytes": 33334
+  },
+  "bindingCheckCount": 107,
+  "bindingAllPassed": true,
+  "recomputeScript": {
+    "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/root-eight-binding-recompute.mjs",
+    "sha256": "992be18c364596b0818a7fd290854fcef48d519018aba9cacd5d0a906b645feb",
+    "bytes": 5864
+  },
+  "provenanceOmittedFixture": {
+    "artifact": {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/runtime-family-descriptors.json",
+      "sha256": "61cb0848edc9c51c5ba4f14775c29924adee7f663ef24653aa55332ec38a2507",
+      "bytes": 32467
+    },
+    "notice": "Static ABI/route fixtures extracted from a saved Ready, with provenance omitted. Not fresh identity, admission, fork-execution or profitability evidence.",
+    "sourceReadySha256": "c2736648d0aa56dbb78705e99460ae832c77b131d10d8cbe7e0be8c9fe018cbb",
+    "treatment": "fixture-only for historical acceptance; no source header/provenance is invented"
+  },
+  "ran_gate": {
+    "savedFileReads": true,
+    "localBytecodeKeccakAndArtifactSHARecalculation": true,
+    "localSavedABIParsing": true,
+    "sourceControlFlowReview": true,
+    "newPublicFetches": 0,
+    "newCloudRPC": 0,
+    "newEVM": 0,
+    "projectTests": 0,
+    "builds": 0,
+    "generators": 0,
+    "live": false,
+    "formalAdapterGate": false,
+    "priorEvidenceReused": [
+      "balancer23-independent-review-20261014.json",
+      "aqua-history20-independent-review-20261014.json"
+    ],
+    "canonicalRunner": "No canonical execution in this delegated read-only review. Existing parent machine-run receipts are referenced through prior audit artifacts; this report does not fabricate a new canonical pass."
+  },
+  "limits": [
+    "Actual explorer source verification is reused, not independently recompiled.",
+    "No complete 46-Family claim: this artifact covers exactly root-owned eight; previous eight-swap audit remains separate.",
+    "No new RPC, EVM, build, runtime model test or production modification.",
+    "No template/ABI-only claim is promoted to a deployment binding. Provenance-omitted fixtures and synthetic Fluid maintenance evidence remain explicitly downgraded.",
+    "No generic direct output claim for native conversions, arbitrary implementation upgrades, unknown hooks or untested receiver tokens.",
+    "Existing natural valuation gaps, historical source scopes, formal Adapter Replay/family_local, opportunity and performance limitations are unchanged."
+  ],
+  "normalizationAddendum": {
+    "originalReport": {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/root-eight-review.json",
+      "sha256": "77476598830e4be491e1417eb11d442318fafc9a4694e884b40987c63d4a0a14"
+    },
+    "purpose": "Add explicit variant ids and conservative gate statuses without modifying original findings or claiming new execution.",
+    "v3Execution": "Existing 196 ordinary Router executions remain valid reported facts; typed gate source/execution evidence join is pending, so its normalized execution status is unverified.",
+    "newInvestigation": false,
+    "newExecution": false
+  }
+}

@@ -14,12 +14,16 @@ export const ekuboExecution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertRoute(d, r); runtimeExecutor(executor, EKUBO_ROUTER);
+    const request = input.settlement, directOutput = d.poolKey.token0 !== ethers.ZeroAddress;
+    if (request && (request.kind !== "direct-output" || !directOutput)) return null;
+    const recipient = request ? runtimeExecutor(request.recipient, EKUBO_ROUTER, r.tokenIn, r.tokenOut) : executor;
     const nativeInput = d.poolKey.token0 === ethers.ZeroAddress && !r.isToken1;
     const p = new RuntimeAmountProgram().constant(1, 127n).math("shr", 2, 0, 1).constant(3, 0n).equal(2, 3);
     if (!nativeInput) p.allowance(r.tokenIn, EKUBO_ROUTER, 0, MAX_UINT);
-    p.call(EKUBO_ROUTER, ekuboRouterIface.encodeFunctionData("swap", [d.poolKey, r.isToken1, 0n, 0n, 0n, 1n, executor]),
+    p.call(EKUBO_ROUTER, ekuboRouterIface.encodeFunctionData("swap", [d.poolKey, r.isToken1, 0n, 0n, 0n, 1n, recipient]),
       { patches: [{ offset: 132, reg: 0 }], ...(nativeInput ? { valueReg: 0 } : {}) });
-    return runtimeLeg(EKUBO_ACTION_ID, p);
+    return { ...runtimeLeg(EKUBO_ACTION_ID, p), ...(directOutput ? { settlement: { directOutput: true as const } } : {}),
+      ...(request ? { settlementRequest: request } : {}) };
   },
   runtimeProjection: () => ({ allowanceSpender: EKUBO_ROUTER, prewarmQuoteCalls: [] }),
   buildFragment(input) {

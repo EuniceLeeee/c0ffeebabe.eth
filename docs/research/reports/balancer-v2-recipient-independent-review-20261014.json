@@ -1,0 +1,444 @@
+{
+  "schema": "independent-balancer23-saved-evidence-review-v1",
+  "createdAt": "2026-10-14T09:01:20.572Z",
+  "reviewer": "curve_ready_review",
+  "scope": "Independent recomputation of saved execution effects/logs/calldata and Ready/pricing/artifact pins. Reviewer authored the narrow harness candidate; did not author the Balancer production recipient change. This is not an independent EVM rerun.",
+  "verdict": "scoped saved evidence checks pass; no new blocking finding",
+  "findings": [],
+  "totals": {
+    "directions": 10,
+    "poolSourceInstances": 3,
+    "amountGroups": 20,
+    "positive": 60,
+    "negative": 130,
+    "tokenDeltaRows": 360,
+    "nativeDeltaRows": 60,
+    "totalSupplyDeltaRows": 120,
+    "swapLogs": 60,
+    "inputTransfers": 60,
+    "outputTransfers": 60,
+    "allowanceSuffixes": 60,
+    "negativeByKind": {
+      "insufficient-total-input": 60,
+      "minimum-plus-one": 40,
+      "zero-input": 20,
+      "post-execution-revert": 10
+    },
+    "positiveByEncoding": {
+      "quoted": 20,
+      "runtime": 20,
+      "direct-runtime": 20
+    }
+  },
+  "reports": [
+    {
+      "name": "bal-recipient-A01.json",
+      "sha256": "e935b35c5a40f4784ce6b45b1c1707627be1552461c413054e13a06a6cc5346d",
+      "source": {
+        "number": 26138724,
+        "hash": "0xcad9e81827cbe1f29ff77fc163855dfe1647a17b8b4a44b209e900273ac4f70b",
+        "generation": 26138724
+      },
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "code": {
+        "sourceTreeSha256": "3eaa8903b880ba0357c96bbf07cc51ae701116350d64027be04d0a73690df814",
+        "harnessSha256": "6d6c5c82fd971d5a55c50817b0738d7524e7f129ec60d5f8fc24af37dffbec54",
+        "evidenceSha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27",
+        "observationHelpers": [
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+          },
+          {
+            "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+            "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+          },
+          {
+            "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+            "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+          },
+          {
+            "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+            "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+            "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+          },
+          {
+            "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+            "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "executorArtifactSha256": "f8ce9aff9f9ee68b3080b29e882dbc49f978fde135edfdcae89e7f9e094246a7",
+      "executorCodeHash": "0xdf4a3ba377233f0581fcc45273d970d78c9d2b548e111241c97503baa77724d4",
+      "vaultCodeHash": "0x9eb70db20a41bfbf4b022fd070fa7f154b7c4aec98177120dde7a958384f4e66",
+      "runtimeConstruction": {
+        "directions": 2,
+        "builds": 4,
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false
+      },
+      "counts": {
+        "positive": 12,
+        "negative": 26,
+        "byEncoding": {
+          "quoted": 8,
+          "runtime": 8,
+          "direct-runtime": 8,
+          "quoted-minimum-plus-one": 4,
+          "direct-helper-minimum-plus-one": 4,
+          "runtime-zero": 2,
+          "direct-zero": 2,
+          "direct-post-revert": 2
+        },
+        "negativeByKind": {
+          "insufficient-total-input": 12,
+          "minimum-plus-one": 8,
+          "zero-input": 4,
+          "post-execution-revert": 2
+        },
+        "instances": [
+          "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030"
+        ],
+        "rows": [
+          {
+            "instanceKey": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",
+            "routeKey": "balancer-v2:0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030:0:1",
+            "multiplier": "1",
+            "amountIn": "2000000000000000",
+            "selfOut": "27280497099562591080",
+            "recipientOut": "27280497099562591080",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",
+            "routeKey": "balancer-v2:0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030:0:1",
+            "multiplier": "2",
+            "amountIn": "4000000000000000",
+            "selfOut": "54474981242000181013",
+            "recipientOut": "54474981242000181013",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",
+            "routeKey": "balancer-v2:0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030:1:0",
+            "multiplier": "1",
+            "amountIn": "27280497099562591080",
+            "selfOut": "1987716344584957",
+            "recipientOut": "1987716344584957",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030",
+            "routeKey": "balancer-v2:0xff083f57a556bfb3bbe46ea1b4fa154b2b1fbe88000200000000000000000030:1:0",
+            "multiplier": "2",
+            "amountIn": "54560994199125182160",
+            "selfOut": "3969173010552872",
+            "recipientOut": "3969173010552872",
+            "deltaFromSelf": "0"
+          }
+        ]
+      }
+    },
+    {
+      "name": "bal-recipient-B01.json",
+      "sha256": "b09677a5c58a239407a95c7553bb8010c9d5f09c225b79da8b15bd1ce859da99",
+      "source": {
+        "number": 26138511,
+        "hash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771",
+        "generation": 26138511
+      },
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "code": {
+        "sourceTreeSha256": "3eaa8903b880ba0357c96bbf07cc51ae701116350d64027be04d0a73690df814",
+        "harnessSha256": "6d6c5c82fd971d5a55c50817b0738d7524e7f129ec60d5f8fc24af37dffbec54",
+        "evidenceSha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27",
+        "observationHelpers": [
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+          },
+          {
+            "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+            "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+          },
+          {
+            "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+            "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+          },
+          {
+            "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+            "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+            "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+          },
+          {
+            "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+            "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "executorArtifactSha256": "f8ce9aff9f9ee68b3080b29e882dbc49f978fde135edfdcae89e7f9e094246a7",
+      "executorCodeHash": "0xdf4a3ba377233f0581fcc45273d970d78c9d2b548e111241c97503baa77724d4",
+      "vaultCodeHash": "0x9eb70db20a41bfbf4b022fd070fa7f154b7c4aec98177120dde7a958384f4e66",
+      "runtimeConstruction": {
+        "directions": 8,
+        "builds": 16,
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false
+      },
+      "counts": {
+        "positive": 48,
+        "negative": 104,
+        "byEncoding": {
+          "quoted": 32,
+          "runtime": 32,
+          "direct-runtime": 32,
+          "quoted-minimum-plus-one": 16,
+          "direct-helper-minimum-plus-one": 16,
+          "runtime-zero": 8,
+          "direct-zero": 8,
+          "direct-post-revert": 8
+        },
+        "negativeByKind": {
+          "insufficient-total-input": 48,
+          "minimum-plus-one": 32,
+          "zero-input": 16,
+          "post-execution-revert": 8
+        },
+        "instances": [
+          "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+          "0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274"
+        ],
+        "rows": [
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:0:1",
+            "multiplier": "1",
+            "amountIn": "23249899353025083116",
+            "selfOut": "175005464661393458634",
+            "recipientOut": "175005464661393458634",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:0:1",
+            "multiplier": "2",
+            "amountIn": "46499798706050166232",
+            "selfOut": "332056003115055660662",
+            "recipientOut": "332056003115055660662",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:0:2",
+            "multiplier": "1",
+            "amountIn": "23249899353025083116",
+            "selfOut": "1747113666915149",
+            "recipientOut": "1747113666915149",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:0:2",
+            "multiplier": "2",
+            "amountIn": "46499798706050166232",
+            "selfOut": "3314954336542269",
+            "recipientOut": "3314954336542269",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:1:0",
+            "multiplier": "1",
+            "amountIn": "186879770730708662978",
+            "selfOut": "21772972718026844618",
+            "recipientOut": "21772972718026844618",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:1:0",
+            "multiplier": "2",
+            "amountIn": "373759541461417325956",
+            "selfOut": "41312066218974471545",
+            "recipientOut": "41312066218974471545",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:1:2",
+            "multiplier": "1",
+            "amountIn": "186879770730708662978",
+            "selfOut": "1747142171237404",
+            "recipientOut": "1747142171237404",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:1:2",
+            "multiplier": "2",
+            "amountIn": "373759541461417325956",
+            "selfOut": "3315029785177794",
+            "recipientOut": "3315029785177794",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:2:0",
+            "multiplier": "1",
+            "amountIn": "2000000000000000",
+            "selfOut": "23249899353025083116",
+            "recipientOut": "23249899353025083116",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:2:0",
+            "multiplier": "2",
+            "amountIn": "4000000000000000",
+            "selfOut": "43961071523879837959",
+            "recipientOut": "43961071523879837959",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:2:1",
+            "multiplier": "1",
+            "amountIn": "2000000000000000",
+            "selfOut": "186879770730708662978",
+            "recipientOut": "186879770730708662978",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+            "routeKey": "balancer-v2:0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269:2:1",
+            "multiplier": "2",
+            "amountIn": "4000000000000000",
+            "selfOut": "353356459641851445579",
+            "recipientOut": "353356459641851445579",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274",
+            "routeKey": "balancer-v2:0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274:0:1",
+            "multiplier": "1",
+            "amountIn": "2000000000000000",
+            "selfOut": "210937570910564734999",
+            "recipientOut": "210937570910564734999",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274",
+            "routeKey": "balancer-v2:0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274:0:1",
+            "multiplier": "2",
+            "amountIn": "4000000000000000",
+            "selfOut": "421522504671221428459",
+            "recipientOut": "421522504671221428459",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274",
+            "routeKey": "balancer-v2:0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274:1:0",
+            "multiplier": "1",
+            "amountIn": "210937570910564734999",
+            "selfOut": "1976748091697955",
+            "recipientOut": "1976748091697955",
+            "deltaFromSelf": "0"
+          },
+          {
+            "instanceKey": "0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274",
+            "routeKey": "balancer-v2:0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274:1:0",
+            "multiplier": "2",
+            "amountIn": "421875141821129469998",
+            "selfOut": "3950210775536288",
+            "recipientOut": "3950210775536288",
+            "deltaFromSelf": "0"
+          }
+        ]
+      }
+    }
+  ],
+  "currentInventory": {
+    "files": 1198,
+    "sourceTreeSha256": "3eaa8903b880ba0357c96bbf07cc51ae701116350d64027be04d0a73690df814",
+    "scope": "listener/src, excluding every test and templates directory; actual runner localeCompare DFS algorithm"
+  },
+  "bindingPins": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/balancer23-results.json",
+      "sha256": "8937ccccebad308ceafb86da24df3e20958a8fa1efd3cc827de7f64ade19be38"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/balancer23-independent-bindings.json",
+      "sha256": "fcf74d48a3a48ca49016ea9b7eb9adf21553f3e68bf04abeb24d81df13e90431"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/balancer23-independent-current-inventory.json",
+      "sha256": "7ff6e510438298088ba830c1bfa5ef5cdf454c3739bbcb2997f286c444251530"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/balancer23-independent-recompute.mjs",
+      "sha256": "e828b904dca27cee88fa245ddb9ad6e96acc3afddcd7e9b9bb826a23ef2d71ad"
+    }
+  ],
+  "terminal": {
+    "steps": 7,
+    "allExitedZero": true,
+    "runnerDrained": true
+  },
+  "ran_gate": {
+    "kind": "read-only saved JSON ABI/effects/log/calldata and source hash recalculation",
+    "assertions": 34221,
+    "newRPC": 0,
+    "newEVM": 0,
+    "projectTests": 0,
+    "builds": 0,
+    "cloudWrites": 0
+  },
+  "limits": [
+    "20 amount groups cover10 natural Ready directions at2 N-end states, not original transaction pre-call reproduction or other pool variants.",
+    "60 success receipts have6 token-delta rows,1 executor native row,2 token supply rows each. No owner/Vault native delta observation is claimed.",
+    "130 declared main-EVM failures expose empty effects by transport contract. These are revert receipts, not independently reread post-revert balances/stateDiff; no such data were saved.",
+    "direct-runtime uses independent same-N queryBatchSwap with owner as recipient. queryBatchSwap is ordinary eth_call, not a static quote-output capability; its from=executor differs from executor-program tx.origin=owner. Per-case equality does not prove general origin independence.",
+    "Quoted and self-runtime results are separate from direct results; direct min+1 is the same Family emitter diagnostic changing only minimum, not a new issued minimum API.",
+    "Local executor code and actor funding overlays are explicit. Historical protocol state/header were pinned; no historical executor deployment or signing/broadcast is claimed.",
+    "No deferred-input, opportunity/EV, latency, clean-tree merge or formal AdapterReplay/family_local verdict."
+  ]
+}

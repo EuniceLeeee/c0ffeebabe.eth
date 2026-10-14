@@ -6,9 +6,12 @@ import { VAULT_ACTION } from "./action.js";
 import { assertRoute } from "./routes.js";
 import type { BalancerV2Descriptor, BalancerV2ExactEvidence, BalancerV2Route } from "./types.js";
 export const execution: ExecutionSemantics<BalancerV2Descriptor, BalancerV2Route, BalancerV2ExactEvidence> = {
-  buildRuntimeLeg({ descriptor: d, route: r, executor }) {
+  buildRuntimeLeg({ descriptor: d, route: r, executor, settlement: request }) {
     assertRoute(d, r); runtimeExecutor(executor, d.pool, VAULT);
-    return runtimeLeg(VAULT_ACTION, swapProgram(d.poolId, r.tokenIn, r.tokenOut, executor, 1n));
+    if (request && request.kind !== "direct-output") return null;
+    const recipient = request ? runtimeExecutor(request.recipient, d.pool, VAULT, r.tokenIn, r.tokenOut) : undefined;
+    return { ...runtimeLeg(VAULT_ACTION, swapProgram(d.poolId, r.tokenIn, r.tokenOut, executor, 1n, recipient)),
+      settlement: { directOutput: true }, ...(request ? { settlementRequest: request } : {}) };
   },
   runtimeProjection: () => ({ allowanceSpender: null, prewarmQuoteCalls: [] }),
   buildFragment(i) {

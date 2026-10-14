@@ -1,0 +1,15 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineSwapFamily } from "../adapter-family-plugin.js";
+import { manifest } from "../swaps/aqua-swapvm-family/manifest.js";
+import { discovery } from "../swaps/aqua-swapvm-family/discovery.js";
+import { identity } from "../swaps/aqua-swapvm-family/identity.js";
+import { instance } from "../swaps/aqua-swapvm-family/instance.js";
+import { routes } from "../swaps/aqua-swapvm-family/routes.js";
+import { pricing } from "../swaps/aqua-swapvm-family/pricing.js";
+import { exact } from "../swaps/aqua-swapvm-family/exact.js";
+import { execution } from "../swaps/aqua-swapvm-family/execution.js";
+import { swap } from "../swaps/aqua-swapvm-family/swap.js";
+import { action } from "../swaps/aqua-swapvm-family/action.js";
+import { capture } from "../swaps/aqua-swapvm-family/capture.js";
+export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_AQUA_SWAPVM_ENABLED" });
+export const plugin = defineSwapFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, swap, capture, actionAdapters: [action] });

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   assertAdapterWorkControl,
   adapterWorkSubjectKey,
@@ -2767,6 +2768,7 @@ export function buildFamilyRuntimeAmountLeg(input: {
   executor: string;
   runtimeEvidence: readonly RuntimeEvidence[];
   actionOwnership: Pick<FamilyCapabilityCatalog, "ownerOfAction">;
+  settlement?: import("../../adapters/runtime-amount-program.js").RuntimeSettlementRequest;
 }): import("../../adapters/runtime-amount-program.js").RuntimeAmountLeg | null {
   assertIssuedLoadedFamilyBox(input.family);
   const record = resolveFamilyRouteRuntimeHandle(input.family, input.route);
@@ -2787,6 +2789,7 @@ export function buildFamilyRuntimeAmountLeg(input: {
   const leg = builder(Object.freeze({ descriptor: record.instance.descriptor, route: record.route,
     source: Object.freeze({ ...input.source }),
     executor: input.executor, runtimeEvidence: Object.freeze([...input.runtimeEvidence]),
+    ...(input.settlement === undefined ? {} : { settlement: Object.freeze({ ...input.settlement }) }),
     ...(caller.transactionOrigin === undefined ? {} : { transactionOrigin: caller.transactionOrigin }) }));
   input.runtime.generationFence.assertCurrent(input.source.generation, input.source);
   const current = snapshotCentralCallerAuthority(input.runtime.callerAuthority.bind(binding));
@@ -2794,15 +2797,28 @@ export function buildFamilyRuntimeAmountLeg(input: {
     throw new Error("runtime execution caller changed");
   }
   if (leg === null) return null;
+  // Existing emitters cannot silently ignore a receiver or payment request.
+  if (!isDeepStrictEqual(leg.settlementRequest, input.settlement)) return null;
   if (!input.family.plugin.manifest.ownedActionAdapterIds.includes(leg.actionAdapterId) ||
       input.actionOwnership.ownerOfAction(leg.actionAdapterId) !== input.family.plugin.manifest.familyId ||
       (leg.inputMode !== undefined && leg.inputMode !== "maximum") ||
       typeof leg.program !== "string" || !/^0x01(?:[a-fA-F0-9]{2})+$/.test(leg.program) || leg.program.length > 131074) {
     throw new Error("runtime execution program ownership or bounds");
   }
+  if (leg.settlement?.deferredInput !== undefined) assertAddress(leg.settlement.deferredInput, "deferred input recipient");
+  if (leg.settlement?.directOutput !== undefined && leg.settlement.directOutput !== true ||
+      leg.settlement?.quoteOutput !== undefined && leg.settlement.quoteOutput !== true) throw new Error("runtime settlement capabilities");
+  // Native execution retains the shared wrap/refund path. Its pre-funded
+  // lifecycle cannot be reused as an output-first callback without a separate
+  // native boundary proof. Keep those routes on their existing runtime path.
+  const native = executionNativeSides(record.route);
+  if (input.settlement !== undefined && native) return null;
+  const settlement = native ? undefined : leg.settlement;
   return applyRuntimeAssetBoundary({ route: record.route, executor: input.executor,
     leg: Object.freeze({ actionAdapterId: leg.actionAdapterId, program: leg.program,
-      ...(leg.inputMode === undefined ? {} : { inputMode: leg.inputMode }) }) });
+      ...(leg.inputMode === undefined ? {} : { inputMode: leg.inputMode }),
+      ...(settlement === undefined ? {} : { settlement: Object.freeze({ ...settlement }) }),
+      ...(input.settlement === undefined ? {} : { settlementRequest: Object.freeze({ ...input.settlement }) }) }) });
 }
 
 interface ResolvedFamilyExecutionInvocation {

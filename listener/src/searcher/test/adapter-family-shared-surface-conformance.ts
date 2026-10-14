@@ -4,14 +4,25 @@ import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
 import {
-  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-  PRODUCTION_STRICT_SHADOW_GENERATED_CAPABILITY_MANIFEST,
+  PRODUCTION_STRICT_SHADOW_FAMILY_LOAD,
 } from "../venues/production-family-composition.js";
 import {
   createFamilyCapabilityShadowArtifact,
   generatedCapabilityManifestFromShadowArtifact,
   type FamilyCapabilityShadowArtifact,
 } from "../venues/family-capability-shadow.js";
+
+import capabilityShadowArtifact from "../generated/family-capability-shadow.generated.json";
+
+// Installed definitions remain architecture authority when their runtime activation is off.
+const ALL_PRODUCTION_FAMILIES = [
+  ...PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins,
+  ...PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins,
+];
+const FULL_CAPABILITY_MANIFEST = generatedCapabilityManifestFromShadowArtifact({
+  artifact: capabilityShadowArtifact,
+  strictFamilyIds: ALL_PRODUCTION_FAMILIES.map(module => module.familyId),
+});
 
 type FindingRule =
   | "concrete-family-import"
@@ -224,8 +235,7 @@ function productionVocabulary(entries: readonly string[]): ProductionVocabulary 
   const familyIds = new Set<string>();
   const familyAliases = new Set<string>();
   const pluginDeclaredHex = new Set<string>();
-  for (const loaded of
-    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll()) {
+  for (const loaded of ALL_PRODUCTION_FAMILIES) {
     const id = loaded.plugin.manifest.familyId;
     familyIds.add(id);
     addFamilyAliases(familyAliases, id);
@@ -515,12 +525,11 @@ function canonicalCapabilityIdentityNodes(
     const artifact: unknown = JSON.parse(source.text);
     const manifest = generatedCapabilityManifestFromShadowArtifact({
       artifact,
-      strictFamilyIds: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-        .listAll().map((loaded) => loaded.plugin.manifest.familyId),
+      strictFamilyIds: ALL_PRODUCTION_FAMILIES.map(module => module.familyId),
     });
     if ((artifact as FamilyCapabilityShadowArtifact).legacy.length !== 0 ||
         manifest.manifestHash !==
-          PRODUCTION_STRICT_SHADOW_GENERATED_CAPABILITY_MANIFEST.manifestHash) {
+          FULL_CAPABILITY_MANIFEST.manifestHash) {
       return none;
     }
   } catch {
@@ -762,6 +771,30 @@ function assertDetectorSelfTest(
   const compact = JSON.stringify(artifact);
   assert.equal(scan(metadataSource(compact)).length, 0, "formatting is not authority");
 
+  for (const module of PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins) {
+    assert(vocabulary.familyIds.has(module.familyId), "disabled Family still belongs to the architecture boundary");
+    if (!("discovery" in module.plugin)) continue;
+    const declarations = [
+      ...(module.plugin.discovery.callPatterns ?? []).map(pattern => pattern.selector),
+      ...(module.plugin.discovery.logPatterns ?? []).map(pattern => pattern.topic),
+    ];
+    for (const hex of declarations) {
+      assert(vocabulary.pluginDeclaredHex.has(hex.toLowerCase()));
+      const source = ts.createSourceFile("disabled-selector.ts", `const selector = ${JSON.stringify(hex)};`,
+        ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+      assert(scan(source).some(finding => finding.rule === "production-family-literal"),
+        "disabled protocol selectors/topics cannot enter central code");
+    }
+  }
+  const activeIds = new Set(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins.map(module => module.familyId));
+  if (PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins.length) {
+    const activeOnly = createFamilyCapabilityShadowArtifact({
+      exact: artifact.exact.filter(record => activeIds.has(record.identity.familyId)), legacy: [],
+    });
+    assert.equal(canonicalCapabilityIdentityNodes(metadataSource(JSON.stringify(activeOnly))).size, 0,
+      "a correctly rehashed active-only artifact cannot omit installed disabled definitions");
+  }
+
   const rejectedMetadata = [
     ["arbitrary JSON path", metadataSource(compact, resolve(HERE, "arbitrary.json"))],
     ["arbitrary familyId field", metadataSource(JSON.stringify({ familyId: exampleFamilyId }))],
@@ -867,7 +900,7 @@ function main(): void {
   const vocabulary = productionVocabulary(entries);
   assert.equal(
     entries.length,
-    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll().length,
+    ALL_PRODUCTION_FAMILIES.length,
     "generated entry/catalog cardinality mismatch",
   );
   assertDetectorSelfTest(vocabulary, graph, entries);

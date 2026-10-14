@@ -9,7 +9,7 @@ const APPROVAL = new Interface(["function approve(address,uint256) returns(bool)
  * Vault credit before wallet tokens, so fail before issue if old credit exists.
  * No component rounding, donation, old allowance, or output inventory can fill
  * a shortfall. The native Core/Set still enforce all issuance permissions. */
-export function legacyIssueRuntime(d: Descriptor, actor: string, minimum?: bigint): RuntimeAmountProgram {
+export function legacyIssueRuntime(d: Descriptor, actor: string, minimum?: bigint, recipient = actor): RuntimeAmountProgram {
   const l = d.legacy, proxy = l?.issuance?.transferProxy;
   if (!l || !proxy || d.components.length !== 1) throw new Error("set-legacy unary issuance unavailable");
   const token = d.components[0], p = new RuntimeAmountProgram().constant(15, 0n).constant(14, 1n);
@@ -28,23 +28,25 @@ export function legacyIssueRuntime(d: Descriptor, actor: string, minimum?: bigin
       .call(d.set, LEGACY_SET.encodeFunctionData("feeRecipient"), { static: true }).load(1, 0);
     // Both operands are uint160 addresses. (2^160+a-b)>>160 is the
     // a>=b bit without uint256 underflow; the AND of both comparisons is
-    // equality. Retain the fee in our minimum when this executor receives it.
-    p.constant(6, BigInt(actor)).constant(7, 1n << 160n).constant(9, 160n)
+    // equality. Retain the fee in the receipt minimum only when the output recipient receives it.
+    p.constant(6, BigInt(recipient)).constant(7, 1n << 160n).constant(9, 160n)
       .math("add", 8, 1, 7).math("sub", 8, 8, 6).math("shr", 8, 8, 9)
       .math("add", 10, 6, 7).math("sub", 10, 10, 1).math("shr", 10, 10, 9)
       .math("and", 8, 8, 10).math("sub", 8, 14, 8).math("mul", 3, 3, 8).math("sub", 3, 2, 3);
   }
   else p.math("add", 3, 2, 15);
   p.call(token, TOKEN.encodeFunctionData("balanceOf", [actor]), { static: true }).load(4, 0)
-    .call(d.set, TOKEN.encodeFunctionData("balanceOf", [actor]), { static: true }).load(5, 0)
+    .call(d.set, TOKEN.encodeFunctionData("balanceOf", [recipient]), { static: true }).load(5, 0)
     .call(token, APPROVAL.encodeFunctionData("allowance", [actor, proxy]), { static: true }).load(1, 0).equal(1, 15)
     .call(token, APPROVAL.encodeFunctionData("approve", [proxy, 0n]), { patches: [{ offset: 36, reg: 0 }] })
     .call(token, APPROVAL.encodeFunctionData("allowance", [actor, proxy]), { static: true }).load(1, 0).equal(1, 0)
-    .call(d.module, CORE.encodeFunctionData("issue", [d.set, 0n]), { patches: [{ offset: 36, reg: 2 }] })
+    .call(d.module, CORE.encodeFunctionData(recipient.toLowerCase() === actor.toLowerCase() ? "issue" : "issueTo",
+      recipient.toLowerCase() === actor.toLowerCase() ? [d.set, 0n] : [recipient, d.set, 0n]),
+      { patches: [{ offset: recipient.toLowerCase() === actor.toLowerCase() ? 36 : 68, reg: 2 }] })
     .call(token, APPROVAL.encodeFunctionData("approve", [proxy, 0n]))
     .call(token, APPROVAL.encodeFunctionData("allowance", [actor, proxy]), { static: true }).load(1, 0).equal(1, 15)
     .call(token, TOKEN.encodeFunctionData("balanceOf", [actor]), { static: true }).load(1, 0).math("sub", 1, 4, 1).equal(1, 0)
-    .call(d.set, TOKEN.encodeFunctionData("balanceOf", [actor]), { static: true }).load(1, 0).math("sub", 1, 1, 5).math("sub", 1, 1, 3)
+    .call(d.set, TOKEN.encodeFunctionData("balanceOf", [recipient]), { static: true }).load(1, 0).math("sub", 1, 1, 5).math("sub", 1, 1, 3)
     .call(l.vault, VAULT.encodeFunctionData("getOwnerBalance", [token, actor]), { static: true }).load(1, 0).equal(1, 15);
   return p;
 }

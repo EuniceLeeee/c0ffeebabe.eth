@@ -28,11 +28,11 @@ const CLONE = "0x363d3d373d3d3d363d73" + IMPLEMENTATION.slice(2) + "5af43d82803e
 const V1_IMPLEMENTATION = "0x2c7796c0590cc100d70af473993890d457cb2ac9";
 const V1_CLONE = "0x366000600037611000600036600073" + V1_IMPLEMENTATION.slice(2) + "5af4602c57600080fd5b6110006000f3";
 const PROFILES = [
-  { implementation: IMPLEMENTATION, implementationHash: IMPLEMENTATION_HASH, code: CLONE, rateSlot: 16 },
+  { implementation: IMPLEMENTATION, implementationHash: IMPLEMENTATION_HASH, code: CLONE, rateSlot: 16, underlyingReceiver: true },
   // Vyper 0.2.8 allocates one root per declaration (arrays use hashed roots).
   // initialize bytecode writes 10**(36-decimals) with PUSH1 0x0a / SSTORE.
   { implementation: V1_IMPLEMENTATION, implementationHash: "0xdf4543ae0cb4d3878072c1da2c56ebec96a64237051a7291429a2fb66d5f54da",
-    code: V1_CLONE, rateSlot: 10 },
+    code: V1_CLONE, rateSlot: 10, underlyingReceiver: true },
 ].map(profile => ({ ...profile, poolCodeHash: ethers.keccak256(profile.code) }));
 function profileForCode(code: string | undefined) {
   return PROFILES.find(profile => profile.code === code?.toLowerCase());
@@ -46,6 +46,14 @@ export function classicMetaRateSlot(model: CurveUnderlyingClassicMetaBinding): n
     value.poolCodeHash === model.poolCodeHash.toLowerCase());
   if (!profile) throw new Error("curve-underlying unknown classic implementation profile");
   return profile.rateSlot;
+}
+/** Both bound classic implementations expose the optional receiver overload.
+ * This describes already admitted code; registry identity remains mandatory. */
+export function supportsClassicUnderlyingRecipient(model: CurveUnderlyingClassicMetaBinding | undefined): boolean {
+  return model !== undefined && PROFILES.some(profile => profile.underlyingReceiver &&
+    profile.implementation === model.implementation.toLowerCase() &&
+    profile.implementationHash === model.implementationCodeHash.toLowerCase() &&
+    profile.poolCodeHash === model.poolCodeHash.toLowerCase());
 }
 /** The old bound forwarder returns 4096 bytes, reusing the calldata buffer.
  * Normalize only its known one-word pool getters; the tail can contain calldata.

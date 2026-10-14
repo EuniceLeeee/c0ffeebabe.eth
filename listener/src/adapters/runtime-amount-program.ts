@@ -54,6 +54,14 @@ export class RuntimeAmountProgram {
     if (result.length <= 1 || result.length > 65536) throw new Error("runtime program size");
     return result;
   }
+  /** Invocation-local registers; only r0 is returned. Quote programs are
+   * transitively read-only, enforced by the VM rather than an emitter label. */
+  run(program: string | Uint8Array, inputReg = 0, outputReg = 0, readOnly = false): this {
+    const bytes = ethers.getBytes(program);
+    if (bytes.length < 2 || bytes.length > 65536 || bytes[0] !== 1) throw new Error("runtime subprogram shape");
+    return this.push(new Uint8Array([8, reg(inputReg), reg(outputReg), readOnly ? 1 : 0]),
+      uint24ToBytes(bytes.length), bytes);
+  }
 }
 function reg(n: number): number {
   if (!Number.isInteger(n) || n < 0 || n >= 16) throw new Error("runtime register bounds");
@@ -76,6 +84,25 @@ export function encodeRuntimeAmountNode(node: ResolvedPlanNode, innerScript: Uin
 }
 
 const TRANSFER = new ethers.Interface(["function transfer(address to,uint256 amount)"]);
+const BALANCE = new ethers.Interface(["function balanceOf(address) view returns(uint256)"]);
+/** The outer Family patches the callback's opening balance floor from a read
+ * made BEFORE it releases output. Existing inventory cannot fund the prefix. */
+export function runtimeDeferredPayment(input: {
+  tokenOut: string; executor: string; paymentAmount: bigint; paymentProgram: string; debtOffset?: number;
+}): { script: Uint8Array; floorOffset: number; limitOffset: number } {
+  const p = new RuntimeAmountProgram().constant(5, 0n)
+    .call(input.tokenOut, BALANCE.encodeFunctionData("balanceOf", [input.executor]), { static: true }).load(6, 0)
+    .math("sub", 7, 6, 5);
+  if (input.debtOffset === undefined) p.constant(2, 0n).math("add", 1, 0, 2);
+  else p.calldata(1, input.debtOffset);
+  runtimePayment(p, 1, 2);
+  p.constant(3, input.paymentAmount).run(input.paymentProgram, 3, 4).equal(4, 1);
+  return { script: runtimeProgramScript(p.bytes()), floorOffset: 36 + 3, limitOffset: 1 };
+}
+export function runtimeDeferredOpeningFloor(p: RuntimeAmountProgram, tokenOut: string, executor: string, paymentAmount: bigint): void {
+  p.call(tokenOut, BALANCE.encodeFunctionData("balanceOf", [executor]), { static: true }).load(13, 0)
+    .constant(14, paymentAmount).math("add", 13, 13, 14);
+}
 /** Bind a protocol-decoded unsigned debt to this invocation's input cap once.
  * All payment forms and optional settlement-credit verification use that same
  * debt register. ABI decoding and protocol-specific sync/wrap steps stay owned
@@ -114,7 +141,21 @@ export interface RuntimeAmountLeg {
   /** Explicit budget semantics; omitted retains the live exact-input policy.
    * Positive actual debit and old inventory/retained-input protection still apply. */
   readonly inputMode?: "maximum";
+  /** Family-owned execution facts, never an admission grant. */
+  readonly settlement?: RuntimeSettlementCapabilities;
+  readonly settlementRequest?: RuntimeSettlementRequest;
 }
+export interface RuntimeSettlementCapabilities {
+  readonly quoteOutput?: true;
+  readonly directOutput?: true;
+  /** Output arrives before input is settled to this measured funding account.
+   * The Family owns any subsequent protocol payment or ledger update. */
+  readonly deferredInput?: string;
+}
+export type RuntimeSettlementRequest =
+  | { readonly kind: "quote-output" }
+  | { readonly kind: "direct-output"; readonly recipient: string }
+  | { readonly kind: "deferred-input"; readonly paymentProgram: string; readonly paymentAmount: bigint };
 export const runtimeAmountFlowAdapter: ActionAdapter = {
   id: "runtime-amount-flow", isWrapper: false, field2Offset: null,
   descriptor: { adapterId: "runtime-amount-flow", lineage: "erc20-infra", edgeKind: null,
@@ -144,6 +185,12 @@ export const runtimeAmountFlowAdapter: ActionAdapter = {
         uint256ToBytes(index === legs.length - 1 ? minimumReturn : 1n), uint24ToBytes(bytes.length), bytes);
     });
     if (token !== node.tokenIn.toLowerCase() || token !== node.tokenOut.toLowerCase()) throw new Error("runtime flow not closed");
+    if (node.params.settlementProgram !== undefined) {
+      if (typeof node.params.settlementProgram !== "string") throw new Error("runtime settlement program shape");
+      const program = ethers.getBytes(node.params.settlementProgram);
+      if (program.length < 2 || program.length > 65536 || program[0] !== 1 || maximumInputMask) throw new Error("runtime settlement program bounds");
+      return runtimeProgramScript(program, node.amount);
+    }
     // High bit opts into at most one unit of retained input dust. The legacy
     // zero-tolerance encoding is unchanged; older executors reject the flag.
     const data = concatBytes(uint256ToBytes(node.amount),

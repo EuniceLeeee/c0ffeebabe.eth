@@ -14,6 +14,8 @@ export const psmExecution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertPsmInvocation(d, r); runtimeExecutor(executor, d.target);
+    const request=input.settlement;if(request&&request.kind!=="direct-output")return null;
+    const recipient=request?runtimeExecutor(request.recipient,d.target,r.tokenIn,r.tokenOut):executor;
     const p = new RuntimeAmountProgram().allowance(r.tokenIn, d.target, 0, MAX_UINT256);
     const sell = r.direction === "sell-gem";
     if (!sell) {
@@ -25,11 +27,12 @@ export const psmExecution = {
         .math("add", 5, 2, 1).math("div", 4, 4, 5)
         .constant(5, d.decimalScale).math("div", 4, 4, 5);
     }
-    p.call(d.target, PSM_INTERFACE.encodeFunctionData(sell ? "sellGem" : "buyGem", [executor, 0n]),
+    p.call(d.target, PSM_INTERFACE.encodeFunctionData(sell ? "sellGem" : "buyGem", [recipient, 0n]),
       { patches: [{ offset: 36, reg: sell ? 0 : 4 }] });
     // buyGem spends the cost of whole gem units; any unused DAI budget stays
     // protected by the common maximum-input policy, independently of rounding.
-    const leg = runtimeLeg("psm", p);
+    const leg = {...runtimeLeg("psm", p),settlement:{directOutput:true as const},
+      ...(request?{settlementRequest:request}:{})};
     return sell ? leg : { ...leg, inputMode: "maximum" as const };
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,

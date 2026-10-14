@@ -49,6 +49,36 @@ venues/<domain>/<family>/
 A new domain only adds a `FamilyDomain` value, a domain validator and its
 capability slot; central pipeline, capture, corpus/parity stay untouched.
 
+## Settlement capability review (all domains)
+
+Every installed Family, including disabled entries, must be reviewed against an
+actual deployment's verified interface and implementation. Record the chain,
+block/code identity, proxy implementation where applicable, supported actions,
+directions and variants. Check payer, output recipient, callback target, transfer
+order, debt verification and caller/recipient-dependent permissions or quotes.
+`owner`, referral and fee recipients are not automatically output recipients.
+
+Only an output-first operation that lets the caller settle input in its callback
+qualifies as deferred input. An input-first payment callback, internal hook/unlock,
+or separate funding operation does not establish that capability for a swap.
+Reuse the shared issuer, scheduler and executor; keep ABI, amount calculation and
+callback semantics inside the Family. Preserve supported default paths. Record
+unsupported capabilities with implementation evidence; unknown variants remain
+unverified and cannot pass adaptation acceptance.
+
+The Family tests must match declarations to actual behavior through the production
+issuer, retain the quoted/default paths, and check the chosen recipient's receipt,
+the payer's debit, callback authentication/debt and old inventory. Include false or
+short output, zero or insufficient debit, excess old-inventory debit, wrong
+recipient/callback caller, unsupported requests and rollback. A verified ABI proves
+an interface capability; newly wired paths additionally need same-state execution
+evidence. Reconcile the review inventory with all installed registry entries.
+
+Run `npm run searcher:family-settlement-review -- --family <family-id>` before
+claiming that Family's adaptation acceptance. This checks the recorded capability
+review and outstanding interface, wiring and execution gaps; passing it does not
+replace strict, dual execution, natural integration, replay or timing acceptance.
+
 ## Required acceptance for swap/protocol Families
 
 Keep and test both execution capabilities; one does not replace the other:

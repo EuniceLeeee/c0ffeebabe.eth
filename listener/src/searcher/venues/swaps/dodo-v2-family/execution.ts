@@ -17,13 +17,17 @@ export const dodoV2Execution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertProjectedRuntimeRoute(r, dodoV2Routes.project({ descriptor: d })); runtimeExecutor(executor, d.pool);
+    const request = input.settlement;
+    if (request && request.kind !== "direct-output") return null;
+    const recipient = request ? runtimeExecutor(request.recipient, d.pool, r.tokenIn, r.tokenOut) : executor;
     if (!input.transactionOrigin) throw new Error("dodo-v2 runtime requires transaction origin");
     runtimeExecutor(input.transactionOrigin);
     const p = new RuntimeAmountProgram()
       .call(r.tokenIn, RUNTIME_ERC20.encodeFunctionData("transfer", [d.pool, 0n]), { patches: [{ offset: 36, reg: 0 }] })
       .call(d.pool, new ethers.Interface(["function sellBase(address)", "function sellQuote(address)"])
-        .encodeFunctionData(r.direction === "sell-base" ? "sellBase" : "sellQuote", [executor]));
-    return runtimeLeg("dodo-v2-swap", p);
+        .encodeFunctionData(r.direction === "sell-base" ? "sellBase" : "sellQuote", [recipient]));
+    return { ...runtimeLeg("dodo-v2-swap", p), settlement: { directOutput: true as const },
+      ...(request ? { settlementRequest: request } : {}) };
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {

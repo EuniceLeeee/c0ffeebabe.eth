@@ -9,10 +9,13 @@ import type { Descriptor,Route,Evidence } from "./types.js";
 export const execution={
   buildRuntimeLeg(i){
     const d=i.descriptor,r=i.route;assertInvocation(d,r);runtimeExecutor(i.executor,d.target,d.asset,d.factory);
+    const request=i.settlement;if(request&&request.kind!=="direct-output")return null;
+    const recipient=request?runtimeExecutor(request.recipient,d.target,d.asset,d.factory):i.executor;
     const p=new RuntimeAmountProgram();if(r.direction==="wrap")runtimeExactApproval(p,d.asset,d.target);
-    p.call(d.target,ABI.encodeFunctionData(r.direction,[0n]),{patches:[{offset:4,reg:0}]});
+    p.call(d.target,ABI.encodeFunctionData(request?`${r.direction}To`:r.direction,request?[0n,recipient]:[0n]),{patches:[{offset:4,reg:0}]});
     if(r.direction==="wrap")clearWrapApproval(p,d.asset,d.target,i.executor);
-    return runtimeLeg(r.adapterId,p);
+    return {...runtimeLeg(r.adapterId,p),settlement:{directOutput:true as const},
+      ...(request?{settlementRequest:request}:{})};
   },
   runtimeProjection:()=>NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(i){

@@ -1,0 +1,11 @@
+{
+  "kind": "impl-progress-update-receipt",
+  "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "de766f75a37141a98d8c26eec09669b72d476b71c707849ab0e02e1e93e1f232",
+  "afterSha256": "4b81b38513a15dd96888a968adaa8f0ca654e110eec9c831299cf01dd73b7dca",
+  "latestTimestamp": "2026-10-14 17:48 UTC+8",
+  "rows": 29,
+  "priorLinksPreserved": 237,
+  "backup": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before-settlement-final.md",
+  "scope": "Update current progress only; keep prior valid one-shot/manual results and failures. No new master table."
+}

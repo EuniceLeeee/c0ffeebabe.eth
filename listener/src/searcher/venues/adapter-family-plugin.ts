@@ -1162,6 +1162,7 @@ export interface ExecutionSemantics<
     readonly executor: string;
     readonly transactionOrigin?: string;
     readonly runtimeEvidence: readonly RuntimeEvidence[];
+    readonly settlement?: import("../../adapters/runtime-amount-program.js").RuntimeSettlementRequest;
   }): import("../../adapters/runtime-amount-program.js").RuntimeAmountLeg | null;
   runtimeProjection(input: {
     readonly hop: ExecutionRuntimeHop;

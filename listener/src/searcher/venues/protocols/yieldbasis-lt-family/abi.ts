@@ -8,8 +8,8 @@ import { canonicalAddress } from "../standard-family/common.js";
  * SUPPORTED entry points:
  *   withdraw(uint256 shares, uint256 min_assets) -> uint256 crypto_received
  * `withdraw(uint256,uint256,address)` is the same call with an explicit
- * receiver; it is declared here as OBSERVED evidence only (see discovery.ts)
- * so the negative contracts can prove it is never routed.
+ * receiver; a runtime direct-output request selects this ordinary overload.
+ * The default and specified-amount paths retain their implicit caller receiver.
  *
  * Guarded single-caller-asset deposit:
  *   deposit(uint256 assets, uint256 debt, uint256 min_shares[, address receiver])

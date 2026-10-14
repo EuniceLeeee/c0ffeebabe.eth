@@ -18,6 +18,25 @@ import type {
   Erc4626Route,
 } from "./types.js";
 
+/** Standard receiver/owner split. Scope is the already admitted operation;
+ * a nonstandard implementation that ignores receiver fails the fresh receipt. */
+export function standardRecipientProgram(d: Pick<Erc4626Descriptor, "vault" | "share" | "asset">,
+  executor: string, direction: "deposit" | "redeem", recipient: string): RuntimeAmountProgram {
+  runtimeExecutor(executor, d.vault, d.asset); runtimeExecutor(recipient, d.vault, d.asset);
+  const deposit = direction === "deposit", input = deposit ? d.asset : d.share, output = deposit ? d.share : d.asset;
+  const abi = new ethers.Interface(["function deposit(uint256,address)", "function redeem(uint256,address,address)",
+    "function balanceOf(address) view returns(uint256)"]);
+  const p = new RuntimeAmountProgram().constant(15, 1n).math("sub", 12, 0, 15).nativeBalance(9);
+  p.call(input, abi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(1, 0)
+    .call(output, abi.encodeFunctionData("balanceOf", [recipient]), { static: true }).load(2, 0);
+  if (deposit) p.allowance(input, d.vault, 0, MAX_UINT256);
+  p.call(d.vault, abi.encodeFunctionData(direction, deposit ? [0n, recipient] : [0n, recipient, executor]),
+    { patches: [{ offset: 4, reg: 0 }] }).load(3, 0)
+    .call(input, abi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(4, 0).math("sub", 4, 1, 4).equal(4, 0)
+    .call(output, abi.encodeFunctionData("balanceOf", [recipient]), { static: true }).load(4, 0).math("sub", 4, 4, 2).equal(4, 3)
+    .math("sub", 12, 4, 15).nativeBalance(4).equal(4, 9);
+  return p;
+}
 export const erc4626Execution: ExecutionSemantics<
   Erc4626Descriptor,
   Erc4626Route,
@@ -26,6 +45,11 @@ export const erc4626Execution: ExecutionSemantics<
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertErc4626Invocation(d, r); runtimeExecutor(executor, d.vault);
+    const request = input.settlement;
+    if (request && (request.kind !== "direct-output" || d.infinifi !== undefined)) return null;
+    const recipient = request ? runtimeExecutor(request.recipient, d.vault, d.share, d.asset,
+      ...(d.custodian ? [d.custodian.proxyAdmin] : [])) : executor;
+    const settle = { settlement: { directOutput: true as const }, ...(request ? { settlementRequest: request } : {}) };
     if (d.infinifi !== undefined) {
       assertCustodianExecutionSource(input.source);
       if (input.runtimeEvidence.length) throw new Error("InfiniFi pending runtime evidence unsupported");
@@ -35,14 +59,15 @@ export const erc4626Execution: ExecutionSemantics<
       assertCustodianExecutionSource(input.source);
       runtimeExecutor(executor, d.custodian.proxyAdmin);
       if (input.runtimeEvidence.length) throw new Error("Custodian pending runtime evidence unsupported");
-      return runtimeLeg(r.adapterId, custodianProgram(d, executor, r.direction));
+      return { ...runtimeLeg(r.adapterId, custodianProgram(d, executor, r.direction, 1n, recipient)), ...settle };
     }
+    if (request) return { ...runtimeLeg(r.adapterId, standardRecipientProgram(d, executor, r.direction, recipient)), ...settle };
     const p = new RuntimeAmountProgram();
     const abi = new ethers.Interface(["function deposit(uint256,address)", "function redeem(uint256,address,address)"]);
     if (r.direction === "deposit") p.allowance(r.tokenIn, d.vault, 0, MAX_UINT256);
     p.call(d.vault, abi.encodeFunctionData(r.direction, r.direction === "deposit" ? [0n, executor] : [0n, executor, executor]),
       { patches: [{ offset: 4, reg: 0 }] });
-    return runtimeLeg(r.adapterId, p);
+    return { ...runtimeLeg(r.adapterId, p), ...settle };
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {

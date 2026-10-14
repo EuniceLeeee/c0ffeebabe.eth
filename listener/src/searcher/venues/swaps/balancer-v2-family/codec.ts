@@ -112,11 +112,11 @@ const queryParts = [
   queryTemplate.slice(queryWord(13), queryWord(16)),
 ] as const;
 const addressWord = (a: string) => lower(a).slice(2).padStart(64, "0");
-export function queryData(poolId: string, tokenIn: string, tokenOut: string, amount: bigint, executor: string) {
+export function queryData(poolId: string, tokenIn: string, tokenOut: string, amount: bigint, executor: string, recipient = executor) {
   if (!ethers.isHexString(poolId, 32)) throw new Error("balancer-v2 invalid pool id");
   if (typeof amount !== "bigint" || amount < 0n || amount > MAX_UINT) throw new Error("balancer-v2 invalid uint input");
-  const caller = addressWord(executor);
-  return queryParts[0] + caller + queryParts[1] + caller + queryParts[2] + poolId.slice(2).toLowerCase() +
+  const caller = addressWord(executor), receiver = addressWord(recipient);
+  return queryParts[0] + caller + queryParts[1] + receiver + queryParts[2] + poolId.slice(2).toLowerCase() +
     queryParts[3] + amount.toString(16).padStart(64, "0") + queryParts[4] + addressWord(tokenIn) + addressWord(tokenOut);
 }
 export function quoteOutput(data: string, amountIn: bigint, allowZero = false): bigint {
@@ -131,9 +131,9 @@ export function quoteOutput(data: string, amountIn: bigint, allowZero = false): 
       (!allowZero && outputDelta === 0n)) throw new Error("balancer-v2 invalid quote deltas");
   return -outputDelta;
 }
-export function swapData(poolId: string, tokenIn: string, tokenOut: string, amount: bigint, minimum: bigint, executor: string) {
+export function swapData(poolId: string, tokenIn: string, tokenOut: string, amount: bigint, minimum: bigint, executor: string, recipient = executor) {
   return VAULT_ABI.encodeFunctionData("swap", [[poolId, 0, tokenIn, tokenOut, amount, "0x"],
-    [executor, false, executor, false], minimum, MAX_UINT]);
+    [executor, false, recipient, false], minimum, MAX_UINT]);
 }
 // ABI head: dynamic SingleSwap + four static fund words + limit + deadline.
 // Inside SingleSwap, amount is the fifth word. Contract tests decode the patch.

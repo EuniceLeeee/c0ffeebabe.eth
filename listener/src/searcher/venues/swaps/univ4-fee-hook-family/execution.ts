@@ -34,7 +34,7 @@ export const univ4FeeHookExecution = {
       throw new Error("univ4 fee-hook runtime hook binding diverged");
     }
     return buildV4RuntimeProgram({ descriptor: d, route: r, executor, actionAdapterId: "univ4-fee-hook-unlock",
-      hookData: hookDataFor(d, executor, r.direction === "zero-for-one") });
+      hookData: hookDataFor(d, executor, r.direction === "zero-for-one"), settlement: input.settlement });
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
@@ -43,6 +43,7 @@ export const univ4FeeHookExecution = {
     runtimeExecutor(input.executor, input.descriptor.managerBinding.manager);
     const leg = buildV4RuntimeProgram({ descriptor: input.descriptor, route: input.route,
       executor: input.executor, actionAdapterId: "univ4-fee-hook-unlock", hookData: input.exactEvidence.hookData });
+    if (!leg) throw new Error("quoted runtime leg unavailable");
     return Object.freeze({
       requirements: Object.freeze([]),
       nodes: Object.freeze([Object.freeze({

@@ -1,0 +1,1126 @@
+{
+  "schemaVersion": 1,
+  "reviewer": "/root/curve_ready_review",
+  "nonAuthor": true,
+  "scope": "Independent offline recomputation of raw captured effects, logs, encoded programs and source/artifact/Ready bindings; no new RPC/EVM or project test run.",
+  "verdict": "No blocking discrepancy found in the scoped historical supplemental evidence.",
+  "ran_gate": {
+    "localEvidenceRecompute": true,
+    "cloudReadOnlyFiles": true,
+    "tests": false,
+    "build": false,
+    "rpc": false,
+    "evm": false,
+    "live": false,
+    "formalAdapterGate": false
+  },
+  "checks": 3978,
+  "counts": {
+    "supplemental": 8,
+    "staticQuote": 4,
+    "directOutput": 4,
+    "defaultPositive": 24,
+    "defaultRejected": 28,
+    "roundTripRejected": 4,
+    "independentChainQuoteRejected": 4
+  },
+  "inputExports": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/aqua-history20-independent-inputs.json",
+      "sha256": "44b5ef21807a8da23400b4cd1eb1782d91d3f1a976e5f19e66a2fc16c1f1c01a"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/aqua-history20-independent-binding-inputs.json",
+      "sha256": "6d8f260e98e06d5429d5d1d4d5827804e7d74ef2cca4ca17b0b647ae5f177dfb"
+    }
+  ],
+  "sourceReview": {
+    "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/aqua-historical-settlement-source-review-20261014.json",
+    "sha256": "e799bb16ed8eb66a8284d4dbaa543783b5d1138458d93c0a329e1d64b1927a43"
+  },
+  "sourceBinding": {
+    "reportedSourceTreeSha256": "8238101c8fc895cc42cc7519aa4c9bb29afc5d8170f839da82ea156c4e311421",
+    "currentReadSourceTreeSha256": "8238101c8fc895cc42cc7519aa4c9bb29afc5d8170f839da82ea156c4e311421",
+    "currentFileCount": 1198,
+    "algorithm": "sourcePin: recursive localeCompare child ordering, excludes test and templates, SHA256 JSON.stringify([relativePath,sha256][])",
+    "currentMatchesRun": true,
+    "artifactSources": [
+      {
+        "name": "src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+        "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+      },
+      {
+        "name": "src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+        "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+      },
+      {
+        "name": "src/RuntimeAmountVM.sol",
+        "sha256": "9f48e0d204342be4079637ac52e73f08470fd112c56aec9cea4272a82c12ee82",
+        "keccak256": "0x1deef9ed6576b229399ecbca9f58c20720cfccfca109be37f18ebae58b3ad27e"
+      },
+      {
+        "name": "src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+        "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+      }
+    ],
+    "artifactSha256": "f8ce9aff9f9ee68b3080b29e882dbc49f978fde135edfdcae89e7f9e094246a7",
+    "executorRuntimeRepatchedIndependently": true,
+    "harnessSha256": "c7e6df326b36613a9e42bb6746280532a77b32f33ba48a25f4d1c311d8c13512"
+  },
+  "toolRun": {
+    "manifestSha256": "e5b630285f87a014b679fb3c6cb665c1204306d7de2da65c5dd1c06f0bed3b27",
+    "query": [
+      "aqua",
+      "historical"
+    ],
+    "executions": [
+      {
+        "id": "listener:searcher:aqua-swapvm-historical-ready",
+        "exit": 0,
+        "started": "2026-10-14T07:58:09.641Z",
+        "finished": "2026-10-14T07:58:17.973Z",
+        "descriptorSha256": "4f81c57a36d9466907d7d95edd7d73852c39276f6e2bf636baa69f6417e70d26",
+        "argvSha256": "c35648d8dd91ee980113f44dd006688e9272c4ace537ffd0f0d876fc24a53f32"
+      },
+      {
+        "id": "listener:searcher:aqua-swapvm-historical-dual",
+        "exit": 0,
+        "started": "2026-10-14T07:58:18.283Z",
+        "finished": "2026-10-14T07:58:23.463Z",
+        "descriptorSha256": "bbd4d0084786c2181dace64597e64e34f0bf1b62cbeecc6665cd01948ed3799b",
+        "argvSha256": "6ad7161047a3317061535b8e2dba6a5d1e0c70d6ea7d2accf191196130f4b7e5"
+      },
+      {
+        "id": "listener:searcher:aqua-swapvm-historical-ready",
+        "exit": 0,
+        "started": "2026-10-14T07:58:23.771Z",
+        "finished": "2026-10-14T07:58:27.204Z",
+        "descriptorSha256": "4f81c57a36d9466907d7d95edd7d73852c39276f6e2bf636baa69f6417e70d26",
+        "argvSha256": "6012dfc5b84f689b57c09fa766a927bbd2443339df462dff3742202c2d7999b8"
+      },
+      {
+        "id": "listener:searcher:aqua-swapvm-historical-dual",
+        "exit": 0,
+        "started": "2026-10-14T07:58:27.512Z",
+        "finished": "2026-10-14T07:58:31.781Z",
+        "descriptorSha256": "bbd4d0084786c2181dace64597e64e34f0bf1b62cbeecc6665cd01948ed3799b",
+        "argvSha256": "883d42b4659937a413770caf1a5b5a2a8c9e8ecbd2f979d280ac2af226f7ec8d"
+      }
+    ],
+    "fiveSteps": [
+      {
+        "step": "index",
+        "exit": 0,
+        "started": "2026-10-14T07:58:09.009404+00:00",
+        "finished": "2026-10-14T07:58:09.341995+00:00"
+      },
+      {
+        "step": "A-production-ready",
+        "exit": 0,
+        "started": "2026-10-14T07:58:09.342385+00:00",
+        "finished": "2026-10-14T07:58:17.987422+00:00"
+      },
+      {
+        "step": "A-dual-and-new-modes",
+        "exit": 0,
+        "started": "2026-10-14T07:58:17.987682+00:00",
+        "finished": "2026-10-14T07:58:23.475211+00:00"
+      },
+      {
+        "step": "B-production-ready",
+        "exit": 0,
+        "started": "2026-10-14T07:58:23.475438+00:00",
+        "finished": "2026-10-14T07:58:27.216844+00:00"
+      },
+      {
+        "step": "B-dual-and-new-modes",
+        "exit": 0,
+        "started": "2026-10-14T07:58:27.217087+00:00",
+        "finished": "2026-10-14T07:58:31.794141+00:00"
+      }
+    ],
+    "runnerDrained": true
+  },
+  "samples": [
+    {
+      "artifact": "dual-A03.json",
+      "sha256": "d3f59a2b5077041bdc87dabe10b87c6c0c02c6e2338732062564fe8fa7dd3457",
+      "source": {
+        "number": 25680170,
+        "hash": "0x5427a888c4db798a4d40ef19f3d2c6ca4afbb1eb1875a00b0c9bdfa0fc659d76"
+      },
+      "sourceTreeSha256": "8238101c8fc895cc42cc7519aa4c9bb29afc5d8170f839da82ea156c4e311421",
+      "executorArtifactSha256": "f8ce9aff9f9ee68b3080b29e882dbc49f978fde135edfdcae89e7f9e094246a7",
+      "executorCodeHash": "0xb76141a82963d35338fafde0fae479a308adde4881975fa6ab005af4c471c911",
+      "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+      "readySha256": "082726162ccb1a0a19c4ac5ca60d2d8444ed412b2ac2252cc34ebab2d22bc4ba",
+      "readyGeneration": 3,
+      "cutoffGeneration": 25680170,
+      "pricingGeneration": 1,
+      "definitionHash": "835e5668c5ed60d24bbf5e093f9ea411f812a333617fc97c14769cd1ce330524",
+      "natural": [
+        {
+          "tokenIn": "0x111111111117dc0aa78b770fa6a738034120c302",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "status": "quoted",
+          "amountIn": "45588188816430759093",
+          "amountOut": "1984441871835144",
+          "quotedAt": {
+            "number": 25680170,
+            "hash": "0x5427a888c4db798a4d40ef19f3d2c6ca4afbb1eb1875a00b0c9bdfa0fc659d76",
+            "generation": 1
+          }
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x111111111117dc0aa78b770fa6a738034120c302",
+          "status": "quoted",
+          "amountIn": "2000000000000000",
+          "amountOut": "45588188816430759093",
+          "quotedAt": {
+            "number": 25680170,
+            "hash": "0x5427a888c4db798a4d40ef19f3d2c6ca4afbb1eb1875a00b0c9bdfa0fc659d76",
+            "generation": 1
+          }
+        }
+      ],
+      "rawMidSource": {
+        "number": 25680170,
+        "hash": "0x5427a888c4db798a4d40ef19f3d2c6ca4afbb1eb1875a00b0c9bdfa0fc659d76",
+        "generation": 1
+      },
+      "readyCandidateAccounting": {
+        "total": 19,
+        "verified": 1,
+        "terminalRejected": 0,
+        "retryable": 18,
+        "remainingUnaccounted": 0
+      },
+      "registrationReceiptChecked": true,
+      "samples": 12,
+      "defaultPositive": [
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "5575843886952894314",
+          "actualReceiverOutput": "243525114683054",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "243525114683157",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "5575843886952894314",
+          "actualReceiverOutput": "243525114683054",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "243525114683157",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 0,
+          "label": "manual-double-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "11151687773905788628",
+          "actualReceiverOutput": "486823802225704",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "486823802225807",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 0,
+          "label": "manual-double-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "11151687773905788628",
+          "actualReceiverOutput": "486823802225704",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "486823802225807",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 0,
+          "label": "production-effective",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "45588188816430759093",
+          "actualReceiverOutput": "1984441871835144",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "1984441871835247",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 0,
+          "label": "production-effective",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "45588188816430759093",
+          "actualReceiverOutput": "1984441871835144",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "1984441871835247",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 0,
+          "label": "double-production-effective",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "91176377632861518186",
+          "actualReceiverOutput": "3953898052763450",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "3953898052763553",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 0,
+          "label": "double-production-effective",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "91176377632861518186",
+          "actualReceiverOutput": "3953898052763450",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "3953898052763553",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "268686500229597",
+          "actualReceiverOutput": "6144704525036193830",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "6144704525036193933",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "268686500229597",
+          "actualReceiverOutput": "6144704525036193830",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "6144704525036193933",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "manual-double-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "537373000459194",
+          "actualReceiverOutput": "12283109625533894852",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "12283109625533894955",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "manual-double-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "537373000459194",
+          "actualReceiverOutput": "12283109625533894852",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "12283109625533894955",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "production-effective",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "2000000000000000",
+          "actualReceiverOutput": "45588188816430759093",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "45588188816430759196",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "production-effective",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "2000000000000000",
+          "actualReceiverOutput": "45588188816430759093",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "45588188816430759196",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "double-production-effective",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "4000000000000000",
+          "actualReceiverOutput": "90830775109786547145",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "90830775109786547248",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "double-production-effective",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "4000000000000000",
+          "actualReceiverOutput": "90830775109786547145",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "90830775109786547248",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        }
+      ],
+      "defaultRejected": [
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "negative": "insufficient-total-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "negative": "post-execution-revert",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "negative": "insufficient-total-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "negative": "post-execution-revert",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted-minimum-plus-one",
+          "negative": "minimum-output-plus-one",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "one-raw-unit-boundary",
+          "encoding": "runtime",
+          "negative": "independent-chain-quote-revert-same-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "zero-input-boundary",
+          "encoding": "runtime",
+          "negative": "zero-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "negative": "insufficient-total-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "negative": "post-execution-revert",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "negative": "insufficient-total-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "negative": "post-execution-revert",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted-minimum-plus-one",
+          "negative": "minimum-output-plus-one",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "one-raw-unit-boundary",
+          "encoding": "runtime",
+          "negative": "independent-chain-quote-revert-same-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "zero-input-boundary",
+          "encoding": "runtime",
+          "negative": "zero-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+          "noRetainedEffects": true
+        }
+      ],
+      "boundaries": [
+        {
+          "direction": 0,
+          "input": "1",
+          "independentQuoteRevert": "0xf6ab88ca0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "direction": 0,
+          "input": "0",
+          "quoteOutput": "0"
+        },
+        {
+          "direction": 1,
+          "input": "1",
+          "independentQuoteRevert": "0xf6ab88ca0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "direction": 1,
+          "input": "0",
+          "quoteOutput": "0"
+        }
+      ],
+      "supplemental": [
+        {
+          "direction": 0,
+          "kind": "quote-output",
+          "amountIn": "5575843886952894314",
+          "expectedOutput": "243525114683054",
+          "encodedRecipient": "0x",
+          "callbackPresent": false,
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "logs": 0,
+          "allDeltasZero": true
+        },
+        {
+          "direction": 0,
+          "kind": "direct-output",
+          "amountIn": "5575843886952894314",
+          "expectedOutput": "243525114683054",
+          "encodedRecipient": "0xb8578b6de173c8554ff0390db5a7effa567dda3c",
+          "callbackPresent": false,
+          "tokenRows": 6,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "5575843886952894314",
+          "actualReceiverOutput": "243525114683054",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "103",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "kind": "quote-output",
+          "amountIn": "268686500229597",
+          "expectedOutput": "6144704525036193830",
+          "encodedRecipient": "0x",
+          "callbackPresent": false,
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "logs": 0,
+          "allDeltasZero": true
+        },
+        {
+          "direction": 1,
+          "kind": "direct-output",
+          "amountIn": "268686500229597",
+          "expectedOutput": "6144704525036193830",
+          "encodedRecipient": "0xb8578b6de173c8554ff0390db5a7effa567dda3c",
+          "callbackPresent": false,
+          "tokenRows": 6,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "268686500229597",
+          "actualReceiverOutput": "6144704525036193830",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "103",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        }
+      ],
+      "roundTrips": [
+        {
+          "direction": 0,
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001672756e74696d65206d696e696d756d206f757470757400000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001672756e74696d65206d696e696d756d206f757470757400000000000000000000",
+          "noRetainedEffects": true
+        }
+      ],
+      "directReads": 121,
+      "invocationCounts": {
+        "exact": 12,
+        "quoted": 8,
+        "forbiddenDuringBuild": 0
+      },
+      "drained": true
+    },
+    {
+      "artifact": "dual-B02.json",
+      "sha256": "3337e021196b3ed4b8084a02e1d99a6db1d2003aabcd761c7a8ab58acc087bac",
+      "source": {
+        "number": 25680171,
+        "hash": "0x8a4a280896735af0405fc9ef9f749d57675fa4c16345da4dbce123ccd769a317"
+      },
+      "sourceTreeSha256": "8238101c8fc895cc42cc7519aa4c9bb29afc5d8170f839da82ea156c4e311421",
+      "executorArtifactSha256": "f8ce9aff9f9ee68b3080b29e882dbc49f978fde135edfdcae89e7f9e094246a7",
+      "executorCodeHash": "0xb76141a82963d35338fafde0fae479a308adde4881975fa6ab005af4c471c911",
+      "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+      "readySha256": "0366c52ff884a0de28c3c81dc5516eb02c5abcf403a84419cf59ba033ae96a3d",
+      "readyGeneration": 2,
+      "cutoffGeneration": 25680171,
+      "pricingGeneration": 1,
+      "definitionHash": "835e5668c5ed60d24bbf5e093f9ea411f812a333617fc97c14769cd1ce330524",
+      "natural": [
+        {
+          "tokenIn": "0x111111111117dc0aa78b770fa6a738034120c302",
+          "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null
+        },
+        {
+          "tokenIn": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "tokenOut": "0x111111111117dc0aa78b770fa6a738034120c302",
+          "status": "missing-valuation",
+          "amountIn": null,
+          "amountOut": null
+        }
+      ],
+      "rawMidSource": {
+        "number": 25680171,
+        "hash": "0x8a4a280896735af0405fc9ef9f749d57675fa4c16345da4dbce123ccd769a317",
+        "generation": 1
+      },
+      "readyCandidateAccounting": {
+        "total": 2,
+        "verified": 1,
+        "terminalRejected": 0,
+        "retryable": 1,
+        "remainingUnaccounted": 0
+      },
+      "registrationReceiptChecked": true,
+      "samples": 8,
+      "defaultPositive": [
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "5679036482452270992",
+          "actualReceiverOutput": "722",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "825",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "5679036482452270992",
+          "actualReceiverOutput": "722",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "825",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 0,
+          "label": "manual-double-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "11358072964904541984",
+          "actualReceiverOutput": "1444",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "1547",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 0,
+          "label": "manual-double-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "11358072964904541984",
+          "actualReceiverOutput": "1444",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "1547",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "794",
+          "actualReceiverOutput": "6193709890075269123",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "6193709890075269226",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "794",
+          "actualReceiverOutput": "6193709890075269123",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "6193709890075269226",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "manual-double-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "1588",
+          "actualReceiverOutput": "12388932306360342071",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "12388932306360342174",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "label": "manual-double-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "1588",
+          "actualReceiverOutput": "12388932306360342071",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "12388932306360342174",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        }
+      ],
+      "defaultRejected": [
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "negative": "insufficient-total-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "negative": "post-execution-revert",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "negative": "insufficient-total-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "negative": "post-execution-revert",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted-minimum-plus-one",
+          "negative": "minimum-output-plus-one",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "one-raw-unit-boundary",
+          "encoding": "runtime",
+          "negative": "independent-chain-quote-revert-same-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 0,
+          "label": "zero-input-boundary",
+          "encoding": "runtime",
+          "negative": "zero-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "negative": "insufficient-total-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted",
+          "negative": "post-execution-revert",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "negative": "insufficient-total-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "runtime",
+          "negative": "post-execution-revert",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001772756e74696d6520616d6f756e74206d69736d61746368000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "manual-registration-reserve-hundredth",
+          "encoding": "quoted-minimum-plus-one",
+          "negative": "minimum-output-plus-one",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "one-raw-unit-boundary",
+          "encoding": "runtime",
+          "negative": "independent-chain-quote-revert-same-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "label": "zero-input-boundary",
+          "encoding": "runtime",
+          "negative": "zero-input",
+          "completion": "reverted-as-declared",
+          "revertData": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+          "noRetainedEffects": true
+        }
+      ],
+      "boundaries": [
+        {
+          "direction": 0,
+          "input": "1",
+          "independentQuoteRevert": "0xf6ab88ca0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "direction": 0,
+          "input": "0",
+          "quoteOutput": "0"
+        },
+        {
+          "direction": 1,
+          "input": "1",
+          "independentQuoteRevert": "0xf6ab88ca0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "direction": 1,
+          "input": "0",
+          "quoteOutput": "0"
+        }
+      ],
+      "supplemental": [
+        {
+          "direction": 0,
+          "kind": "quote-output",
+          "amountIn": "5679036482452270992",
+          "expectedOutput": "722",
+          "encodedRecipient": "0x",
+          "callbackPresent": false,
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "logs": 0,
+          "allDeltasZero": true
+        },
+        {
+          "direction": 0,
+          "kind": "direct-output",
+          "amountIn": "5679036482452270992",
+          "expectedOutput": "722",
+          "encodedRecipient": "0xb8578b6de173c8554ff0390db5a7effa567dda3c",
+          "callbackPresent": false,
+          "tokenRows": 6,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "5679036482452270992",
+          "actualReceiverOutput": "722",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "103",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        },
+        {
+          "direction": 1,
+          "kind": "quote-output",
+          "amountIn": "794",
+          "expectedOutput": "6193709890075269123",
+          "encodedRecipient": "0x",
+          "callbackPresent": false,
+          "tokenRows": 4,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "logs": 0,
+          "allDeltasZero": true
+        },
+        {
+          "direction": 1,
+          "kind": "direct-output",
+          "amountIn": "794",
+          "expectedOutput": "6193709890075269123",
+          "encodedRecipient": "0xb8578b6de173c8554ff0390db5a7effa567dda3c",
+          "callbackPresent": false,
+          "tokenRows": 6,
+          "nativeRows": 1,
+          "supplyRows": 2,
+          "actualInputDebit": "794",
+          "actualReceiverOutput": "6193709890075269123",
+          "executorInputAfter": "101",
+          "executorOutputAfter": "103",
+          "nativeAfter": "17",
+          "transferCount": 3,
+          "swappedCount": 1,
+          "actorApprovalLast": "0"
+        }
+      ],
+      "roundTrips": [
+        {
+          "direction": 0,
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001672756e74696d65206d696e696d756d206f757470757400000000000000000000",
+          "noRetainedEffects": true
+        },
+        {
+          "direction": 1,
+          "completion": "reverted-as-declared",
+          "revertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001672756e74696d65206d696e696d756d206f757470757400000000000000000000",
+          "noRetainedEffects": true
+        }
+      ],
+      "directReads": 77,
+      "invocationCounts": {
+        "exact": 8,
+        "quoted": 4,
+        "forbiddenDuringBuild": 0
+      },
+      "drained": true
+    }
+  ],
+  "findings": [],
+  "limits": [
+    "The four static quotes have exactly 4 token rows, 1 executor-native row and 2 correct token-supply rows, so no empty-array observation gap is used in this evidence. Four direct outputs have 6 token-account rows, 1 native row and 2 supply rows.",
+    "Observed effects contain deltas and logs, not raw per-account pre/post stateDiff or callTracer trees. Reported after-inventories follow the explicit override baseline plus independently verified deltas. Reverts have empty effects by transport design; do not claim separately read post-revert balances.",
+    "The output recipient is the original configured owner, distinct from executor and maker; executor/origin are unchanged. This does not establish all recipients or token behaviors.",
+    "Supplemental modes use one registration-reserve/100 amount per direction. Original transaction is a registration source, not an original swap amount or original-precall replay.",
+    "No deferred-input/payment-program/callback execution occurs in these 8 supplemental cases. No opportunity, EV, clean-tree integration, formal Adapter Replay or performance conclusion.",
+    "A natural effective rows are quoted; both B effective rows remain missing-valuation with null amountIn/amountOut. Manual same-N success does not repair that missing valuation.",
+    "Ready generation, source/cutoff generation, and per-run pricing generation are separate counters; N/hash and canonical bindings are checked without falsely equating them.",
+    "Current source inventory is a later read and may include parent work after the preserved run; the exact run pin is retained and matching current Aqua source/metadata/artifact is checked separately."
+  ]
+}

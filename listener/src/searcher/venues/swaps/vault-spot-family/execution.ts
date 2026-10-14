@@ -8,7 +8,9 @@ import type { Descriptor, Route, Evidence } from "./types.js";
 export const execution = {
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildRuntimeLeg(i) { assertRoute(i.descriptor, i.route);
-    return runtimeLeg(ACTION, swapProgram(i.descriptor.vault, i.route.tokenIn, i.route.tokenOut, i.executor, 1n)); },
+    const request=i.settlement;if(request&&request.kind!=="direct-output")return null;
+    return {...runtimeLeg(ACTION, swapProgram(i.descriptor.vault, i.route.tokenIn, i.route.tokenOut, i.executor, 1n,
+      request?.recipient)),settlement:{directOutput:true as const},...(request?{settlementRequest:request}:{})}; },
   buildFragment(i) {
     assertRoute(i.descriptor, i.route); amount(i.amountIn); amount(i.quotedAmountOut); amount(i.minAmountOut, true);
     runtimeExecutor(i.executor, i.descriptor.vault, ...i.descriptor.tokens);

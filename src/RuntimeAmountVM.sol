@@ -135,6 +135,13 @@ abstract contract RuntimeAmountVM {
     function _runRuntimeProgram(bytes memory data, uint256 amount, HopContext memory context)
         private
     {
+        _runRuntimeProgram(data, amount, context, false, 0);
+    }
+
+    function _runRuntimeProgram(bytes memory data, uint256 amount, HopContext memory context, bool readOnly, uint256 depth)
+        private returns (uint256 output)
+    {
+        require(depth <= 8, "runtime nesting limit");
         require(data.length > 1 && data.length <= 65536 && uint8(data[0]) == 1, "runtime program version");
         uint256[16] memory r;
         r[0] = amount;
@@ -148,6 +155,7 @@ abstract contract RuntimeAmountVM {
                 require(ip + 33 <= data.length, "runtime constant bounds");
                 r[uint8(data[ip])] = _word(data, ip + 1); ip += 33;
             } else if (op == 1) {
+                if (readOnly) require(ip + 29 <= data.length && uint8(data[ip + 20]) == 1, "runtime readonly call");
                 (ip, returned, context.lastTarget) = _runtimeCall(data, ip, r, context);
             } else if (op == 2) {
                 require(ip + 4 <= data.length, "runtime math bounds");
@@ -168,6 +176,7 @@ abstract contract RuntimeAmountVM {
                 require(ip + 2 <= data.length, "runtime equality bounds");
                 require(r[uint8(data[ip])] == r[uint8(data[ip + 1])], "runtime amount mismatch"); ip += 2;
             } else if (op == 4) {
+                require(!readOnly, "runtime readonly allowance");
                 require(ip + 73 <= data.length, "runtime allowance bounds");
                 uint256 oldTarget = _getTransient(CALLBACK_TARGET);
                 _setTransient(CALLBACK_TARGET, 1);
@@ -187,8 +196,19 @@ abstract contract RuntimeAmountVM {
                 uint256 value;
                 assembly { value := calldataload(offset) }
                 r[uint8(data[ip])] = value; ip += 4;
+            } else if (op == 8) {
+                require(ip + 6 <= data.length, "runtime subprogram header");
+                uint256 inputReg = uint8(data[ip]);
+                uint256 outputReg = uint8(data[ip + 1]);
+                uint256 mode = uint8(data[ip + 2]);
+                require(mode <= 1, "runtime subprogram mode");
+                uint256 size = _u24(data, ip + 3);
+                r[outputReg] = _runRuntimeProgram(_slice(data, ip + 6, size), r[inputReg],
+                    context, readOnly || mode == 1, depth + 1);
+                ip += 6 + size;
             } else revert("runtime opcode");
         }
+        output = r[0];
     }
 
     function _runtimeCall(bytes memory data, uint256 ip, uint256[16] memory r, HopContext memory context)

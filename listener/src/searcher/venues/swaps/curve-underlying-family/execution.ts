@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
 import { runtimeLeg, runtimeExecutor, assertProjectedRuntimeRoute } from "../../runtime-execution.js";
 import { curveUnderlyingRoutes } from "./routes.js";
+import { supportsClassicUnderlyingRecipient } from "./quote-model.js";
 import { CURVE_UNDERLYING_NATIVE_ACTION, underlyingNativeAssets, underlyingNativeAliasProgram } from "./native.js";
 import {
   type ExecutionSemantics,
@@ -21,6 +22,11 @@ export const curveUnderlyingExecution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertProjectedRuntimeRoute(r, curveUnderlyingRoutes.project({ descriptor: d })); runtimeExecutor(executor, d.pool);
+    const request = input.settlement;
+    const directOutput = !d.lending && !d.nativeAlias && !d.legacyPlain &&
+      supportsClassicUnderlyingRecipient(d.quoteModel);
+    if (request && (request.kind !== "direct-output" || !directOutput)) return null;
+    const recipient = request ? runtimeExecutor(request.recipient, d.pool, r.tokenIn, r.tokenOut) : executor;
     if (d.lending) return runtimeLeg(CURVE_UNDERLYING_LENDING_ACTION,
       underlyingLendingProgram(d.pool, r.tokenIn, r.tokenOut, r.i, r.j, executor));
     if (d.nativeAlias) {
@@ -28,10 +34,14 @@ export const curveUnderlyingExecution = {
       return runtimeLeg(CURVE_UNDERLYING_NATIVE_ACTION, underlyingNativeAliasProgram(d.pool, r.tokenIn, r.tokenOut,
         r.i, r.j, executor, assets?.input === "native", assets?.output === "native"));
     }
+    const signature = request ? "exchange_underlying(int128,int128,uint256,uint256,address)"
+      : "exchange_underlying(int128,int128,uint256,uint256)";
     const p = new RuntimeAmountProgram().allowance(r.tokenIn, d.pool, 0, MAX_UINT)
-      .call(d.pool, new ethers.Interface(["function exchange_underlying(int128,int128,uint256,uint256)"]).encodeFunctionData("exchange_underlying",
-        [r.i, r.j, 0n, 1n]), { patches: [{ offset: 68, reg: 0 }] });
-    return runtimeLeg("curve-exchange-underlying", p);
+      .call(d.pool, new ethers.Interface(["function " + signature]).encodeFunctionData(signature,
+        request ? [r.i, r.j, 0n, 1n, recipient] : [r.i, r.j, 0n, 1n]), { patches: [{ offset: 68, reg: 0 }] });
+    return { ...runtimeLeg("curve-exchange-underlying", p),
+      ...(directOutput ? { settlement: { directOutput: true as const } } : {}),
+      ...(request ? { settlementRequest: request } : {}) };
   },
   runtimeProjection: ({ hop }) => ({ allowanceSpender: [CURVE_UNDERLYING_NATIVE_ACTION, CURVE_UNDERLYING_LENDING_ACTION].includes(hop.adapterId) ? null : hop.target,
     prewarmQuoteCalls: [] }),
