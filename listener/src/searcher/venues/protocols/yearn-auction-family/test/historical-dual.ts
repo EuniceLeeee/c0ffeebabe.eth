@@ -46,8 +46,8 @@ async function main(argv = process.argv.slice(2)) {
     assert(names.includes(argv[i]!) && !args.has(argv[i]!) && argv[i + 1]); args.set(argv[i]!, argv[i + 1]!);
   }
   assert(names.every(name => args.has(name)));
-  const fd = openSync(args.get("--out")!, "wx", 0o600), report: any = { result: "failed", samples: [], tx: TX,
-    claim: "One auction:sold instance at N-end; production quote and separate quoted/runtime single-leg actual effects. Not full-loop execution or original pre-call parity.",
+  const fd = openSync(args.get("--out")!, "wx", 0o600), report: any = { result: "failed", samples: [], readonlyQuotes: [], tx: TX,
+    claim: "One auction:sold instance at N-end; production quote and separate quoted/runtime/direct single-leg actual effects and unfunded readonly quotes. Deferred actual history remains unverified. Not full-loop execution or original pre-call parity.",
     performance: "NOT RUN", signing: false, broadcast: false, protocolOverrides: false, actorOnlyFunding: true };
   const abort = new AbortController(), deadlineAtMs = Date.now() + 480_000;
   const timer = setTimeout(() => abort.abort(new Error("historical dual deadline")), 480_000);
@@ -61,7 +61,7 @@ async function main(argv = process.argv.slice(2)) {
     const paths = [readyPath, pricesPath, resolve(dirname(pricesPath), "input.json"), fileURLToPath(import.meta.url), referencePath];
     const pins = () => paths.map(path => ({ path, sha256: sha(readFileSync(path)) }));
     report.inputs = pins(); report.code = sourcePin(); report.revmSha256 = sha(readFileSync(args.get("--revm-bin")!));
-    assert.equal(report.revmSha256, "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d");
+    assert.equal(report.revmSha256, "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6");
     const prices = parseAtBlockJson(readFileSync(pricesPath, "utf8")), provenance = parseAtBlockJson(readFileSync(paths[2]!, "utf8"));
     const envelope = await new UniverseRebuildCheckpointStore({ path: readyPath }).load(); assert(envelope && !envelope.inProgressRun);
     const { ready, graph } = resolveStrictReadyRuntime(envelope.readyGeneration), source = ready.cutoff;
@@ -146,7 +146,10 @@ async function main(argv = process.argv.slice(2)) {
         getStorage: async (a: string, slot: string, n: number) => { assert.equal(n, N); return rpc("eth_getStorageAt", [a, slot, pin]); } } as never });
     const adapters = [...family.plugin.actionAdapters, ...PRODUCTION_INFRA_ACTION_ADAPTERS];
     const compile = (node: ResolvedPlanNode): Uint8Array => { const a = adapters.find(a => a.id === node.adapterId); assert(a); return a.encode(node, executor, concatBytes(...node.children.map(compile))); };
-    const leg = guard.build(() => buildFamilyRuntimeAmountLeg({ family, route: handle, source, executor, runtime: guard.runtime(runtime), runtimeEvidence: [], actionOwnership: catalog }));
+    const build = (settlement?: { kind: "quote-output" | "direct-output"; recipient: string }) => guard.build(() =>
+      buildFamilyRuntimeAmountLeg({ family, route: handle, source, executor, runtime: guard.runtime(runtime), runtimeEvidence: [],
+        actionOwnership: catalog, ...(settlement ? { settlement } : {}) }));
+    const leg = build();
     assert(leg, "no runtime fallback"); assert.equal(leg.inputMode, "maximum");
     const capacityCost: bigint = await call(NEED, [d.sold, available]);
     const inputs: [string, bigint][] = [["borrowed-production-input-at-N", referenceRow.amountIn], ["original-budget-at-N", original.amountIn],
@@ -169,28 +172,63 @@ async function main(argv = process.argv.slice(2)) {
       };
       const allowanceCheck = runtimeProgramScript(new RuntimeAmountProgram().call(route.tokenIn, ABI.encodeFunctionData("allowance", [executor, TARGET]), { static: true })
         .load(1, 0).constant(2, 0n).equal(1, 2).bytes(), 0n);
-      const scripts = [["quoted", concatBytes(buildQuoted(quote.amountOut), allowanceCheck)],
-        ["runtime", concatBytes(runtimeProgramScript(ethers.getBytes(leg.program), amountIn), allowanceCheck)]] as const;
-      for (const [encoding, script] of scripts) for (const negative of label === "borrowed-production-input-at-N" ? ["none", "no-input", "post-execution-revert"] : ["none"]) {
+      const actors = [...new Set([executor, owner, receiver, TARGET].map(a => a.toLowerCase()))];
+      const observations = [d.want, d.sold].flatMap(token => actors.map(account => ({ token,
+        account: same(account, executor) ? { kind: "executor" as const } : account })));
+      const dispatch = (request: AdapterRequest) => executeAdapterWork({ runtime, control: { signal: abort.signal, deadlineAtMs }, intent: {
+        stage: "exact-refine", familyId: FAMILY, source, generation: source.generation, programInput: undefined,
+        program: { requirements: () => requirements, buildRequests: (): readonly AdapterRequest[] => [request],
+          decode: ({ results }): readonly AdapterRequestResult[] => results } } });
+      const scripts = [
+        { encoding: "quoted", recipient: executor, script: concatBytes(buildQuoted(quote.amountOut), allowanceCheck) },
+        { encoding: "runtime", recipient: executor, script: concatBytes(runtimeProgramScript(ethers.getBytes(leg.program), amountIn), allowanceCheck) },
+      ];
+      for (const recipient of [executor, owner]) {
+        const direct = build({ kind: "direct-output", recipient }), prepared = build({ kind: "quote-output", recipient });
+        assert(direct && prepared, "settlement construction must not fall back");
+        const checkedQuote = runtimeProgramScript(new RuntimeAmountProgram().run(prepared.program, 0, 1, true)
+          .constant(2, quote.amountOut).equal(1, 2).bytes(), amountIn);
+        if (same(recipient, executor)) {
+          stage = "readonly-quote-without-input";
+          const caller = { kind: "executor" as const }, request: AdapterRequest = {
+            id: "yearn-readonly", required: false, kind: "effect-delta-simulation",
+            call: { caller, executionMode: "executor-program", to: executor, data: buildSubscriptCalldata(checkedQuote) },
+            overrideIntent: { caller, nativeBalanceWei: 17n,
+              tokenBalances: [{ token: d.want, amount: 0n }, { token: d.sold, amount: 103n }] },
+            observeTokenBalances: observations, observe: effects,
+          };
+          const record: any = { label, amountIn, expectedOutput: quote.amountOut, request, status: "failed" };
+          report.readonlyQuotes.push(record); const outcome = await dispatch(request); record.outcome = outcome;
+          assert.equal(outcome.status, "resolved"); if (outcome.status !== "resolved") throw new Error("readonly unresolved");
+          const result = outcome.executed.evidence[0]!; assert(result.ok && result.completion === "returned");
+          assert.equal(result.effects?.tokenDeltas?.length, observations.length);
+          assert(result.effects!.tokenDeltas!.every(row => row.delta === 0n));
+          assert.equal(result.effects?.nativeDeltas?.length, 1); assert.equal(result.effects!.nativeDeltas![0].delta, 0n);
+          assert.equal(result.effects?.logs?.length, 0); record.status = "pass";
+        }
+        scripts.push({ encoding: same(recipient, executor) ? "direct-self" : "direct-external", recipient,
+          script: concatBytes(checkedQuote, runtimeProgramScript(ethers.getBytes(direct.program), amountIn), allowanceCheck) });
+      }
+      for (const { encoding, recipient, script } of scripts) for (const negative of label === "borrowed-production-input-at-N" ? ["none", "no-input", "post-execution-revert"] : ["none"]) {
         stage = encoding + ":" + negative;
-        const result: any = { encoding, negative, status: "failed" }; trial.executions.push(result);
+        const result: any = { encoding, recipient, negative, status: "failed" }; trial.executions.push(result);
         const executedScript = negative === "post-execution-revert" ? concatBytes(script,
           runtimeProgramScript(new RuntimeAmountProgram().constant(0, 0n).constant(1, 1n).equal(0, 1).bytes(), 0n)) : script;
         const caller = { kind: "executor" as const }, request: AdapterRequest = { id: "yearn-execute", required: false, kind: "effect-delta-simulation",
           call: { caller, executionMode: "executor-program", to: executor, data: buildSubscriptCalldata(executedScript) },
           overrideIntent: { caller, nativeBalanceWei: 17n, tokenBalances: [{ token: route.tokenIn, amount: negative === "no-input" ? 0n : amountIn + 101n },
             { token: route.tokenOut, amount: quote.amountOut + 103n }] },
-          observeTokenBalances: [{ token: d.want, account: caller }, { token: d.want, account: receiver },
-            { token: d.sold, account: caller }, { token: d.sold, account: TARGET }], observe: effects };
+          observeTokenBalances: observations, observe: effects };
         result.request = request;
-        const outcome = await executeAdapterWork({ runtime, control: { signal: abort.signal, deadlineAtMs }, intent: {
-          stage: "exact-refine", familyId: FAMILY, source, generation: source.generation, programInput: undefined,
-          program: { requirements: () => requirements, buildRequests: (): readonly AdapterRequest[] => [request], decode: ({ results }): readonly AdapterRequestResult[] => results } } });
+        const outcome = await dispatch(request);
         result.outcome = outcome; assert.equal(outcome.status, "resolved"); if (outcome.status !== "resolved") throw new Error("execution unresolved");
         const returned = outcome.executed.evidence[0]!; assert(returned.ok, "transport failure is not an EVM negative");
         if (negative === "none") {
-          assert.equal(returned.completion, "returned"); assert.equal(returned.data, "0x"); assert.equal(returned.effects?.tokenDeltas?.length, 4);
-          const expected: readonly (readonly [string, string, bigint])[] = [[d.want, executor, -spent], [d.want, receiver, spent], [d.sold, executor, quote.amountOut], [d.sold, TARGET, -quote.amountOut]];
+          assert.equal(returned.completion, "returned"); assert.equal(returned.data, "0x");
+          assert.equal(returned.effects?.tokenDeltas?.length, observations.length);
+          const expected = [d.want, d.sold].flatMap(token => actors.map(account => [token, account,
+            same(token, d.want) ? (same(account, receiver) ? spent : 0n) - (same(account, executor) ? spent : 0n)
+              : (same(account, recipient) ? quote.amountOut : 0n) - (same(account, TARGET) ? quote.amountOut : 0n)] as const));
           for (const [token, account, delta] of expected) {
             const matched: NonNullable<ObservedEffects["tokenDeltas"]> = returned.effects!.tokenDeltas!.filter(r => same(r.token, token) && same(r.account, account)); assert.equal(matched.length, 1); assert.equal(matched[0].delta, delta);
           }
