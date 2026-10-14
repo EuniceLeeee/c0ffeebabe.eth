@@ -1,0 +1,23 @@
+{
+  "at": "2026-10-14T01:26:32.251082+00:00",
+  "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "line": 18,
+  "tx": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+  "sourceBlock": 26182689,
+  "codeCommit": "3a6d8a7f5d8a42ac35a1f45e1d13e594900e9891",
+  "reportPath": "docs/research/reports/vault-spot-family-acceptance-20261014.json",
+  "before": {
+    "sha256": "95f5cd71a278aa7a90ea2329d9ee9abbdf2c5cd0d8558f34dba1e88ad99d661b",
+    "bytes": 271072
+  },
+  "after": {
+    "sha256": "6b4c320f7859881b4f3101e3a03bfce5e072b2b8120f7d2f8c3b06eda10b6108",
+    "bytes": 273903
+  },
+  "changedRows": 1,
+  "otherLinesPreserved": true,
+  "oldHistoryPreservedExceptCurrentTitle": true,
+  "goalStatus": "active",
+  "stage": "3; phases4A/4B not started",
+  "remaining": "Fresh non-author Vault review, exact original-precall/opportunity and formal gates, all pending IMPL correctness increments, then authorized phase4 in order"
+}
