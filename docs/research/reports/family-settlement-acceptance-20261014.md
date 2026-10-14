@@ -17,3 +17,5 @@ Aqua／SwapVM 两个策略、四个方向已有当前历史双执行；history20
 保留的失败／中断：settlement24 的类型构建失败在 25 修复；25 的未索引工具名称导致后续未运行，26 使用实际索引入口补验；26 检查规则的列表顺序回归失败修复后通过；27 源码导出遇到 production entry basename 路径问题，28 修复并完成实际全安装导出；29 全量门退出 1 是上述 42 项未完成的真实状态。旧 central conformance 的具体族导入／分支失败继续保留；installed-versus-active 误判只作局部工具修复，不宣称整个 framework 通过。
 
 本轮没有重型阶段性能实验。4A／4B 未完成；Balancer V2 原 28,040 边／94 实例、727 方向、4 秒预算与重块中位 4,276.945 ms 失败及 429／未运行样本保留。全部目标协议仍须按既定顺序在正确性之后验收时效性，原机会与 Curve underlying 双调 A 等缺口也继续保留。总目标未完成。
+
+提交核对：代码提交 `4dd7fc8239bd981c5a12eee0c4b2f374b3a04b5f` 从实际待提交树生成 catalog，并通过 build:live、Family 双执行合同及结算检查规则回归（套件用例数分别为 298, 6）。提交树排除他人的 Ready／UniV1 改动，原工作文件与原 generated 仍保留。`tooldef-20261014-installed-family-conformance` 已以该提交 codify，仅关闭安装集合误判，不关闭原 central boundary 失败。

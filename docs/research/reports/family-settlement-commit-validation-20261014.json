@@ -1,0 +1,51 @@
+{
+  "sha": "4dd7fc8239bd981c5a12eee0c4b2f374b3a04b5f",
+  "tree": "3f9ac82f274ebdd1308b5b5bda068e8a37e4a00f",
+  "files": 87,
+  "committedAt": "2026-10-14T09:53:40.344170+00:00",
+  "branch": "codex/family-runtime-actual-20261007",
+  "validation": [
+    {
+      "step": "generate-staged-source",
+      "exit": 0,
+      "started": "2026-10-14T09:50:27.366176+00:00",
+      "finished": "2026-10-14T09:51:09.765668+00:00"
+    },
+    {
+      "step": "build-staged-source",
+      "exit": 0,
+      "started": "2026-10-14T09:51:09.780420+00:00",
+      "finished": "2026-10-14T09:51:17.733738+00:00"
+    },
+    {
+      "step": "family-dual-staged-source",
+      "exit": 0,
+      "started": "2026-10-14T09:51:17.734035+00:00",
+      "finished": "2026-10-14T09:51:27.413622+00:00"
+    },
+    {
+      "step": "settlement-review-contract-staged-source",
+      "exit": 0,
+      "started": "2026-10-14T09:51:27.413912+00:00",
+      "finished": "2026-10-14T09:51:31.144179+00:00"
+    },
+    {
+      "step": "staged-diff-check",
+      "exit": 0,
+      "started": "2026-10-14T09:51:31.144463+00:00",
+      "finished": "2026-10-14T09:51:31.163611+00:00"
+    }
+  ],
+  "workingSourcePreserved": true,
+  "push": "recorded separately in ignored transport receipt",
+  "stagedSuiteCounts": [
+    298,
+    6
+  ],
+  "toolingDefect": {
+    "learningCaseId": "tooldef-20261014-installed-family-conformance",
+    "status": "codified",
+    "codifyCommit": "4dd7fc8239bd981c5a12eee0c4b2f374b3a04b5f"
+  },
+  "scope": "Verified own staged source; unrelated dirty workspace source remains intentionally outside this commit."
+}
