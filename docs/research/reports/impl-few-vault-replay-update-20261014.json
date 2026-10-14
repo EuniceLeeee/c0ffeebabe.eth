@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-14T01:59:44.175419+00:00",
+  "originalMainTable": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "before": {
+    "sha256": "6b4c320f7859881b4f3101e3a03bfce5e072b2b8120f7d2f8c3b06eda10b6108",
+    "bytes": 273903
+  },
+  "after": {
+    "sha256": "86e587b60fa90fb5e22b717dd39915c62aaf352118ababa39476a4cbaf2556f1",
+    "bytes": 277185
+  },
+  "changedLines": [
+    7,
+    18
+  ],
+  "otherLinesPreserved": true,
+  "reportCommit": "344a04c99ffeee6bde85ee14791e2e93e968682a",
+  "reportSha256": "eaab3b7e49b7ccedd6471d74f5814f64744f1ced10f1f454cde0c3cd47d52932",
+  "replayArchive": {
+    "path": "/Users/eunice/src/MEV/logs/replay-history/1/0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058/20261014-few-vault-bb-core-ev-reject.json",
+    "sha256": "36337a7db36aadc61019f36d448c7047cab68e7ded05a66954fc2d9376cc3cc8"
+  },
+  "result": "Core gross match passed; net EV rejected; source unchanged and all stage4 performance unrun; goal active."
+}
