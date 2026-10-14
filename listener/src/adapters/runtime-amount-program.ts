@@ -17,8 +17,8 @@ export class RuntimeAmountProgram {
     if (value < 0n || value > ethers.MaxUint256) throw new Error("runtime constant uint256");
     return this.push(new Uint8Array([0, reg(dst)]), uint256ToBytes(value));
   }
-  math(op: "add" | "sub" | "mul" | "div" | "shr" | "and" | "neg" | "eq", dst: number, a: number, b = a): this {
-    return this.push(new Uint8Array([2, ["add", "sub", "mul", "div", "shr", "and", "neg", "eq"].indexOf(op), reg(dst), reg(a), reg(b)]));
+  math(op: "add" | "sub" | "mul" | "div" | "shr" | "and" | "neg" | "eq" | "min", dst: number, a: number, b = a): this {
+    return this.push(new Uint8Array([2, ["add", "sub", "mul", "div", "shr", "and", "neg", "eq", "min"].indexOf(op), reg(dst), reg(a), reg(b)]));
   }
   equal(a: number, b: number): this { return this.push(new Uint8Array([3, reg(a), reg(b)])); }
   load(dst: number, offset: number): this { return this.push(new Uint8Array([6, reg(dst)]), uint24ToBytes(offset)); }
@@ -197,7 +197,8 @@ export const runtimeAmountFlowAdapter: ActionAdapter = {
     if (node.params.settlementProgram !== undefined) {
       if (typeof node.params.settlementProgram !== "string") throw new Error("runtime settlement program shape");
       const program = ethers.getBytes(node.params.settlementProgram);
-      if (program.length < 2 || program.length > 65536 || program[0] !== 1 || maximumInputMask) throw new Error("runtime settlement program bounds");
+      if (program.length < 2 || program.length > 65536 || program[0] !== 1 ||
+          maximumInputMask !== 0 && maximumInputMask !== 1 << (legs.length - 1)) throw new Error("runtime settlement program bounds");
       return runtimeProgramScript(program, node.amount);
     }
     // High bit opts into at most one unit of retained input dust. The legacy

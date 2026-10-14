@@ -86,7 +86,7 @@ test("exact uses the requested budget and source; does not silently use point am
 function run(f: Fixture, bytes: string, budget: bigint, changes: { debit?: bigint; receipt?: bigint; returnOut?: bigint; approval?: boolean; initial?: bigint } = {}) {
   let traded = false; const approvals: bigint[] = [];
   const oldInput = changes.initial ?? budget + 999n, oldOutput = 777n;
-  const result = inspectRuntime(bytes, budget, { call(c) {
+  const result = inspectRuntime(bytes, budget, { nativeBalance: () => 17n, call(c) {
     const call = ABI.parseTransaction({ data: c.data })!;
     if (call.name === "getAmountNeeded") return ABI.encodeFunctionResult(NEED, [contractCost(f, call.args[1])]);
     if (call.name === "approve") { approvals.push(call.args[1]); return ABI.encodeFunctionResult("approve", [changes.approval ?? true]); }
@@ -112,6 +112,8 @@ test("runtime derives output from r0/current price, approves only budget and cle
       assert.equal(runtime.calls.filter(c => c.target.toLowerCase() === d.target).length, 2);
       const quoted = ethers.hexlify(takeProgram(d, actor, q.amountOut).bytes()); run(f, quoted, budget);
       assert.throws(() => run(f, quoted, budget, { debit: 0n }));
+      assert.throws(() => run(f, quoted, budget, { debit: q.spent - 1n }));
+      assert.throws(() => run(f, leg.program, budget, { debit: q.spent - 1n }));
       assert.throws(() => run(f, quoted, budget, { debit: budget + 1n }));
       assert.throws(() => run(f, quoted, budget, { receipt: q.amountOut - 1n }));
       assert.throws(() => run(f, quoted, budget, { returnOut: q.amountOut + 1n }));

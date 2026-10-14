@@ -13,9 +13,10 @@ export function buildRuntimeSettlementRoot(input: {
   build(index: number, request: RuntimeSettlementRequest): RuntimeAmountLeg | null;
 }): ResolvedPlanNode | null {
   const { legs, amount, minimumProfit, executor } = input;
-  if (legs.length < 2 || legs.length > 6 || amount <= 0n || minimumProfit < 1n || legs.some(leg => leg.inputMode !== undefined)) return null;
+  if (legs.length < 2 || legs.length > 6 || amount <= 0n || minimumProfit < 1n || legs.slice(0, -1).some(leg => leg.inputMode !== undefined)) return null;
   const last = legs.at(-1)!;
   const recipient = last.settlement?.deferredInput;
+  if (last.inputMode !== undefined && (last.inputMode !== "maximum" || !recipient || !same(recipient, executor))) return null;
   if (!recipient || !legs.slice(0, -1).every(leg => leg.settlement?.quoteOutput) ||
       !legs.at(-2)!.settlement?.directOutput) return null;
   if (!same(legs[0]!.tokenIn, last.tokenOut) || legs.some((leg, i) =>
@@ -31,7 +32,7 @@ export function buildRuntimeSettlementRoot(input: {
   }
   // Measure each real receipt, including credit at the final debt recipient.
   // This optimization requires an exact positive debit. A tolerated retained
-  // unit or maximum-input operation uses the existing funded runtime fallback;
+  // unit or maximum-input PREFIX uses the existing funded runtime fallback;
   // its 0/1 and refund rules are unchanged. No old inventory may fund a hop.
   const payment = new RuntimeAmountProgram();
   for (let i = 0; i < execution.length; i++) {
@@ -57,6 +58,7 @@ export function buildRuntimeSettlementRoot(input: {
   assets.forEach((asset, i) => {
     p.call(asset, token.encodeFunctionData("balanceOf", [executor]), { static: true }).load(10, 0);
     if (i === 0) p.math("sub", 10, 10, 1).constant(11, minimumProfit).math("sub", 10, 10, 11);
+    else if (last.inputMode === "maximum" && same(asset, last.tokenIn)) p.math("sub", 10, 10, i + 1);
     else p.equal(10, i + 1);
   });
   p.nativeBalance(10).equal(10, 7);

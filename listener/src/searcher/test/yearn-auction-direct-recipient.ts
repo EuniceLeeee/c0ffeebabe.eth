@@ -4,7 +4,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
-import type { RuntimeSettlementRequest } from "../../adapters/runtime-amount-program.js";
+import { RuntimeAmountProgram, type RuntimeSettlementRequest } from "../../adapters/runtime-amount-program.js";
+import { createBlockScanSimAmountSelector } from "../simulator/blockscan-sim-amount-selector.js";
 import { buildRuntimeSettlementRoot } from "../simulator/runtime-settlement.js";
 import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
 import { runStrictFamilyLifecycle } from "../strict-family-lifecycle-runner.js";
@@ -63,7 +64,7 @@ async function prepared(f: Fixture) {
 }
 
 type Fault = "none" | "wrong-recipient" | "old-output-only" | "short-output" | "zero-debit" |
-  "over-budget" | "return-mismatch" | "approval-false" | "insufficient-input" | "native";
+  "under-debit" | "over-budget" | "return-mismatch" | "approval-false" | "insufficient-input" | "native";
 function run(f: Fixture, program: string, budget: bigint, receiver: string, fault: Fault = "none") {
   const key = (token: string, owner: string) => `${token.toLowerCase()}:${owner.toLowerCase()}`;
   const balances = new Map<string, bigint>();
@@ -104,7 +105,7 @@ function run(f: Fixture, program: string, budget: bigint, receiver: string, faul
     // from msg.sender/executor to the independent configured proceeds receiver.
     const receipt = fault === "old-output-only" ? 0n : actual - (fault === "short-output" ? 1n : 0n);
     add(f.sold, f.target, -receipt); add(f.sold, fault === "wrong-recipient" ? f.receiver : receiver, receipt);
-    const debit = fault === "zero-debit" ? 0n : fault === "over-budget" ? budget + 1n : spent;
+    const debit = fault === "zero-debit" ? 0n : fault === "under-debit" ? spent - 1n : fault === "over-budget" ? budget + 1n : spent;
     add(f.want, actor, -debit); add(f.want, f.receiver, debit);
     if (fault === "native") native--;
     return ABI.encodeFunctionResult(parsed.signature, [actual + (fault === "return-mismatch" ? 1n : 0n)]);
@@ -123,7 +124,7 @@ test("Yearn ordinary receiver is issuer-bound, separates proceeds, and keeps max
   for (const f of [fixture(), { ...fixture(), wantDecimals: 6 }, { ...fixture(), soldDecimals: 6, available: 772943155n }]) {
     const h = await prepared(f), request = { kind: "direct-output" as const, recipient: taker };
     const direct = h.build(request); assert(direct);
-    assert.equal(direct.inputMode, "maximum"); assert.deepEqual(direct.settlement, { directOutput: true });
+    assert.equal(direct.inputMode, "maximum"); assert.deepEqual(direct.settlement, { quoteOutput: true, directOutput: true, deferredInput: ethers.getAddress(actor) });
     assert.deepEqual(direct.settlementRequest, request);
     const defaultLeg = h.build(); assert(defaultLeg); assert.equal(defaultLeg.inputMode, "maximum");
     for (const budget of [10n * 10n ** BigInt(f.wantDecimals), contractCost(f, f.available) + 17n]) {
@@ -133,11 +134,11 @@ test("Yearn ordinary receiver is issuer-bound, separates proceeds, and keeps max
     }
     const budget = 10n * 10n ** BigInt(f.wantDecimals);
     for (const fault of ["wrong-recipient", "old-output-only", "short-output", "zero-debit", "over-budget",
-      "return-mismatch", "approval-false", "insufficient-input", "native"] as const) {
+      "under-debit", "return-mismatch", "approval-false", "insufficient-input", "native"] as const) {
       assert.throws(() => run(f, direct.program, budget, taker, fault), /runtime amount mismatch|checked uint256 math/);
     }
-    assert.equal(h.build({ kind: "quote-output" }), null);
-    assert.equal(h.build({ kind: "deferred-input", paymentAmount: budget, paymentProgram: "0x" }), null);
+    assert(h.build({ kind: "quote-output" }));
+    assert.throws(() => h.build({ kind: "deferred-input", paymentAmount: budget, paymentProgram: "0x" }), /subprogram shape/);
     assert.throws(() => h.build(request, taker), /caller mismatch/);
     for (const recipient of [ethers.ZeroAddress, f.target, f.implementation, f.want, f.sold]) {
       assert.throws(() => h.build({ kind: "direct-output", recipient }), /invalid executor/);
@@ -153,4 +154,61 @@ test("Yearn maximum-input policy prevents automatic deferred settlement even wit
     { ...leg, tokenIn: f.sold, tokenOut: f.want, settlement: { deferredInput: taker } },
   ], build() { builds++; throw new Error("maximum input cannot enter settlement construction"); } });
   assert.equal(root, null); assert.equal(builds, 0); assert.equal(leg.inputMode, "maximum");
+});
+
+// This must fail on the pre-adaptation issuer: the four-argument path was absent.
+test("Yearn issuer exposes quote and output-first callback settlement", async () => {
+  const f = fixture(), h = await prepared(f), leg = h.build(); assert(leg);
+  assert.equal(leg.settlement?.quoteOutput, true);
+  assert.equal(leg.settlement?.deferredInput?.toLowerCase(), actor.toLowerCase());
+  assert(h.build({ kind: "quote-output" }));
+  const payment = "0x010001" + "00".repeat(32);
+  assert(h.build({ kind: "deferred-input", paymentAmount: 1n, paymentProgram: payment }));
+});
+
+test("Yearn runtime quote caps capacity and matches full-price payable quantity without funded input", async () => {
+  for (const soldDecimals of [0, 6, 18]) for (const wantDecimals of [0, 6, 18]) {
+    const f = { ...fixture(), soldDecimals, wantDecimals, available: 700n * 10n ** BigInt(soldDecimals) };
+    const h = await prepared(f);
+    for (const recipient of [undefined, actor, taker]) {
+      const leg = h.build({ kind: "quote-output", ...(recipient ? { recipient } : {}) }); assert(leg);
+      const quote = (amount: bigint, state = f) => inspectRuntime(leg.program, amount, { call(c) {
+        assert(c.static); assert.equal(c.value, 0n);
+        const result = reads(state, [{ id: "quote", kind: "eth-call", to: c.target, data: c.data, completion: "return-data" }])[0];
+        assert(result.ok); return result.data;
+      } }, { output: true, readOnly: true }).registers[0];
+      for (const budget of [1n, 17n, 10n * 10n ** BigInt(wantDecimals), contractCost(f, f.available) + 17n]) {
+        let low = 0n, high = f.available;
+        while (low < high) { const mid = (low + high + 1n) / 2n; if (contractCost(f, mid) <= budget) low = mid; else high = mid - 1n; }
+        if (low === 0n || contractCost(f, low) === 0n) assert.throws(() => quote(budget));
+        else assert.equal(quote(budget), low);
+      }
+      for (const state of [{ ...f, receiver: actor }, { ...f, available: 0n }, { ...f, rawPrice: 0n }]) assert.throws(() => quote(100n, state));
+      assert.throws(() => quote(0n)); assert.throws(() => quote(ethers.MaxUint256));
+    }
+  }
+});
+
+test("production selector builds final maximum callback through the real issuer with Exact and quoted disabled", async () => {
+  const f = fixture(), h = await prepared(f), yearn = h.build(); assert(yearn);
+  const prefix = { actionAdapterId: "fixture-exact-prefix", program: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()),
+    settlement: { quoteOutput: true as const, directOutput: true as const } };
+  const edges = [{ adapterId: prefix.actionAdapterId, target: addr(89), tokenIn: f.sold, tokenOut: f.want },
+    { adapterId: yearn.actionAdapterId, target: f.target, tokenIn: f.want, tokenOut: f.sold }];
+  let exact = 0, quoted = 0, rpc = 0, simulated = 0, funded = 0;
+  const session: any = { source, blocksPrefixInversion: () => false, fundingActionIds: () => ["fixture-funding"],
+    buildRuntimeAmountLeg({ edge, settlement }: any) {
+      return edge === edges[1] ? h.build(settlement) : { ...prefix, ...(settlement ? { settlementRequest: settlement } : {}) };
+    }, issueExact() { exact++; throw Error("forbidden Exact"); }, buildExecution() { quoted++; throw Error("forbidden quoted"); },
+    buildFundingRoot() { funded++; throw Error("unexpected funded fallback"); } };
+  const selector = createBlockScanSimAmountSelector({ source, executor: actor, async simulate(plan) {
+    simulated++; assert.equal(typeof plan.root.params.settlementProgram, "string");
+    assert.equal(plan.root.amount, plan.flashAmount); assert.equal(plan.root.params.minimumReturn, plan.flashAmount + 1n);
+    return { success: true, netProfit: 1n, grossProfit: 1n, gasUsed: 1n, profitToken: f.sold, calldata: "0x" }; } });
+  await selector.solve({ opportunity: { kind: "block-scan-arb", searchSeed: { searchCenter: 100n },
+    flashToken: f.sold, profitToken: f.sold, targetNetProfit: 1n }, tokenPath: { edges }, maxFlashAmount: 10000n,
+    templateName: "yearn-callback-contract" } as any,
+    { call() { rpc++; throw Error("forbidden RPC"); } } as any, { executor: actor } as any,
+    { strictSession: session, deferPhase2Sim: true, gssMaxTries: 0, deadlineAtMs: Date.now() + 10000 });
+  assert(simulated > 0); assert.equal(exact, 0); assert.equal(quoted, 0); assert.equal(rpc, 0); assert.equal(funded, 0);
 });

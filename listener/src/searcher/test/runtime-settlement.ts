@@ -121,7 +121,7 @@ test("settlement opening floor blocks old inventory before prefix work and still
   assert.throws(() => scenario({ changeNative: 1n }).run());
 });
 
-test("settlement declines maximum-input and malformed/unsupported compositions before execution", () => {
+test("settlement declines maximum prefix, external maximum debt account and malformed compositions before execution", () => {
   const build = () => { throw Error("must not build a maximum-input settlement"); };
   for (const index of [0, 1]) {
     const list = legs(); list[index] = { ...list[index]!, inputMode: "maximum" };

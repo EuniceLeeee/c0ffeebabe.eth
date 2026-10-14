@@ -148,6 +148,7 @@
     "searcher:few-wrapped-historical-ready": "node --import tsx src/searcher/venues/protocols/few-wrapped-family/test/historical-ready.ts",
     "searcher:few-wrapped-historical-dual": "node --import tsx src/searcher/venues/protocols/few-wrapped-family/test/historical-dual.ts",
     "searcher:family-dual-execution": "node --import tsx src/searcher/test/family-dual-execution.ts",
+    "searcher:yearn-auction-family-callback-evm": "node --import tsx src/searcher/venues/protocols/yearn-auction-family/test/runtime-settlement-evm.ts",
     "searcher:yearn-auction-family": "node --import tsx --test src/searcher/venues/protocols/yearn-auction-family/test/contract.ts",
     "searcher:curve-lp-family": "node --import tsx --test src/searcher/venues/protocols/curve-lp-family/test/contract.ts",
     "searcher:curve-lp-production-exact": "SEARCHER_FAMILY_CURVE_LP_ENABLED=1 node --import tsx --test src/searcher/venues/protocols/curve-lp-family/test/production-exact.ts",

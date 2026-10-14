@@ -198,7 +198,25 @@ contract BotVMRuntimeAmountTest is Test {
         p = abi.encodePacked(hex"010001", type(uint256).max, hex"0207010101",
             hex"0002", uint256(1), hex"030102");
         bot.execute(script(p, 100));
-        vm.expectRevert("runtime math opcode"); bot.execute(script(hex"010208010000", 100));
+        vm.expectRevert("runtime math opcode"); bot.execute(script(hex"010209010000", 100));
+    }
+    function testUnsignedMinimumFullRange() public {
+        uint256[6] memory left = [uint256(0), type(uint256).max, 0, type(uint256).max, 17, 23];
+        uint256[6] memory right = [uint256(0), type(uint256).max, type(uint256).max, 0, 23, 17];
+        for (uint256 i; i < left.length; ++i) {
+            bytes memory p = abi.encodePacked(hex"010001", left[i], hex"0002", right[i],
+                hex"0208030102", hex"0004", uint256(left[i] < right[i] ? left[i] : right[i]), hex"030304");
+            bot.execute(script(p, 100));
+        }
+    }
+    function testUnsignedMinimumAliasesAndReadonlyNesting() public {
+        bytes memory child = abi.encodePacked(hex"010001", type(uint256).max, hex"0208000001");
+        bytes memory p = abi.encodePacked(hex"0108000301", uint24(child.length), child,
+            hex"0004", uint256(100), hex"030304");
+        bot.execute(script(p, 100));
+        p = abi.encodePacked(hex"010001", type(uint256).max, hex"0208010101",
+            hex"0002", type(uint256).max, hex"030102");
+        bot.execute(script(p, 100));
     }
     function callbackProgram(RuntimeTestCallback cb, bytes memory inner) internal pure returns(bytes memory) {
         return abi.encodePacked(uint8(1), callOp(address(cb), abi.encodeCall(RuntimeTestCallback.run, (inner)), "", 68, 68));
