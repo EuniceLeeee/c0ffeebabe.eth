@@ -1,0 +1,626 @@
+{
+  "schema": "fluid-settlement-design-independent-review-v1",
+  "createdAt": "2026-10-14T14:46:47.627135+00:00",
+  "reviewer": "/root/interface_protocols_b",
+  "reviewRound": "本批设计只读审查；父任务管理最多三轮审查总额。",
+  "nonAuthor": true,
+  "stage": "design-only",
+  "sourceHead": "ae68664f83099c9abff4165809bc6ef90b260c78",
+  "sourceRoot": "/opt/mev-cloud/family-runtime-20261007",
+  "actions": {
+    "rpc": false,
+    "build": false,
+    "tests": false,
+    "productionEdits": false,
+    "candidateCodeEdits": false,
+    "implEdits": false,
+    "catalogGeneration": false,
+    "localReportOnly": true
+  },
+  "verdict": {
+    "direction": "design-contract-acceptable-for-implementation; execution-unverified",
+    "implemented": false,
+    "accepted": false,
+    "settlementGate": "unverified",
+    "principalConclusion": "预期回滚 CALL 可以作为通用 EVM 能力，供已验证 Family 解码声明 revert 报价；将原生输出先收至 executor、按实际净 ETH 包装并转 WETH 给请求收款方也是可行的通用资产边界。父任务最终设计回复已明确主要安全契约。以下条件保留为实现与验收必须证明的约束，不再把已明确的选择写成仍需用户决策。",
+    "blockingFindingsAfterDesignClarification": [],
+    "implementationApproval": false,
+    "noClaimOfExistingRuntimePass": true,
+    "frameworkClassification": "framework / shared capability change；不可用 Fluid 单族结果标记 family_local 或 adapter_merge_ready。",
+    "scope": "Fluid DEX swapIn 的 ERC20/ERC20、native input、native output quote/direct 设计；不扩 Fluid Credit、真实债务、swapInWithCallback 或 deferred-input。"
+  },
+  "verifiedCurrentFacts": [
+    {
+      "fact": "RuntimeAmountVM 现有 call mode 仅0/1；readonly 子程序只允许 mode1 staticcall；任何 !ok 都进入 runtimeHopFailure，无法把 revert payload 留给后续 load。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/src/RuntimeAmountVM.sol",
+          "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf",
+          "lines": [
+            159,
+            160,
+            229,
+            244,
+            257
+          ]
+        }
+      ]
+    },
+    {
+      "fact": "当前 native runtime issuer 对任意 settlement request 返回null，并剥除 native leg 的 settlement metadata。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/adapter-family-runtime.ts",
+          "sha256": "70f8d6c64580f1814cedcbeca6d1fc8f7db2cb256f65f5064491f9ac0d66f845",
+          "lines": [
+            2763,
+            2792,
+            2801,
+            2813,
+            2814,
+            2815,
+            2816
+          ]
+        }
+      ]
+    },
+    {
+      "fact": "当前 common envelope 总会执行 raw self-call；native input先unwrap，之后wrap净ETH、恢复executor native并检查graph资产。它不是只读quote envelope，不能原样用于quote-output。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/execution-asset-boundary.ts",
+          "sha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e",
+          "lines": [
+            79,
+            86,
+            93,
+            95,
+            101,
+            102,
+            122,
+            126
+          ]
+        }
+      ]
+    },
+    {
+      "fact": "Fluid现有default raw swapIn固定to=executor，ERC20输入采用临时approve(0),approve(amount),swap,approve(0)，native输入value=完整runtime amount。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/raw-execution.ts",
+          "sha256": "e7ebb8509033c3f2975470f076826397b3e50b42439373faaf9dbf6a367536cb",
+          "lines": [
+            15,
+            21,
+            22,
+            24,
+            25
+          ]
+        }
+      ]
+    },
+    {
+      "fact": "Fluid Exact只接受36字节 FluidDexSwapResult(uint256) revert且输出>0；正常返回、FluidDexError、其他selector和错长度都不是报价。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/exact.ts",
+          "sha256": "93a37fa013f0d2a41c78894136f4e2b82387945e0bad83a7f44798d972c7dac6",
+          "lines": [
+            34,
+            40,
+            47,
+            60
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/codec.ts",
+          "sha256": "845f8cf2d738fa32b189b771f561611df058f0b105af2a85c408eb4fb277870c",
+          "lines": [
+            115,
+            119,
+            122,
+            123,
+            127,
+            135
+          ]
+        }
+      ]
+    },
+    {
+      "fact": "实际已保存 FluidDexT1 实现先计算 amountOut，再在to=dead分支revert；该分支在Liquidity付款/输出以及后置hook/utilization校验之前。msg.value检查仅在value>0时发生，因此同实现的native报价可以zero-value调用。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0x3c0441b42195f4ad6aa9a0978e06096ea616cda7/main.sol",
+          "sha256": "18d1931d62e5a80262e5c13ea2884fb632d3071c89d9ce33157fed92e6e3c6fe",
+          "lines": [
+            49,
+            57,
+            59,
+            81,
+            82,
+            83,
+            331,
+            339,
+            341,
+            345,
+            347,
+            350
+          ]
+        }
+      ]
+    },
+    {
+      "fact": "实际swapIn使用isCallback=false；Liquidity先完成输入operate与pool.liquidityCallback transferFrom，再输出operate。swapInWithCallback才回调原caller，但仍先付款，无output-first债务。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0x3c0441b42195f4ad6aa9a0978e06096ea616cda7/main.sol",
+          "sha256": "18d1931d62e5a80262e5c13ea2884fb632d3071c89d9ce33157fed92e6e3c6fe",
+          "lines": [
+            337,
+            339,
+            341,
+            371,
+            386,
+            575,
+            585,
+            587
+          ]
+        }
+      ]
+    },
+    {
+      "fact": "现有 nativeBalance opcode只能读取address(this).balance，不能读取任意external recipient的native余额。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/src/RuntimeAmountVM.sol",
+          "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf",
+          "lines": [
+            196,
+            197,
+            198
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/adapters/runtime-amount-program.ts",
+          "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d",
+          "lines": [
+            25,
+            26,
+            27
+          ]
+        }
+      ]
+    },
+    {
+      "fact": "runtime settlement root在资金到达前按quoteOutput依次求金额；付款路径要求每腿正且精确的graph input debit。任何inputMode（包括maximum）都不进入该优化。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/simulator/runtime-settlement.ts",
+          "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5",
+          "lines": [
+            16,
+            19,
+            27,
+            37,
+            43,
+            45,
+            48,
+            52,
+            58,
+            59
+          ]
+        }
+      ]
+    }
+  ],
+  "blockingDesignConditions": [
+    {
+      "id": "FLUID-DESIGN-01",
+      "severity": "high",
+      "status": "must-be-explicit-before-implementation",
+      "title": "native quote 必须使用单独的只读路径",
+      "problem": "若仅解除issuer blanket拒绝，然后仍调用当前applyRuntimeAssetBoundary/envelope，quote-output会进入self CALL与wrap；native input还会先unwrap，破坏资金到达前的只读准备并被readonly VM拒绝。当前代码没有可直接复用的quote转换分支。",
+      "requiredContract": "quote-output不unwrap、不wrap、不transfer、不approve、不执行正常raw swap，不要求executor已有输入。允许Family quote程序以zero-value expected-revert CALL计算native或ERC20 raw amount，返回对应graph资产单位；quote输入/输出单位须由既有executionAssets的1:1 native/WETH边界保证。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/execution-asset-boundary.ts",
+          "sha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e",
+          "lines": [
+            86,
+            93,
+            95,
+            101,
+            122
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/simulator/runtime-settlement.ts",
+          "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5",
+          "lines": [
+            58,
+            59
+          ]
+        }
+      ]
+    },
+    {
+      "id": "FLUID-DESIGN-02",
+      "severity": "high",
+      "status": "request-binding-contract-required",
+      "title": "内部receiver映射不能覆盖原始请求的确认",
+      "problem": "当前issuer要求leg.settlementRequest与原始input.settlement完全相等。native output内部将recipient改成executor后，直接比较原始请求会拒绝正确程序；若取消该检查或在不验证的情况下重新盖回原请求，则可能接受忽略receiver/能力的Family。",
+      "requiredContract": "先验证并冻结original request；按executionAssets生成内部raw request（native output direct或带recipient的quote映射到executor，native input保留外部ERC20 receiver）；检查Family确实回显精确raw request、能力与action ownership。随后只有实际common转换/付款envelope可以重新发布original request。未支持/忽略raw request/错kind/错recipient必须null或throw，不能由中央补出能力。",
+      "recipientBoundary": "通用层校验generic地址/资产别名。Fluid的dead quote sentinel和协议池/资产禁用条件留在Family；如需要对原始graph recipient应用Family限制，必须保留可验证的原始请求信息，不能在映射时丢失。核心不加入Fluid dead或selector。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/adapter-family-runtime.ts",
+          "sha256": "70f8d6c64580f1814cedcbeca6d1fc8f7db2cb256f65f5064491f9ac0d66f845",
+          "lines": [
+            2792,
+            2801,
+            2809,
+            2810,
+            2814,
+            2815,
+            2816
+          ]
+        }
+      ]
+    },
+    {
+      "id": "FLUID-DESIGN-03",
+      "severity": "high",
+      "status": "exact-refund-policy-required",
+      "title": "非零native退款与exact-input成功不能同时承诺",
+      "problem": "unwrap A，raw操作退回R并重包后，payer的WETH净扣款为A−R。当前settlement root要求实际扣款==A。保留unwrap/refund机制不等于新direct模式可以把R>0记为exact成功。",
+      "requiredContract": "新quote/direct结算路径以graph净扣款为准，成功必须A>0且R=0（或等价净扣款A）；R=1、R>1、整额退款都应拒绝该精确路径。原default/quoted的既有退款与0/1容差按原规则保留。不能把max/partial输入偷放进exact settlement；如需成功支持部分输入，应另开通用契约而非本最小改动。",
+      "fallbackBoundary": "只有现有选择器实际存在并被验证的funded fallback才能声明可回退；不能把一次最终模拟revert自动描述为已执行fallback。",
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/execution-asset-boundary.ts",
+          "sha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e",
+          "lines": [
+            98,
+            101,
+            104,
+            109,
+            110,
+            111,
+            114
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/simulator/runtime-settlement.ts",
+          "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5",
+          "lines": [
+            16,
+            34,
+            37,
+            43,
+            45
+          ]
+        }
+      ]
+    },
+    {
+      "id": "FLUID-DESIGN-04",
+      "severity": "high",
+      "status": "invariant-scope-must-be-resolved",
+      "title": "任意receiver native保护不能由现有opcode宣称完成",
+      "problem": "当前nativeBalance只读executor。若提案中的“actor/receiver旧库存和native恢复”包含external receiver native前后相等，则用现有opcode无法实施。WETH到账不能证明receiver native未变化。",
+      "minimalChoices": [
+        "最小范围：明确链内承诺为executor native恢复，以及actor/receiver graph ERC20库存保护；external receiver native只作独立历史观测，不声称链内guard。",
+        "若必须链内保护external receiver native：另增加通用BALANCE(account)能力并独立做alias/callback/readonly契约测试，增加的核心范围必须显式登记。"
+      ],
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/src/RuntimeAmountVM.sol",
+          "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf",
+          "lines": [
+            196,
+            198
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/adapters/runtime-amount-program.ts",
+          "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d",
+          "lines": [
+            25,
+            27
+          ]
+        }
+      ]
+    }
+  ],
+  "expectedRevertPrimitiveContract": {
+    "result": "design-feasible-subject-to-contract-and-tests",
+    "meaning": "状态只读＝只有整个目标CALL失败回滚后才消费其payload，故该CALL及其全部子调用的持久状态、transient写入、token/native转移与logs均不提交。它不是EVM STATICCALL；子调用可能尝试SSTORE和外部调用，消耗gas并改变transaction warmness，不得声称副作用完全未尝试。",
+    "mode": "新增显式且旧VM必然拒绝的mode/核心capability。mode0/1与旧字节编码保持原义；未知mode拒绝。",
+    "configuration": [
+      "zero value应以valueReg=255等不可变配置强制，不能仅依赖某个寄存器这次恰好为0。",
+      "不能配置BotVM callback。incoming必须0；若复用旧outgoing字段保存expectedRevertLength，mode2独立解释该字段且绝不进入旧callback slice/hash逻辑；若另加length字段，则旧callback offsets均0。",
+      "expected length必须是可编码的有界安全整数，未知/负/NaN/溢出拒绝。该通用原语无需认识36或Fluid selector；Family固定36并解码。",
+      "static选项与expected-revert mode不能混淆；零value CALL和STATICCALL的选择显式。readonly父/子传播时只允许static或此特定预期回滚模式，不能放开mode0、allowance或普通selfcall。"
+    ],
+    "acceptance": "仅 !success && returndata.length===declaredLength 成功；success=true（包括空返回、32字节返回或伪36字节Fluid payload）一律使父执行回滚。失败错长度/空数据/OOG/未知错误也必须fail closed，Family进一步拒绝错误selector与非正金额。",
+    "callbackIsolation": [
+      "调用前保存old CALLBACK_TARGET、CALLBACK_HASH、VM_STATE，安装禁止runtime callback的sentinel；不能把readonly quote变成接受任意callback的入口。",
+      "接受预期revert后必须走完整恢复路径，再把returndata交给后续load；不能提前return导致外层callback被吞、错误hash残留或VM_STATE泄漏。",
+      "在外层已建立callback scope时调用quote、在callback内调用quote、quote目标尝试直接/经relay回调及捕获失败后伪造payload，都要证明无法执行/消费外层payment脚本，且合法外层scope仍按原规则使用一次。",
+      "目标子调用里发生的改动即使被它捕获/嵌套也只有最终整条CALL revert才可接受；若最终正常返回，父VM必须回滚。单次子层revert不能替代目标调用本身的!success。"
+    ],
+    "decoding": "Family用现有load(offset=0)+shr224比较selector，load(offset=4)读取uint256，再验证>0；完整输入必须patch进swapIn amountIn offset36。只检查36字节不足：FluidDexError(uint256)与Panic(uint256)也可能是36字节。",
+    "quotePermissionLimit": "真实Fluid dead分支在转账、后置hook/utilization之前退出。报价不证明这些执行条件会通过；actual swap与最终模拟保持拒绝能力。",
+    "interpreter": "runtime-program-testkit 当前call handler只返回string，没有success/revert区分；必须加入明确的成功/失败结果契约或专门expected-revert结果，不能把普通返回伪装成revert。合成解释器通过不替代BotVM真实EVM回滚测试。",
+    "resourceNote": "预期长度应有界，优先先检查returndatasize再复制所需数据以免无界returndata分配；至少保留现有程序大小、指令数、depth和调用gas失败的fail-closed行为。这里不作性能通过结论。"
+  },
+  "nativeBoundaryContract": {
+    "authority": "根据executionAssets判定native，不能按Family名字、native sentinel字面量或token==WETH猜测。native deferred仍拒绝；WETH作为普通ERC20时不做转换。",
+    "quote": "只返回准备金额；无资金也可运行。原始ETH/wrapped单位1:1，不在中央重写Fluid公式、舍入或selector。",
+    "nativeOutput": [
+      "raw协议recipient固定executor；external graph recipient只能在共同边界的WETH转账中使用。",
+      "以调用前executor native N0为基线，raw返回后独立测得D=N1−N0，必须D>0；不能用swap返回值、quote或总native余额作为wrap金额。",
+      "只deposit D；验证executor WETH本次增量==D，native最终恢复N0。raw调用前已有的WETH必须保留，不能把旧WETH补齐短收或短mint。",
+      "external receiver：transfer仅D，并独立验证receiver WETH新到账==D、executor WETH回到旧库存、receiver输入token旧库存不变。",
+      "self receiver：不要求不可能的executor输出不变，不做无意义自转账；要求executor WETH增加D，同时输入净扣款精确A。",
+      "错误raw receiver、未收ETH、短wrap、短transfer、假true返回、旧WETH补贴、raw额外修改图资产都须回滚。"
+    ],
+    "nativeInput": [
+      "以WETH输入余额和native基线为边界；unwrap完整A，最好立即确认ETH增加A，防止旧ETH暂时补贴短unwrap。",
+      "raw value发送完整A，外部ERC20收款地址保持original request；quote路径value始终0。",
+      "只把raw操作留下的本次净ETH/refund重新包装；native恢复原基线。默认路径保留原退款政策。",
+      "新direct精确路径要求最终WETH净扣款A且A>0；因此任何净退款R>0不能成功进入该结算优化。",
+      "独立量receiver输出ERC20新到账；external时executor旧输出与receiver旧输入WETH必须保留；self时按alias正确净差额处理。"
+    ],
+    "escrowAndRegisters": "各层保存baseline/原始A的寄存器必须在invocation-local程序隔离内；子quote、raw子程序或嵌套callback不能覆盖父baseline。保持amountPatch与输入寄存器绑定，不能让quote返回的r0误替代真实swap输入。",
+    "receiptRelation": "common边界证明真实到账与实际转换/转账量相等；Family证明其报价语义。现有settlement root再校验最终payment实收与已准备债务一致。若单腿报告宣称quote==actual receipt，应单独观察并比较，不从transfer返回值推出。",
+    "approvals": "Fluid ERC20输入保留原临时approval策略，native输入无ERC20 approval；成功验证最终allowance=0，失败独立验证旧allowance恢复。不得照搬Mooniswap的MAX standing policy。"
+  },
+  "capabilityDeclaration": {
+    "retainOnlyIssued": "只有Family原始builder返回的quoteOutput/directOutput可以在native边界转换后向上保留；中央不得凭executionAssets凭空增加能力。",
+    "defaultMetadata": "默认leg新增quote/direct元数据仅让选择器尝试新构造，不是执行验收。默认program bytes与default/quoted行为必须回归相等。",
+    "exactEcho": "ERC20维持现有original request exact echo；native映射必须采用受控raw echo + common envelope original echo两段检查。未知/缺失请求回显不可过门。",
+    "deferred": "Fluid普通swapIn以及swapInWithCallback均不声明deferred-input；input-first/internal liquidity callback不得填output-first能力。",
+    "alias": "self/external、WETH普通ERC20、native token0/token1以及原生方向都要分开验证，不能仅按Family ID登记一个乐观总pass。",
+    "profileEvidence": "实际3c0441...源可用于接口设计；旧报告descriptor provenance/codeHash遗漏与synthetic fixture限制仍保留。新模式需要真实部署、同源Ready/issuer、价格和执行器绑定后才可记verified。"
+  },
+  "requiredTestMatrix": [
+    {
+      "id": "VM-ENCODING",
+      "kind": "generic contract",
+      "cases": [
+        "旧mode0/1 golden bytes与行为不变",
+        "新mode normal return必须拒绝，即使length/selector看起来正确",
+        "expected revert正确长度被保留供load，错长/截断/extra bytes/空/unknown mode拒绝",
+        "非法valueReg/callback/static组合/length溢出/patch边界拒绝",
+        "readonly嵌套中expected revert可用但普通call/approve仍禁"
+      ],
+      "positiveEvidence": "真实BotVM执行，不只TS解释器"
+    },
+    {
+      "id": "VM-ROLLBACK",
+      "kind": "actual EVM synthetic fault fixture",
+      "cases": [
+        "目标写storage/transient、改allowance/token/native、发log后按预期revert：量回滚且amount可解码",
+        "相同目标正常返回：父调用失败且所有改动回滚",
+        "外层callback pending、callback内部quote、两层nested quote",
+        "错误sender/relay/重复/缺失callback，目标捕获callback失败后返回expected payload",
+        "quote后合法outer callback仍按原scope一次执行，旧hash/state恢复"
+      ],
+      "positiveEvidence": "独立前后余额/授权/协议状态对比；禁用测试成功后置断言制造负例"
+    },
+    {
+      "id": "FAMILY-QUOTE",
+      "kind": "Fluid encoding and readonly behavior",
+      "cases": [
+        "ERC20/ERC20双向",
+        "native token0的native-in/native-out",
+        "native token1的native-in/native-out",
+        "普通WETH/ERC20双向不得误unwrap",
+        "无输入余额/无allowance仍能quote",
+        "完整输入多量级、零输入/零输出拒绝",
+        "36-byte FluidDexError/Panic/未知selector拒绝",
+        "to=dead,value0,offset36；不调用swapInWithCallback"
+      ],
+      "positiveEvidence": "先ABI/VM契约，再真实同source已准入实例的链内quote与生产Exact比较"
+    },
+    {
+      "id": "NATIVE-OUTPUT",
+      "kind": "generic boundary",
+      "cases": [
+        "self与external，旧ETH/WETH/输入库存均非零",
+        "raw to确为executor、仅本次ETH D被包装",
+        "WETH mint/recipient到账精确D",
+        "executor旧输出、receiver旧输入保留",
+        "0/短ETH、short mint、false/no-transfer/short transfer、过量或旧库存补贴拒绝",
+        "原生输出绕过executor直接给receiver须拒绝",
+        "receiver=executor别名、invalid recipient、token地址与池地址冲突"
+      ],
+      "positiveEvidence": "真实BotVM synthetic WETH/protocol fault测试＋实际历史native-output到账"
+    },
+    {
+      "id": "NATIVE-INPUT",
+      "kind": "generic boundary",
+      "cases": [
+        "self与external，payer旧WETH/ETH和receiver旧输入/输出非零",
+        "完整unwrap、raw msg.value=A、外部ERC20实收",
+        "零扣款、少扣款、多扣款、短unwrap、消耗旧ETH拒绝",
+        "退款0在direct成功；退款1/大额/全退在direct精确路径拒绝",
+        "原default/quoted退款及0/1容差按旧政策保持",
+        "成功后native归基线，失败后token/allowance/native全部恢复"
+      ],
+      "positiveEvidence": "独立真实余额，不能仅检查unwrap/transfer返回值"
+    },
+    {
+      "id": "ISSUER-CAPABILITY",
+      "kind": "production contract",
+      "cases": [
+        "current issued route/source/caller/ownership完整绑定",
+        "raw mapped recipient与original recipient分层echo校验",
+        "Family忽略请求、错kind/错recipient/无能力均拒绝",
+        "native deferred仍null",
+        "constructor Exact/quoted/RPC计数0",
+        "default元数据变化不算新模式成功"
+      ],
+      "positiveEvidence": "生产buildFamilyRuntimeAmountLeg，而非直接调用私有builder代替"
+    },
+    {
+      "id": "SETTLEMENT-ROOT",
+      "kind": "cross-family core behavior",
+      "cases": [
+        "Fluid作前缀quote和倒数direct，后腿deferred仍由其Family提供",
+        "native出WETH可作为实际收款债务资产",
+        "nested callback中quote不能消费外层callback或覆盖baseline",
+        "inputMode maximum/retained input不可偷入exact root",
+        "真实actual payment量与prepared debt mismatch拒绝"
+      ],
+      "positiveEvidence": "通用真实EVM合成组合证明安全；不得把合成组合称实际套利复现"
+    },
+    {
+      "id": "HISTORICAL",
+      "kind": "new-mode historical acceptance, not run",
+      "cases": [
+        "复用现有自然Ready/原始TX来源及已通过默认成果",
+        "同N/hash current issuer构造quote/direct，self+external，双方方向多输入",
+        "实际payer扣款、receiver到账、旧库存、native/WETH转换、成功allowance",
+        "同calldata无输入、后置故障回滚，保存真实revert和独立状态差分的不同证据边界",
+        "source/commonSource/executor artifact/runtime hash与actual部署/代理实现绑定"
+      ],
+      "positiveEvidence": "新模式实据；default、fixture、ABI存在均不能移作通过"
+    }
+  ],
+  "scopeAndWorkflow": {
+    "noNewExecutionAuthorizedByThisReport": true,
+    "frameworkGate": "source/docs/research/gates.md:302–319 明确新中央能力属于framework；本报告不给family_local/merge/live授权。应按现行框架影响边界与跨族core cohort补独立证据，不从Fluid单族正例推出全系统通过。",
+    "sourcePinImpact": "RuntimeAmountVM、runtime-amount-program、issuer、native boundary均是共享安全闭包。原typed behavior的旧commonSource pins不能静默继续代表新VM；当前artifact及依赖闭包须重绑，未受影响Family接口事实可以保留。",
+    "requiredVersioning": "新模式的可理解性必须由新core capability/已绑定executor源码与artifact证明；旧VM对mode2 fail closed即可保持旧字节兼容，不得仅改TypeScript让旧artifact假装支持。",
+    "threePassCap": "当前只做一次设计评审；代码/证据后续审查由父任务在最多3轮限制内安排。",
+    "unchangedClaims": "不改默认/quoted语义、不新增信用策略或真实债务、不做机会复现/性能结论；此为待实现设计与待测矩阵。"
+  },
+  "designClarificationAddendum": {
+    "source": "父任务在本次设计评审结束前的明确回复；未读取候选实现作代码通过结论。",
+    "clarifiedContracts": [
+      "独立expected-revert长度字段；mode2强制valueReg=255、incoming/outgoing=0，保持旧尾部callback target/hash/VM_STATE完整恢复。",
+      "native direct要求净graph input扣款==A且A>0；非零退款成功只保留在原default/quoted规则内。",
+      "native output raw recipient映射executor；中央只转出本次实际包装量并测量receiver WETH新到账。",
+      "程序内只承诺actor native恢复；外部receiver native另作历史观测，不添加或宣称不存在的BALANCE(account)能力。",
+      "issuer对original/mapped request实行两段校验。",
+      "按framework变更验收，不签family_local。"
+    ],
+    "remainingImplementationObligation": "native quote必须绕过原unwrap/self-call/wrap envelope、保持资金到达前只读；全部模式/回调/库存/alias约束及上列测试矩阵仍待候选代码和实际证据证明。",
+    "candidateStateReportedByParent": "候选四文件只在本地candidate，尚未上云或运行；本报告未审查这些候选文件。",
+    "status": "设计级具体歧义已澄清；无新增设计阻断。不是implemented、execution pass或settlement gate pass。"
+  },
+  "artifactPins": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/AGENTS.md",
+      "sha256": "4ab1f6aaed59f8aa31837542a55b5d1c452896e89b568918e0923bd0e420244d",
+      "bytes": 8920
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/docs/research/gates.md",
+      "sha256": "966c92259b85a645d2810cf6fcd3253ca6162062721882c17f55861a67db897e",
+      "bytes": 66541
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/docs/research/design/s1-unified-adapter-family-plugin-architecture.md",
+      "sha256": "b8bcee3b7a3dff124286c8830f34c18e2f7c64e3d417f438849cb8475be7246d",
+      "bytes": 204899
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/src/RuntimeAmountVM.sol",
+      "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf",
+      "bytes": 16878
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "bytes": 22021
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d",
+      "bytes": 12298
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/execution-asset-boundary.ts",
+      "sha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e",
+      "bytes": 9307
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "70f8d6c64580f1814cedcbeca6d1fc8f7db2cb256f65f5064491f9ac0d66f845",
+      "bytes": 224657
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/simulator/runtime-settlement.ts",
+      "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5",
+      "bytes": 4346
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+      "bytes": 3636
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/exact.ts",
+      "sha256": "93a37fa013f0d2a41c78894136f4e2b82387945e0bad83a7f44798d972c7dac6",
+      "bytes": 4819
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/execution.ts",
+      "sha256": "f135ddb15397771160a90785c136a8186a811d4a5be87a354bcb8f11e797978e",
+      "bytes": 3891
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/raw-execution.ts",
+      "sha256": "e7ebb8509033c3f2975470f076826397b3e50b42439373faaf9dbf6a367536cb",
+      "bytes": 1715
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/codec.ts",
+      "sha256": "845f8cf2d738fa32b189b771f561611df058f0b105af2a85c408eb4fb277870c",
+      "bytes": 7248
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/identity.ts",
+      "sha256": "0e4a4a46b7cb99b4d956cd803befaa241bb0590118942cb905d35f05295f3c1c",
+      "bytes": 12033
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/routes.ts",
+      "sha256": "e89482a50460dcff82b63abfc5233425814354f85ff4de836bfd4b1957cc46b0",
+      "bytes": 2775
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/test/runtime-program-testkit.ts",
+      "sha256": "30c90ff597cdf9f4f8191a079361d3e004107f583880baf4a84fea20eb1ac714",
+      "bytes": 4925
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/test/BotVMRuntimeAmount.t.sol",
+      "sha256": "88384d02c862061eef9a88a4cd995fb5517d58d2407733ffe5f334236f06b691",
+      "bytes": 31630
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/test/execution-asset-boundary.ts",
+      "sha256": "4476788648c85fce15625ecfbcf37ef4c223db9e5ec5960f7b0c1c5051dea6d9",
+      "bytes": 10130
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/test/native-execution.ts",
+      "sha256": "1d4bbd0d79fc2662d2c3d0e50458316b2f2709d9e6e7ea58c63fb3029a48c0cf",
+      "bytes": 12370
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
+      "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73",
+      "bytes": 81693
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0x3c0441b42195f4ad6aa9a0978e06096ea616cda7/main.sol",
+      "sha256": "18d1931d62e5a80262e5c13ea2884fb632d3071c89d9ce33157fed92e6e3c6fe",
+      "bytes": 43551
+    }
+  ]
+}

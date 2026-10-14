@@ -1,0 +1,946 @@
+{
+  "actual": [
+    {
+      "name": "build-live",
+      "exitCode": 0,
+      "elapsed": 8.014071226119995,
+      "argv": [
+        "npm",
+        "run",
+        "build:live"
+      ]
+    },
+    {
+      "name": "issuer",
+      "exitCode": 0,
+      "elapsed": 0.8347091674804688,
+      "argv": [
+        "npm",
+        "run",
+        "searcher:adapter-family-runtime"
+      ]
+    },
+    {
+      "name": "dual",
+      "exitCode": 0,
+      "elapsed": 7.646631240844727,
+      "argv": [
+        "npm",
+        "run",
+        "searcher:family-dual-execution"
+      ]
+    },
+    {
+      "name": "settlement",
+      "exitCode": 0,
+      "elapsed": 0.6347236633300781,
+      "argv": [
+        "npm",
+        "run",
+        "searcher:runtime-settlement"
+      ]
+    },
+    {
+      "name": "fluid-plugin",
+      "exitCode": 0,
+      "elapsed": 0.7924745082855225,
+      "argv": [
+        "npm",
+        "run",
+        "tool-run",
+        "--",
+        "--manifest",
+        "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/selection03.json",
+        "--tool",
+        "listener:searcher:fluid-dex-family-plugin"
+      ]
+    },
+    {
+      "name": "vm",
+      "exitCode": 0,
+      "elapsed": 16.78540349006653,
+      "argv": [
+        "/opt/mev-cloud/tools/foundry-v1.4.4/forge",
+        "test",
+        "--match-path",
+        "test/BotVMRuntimeAmount.t.sol",
+        "--out",
+        "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/candidate-out",
+        "--cache-path",
+        "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/candidate-cache",
+        "-vv"
+      ]
+    }
+  ],
+  "native": [
+    {
+      "name": "fluid-contract",
+      "exitCode": 0,
+      "elapsed": 1.704155683517456,
+      "argv": [
+        "npm",
+        "run",
+        "tool-run",
+        "--",
+        "--manifest",
+        "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/selection06.json",
+        "--tool",
+        "listener:searcher:fluid-dex-native-contract"
+      ]
+    }
+  ],
+  "ready": [
+    {
+      "name": "historical-ready",
+      "exitCode": 0,
+      "elapsed": 5.029750108718872,
+      "argv": [
+        "npm",
+        "run",
+        "tool-run",
+        "--",
+        "--manifest",
+        "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/history-selection14.json",
+        "--tool",
+        "listener:searcher:fluid-dex-historical-ready",
+        "--",
+        "--tx",
+        "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+        "--block",
+        "26152607",
+        "--expect-pool",
+        "0x86f874212335af27c41cdb855c2255543d1499ce",
+        "--out",
+        "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01",
+        "--executor",
+        "0x1000000000000000000000000000000000000002",
+        "--owner",
+        "0x1000000000000000000000000000000000000001",
+        "--revm-bin",
+        "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+        "--prior-ready",
+        "/opt/mev-cloud/family-runtime-20261007/logs/native-fluid-acceptance-20261009.QGszql/single-N26152607-attempt01/ready.json"
+      ]
+    }
+  ],
+  "canonicalInput": [
+    {
+      "name": "catalog-index",
+      "exitCode": 0,
+      "elapsed": 45.366392612457275,
+      "sha256": "788e4c52f0be590e9f092386cb06d4e24016a36832068d185d468f9c26eeb801"
+    },
+    {
+      "name": "owned-build",
+      "exitCode": 0,
+      "elapsed": 8.054108381271362,
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "name": "owned-dual",
+      "exitCode": 1,
+      "elapsed": 3.148756980895996,
+      "sha256": "79992be7c79d4ad16377e3f87dc1a930635d7fcc9a4ea6d0f7fc5eff63d0bfed"
+    }
+  ],
+  "canonicalInputRepair": [
+    {
+      "name": "owned-dual",
+      "exitCode": 0,
+      "elapsed": 9.668207883834839,
+      "logSha256": "e875e7220da5920014abd1c3811b39454296c2e74df57584190e8c7da2714bda",
+      "inputFiles": [
+        {
+          "path": "listener/searcher/pools/blockscan-view-overrides.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "path": "listener/searcher/pools/discovery-queue.json",
+          "sha256": "de698d625965e2352066d0593fedbaa9891ec160bb8b6ac91297407e54ff022f"
+        },
+        {
+          "path": "listener/searcher/pools/force-include-poolids.json",
+          "sha256": "4373519213045026484af0b63b2819dc927255b4b34dbc761f531839845aa799"
+        },
+        {
+          "path": "listener/searcher/pools/force-include-routers.json",
+          "sha256": "9bc02e21154664a5e96caac1dc6edcf475bb9ebedc90ed8564765fa2a3dd1a59"
+        },
+        {
+          "path": "listener/searcher/pools/pinned-warm-pools.json",
+          "sha256": "544b5fb0402047928771fa40c0fa455b00af22ba11b3c2703292270990c13df2"
+        },
+        {
+          "path": "listener/searcher/pools/v2-lineages.json",
+          "sha256": "b72ee778b981c6413abba6587416e25332d1de0841fbdf0e4663c8abf9cedf6c"
+        }
+      ]
+    }
+  ],
+  "claims": {
+    "actualWorkingTreeFamilyDual": "301/301",
+    "ownedPatchOnHeadFamilyDual": "298/298; 3 peer-added tests absent",
+    "runtimeVm": "53/53 actual EVM",
+    "nativeBoundary": "9/9 actual EVM using generated programs",
+    "fluidNativeContract": "17/17 including production selector fixture; no claim of actual historical composed opportunity",
+    "builds": "actual build:live, owned-source build:live and actual production BotVM build passed",
+    "reviewRounds": 3
+  },
+  "logInventory": [
+    {
+      "file": "tool-index06.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/tool-index06.log",
+      "sha256": "57e97960d2dd6d478f4164a522dcc31b54a5b1b0139815d918adb5c370d170af",
+      "bytes": 1841
+    },
+    {
+      "file": "baseline-vm06.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/baseline-vm06.log",
+      "sha256": "0ef8800443f227698fee7b3bf3b834cb92c97471ef6003d10f5ee33c4ffed068",
+      "bytes": 1519
+    },
+    {
+      "file": "checks19.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks19.json",
+      "sha256": "833e4bde524632e4a89cb585bebb3324c75ab7a310ea249ce38d81eaf08f94d8",
+      "bytes": 3189
+    },
+    {
+      "file": "settlement12.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/settlement12.log",
+      "sha256": "2e7f336a247f860be9b06f5832a022adc0dfd3f917657e769dbc6f745ceeed4c",
+      "bytes": 1368
+    },
+    {
+      "file": "checks10.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks10.json",
+      "sha256": "1969c8e67b1fecaa57a904b6e7f0608a90372152b7f8299fca36ab16a96bf67d",
+      "bytes": 1461
+    },
+    {
+      "file": "owned-build24.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/owned-build24.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "bytes": 71
+    },
+    {
+      "file": "dual19-USDC-native.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual19-USDC-native.log",
+      "sha256": "73dac8dcf1d6f67ada9e48211bbe2217fb109ae51e5ced30a92a5d7cc25c5de4",
+      "bytes": 6628
+    },
+    {
+      "file": "checks24.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks24.json",
+      "sha256": "0049cad45a9781ac6df4da5a24b02dff11e69cd62727865cb544e9b4b41d2a33",
+      "bytes": 514
+    },
+    {
+      "file": "native-boundary-model09.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/native-boundary-model09.log",
+      "sha256": "016e939495e88892048edbf4ef1701dc128f76af3a3ab527fe30e28b052c2372",
+      "bytes": 1027
+    },
+    {
+      "file": "native-boundary-evm09.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/native-boundary-evm09.log",
+      "sha256": "1bcafb4ed200c87fd4df7715be9d9fe4e829bdb87233849938a30d249483773b",
+      "bytes": 1315
+    },
+    {
+      "file": "dual19-weETH-native.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual19-weETH-native.log",
+      "sha256": "d017ba7eee950960aff9d7f0e7673bccb6c05adfc580e8b29330be98dc2e2506",
+      "bytes": 6631
+    },
+    {
+      "file": "fluid-contract15.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/fluid-contract15.log",
+      "sha256": "8d651cd6b3b6abb4a1d3d8dbba4dcb0af496757ba670848a181b29beccbb9061",
+      "bytes": 2392
+    },
+    {
+      "file": "dual22-USDT-unfunded.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual22-USDT-unfunded.log",
+      "sha256": "6690ead66123a9e2fb1ba0551744cf1fb89fefc8b0febe1c905dc427ae5d2649",
+      "bytes": 2748
+    },
+    {
+      "file": "native-boundary-evm10.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/native-boundary-evm10.log",
+      "sha256": "b24df2abd380c0632d0441287b1638d9c98b301ec380c30c1abb20a4772efb2d",
+      "bytes": 1804
+    },
+    {
+      "file": "production-executor14.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/production-executor14.log",
+      "sha256": "ddfc201ec0a3caade1c68a17c7520563d8185c30b57a191fdb493f3a91c2b70c",
+      "bytes": 24029
+    },
+    {
+      "file": "fluid-plugin12.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/fluid-plugin12.log",
+      "sha256": "c556c9cbe613e77b1a7c202bb86eac384e4da703bcb1acfca7a5d0edfe8aa902",
+      "bytes": 533
+    },
+    {
+      "file": "dual12.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual12.log",
+      "sha256": "ced588ccca08431b5da6ad6c4bc06d63bc4fda3e50744b1102b5026f75aeab44",
+      "bytes": 58091
+    },
+    {
+      "file": "checks22.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks22.json",
+      "sha256": "dfe440f316504b7aa588773cc1e2c09cbaee1ac2b3b0968bc25fbc748cacd80e",
+      "bytes": 1347
+    },
+    {
+      "file": "checks17.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks17.json",
+      "sha256": "a3f1d83322ad753bbc8a44f087712c31f63bbb205ae1968064c6edf60b33be54",
+      "bytes": 1068
+    },
+    {
+      "file": "build-live09.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/build-live09.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "bytes": 71
+    },
+    {
+      "file": "generate09.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/generate09.log",
+      "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+      "bytes": 136
+    },
+    {
+      "file": "vm10.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/vm10.log",
+      "sha256": "43f07d9c8b9c1c05bd06424d123a0831eda16ae5fabd4f54841313d7b64805fc",
+      "bytes": 4024
+    },
+    {
+      "file": "fluid-contract09.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/fluid-contract09.log",
+      "sha256": "3a8118a217d3657c0b166e9abc90625e08e3086387563e2f264d286b442b5a2a",
+      "bytes": 2259
+    },
+    {
+      "file": "issuer12.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/issuer12.log",
+      "sha256": "df404e6a99aa195d4798fecfdb33507a1ff8cafe62dd3b8bfaf2a81326110c31",
+      "bytes": 174
+    },
+    {
+      "file": "checks21.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks21.json",
+      "sha256": "70d5fb81ec7d92d3e4389fb1d0eeb62dee7f4614e6522661e4dc77cd94857485",
+      "bytes": 2034
+    },
+    {
+      "file": "checks15.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks15.json",
+      "sha256": "9bd4371731de432a5114a23e8567d0c1ccb4aec4746032978d154f6d0c9048ee",
+      "bytes": 362
+    },
+    {
+      "file": "vm12.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/vm12.log",
+      "sha256": "894dd545f0034455af54b62fbbd4921c42c7b5efa1484c88e5fd7a0135f7a19b",
+      "bytes": 4105
+    },
+    {
+      "file": "dual10.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual10.log",
+      "sha256": "9720cb31a08d5b22839cf3d9923c1e3fa10d9ab651add47323d96a7da52b3047",
+      "bytes": 60641
+    },
+    {
+      "file": "checks16.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks16.json",
+      "sha256": "ffb396059d208cec738e3da8317d08fd7678f31ea0680c5e2e6d3cfcc9a2d1a3",
+      "bytes": 1162
+    },
+    {
+      "file": "dual21-USDC-USDT-remaining.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual21-USDC-USDT-remaining.log",
+      "sha256": "5b70db0739a5c4342e8cd3cc33db5370ed9b136599448a00cf5abc5716c07de9",
+      "bytes": 5641
+    },
+    {
+      "file": "history-index14.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/history-index14.log",
+      "sha256": "bbbedcf15784040c62f5c7eb524eac78e78ccc22670cd5f92c5633c04131726f",
+      "bytes": 1059
+    },
+    {
+      "file": "tool-index03.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/tool-index03.log",
+      "sha256": "492e722d097bc0837317ecea70f5b7fd069328510f7ca790231b4ef299f52717",
+      "bytes": 1404
+    },
+    {
+      "file": "checks25.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks25.json",
+      "sha256": "bf06b98b7627adb251221f451aeb8c355d2d7f795d88c465181187de94ec7d0e",
+      "bytes": 1215
+    },
+    {
+      "file": "issuer09.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/issuer09.log",
+      "sha256": "df404e6a99aa195d4798fecfdb33507a1ff8cafe62dd3b8bfaf2a81326110c31",
+      "bytes": 174
+    },
+    {
+      "file": "baseline-vm06.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/baseline-vm06.json",
+      "sha256": "d0ffed4e5f8fd2d005bb2f57756fb59f7be2e09acb9a2688fb6f98fc44a9b254",
+      "bytes": 521
+    },
+    {
+      "file": "fluid-contract10.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/fluid-contract10.log",
+      "sha256": "0f0aa1414330a57712c67555e29b043fa2f431dd60c66d637563af1745988798",
+      "bytes": 2262
+    },
+    {
+      "file": "checks12.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks12.json",
+      "sha256": "bc4a27b54b4df4106da3dad49a9226d41eb26ceab92c4bbfec4d3a8061cbc7a4",
+      "bytes": 1500
+    },
+    {
+      "file": "build-live12.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/build-live12.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "bytes": 71
+    },
+    {
+      "file": "checks09.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks09.json",
+      "sha256": "8be2e5f531244ef59e410ab59cbd1e21f6eb286ad0844094bc567ef2d4d98944",
+      "bytes": 1683
+    },
+    {
+      "file": "owned-dual24.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/owned-dual24.log",
+      "sha256": "79992be7c79d4ad16377e3f87dc1a930635d7fcc9a4ea6d0f7fc5eff63d0bfed",
+      "bytes": 1233
+    },
+    {
+      "file": "checks14.json",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/checks14.json",
+      "sha256": "8191f160dbbe60fec0c4497a708f65729dda70e5998c9b69819ecf0c4c806f1b",
+      "bytes": 606
+    },
+    {
+      "file": "dual17-weETH-native.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual17-weETH-native.log",
+      "sha256": "f94dd75c3801cc48d06fc584ee31a63f0065f89a9945454ededbcdae404b6cf1",
+      "bytes": 2026
+    },
+    {
+      "file": "owned-dual25.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/owned-dual25.log",
+      "sha256": "e875e7220da5920014abd1c3811b39454296c2e74df57584190e8c7da2714bda",
+      "bytes": 57608
+    },
+    {
+      "file": "catalog-index24.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/catalog-index24.log",
+      "sha256": "788e4c52f0be590e9f092386cb06d4e24016a36832068d185d468f9c26eeb801",
+      "bytes": 461
+    },
+    {
+      "file": "ready16.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/ready16.log",
+      "sha256": "7d7b39df91734b513f29945d069eb374edb12b4ec09294cecf50fb360a5d6af2",
+      "bytes": 11132
+    },
+    {
+      "file": "dual19-USDC-USDT.log",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual19-USDC-USDT.log",
+      "sha256": "bf77573ab0688dbb9e020a02972a4d75c33d3504c4e81d1919e32e3da7b78c8b",
+      "bytes": 4581
+    }
+  ],
+  "canonicalCatalog": {
+    "method": "Canonical generator on immutable Git HEAD plus hash-checked owned source blobs. This is an ignored generator input artifact, not a Git checkout/worktree; no working source or peer hash replaced.",
+    "snapshot": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/catalog-index-source24/listener",
+    "workingSha256": "1ca11ae40e2dec154a103665dd01686218c5e2b793bfb5a08e71485f00b00505",
+    "indexCandidateSha256": "fd200ec273c4b8aaa0fc882003cda90199f64173dd1157b5588f18b3a383b1c1",
+    "peerOnlyDifferences": [
+      "custom-swap:uniswap-v1:capture",
+      "custom-swap:uniswap-v1:discovery",
+      "custom-swap:uniswap-v1:exact",
+      "custom-swap:uniswap-v1:execution",
+      "custom-swap:uniswap-v1:identity",
+      "custom-swap:uniswap-v1:instance",
+      "custom-swap:uniswap-v1:pricing",
+      "custom-swap:uniswap-v1:routes",
+      "custom-swap:uniswap-v1:victim"
+    ],
+    "artifactHash": "5836958cab4603ef9304eea6194ef61ee2bf3c4bfbe13fe86c77e19b33866aa9"
+  },
+  "canonicalToolSelection": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/selection03.json",
+      "sha256": "cf6b7304b8c933cb4eeb3496ed151f71e6b3f5fdb302ed49cf11316b04c0332f",
+      "requested": [
+        "fluid"
+      ],
+      "recommendedTools": [
+        "listener:searcher:fluid-credit-family-plugin"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:fluid-dex-family-plugin",
+          "descriptor_sha256": "a7fc77e72c8e94cc3b5ede517512c09aacdaf813362ad4d00d33ad105f3464f9",
+          "started_at": "2026-10-14T15:24:31.211Z",
+          "finished_at": "2026-10-14T15:24:31.692Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "315d39bba4a99268959e338b2a90334a7f7b1a35bb0ee1afa09aec7ff5d51a58",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:fluid-dex-family-plugin",
+            "--"
+          ],
+          "stdout_sha256": "3d1adc08d1a349fb96ab0d1d57273a6376369329519da92e3ce33fc20ed3b6bb",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 150,
+          "stderr_bytes": 0
+        }
+      ]
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/selection06.json",
+      "sha256": "98a8a48de0e79caeeba6e592cdf501214997f7a3a24845d3f9fe3cf303353329",
+      "requested": [
+        "fluid-native",
+        "native-boundary"
+      ],
+      "recommendedTools": [
+        "listener:searcher:fluid-dex-native-contract"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:fluid-dex-native-contract",
+          "descriptor_sha256": "da8984c0b0166273c6e696b0574a557fdf0fd699a82320cfae0300d02538b2a6",
+          "started_at": "2026-10-14T15:04:20.127Z",
+          "finished_at": "2026-10-14T15:04:21.376Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "2ec8cc4a0454f23317a89cdf0dc3929c2d12c2b43e4e0cae8ee5e440ef6091a5",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:fluid-dex-native-contract",
+            "--"
+          ],
+          "stdout_sha256": "d74b5a737e781e7de9285b6e07fa6bb54a05237a04c95ea0298b814b8f2dbae0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 1872,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:execution-asset-boundary",
+          "descriptor_sha256": "56519fb227fb8d1cd04824063d7f081c7c8ef0943ba7a8e63d0ccf072ef9f100",
+          "started_at": "2026-10-14T15:05:12.543Z",
+          "finished_at": "2026-10-14T15:05:13.085Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "f14f78ce660a858946723f0159667e806eab4efc77be036c00cfe5c32b20e12b",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:execution-asset-boundary",
+            "--"
+          ],
+          "stdout_sha256": "db90f2b5703404794905b836229e940030438622b0915a3774a950487aeb6481",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 642,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:execution-asset-boundary-evm",
+          "descriptor_sha256": "a96375eaf4bd200accd6bfcde718ca6f24a6117f3d4660ae4370b15f8c3133a7",
+          "started_at": "2026-10-14T15:05:13.392Z",
+          "finished_at": "2026-10-14T15:05:16.852Z",
+          "exit_code": 1,
+          "cwd": "listener",
+          "argv_sha256": "215f98afe2775b3441782d4edc8ae4065f6628e98ee6d2c8e58add3105bc33af",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:execution-asset-boundary-evm",
+            "--",
+            "--forge-bin",
+            "/opt/mev-cloud/tools/foundry-v1.4.4/forge"
+          ],
+          "stdout_sha256": "99cecad4cc2ae01208f93a2cd5ad7ac9ae5c06bfca1f83b676ff5772ce94261b",
+          "stderr_sha256": "392b73ee83fcbf6934230e340ee78616a5fa65a7a67a09376155a2c59f842649",
+          "stdout_bytes": 458,
+          "stderr_bytes": 407
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:fluid-dex-native-contract",
+          "descriptor_sha256": "da8984c0b0166273c6e696b0574a557fdf0fd699a82320cfae0300d02538b2a6",
+          "started_at": "2026-10-14T15:07:07.013Z",
+          "finished_at": "2026-10-14T15:07:08.240Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "2ec8cc4a0454f23317a89cdf0dc3929c2d12c2b43e4e0cae8ee5e440ef6091a5",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:fluid-dex-native-contract",
+            "--"
+          ],
+          "stdout_sha256": "28c6c61ca085ecae041a7d9f5384261ad59e93331c1dd0deef5179bb5d74dfd9",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 1875,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:execution-asset-boundary-evm",
+          "descriptor_sha256": "a96375eaf4bd200accd6bfcde718ca6f24a6117f3d4660ae4370b15f8c3133a7",
+          "started_at": "2026-10-14T15:07:08.549Z",
+          "finished_at": "2026-10-14T15:07:18.105Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "215f98afe2775b3441782d4edc8ae4065f6628e98ee6d2c8e58add3105bc33af",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:execution-asset-boundary-evm",
+            "--",
+            "--forge-bin",
+            "/opt/mev-cloud/tools/foundry-v1.4.4/forge"
+          ],
+          "stdout_sha256": "5e0c6af07983f4bb273f28a6209d6643d64ea445d6a16cdf1a4826db30b4fdc4",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 1354,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:fluid-dex-native-contract",
+          "descriptor_sha256": "da8984c0b0166273c6e696b0574a557fdf0fd699a82320cfae0300d02538b2a6",
+          "started_at": "2026-10-14T15:36:18.444Z",
+          "finished_at": "2026-10-14T15:36:19.834Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "2ec8cc4a0454f23317a89cdf0dc3929c2d12c2b43e4e0cae8ee5e440ef6091a5",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:fluid-dex-native-contract",
+            "--"
+          ],
+          "stdout_sha256": "30b9395161e42e871db4839c2832828f8675e74c0725c95a5fb60a372fcb64bf",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 2005,
+          "stderr_bytes": 0
+        }
+      ]
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/history-selection14.json",
+      "sha256": "b707f6d71668b5b72ca2e651277fe5b08a8e3394f3be660367eafc75f49e8144",
+      "requested": [
+        "fluid-native-ready",
+        "fluid-native-dual"
+      ],
+      "recommendedTools": [
+        "listener:searcher:fluid-dex-historical-dual",
+        "listener:searcher:fluid-dex-historical-ready"
+      ],
+      "executions": [
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:fluid-dex-historical-ready",
+          "descriptor_sha256": "64198f0a12a9192db85c9c061acfbfdf9b3255e4f20bfcc59d21ecd66810a57b",
+          "started_at": "2026-10-14T15:37:23.768Z",
+          "finished_at": "2026-10-14T15:37:28.483Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "4698572af8c660831dc244c1032b1310f9034166130296653618235ce3a6e82b",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:fluid-dex-historical-ready",
+            "--",
+            "--tx",
+            "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+            "--block",
+            "26152607",
+            "--expect-pool",
+            "0x86f874212335af27c41cdb855c2255543d1499ce",
+            "--out",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01",
+            "--executor",
+            "0x1000000000000000000000000000000000000002",
+            "--owner",
+            "0x1000000000000000000000000000000000000001",
+            "--revm-bin",
+            "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+            "--prior-ready",
+            "/opt/mev-cloud/family-runtime-20261007/logs/native-fluid-acceptance-20261009.QGszql/single-N26152607-attempt01/ready.json"
+          ],
+          "stdout_sha256": "b105567eb5e38004fc6bdf59d62c733a8908a579487e1b6fc967e19c69c4269d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 10091,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:fluid-dex-historical-dual",
+          "descriptor_sha256": "0f8667f083691bacb89309cc25feb365b9048700fc954f9a87a605448d16c3b3",
+          "started_at": "2026-10-14T15:38:33.471Z",
+          "finished_at": "2026-10-14T15:38:35.589Z",
+          "exit_code": 1,
+          "cwd": "listener",
+          "argv_sha256": "19454054f5c4d5b14017272ce65e891eab5e95c16e1705bdcf79c9433e82735b",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:fluid-dex-historical-dual",
+            "--",
+            "--ready",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/ready.json",
+            "--prices",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/prices/prices.json",
+            "--pool",
+            "0x86f874212335af27c41cdb855c2255543d1499ce",
+            "--rpc-file",
+            "/tmp/ds-rpc.json",
+            "--revm-bin",
+            "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+            "--out",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual17-weETH-native.json"
+          ],
+          "stdout_sha256": "1d573130cdde57b47139fd236569fd087569376347bf56369c686c5ff59d37b4",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 1041,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:fluid-dex-historical-dual",
+          "descriptor_sha256": "0f8667f083691bacb89309cc25feb365b9048700fc954f9a87a605448d16c3b3",
+          "started_at": "2026-10-14T15:41:37.989Z",
+          "finished_at": "2026-10-14T15:41:44.935Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "17721113b064e76c40e79a579de38164514e13b7c9b6d2e087c5890fa4a1c982",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:fluid-dex-historical-dual",
+            "--",
+            "--ready",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/ready.json",
+            "--prices",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/prices/prices.json",
+            "--pool",
+            "0x86f874212335af27c41cdb855c2255543d1499ce",
+            "--rpc-file",
+            "/tmp/ds-rpc.json",
+            "--revm-bin",
+            "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+            "--out",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual19-weETH-native.json"
+          ],
+          "stdout_sha256": "319ac120086bb2f866f1162801e79d4a90549982365438503e8d15d3927e6f94",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 5646,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:fluid-dex-historical-dual",
+          "descriptor_sha256": "0f8667f083691bacb89309cc25feb365b9048700fc954f9a87a605448d16c3b3",
+          "started_at": "2026-10-14T15:41:45.248Z",
+          "finished_at": "2026-10-14T15:41:50.464Z",
+          "exit_code": 0,
+          "cwd": "listener",
+          "argv_sha256": "22bb7711598ba654d23c9ead77fae87cfcb86bc70689f0c59ade8dc5767f5c1a",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:fluid-dex-historical-dual",
+            "--",
+            "--ready",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/ready.json",
+            "--prices",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/prices/prices.json",
+            "--pool",
+            "0x836951eb21f3df98273517b7249dceff270d34bf",
+            "--rpc-file",
+            "/tmp/ds-rpc.json",
+            "--revm-bin",
+            "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+            "--out",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual19-USDC-native.json"
+          ],
+          "stdout_sha256": "5ccaec9277274d5692d2751684b3d6255af2ce15631cdaaba8f708e5d7ba234a",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 5644,
+          "stderr_bytes": 0
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:fluid-dex-historical-dual",
+          "descriptor_sha256": "0f8667f083691bacb89309cc25feb365b9048700fc954f9a87a605448d16c3b3",
+          "started_at": "2026-10-14T15:41:50.780Z",
+          "finished_at": "2026-10-14T15:41:54.990Z",
+          "exit_code": 1,
+          "cwd": "listener",
+          "argv_sha256": "8cce4390b6b6a2cedf3814047c5f344e6e724d4ff626b3dc7db46a76ee210425",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:fluid-dex-historical-dual",
+            "--",
+            "--ready",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/ready.json",
+            "--prices",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/prices/prices.json",
+            "--pool",
+            "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+            "--rpc-file",
+            "/tmp/ds-rpc.json",
+            "--revm-bin",
+            "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+            "--out",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual19-USDC-USDT.json"
+          ],
+          "stdout_sha256": "2f0991d06a380b64604da9339f41f1f3ac02b9360fb5093d6831c84f36d38385",
+          "stderr_sha256": "c9718e0fa2b027755510450c3d96e66b8caf9ddb8611045e910413652aeadef7",
+          "stdout_bytes": 3506,
+          "stderr_bytes": 93
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:fluid-dex-historical-dual",
+          "descriptor_sha256": "0f8667f083691bacb89309cc25feb365b9048700fc954f9a87a605448d16c3b3",
+          "started_at": "2026-10-14T15:46:43.762Z",
+          "finished_at": "2026-10-14T15:46:47.503Z",
+          "exit_code": 1,
+          "cwd": "listener",
+          "argv_sha256": "9f39c9a4a2cc7ff16ccda71d7e6b7f0ffdfc11a9520510970d2efa528a7a26aa",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:fluid-dex-historical-dual",
+            "--",
+            "--ready",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/ready.json",
+            "--prices",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/prices/prices.json",
+            "--pool",
+            "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+            "--rpc-file",
+            "/tmp/ds-rpc.json",
+            "--revm-bin",
+            "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+            "--out",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual21-USDC-USDT-remaining.json",
+            "--cases",
+            "[\"token1-to-token0/production-effective/quoted/post-execution-revert\", \"token1-to-token0/production-effective/runtime/none\", \"token1-to-token0/production-effective/runtime/no-input\", \"token1-to-token0/production-effective/runtime/post-execution-revert\", \"token1-to-token0/production-effective/direct-self/none\", \"token1-to-token0/production-effective/direct-self/no-input\", \"token1-to-token0/production-effective/direct-self/post-execution-revert\", \"token1-to-token0/production-effective/direct-external/none\", \"token1-to-token0/production-effective/direct-external/no-input\", \"token1-to-token0/production-effective/direct-external/post-execution-revert\", \"token1-to-token0/10x-production-effective/quoted/none\", \"token1-to-token0/10x-production-effective/runtime/none\", \"token1-to-token0/10x-production-effective/direct-self/none\", \"token1-to-token0/10x-production-effective/direct-external/none\"]"
+          ],
+          "stdout_sha256": "c9e7ab26854790c13ed48f38611d4abcad2811e13fe82025fa3abce1495b2f21",
+          "stderr_sha256": "4786bb4e08d50eb54ffb1cb794d37e08856444c0a54e05b488de630d464f3661",
+          "stdout_bytes": 3463,
+          "stderr_bytes": 279
+        },
+        {
+          "schema_version": 1,
+          "tool_id": "listener:searcher:fluid-dex-historical-dual",
+          "descriptor_sha256": "0f8667f083691bacb89309cc25feb365b9048700fc954f9a87a605448d16c3b3",
+          "started_at": "2026-10-14T15:48:43.460Z",
+          "finished_at": "2026-10-14T15:48:46.291Z",
+          "exit_code": 1,
+          "cwd": "listener",
+          "argv_sha256": "061de839ee762432d8c66dcd5d2cdc92108681c99232295d87fb71115236253a",
+          "argv_redacted": [
+            "npm",
+            "run",
+            "searcher:fluid-dex-historical-dual",
+            "--",
+            "--ready",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/ready.json",
+            "--prices",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/single-N26152607-attempt01/prices/prices.json",
+            "--pool",
+            "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+            "--rpc-file",
+            "/tmp/ds-rpc.json",
+            "--revm-bin",
+            "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+            "--out",
+            "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual22-USDT-unfunded.json",
+            "--cases",
+            "[\"token1-to-token0/production-effective/quoted/no-input\", \"token1-to-token0/production-effective/runtime/no-input\", \"token1-to-token0/production-effective/direct-self/no-input\", \"token1-to-token0/production-effective/direct-external/no-input\"]"
+          ],
+          "stdout_sha256": "90187ad6252f2f08287c5cb3d19be1f549bb1b1f63e5940a872a86d98b09f98b",
+          "stderr_sha256": "21c48b35045d84ae1d7efdc7dd0ae66a3ba91d10b78ed4e662da3458788d1266",
+          "stdout_bytes": 1138,
+          "stderr_bytes": 372
+        }
+      ]
+    }
+  ],
+  "retainedFailures": [
+    {
+      "case": "baseline06",
+      "result": "4 new expected-revert VM tests failed on unchanged production baseline; expected pre-fix failure"
+    },
+    {
+      "case": "09",
+      "result": "native EVM compile Yul stack too deep; repaired by reusing already validated scratch offset, no format/safety weakening"
+    },
+    {
+      "case": "10",
+      "result": "shared Family dual 299/301; two native raw requests bypassed common receiver mapping; mapping contract repaired and full suite rerun"
+    },
+    {
+      "case": "17",
+      "result": "new historical wrapper discarded structured Fluid revert; first Exact unresolved, no executions; standard ethers provider repair verified by same-state 19 runs"
+    },
+    {
+      "case": "19/21/22",
+      "result": "USDT zero-input four unique cases remain strict resource-limited; raw main Revert/nested InvalidFEOpcode diagnostic retained; no strict negative pass"
+    },
+    {
+      "case": "24",
+      "result": "owned-source optional test did not start because ignored input snapshot omitted existing V2 lineage JSON; HEAD-identical public fixture data supplied; 25 passed298/298"
+    },
+    {
+      "case": "audit04/checks12 SSH",
+      "result": "two client metadata TLS EOF failures before remote execution; originals and separate recovery outputs retained"
+    }
+  ],
+  "independentReviews": [
+    {
+      "path": "docs/research/reports/fluid-settlement-design-review-20261015.json",
+      "sha256": "7ab98e42987b704137c3a1101bc254c4a37a3c74f4c7e45ef50e992cef2c0b35"
+    },
+    {
+      "path": "docs/research/reports/fluid-settlement-code-review-20261015.json",
+      "sha256": "dc890a8ae422edb7243712751dde85e511b09f340718bb73ea38921782a89f7e"
+    },
+    {
+      "path": "docs/research/reports/fluid-settlement-evidence-review-20261015.json",
+      "sha256": "3e76f147e6f4cdaa5930c18a388ac584b8d445857686c9614ed25ed1f12f3957"
+    }
+  ]
+}

@@ -1,0 +1,776 @@
+{
+  "schemaVersion": 1,
+  "reportType": "fluid-settlement-independent-code-review",
+  "reviewRound": 2,
+  "maxReviewRounds": 3,
+  "createdAt": "2026-10-14T15:13:45.761158+00:00",
+  "reviewer": {
+    "agent": "/root/interface_protocols_b",
+    "role": "non-author static reviewer"
+  },
+  "scope": {
+    "sourceBaseline": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/",
+    "candidateRoot": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/",
+    "baselineHead": "ae68664f83099c9abff4165809bc6ef90b260c78",
+    "filesReviewed": 13,
+    "activities": [
+      "读取基线与当前 13 个候选文件差异及相关消费者",
+      "读取 install09/checks10 现有输出",
+      "对安装脚本嵌入内容作 SHA256 比对，不执行脚本",
+      "只在指定日志目录写本报告"
+    ],
+    "didNotRun": [
+      "RPC",
+      "build",
+      "test",
+      "catalog generation",
+      "cloud write",
+      "production source edit",
+      "IMPL edit",
+      "signing",
+      "broadcast"
+    ],
+    "snapshotCaveat": "本次仅核对本地 candidate 与保存的执行输出；未另查云端当前文件，也没有完整 raw EVM 日志或执行后 source manifest 的本地副本。",
+    "inheritedDesignReport": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/fluid-settlement-design-review.json"
+  },
+  "verdict": {
+    "codeSafety": "本轮静态检查未发现新的具体生产代码安全阻断",
+    "reviewDisposition": "needs-validation-tooling-corrections",
+    "productionCodeBlockingFindings": [],
+    "requiredValidationCorrections": [
+      "FLUID-CODE-R2-01",
+      "FLUID-CODE-R2-02"
+    ],
+    "framework": true,
+    "familyLocal": false,
+    "historicalNewModes": "not-run",
+    "settlementGate": "unverified",
+    "mergeReady": false,
+    "performance": "not-reviewed"
+  },
+  "findings": [
+    {
+      "id": "FLUID-CODE-R2-01",
+      "priority": "P2",
+      "category": "confirmed-tooling_defect",
+      "toolingDefectDisposition": "parent 与独立非作者审查已确认：canonical raw 合同缺少 native mapping。父任务负责记录 LearningCase、最小回归与 codify_commit；当前尚未据此关闭缺陷。",
+      "status": "open",
+      "title": "全族 raw-emitter 合同尚未纳入原生输出的中央 recipient 映射",
+      "primaryLocation": {
+        "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/test/family-dual-execution.ts",
+        "line": 496
+      },
+      "relatedLocations": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/execution.ts",
+          "line": 28
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/raw-execution.ts",
+          "line": 23
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/adapter-family-runtime.ts",
+          "line": 2801
+        }
+      ],
+      "evidence": "checks10-output.jsonl 的 dual exitCode=1；301 项中 299 pass、2 fail。两项都为 Fluid native-output 方向，失败为 fluid-dex raw output recipient。测试直接把 external recipient 传给 Family，而生产 issuer 先把 raw native-output recipient 映射为 executor。",
+      "impact": "当前全族能力合同回归未通过。不能把它当成生产 issuer 丢失收款方，也不能跳过两项后宣称全族通过；声明与 raw/graph 两层请求约定必须统一。",
+      "productionSafetyAssessment": "raw native output 拒绝外部 ETH 收款是本设计要求，生产 issuer 的 mapped echo 与外层 original recipient 保留在静态代码中成立。没有因此发现实际错误转账或安全绕过。",
+      "requiredChange": "以通用 executionAssets.output==='native' 语义更新验收合同，分别核对 mapped raw request 和原始 graph request；保留原生 raw 外部收款拒绝。优先由真实 issuer 做最终接线断言，不能加入 Fluid 特判或降低到账保护。保留已有失败结果，修后跑相同全族回归。",
+      "requiredValidation": [
+        "两项当前失败用例翻转且默认字节仍相同",
+        "raw receiver=executor；issued settlementRequest=original recipient",
+        "错误 echo、忽略请求、缺 capability 继续拒绝",
+        "实际 issuer 发出的程序执行后仅原始 recipient 收到本次 WETH"
+      ],
+      "mustResolveBeforeAcceptance": true
+    },
+    {
+      "id": "FLUID-CODE-R2-02",
+      "priority": "P2",
+      "category": "safety-regression-coverage",
+      "status": "open",
+      "title": "新 mode-2 回调测试没有证明其声称的旧 callback scope 恢复",
+      "primaryLocation": {
+        "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/test/BotVMRuntimeAmount.t.sol",
+        "line": 582
+      },
+      "relatedLocations": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/test/BotVMRuntimeAmount.t.sol",
+          "line": 83
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/src/RuntimeAmountVM.sol",
+          "line": 247
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/src/RuntimeAmountVM.sol",
+          "line": 268
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/src/BotVM.sol",
+          "line": 84
+        }
+      ],
+      "evidence": "testRevertQuoteBlocksReentryAndRestoresOuterCallbackScope 首次 quote 在已进入的合法 callback 中执行，_checkRuntimeCallback 已把 CALLBACK_TARGET 置为 1；mode 2 又写入 1。之后的第二次 bot.execute 重新安装 callback scope。probe 仅要求恶意 callback 的 ok=false，未核对拒绝原因，且其脚本与原 hash 不同。",
+      "impact": "静态可推导：仅删除 mode-2 分支的尾部恢复，当前用例仍无法区分；拒绝也可能来自错误 hash。这是安全回归的证明缺口，不是已发现的生产实现漏洞。",
+      "productionSafetyAssessment": "当前生产 _runtimeCall 在 accepted revert 后仍顺序恢复 CALLBACK_TARGET、CALLBACK_HASH、VM_STATE，未见 early return；mode2 的 input/outgoing callback 字段和 value 限制正确。",
+      "requiredChange": "补一个既有 pending legacy callback 状态下执行 mode-2 quote、随后不重新安装状态而完成合法 callback 的用例，沿现有 testNormalSelfCallRestoresLegacyCallbackState 的模式；恶意 callback 应检查实际 revert reason 为 runtime callback sender，并保留合法回调对照。用精确状态断言或针对尾部恢复的 mutation sentinel 证明该用例会识别恢复遗漏。",
+      "requiredValidation": [
+        "quote 前存在可继续的旧 callback 状态",
+        "mode2 内恶意 callback 被正确的 sender guard 拒绝",
+        "quote 后不用新 callbackProgram 覆盖状态即可执行合法 continuation",
+        "移除/破坏 mode2 恢复的对照必须失败"
+      ],
+      "mustResolveBeforeAcceptance": true
+    }
+  ],
+  "inspectedInvariants": [
+    {
+      "id": "expected-revert-format",
+      "status": "static-consistent",
+      "locations": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/adapters/runtime-amount-program.ts",
+          "line": 36
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/src/RuntimeAmountVM.sol",
+          "line": 219
+        }
+      ],
+      "observations": [
+        "mode 0/1 的原编码保持；mode2 增加独立的 3 字节 expected length，TS 拒绝 value、callback、static 混用及非整数/负数/>65536 长度。",
+        "VM 在读取独立长度前要求原 outgoing callback 字段为 0；mode2 还要求 valueReg=255、incoming=0、expected length<=65536。复用 outgoing 局部变量不复用 wire 字段。",
+        "VM 只有 !ok 且 exact result.length 可接受；正常返回即使字节与声明错误一样也使父调用回滚。",
+        "readonly 子程序只新增允许 mode2；普通 CALL/allowance 仍拒绝，readonly 标志通过 nested run 传递。",
+        "此处 readonly 指 callee 及 descendants 的持久状态提交被回滚，不指 EVM STATICCALL、不证明没有尝试写入、gas 或 warmness 相同。"
+      ]
+    },
+    {
+      "id": "callback-isolation",
+      "status": "static-consistent; regression-claim-incomplete",
+      "locations": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/src/RuntimeAmountVM.sol",
+          "line": 247
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/src/RuntimeAmountVM.sol",
+          "line": 268
+        }
+      ],
+      "observations": [
+        "mode2 保存原 target/hash/VM_STATE，安装 no-callback sentinel，成功接受声明 revert 后走原有三个恢复操作。",
+        "原 callback 字段不得被 mode2 长度字段伪装为 callback；目标 CALL 的 descendant 状态即使尝试重入也随目标 revert 回滚。",
+        "target.code.length、call payload/patch 边界及返回读取边界仍执行。",
+        "新回归对恢复的证明不足，见 FLUID-CODE-R2-02。"
+      ]
+    },
+    {
+      "id": "issuer-original-mapped-binding",
+      "status": "static-consistent",
+      "locations": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/adapter-family-runtime.ts",
+          "line": 2790
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/adapter-family-runtime.ts",
+          "line": 2815
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/adapter-family-runtime.ts",
+          "line": 2834
+        }
+      ],
+      "observations": [
+        "原始 native 请求仅允许 quote/direct；direct 必须有地址，原始 receiver 排除 zero、graph tokenIn/tokenOut。native deferred 在构造 Family 前拒绝。",
+        "native output 将 raw recipient 映射为 executor，传入冻结的 request；Family 返回必须深相等回显 mapped request。",
+        "所有权、source generation、caller authority、program 边界和对应 capability 仍校验；仅 echo 无 capability 不能通过。",
+        "中央输出恢复原始 settlementRequest，然后共同边界按该原始 recipient 转 WETH。这不是直接把未经 echo 的原请求贴回 Family 程序。",
+        "quote-output 绕过 unwrap/self-call/wrap，满足未付款时报价；output quote 的 mapped recipient 是实际 raw ETH 收款者。",
+        "该通用变化会允许其他正确声明的 native quote/direct 能力，因此本批仍属于 framework。不能仅凭 Fluid 合同给所有 native Family 新接线盖章。"
+      ]
+    },
+    {
+      "id": "native-output-conservation",
+      "status": "static-consistent; synthetic-EVM-reported-pass",
+      "locations": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/execution-asset-boundary.ts",
+          "line": 80
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/execution-asset-boundary.ts",
+          "line": 100
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/execution-asset-boundary.ts",
+          "line": 114
+        }
+      ],
+      "observations": [
+        "boundary 先保存 actor native、input、output 以及 external recipient 的 input/output 库存。A-1 checked subtraction 要求 A>0。",
+        "raw ETH 只到 actor；D=ETH_after_raw-ETH_before_boundary，wrapOutput 仅包装 D，随后检查 actor native 恢复及 WETH increase=D。",
+        "external 模式仅转该次新 WETH 增量，并检查 actor output 库存恢复、receiver input 不变、receiver output 增量等于转出量，且输出>=1。",
+        "self 模式不做 transfer-to-self，独立测 actor output 增量。",
+        "transfer 返回值不被当作到账。少包装、少转出或以 actor 旧 WETH 补差被独立余额等式拒绝。",
+        "最后再次检查 actor native。没有任意地址 BALANCE opcode，external receiver ETH 只在测试/后续历史观测中检查，代码没有承诺其通用链上守卫。"
+      ]
+    },
+    {
+      "id": "native-input-refunds",
+      "status": "static-consistent",
+      "locations": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/execution-asset-boundary.ts",
+          "line": 94
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/execution-asset-boundary.ts",
+          "line": 108
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/raw-execution.ts",
+          "line": 42
+        }
+      ],
+      "observations": [
+        "共同边界先解包 A；raw direct 以 msg.value=A 调用并要求 native 净扣款=A。",
+        "共同边界包装剩余 native 增量后再次要求 graph input 实扣=A。退款 R>0 会使新 direct 模式拒绝，而不会把 A-R 偷换成完整 A。",
+        "默认/quoted 没有 recipient 参数，继续使用既有 refund/rounding 分支；没有把 direct 的精确扣款要求扩到原路径。",
+        "raw native input 的外部 ERC20 收款由 Fluid 层按 quote 实测，common 再保护 graph WETH input、actor output 和 receiver input 库存。",
+        "此代码不实现失败后自动 funded fallback；不能把保留默认路径写成已证明运行时会自动回退。"
+      ]
+    },
+    {
+      "id": "fluid-specific-quote-direct",
+      "status": "static-consistent; model-reported-pass",
+      "locations": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/raw-execution.ts",
+          "line": 28
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/raw-execution.ts",
+          "line": 58
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/execution.ts",
+          "line": 20
+        }
+      ],
+      "observations": [
+        "quote 使用完整 r0 amountIn patched offset36，to=ADDRESS_DEAD、value=0、exact36；Family 验证 FluidDexSwapResult selector 并要求输入、解码输出均正。",
+        "该 quote 没有链外 Exact/quoted 构造，也不声称证明支付/收款/所有真实执行权限；真实 swapIn 仍是最终协议拒绝边界。",
+        "direct 使用 invocation-local readonly quote 子程序；swap 实际返回值=quote、raw input 净扣款=A、raw receiver 新到账=quote，native/non-native 按真实资产测量。",
+        "ERC20 输入保持 approve0→approveA→swap→approve0；没有引入 MAX_UINT 站立授权。",
+        "外部 ERC20 输出要求 actor 原 output 库存不变；外部非-native input 余额不变。native graph 库存由共同边界补足。",
+        "Fluid 回调是输入先付而非 deferred；Family 和 issuer 均拒绝 native deferred。",
+        "finish 新增能力元数据但默认程序指令分支 unchanged；quoted buildFragment 和原 raw 参数默认值没有逻辑改动。"
+      ]
+    }
+  ],
+  "validationEvidence": {
+    "observedOutputs": {
+      "install09-output.jsonl": [
+        {},
+        {
+          "installed": 12
+        },
+        {
+          "starting": "fluid-contract"
+        },
+        {
+          "name": "fluid-contract",
+          "exitCode": 0,
+          "elapsed": 1.5597927570343018
+        },
+        {
+          "starting": "generate"
+        },
+        {
+          "name": "generate",
+          "exitCode": 0,
+          "elapsed": 42.005765199661255
+        },
+        {
+          "starting": "build-live"
+        },
+        {
+          "name": "build-live",
+          "exitCode": 0,
+          "elapsed": 8.039115190505981
+        },
+        {
+          "starting": "issuer"
+        },
+        {
+          "name": "issuer",
+          "exitCode": 0,
+          "elapsed": 0.8050060272216797
+        },
+        {
+          "starting": "native-boundary-model"
+        },
+        {
+          "name": "native-boundary-model",
+          "exitCode": 0,
+          "elapsed": 0.8579814434051514
+        },
+        {
+          "starting": "native-boundary-evm"
+        },
+        {
+          "name": "native-boundary-evm",
+          "exitCode": 1,
+          "elapsed": 3.767887592315674
+        },
+        {
+          "failure": "native-boundary-evm"
+        }
+      ],
+      "checks10-output.jsonl": [
+        {
+          "installed": [
+            "src/RuntimeAmountVM.sol",
+            "listener/src/searcher/venues/swaps/fluid-dex-family/test/native-execution.ts",
+            "listener/src/searcher/venues/swaps/fluid-dex-family/test/historical-ready.ts"
+          ]
+        },
+        {
+          "starting": "fluid-contract"
+        },
+        {
+          "name": "fluid-contract",
+          "exitCode": 0,
+          "elapsed": 1.538740873336792
+        },
+        {
+          "starting": "native-boundary-evm"
+        },
+        {
+          "name": "native-boundary-evm",
+          "exitCode": 0,
+          "elapsed": 9.86514663696289
+        },
+        {
+          "starting": "vm"
+        },
+        {
+          "name": "vm",
+          "exitCode": 0,
+          "elapsed": 17.191686153411865
+        },
+        {
+          "starting": "dual"
+        },
+        {
+          "name": "dual",
+          "exitCode": 1,
+          "elapsed": 7.6638405323028564
+        },
+        {
+          "failure": "dual"
+        }
+      ]
+    },
+    "install09": {
+      "baseline": "保存的旧 VM + 新 mode2 四例为 0/4，原因包括 readonly/config/parser 拒绝。它证明旧 VM 不支持新 wire mode，不能作为行为归因的全部证据。",
+      "buildLive": "exitCode 0",
+      "issuer": "exitCode 0",
+      "fluidContract": "exitCode 0",
+      "nativeBoundaryModel": "exitCode 0",
+      "nativeBoundaryEvm": "exitCode 1: Yul stack too deep(var_revertBytes)。失败产物保留。",
+      "skippedAfterFailure": [
+        "vm09",
+        "dual09",
+        "settlement09"
+      ]
+    },
+    "checks10": {
+      "changedFiles": [
+        "src/RuntimeAmountVM.sol",
+        "listener/src/searcher/venues/swaps/fluid-dex-family/test/native-execution.ts",
+        "listener/src/searcher/venues/swaps/fluid-dex-family/test/historical-ready.ts"
+      ],
+      "fluidContract": "exitCode 0",
+      "nativeBoundaryEvm": "exitCode 0",
+      "vm": "exitCode 0",
+      "dual": {
+        "exitCode": 1,
+        "total": 301,
+        "passed": 299,
+        "failed": 2,
+        "reason": "raw native-output external-recipient request mismatch; see FLUID-CODE-R2-01"
+      },
+      "skippedAfterFailure": [
+        "settlement10",
+        "fluid-plugin10"
+      ],
+      "buildScope": "09 build:live/issuer 使用与当前相同的生产 TypeScript。10 改 VM 和两个 Family 测试/CLI 文件；不能写成完整 13 文件在10重新 build 全过。"
+    },
+    "sourceBinding": {
+      "candidateFiles": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/adapters/runtime-amount-program.ts",
+          "sha256": "a35a3210ea97e59e5a57dcaeba28004dfc5be4b84b8825f68ecfdcaf9340f4dc",
+          "bytes": 12882,
+          "relativePath": "listener/src/adapters/runtime-amount-program.ts",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/adapters/runtime-amount-program.ts",
+            "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d",
+            "bytes": 12298
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/execution-asset-boundary.ts",
+          "sha256": "6b8cfd3b99bacf4d0310a3c20ef7b82f4ed2e121b272244a53147d6f40da459d",
+          "bytes": 11658,
+          "relativePath": "listener/src/searcher/execution-asset-boundary.ts",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/execution-asset-boundary.ts",
+            "sha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e",
+            "bytes": 9307
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/test/adapter-family-runtime.ts",
+          "sha256": "fbc85ae2eafc5e9908086cc2f3ee93a189427205df52322bf85629d573b7d0cf",
+          "bytes": 169037,
+          "relativePath": "listener/src/searcher/test/adapter-family-runtime.ts",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/test/adapter-family-runtime.ts",
+            "sha256": "66ceb3e661c198975538fb16549495b68344228cd2dff87aed87f6fcc3c4ca61",
+            "bytes": 167427
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/test/execution-asset-boundary-evm.ts",
+          "sha256": "a0c165fd66ae60f17b01659588b546d4b7e6cf7336445cf828f2849ef0515bdd",
+          "bytes": 7894,
+          "relativePath": "listener/src/searcher/test/execution-asset-boundary-evm.ts",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/test/execution-asset-boundary-evm.ts",
+            "sha256": "cd30ef031625bdbea2b1d34c44fa3d06f0421c995e6ef1a519094793b577fe6e",
+            "bytes": 7150
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/test/runtime-program-testkit.ts",
+          "sha256": "c28920fba420109ac233b8a91e065c0c5e7f2805fbb3e7146584d8e5199213a1",
+          "bytes": 5713,
+          "relativePath": "listener/src/searcher/test/runtime-program-testkit.ts",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/test/runtime-program-testkit.ts",
+            "sha256": "30c90ff597cdf9f4f8191a079361d3e004107f583880baf4a84fea20eb1ac714",
+            "bytes": 4925
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/adapter-family-runtime.ts",
+          "sha256": "6e978a3d6cda2ba48bd95039d542567d400be963c96686d8e3ea5a458f2d401e",
+          "bytes": 225854,
+          "relativePath": "listener/src/searcher/venues/adapter-family-runtime.ts",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/adapter-family-runtime.ts",
+            "sha256": "70f8d6c64580f1814cedcbeca6d1fc8f7db2cb256f65f5064491f9ac0d66f845",
+            "bytes": 224657
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/execution.ts",
+          "sha256": "ba16af8f57a017ee734b7cf5bb1dbe9310bf7896ca620ed6d115914764a051e6",
+          "bytes": 4880,
+          "relativePath": "listener/src/searcher/venues/swaps/fluid-dex-family/execution.ts",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/execution.ts",
+            "sha256": "f135ddb15397771160a90785c136a8186a811d4a5be87a354bcb8f11e797978e",
+            "bytes": 3891
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/raw-execution.ts",
+          "sha256": "f17d6c7cf0f2668c24bfe3f88e9cf9d5bd30ad0178dde890d805b51ecef2d39b",
+          "bytes": 4252,
+          "relativePath": "listener/src/searcher/venues/swaps/fluid-dex-family/raw-execution.ts",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/raw-execution.ts",
+            "sha256": "e7ebb8509033c3f2975470f076826397b3e50b42439373faaf9dbf6a367536cb",
+            "bytes": 1715
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/test/historical-ready.ts",
+          "sha256": "20a296db810a8c0337a5ff1c9c97641813cfb9a0d46224def6ff4129e11633d0",
+          "bytes": 15271,
+          "relativePath": "listener/src/searcher/venues/swaps/fluid-dex-family/test/historical-ready.ts",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/test/historical-ready.ts",
+            "sha256": "fb98d11fdd869923fe2f456462bf1828726618f03d3a57b6c48851453e4b3457",
+            "bytes": 13967
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/test/native-execution.ts",
+          "sha256": "5d3ccbcfd26b373330333b51d518df825cf61d7ce6593108bea4cf378a106b8e",
+          "bytes": 23024,
+          "relativePath": "listener/src/searcher/venues/swaps/fluid-dex-family/test/native-execution.ts",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/swaps/fluid-dex-family/test/native-execution.ts",
+            "sha256": "1d4bbd0d79fc2662d2c3d0e50458316b2f2709d9e6e7ea58c63fb3029a48c0cf",
+            "bytes": 12370
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/src/RuntimeAmountVM.sol",
+          "sha256": "6f628154f9641367ada5015c0776115981a7c3f8bc5609685d5bd89723c67655",
+          "bytes": 17631,
+          "relativePath": "src/RuntimeAmountVM.sol",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/src/RuntimeAmountVM.sol",
+            "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf",
+            "bytes": 16878
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/test/BotVMRuntimeAmount.t.sol",
+          "sha256": "379532fd54f52203fb506dc76a5f20717cb7ed25f9c96a34fbbd259658ed3764",
+          "bytes": 35912,
+          "relativePath": "test/BotVMRuntimeAmount.t.sol",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/test/BotVMRuntimeAmount.t.sol",
+            "sha256": "88384d02c862061eef9a88a4cd995fb5517d58d2407733ffe5f334236f06b691",
+            "bytes": 31630
+          }
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/test/ExecutionAssetBoundary.t.sol",
+          "sha256": "8092f23d44f8d4628d9dc7307a7a9d62b2f02cbc0e7c7ecd5f99d19fa0ca5382",
+          "bytes": 9539,
+          "relativePath": "test/ExecutionAssetBoundary.t.sol",
+          "baseline": {
+            "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/test/ExecutionAssetBoundary.t.sol",
+            "sha256": "4d1277b237c410aa0b79ad9a1922423d255bd5a28ee4570bbb4546370166dd48",
+            "bytes": 6975
+          }
+        }
+      ],
+      "installationPayloads": {
+        "install09.py": [
+          {
+            "path": "test/ExecutionAssetBoundary.t.sol",
+            "sha256": "8092f23d44f8d4628d9dc7307a7a9d62b2f02cbc0e7c7ecd5f99d19fa0ca5382"
+          },
+          {
+            "path": "test/BotVMRuntimeAmount.t.sol",
+            "sha256": "379532fd54f52203fb506dc76a5f20717cb7ed25f9c96a34fbbd259658ed3764"
+          },
+          {
+            "path": "src/RuntimeAmountVM.sol",
+            "sha256": "0b4522721eaa64df796bf67686b420d858c8c7f8fa8719dbe8daf85b4edf27e8"
+          },
+          {
+            "path": "listener/src/searcher/execution-asset-boundary.ts",
+            "sha256": "6b8cfd3b99bacf4d0310a3c20ef7b82f4ed2e121b272244a53147d6f40da459d"
+          },
+          {
+            "path": "listener/src/adapters/runtime-amount-program.ts",
+            "sha256": "a35a3210ea97e59e5a57dcaeba28004dfc5be4b84b8825f68ecfdcaf9340f4dc"
+          },
+          {
+            "path": "listener/src/searcher/test/execution-asset-boundary-evm.ts",
+            "sha256": "a0c165fd66ae60f17b01659588b546d4b7e6cf7336445cf828f2849ef0515bdd"
+          },
+          {
+            "path": "listener/src/searcher/test/runtime-program-testkit.ts",
+            "sha256": "c28920fba420109ac233b8a91e065c0c5e7f2805fbb3e7146584d8e5199213a1"
+          },
+          {
+            "path": "listener/src/searcher/test/adapter-family-runtime.ts",
+            "sha256": "fbc85ae2eafc5e9908086cc2f3ee93a189427205df52322bf85629d573b7d0cf"
+          },
+          {
+            "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+            "sha256": "6e978a3d6cda2ba48bd95039d542567d400be963c96686d8e3ea5a458f2d401e"
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/fluid-dex-family/execution.ts",
+            "sha256": "ba16af8f57a017ee734b7cf5bb1dbe9310bf7896ca620ed6d115914764a051e6"
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/fluid-dex-family/raw-execution.ts",
+            "sha256": "f17d6c7cf0f2668c24bfe3f88e9cf9d5bd30ad0178dde890d805b51ecef2d39b"
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/fluid-dex-family/test/native-execution.ts",
+            "sha256": "7239b73135f7267b7759728113414e9294e3a4157f713dedd34ec7d8af0597e5"
+          }
+        ],
+        "checks10.py": [
+          {
+            "path": "src/RuntimeAmountVM.sol",
+            "sha256": "6f628154f9641367ada5015c0776115981a7c3f8bc5609685d5bd89723c67655"
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/fluid-dex-family/test/native-execution.ts",
+            "sha256": "5d3ccbcfd26b373330333b51d518df825cf61d7ce6593108bea4cf378a106b8e"
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/fluid-dex-family/test/historical-ready.ts",
+            "sha256": "20a296db810a8c0337a5ff1c9c97641813cfb9a0d46224def6ff4129e11633d0"
+          }
+        ]
+      },
+      "assessment": "对 install09/checks10 中已保存的嵌入源内容独立 SHA256 比对。09+10 最后写入集合覆盖当前 13 候选；09 VM/native-execution 旧版本与当前不同，10 对应项匹配。这里没有另读取云端执行后 candidate10-pins.json 或全部源闭包，所以不把安装计划当成最终行为 source proof。",
+      "completeSourceClosureVerified": false,
+      "executorArtifactPinVerified": false
+    },
+    "testSemantics": [
+      {
+        "file": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/test/native-execution.ts",
+        "type": "synthetic bytecode model",
+        "claims": [
+          "覆盖 native token0/token1、普通 WETH ERC20、ERC20 两方向，self/external，多金额；默认 bytes 比对。",
+          "quote 拒绝非声明 revert、长度/selector/zero output/success；构造输入的 Exact/quoted 字段放置抛错 getter。",
+          "负例 fault 分支在 inspectRuntime 成功返回后直接 return，不会靠 success 后置余额断言制造 false rejection；amount=0 的路径由 emitted positive-input guard 拒绝。",
+          "short wrap/short transfer、wrong recipient、zero/under/over debit、old stock、native loss 等由 emitted guard 的模型执行检查。模型不具备 EVM 事务回滚。",
+          "model 手工镜像 native raw recipient 映射，不能代替生产 issuer 实际编码+执行。该限制已在源码注释披露。"
+        ]
+      },
+      {
+        "file": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/test/BotVMRuntimeAmount.t.sol",
+        "type": "actual BotVM + explicitly synthetic probe/token",
+        "claims": [
+          "新模式正例在 readonly nested run 中调用，probe storage writes 和 token mint 在目标声明 revert 后恢复；input patch/output 回传受检查。",
+          "普通 success、wrong/empty return length、forbidden value/callback/oversized length 使用 expectRevert，随后检查余额与 probe calls。",
+          "mode2 状态回滚来自真实 EVM，不是 TS interpreter；只直接观察 probe storage/token balance，未因此宣称所有 native/allowance/log/transient 资产面都已独立观测。",
+          "现有 callback 恢复测试名超过其实际鉴别力，见 FLUID-CODE-R2-02。"
+        ]
+      },
+      {
+        "file": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/test/ExecutionAssetBoundary.t.sol",
+        "producer": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/test/execution-asset-boundary-evm.ts",
+        "type": "actual BotVM + production-emitted common boundary + synthetic exchange/token/WETH",
+        "claims": [
+          "新 direct 的4个方向/recipient组合执行真实 BotVM；所有 actor/receiver graph token stocks 与 native balances独立读取。",
+          "14个 direct negative combinations 使用 expectRevert 并复查 actor/receiver input/output/native；native input extra-debit 被此循环跳过，旧 overspendNative 用例另覆盖。",
+          "真实 EVM negative 只覆盖 zero/under debit、zero output、ERC20 over-debit；short-wrap、short-transfer/wrong-receiver的新增针对性证据目前来自 TS model，不能称已跑真实 EVM。",
+          "synthetic token/exchange 不等于实际 Fluid 或部署 WETH 的历史执行；producer 直接调用 common boundary，不是 Fluid issuer 集成。",
+          "没有本地全量 log/program artifact 对照；已保存 runner output 报 exitCode 0，不能据此自造具体总测试数。"
+        ]
+      }
+    ]
+  },
+  "historicalReadyReview": {
+    "file": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/candidate/listener/src/searcher/venues/swaps/fluid-dex-family/test/historical-ready.ts",
+    "status": "static-reviewed; not-run",
+    "facts": [
+      "prior-ready 必须 completed、无 inProgressRun、cutoff number/hash 与 N header 相同、无 sparse observationScope。",
+      "使用 COPYFILE_EXCL 写新输出副本；保留原 Ready SHA 并在重验后复查原文件未变；没有编辑 Family fingerprints。",
+      "production rebuildUniverse 和价格入口仍被调用，expected pool/TX 只作完成后的目标断言，没有注入发现/strict。",
+      "保存源快照增加 BotVM、RuntimeAmountVM 与 TS amount-program；明确 scope 仍为命名文件及 Family树，并非 complete import closure。",
+      "同N/fullscope 元数据检查本身不是历史自然发现 provenance 证明；后续必须保留旧 Ready 来源并称复用+当前生产重验，不能改写成 fresh-from-zero discovery。",
+      "工具 result 自己保留 dualExecution/performance=not_run，价格行仍要求人工检查。"
+    ]
+  },
+  "parentAcknowledgement": {
+    "bothFindingsAccepted": true,
+    "plannedRawContractCorrection": "将映射抽为 protocol-neutral common helper，issuer 与 family-dual raw 层复用；保留真实 issuer 对 original echo 的独立断言。只改该合同的最小片段，不重写 peer 文件。",
+    "plannedCallbackRegression": "补 pending legacy field2→mode2 quote→不重装状态的合法 callback；恶意 callback 检查 runtime callback sender。",
+    "correctionsReviewedOrExecutedHere": false,
+    "historicalReadyUnchangedPerParent": true
+  },
+  "remainingAcceptanceWork": [
+    "修正两个本轮工具/安全回归发现后，完成原已选择检查；checks10 在 dual 失败后未执行 settlement/fluid-plugin。",
+    "冻结并绑定最终 commonSource/Family source closure、generated identity/route/execution pins、实际 executor bytecode 和底层执行 receipts；本报告不是 settlement gate 行为证据替代品。",
+    "真实历史同N current issuer 构造 quote/direct：覆盖 ERC20/native input/native output 的实际已准入变体、两方向、生产参考金额与多金额、self/external、真实 input debit/recipient receipt/old stocks；quote 只读及无输入控制独立记录。",
+    "新 Framework 模式的安全回归与跨 Family settlement composer 完成，不签 family_local。",
+    "把 model 的 short-wrap/short-transfer 等限制明列；如声称真实 EVM 已覆盖相应故障，需要同一生产编码的真实 EVM 对照。",
+    "性能、机会复现、生产盈利、部署与广播均未由本轮建立。"
+  ],
+  "evidenceFiles": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/install09-output.jsonl",
+      "sha256": "95e30b7d5a264bb8f50c17044f11e8210597638a85af8c2a63eed6332052c9b4",
+      "bytes": 4600
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/checks10-output.jsonl",
+      "sha256": "5fbedfe1e1aefe6ff0797070df9d90d1d1262c491102a9f132961f6a71209bef",
+      "bytes": 14300
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/install09.py",
+      "sha256": "6c46926f30fd094fa9a73cf471816b0f80ba625e3beb366ed87a99232dc701f8",
+      "bytes": 708885
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/checks10.py",
+      "sha256": "5fbd30e5d6f27d4142665f752ea9ac22344d12a9fe3acb9dc530ec41421a1afe",
+      "bytes": 77331
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/selection03.json",
+      "sha256": "7235af3e00e1eee0080ca76035c7f58d1694c9505c45d03dce74ed5a4233f132",
+      "bytes": 4507
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/selection06.json",
+      "sha256": "f28e1ddd058523f9ed3e82cc32f604cf0fd65280677746b21725d191bff46fb4",
+      "bytes": 4764
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/fluid-settlement-design-review.json",
+      "sha256": "7ab98e42987b704137c3a1101bc254c4a37a3c74f4c7e45ef50e992cef2c0b35",
+      "bytes": 35401
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/AGENTS.md",
+      "sha256": "4ab1f6aaed59f8aa31837542a55b5d1c452896e89b568918e0923bd0e420244d",
+      "bytes": 8920
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/CLAUDE.md",
+      "sha256": "4ab1f6aaed59f8aa31837542a55b5d1c452896e89b568918e0923bd0e420244d",
+      "bytes": 8920
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/docs/research/gates.md",
+      "sha256": "966c92259b85a645d2810cf6fcd3253ca6162062721882c17f55861a67db897e",
+      "bytes": 66541
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "bytes": 22021
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+      "bytes": 3636
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/listener/src/searcher/test/family-dual-execution.ts",
+      "sha256": "28e796b9642570c2317ecdcddccf460ed75601fcdddf2d5030cc65486f5dc2c0",
+      "bytes": 73573
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/test/RuntimePaymentMocks.sol",
+      "sha256": "2ef1f0e877a564c555d99d9c23b5d1b0f74fcbb21fa8317ae624dde93d6e3cfa",
+      "bytes": 4238
+    }
+  ],
+  "reviewMethod": {
+    "readOnly": true,
+    "testsRunByReviewer": false,
+    "cloudCallsByReviewer": false,
+    "codeEditsByReviewer": false,
+    "reportOnlyWrite": true,
+    "reconciliation": "复核 parent 已保存 canonical tool-run/runner 输出；明确 dual 失败和后续 skipped。受本轮只读授权限制未另运行 tool-index/tool-run。",
+    "interpretation": "发现为需要处理的验证合同与测试鉴别力缺口，不把缺乏历史执行误写为协议不支持，也不把 ABI/metadata/合成测试误写成实际部署通过。"
+  }
+}

@@ -1501,6 +1501,74 @@
       },
       "created_at": "2026-10-14T14:19:29.143316+00:00",
       "updated_at": "2026-10-14T14:19:29.143316+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-native-raw-request-mapping",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Tool-only adaptation validation defect, not an original opportunity causal lane. The raw contract supplied graph recipient to a native-output Family before the production issuer mapping, causing two false failures at299/301.",
+      "evidence": {
+        "before": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual10.log",
+        "after": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual12.log",
+        "independentReview": {
+          "path": "docs/research/reports/fluid-settlement-evidence-review-20261015.json",
+          "sha256": "3e76f147e6f4cdaa5930c18a388ac584b8d445857686c9614ed25ed1f12f3957"
+        },
+        "validation": {
+          "path": "docs/research/reports/fluid-recipient-validation-20261015.json",
+          "sha256": "e2b8770120f3bcad1f41ff26c93af078b6cde810bc5837abd108874dc1e84e6a"
+        }
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:family-dual-execution",
+        "issue": "The raw contract supplied graph recipient to a native-output Family before the production issuer mapping, causing two false failures at299/301.",
+        "evidence": "Non-author confirmed; old failure and same-source corrected regressions retained.",
+        "codify_target": "listener/src/searcher/test/family-dual-execution.ts; common mapRuntimeAssetSettlementRequest; issuer original-request proof.",
+        "status": "codified",
+        "codify_commit": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f"
+      },
+      "created_at": "2026-10-14T16:13:54.542087+00:00",
+      "updated_at": "2026-10-14T16:13:54.542087+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-fluid-declared-revert-provider",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Tool-only adaptation validation defect, not an original opportunity causal lane. The new handwritten RPC wrapper asserted no JSON-RPC error and discarded declared revert bytes, causing Fluid Exact unresolved although production prices succeeded.",
+      "evidence": {
+        "before": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual17-weETH-native.json",
+        "after": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/dual19-weETH-native.json",
+        "independentReview": {
+          "path": "docs/research/reports/fluid-settlement-evidence-review-20261015.json",
+          "sha256": "3e76f147e6f4cdaa5930c18a388ac584b8d445857686c9614ed25ed1f12f3957"
+        },
+        "validation": {
+          "path": "docs/research/reports/fluid-recipient-validation-20261015.json",
+          "sha256": "e2b8770120f3bcad1f41ff26c93af078b6cde810bc5837abd108874dc1e84e6a"
+        }
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:fluid-dex-historical-dual",
+        "issue": "The new handwritten RPC wrapper asserted no JSON-RPC error and discarded declared revert bytes, causing Fluid Exact unresolved although production prices succeeded.",
+        "evidence": "Non-author confirmed; old failure and same-source corrected regressions retained.",
+        "codify_target": "listener/src/searcher/venues/swaps/fluid-dex-family/test/historical-dual.ts; standard ethers structured provider revert.",
+        "status": "codified",
+        "codify_commit": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f"
+      },
+      "created_at": "2026-10-14T16:13:54.542087+00:00",
+      "updated_at": "2026-10-14T16:13:54.542087+00:00"
     }
   ]
 }

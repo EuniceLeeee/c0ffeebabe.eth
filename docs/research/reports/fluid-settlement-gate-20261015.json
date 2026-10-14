@@ -1,0 +1,65 @@
+{
+  "kind": "family-settlement-gate-receipt-v1",
+  "createdAt": "2026-10-14T16:18:31.482753+00:00",
+  "sourceCommit": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+  "familyId": "fluid-dex",
+  "result": "incomplete",
+  "gate": {
+    "scope": "settlement capability acceptance only",
+    "installed": 46,
+    "results": [
+      {
+        "familyId": "fluid-dex",
+        "passed": false,
+        "failures": [
+          "variant coverage is incomplete",
+          "fluid-dex: execution evidence; 3池6方向48正执行、44声明revert、12未预付quote已验；4项USDT无输入strict仍resource-limited，底层main Revert不能冒充该门通过。; 其他历史状态、jrUSDe实例及未覆盖部署仍未验；原有成功证据继续有效。; swapInWithCallback仍先收输入再输出，不声明deferred-input；native deferred没有扩大。"
+        ]
+      }
+    ]
+  },
+  "execution": {
+    "exit": 1,
+    "elapsedSeconds": 46.8516161441803,
+    "log": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/settlement-gate29.log",
+    "sha256": "0bdf18b9b28961213a563c82eb95ddfb8a6056712cbcbd28f884ab34004b99f6",
+    "selectionSha256": "d2fa42e6aa7212d812618f2f88464a7c3fac3a34421e637feedd2f54b5f0a3d2"
+  },
+  "toolSelection": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/fluid-recipient-20261014.vihrisnu/selection28.json",
+    "sha256": "d2fa42e6aa7212d812618f2f88464a7c3fac3a34421e637feedd2f54b5f0a3d2",
+    "requested": [
+      "settlement"
+    ],
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:family-settlement-review",
+        "descriptor_sha256": "023666295b246ae5768fdf4de22e320bd93e64470f3b8648bd3187617b12f48a",
+        "started_at": "2026-10-14T16:16:44.246Z",
+        "finished_at": "2026-10-14T16:17:30.779Z",
+        "exit_code": 1,
+        "cwd": "listener",
+        "argv_sha256": "d8cbfc863c251d2ed6494cadfd6d964b570346ec448fcc8153a32394d531bf66",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:family-settlement-review",
+          "--",
+          "--family",
+          "fluid-dex"
+        ],
+        "stdout_sha256": "b9ec4e98e892295a7a4b43fbd6b13d27f52282dcae3d72a53465523004250b0a",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 904,
+        "stderr_bytes": 0
+      }
+    ]
+  },
+  "reconciliation": "The canonical current-source gate agrees with the independent review: new recipient wiring is implemented, 48 positives/44 declared reverts/12 unfunded quotes are valid scoped evidence, while four strict negatives and deployment coverage remain incomplete. No stale/missing source or invalid evidence pin is hidden; expected incomplete result is not a pass.",
+  "sourceEvidence": {
+    "path": "docs/research/reports/fluid-recipient-correctness-20261015.json",
+    "sha256": "406f6185ab386e5875f17760a22a125be8711f86f645763335f42e071152f6dd"
+  },
+  "limits": "Framework change; no family_local, Adapter Replay, whole opportunity, performance, deployment or delivery pass."
+}
