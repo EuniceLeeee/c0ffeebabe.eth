@@ -1,0 +1,267 @@
+{
+  "schema": "psv-recipient-candidate-static-review.v2",
+  "createdAt": "2026-10-14T12:20:39.922914+00:00",
+  "reviewer": "interface_protocols_a",
+  "scope": {
+    "mode": "independent-read-only-code-and-harness-review",
+    "newRpc": false,
+    "newBuild": false,
+    "newTests": false,
+    "newFork": false,
+    "remoteActions": "Read only four source dependencies via cloud.py; no source writes or test processes.",
+    "writes": "This JSON and reviewer-source snapshots only; no source/IMPL edits.",
+    "executionResultReviewed": false
+  },
+  "verdict": "no-unresolved-static-blocker-found; v1-findings-addressed; execution-acceptance-pending-with-explicit-evidence-limits",
+  "priorFindings": [
+    {
+      "id": "PSV-CANDIDATE-01",
+      "status": "closed-in-source",
+      "fix": "Negative model calls pass verify=false and return immediately after inspectRuntime. Capacity tests independently assert observed.mutations==0, so protocol or model failure after approvals cannot satisfy the preflight check.",
+      "bounds": "No tests or mutation trials were executed by this reviewer. Fault-call assertions remain legitimate constraints on encoded recipient/amount."
+    },
+    {
+      "id": "PSV-CANDIDATE-02",
+      "status": "closed-in-source",
+      "fix": "New compatibility suite covers Aqua omitted/executor/external receiver forwarding and invalid recipients; UniV2 CP same quote bytes for external receivers, opaque omitted/explicit executor acceptance, external quote rejection, invalid receiver rejection. Explicit synthetic opaque descriptor was added after the saved corpus was found to contain only CP.",
+      "bounds": "Synthetic opaque descriptor is emitter-only evidence, never a Ready or admission claim. Compatibility suite execution results were not reviewed here."
+    }
+  ],
+  "newBlockingFindings": [],
+  "productionCodeReview": {
+    "result": "No new payer debit, recipient credit, fee, reserve/capacity, opcode or default-path defect found.",
+    "unchangedSinceV1": [
+      "listener/src/searcher/simulator/runtime-settlement.ts",
+      "listener/src/searcher/venues/protocols/psv-family/execution.ts",
+      "listener/src/searcher/venues/protocols/psv-family/runtime-quote.ts",
+      "listener/src/searcher/venues/swaps/aqua-swapvm-family/execution.ts",
+      "listener/src/searcher/venues/swaps/aqua-swapvm-family/runtime.ts",
+      "listener/src/searcher/venues/swaps/univ2-family/runtime-execution.ts",
+      "src/RuntimeAmountVM.sol"
+    ],
+    "checks": [
+      "PSV static preview is bound to actual recipient; gross reserve net+fee is separate from receiver net+fee*treasuryAlias.",
+      "Zero-disabled txn cap effective MAX addition cannot overflow: the MAX term is nonzero only for cap=0. Remaining capacity, amount and net positivity are checked.",
+      "Nested child programs preserve parent r0; input approval and swap use the full invocation input. Direct verifies exact payer debit and receiver credit; local separate-recipient old-input/old-output checks reject payer treasury fee residue.",
+      "Default PSV swap/quoted program construction remains equivalent; default Exact and evidence/cache contracts remain unchanged. Existing historical default evidence is not invalidated.",
+      "Generic quote receiver matches actual prefix receiver; Aqua and UniV2 retain existing valid self-recipient paths. Opaque external quote correctly refuses unsupported output/payment callback coupling.",
+      "math eq kind7 is consistent across Solidity, emitter and interpreter; previous checked math, signed neg restriction, assert-equal and read-only semantics are retained."
+    ]
+  },
+  "evmHarnessReview": {
+    "files": [
+      "RuntimeRecipient.t.sol",
+      "runtime-evm-program.ts"
+    ],
+    "type": "actual saved PSV runtime templates with relocated UUPS __self, fresh local proxy storage and synthetic ERC20 contracts; not historical fee/cap/whitelist state",
+    "identityBinding": "Solidity pins proxy code hash, patches both implementation __self offsets and installs EIP-1967 slot. The FFI emitter reads the same source-runtime fixture and setup()/identity/proveImplementation checks the normalized implementation template hash and self-address binding before producing a Family program. Fixture token code hashes represent synthetic descriptor setup; this is not live strict admission.",
+    "emission": "FFI invokes the actual production Family emitter for quote and direct programs. Test contract receives bytecode, not a handwritten substitute program.",
+    "positiveChecks": [
+      "Quote-output executes as a read-only nested program and compares its output to the real deployed-code preview adjusted only for treasury==receiver.",
+      "Direct EVM success independently reads payer input debit, unchanged payer old output, unchanged receiver old input, receiver output credit, vault gross output debit, zero final allowance and payer native balance.",
+      "Both directions, nonzero fees, payer whitelist vs receiver whitelist, treasury==receiver, zero fee and asymmetric 18/6 and 6/18 decimals are exercised."
+    ],
+    "negativeChecks": [
+      "expectRevert applies to bot.execute only. Subsequent direct EVM storage reads assert seven balance positions, preexisting allowance and remaining block capacity are unchanged; these assertions cannot masquerade as the expected transaction revert.",
+      "Synthetic token faults allow zero/one-under/one-over debit with no token allowance failure, so deleting the Family exact-debit guard would let those cases execute and fail the expected-revert test.",
+      "Short/wrong output, false approval and treasury==payer residue have valid surrounding balances and capture actual Family failure/rollback.",
+      "Sequential capped swaps test inclusive transaction/block limits, exhausted block capacity and next-block reset using actual saved PSV code. Gross reserve shortfall, pause and zero/rounded-zero output are represented."
+    ],
+    "limitations": [
+      "Success checks use deployed preview as the net/fee oracle; they verify Family agreement with that contract rather than independently proving all protocol fee arithmetic. Offline fixture arithmetic and source review supplement this.",
+      "The Solidity EVM suite does not prove static capacity rejection occurs before approval by itself; the revised offline observed.mutations==0 tests cover that distinction.",
+      "Receiver native balance and a distinct treasury positive fee delta are not independently asserted by the Solidity success helper; payer native, receiver token balances and vault gross debit are checked.",
+      "The reviewer did not execute Forge/FFI or inspect final passing receipts. Initial filesystem-permission failure and retries must remain separate execution records."
+    ]
+  },
+  "historicalHarnessReview": {
+    "historicalReady": "Copies prior Ready to a new logs output, selectively invokes current production rebuild for PSV/V2/V3 at pinned N, verifies unchanged prior-file hash and source-before/after, then invokes production runAtBlock through prices. No manually minted target identity or price amount was found. The result label is stage completion; final effective-row acceptance is enforced by historical-dual productionAmount(status=met).",
+    "historicalDual": "Preserves prior default Exact/quoted/runtime tests and adds actual-recipient preview, current-source issued quote/direct and effect-delta execution. Each external recipient uses its own preview and treasury-adjusted expected credit; no default executor quote output is reused as recipient output. Successful observations cover payer, vault, recipient and treasury for both tokens, including alias aggregation.",
+    "sourceBinding": [
+      "Ready hash and current memo definition; N/hash/generation checks; prices source provenance and effective amount; current production source tree; runner and helper hashes; REVM binary hash; every executor artifact Solidity source hash and provisioned runtime code hash; final before/after pin checks.",
+      "stateRequests+decodeState recheck proxy, implementation slot/runtime identity, token code/decimals/scales and mutable PSV state at the same pinned source."
+    ],
+    "controls": [
+      "No-input negative uses the same execution script/calldata as its positive counterpart and only changes actor input funding to zero.",
+      "Post-execution-revert appends a deliberate failing equality, so it is a separate atomicity control with different calldata.",
+      "Successful event recipient, input, net amount and fee are independently checked against the recipient preview and observed balance deltas."
+    ],
+    "strictTransportFacts": {
+      "sourceFile": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-source/listener/src/searcher/revm-strict-simulation-transport.ts",
+      "success": "Checks node source attestation and counterfactual executor code hash; requires exact requested token/native observation cardinality and account order; maps validated successful token deltas/native delta/logs into Family effects.",
+      "native": "requestSnapshot lines 264-266 requests native balances only for caller/from. No external recipient native observation is produced.",
+      "revert": "responseSnapshot lines 329-344 requires non-success effects arrays empty and returns empty observations. Nested incomplete/halt provenance is rejected from declared successful evidence. Thus empty tokenDeltas after revert are transport behavior, not an independently observed full zero stateDiff.",
+      "rawEvidence": "The runner saves central outcome/effects and source pins; its wrapper does not retain raw call trace or full stateDiff."
+    },
+    "requiredClaimLimits": [
+      "Historical positive evidence is same-N-end current-executor receipt/debit observation, not original pre-call TX parity, whole-loop success or performance.",
+      "Historical negative evidence is declared EVM revert with unchanged calldata for no-input controls; it is not independent full historical stateDiff rollback.",
+      "Historical recipient native is unmeasured. Do not claim it from the caller native delta.",
+      "Nonzero fees/caps/whitelist and asymmetric decimals in the added EVM suite are fresh synthetic state on genuine code templates; they are not historical mainnet state.",
+      "Actual execution acceptance remains pending until final saved results are inspected."
+    ]
+  },
+  "packageRegistration": {
+    "reviewed": "package.json adds PSV runtime-recipient, historical-ready and historical-dual scripts. The standalone compatibility and Forge invocation still need their actual selected tool-run manifest/receipts to count as executed reconciliation; registration/source text is not execution evidence."
+  },
+  "changedOrNewSinceV1": [
+    "listener/package.json",
+    "listener/src/adapters/runtime-amount-program.ts",
+    "listener/src/searcher/test/runtime-quote-recipient-compatibility.ts",
+    "listener/src/searcher/venues/protocols/psv-family/test/RuntimeRecipient.t.sol",
+    "listener/src/searcher/venues/protocols/psv-family/test/historical-dual.ts",
+    "listener/src/searcher/venues/protocols/psv-family/test/historical-ready.ts",
+    "listener/src/searcher/venues/protocols/psv-family/test/runtime-evm-program.ts"
+  ],
+  "sourcePins": {
+    "candidate": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/package.json",
+        "sha256": "102be52cade95576e64a31ea1e6484ffbb8333acfc2cd0ded0e2800c0e0f4dd0",
+        "bytes": 43961
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d",
+        "bytes": 12298
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/simulator/runtime-settlement.ts",
+        "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5",
+        "bytes": 4346
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/test/psv-direct-recipient.ts",
+        "sha256": "9a8adc55acdef8ea6ebe3dcee837507a42358979f058c9f5648e15536dd8d6c6",
+        "bytes": 18887
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/test/runtime-program-testkit.ts",
+        "sha256": "30c90ff597cdf9f4f8191a079361d3e004107f583880baf4a84fea20eb1ac714",
+        "bytes": 4925
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/test/runtime-quote-recipient-compatibility.ts",
+        "sha256": "c14762cc7be570c1a06062eb6bbe3f5917ac4d40249b31b847b057b00ba390f5",
+        "bytes": 4082
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/test/runtime-settlement.ts",
+        "sha256": "1d19a3f5b78b572fc3eb18d4b0667a846ac254049ce1de2031201b7ec260e6de",
+        "bytes": 12719
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/execution.ts",
+        "sha256": "3acba817b47f1306bca7632b8a8dd22b941ccca3ead497b37726443e11abbaa7",
+        "bytes": 5450
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/runtime-quote.ts",
+        "sha256": "944d755180a706c49f9e422adf5c444776dadedb525d404000bb5a112c1f80ed",
+        "bytes": 2153
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/test/RuntimeRecipient.t.sol",
+        "sha256": "8033624c5aab718e2095b489f4d53c57b65a7a5ed912a6ca640ea846377ee4a7",
+        "bytes": 10087
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/test/fixtures.ts",
+        "sha256": "165170e94554dc57e4f0cb55c7d2edf37f16a68d404f03f8121eb97dbec57e72",
+        "bytes": 5637
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/test/historical-dual.ts",
+        "sha256": "fd547c221fbd0e4448c1d081736aaa88448769075c79ddcf6ed5e7547dccea17",
+        "bytes": 27325
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/test/historical-ready.ts",
+        "sha256": "d2783d643ba62aeacac14d2eac06f5081873215a33585705432f3dc7c36fa820",
+        "bytes": 6201
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/test/runtime-evm-program.ts",
+        "sha256": "f30eb8d0e85b44ef0331a5ef9326e60430ca85820bacf91f1c51d1b19f2b9bc6",
+        "bytes": 1389
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/swaps/aqua-swapvm-family/execution.ts",
+        "sha256": "07674ff2020b90f2c5252b314467a07fbf8cfad43cddaa521e353f05db11dfe0",
+        "bytes": 2526
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/swaps/aqua-swapvm-family/runtime.ts",
+        "sha256": "1c00b28582d54acea349e578b09580e57b3e131deffcb5a96e950042a10f613a",
+        "bytes": 5340
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/swaps/univ2-family/runtime-execution.ts",
+        "sha256": "ba0953b2dbcdf01d8d66dbe430723f47298a5988ca2abe9face4ac063c608dac",
+        "bytes": 8784
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/src/RuntimeAmountVM.sol",
+        "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf",
+        "bytes": 16878
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/test/BotVMRuntimeAmount.t.sol",
+        "sha256": "88384d02c862061eef9a88a4cd995fb5517d58d2407733ffe5f334236f06b691",
+        "bytes": 31630
+      }
+    ],
+    "context": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/protocols/psv-family/runtime-shape.ts",
+        "sha256": "597798c351886edb22f942a0809d6ce150ac3b23dbdd0f10a6381f15b7a1b478",
+        "bytes": 1294
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/protocols/psv-family/test/source-runtime.json",
+        "sha256": "3528a3ad0a1afb1818301f178c2654b2ca7a748babeee4ce556e036ddc20ea19",
+        "bytes": 17941
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/protocols/psv-family/identity.ts",
+        "sha256": "07b6197aad6856cef8cad775edc7f0f29995cbae979f37218ca04aa496a019d2",
+        "bytes": 10923
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/protocols/psv-family/state.ts",
+        "sha256": "b79fe8f32dbe8115bba9257b55bc292e618ac7d57e90a63a72b19bb8875bab77",
+        "bytes": 4394
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/swaps/aqua-swapvm-family/codec.ts",
+        "sha256": "f627cb827217c42cfe5380bc358ad07f36baef236a5d35cd191639a4316c01c1",
+        "bytes": 9170
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/psv-recipient-candidate-static-review-v1.json",
+        "sha256": "a111231f8c1a194d131fa1bead90dae05f2aa713dfcdac3cb59b92a71f410ebc",
+        "bytes": 17817
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-source/listener/src/searcher/revm-strict-simulation-transport.ts",
+        "sha256": "dcd6f1d8b0bf9cf8f17ea18ef1a8d39dfd3ed30a223730e0775bf48f336ad851",
+        "bytes": 28966
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-source/listener/src/searcher/revm-strict-source-simulation.ts",
+        "sha256": "347fb02581087c40bceba022349fa6ebe8127c9733d5cd2703fe6a44b87fff02",
+        "bytes": 2868
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-source/listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+        "sha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27",
+        "bytes": 37416
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-source/listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+        "sha256": "6d6c5c82fd971d5a55c50817b0738d7524e7f129ec60d5f8fc24af37dffbec54",
+        "bytes": 35161
+      }
+    ]
+  }
+}

@@ -1,0 +1,716 @@
+{
+  "kind": "family-settlement-behavior-evidence-v1",
+  "schemaVersion": 1,
+  "familyId": "protocol:psv",
+  "variantIds": [
+    "PegStabilityVault buy/sell GEM"
+  ],
+  "result": "pass",
+  "scope": "PSV recipient-aware settlement correctness only; not full adapter delivery",
+  "createdAt": "2026-10-14T13:00:11.175831+00:00",
+  "sourceCommit": "4a71243757c691cc25ddfdb343fafa481516f14c",
+  "actualSource": {
+    "sourceTreeSha256": "a6b0d29c2e1114cf932283d072be969212eeefe95137a3cb2a793a2336d86515",
+    "harnessSha256": "6d6c5c82fd971d5a55c50817b0738d7524e7f129ec60d5f8fc24af37dffbec54",
+    "evidenceSha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27",
+    "observationHelpers": [
+      {
+        "path": "../three-family/historical-input-observations.ts",
+        "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+      },
+      {
+        "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+        "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+      },
+      {
+        "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+        "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+      },
+      {
+        "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+        "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+      },
+      {
+        "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+        "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+      },
+      {
+        "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+        "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+      },
+      {
+        "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+        "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+      },
+      {
+        "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+        "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+      },
+      {
+        "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+      }
+    ]
+  },
+  "source": [
+    {
+      "path": "listener/src/adapters/protocol-legs.ts",
+      "sha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/psv.production.ts",
+      "sha256": "11eac9d5f3daf2b779d6aad8164cb51a79534ed60950dbd79ddb8fcb531d0a65"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/action.ts",
+      "sha256": "b1ec04e1846f903b163b9edff8a8a3c9cc82a0e4998b51d930b25fff6c6aa3f1"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/codec.ts",
+      "sha256": "52d66b57cd3e01187597fe1e5e805226e4567b3c4097c4fc7fa072a4638265d5"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/execution.ts",
+      "sha256": "3acba817b47f1306bca7632b8a8dd22b941ccca3ead497b37726443e11abbaa7"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/identity.ts",
+      "sha256": "07b6197aad6856cef8cad775edc7f0f29995cbae979f37218ca04aa496a019d2"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/instance.ts",
+      "sha256": "facf62e75de73e598debfce2f93f9b412e4ca12b812a528163d2132d7446141e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/manifest.ts",
+      "sha256": "3c866910bd9dacc7db5b6752cf752838a12e44b259a16a6ddd4659d104573ab5"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/routes.ts",
+      "sha256": "2d23283a19ad13d9b05c69ce973a70c173f3b4f38e4552fdd6952fc8861e8808"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/runtime-quote.ts",
+      "sha256": "944d755180a706c49f9e422adf5c444776dadedb525d404000bb5a112c1f80ed"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/runtime-shape.ts",
+      "sha256": "597798c351886edb22f942a0809d6ce150ac3b23dbdd0f10a6381f15b7a1b478"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/state.ts",
+      "sha256": "b79fe8f32dbe8115bba9257b55bc292e618ac7d57e90a63a72b19bb8875bab77"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+      "sha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    }
+  ],
+  "commonSource": [
+    {
+      "path": "listener/src/adapters/registry.ts",
+      "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d"
+    },
+    {
+      "path": "listener/src/compiler.ts",
+      "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-credit-runtime.ts",
+      "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+      "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+      "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+      "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+    },
+    {
+      "path": "listener/src/searcher/adapter-funding-runtime.ts",
+      "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+    },
+    {
+      "path": "listener/src/searcher/adapter-work-intent.ts",
+      "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+    },
+    {
+      "path": "listener/src/searcher/amount-quote-continuity.ts",
+      "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+    },
+    {
+      "path": "listener/src/searcher/blockscan-route-identity.ts",
+      "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+    },
+    {
+      "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+      "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+    },
+    {
+      "path": "listener/src/searcher/exact-prefix-plan.ts",
+      "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+    },
+    {
+      "path": "listener/src/searcher/exact-trial-state.ts",
+      "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "sha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e"
+    },
+    {
+      "path": "listener/src/searcher/identity-asset-metadata.ts",
+      "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+    },
+    {
+      "path": "listener/src/searcher/runtime-evidence.ts",
+      "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+    },
+    {
+      "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+      "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+    },
+    {
+      "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+      "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+      "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+      "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-bounds.ts",
+      "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-propagation.ts",
+      "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-rejection.ts",
+      "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-builder.ts",
+      "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+      "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+    },
+    {
+      "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+      "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+    },
+    {
+      "path": "listener/src/searcher/strategy-taxonomy.ts",
+      "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+    },
+    {
+      "path": "listener/src/searcher/strict-production-runtime-session.ts",
+      "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+      "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "70f8d6c64580f1814cedcbeca6d1fc8f7db2cb256f65f5064491f9ac0d66f845"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-program.ts",
+      "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+    },
+    {
+      "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+      "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+      "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+      "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-instance-identity.ts",
+      "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/constants/addresses.ts",
+      "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+    },
+    {
+      "path": "listener/src/shared/state/state-backend.ts",
+      "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+    },
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "src/BotVMEncoder.sol",
+      "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+    },
+    {
+      "path": "src/BotVMScriptBuilder.sol",
+      "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+    },
+    {
+      "path": "src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+    },
+    {
+      "path": "src/FlashArb.sol",
+      "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+    },
+    {
+      "path": "src/interfaces/IFluidVault.sol",
+      "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+    },
+    {
+      "path": "src/interfaces/IMorpho.sol",
+      "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+    },
+    {
+      "path": "src/interfaces/ISwap.sol",
+      "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+    }
+  ],
+  "positiveExecutions": 40,
+  "rejections": 20,
+  "verifiedAssertions": [
+    "actual-input-debit",
+    "actual-output-receipt",
+    "old-inventory",
+    "rollback",
+    "receiver-bound-readonly-quote",
+    "positive-exact-input",
+    "approval-cleanup",
+    "quote-receipt-equality"
+  ],
+  "implementation": {
+    "family": "PSV emits recipient-bound quote-output/direct-output; preview observes recipient whitelist; treasury recipient is credited net+fee; input is never reduced; positive input/output, gross reserves, pause and inclusive WAD rate limits checked; no callback claim. Existing default quote/quoted/runtime retained.",
+    "shared": "Generic quote-output optionally names its actual recipient; deferred composer supplies each real prefix recipient. Generic RuntimeAmountVM eq(kind7) enables Family boolean comparisons. Existing guards, math assert-equal, 0/1 raw-unit policy, native/profit/final-repayment and inventory gates are unchanged.",
+    "compatibility": "Aqua forwards optional quote recipient in taker data. UniV2 CP accepts receiver-independent quotes; opaque pool quote keeps omitted/self support and declines unsupported external recipient."
+  },
+  "chain": {
+    "transactionHash": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8",
+    "block": 26152596,
+    "blockHash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+    "pool": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+    "implementation": "0x8be82303829042f0fba1315096a8f1961907c0dd",
+    "executorCodeHash": "0x7abb7c759c70c829a2ee4e8712108458fd148ac9e8f6d396caaa9539c9ecb346",
+    "executorArtifactSha256": "a95d791dc8ffb170bc1ee6d6fd00e0993d6445cf03a9b6320bc14ea185b7a87a",
+    "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+    "admission": {
+      "memoFingerprint": "b1e556c4230634960e7f4a6a7faa4ac995eea335f93b125d156d76843ec9f80d",
+      "familyDefinitionHash": "95deedaeef7bdf0b3c86eebe67a76adaf236782d503ff53fc33f2c2870200983",
+      "candidate": {
+        "adapter": "psv",
+        "address": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "blockHash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+        "blockNumber": 26152596,
+        "candidateKind": "psv",
+        "familyId": "protocol:psv",
+        "logIndex": 2164,
+        "pluginCandidateKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "target": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "transactionHash": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8"
+      }
+    },
+    "state": {
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+        "generation": 26152596
+      },
+      "paused": false,
+      "tin": "0",
+      "tout": "0",
+      "treasury": "0xd623a098e77d484069cf7840205c800a2ef5ea20",
+      "maxPerTransaction": "0",
+      "maxPerBlock": "0",
+      "remaining": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      "stableReserve": "490729776199",
+      "gemReserve": "159270223801"
+    }
+  },
+  "naturalIntegration": {
+    "result": "reused-natural-ready-current-production-revalidated",
+    "priorReady": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-adaptation-20261010.ajBfxG/natural-2/ready.json",
+      "sha256": "9c27ae170a25c04c32031d0e88cfe4033f676338289215247e4855d8975852ec",
+      "unchanged": true
+    },
+    "currentInputs": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/natural09/ready.json",
+        "sha256": "971053d021ec0b4e14a033cdeb71edd7f45c3295885bbeac46494c451f970e5c"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/natural09/prices/prices.json",
+        "sha256": "8142f50c2d6099be3dc62479d481a9c65ac663f26a385b9d0175af21022a5fbc"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/natural09/prices/input.json",
+        "sha256": "5e4a995fdec8c28bfa812b9fc66d16c614f06c8cfae9e1d33f0b0aacc31a4b6d"
+      }
+    ],
+    "activeInstances": 41,
+    "edges": 82,
+    "graphRaw": 82,
+    "graphEffective": 80,
+    "backgroundMissingValuation": 2,
+    "targetDirections": 2,
+    "targetRows": [
+      {
+        "edgeId": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x14913815bcfde78baead2111f463d038ac9c2949\u001fa3cb2816e192c26fe52dbbe3b1b57a0e247e56a3401d92845d19651ac92da5cd",
+        "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "amountIn": "4969763",
+        "status": "quoted",
+        "amountOut": "4969763",
+        "effectiveMid": 1,
+        "quotedAt": {
+          "number": 26152596,
+          "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+          "generation": 1
+        }
+      },
+      {
+        "edgeId": "protocol:psv\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0xc72178d412256a6dc5f04d749859b4cd95076d61\u001f0x14913815bcfde78baead2111f463d038ac9c2949>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f922ae3adeb9f64f5ed1ae9394f191382c9d14f4c54c698cae1fbb69a87a0401e",
+        "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "4969763",
+        "status": "quoted",
+        "amountOut": "4969763",
+        "effectiveMid": 1,
+        "quotedAt": {
+          "number": 26152596,
+          "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+          "generation": 1
+        }
+      }
+    ],
+    "configuration": {
+      "familyIds": [
+        "protocol:psv",
+        "univ2-standard",
+        "univ3-standard"
+      ],
+      "SEARCHER_FAMILY_PSV_ENABLED": "1",
+      "defaultEnabledChanged": false,
+      "referenceWethInput": "2000000000000000",
+      "maxInputPathHops": 3,
+      "sourceMode": "source-block",
+      "through": "prices",
+      "manualPriceEdits": false,
+      "carriedTargetRows": 0
+    }
+  },
+  "historicalExecution": {
+    "inputsPerDirection": [
+      "4969763 natural production input",
+      "7361655916 original receipt size at N-end (manual size control, not original direction/state replay)",
+      "1000000 one-token control",
+      "1 one-raw control"
+    ],
+    "defaultAndExternal": {
+      "file": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/historical-dual10.json",
+        "sha256": "986c9093548fbcf6371d177579b92526bca9e1b13a339ba638dc73f9101ff680"
+      },
+      "defaultPositive": 16,
+      "defaultDeclaredReverts": 8,
+      "externalPositive": 16,
+      "externalDeclaredReverts": 8,
+      "recipients": [
+        "owner",
+        "treasury"
+      ],
+      "quoteReceiptDelta": "0",
+      "invocationCounts": {
+        "exact": 8,
+        "quoted": 8,
+        "forbiddenDuringBuild": 0
+      }
+    },
+    "selfRecipientSupplement": {
+      "file": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/historical-self14.json",
+        "sha256": "271d085d4b8867d22fbaa1a20d3d442a67f3a2926deda83fb5c8d5a588d81d61"
+      },
+      "positive": 8,
+      "declaredReverts": 4,
+      "defaultExecutions": 0,
+      "externalExecutions": 0,
+      "quoteReceiptDelta": "0",
+      "invocationCounts": {
+        "exact": 0,
+        "quoted": 0,
+        "forbiddenDuringBuild": 0
+      }
+    },
+    "productionConstruction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "scope": "production issuer; selector contract separately tested offline"
+    },
+    "drained": true
+  },
+  "offlineChecks": {
+    "productionBuild": "PASS build03/build05/build11; owned-source build13 also passes with peer changes excluded",
+    "psvAndSharedTests": 36,
+    "sharedExecutorSafetyTests": 132,
+    "existingFamilyDualTests": 301,
+    "existingAquaTests": 11,
+    "newCompatibilityTests": 2,
+    "genuineRuntimeSyntheticEvmTests": 7,
+    "toolIndexTests": "PASS",
+    "defaultFoundry": {
+      "test": "test",
+      "ffi": false,
+      "fsPermissions": [
+        {
+          "access": "read",
+          "path": "out"
+        }
+      ]
+    },
+    "evmAssertions": "Both directions; fee/whitelist/treasury aliases, 6/18 and 18/6 decimals, positive/rounded-zero output, gross reserve boundary, pause, exact debit 0/-1/+1, short/wrong receipt, false approval, inclusive transaction/block caps and next-block reset, exact post-revert balances/allowance/capacity; payer/receiver native inventory 17/19 wei."
+  },
+  "preservedFailures": [
+    {
+      "attempt": "baseline01/02",
+      "type": "Expected regression failures against prior production: missing recipient quote binding/capability/eq opcode; retained."
+    },
+    {
+      "attempt": "compat04/05",
+      "type": "New offline opaque fixture incomplete; never counted as protocol execution failure."
+    },
+    {
+      "attempt": "psv-evm04/05",
+      "type": "Fixture file read permission prevented tests."
+    },
+    {
+      "attempt": "config06",
+      "type": "Isolated config basename caused Forge config crash; no EVM tests."
+    },
+    {
+      "attempt": "psv-evm07",
+      "type": "Nothing to compile; zero tests despite exit0; not counted as pass."
+    },
+    {
+      "attempt": "psv-dual09",
+      "type": "New helper declared unused executor for no-caller state requests, unresolved before samples; same Ready/prices reused by dual10 after narrow correction."
+    },
+    {
+      "attempt": "catalog-index12",
+      "type": "Ignored commit-generator input lacked package lock, artifact incomplete; actual working catalog untouched; supplied tracked lockfile and canonical index13 succeeded."
+    }
+  ],
+  "boundaries": [
+    "Historical execution uses current BotVM bytecode counterfactually in source-pinned local REVM at N-end. No mainnet deployment/signing/broadcast, original pre-call parity, whole-loop search/final-sim/EV or new opportunity replay is claimed.",
+    "At this historical state tin=tout=maxPerTransaction=maxPerBlock=0. Nonzero fees, receiver whitelist, gross treasury credit, caps, decimal rounding and full post-revert balance/allowance/capacity reads are synthetic states on genuine saved PSV bytecode, not historical nonzero-state samples.",
+    "Historical negatives prove declared EVM reverts. The transport empties effects on revert; they are not independent full historical stateDiff rollback evidence. The separate EVM suite supplies actual storage/balance rollback checks.",
+    "Historical external-recipient native balance is not observed. Native is observed for the payer/self recipient; the synthetic EVM suite retains payer 17 wei and external receiver 19 wei.",
+    "PSV has input-first ERC20 payment and no deferred callback. Treasury equal to payer with nonzero fee splits output back to payer; the direct path rejects atomically instead of relaxing conservation. The current strict identity/default Exact already reject that actor alias.",
+    "Current natural integration covers this pinned implementation/proxy and two directions. Formal Adapter Replay, whole-framework/family_local/merge_ready acceptance, untested variants and phase 4A/4B remain unfinished. Source commit/build success is not complete delivery.",
+    "The full background graph has 82 raw/80 effective rows, with two non-PSV missing-valuation rows. Both PSV rows are fresh, quoted from natural inputs. No complete background-graph or representative performance claim.",
+    "Older all-family interface and behavior results remain scoped to their original source snapshots; updating common source pins for this PSV acceptance does not revalidate the other 45 families."
+  ],
+  "nextWork": [
+    "Mooniswap external receiver wiring/receipt acceptance; preserve existing full-prefix opportunity result.",
+    "Other original IMPL unfinished adaptations, then unified opportunity replay; performance stays later."
+  ],
+  "evidence": [
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/historical-dual10.json",
+      "sha256": "986c9093548fbcf6371d177579b92526bca9e1b13a339ba638dc73f9101ff680"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/historical-self14.json",
+      "sha256": "271d085d4b8867d22fbaa1a20d3d442a67f3a2926deda83fb5c8d5a588d81d61"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/psv-evm09.log",
+      "sha256": "57b3e488c9014611734f55fb087318ff3d81b1075ff59fb6f6935093601d00b0"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/natural09/result.json",
+      "sha256": "4a2bb595d5becb458978b94d61b5d069eebbc00332c1db97904577f8f7c32643"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/natural09/source-before.json",
+      "sha256": "a62dfb5169f23a2b171535c29024a7a3503a4461ff128239eb79b814de8227e2"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/natural09/source-after.json",
+      "sha256": "a62dfb5169f23a2b171535c29024a7a3503a4461ff128239eb79b814de8227e2"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/selection04.json",
+      "sha256": "4169fe16204a3908592becc4769221f693cdff552152117e3a1b23dcd1bdf7d1"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/selection02.json",
+      "sha256": "4b947a36e29a93b6590ff9b15e764c6023db309b496c43e9d8e35d8380a40f7f"
+    },
+    {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/historical-dual09.json",
+      "sha256": "6321a0dc018e10185e6391289752f39b3528c1805f9de1d9b4cd13e35db33077"
+    },
+    {
+      "path": "docs/research/reports/psv-recipient-static-review-20261014.json",
+      "sha256": "23a563ad3b5debbcd8b6da2db4b29a1051940bfe1e34672de0728b9688ab02ca"
+    },
+    {
+      "path": "docs/research/reports/psv-recipient-evidence-review-20261014.json",
+      "sha256": "8a4f953f5d0125d6ba1d46c9fafe2b0b3df4e355c8dd1ecd087534da2d4b3db4"
+    },
+    {
+      "path": "docs/research/reports/psv-self-recipient-evidence-review-20261014.json",
+      "sha256": "0b3178b28e15e77a1e5deabd8333a6c67617c4dbc576d45315e5672ee8e98458"
+    }
+  ],
+  "reconciliation": {
+    "queries": [
+      [
+        "psv",
+        "ready",
+        "dual"
+      ],
+      [
+        "family",
+        "runtime",
+        "status"
+      ]
+    ],
+    "selectedTools": [
+      "listener:searcher:psv-runtime-recipient",
+      "listener:searcher:psv-historical-ready",
+      "listener:searcher:psv-historical-dual",
+      "listener:searcher:family-runtime-audit",
+      "listener:searcher:universe-rebuild-status"
+    ],
+    "manifestFiles": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/selection04.json",
+        "sha256": "4169fe16204a3908592becc4769221f693cdff552152117e3a1b23dcd1bdf7d1"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/selection02.json",
+        "sha256": "4b947a36e29a93b6590ff9b15e764c6023db309b496c43e9d8e35d8380a40f7f"
+      }
+    ]
+  },
+  "performance": {
+    "phase4A": "NOT RUN",
+    "phase4B": "NOT RUN"
+  },
+  "formalAdapterReplay": "NOT RUN",
+  "opportunityReplay": "NOT RUN; preserve earlier N-1 negative EV evidence",
+  "signing": false,
+  "broadcast": false,
+  "deployed": false
+}

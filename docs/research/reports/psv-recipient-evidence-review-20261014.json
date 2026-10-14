@@ -1,0 +1,766 @@
+{
+  "schema": "psv-recipient-independent-evidence-review-v1",
+  "createdAt": "2026-10-14T12:48:52.678586+00:00",
+  "reviewer": "/root/interface_protocols_a (independent read-only reviewer; not implementation author)",
+  "scope": {
+    "familyId": "protocol:psv",
+    "actions": [
+      "sell-gem",
+      "buy-gem"
+    ],
+    "reviewMethod": "Read source, saved central transport outcomes, exact request/program bytes and execution logs; independently recompute all delta/event/amount/source/call-data checks. No reliance on sample pass flags alone.",
+    "reviewerExecuted": {
+      "rpc": false,
+      "build": false,
+      "fork": false,
+      "productionTests": false,
+      "productionMutation": false,
+      "cloudMutation": false,
+      "implMutation": false,
+      "offlineSavedDataAnalysis": true
+    },
+    "claimBoundary": "Local Family adaptation acceptance at a pinned historical N-end state using current Cancun executor; plus actual PSV runtime transplanted into synthetic state for fee/cap/rollback checks."
+  },
+  "verdict": {
+    "status": "accepted-with-explicit-evidence-bounds",
+    "blockingFindings": [],
+    "conclusion": "No unresolved funds-flow, recipient-quote, or declaration defect found in the reviewed candidate. The added quote-output/direct-output paths have current issued-Family historical execution evidence in both directions. The harness caller-requirement defect is confirmed and regressed successfully on the identical Ready09/prices inputs.",
+    "notAClaimOf": [
+      "original transaction pre-call parity",
+      "full conserving arbitrage-loop execution",
+      "formal Adapter Replay",
+      "performance or latency acceptance",
+      "natural opportunity valuation or profitable live readiness",
+      "mainnet deployment or broadcast",
+      "historical nonzero fee/cap/whitelist-state execution"
+    ]
+  },
+  "protocolAndCurrentWiring": {
+    "protocol": "Input-first buyGem(recipient,inputStable) / sellGem(recipient,inputGem); payer is msg.sender, output net is sent to recipient and fee separately to treasury; no deferred payment/callback.",
+    "recipientPreview": "preview uses actual recipient for whitelist/fees. Quote program patches current r0 input and passes the same recipient as swap; executor remains payer/caller.",
+    "capabilities": {
+      "quoteOutput": true,
+      "directOutput": true,
+      "deferredInput": false
+    },
+    "treasuryReceiver": "Runtime preparation returns net+fee when treasury==recipient; receipt is measured separately from the ABI net return.",
+    "treasuryPayer": "The fresh identity/default Exact exclusion remains unchanged. In a previously issued direct program with mutated treasury==payer and external receiver, nonzero fee output left at payer fails the exact output/inventory guard; zero-fee synthetic case succeeds. This does not prove fresh admission for treasury==payer.",
+    "limits": "Transaction-local readonly preflight checks positive input/output, paused, gross reserves, input normalized to WAD, zero-disabled per-transaction cap and remaining block capacity. Input balance and approval are checked at execution; they are not required during prefunding preparation.",
+    "defaultBytes": "Established default four-call runtime program is compared byte-for-byte in the passing PSV test; default Exact/quoted interfaces and their source/evidence binding remain unchanged. Old default evidence is not invalidated because the new external-recipient path needed additional execution.",
+    "sharedComposition": "Prefix quote receiver is executor for intermediates and actual debt receiver for the penultimate leg. Aqua taker receiver is aligned; CP UniV2 validates receiver without changing formula; opaque UniV2 keeps executor-only quoting. These shared changes have code/model/ABI compatibility coverage, not new historical multi-Family execution coverage."
+  },
+  "historicalIdentity": {
+    "source": {
+      "number": 26152596,
+      "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+      "generation": 26152596
+    },
+    "stateRoot": "0x066f90a09c0f9beef5e1031ecdf8df1b8398a2355bf69e2c5c32a6c9c8ed63a2",
+    "target": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+    "proxyCodeHash": "0x46a010df31eb642b47284650e80051e8f6239a0c995003d230b437810bc4b9b4",
+    "implementation": "0x8be82303829042f0fba1315096a8f1961907c0dd",
+    "implementationCodeHash": "0x0c940593c322e41b558806fb248ebdd01e38cf2cd5f02e3689824f3469d3c666",
+    "gem": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "gemCodeHash": "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505",
+    "gemDecimals": 6,
+    "stable": "0x14913815bcfde78baead2111f463d038ac9c2949",
+    "stableCodeHash": "0x3469c0d67d65a34f0ccd95c623fe97c9874aa9007da338dc12734ea679bb8a97",
+    "stableDecimals": 6,
+    "independentByteCheck": {
+      "proxyExactSavedRuntime": true,
+      "implementationMatchesSavedRuntimeWithOnlyDeclaredImmutablesNormalized": true,
+      "immutableOffsets": [
+        4253,
+        4473
+      ],
+      "implementationSlot": "0x8be82303829042f0fba1315096a8f1961907c0dd",
+      "normalizedImplementationSha256": "ef149312d291991c9ec7ced502007f2ad878302ef21d68316fe91075cac5fa68",
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+        "generation": 26152596
+      }
+    },
+    "deploymentSourceBasis": "19 successful source-pinned state responses include actual proxy code, EIP-1967 implementation slot, implementation code, token code and decimals; independently matched proxy bytes exactly and implementation bytes to saved compiler runtime after normalizing only __self offsets 4253 and 4473. Both original immutable words equal the on-chain implementation address.",
+    "protocolSourceReference": "https://eth.blockscout.com/api/v2/smart-contracts/0x8be82303829042f0fba1315096a8f1961907c0dd",
+    "sourceReferenceStatus": "Previously saved verified source and deployed-runtime evidence reused; no new external lookup by reviewer.",
+    "executorCodeHash": "0x7abb7c759c70c829a2ee4e8712108458fd148ac9e8f6d396caaa9539c9ecb346",
+    "executorArtifactSha256": "a95d791dc8ffb170bc1ee6d6fd00e0993d6445cf03a9b6320bc14ea185b7a87a",
+    "executorProvisioning": {
+      "historicalHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "runtimeHash": "0x7abb7c759c70c829a2ee4e8712108458fd148ac9e8f6d396caaa9539c9ecb346",
+      "replacement": false,
+      "historicalRuntimeExecuted": false,
+      "scope": "local eth_call/debug_traceCall code overlay only; same executor/origin; no protocol or permission override"
+    },
+    "artifactBindingScope": "Harness checks artifact metadata hashes against every referenced Solidity source, pins artifact bytes and loaded runtime, and rechecks pins before drain. Reviewer inspected those checks and their successful outcome; no independent rebuild/artifact reproduction was run."
+  },
+  "readyAndPrices": {
+    "status": "saved-current-production-revalidation-and-prices-verified",
+    "readySha256": "971053d021ec0b4e14a033cdeb71edd7f45c3295885bbeac46494c451f970e5c",
+    "instancesAllSelectedFamilies": 41,
+    "edgesAllSelectedFamilies": 82,
+    "targetPsvInstances": 1,
+    "targetPsvEdges": 2,
+    "amountReference": [
+      {
+        "direction": "sell-gem",
+        "amountIn": "4969763",
+        "amountOut": "4969763"
+      },
+      {
+        "direction": "buy-gem",
+        "amountIn": "4969763",
+        "amountOut": "4969763"
+      }
+    ],
+    "sourceTreeSha256": "a6b0d29c2e1114cf932283d072be969212eeefe95137a3cb2a793a2336d86515",
+    "sourceBeforeAfterEqual": true,
+    "readyAndPricesInputsIdenticalBetween09And10": true,
+    "historicalNaturalDiscoveryProvenFlag": false,
+    "topologyContainsFutureDiscovery": false,
+    "qualification": "Existing natural Ready copied/revalidated at N and production runAtBlock completed through prices. Graph totals are not 41 PSV deployments. This does not create a new claim that the whole graph was naturally discovered at the original instant, or that a profitable opportunity was valued."
+  },
+  "historicalExecution": {
+    "status": "independently-checked-saved-central-transport-evidence",
+    "counts": {
+      "samples_positive": 16,
+      "samples_negative": 8,
+      "recipientSamples_positive": 16,
+      "recipientSamples_negative": 8
+    },
+    "groups": {
+      "default": 8,
+      "externalRecipient": 16,
+      "directions": 2,
+      "amountsPerDirection": [
+        "4969763",
+        "7361655916",
+        "1000000",
+        "1"
+      ],
+      "externalRecipients": [
+        "0x1000000000000000000000000000000000000001",
+        "0xd623a098e77d484069cf7840205c800a2ef5ea20"
+      ]
+    },
+    "state": {
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+        "generation": 26152596
+      },
+      "paused": false,
+      "tin": "0",
+      "tout": "0",
+      "treasury": "0xd623a098e77d484069cf7840205c800a2ef5ea20",
+      "maxPerTransaction": "0",
+      "maxPerBlock": "0",
+      "remaining": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      "stableReserve": "490729776199",
+      "gemReserve": "159270223801"
+    },
+    "checkedWithoutPassFlags": [
+      "All 48 outcomes resolve with correct source/generation and matching issued trusted/evidence rows.",
+      "All 32 positives show exact payer input debit and equal vault input credit, plus exact output vault debit and intended recipient credit.",
+      "All 16 recipient positives preserve payer pre-existing output and receiver input; actor old input remains 101 raw units, actor old output is seeded to expected credit+103, and actor native is seeded to 17 wei with observed delta zero.",
+      "Token observation set is complete for both tokens across deduplicated payer/vault/recipient/treasury accounts, including the treasury==recipient case.",
+      "All 32 positives match Swap sender, recipient, input/output tokens, amountIn, net amountOut and fee, and Transfer amounts. Approval logs are [0,input,0], with a final actual readonly allowance==0 assertion in the executed calldata.",
+      "Every one of 16 prepared quotes has only static external calls, is invoked in a transitive readonly child, and the identical quote program is also the first readonly child inside direct execution.",
+      "Each quote preview receiver matches its swap receiver in raw ABI bytes, r0 patches the actual amount, and the asserted quote result equals the recipient receipt.",
+      "Eight no-input negatives retain exactly the same call object/calldata as their positive control, changing input balance to zero only. Eight forced-revert negatives retain the entire successful script prefix and append an always-failing equality guard."
+    ],
+    "negativeQualification": "All 16 negatives have completion=reverted-as-declared and empty token/native/log arrays. The strict transport deliberately omits effects on declared reverts, so emptiness is not independent measured rollback or raw stateDiff evidence.",
+    "nativeRecipientQualification": "Historical transport observes native balance of caller/executor only. External recipient native delta is not present in these historical records; no claim that historical receiver native was measured.",
+    "recipientOldInventoryQualification": "Historical deltas protect the actual receiver balances present at N, but no nonzero receiver pre-balance amount is retained in this evidence. Explicit nonzero receiver token/native inventory is exercised in synthetic EVM09.",
+    "construction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "scope": "production issuer; selector contract separately tested offline"
+    },
+    "invocationCounts": {
+      "exact": 8,
+      "quoted": 8,
+      "forbiddenDuringBuild": 0
+    },
+    "drained": true,
+    "noClaimOfRawTrace": "Saved evidence is normalized strict transport outcomes and logs, not independently retained raw call trace/stateDiff. The independent re-read audits that saved representation and the transport source contract."
+  },
+  "actualRuntimeSyntheticEvm": {
+    "status": "7-executed-tests-passed-in-saved-log",
+    "testCount": 7,
+    "fail": 0,
+    "skip": 0,
+    "sourceSha256": "fc4ee994b2a96e3d9403853d856978ddec50412b59d1fc385d169ad975f9afd2",
+    "deploymentMeaning": "Saved real PSV proxy/implementation runtime with relocated __self words; new initialized synthetic storage, synthetic ERC20s and test actors. No claim of historical nonzero state or mainnet execution.",
+    "covered": [
+      "Both buy/sell with nonzero fees and small/original-size amounts; whitelist receiver changes output while payer whitelist does not.",
+      "Treasury==receiver credits gross net+fee and distinct treasury actually receives fee.",
+      "Treasury==payer positive-fee split output reverts and zero-fee case succeeds.",
+      "Positive input/output, gross reserve equality/shortage, pause, and cross-decimal fee floors (18→6 and 6→18).",
+      "Inclusive per-transaction/block caps, sequential capacity exhaustion, and next-block reset.",
+      "Input zero debit, one-unit under/over debit, false approval, short output and wrong output recipient revert.",
+      "Independent post-revert assertions preserve both actors tokens, vault tokens, treasury output, allowance and remaining capacity.",
+      "Successful and reverted executions retain payer native 17 wei and receiver native 19 wei; receiver begins with gem 107 and stable 109 raw units."
+    ],
+    "testIndependence": "Expected-revert applies only to bot execution; balance/allowance/capacity assertions occur afterward. Successful receipts are checked against actual protocol preview and measured external balances. Removing the emitted exact-debit/receipt guards would let the controlled faulty token operation succeed and fail the expected-revert test.",
+    "profile": "Named psv_recipient grants read access only to this Family source-runtime.json and selects the Family test directory; FFI remains explicit per invocation. Default global profile is not loosened."
+  },
+  "otherExecutedChecks": {
+    "contracts03": {
+      "executed": 36,
+      "pass": 36,
+      "fail": 0,
+      "proof": "Full embedded TAP log in diagnostic06.json plus check03 execution receipt; includes corrected fail-only execution model negatives, PSV default byte equality, receiver-aware shared composer and original PSV contract tests."
+    },
+    "solidity03": {
+      "executed": 132,
+      "pass": 132,
+      "fail": 0,
+      "skip": 0,
+      "proof": "Full embedded Forge log in diagnostic06.json; 12 native wrap +19 amount flow +48 runtime amount +53 hop diagnostics. Equality kind 7 and transitive readonly tests are explicitly present."
+    },
+    "compat07": {
+      "executed": 2,
+      "pass": 2,
+      "fail": 0,
+      "proof": "check07-output.jsonl contains actual two-test output; covers Aqua receiver slice/invalid receiver and UniV2 CP foreign receiver/opaque self receiver. Opaque descriptor is synthetic ABI coverage, not new Ready/admission."
+    },
+    "psvRuntime09": {
+      "executed": 5,
+      "pass": 5,
+      "fail": 0,
+      "proof": "Saved log and exact tool-run stdout hash match."
+    },
+    "baselineFlip": "Old production code + new tests failed two receiver-context composer assertions, missing PSV quote/direct declaration, and two equality VM tests. Subsequent relevant contracts/VM suites pass. Baseline failures are retained."
+  },
+  "harnessDefect09To10": {
+    "classification": "new acceptance-tool declaration bug, not a production funds-flow defect",
+    "observed09": {
+      "result": "failed",
+      "error": {
+        "stage": "source-and-runtime",
+        "message": "recipient state\n+ actual - expected\n\n+ 'unresolved'\n- 'resolved'\n"
+      },
+      "samples": 0,
+      "directReads": 6,
+      "drained": true
+    },
+    "rootCause": "Old helper always declared caller=executor for stateRequests which contain no caller reference. assertRequestsMatchRequirements rejects unused caller requirement when callerUses==0. Completion requirements are separately completed from the requests, so omitting explicit completions was not the cause.",
+    "causalEvidenceLimit": "09 asserted status before persisting unresolved outcome, so the reason text is not present in the saved failure. Cause is established by exact old source/declaration logic and corroborated by the narrow source change plus successful same-input 10.",
+    "fix": "dispatch accepts complete RequestRequirements; state uses exported state requirements, preview declares explicit executor caller, simulation reuses existing effects requirements. Failed outcome is preserved in unresolvedWork before throwing.",
+    "oldHarnessSha256": "fd547c221fbd0e4448c1d081736aaa88448769075c79ddcf6ed5e7547dccea17",
+    "newHarnessSha256": "deaa347d9f49784f2bf5ce71201da82c0a661465530822ca8a2231fa59cd3cdd",
+    "productionBoundaryChanged": false,
+    "centralValidationWeakened": false,
+    "sameReadyPricesAndProductionSource": true,
+    "regression10": "24 historical sample groups / 48 executed simulations completed, all saved-data checks passed. Ready09 was reused; no second Ready run is needed for this harness-only declaration correction."
+  },
+  "evidenceLimitations": [
+    {
+      "id": "history-fee-cap-whitelist",
+      "scope": "not covered historically",
+      "detail": "N-end has tin=tout=0 and maxPerTransaction=maxPerBlock=0. Historical treasury==receiver therefore cannot alone establish gross fee addition; actual-runtime synthetic state tests supply fee, whitelist and nonzero cap evidence."
+    },
+    {
+      "id": "negative-state-diff",
+      "scope": "not retained historically",
+      "detail": "Declared historical EVM revert is verified, but no raw historical stateDiff/full rollback measurements are retained. Independent explicit rollback assertions are synthetic EVM only."
+    },
+    {
+      "id": "recipient-native",
+      "scope": "historical unverified; synthetic verified",
+      "detail": "Historical observation has only executor native delta. EVM09 protects nonzero receiver native 19 wei and payer 17 wei."
+    },
+    {
+      "id": "composed-historical-loop",
+      "scope": "not executed",
+      "detail": "Historical execution is single-leg quote/quoted/runtime/direct. Shared debt-recipient composition has deterministic model tests but no newly executed full historical loop or natural opportunity/PnL claim."
+    },
+    {
+      "id": "compatibility-real-deployments",
+      "scope": "ABI/model coverage only",
+      "detail": "Aqua and UniV2 compatibility changes are tested as emitted programs/fixtures; no fresh real-deployment historical multi-Family evidence is claimed."
+    },
+    {
+      "id": "evm-configuration",
+      "scope": "current Cancun executor only",
+      "detail": "New math kind 7 requires the current artifact; old executor rejects it. No older EVM or deployed executor support is asserted."
+    },
+    {
+      "id": "artifact-rebuild",
+      "scope": "reviewer did not rebuild",
+      "detail": "Artifact/source binding is enforced by the executed harness and saved pins; reviewer did not independently reproduce compiler artifact bytes."
+    }
+  ],
+  "preservedNonPassingEvidence": [
+    {
+      "case": "compat04 / compat05",
+      "classification": "preparation failures; not passing tests"
+    },
+    {
+      "case": "psv-evm04 / psv-evm05",
+      "classification": "fixture read-permission preparation failures; not passing EVM evidence"
+    },
+    {
+      "case": "config06",
+      "classification": "configuration basename crash; not passing test evidence"
+    },
+    {
+      "case": "psv-evm07",
+      "classification": "exit 0 but Nothing to compile / zero tests; explicitly not counted"
+    },
+    {
+      "case": "dual09",
+      "classification": "recipient state declaration unresolved before any sample loop; explicitly not counted"
+    },
+    {
+      "case": "baseline old-code/new-tests",
+      "classification": "expected failing controls; demonstrate relevant behavior difference, not acceptance"
+    }
+  ],
+  "reconciliation": {
+    "requestedCapabilities": [
+      "psv",
+      "ready",
+      "dual"
+    ],
+    "selectedTools": [
+      "listener:searcher:psv-runtime-recipient",
+      "listener:searcher:psv-historical-ready",
+      "listener:searcher:psv-historical-dual"
+    ],
+    "toolManifestPin": {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results10/selection04.json",
+      "sha256": "8e678d2c198ff0d28b50995ef9e5d4ab05bb46c109b972f3450d73d80a651d1e",
+      "bytes": 38821
+    },
+    "stdoutHashReadback": [
+      {
+        "tool": "listener:searcher:psv-runtime-recipient",
+        "exit": 0,
+        "stdoutSha256": "15aab3529ce20934341d855dc225d459ff9ba410fce2f5d60d6d94ba8d2ba2eb",
+        "matches": [
+          {
+            "file": "results09/psv-runtime09.log",
+            "byteOffset": 209,
+            "bytes": 796
+          }
+        ]
+      },
+      {
+        "tool": "listener:searcher:psv-historical-ready",
+        "exit": 0,
+        "stdoutSha256": "bf473a48bf37b6541d0453fb0e3e07eeb40c5795ba6db56e73ea0ee987925eb5",
+        "matches": [
+          {
+            "file": "results09/psv-ready09.log",
+            "byteOffset": 534,
+            "bytes": 11875
+          }
+        ]
+      },
+      {
+        "tool": "listener:searcher:psv-historical-dual",
+        "exit": 1,
+        "stdoutSha256": "a4da572220b97489ac51c97ef6bee1b583cc3be6f728514fec3492610685f60d",
+        "matches": [
+          {
+            "file": "results09/psv-dual09.log",
+            "byteOffset": 697,
+            "bytes": 917
+          }
+        ]
+      },
+      {
+        "tool": "listener:searcher:psv-historical-dual",
+        "exit": 0,
+        "stdoutSha256": "e95b016ff17549088ae642c09860e3915b906d502193e6c2366035a2a9955fb7",
+        "matches": [
+          {
+            "file": "results10/psv-dual10.log",
+            "byteOffset": 697,
+            "bytes": 1640
+          }
+        ]
+      }
+    ],
+    "qualification": "Reviewer consumed already executed indexed receipts. Exact stdout bytes for all four retained tool executions, including failing dual09 and passing dual10, were located in their saved logs and SHA-256 matched. No new diagnostic/test execution by reviewer."
+  },
+  "readbackDetailsPin": {
+    "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/psv-recipient-evidence-readback10.json",
+    "sha256": "828e8f1ad51ef696d78289adfc9f31f546184ff234ab2f4ed013dc8bf31d11ff",
+    "bytes": 41085
+  },
+  "readbackScriptPin": {
+    "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-readback10.py",
+    "sha256": "13b2c157a31eb76b276573add0e407106d972bd337bf3672077bb2fb1b5d59f0",
+    "bytes": 13481
+  },
+  "sourcePins": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/analysis/src/tool-index.ts",
+      "sha256": "94210857b0bb7a24cc125c18ca7a1e5f8edba8e79668029880b7d16772b75891",
+      "bytes": 36988
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/foundry.toml",
+      "sha256": "011518d35b2aec06445ed2ca6150aea758541844a8a8c3776c78396b54d3b482",
+      "bytes": 542
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/package.json",
+      "sha256": "102be52cade95576e64a31ea1e6484ffbb8333acfc2cd0ded0e2800c0e0f4dd0",
+      "bytes": 43961
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d",
+      "bytes": 12298
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/simulator/runtime-settlement.ts",
+      "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5",
+      "bytes": 4346
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/test/psv-direct-recipient.ts",
+      "sha256": "9a8adc55acdef8ea6ebe3dcee837507a42358979f058c9f5648e15536dd8d6c6",
+      "bytes": 18887
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/test/runtime-program-testkit.ts",
+      "sha256": "30c90ff597cdf9f4f8191a079361d3e004107f583880baf4a84fea20eb1ac714",
+      "bytes": 4925
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/test/runtime-quote-recipient-compatibility.ts",
+      "sha256": "662ec99f54a83a19a96d2d31d2bd36bfac081da1e369f7e38a91299408cba088",
+      "bytes": 4146
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/test/runtime-settlement.ts",
+      "sha256": "1d19a3f5b78b572fc3eb18d4b0667a846ac254049ce1de2031201b7ec260e6de",
+      "bytes": 12719
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/execution.ts",
+      "sha256": "3acba817b47f1306bca7632b8a8dd22b941ccca3ead497b37726443e11abbaa7",
+      "bytes": 5450
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/runtime-quote.ts",
+      "sha256": "944d755180a706c49f9e422adf5c444776dadedb525d404000bb5a112c1f80ed",
+      "bytes": 2153
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/test/RuntimeRecipient.t.sol",
+      "sha256": "fc4ee994b2a96e3d9403853d856978ddec50412b59d1fc385d169ad975f9afd2",
+      "bytes": 10232
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/test/fixtures.ts",
+      "sha256": "165170e94554dc57e4f0cb55c7d2edf37f16a68d404f03f8121eb97dbec57e72",
+      "bytes": 5637
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/test/historical-dual.ts",
+      "sha256": "deaa347d9f49784f2bf5ce71201da82c0a661465530822ca8a2231fa59cd3cdd",
+      "bytes": 27326
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/test/historical-ready.ts",
+      "sha256": "3e5894e35338b0e2189d0cf6bb49e1b00d2cf7f4872f11ea0eb33963f040df56",
+      "bytes": 6210
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/test/runtime-evm-program.ts",
+      "sha256": "f30eb8d0e85b44ef0331a5ef9326e60430ca85820bacf91f1c51d1b19f2b9bc6",
+      "bytes": 1389
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/swaps/aqua-swapvm-family/execution.ts",
+      "sha256": "07674ff2020b90f2c5252b314467a07fbf8cfad43cddaa521e353f05db11dfe0",
+      "bytes": 2526
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/swaps/aqua-swapvm-family/runtime.ts",
+      "sha256": "1c00b28582d54acea349e578b09580e57b3e131deffcb5a96e950042a10f613a",
+      "bytes": 5340
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/swaps/univ2-family/runtime-execution.ts",
+      "sha256": "ba0953b2dbcdf01d8d66dbe430723f47298a5988ca2abe9face4ac063c608dac",
+      "bytes": 8784
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/src/RuntimeAmountVM.sol",
+      "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf",
+      "bytes": 16878
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/test/BotVMRuntimeAmount.t.sol",
+      "sha256": "88384d02c862061eef9a88a4cd995fb5517d58d2407733ffe5f334236f06b691",
+      "bytes": 31630
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/adapter-request-program.ts",
+      "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab",
+      "bytes": 69754
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/protocols/psv-family/codec.ts",
+      "sha256": "52d66b57cd3e01187597fe1e5e805226e4567b3c4097c4fc7fa072a4638265d5",
+      "bytes": 3804
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/protocols/psv-family/state.ts",
+      "sha256": "b79fe8f32dbe8115bba9257b55bc292e618ac7d57e90a63a72b19bb8875bab77",
+      "bytes": 4394
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/protocols/psv-family/identity.ts",
+      "sha256": "07b6197aad6856cef8cad775edc7f0f29995cbae979f37218ca04aa496a019d2",
+      "bytes": 10923
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/protocols/psv-family/exact.ts",
+      "sha256": "139736a41ab0bebe8381b0c6594b2d8762ea530039d96599139be63a23bd8cb1",
+      "bytes": 2950
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/protocols/psv-family/runtime-shape.ts",
+      "sha256": "597798c351886edb22f942a0809d6ce150ac3b23dbdd0f10a6381f15b7a1b478",
+      "bytes": 1294
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/source/listener/src/searcher/venues/protocols/psv-family/test/source-runtime.json",
+      "sha256": "3528a3ad0a1afb1818301f178c2654b2ca7a748babeee4ce556e036ddc20ea19",
+      "bytes": 17941
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-source/listener/src/searcher/revm-strict-simulation-transport.ts",
+      "sha256": "dcd6f1d8b0bf9cf8f17ea18ef1a8d39dfd3ed30a223730e0775bf48f336ad851",
+      "bytes": 28966
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-source/listener/src/searcher/revm-strict-source-simulation.ts",
+      "sha256": "347fb02581087c40bceba022349fa6ebe8127c9733d5cd2703fe6a44b87fff02",
+      "bytes": 2868
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-source/listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+      "sha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27",
+      "bytes": 37416
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-source/listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+      "sha256": "6d6c5c82fd971d5a55c50817b0738d7524e7f129ec60d5f8fc24af37dffbec54",
+      "bytes": 35161
+    }
+  ],
+  "evidencePins": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results10/historical-dual10.json",
+      "sha256": "986c9093548fbcf6371d177579b92526bca9e1b13a339ba638dc73f9101ff680",
+      "bytes": 1090787
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results10/psv-dual10.log",
+      "sha256": "43e20def5d7cc3160d119254c295427ee0293eaf8049f8b41c0b55d42e2c8e92",
+      "bytes": 2501
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results10/check10.json",
+      "sha256": "582fedcf40be35fc7194b912656f4ed11e7e2d4d14a2015814f5aeb1755a7b18",
+      "bytes": 973
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results10/selection04.json",
+      "sha256": "8e678d2c198ff0d28b50995ef9e5d4ab05bb46c109b972f3450d73d80a651d1e",
+      "bytes": 38821
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/historical-dual09.json",
+      "sha256": "6321a0dc018e10185e6391289752f39b3528c1805f9de1d9b4cd13e35db33077",
+      "bytes": 51991
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/psv-dual09.log",
+      "sha256": "52c3577a45b79d8ad2c8c49df972c8b47f57e7acbb221cfdbae9928afcf4642d",
+      "bytes": 1778
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/psv-evm09.log",
+      "sha256": "57b3e488c9014611734f55fb087318ff3d81b1075ff59fb6f6935093601d00b0",
+      "bytes": 909
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/psv-runtime09.log",
+      "sha256": "e08c1e0dd2689b59a98fe66d14a465c76aec9c1218f0cbca7044014c9f828054",
+      "bytes": 1171
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/psv-ready09.log",
+      "sha256": "d566cb9d164bc68b96d8a4af4c38889985b5d5b3d616d6749226bd5856c459c4",
+      "bytes": 12663
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/checks09.json",
+      "sha256": "a5e3d721687709713ba2147ab72670249d47356d4803bd46508434e44f24d4ac",
+      "bytes": 2643
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/selection04.json",
+      "sha256": "fc3971fad901c9d5763932056e9f0ab8358155478bc57ea75d5bb85fef6b6d0b",
+      "bytes": 37447
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/natural09/ready-summary.json",
+      "sha256": "ba253ce556ce81f6d222c6bd6159a599c3fc1c02c6b2e6717bef6d7bc807d8bc",
+      "bytes": 17408
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/natural09/result.json",
+      "sha256": "4a2bb595d5becb458978b94d61b5d069eebbc00332c1db97904577f8f7c32643",
+      "bytes": 4882
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/natural09/source-before.json",
+      "sha256": "a62dfb5169f23a2b171535c29024a7a3503a4461ff128239eb79b814de8227e2",
+      "bytes": 1945
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/natural09/source-after.json",
+      "sha256": "a62dfb5169f23a2b171535c29024a7a3503a4461ff128239eb79b814de8227e2",
+      "bytes": 1945
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/natural09/prices/input.json",
+      "sha256": "5e4a995fdec8c28bfa812b9fc66d16c614f06c8cfae9e1d33f0b0aacc31a4b6d",
+      "bytes": 64025
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/natural09/prices/prices.json",
+      "sha256": "8142f50c2d6099be3dc62479d481a9c65ac663f26a385b9d0175af21022a5fbc",
+      "bytes": 636846
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/diagnostic06.json",
+      "sha256": "9cd13ec2c037e4b1925ffc484760018399d05c6e6bfa06c273e9a1415ab6f5d9",
+      "bytes": 59085
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/baseline02-detail.json",
+      "sha256": "ce5722dde574b5bbd337ceb529ae942c8d783f391278587643d010e91a97227a",
+      "bytes": 7076
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/check03-output.jsonl",
+      "sha256": "ff6ed81a21e76bc28318aedf09fe8382ead5c8dce55b107148ff1036b55172f0",
+      "bytes": 1488
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/check04-output.jsonl",
+      "sha256": "a8cf4a3a41e3ee70b0d75f1b5ba7dbe56f02b7dd84a353dea69ae4d067956c4b",
+      "bytes": 668
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/check05-output.jsonl",
+      "sha256": "296dde60dc6a3f06afd9d4d115bedd29c9e4993f18af7ce248c904199a94e9b4",
+      "bytes": 1349
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/check06-output.jsonl",
+      "sha256": "cf6d5b98342a89f25c372409007f3cfc3d548e2270a019185ed5a4f39498fea9",
+      "bytes": 15
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/check07-output.jsonl",
+      "sha256": "9e288630eca3485c17c65fe0006a025824b65c7a33d26de95768e2f690f76118",
+      "bytes": 1341
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/check08-output.jsonl",
+      "sha256": "644b8dcac99d309550a125040a33ee620fb6bf05eaa8d8010b26a08e30a00702",
+      "bytes": 3153
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/check09-output.jsonl",
+      "sha256": "217bf6c6ffd177714f64946a4e30f4d0b3011b33752b71c6a7ee7b457b6c908b",
+      "bytes": 2764
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/check10-output.jsonl",
+      "sha256": "a83b3593ea1fefb96ef8f86c458d58e34275238b553905835ac0684565ad0e4a",
+      "bytes": 923
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/patch02-manifest.json",
+      "sha256": "486facb528ae03e707084795e7711a4725025cbb30d4b30a05cbbdf78bff42fa",
+      "bytes": 3053
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/patch04-manifest.json",
+      "sha256": "0e60a0e642ed3db720dab90db92c0873c217bf9318a556f69837a7bc5bc290a2",
+      "bytes": 595
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/patch05-manifest.json",
+      "sha256": "e6f75bd05e989ffdcdd2244c4fcb23322c1550e3372031ea0016e16d349039be",
+      "bytes": 1415
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/patch06-manifest.json",
+      "sha256": "64718b289299c0f1840ac0d34538d5cc92de6fc6afc7112b36b37499cbc106f0",
+      "bytes": 515
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/patch08-manifest.json",
+      "sha256": "7489476b624b0d1a461d76844554e97b8ef21bbd69fbb35d3704558725075666",
+      "bytes": 675
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/patch09-manifest.json",
+      "sha256": "39b2e9378bdae026375a1d0a423f4590b63ad1d444a968db3c087f7f6f317de2",
+      "bytes": 265
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/patch10-manifest.json",
+      "sha256": "817102a42e096874cdaec0c6cf84d1c2668f81dadd3480b462e8caea4ed572c7",
+      "bytes": 261
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/psv-tool-receipt-readback10.json",
+      "sha256": "2bb1169fe3a41e66833d024850b77b05af4be6f69da22b31d3412b3bfb668fef",
+      "bytes": 1197
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/psv-recipient-interface-review.json",
+      "sha256": "b7ba6666e6e8d3193389ba8d6882b66523a6a5b1ad9487cc0f03f1b7dada5be6",
+      "bytes": 31126
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/psv-deployment-recheck.json",
+      "sha256": "a08a4417818f69e877ea3dae321c0577444b420ad04b94eb59816052dc195f30",
+      "bytes": 3176
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/psv-recipient-design-review.json",
+      "sha256": "6b0c250080306861947e9903b21a23586c7d20fe69795b06766833ff34a6f47c",
+      "bytes": 16215
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/psv-recipient-candidate-static-review-v1.json",
+      "sha256": "a111231f8c1a194d131fa1bead90dae05f2aa713dfcdac3cb59b92a71f410ebc",
+      "bytes": 17817
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/psv-recipient-candidate-static-review-v2.json",
+      "sha256": "23a563ad3b5debbcd8b6da2db4b29a1051940bfe1e34672de0728b9688ab02ca",
+      "bytes": 19306
+    }
+  ]
+}

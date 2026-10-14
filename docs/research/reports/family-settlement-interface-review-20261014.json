@@ -16,7 +16,7 @@
     },
     {
       "path": "listener/src/adapters/runtime-amount-program.ts",
-      "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+      "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d"
     },
     {
       "path": "listener/src/compiler.ts",
@@ -88,7 +88,7 @@
     },
     {
       "path": "listener/src/searcher/simulator/runtime-settlement.ts",
-      "sha256": "15d57cc792471b24e26dd12970b8f85042e299492a7700713127d7ce88e3ffb7"
+      "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5"
     },
     {
       "path": "listener/src/searcher/simulator/sim-amount-search.ts",
@@ -220,7 +220,7 @@
     },
     {
       "path": "src/RuntimeAmountVM.sol",
-      "sha256": "9f48e0d204342be4079637ac52e73f08470fd112c56aec9cea4272a82c12ee82"
+      "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf"
     },
     {
       "path": "src/interfaces/IERC20.sol",
@@ -4566,19 +4566,34 @@
           "identity": "verified",
           "callback": "none",
           "recipient": "conditional",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "历史 proxy/implementation 源码与代码哈希已匹配。",
-            "recipient whitelist 改变费用；当前 quote/调用均绑定 executor。",
-            "补 receiver-aware quote/接线及新路径回执；两方向参数都是精确输入，不能照搬 PSM buy。",
-            "旧默认 16 份回执保留原范围。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/psv-recipient-static-review-20261014.json",
+              "sha256": "23a563ad3b5debbcd8b6da2db4b29a1051940bfe1e34672de0728b9688ab02ca"
+            },
+            {
+              "path": "docs/research/reports/psv-recipient-evidence-review-20261014.json",
+              "sha256": "8a4f953f5d0125d6ba1d46c9fafe2b0b3df4e355c8dd1ecd087534da2d4b3db4"
+            },
+            {
+              "path": "docs/research/reports/psv-self-recipient-evidence-review-20261014.json",
+              "sha256": "0b3178b28e15e77a1e5deabd8333a6c67617c4dbc576d45315e5672ee8e98458"
             }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/psv-recipient-correctness-20261014.json",
+            "sha256": "589cd6976f04a04a4b1b0e8855ae58b1dc13fb92827f04377717d3384e0b1d87"
+          },
+          "notes": [
+            "Recipient-bound quote/direct verified in both directions for executor, ordinary receiver and treasury. No deferred callback; input-first ERC20 payment.",
+            "Historical zero fees/unlimited caps and declared reverts are separate from synthetic genuine-runtime fee/cap/full rollback checks. Formal Adapter Replay and timing remain outside this settlement-only gate."
           ]
         }
       ],
@@ -4590,7 +4605,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -4630,7 +4645,7 @@
         },
         {
           "path": "listener/src/searcher/venues/protocols/psv-family/execution.ts",
-          "sha256": "6ed7c80ea3a5c884188f3c484c8c819f23a5222ea79b232e27897a8317e7eac7"
+          "sha256": "3acba817b47f1306bca7632b8a8dd22b941ccca3ead497b37726443e11abbaa7"
         },
         {
           "path": "listener/src/searcher/venues/protocols/psv-family/identity.ts",
@@ -4647,6 +4662,10 @@
         {
           "path": "listener/src/searcher/venues/protocols/psv-family/routes.ts",
           "sha256": "2d23283a19ad13d9b05c69ce973a70c173f3b4f38e4552fdd6952fc8861e8808"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/psv-family/runtime-quote.ts",
+          "sha256": "944d755180a706c49f9e422adf5c444776dadedb525d404000bb5a112c1f80ed"
         },
         {
           "path": "listener/src/searcher/venues/protocols/psv-family/runtime-shape.ts",
@@ -6640,5 +6659,12 @@
   "independentGateReview": {
     "path": "docs/research/reports/family-settlement-gate-independent-review-20261014.json",
     "sha256": "25cc557bcefd3b645883bd23b1a4c35edabad77a32bf5fe67315a0b4c4319cc3"
+  },
+  "lastScopedUpdate": {
+    "at": "2026-10-14T13:00:11.175831+00:00",
+    "familyId": "protocol:psv",
+    "sourceCommit": "4a71243757c691cc25ddfdb343fafa481516f14c",
+    "actualSourceTreeSha256": "a6b0d29c2e1114cf932283d072be969212eeefe95137a3cb2a793a2336d86515",
+    "policy": "Update current common/PSV pins for this actual-source PSV gate only. Other family rows/review hashes remain intact; their old success is not promoted to current shared source."
   }
 }

@@ -1,0 +1,44 @@
+{
+  "kind": "family-settlement-gate-receipt-v1",
+  "createdAt": "2026-10-14T13:09:56.401924+00:00",
+  "familyId": "protocol:psv",
+  "scope": "PSV settlement capability acceptance only; not full-family, formal merge/replay, opportunity or performance acceptance",
+  "sourceCommit": "4a71243757c691cc25ddfdb343fafa481516f14c",
+  "actualSourceTreeSha256": "a6b0d29c2e1114cf932283d072be969212eeefe95137a3cb2a793a2336d86515",
+  "result": "pass",
+  "installedInventoryCount": 46,
+  "gateResult": {
+    "exit": 0,
+    "elapsedSeconds": 46.75691318511963,
+    "log": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/settlement-gate16.log",
+    "sha256": "545a2c63a8151c6cef53c3889223e67f2bb659fe593d1831c1dd53fd2588a0a4",
+    "selectionSha256": "e73d9febcb898f90abe5e6adc5ac877c3f890a893cef832f71ea4ac93ce1621b"
+  },
+  "toolQuery": [
+    "settlement"
+  ],
+  "selectedTool": "listener:searcher:family-settlement-review",
+  "manifest": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/selection16.json",
+    "sha256": "e73d9febcb898f90abe5e6adc5ac877c3f890a893cef832f71ea4ac93ce1621b"
+  },
+  "evidence": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/settlement-gate16.log",
+    "sha256": "545a2c63a8151c6cef53c3889223e67f2bb659fe593d1831c1dd53fd2588a0a4"
+  },
+  "behaviorEvidence": {
+    "path": "docs/research/reports/psv-recipient-correctness-20261014.json",
+    "sha256": "589cd6976f04a04a4b1b0e8855ae58b1dc13fb92827f04377717d3384e0b1d87"
+  },
+  "reviewDocument": {
+    "path": "docs/research/reports/family-settlement-interface-review-20261014.json",
+    "sha256": "c10b127f77b557776522359fc1edbab8a56c1896929bb92a652e05be49c7e57a"
+  },
+  "otherFamilies": "The other 45 rows retain their old evidence. This scoped run does not revalidate them after shared-source changes.",
+  "peerFilesPreserved": 28,
+  "learningCase": {
+    "id": "tooldef-20261014-psv-recipient-state-caller",
+    "codifyCommit": "4a71243757c691cc25ddfdb343fafa481516f14c",
+    "priorCasesPreserved": 41
+  }
+}

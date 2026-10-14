@@ -1418,6 +1418,48 @@
       },
       "created_at": "2026-10-14T11:27:53.414397+00:00",
       "updated_at": "2026-10-14T11:27:53.414397+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261014-psv-recipient-state-caller",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "New historical PSV acceptance helper declared executor authority for state requests that use no caller. Central validation correctly refused the unused authority before any execution; production contracts/guards were unchanged. Tool-only classification; not the original transaction causal lane.",
+      "evidence": {
+        "baseline": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/historical-dual09.json",
+          "sha256": "6321a0dc018e10185e6391289752f39b3528c1805f9de1d9b4cd13e35db33077"
+        },
+        "fixed": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/historical-dual10.json",
+          "sha256": "986c9093548fbcf6371d177579b92526bca9e1b13a339ba638dc73f9101ff680"
+        },
+        "targetedSupplement": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/historical-self14.json",
+          "sha256": "271d085d4b8867d22fbaa1a20d3d442a67f3a2926deda83fb5c8d5a588d81d61"
+        },
+        "independentReview": {
+          "path": "docs/research/reports/psv-recipient-evidence-review-20261014.json",
+          "sha256": "8a4f953f5d0125d6ba1d46c9fafe2b0b3df4e355c8dd1ecd087534da2d4b3db4"
+        },
+        "transition": "same Ready/price hashes: unresolved recipient state with 0 samples -> 8 default groups plus 16 external groups pass; separate self-only 8 groups pass with Exact/quoted=0.",
+        "sourceInference": "09 retained stage+unresolved, not inner error. Exact unused-caller reason established independently from request/validation source."
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:psv-historical-dual",
+        "issue": "dispatch hardcoded caller=executor for no-caller stateRequests, causing correct central validation rejection; inner unresolved outcome was discarded.",
+        "evidence": "Independent non-author source review agrees with baseline09 and successful identical-input dual10 regression; self14 additionally validates narrowed scope.",
+        "codify_target": "listener/src/searcher/venues/protocols/psv-family/test/historical-dual.ts: consume full declared RequestRequirements, reuse Family state requirements, retain explicit caller for preview/simulation, preserve unresolved outcome.",
+        "status": "codified",
+        "codify_commit": "4a71243757c691cc25ddfdb343fafa481516f14c"
+      },
+      "created_at": "2026-10-14T13:00:11.175831+00:00",
+      "updated_at": "2026-10-14T13:00:11.175831+00:00"
     }
   ]
 }

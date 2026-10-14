@@ -1,0 +1,443 @@
+{
+  "schema": "psv-self-recipient-independent-evidence-review-v1",
+  "createdAt": "2026-10-14T12:56:41.134175+00:00",
+  "reviewer": "/root/interface_protocols_a (independent read-only reviewer)",
+  "scope": {
+    "familyId": "protocol:psv",
+    "runnerScope": "self-recipient",
+    "newPath": "explicit quote-output and direct-output with recipient==executor",
+    "reviewerRanRpcBuildForkOrTests": false,
+    "onlySavedDataAndSourceReadback": true
+  },
+  "verdict": {
+    "status": "accepted-with-existing-evidence-bounds",
+    "blockingFindings": [],
+    "conclusion": "Eight explicit self-recipient direct executions and four declared EVM reverts are independently consistent with raw request/program bytes, source-pinned normalized effects and event data. No aliasing, old-output-inventory, readonly-quote, or scope-branch defect found."
+  },
+  "separateFromPriorReview": {
+    "existingReport": {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/psv-recipient-evidence-review.json",
+      "sha256": "8a4f953f5d0125d6ba1d46c9fafe2b0b3df4e355c8dd1ecd087534da2d4b3db4",
+      "bytes": 40168
+    },
+    "existingReportUntouched": true,
+    "priorDual10Counts": {
+      "successfulExecutions": 32,
+      "declaredEvmReverts": 16
+    },
+    "self14OnlyCounts": {
+      "successfulExecutions": 8,
+      "declaredEvmReverts": 4
+    },
+    "emptyDefaultShells": 8,
+    "emptyDefaultShellsCountedAsExecuted": false,
+    "qualification": "The samples array carries eight case shells with empty executions and no quote, because the scope skips default Exact/quoted/runtime execution. Only recipientSamples execution outcomes are counted in this supplement."
+  },
+  "identityAndBinding": {
+    "source": {
+      "number": 26152596,
+      "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+      "generation": 26152596
+    },
+    "stateRoot": "0x066f90a09c0f9beef5e1031ecdf8df1b8398a2355bf69e2c5c32a6c9c8ed63a2",
+    "admission": {
+      "memoFingerprint": "b1e556c4230634960e7f4a6a7faa4ac995eea335f93b125d156d76843ec9f80d",
+      "familyDefinitionHash": "95deedaeef7bdf0b3c86eebe67a76adaf236782d503ff53fc33f2c2870200983",
+      "candidate": {
+        "adapter": "psv",
+        "address": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "blockHash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+        "blockNumber": 26152596,
+        "candidateKind": "psv",
+        "familyId": "protocol:psv",
+        "logIndex": 2164,
+        "pluginCandidateKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "target": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+        "transactionHash": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8"
+      }
+    },
+    "productionSourceTreeSha256": "a6b0d29c2e1114cf932283d072be969212eeefe95137a3cb2a793a2336d86515",
+    "productionSourceEqualsDual10": true,
+    "executorCodeHash": "0x7abb7c759c70c829a2ee4e8712108458fd148ac9e8f6d396caaa9539c9ecb346",
+    "executorArtifactSha256": "a95d791dc8ffb170bc1ee6d6fd00e0993d6445cf03a9b6320bc14ea185b7a87a",
+    "executorAndArtifactEqualDual10": true,
+    "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+    "revmEqualsDual10": true,
+    "readyPricesAndInputPinsEqualDual10": true,
+    "inputPins": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/natural09/ready.json",
+        "sha256": "971053d021ec0b4e14a033cdeb71edd7f45c3295885bbeac46494c451f970e5c"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/natural09/prices/prices.json",
+        "sha256": "8142f50c2d6099be3dc62479d481a9c65ac663f26a385b9d0175af21022a5fbc"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/psv-recipient-20261014.5rxktrnl/natural09/prices/input.json",
+        "sha256": "5e4a995fdec8c28bfa812b9fc66d16c614f06c8cfae9e1d33f0b0aacc31a4b6d"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/psv-family/test/historical-dual.ts",
+        "sha256": "0f43724db47d9372c153f4e4fafdff739211e296166729d73baa6fec9343db60"
+      }
+    ],
+    "historicalStateEqualDual10": true,
+    "historicalCodeByteCheck": {
+      "proxyExactSavedRuntime": true,
+      "implementationMatchesSavedRuntimeWithOnlyDeclaredImmutablesNormalized": true,
+      "immutableOffsets": [
+        4253,
+        4473
+      ],
+      "implementationSlot": "0x8be82303829042f0fba1315096a8f1961907c0dd",
+      "normalizedImplementationSha256": "ef149312d291991c9ec7ced502007f2ad878302ef21d68316fe91075cac5fa68",
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+        "generation": 26152596
+      }
+    },
+    "unchangedKeyProductionSourcePins": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/execution.ts",
+        "sha256": "3acba817b47f1306bca7632b8a8dd22b941ccca3ead497b37726443e11abbaa7",
+        "bytes": 5450
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/searcher/venues/protocols/psv-family/runtime-quote.ts",
+        "sha256": "944d755180a706c49f9e422adf5c444776dadedb525d404000bb5a112c1f80ed",
+        "bytes": 2153
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d",
+        "bytes": 12298
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/candidate/src/RuntimeAmountVM.sol",
+        "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf",
+        "bytes": 16878
+      }
+    ],
+    "qualification": "The same Ready09 and prices were reused. Source, protocol identity/state, current executor artifact/runtime and REVM binary pins match dual10. No Ready rebuild or new production implementation is claimed."
+  },
+  "actorAliasingReview": {
+    "payer": "0x1000000000000000000000000000000000000002",
+    "recipient": "0x1000000000000000000000000000000000000002",
+    "treasury": "0xd623a098e77d484069cf7840205c800a2ef5ea20",
+    "deduplication": "executor and recipient collapse to one actor; unique actors are payer/recipient, vault and distinct treasury. Both tokens yield exactly six observations, no duplicate or missing key.",
+    "expectedInput": "payer/recipient -amountIn; vault +amountIn; treasury 0. The recipient input is intentionally spent because it is the payer; an external-recipient input-preservation assertion must not be applied here.",
+    "expectedOutput": "vault -(net+fee); payer/recipient +net; distinct treasury +fee. Historical fee is zero, so payer/recipient receipt is exactly the decoded preview net.",
+    "oldOutputInventory": "Each case seeds payer/recipient output with credit+103 and observes an additional +credit, hence final output 2*credit+103. Existing output cannot stand in for a new receipt. Exact input debit leaves the separately seeded 101 raw units.",
+    "native": "The observed executor native delta is 0 with 17 wei initial funding; because recipient==executor this same observation also covers recipient native preservation.",
+    "eventsAndApproval": "For all eight successes, independently decoded Swap/Transfer data bind sender=recipient=executor, both tokens, input/net/fee and new credit. Approval events are 0,input,0 and the final executed readonly allowance==0 guard is present.",
+    "caseRows": [
+      {
+        "direction": "sell-gem",
+        "label": "production-effective",
+        "amountIn": "4969763",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "previewNet": "4969763",
+        "fee": "0",
+        "actualReceipt": "4969763",
+        "inputInventoryBefore": "4969864",
+        "inputInventoryAfter": "101",
+        "outputInventoryBefore": "4969866",
+        "outputInventoryAfter": "9939629",
+        "balanceInterpretation": "Before values are actor-only funding override inputs; after values derive from the independently checked transport deltas. No raw historical stateDiff is asserted.",
+        "uniqueObservedActors": 3,
+        "tokenObservations": 6,
+        "nativeDelta": "0",
+        "nativeBeforeAndAfterWei": "17",
+        "positiveCount": 1,
+        "declaredRevertCount": 2
+      },
+      {
+        "direction": "sell-gem",
+        "label": "original-size-at-N-end",
+        "amountIn": "7361655916",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "previewNet": "7361655916",
+        "fee": "0",
+        "actualReceipt": "7361655916",
+        "inputInventoryBefore": "7361656017",
+        "inputInventoryAfter": "101",
+        "outputInventoryBefore": "7361656019",
+        "outputInventoryAfter": "14723311935",
+        "balanceInterpretation": "Before values are actor-only funding override inputs; after values derive from the independently checked transport deltas. No raw historical stateDiff is asserted.",
+        "uniqueObservedActors": 3,
+        "tokenObservations": 6,
+        "nativeDelta": "0",
+        "nativeBeforeAndAfterWei": "17",
+        "positiveCount": 1,
+        "declaredRevertCount": 0
+      },
+      {
+        "direction": "sell-gem",
+        "label": "one-token-control",
+        "amountIn": "1000000",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "previewNet": "1000000",
+        "fee": "0",
+        "actualReceipt": "1000000",
+        "inputInventoryBefore": "1000101",
+        "inputInventoryAfter": "101",
+        "outputInventoryBefore": "1000103",
+        "outputInventoryAfter": "2000103",
+        "balanceInterpretation": "Before values are actor-only funding override inputs; after values derive from the independently checked transport deltas. No raw historical stateDiff is asserted.",
+        "uniqueObservedActors": 3,
+        "tokenObservations": 6,
+        "nativeDelta": "0",
+        "nativeBeforeAndAfterWei": "17",
+        "positiveCount": 1,
+        "declaredRevertCount": 0
+      },
+      {
+        "direction": "sell-gem",
+        "label": "one-raw-control",
+        "amountIn": "1",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "previewNet": "1",
+        "fee": "0",
+        "actualReceipt": "1",
+        "inputInventoryBefore": "102",
+        "inputInventoryAfter": "101",
+        "outputInventoryBefore": "104",
+        "outputInventoryAfter": "105",
+        "balanceInterpretation": "Before values are actor-only funding override inputs; after values derive from the independently checked transport deltas. No raw historical stateDiff is asserted.",
+        "uniqueObservedActors": 3,
+        "tokenObservations": 6,
+        "nativeDelta": "0",
+        "nativeBeforeAndAfterWei": "17",
+        "positiveCount": 1,
+        "declaredRevertCount": 0
+      },
+      {
+        "direction": "buy-gem",
+        "label": "production-effective",
+        "amountIn": "4969763",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "previewNet": "4969763",
+        "fee": "0",
+        "actualReceipt": "4969763",
+        "inputInventoryBefore": "4969864",
+        "inputInventoryAfter": "101",
+        "outputInventoryBefore": "4969866",
+        "outputInventoryAfter": "9939629",
+        "balanceInterpretation": "Before values are actor-only funding override inputs; after values derive from the independently checked transport deltas. No raw historical stateDiff is asserted.",
+        "uniqueObservedActors": 3,
+        "tokenObservations": 6,
+        "nativeDelta": "0",
+        "nativeBeforeAndAfterWei": "17",
+        "positiveCount": 1,
+        "declaredRevertCount": 2
+      },
+      {
+        "direction": "buy-gem",
+        "label": "original-size-at-N-end",
+        "amountIn": "7361655916",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "previewNet": "7361655916",
+        "fee": "0",
+        "actualReceipt": "7361655916",
+        "inputInventoryBefore": "7361656017",
+        "inputInventoryAfter": "101",
+        "outputInventoryBefore": "7361656019",
+        "outputInventoryAfter": "14723311935",
+        "balanceInterpretation": "Before values are actor-only funding override inputs; after values derive from the independently checked transport deltas. No raw historical stateDiff is asserted.",
+        "uniqueObservedActors": 3,
+        "tokenObservations": 6,
+        "nativeDelta": "0",
+        "nativeBeforeAndAfterWei": "17",
+        "positiveCount": 1,
+        "declaredRevertCount": 0
+      },
+      {
+        "direction": "buy-gem",
+        "label": "one-token-control",
+        "amountIn": "1000000",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "previewNet": "1000000",
+        "fee": "0",
+        "actualReceipt": "1000000",
+        "inputInventoryBefore": "1000101",
+        "inputInventoryAfter": "101",
+        "outputInventoryBefore": "1000103",
+        "outputInventoryAfter": "2000103",
+        "balanceInterpretation": "Before values are actor-only funding override inputs; after values derive from the independently checked transport deltas. No raw historical stateDiff is asserted.",
+        "uniqueObservedActors": 3,
+        "tokenObservations": 6,
+        "nativeDelta": "0",
+        "nativeBeforeAndAfterWei": "17",
+        "positiveCount": 1,
+        "declaredRevertCount": 0
+      },
+      {
+        "direction": "buy-gem",
+        "label": "one-raw-control",
+        "amountIn": "1",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "previewNet": "1",
+        "fee": "0",
+        "actualReceipt": "1",
+        "inputInventoryBefore": "102",
+        "inputInventoryAfter": "101",
+        "outputInventoryBefore": "104",
+        "outputInventoryAfter": "105",
+        "balanceInterpretation": "Before values are actor-only funding override inputs; after values derive from the independently checked transport deltas. No raw historical stateDiff is asserted.",
+        "uniqueObservedActors": 3,
+        "tokenObservations": 6,
+        "nativeDelta": "0",
+        "nativeBeforeAndAfterWei": "17",
+        "positiveCount": 1,
+        "declaredRevertCount": 0
+      }
+    ]
+  },
+  "quoteAndProgramReview": {
+    "status": "raw-saved-program-bytes-checked",
+    "preparedQuotes": 8,
+    "checks": [
+      "Every explicit quote settlementRequest binds recipient to executor.",
+      "Preview ABI receiver and swap ABI receiver are the same executor address; preview current input is patched from r0, and swap input is patched from r0.",
+      "All calls in each quote program are static. The outer quote check and the identical nested quote at the start of direct execution both set readonly child mode.",
+      "Readonly behavior is transitively enforced by the unchanged current VM; equality assertion uses actual returned quote result and expected recipient credit.",
+      "The direct program executes the same-recipient branch, with before/after input debit, before/after output receipt and native equality checks. External-only recipient-input/payer-output preservation checks are omitted because those balances are the self input/output."
+    ],
+    "actualInputConstruction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "scope": "production issuer; selector contract separately tested offline"
+    },
+    "invocationCounts": {
+      "exact": 0,
+      "quoted": 0,
+      "forbiddenDuringBuild": 0
+    },
+    "directReads": 33,
+    "constructionCountMeaning": "Exact=0, quoted=0, forbiddenDuringBuild=0. Direct reads=33 cover historical setup/state/preview reads, so zero RPC is limited to guarded runtime program construction, not the whole acceptance run."
+  },
+  "negativeReview": {
+    "noInput": "Both directions reuse exactly the successful call/calldata and current amount, but set caller input balance to zero while retaining old output/native funding. Completion is reverted-as-declared.",
+    "postExecutionForcedRevert": 2,
+    "forcedRevert": "Both directions retain the complete successful quote/direct/allowance script prefix and append a constant 0 vs 1 equality guard. Completion is reverted-as-declared.",
+    "limit": "All four negative effects arrays are empty by the existing strict transport contract. These are declared-EVM-revert observations, not independently measured historical stateDiff/full rollback. Existing synthetic EVM09 rollback checks remain separately scoped."
+  },
+  "scopeBranchReview": {
+    "comparison": "Recovered exact accepted dual10 harness from saved run10 patch payload; verified deaa347d… hash, then directly diffed against executed self14 harness 0f43724d….",
+    "defaultWhenOmitted": "default-and-external",
+    "allowedScopes": [
+      "default-and-external",
+      "self-recipient"
+    ],
+    "invalidScopeRejectedBeforeOutputOpen": true,
+    "executionSemantics": "Default/external execution body and its request requirements/checks are unchanged. The pure allowance-check byte construction moves before the branch; the old default Exact/quoted/runtime block is wrapped by the default scope condition. Default receiver list remains owner and treasury; self receiver list is executor only.",
+    "helpers": "State uses stateRequirements; preview explicitly declares executor; simulation uses original effects requirements. The unresolved-outcome preservation correction remains intact.",
+    "noDefaultRerunClaim": "The revised default branch was inspected by source comparison; this self14 run does not execute the default or external-recipient branch, and does not replace their dual10 evidence.",
+    "metadataChanges": [
+      "Report adds scope.",
+      "Per-case console field amountOut becomes defaultAmountOut, absent in self mode; stored default sample quote/receipt structure is unchanged."
+    ],
+    "oldHarnessPin": {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-source/psv-historical-dual10.ts",
+      "sha256": "deaa347d9f49784f2bf5ce71201da82c0a661465530822ca8a2231fa59cd3cdd",
+      "bytes": 27326
+    },
+    "newHarnessPin": {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-source/psv-historical-dual14.ts",
+      "sha256": "0f43724db47d9372c153f4e4fafdff739211e296166729d73baa6fec9343db60",
+      "bytes": 27782
+    }
+  },
+  "runReceipt": {
+    "toolId": "listener:searcher:psv-historical-dual",
+    "exitCode": 0,
+    "descriptorSha256": "53e9552a831f4aac5188084dfc4b91cdfe051aed5dd36be1876d00dc26909409",
+    "argvSha256": "2953608795d40d363b245d0b9a6d5e43579a350fe20d51ff67caf7b309b24b04",
+    "stdoutSha256": "fd232cabee677c91aded8e8f3ebc4864db6f8e433ce2daff0da972f2f43792d7",
+    "stdoutBytes": "candidate/src/RuntimeAmountVM.sol",
+    "exactStdoutLocatedInSavedLogAtByte": 720,
+    "drained": true
+  },
+  "remainingBounds": [
+    "N-end state and current Cancun executor only; this is not original-transaction pre-call replay, formal Adapter Replay, full-loop execution, natural opportunity valuation, performance acceptance or deployment.",
+    "Self14 historical fees and caps are zero and treasury is distinct from executor; nonzero fee/cap or treasury==payer self-recipient combinations are not newly executed by this supplement.",
+    "Negative historical raw stateDiff/full rollback remains unverified.",
+    "The eight empty default case shells are not successful default executions."
+  ],
+  "readbackPin": {
+    "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/psv-self-recipient-evidence-readback14.json",
+    "sha256": "cfb0b0570d683973761241b8680c0f43e51d8c21113e57926ebc3b8d4ee30e10",
+    "bytes": 13805
+  },
+  "readbackScriptPin": {
+    "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/reviewer-readback14.py",
+    "sha256": "0fed0ef80eb4f108941fdd997481906abe13145331e1ceefcc3958e6eae01a8c",
+    "bytes": 13821
+  },
+  "evidencePins": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results14/historical-self14.json",
+      "sha256": "271d085d4b8867d22fbaa1a20d3d442a67f3a2926deda83fb5c8d5a588d81d61",
+      "bytes": 409781
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results14/psv-self14.log",
+      "sha256": "ee4a8d08bc4e8aa2a81815f60f35075879de62af0658ba923d266279c409fc65",
+      "bytes": 2345
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results14/selection04.json",
+      "sha256": "4169fe16204a3908592becc4769221f693cdff552152117e3a1b23dcd1bdf7d1",
+      "bytes": 40240
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results14/check14.json",
+      "sha256": "50db8167035d7d3c36b4fdbd90914d9f564bfdb6a1cffd591cdd5da1bdcddc6e",
+      "bytes": 1010
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/patch14-manifest.json",
+      "sha256": "ae0d17e538be671b00330accf0283230e70c01ddb846ba25261c06960491c5c9",
+      "bytes": 261
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/check14-output.jsonl",
+      "sha256": "1c6050eac530471695903c9a561e066ee79f972bb3292cce79e194cf3b511f4e",
+      "bytes": 952
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/run10.py",
+      "sha256": "4430bff6027edb07b961a13684465dd4e9d3bb5730e1b72c571dbfde156e5aa7",
+      "bytes": 38151
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/run14.py",
+      "sha256": "62bc43298e046716a7f8d4f5cd30826690badc0ba7972e17570f45810c3477fa",
+      "bytes": 38785
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results10/historical-dual10.json",
+      "sha256": "986c9093548fbcf6371d177579b92526bca9e1b13a339ba638dc73f9101ff680",
+      "bytes": 1090787
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/natural09/prices/input.json",
+      "sha256": "5e4a995fdec8c28bfa812b9fc66d16c614f06c8cfae9e1d33f0b0aacc31a4b6d",
+      "bytes": 64025
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results09/natural09/prices/prices.json",
+      "sha256": "8142f50c2d6099be3dc62479d481a9c65ac663f26a385b9d0175af21022a5fbc",
+      "bytes": 636846
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/psv-recipient-evidence-review.json",
+      "sha256": "8a4f953f5d0125d6ba1d46c9fafe2b0b3df4e355c8dd1ecd087534da2d4b3db4",
+      "bytes": 40168
+    }
+  ]
+}
