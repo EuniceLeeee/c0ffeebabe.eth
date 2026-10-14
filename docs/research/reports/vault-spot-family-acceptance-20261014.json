@@ -1,0 +1,320 @@
+{
+  "schema": "vault-spot-family-acceptance/v1",
+  "at": "2026-10-14T01:20:57.632297+00:00",
+  "claim": "Current actual dirty cloud workspace: implemented Vault spot Family, one real market admitted from N-only production discovery, same-N dual execution plus state-dependent rejection. No complete adaptation delivery claim.",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "sourceBaseHead": "ed8f410cad87c4060dbb2f902265c8a08fd3b2f0",
+  "family": "vault-spot",
+  "defaultEnabled": false,
+  "envKey": "SEARCHER_FAMILY_VAULT_SPOT_ENABLED",
+  "identity": "Known GMX-V1-style deployed runtime plus current router.vault/router.usdg/USDG.vaults/VaultUtils.vault reverse registration and pair whitelist/decimals/code. No instance allowlist; no official GMX brand or creation claim.",
+  "variantCoverage": "APE/WETH, both directions, exact deployed runtime profile. Other markets or runtime variants not historically accepted by this sample.",
+  "tx": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+  "source": {
+    "number": 26182689,
+    "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c"
+  },
+  "originalTransaction": {
+    "account": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+    "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+    "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    "amountIn": "71854376210288490340",
+    "amountOut": "4430934597103818",
+    "gross": "4444267399301724",
+    "feeBasisPoints": "30",
+    "sender": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+    "receiver": "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+    "inputSender": "0xE08D97e151473A848C3d9CA3f323Cb720472D015",
+    "logIndex": "0x38e",
+    "originalPrecallReplay": false
+  },
+  "sourcePins": {
+    "sourceTreeSha256": "80af4f387d9fdf1e14c589533451a4d964694d19f971ae6fe028ac53c0e2f612",
+    "harnessSha256": "6d6c5c82fd971d5a55c50817b0738d7524e7f129ec60d5f8fc24af37dffbec54",
+    "evidenceSha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27",
+    "observationHelpers": [
+      {
+        "path": "../three-family/historical-input-observations.ts",
+        "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+      },
+      {
+        "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+        "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+      },
+      {
+        "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+        "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+      },
+      {
+        "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+        "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+      },
+      {
+        "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+        "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+      },
+      {
+        "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+        "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+      },
+      {
+        "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+        "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+      },
+      {
+        "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+        "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+      },
+      {
+        "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+      }
+    ]
+  },
+  "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+  "executorArtifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+  "executorRuntimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+  "actors": {
+    "executor": "0x1000000000000000000000000000000000000002",
+    "owner": "0x1000000000000000000000000000000000000001"
+  },
+  "ready": {
+    "artifact": "logs/stage3-vault-swap-20261014.sh8jqyhk/single-N26182689-attempt03/ready.json",
+    "sha256": "5f2bb3bbe99dd26425b1d462c4ef161103c840fb55bae6b911574468ae3a7c20",
+    "naturalMarkets": 1,
+    "directions": 2,
+    "rawPositive": 2,
+    "effectiveQuoted": 1,
+    "effectiveQuoteFailed": 1,
+    "freshQuoted": 1,
+    "carried": 0,
+    "referenceWethInput": "2000000000000000",
+    "forwardReferenceAPEInput": "32300188061471902312",
+    "reverseReferenceAPEReceipt": "32300188061471902312",
+    "priceTablesUnmodified": true
+  },
+  "amountMatrix": [
+    {
+      "label": "manual-original-input",
+      "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "71854376210288490340",
+      "amountOut": null,
+      "status": "same-N-quote-and-execution-rejected",
+      "outerRevert": "Error(runtime external call)",
+      "innerVaultRevertReason": "not exposed by current BotVM wrapper; do not claim a decoded Vault pool error"
+    },
+    {
+      "label": "manual-double-original-input",
+      "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "143708752420576980680",
+      "amountOut": null,
+      "status": "same-N-quote-and-execution-rejected",
+      "outerRevert": "Error(runtime external call)",
+      "innerVaultRevertReason": "not exposed by current BotVM wrapper; do not claim a decoded Vault pool error"
+    },
+    {
+      "label": "manual-legal-diagnostic",
+      "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "1000000000000",
+      "amountOut": "61665479",
+      "status": "same-N-dual-pass",
+      "quotedAmountOut": "61665479",
+      "runtimeAmountOut": "61665479"
+    },
+    {
+      "label": "manual-double-legal-diagnostic",
+      "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "2000000000000",
+      "amountOut": "123330959",
+      "status": "same-N-dual-pass",
+      "quotedAmountOut": "123330959",
+      "runtimeAmountOut": "123330959"
+    },
+    {
+      "label": "production-effective",
+      "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "32300188061471902312",
+      "amountOut": null,
+      "status": "same-N-quote-and-execution-rejected",
+      "outerRevert": "Error(runtime external call)",
+      "innerVaultRevertReason": "not exposed by current BotVM wrapper; do not claim a decoded Vault pool error"
+    },
+    {
+      "label": "double-production-effective",
+      "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "64600376122943804624",
+      "amountOut": null,
+      "status": "same-N-quote-and-execution-rejected",
+      "outerRevert": "Error(runtime external call)",
+      "innerVaultRevertReason": "not exposed by current BotVM wrapper; do not claim a decoded Vault pool error"
+    },
+    {
+      "label": "one-raw-unit-boundary",
+      "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "1",
+      "amountOut": null,
+      "status": "same-N-quote-and-execution-rejected",
+      "outerRevert": "Panic(0x11)",
+      "innerVaultRevertReason": "not exposed by current BotVM wrapper; do not claim a decoded Vault pool error"
+    },
+    {
+      "label": "manual-original-output-as-reverse-input",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "amountIn": "4430934597103818",
+      "amountOut": "71560010387267777812",
+      "status": "same-N-dual-pass",
+      "quotedAmountOut": "71560010387267777812",
+      "runtimeAmountOut": "71560010387267777812"
+    },
+    {
+      "label": "manual-double-original-output-as-reverse-input",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "amountIn": "8861869194207636",
+      "amountOut": null,
+      "status": "same-N-quote-and-execution-rejected",
+      "outerRevert": "Error(runtime external call)",
+      "innerVaultRevertReason": "not exposed by current BotVM wrapper; do not claim a decoded Vault pool error"
+    },
+    {
+      "label": "production-effective",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "amountIn": "2000000000000000",
+      "amountOut": "32300188061471902312",
+      "status": "same-N-dual-pass",
+      "quotedAmountOut": "32300188061471902312",
+      "runtimeAmountOut": "32300188061471902312"
+    },
+    {
+      "label": "double-production-effective",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "amountIn": "4000000000000000",
+      "amountOut": "64600376122943804625",
+      "status": "same-N-dual-pass",
+      "quotedAmountOut": "64600376122943804625",
+      "runtimeAmountOut": "64600376122943804625"
+    },
+    {
+      "label": "one-raw-unit-boundary",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "amountIn": "1",
+      "amountOut": "16149",
+      "status": "same-N-dual-pass",
+      "quotedAmountOut": "16149",
+      "runtimeAmountOut": "16149"
+    }
+  ],
+  "executionCounts": {
+    "quoteAttempts": 12,
+    "successfulAmountGroups": 6,
+    "rejectedAmountGroups": 6,
+    "quotedAndRuntimePositiveExecutions": 12,
+    "negativeControlsIncludingStateAndClosedLoop": 42,
+    "feeOrRoundingLossClosedLoopRejections": 6,
+    "directHistoricalReadsInDualCLI": 216
+  },
+  "safetyEvidence": {
+    "oldInputRaw": 101,
+    "oldOutputRaw": 103,
+    "nativeWei": 17,
+    "requestedInputReduction": 0,
+    "successfulReceiptComparisonRawDelta": 0,
+    "positiveEffects": "Four account/token balances, both token total supplies, native delta and actual Swap/Transfer logs; full input debit and Vault credit",
+    "controls": "Insufficient total input; post-execution forced revert; quoted minimum output+1; unmodified-capacity/zero-output state rejects; shared runtime-flow minimumReturn remains the full original amount, tolerance0",
+    "rollbackScope": "Main call Revert with trusted transport suppressing rolled-back effects; no separate post-revert balance query claim",
+    "runtimeConstruction": {
+      "rpc": 0,
+      "exact": 0,
+      "quotedFallback": false,
+      "scope": "real production issuer; live selector throwing-stub regression remains in shared family-dual suite"
+    }
+  },
+  "stateRejectionQualification": "Five large-input outer external-call reverts match independently read N output-pool capacity limits; the wrapper does not retain the Vault inner error string. APE 1 raw unit yields an outer checked-arithmetic panic consistent with the positive-receipt gate. These are actual current-BotVM N-end rejections, not original-call-prestate or universal protocol-unsupported verdicts.",
+  "regressions": {
+    "buildLive": "PASS build-live-attempt04",
+    "familyContracts": "7/7 contract-attempt04",
+    "productionLifecycle": "1/1 lifecycle-attempt03; real production strict/session, fixture chain transport; empty touched set, changed oracle pointer, oracle failure, swap disabled, recovery, unrelated touch; not a new EVM or full effective-producer multi-head performance run",
+    "sharedRuntimeDual": "82/82 final-family-dual-execution; live selector guards Exact/quoted/RPC during construction",
+    "pluginDeclarationCompositionGenerated": "PASS",
+    "targetedTypes": "Seven existing diagnostics in four unchanged files, independently found in prior Few types-tests04; no Vault diagnostics. Not full typecheck pass."
+  },
+  "retainedFailures": [
+    "contract-attempt01 fixture argument access",
+    "build-live-attempt01 own TypeScript issues",
+    "types-expanded-attempt01 broad existing plus initial own diagnostics",
+    "canonical-04 composition test default-policy defect; closed in315467723f3f9ecc211846d4d37999e0abe558bc",
+    "single-ready01 no_catalog_match before opaque candidate nomination fix",
+    "nomination-regression-before-fix01 deterministic failure",
+    "generate-attempt02 wrong package, no generation occurred",
+    "single-ready02 strict invalid-program declared unused eth-call transport",
+    "lifecycle-before-transport-fix01 deterministic failure",
+    "lifecycle-after-transport-fix01 and lifecycle-diagnostic02 fixture omitted trusted executor code hash",
+    "types-targeted-attempt02 two own test annotations plus existing diagnostics"
+  ],
+  "authorArtifactRecheck": {
+    "checks": 719,
+    "networkCalls": 0,
+    "newEvmExecutions": 0,
+    "scope": "Independent arithmetic/ABI parsing by author against saved raw effects and encoded requested inputs; not a fresh non-author review"
+  },
+  "artifacts": {
+    "dual": {
+      "path": "logs/stage3-vault-swap-20261014.sh8jqyhk/dual-attempt01.json",
+      "sha256": "e82e58bf319553eba11f0248ec8beaddffc5d76a549f64e4167cc1b79f242cf6"
+    },
+    "ownedSourceFreeze": {
+      "path": "logs/stage3-vault-swap-20261014.sh8jqyhk/owned-source-freeze-candidate01.json",
+      "sha256": "1a806f0aecc6933e54848b550ba71c4d6e0c94ab27c9ec6fe38332321e49a243"
+    },
+    "toolManifest": {
+      "path": "logs/stage3-vault-swap-20261014.sh8jqyhk/tool-selection07.json",
+      "sha256": "ebea78cf3a3be0cfbbb82748ee8d5de1b64776663a6ce21ccac076f9c486d4a0",
+      "query": [
+        "adapter",
+        "family"
+      ],
+      "executed": "Vault historical dual/ready/lifecycle/contract and related canonical declarations/composition/shared dual tests; see execution receipts"
+    }
+  },
+  "preservation": {
+    "baselineSourceFileCount": 2029,
+    "changedOldFiles": [
+      "listener/package.json",
+      "listener/src/searcher/generated/family-capability-shadow.generated.json",
+      "listener/src/searcher/generated/production-family-entries.generated.ts",
+      "listener/src/searcher/test/family-dual-execution.ts",
+      "listener/src/searcher/test/production-family-composition.ts"
+    ],
+    "oldCatalogExactRowsUnchanged": 484,
+    "newVaultRows": 11,
+    "legacyCatalogUnchanged": true,
+    "peerSharedDualHunksUnchanged": true,
+    "coffeeSha256": "e43015e83e5a1baa5d0aaeff5adb5e6648bec106258a24b5c51fbc39bb0fe517"
+  },
+  "remaining": [
+    "Fresh non-author Vault acceptance review not yet performed",
+    "Formal Adapter Replay/conformance/family_local gates not completed",
+    "Original transaction leg pre-call-state equality not replayed",
+    "Full conserving opportunity replay not completed",
+    "4A local and4B representative performance both NOT RUN; observed correctness CLI times are not performance acceptance",
+    "Other markets/runtime variants not historically validated by this one-market matrix"
+  ],
+  "goalStatus": "active",
+  "publication": {
+    "workingCatalogArtifactHash": "60fcd392d38d77a29f94dc68ad9122b49ffafbdae0af71a226cf50e048287926",
+    "committedCatalogArtifactHash": "9edf49855220327a660a818f5c79411091e1857d96c03064483c78e05673aea6",
+    "catalogMethod": "Canonical serializer: current HEAD old rows plus only the eleven new Vault rows; actual shared generated file is preserved. Evidence applies to the actual dirty workspace with protected peer changes."
+  }
+}

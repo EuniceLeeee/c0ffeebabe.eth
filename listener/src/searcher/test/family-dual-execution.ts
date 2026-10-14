@@ -31,6 +31,7 @@ import { descriptor as yieldBasisLtFixture, answerFor as yieldBasisAnswers } fro
 import { setup as yearnAuctionFixture } from "../venues/protocols/yearn-auction-family/test/fixtures.js";
 import { setup as curveLpFixture } from "../venues/protocols/curve-lp-family/test/fixtures.js";
 import { descriptor as fewWrappedFixture } from "../venues/protocols/few-wrapped-family/test/fixtures.js";
+import { descriptor as vaultSpotFixture } from "../venues/swaps/vault-spot-family/test/fixtures.js";
 
 
 const executor = ethers.getAddress("0x1000000000000000000000000000000000000002");
@@ -49,6 +50,7 @@ const raw = JSON.parse(readFileSync(new URL("./fixtures/runtime-family-descripto
   (_key, value) => value?.$durableType === "bigint" ? BigInt(value.value) : value);
 const fixtures: any[] = raw.descriptors;
 fixtures.push(fewWrappedFixture());
+fixtures.push(vaultSpotFixture());
 // These saved Fluid fixtures are ERC20-only. Upgrade their test shape, not
 // production Ready: real stale descriptors must still be re-attested.
 for (const d of fixtures.filter(d => d.familyId === "fluid-dex")) {

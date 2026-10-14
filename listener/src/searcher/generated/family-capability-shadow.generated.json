@@ -15152,10 +15152,373 @@
         ],
         "absence": null
       }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "vault-spot",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "67cc9506e0a79e21d7647753273f9cdbb75e50059dce74b9e1bfbf6f8cdb8a46",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/vault-spot-family/codec.ts",
+          "src/searcher/venues/swaps/vault-spot-family/discovery.ts",
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/swaps/vault-spot-family/capture.ts",
+        "entryExport": "capture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "vault-spot",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "vault-spot",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "088fe34a30f7d2ae3188327d32585dfb18630b5c5cf4164fb8efe95fc52baa32",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/vault-spot-family/codec.ts",
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/swaps/vault-spot-family/discovery.ts",
+        "entryExport": "discovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "vault-spot",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "68f7da5f94212f7431b548138fcf9f1d65e45c21f27a4384948c0170169f3664",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/searcher/venues/swaps/vault-spot-family/codec.ts",
+          "src/searcher/venues/swaps/vault-spot-family/discovery.ts",
+          "src/searcher/venues/swaps/vault-spot-family/instance.ts",
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts",
+          "src/searcher/venues/swaps/vault-spot-family/routes.ts",
+          "src/searcher/venues/swaps/vault-spot-family/runtime.ts",
+          "src/searcher/venues/swaps/vault-spot-family/simulation.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/swaps/vault-spot-family/exact.ts",
+        "entryExport": "exact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "vault-spot",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "6fde5cc43544273a2a85486b622662687b592623993c849d4573cb176e184401",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/searcher/venues/swaps/vault-spot-family/action.ts",
+          "src/searcher/venues/swaps/vault-spot-family/codec.ts",
+          "src/searcher/venues/swaps/vault-spot-family/instance.ts",
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts",
+          "src/searcher/venues/swaps/vault-spot-family/routes.ts",
+          "src/searcher/venues/swaps/vault-spot-family/runtime.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/swaps/vault-spot-family/execution.ts",
+        "entryExport": "execution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/vault-spot-family/action.ts",
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "vault-spot",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "vault-spot",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "865b842f6c3a2cba98c6d6f426f9dec1beed082f5b468b093eeae9f0455c22b7",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/vault-spot-family/codec.ts",
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/swaps/vault-spot-family/identity.ts",
+        "entryExport": "identity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "vault-spot",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "15edc304320834ddb3d5cc3280b8123910100e47e18823dba65d47e980a05dec",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "package:ethers@6.16.0",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/vault-spot-family/codec.ts",
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/swaps/vault-spot-family/instance.ts",
+        "entryExport": "instance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "vault-spot",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "093a147fdaa298d2d254bdbff9c6f9736af93bab3504791dc5b30dad1b57b0f4",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/blockscan-multicall.ts",
+          "src/searcher/detector/blockscan-sizing-constants.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/blockscan-state-capability.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/route-immutable-binding.ts",
+          "src/searcher/venues/route-instance-identity.ts",
+          "src/searcher/venues/swaps/blockscan-state-shared.ts",
+          "src/searcher/venues/swaps/vault-spot-family/codec.ts",
+          "src/searcher/venues/swaps/vault-spot-family/instance.ts",
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts",
+          "src/searcher/venues/swaps/vault-spot-family/routes.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/swaps/vault-spot-family/pricing.ts",
+        "entryExport": "pricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "vault-spot",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "b5d60b61cf4b358e14b02356cc03e7144bc36d534e915f8d88940eb68f8d5ad3",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swaps/vault-spot-family/codec.ts",
+          "src/searcher/venues/swaps/vault-spot-family/instance.ts",
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/swaps/vault-spot-family/routes.ts",
+        "entryExport": "routes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "vault-spot",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "d33aea977f90aa8a51bf616e344460dc77499174cf11f83f122774157027a5b1",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:fs@node-es2022-v1",
+          "runtime:node:path@node-es2022-v1",
+          "runtime:node:url@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/solver/v2-constant-product-math.ts",
+          "src/searcher/solver/v2-fee.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/landed-event-registry.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/swap-observation.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/vault-spot-family/codec.ts",
+          "src/searcher/venues/swaps/vault-spot-family/discovery.ts",
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts",
+          "src/searcher/venues/v2-lineage.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": "src/searcher/venues/swaps/vault-spot-family/swap.ts",
+        "entryExport": "swap",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/vault-spot-family/manifest.ts"
+        ],
+        "absence": null
+      }
     }
   ],
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "eb297d4b7e50666b441f2dc273ed4912f144e30d4c6fb1cd2268f31113e2a56e"
+  "artifactHash": "9edf49855220327a660a818f5c79411091e1857d96c03064483c78e05673aea6"
 }

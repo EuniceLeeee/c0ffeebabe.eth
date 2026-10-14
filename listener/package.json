@@ -342,7 +342,11 @@
     "searcher:strict-universe-source-fingerprints": "node --import tsx src/searcher/test/strict-universe-source-fingerprints.ts",
     "searcher:migration-cleanup-receipt": "node --import tsx src/searcher/test/migration-cleanup-receipt.ts",
     "searcher:production-family-reverse-binding": "node --import tsx src/searcher/test/production-family-reverse-binding.ts",
-    "searcher:univ4-fee-hook-live-probe": "node --import tsx src/searcher/test/univ4-fee-hook-live-probe.ts"
+    "searcher:univ4-fee-hook-live-probe": "node --import tsx src/searcher/test/univ4-fee-hook-live-probe.ts",
+    "searcher:vault-spot-family-historical-fork-ready": "node --import tsx src/searcher/venues/swaps/vault-spot-family/test/historical-ready.ts",
+    "searcher:vault-spot-family-contract": "node --import tsx --test src/searcher/venues/swaps/vault-spot-family/test/contract.ts",
+    "searcher:vault-spot-family-lifecycle": "node --import tsx --test src/searcher/venues/swaps/vault-spot-family/test/lifecycle.ts",
+    "searcher:vault-spot-family-historical-dual-fork": "node --import tsx src/searcher/venues/swaps/vault-spot-family/test/historical-dual.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

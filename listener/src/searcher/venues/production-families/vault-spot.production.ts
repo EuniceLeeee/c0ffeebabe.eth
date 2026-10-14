@@ -1,0 +1,15 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineSwapFamily } from "../adapter-family-plugin.js";
+import { manifest } from "../swaps/vault-spot-family/manifest.js";
+import { discovery } from "../swaps/vault-spot-family/discovery.js";
+import { identity } from "../swaps/vault-spot-family/identity.js";
+import { instance } from "../swaps/vault-spot-family/instance.js";
+import { routes } from "../swaps/vault-spot-family/routes.js";
+import { pricing } from "../swaps/vault-spot-family/pricing.js";
+import { exact } from "../swaps/vault-spot-family/exact.js";
+import { execution } from "../swaps/vault-spot-family/execution.js";
+import { swap } from "../swaps/vault-spot-family/swap.js";
+import { action } from "../swaps/vault-spot-family/action.js";
+import { capture } from "../swaps/vault-spot-family/capture.js";
+export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_VAULT_SPOT_ENABLED" });
+export const plugin = defineSwapFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, swap, capture, actionAdapters: [action] });
