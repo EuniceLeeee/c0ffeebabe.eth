@@ -5616,7 +5616,7 @@
         "familyId": "mooniswap",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "64a16091c734e22baacd13890d80f66babb4009a16ce197cde9311d5e2cd64e4",
+        "contentHash": "8d2022ab61809aa9045a8271877e052f7a98e2ffd9c9d4d60644d2accaa17c36",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -15881,5 +15881,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "a3af314197c5ef289653a2708c03e04d421c8c0fe1aa3f7501b5c5be909552c5"
+  "artifactHash": "b64146dd1b2e403b7b8222dbc460929798cd530b91aed681192ae5283a461702"
 }

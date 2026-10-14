@@ -169,6 +169,8 @@
     "searcher:runtime-native-boundary": "node --import tsx --test src/searcher/test/runtime-native-boundary.ts",
     "searcher:runtime-maximum-input": "node --import tsx --test src/searcher/test/runtime-maximum-input.ts",
     "searcher:psv-runtime-recipient": "node --import tsx --test src/searcher/test/psv-direct-recipient.ts",
+    "searcher:mooniswap-contract": "node --import tsx --test src/searcher/venues/swaps/mooniswap-family/test/contract.ts",
+    "searcher:mooniswap-runtime-recipient": "node --import tsx --test src/searcher/venues/swaps/mooniswap-family/test/runtime-recipient.ts",
     "searcher:psv-historical-ready": "node --import tsx src/searcher/venues/protocols/psv-family/test/historical-ready.ts",
     "searcher:psv-historical-dual": "node --import tsx src/searcher/venues/protocols/psv-family/test/historical-dual.ts",
     "searcher:runtime-settlement": "tsx src/searcher/test/runtime-settlement.ts",
@@ -364,7 +366,10 @@
     "searcher:balancer-v2-family-contract": "node --import tsx --test src/searcher/venues/swaps/balancer-v2-family/test/contract.ts src/searcher/venues/swaps/balancer-v2-family/test/codec-equivalence.ts src/searcher/venues/swaps/balancer-v2-family/test/lifecycle-observation.ts",
     "searcher:balancer-v2-historical-recipient": "node --import tsx src/searcher/venues/swaps/balancer-v2-family/test/historical-recipient.ts",
     "searcher:family-settlement-review": "node --import tsx src/searcher/test/family-settlement-review.ts",
-    "searcher:family-settlement-review-contract": "node --import tsx --test src/searcher/test/family-settlement-review-contract.ts"
+    "searcher:family-settlement-review-contract": "node --import tsx --test src/searcher/test/family-settlement-review-contract.ts",
+    "searcher:mooniswap-historical-ready": "node --import tsx src/searcher/venues/swaps/mooniswap-family/test/historical-ready.ts",
+    "searcher:mooniswap-historical-dual": "node --import tsx src/searcher/venues/swaps/mooniswap-family/test/historical-dual.ts",
+    "searcher:mooniswap-runtime-recipient-evm": "FOUNDRY_PROFILE=mooniswap_recipient forge test --ffi --match-contract MooniswapRuntimeRecipientTest"
   },
   "dependencies": {
     "ethers": "^6.13.0"

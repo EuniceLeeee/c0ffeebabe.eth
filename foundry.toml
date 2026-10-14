@@ -19,3 +19,6 @@ tab_width = 4
 [profile.psv_recipient]
 test = "listener/src/searcher/venues/protocols/psv-family/test"
 fs_permissions = [{ access = "read", path = "./listener/src/searcher/venues/protocols/psv-family/test/source-runtime.json" }]
+# Local Mooniswap emitted-guard correctness; synthetic pool, explicitly opted in.
+[profile.mooniswap_recipient]
+test = "listener/src/searcher/venues/swaps/mooniswap-family/test"
