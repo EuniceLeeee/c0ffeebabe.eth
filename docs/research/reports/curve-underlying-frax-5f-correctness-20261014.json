@@ -1,0 +1,2500 @@
+{
+  "schema": "curve-underlying-5f-correctness-20261014-v1",
+  "baseCommit": "24450b08958dc2611244e8ff57f34085dbe6560d",
+  "codifyCommit": "dc9013a8ceb8d325bd5422592cc24ff6eb3068e0",
+  "classification": "Family exact amount and refresh repair plus narrow acceptance-tool repair; not opportunity replay or performance",
+  "source": {
+    "number": 14274089,
+    "hash": "0x30ccd5160f0898c018bd53954f0cf36e7910461491848b10530d9b4d6ed3163b",
+    "generation": 14274089
+  },
+  "code": {
+    "headAtStart": "24450b08958dc2611244e8ff57f34085dbe6560d",
+    "sourceSha256": "ea4e35f52e18b03efe600e2022d8da8039167c2269220cede7ddc9896d7da0f2",
+    "fileCount": 1209,
+    "testSha256": "bc3f7db0866ff2b6b9540eb2a5b30c1a485c0543953dfead481104822040a1c8",
+    "testSafetySha256": "0b63d02aeea7a2d44d9ec0ac201e4ffd91e36118f0ece486e6c4843e75fa87c3",
+    "testInputHelperSha256": "a4a0449afc1777b3a0f5256b99fb63d23db8f7e54d6bce8f75128f1d65c0abbd",
+    "testPriceInputHelperSha256": "c5a503ae065c2f925edf35b568649b58e7ed281827ee1df33881f085cd6d9502",
+    "testDonorHelperSha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27",
+    "artifactSha256": "f8ce9aff9f9ee68b3080b29e882dbc49f978fde135edfdcae89e7f9e094246a7",
+    "familyDefinitionHash": "ea1c70eedf804ef8b5e2b211a98c1e6c6dd1d254cfbd8a5f61ba9e4b8cdcebbb",
+    "familyMemoDefinitionHash": "30897e92f7092d9c5dce83cfd1d2f8af00b42e742ed01d7b2b83c3084ba721db"
+  },
+  "pool": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+  "transaction": "0x7d996f99247b03b809e5eea4989de17f674946b75b1bfddae601311bf0e85a70",
+  "counts": {
+    "old-fragment": 26,
+    "zero-input-controls": 104,
+    "runtime-program": 26,
+    "quoted-minimum-1-diagnostic": 26,
+    "runtime-direct-output": 26
+  },
+  "directions": 12,
+  "uniqueInputGroups": 26,
+  "samples": [
+    {
+      "mode": "default",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "1000000000000",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "999398176373526499028888",
+          "quoteDelta": "0",
+          "payerDebit": "1000000000000",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584006913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "999398176373526499028888",
+          "quoteDelta": "0",
+          "payerDebit": "1000000000000",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584006913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "999398176373526499028888",
+          "quoteDelta": "0",
+          "payerDebit": "1000000000000",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584006913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/frax-dual03-double.json",
+        "sha256": "0493668d427a4cbdb2d1b7cd5d739ff4a063f2522ae75469b68d8c2d44b253d8",
+        "bytes": 394231,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual03-double.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "500000000000",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "499699329276493554552688",
+          "quoteDelta": "0",
+          "payerDebit": "500000000000",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007413129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "499699329276493554552688",
+          "quoteDelta": "0",
+          "payerDebit": "500000000000",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007413129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "499699329276493554552688",
+          "quoteDelta": "0",
+          "payerDebit": "500000000000",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007413129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/frax-dual03-original.json",
+        "sha256": "3fd3b5deb683b9be6b9faac2d7abf4639843b898599f91eb502f96b7e834fa31",
+        "bytes": 394222,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual03-original.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "999399605536773038882192",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "998928719141",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "998928719141",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "998928719141",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/frax-dual03-reverse-double.json",
+        "sha256": "6e9965200638bd0d832ae0f5707d05a8a0925b2f491bf0caf77b5ff4fb482dc2",
+        "bytes": 377628,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual03-reverse-double.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "499699802768386519441096",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "499464600458",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "499464600458",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "499464600458",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/frax-dual03-reverse.json",
+        "sha256": "20d012336a30266dfba1ab41358e95be5c358830069e577160787ce09191188e",
+        "bytes": 377628,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual03-reverse.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "499699802768386519441096",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "499465067633964762397936",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "499465067633964762397936",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "499465067633964762397936",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-00-x1.json",
+        "sha256": "1318aa6539a046c423fa13802333038bb59c6364ed8a801bfc09794b4f6c48fc",
+        "bytes": 402983,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-00-x1.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "999399605536773038882192",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "998929653589760787619186",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "998929653589760787619186",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "998929653589760787619186",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-00-x2.json",
+        "sha256": "3531696a6b0a43d7958d8dc9a5018fc45fb500b856dbbd775955e568890b9e63",
+        "bytes": 402983,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-00-x2.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "499699802768386519441096",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "499276908982",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "499276908982",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "499276908982",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-02-x1.json",
+        "sha256": "1f822065966c2f0c8d33aeb928fe0e8c0553645ac8910d83055cefc15bb069d5",
+        "bytes": 426512,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-02-x1.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "999399605536773038882192",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "998553191511",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "998553191511",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "998553191511",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-02-x2.json",
+        "sha256": "b2e01f44509277dc8bc29ba1c38964a5dfbb687dc7f204bbb4528d89a4c81dd4",
+        "bytes": 426512,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-02-x2.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "5056416543622737857",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "5053375818859826732",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "5053375818859826732",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "5053375818859826732",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-03-x1.json",
+        "sha256": "1acb44eff375f58c894af97a4068401249365e151026938705840ef258d93819",
+        "bytes": 406252,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-03-x1.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "50564165436227378570",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "50533756186645855642",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "50533756186645855642",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "50533756186645855642",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-03-x10.json",
+        "sha256": "c096964054677695ac954ff7d1fd92ef91e0e872f797aa93a3e8588574fd974f",
+        "bytes": 406277,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-03-x10.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "5056416543622737857",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "5054895",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "5054895",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "5054895",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-04-x1.json",
+        "sha256": "5a0d2fdadd0492227b3f9d9daf45ed1fd426b50e64514d4c6134b34c2ff6b326",
+        "bytes": 323228,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-04-x1.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "50564165436227378570",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "50548958",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "50548958",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "50548958",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-04-x10.json",
+        "sha256": "f2533518637984a396aadfc38ed5b672e2fe1b0598ce71a29d4760bf0dbf6149",
+        "bytes": 323253,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-04-x10.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "5056416543622737857",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "5053216",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "5053216",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "5053216",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-05-x1.json",
+        "sha256": "229007e0b21977b4d9bb96e9c7f3c7707ceb2be61dd07f637336366de9ed2da6",
+        "bytes": 372113,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-05-x1.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "50564165436227378570",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "50532164",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "50532164",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "50532164",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-05-x10.json",
+        "sha256": "b8be4c1341fd3b2ec17ae209f30acf2543b163b50da9c9abb497cb65c7dff53f",
+        "bytes": 372138,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-05-x10.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "5057048",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "5054010505894487440",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "5054010505894487440",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "5054010505894487440",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-06-x1.json",
+        "sha256": "9133604b037efe0542c9777cfaea9a2e9059ab6075907e7ceeded6cb774700d7",
+        "bytes": 394097,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-06-x1.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "50570480",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "50540095060714142038",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "50540095060714142038",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "50540095060714142038",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-06-x10.json",
+        "sha256": "62413a5ab80abb753a352f7da9b8a0c5fb993cc73ade5bf5ab362e4946025929",
+        "bytes": 394122,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-06-x10.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "5057048",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "5055534653984797949",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "5055534653984797949",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "5055534653984797949",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-07-x1.json",
+        "sha256": "dfc91ad73ce4d5a3a719711ef5c51f4723d9db6f3f6fb425256a39db9301be28",
+        "bytes": 336428,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-07-x1.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "50570480",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "50555346539327750888",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "50555346539327750888",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "50555346539327750888",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-07-x10.json",
+        "sha256": "bb5b9ba39d2d91caef473e6cb80629f285336a5d9f9e41e2362702c9d2121d60",
+        "bytes": 336453,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-07-x10.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "5057048",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "5053851",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "5053851",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "5053851",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-08-x1.json",
+        "sha256": "40615936f27e487eb2491e31d7a815a89e09083fc97debbeb53cce884432685c",
+        "bytes": 366267,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-08-x1.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "50570480",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "50538513",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "50538513",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "50538513",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-08-x10.json",
+        "sha256": "c17a81f793ce7d5665c21a42ba9e91121f996b04b792e07b5b4175a9b2adbff6",
+        "bytes": 366292,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-08-x10.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "5056583",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "5055005358148579480",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "5055005358148579480",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "5055005358148579480",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-09-x1.json",
+        "sha256": "cae0cb9f9ed1c38633aaa7e5894cc267e1a5ca1dcd9eb35e7cc777f95b25579a",
+        "bytes": 426896,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-09-x1.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "50565830",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "50550047579729325295",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "50550047579729325295",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "50550047579729325295",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-09-x10.json",
+        "sha256": "f13cd130b6328cacc1653a1fdabcef4762b22dd2dbc167594a4dd60a112d21d7",
+        "bytes": 426921,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-09-x10.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "5056583",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "5056749771769839982",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "5056749771769839982",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "5056749771769839982",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-10-x1.json",
+        "sha256": "aabc5d53e4e4a79319266f43025eb51fba02a15868909faa717c237b9afee26a",
+        "bytes": 369227,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-10-x1.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "50565830",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "50567497716219310635",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "50567497716219310635",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "50567497716219310635",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-10-x10.json",
+        "sha256": "92317753b88192528e5e28fff2bfab5fa97131e24203c3b4536a1fdc0b2bb7cd",
+        "bytes": 369252,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-10-x10.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "5056583",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "5056746",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "5056746",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "5056746",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-11-x1.json",
+        "sha256": "bba224133b9e4f2d8f5aba53907d1b32e83469d9e00fb1f1c8153f9cf7b865cb",
+        "bytes": 343872,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-11-x1.json"
+      }
+    },
+    {
+      "mode": "default",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "50565830",
+      "outputs": [
+        {
+          "encoding": "old-fragment",
+          "amountOut": "50567460",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "runtime-program",
+          "amountOut": "50567460",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        },
+        {
+          "encoding": "quoted-minimum-1-diagnostic",
+          "amountOut": "50567460",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-dual04-11-x10.json",
+        "sha256": "381ced1cdb5153f1ce9735299cda5394bb77ef5eba2ad4c41edd7343e27d95a2",
+        "bytes": 343897,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-dual04-11-x10.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "499699802768386519441096",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "499465067633964762397936",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-00.json",
+        "sha256": "0c7603ae640a3aeb6126fe4647b1702f76250cb7dad696caf0a11f277909d25f",
+        "bytes": 151764,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-00.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "999399605536773038882192",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "998929653589760787619186",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-01.json",
+        "sha256": "4034758be6aba7cbefa480eb25defe46a66c22f32b5286ab1dbe0597ea50c59b",
+        "bytes": 151764,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-01.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "499699802768386519441096",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "499464600458",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-02.json",
+        "sha256": "8c14f52bcd0015706eedc679132faec58df3a10b6e459363c2e9f8e1d7d6b0d2",
+        "bytes": 143719,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-02.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "999399605536773038882192",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "998928719141",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-03.json",
+        "sha256": "667220202a91400542820f16cd22835a2f5aa5ddd9e3d0da97c2e4c2c59f3b45",
+        "bytes": 143719,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-03.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "499699802768386519441096",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "499276908982",
+          "quoteDelta": "0",
+          "payerDebit": "499699802768386519441096",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563539757781239526610198839"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-04.json",
+        "sha256": "5b6fa0639aa144f5bcbf81e25d1c16fb84fe39d65323687b531b661a473c36cc",
+        "bytes": 160083,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-04.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "999399605536773038882192",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "998553191511",
+          "quoteDelta": "0",
+          "payerDebit": "999399605536773038882192",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640563040057978471140090757743"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-05.json",
+        "sha256": "0092dc3c15a2779fac86b29a5a64e789cd47818acf5072acca18f9f212f17a7d",
+        "bytes": 160083,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-05.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "5056416543622737857",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "5053375818859826732",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-06.json",
+        "sha256": "3ecf0ca28731c8954ea0df96d83153a529e6cfdb4cdbc6138bd6e9e65f7dfad4",
+        "bytes": 153453,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-06.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "50564165436227378570",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "50533756186645855642",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-07.json",
+        "sha256": "8e6c458710c540c4fd46c86147b7fe32cc4686595de7766b1c03c188d00d1a40",
+        "bytes": 153470,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-07.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "5056416543622737857",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "5054895",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-08.json",
+        "sha256": "add1757ea2b3ba31c071766d28c96c5746f2875e8101b6bdc43bf9b092ac1775",
+        "bytes": 126906,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-08.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "50564165436227378570",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "50548958",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-09.json",
+        "sha256": "8b62122c7550f0d7071db38066cbbada674774aa4a61fcdb3fcbfd184d5a1cc1",
+        "bytes": 126923,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-09.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "5056416543622737857",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "5053216",
+          "quoteDelta": "0",
+          "payerDebit": "5056416543622737857",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-10.json",
+        "sha256": "c68add78ec2601fc74633aca6856df2ef26a2bdc0aec3114e2479fbecb7f0a97",
+        "bytes": 143270,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-10.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "50564165436227378570",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "50532164",
+          "quoteDelta": "0",
+          "payerDebit": "50564165436227378570",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-11.json",
+        "sha256": "cca0e4dd82cbdb27da51e34ebb14db9fb5d5c527c985a77c993a6cbe1e751d8a",
+        "bytes": 143287,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-11.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "5057048",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "5054010505894487440",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-12.json",
+        "sha256": "e64688cebdec113799736d030929fdd4eb485a4366ac96efd0495dccb0d360c4",
+        "bytes": 149864,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-12.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "50570480",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "50540095060714142038",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-13.json",
+        "sha256": "1252e010b3400e24591f48b36bbc8802861b990df8515ff531e90493ca541580",
+        "bytes": 149881,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-13.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "5057048",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "5055534653984797949",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-14.json",
+        "sha256": "17cca360b25faf8e5f5e74d0f2c1109ae0d8a4361dee5514c58ff86bbe40d1bd",
+        "bytes": 131362,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-14.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "50570480",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "50555346539327750888",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-15.json",
+        "sha256": "0c380c2f0480c40bfaad6ca594cd6b58923b67c96170b1d5f3e3d49c13bac11f",
+        "bytes": 131379,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-15.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "5057048",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "5053851",
+          "quoteDelta": "0",
+          "payerDebit": "5057048",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913124582887"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-16.json",
+        "sha256": "8752b2658ea2f0b0bbf43109bd68ea16daf177470e04a849562fac4ec7a9bcca",
+        "bytes": 141784,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-16.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "50570480",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "50538513",
+          "quoteDelta": "0",
+          "payerDebit": "50570480",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913079069455"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-17.json",
+        "sha256": "00ca9b5f4d56430e68a7e5f1edb4c3cd3515f3858aba457183e159d9dd3c52b6",
+        "bytes": 141801,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-17.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "5056583",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "5055005358148579480",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-18.json",
+        "sha256": "355522c9f3b1c52aa9f1ef79c4ae99705fcc50f82981bfc1b4b5c2d675515715",
+        "bytes": 160866,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-18.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "50565830",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "50550047579729325295",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-19.json",
+        "sha256": "eaddeb5d4a334b250824687a7c92ab1741a2c43aa44d9888f3bbc5881ddcdaf5",
+        "bytes": 160883,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-19.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "5056583",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "5056749771769839982",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-20.json",
+        "sha256": "e4c741578fbfd088e8024c3283074944c827f3af2cd7399732dc7d79d86c46ea",
+        "bytes": 142364,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-20.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "50565830",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "50567497716219310635",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-21.json",
+        "sha256": "9e25bd28dbd218f72b67e8da9915bac55f28478efb98168fe884bd84af0be00f",
+        "bytes": 142381,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-21.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "5056583",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "5056746",
+          "quoteDelta": "0",
+          "payerDebit": "5056583",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-22.json",
+        "sha256": "a266351f68fa2bdc5b9de8953cd556d9de75d01d5ae8ce935f94a331b001a2b6",
+        "bytes": 134319,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-22.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "50565830",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "50567460",
+          "quoteDelta": "0",
+          "payerDebit": "50565830",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-23.json",
+        "sha256": "e5cd6b0665669cdede8e524d2d60d2e24d30abcec36d0f091ad9bfbe3e4b3fab",
+        "bytes": 134336,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-23.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "500000000000",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "499699329276493554552688",
+          "quoteDelta": "0",
+          "payerDebit": "500000000000",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584007413129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-24.json",
+        "sha256": "5fe43a4ff46c95f32d8ff921a771402265c1e0666fdc4e7fbab7f3eb193c352e",
+        "bytes": 149949,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-24.json"
+      }
+    },
+    {
+      "mode": "recipient",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x853d955acef822db058eb8505911ed77f175b99e",
+      "amountIn": "1000000000000",
+      "outputs": [
+        {
+          "encoding": "runtime-direct-output",
+          "amountOut": "999398176373526499028888",
+          "quoteDelta": "0",
+          "payerDebit": "1000000000000",
+          "allowancePolicy": "standing-grant",
+          "finalAllowance": "115792089237316195423570985008687907853269984665640564039457584006913129639935"
+        }
+      ],
+      "report": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient05-25.json",
+        "sha256": "d76c0ce579ef4b1fba37983084d7b02b9f78b259b248f18399a7c22ae781fc00",
+        "bytes": 149954,
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-recipient05-25.json"
+      }
+    }
+  ],
+  "amountSources": {
+    "0x6b175474e89094c44da98b954eedeac495271d0f": {
+      "kind": "saved-production-input-only",
+      "amountIn": "5056416543622737857",
+      "rowId": "curve-underlying\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0xc270b3b858c335b6ba5d5b10e2da8a09976005ad\u001f0x6b175474e89094c44da98b954eedeac495271d0f>0x8e870d67f660d95d5be530380d0ec0bd388289e1\u001f02e3ecd64b953807a3012ff0be8aef1ccfe3cf6cb166ce19919a54a85ceb9648",
+      "source": {
+        "number": 22871578,
+        "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+        "generation": 1
+      },
+      "freshness": "fresh",
+      "donorPrices": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/single-N22871578-attempt01/prices/prices.json",
+      "donorPricesSha256": "1d6d9e9e094908c3551ac93505af2e08591e12ad00229dea7ad33dcf316acb53",
+      "donorInputSha256": "3303619d415b9969c9641544530f7f3dc6ad9b7e182682ae1222d5d99bd86996",
+      "cfg": {
+        "maxHops": 6,
+        "deduplicateRotations": true,
+        "allowRepeatedPools": true,
+        "allowRepeatedTokens": false,
+        "prefixPruningEnabled": true,
+        "maxPrefixDrawdownBps": 0,
+        "enumerationMethod": "joint-dfs",
+        "enumerationBackend": "typescript",
+        "rustEnumerationThreads": 1,
+        "rustEnumerationScratchMb": 512,
+        "ethSignalPairsPerToken": 50,
+        "hopTokensPerStep": 3,
+        "hopPoolsPerPair": 3,
+        "minSpreadBps": 0,
+        "requireDislocatedPair": true,
+        "exactAdmissionSpreadBps": 0,
+        "minCapitalFraction": 0.001,
+        "maxCandidates": 100,
+        "budgetMs": 2000,
+        "pricedTokens": {
+          "$type": "map",
+          "entries": [
+            [
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "2000000000000000000000"
+                }
+              }
+            ],
+            [
+              "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000"
+                }
+              }
+            ],
+            [
+              "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000000"
+                }
+              }
+            ],
+            [
+              "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000000"
+                }
+              }
+            ],
+            [
+              "0x6b175474e89094c44da98b954eedeac495271d0f",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000000000000000000"
+                }
+              }
+            ]
+          ]
+        }
+      },
+      "targetNaturalValuation": "unmet: input only from a different historical block; no donor output/identity/admission is borrowed"
+    },
+    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+      "kind": "saved-production-input-only",
+      "amountIn": "5057048",
+      "rowId": "univ3-standard\u001f0x5ae13baaef0620fdae1d355495dc51a17adb4082\u001f0x5ae13baaef0620fdae1d355495dc51a17adb4082\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x45804880de22913dafe09f4980848ece6ecbaf78\u001f8ec67b64a82d369e4a5af01e172af8fccefbd488e7abfd30a2d2c81601a79ffb",
+      "source": {
+        "number": 22871578,
+        "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+        "generation": 1
+      },
+      "freshness": "fresh",
+      "donorPrices": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/single-N22871578-attempt01/prices/prices.json",
+      "donorPricesSha256": "1d6d9e9e094908c3551ac93505af2e08591e12ad00229dea7ad33dcf316acb53",
+      "donorInputSha256": "3303619d415b9969c9641544530f7f3dc6ad9b7e182682ae1222d5d99bd86996",
+      "cfg": {
+        "maxHops": 6,
+        "deduplicateRotations": true,
+        "allowRepeatedPools": true,
+        "allowRepeatedTokens": false,
+        "prefixPruningEnabled": true,
+        "maxPrefixDrawdownBps": 0,
+        "enumerationMethod": "joint-dfs",
+        "enumerationBackend": "typescript",
+        "rustEnumerationThreads": 1,
+        "rustEnumerationScratchMb": 512,
+        "ethSignalPairsPerToken": 50,
+        "hopTokensPerStep": 3,
+        "hopPoolsPerPair": 3,
+        "minSpreadBps": 0,
+        "requireDislocatedPair": true,
+        "exactAdmissionSpreadBps": 0,
+        "minCapitalFraction": 0.001,
+        "maxCandidates": 100,
+        "budgetMs": 2000,
+        "pricedTokens": {
+          "$type": "map",
+          "entries": [
+            [
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "2000000000000000000000"
+                }
+              }
+            ],
+            [
+              "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000"
+                }
+              }
+            ],
+            [
+              "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000000"
+                }
+              }
+            ],
+            [
+              "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000000"
+                }
+              }
+            ],
+            [
+              "0x6b175474e89094c44da98b954eedeac495271d0f",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000000000000000000"
+                }
+              }
+            ]
+          ]
+        }
+      },
+      "targetNaturalValuation": "unmet: input only from a different historical block; no donor output/identity/admission is borrowed"
+    },
+    "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+      "kind": "saved-production-input-only",
+      "amountIn": "5056583",
+      "rowId": "univ3-standard\u001f0x09aa63b7a22eefc372196aacd5b53441ed390bfb\u001f0x09aa63b7a22eefc372196aacd5b53441ed390bfb\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xc18360217d8f7ab5e7c516566761ea12ce7f9d72\u001fa05688b69fbb7bb0ceaa144a360a983eb21bed045e96c7f08e5d08f9ee85f2d2",
+      "source": {
+        "number": 22871578,
+        "hash": "0x5345cfd3ad3194fd740c849eb9c025ebeaf53284779af187c263994417d17b2b",
+        "generation": 1
+      },
+      "freshness": "fresh",
+      "donorPrices": "/opt/mev-cloud/family-runtime-20261007/logs/curve-ramp-support-20261013.9xy3su7y/single-N22871578-attempt01/prices/prices.json",
+      "donorPricesSha256": "1d6d9e9e094908c3551ac93505af2e08591e12ad00229dea7ad33dcf316acb53",
+      "donorInputSha256": "3303619d415b9969c9641544530f7f3dc6ad9b7e182682ae1222d5d99bd86996",
+      "cfg": {
+        "maxHops": 6,
+        "deduplicateRotations": true,
+        "allowRepeatedPools": true,
+        "allowRepeatedTokens": false,
+        "prefixPruningEnabled": true,
+        "maxPrefixDrawdownBps": 0,
+        "enumerationMethod": "joint-dfs",
+        "enumerationBackend": "typescript",
+        "rustEnumerationThreads": 1,
+        "rustEnumerationScratchMb": 512,
+        "ethSignalPairsPerToken": 50,
+        "hopTokensPerStep": 3,
+        "hopPoolsPerPair": 3,
+        "minSpreadBps": 0,
+        "requireDislocatedPair": true,
+        "exactAdmissionSpreadBps": 0,
+        "minCapitalFraction": 0.001,
+        "maxCandidates": 100,
+        "budgetMs": 2000,
+        "pricedTokens": {
+          "$type": "map",
+          "entries": [
+            [
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "2000000000000000000000"
+                }
+              }
+            ],
+            [
+              "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000"
+                }
+              }
+            ],
+            [
+              "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000000"
+                }
+              }
+            ],
+            [
+              "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000000"
+                }
+              }
+            ],
+            [
+              "0x6b175474e89094c44da98b954eedeac495271d0f",
+              {
+                "maxBorrow": {
+                  "$type": "bigint",
+                  "value": "5000000000000000000000000"
+                }
+              }
+            ]
+          ]
+        }
+      },
+      "targetNaturalValuation": "unmet: input only from a different historical block; no donor output/identity/admission is borrowed"
+    },
+    "0x853d955acef822db058eb8505911ed77f175b99e": {
+      "kind": "original-transaction-output-used-only-as-new-input",
+      "amountIn": "499699802768386519441096",
+      "tx": "0x7d996f99247b03b809e5eea4989de17f674946b75b1bfddae601311bf0e85a70",
+      "receipt": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-ready02/receipt.json",
+      "receiptSha256": "2326d268a0f41f810b1f2781ccb6cd9216ad0225c0265d7294d3828440b8081b",
+      "logIndex": "0x235",
+      "targetNaturalValuation": "unmet: manual transaction quantity only"
+    }
+  },
+  "plans": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence08/frax-direction-plan04.json",
+      "sha256": "560e768cf3d8fc41db5acf783bbc44a5ccabe31b580c24163232bd1afb364bbb",
+      "bytes": 28775
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/frax-recipient-plan05.json",
+      "sha256": "e4144808c41b78ec21a48a21bc6bdbb47b656f7619b76d1589612ef4b596107f",
+      "bytes": 20840
+    }
+  ],
+  "binding": {
+    "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-binding01.json",
+    "sha256": "fef50b8e43c11089743d270dbcb41e03009383c1d37601e6c6c8ff968d703c7e",
+    "bytes": 117491
+  },
+  "verifiedImplementationSource": {
+    "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/5f-verified-source.vy",
+    "sha256": "7e27184f3063a6a902267bbfcf8db1dee951dac0e27e2e49933d9557a177c6f4",
+    "bytes": 35583
+  },
+  "inputs": {
+    "ready": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-ready02/ready.json",
+    "prices": "/opt/mev-cloud/family-runtime-20261007/logs/impl-adaptation-20261014/frax-ready02/prices/prices.json",
+    "readySha256": "97b4b424ffa39e83048420f9a5e737100bb5d46cb23d2ec582b69ba2a4eab842",
+    "pricesSha256": "1745d612eb218b818309f05738ea3ea854aab1cf7a47f6a5ea8d9353b815fe5c",
+    "source": {
+      "number": 14274089,
+      "hash": "0x30ccd5160f0898c018bd53954f0cf36e7910461491848b10530d9b4d6ed3163b",
+      "generation": 14274089
+    },
+    "priceGeneration": 1,
+    "timestamp": 1645776136,
+    "memoFingerprint": "2a7b3b80fb07c1ee398beddc09749b2466a7f2d7a884b70b6ec0de9d5857aa57",
+    "familyDefinitionHash": "30897e92f7092d9c5dce83cfd1d2f8af00b42e742ed01d7b2b83c3084ba721db",
+    "candidate": {
+      "adapter": "curve-underlying",
+      "address": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+      "blockHash": "0x30ccd5160f0898c018bd53954f0cf36e7910461491848b10530d9b4d6ed3163b",
+      "blockNumber": 14274089,
+      "candidateKind": "curve-underlying-pool",
+      "familyId": "curve-underlying",
+      "hintedI": 2,
+      "hintedJ": 0,
+      "logIndex": 565,
+      "pluginCandidateKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+      "pool": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+      "sourceKind": "underlying-swap-log",
+      "transactionHash": "0x7d996f99247b03b809e5eea4989de17f674946b75b1bfddae601311bf0e85a70"
+    },
+    "runtimeCodeHash": "0xdf4a3ba377233f0581fcc45273d970d78c9d2b548e111241c97503baa77724d4"
+  },
+  "executionRules": {
+    "mode": "counterfactual-current-executor",
+    "artifactTarget": "cancun",
+    "requestedHardfork": "cancun",
+    "actualHardfork": "Cancun",
+    "originalTransactionReplay": false
+  },
+  "productionRules": {
+    "quoteAndRequestedInputReduction": 0,
+    "newTolerance": false,
+    "runtimeConstructionRpcAttempts": 0,
+    "quotedFallbackAdded": false,
+    "oldInputSentinel": "101",
+    "oldExecutorOutputSentinel": "103",
+    "oldExecutorNativeSentinel": "17",
+    "oldRecipientInputSentinel": "107",
+    "oldRecipientOutputSentinel": "109",
+    "oldRecipientNativeSentinel": "19",
+    "settlementOrder": "Caller input is paid before output; external recipient uses bound five-argument exchange_underlying; no deferred-input callback claim",
+    "scope": "Only the code-bound classic 5f implementation profile; not all Curve variants"
+  },
+  "boundaries": {
+    "implemented": true,
+    "sameStateDefaultDualExecution": "passed",
+    "sameStateExternalRecipient": "passed; independently recomputed raw trace/stateDiff",
+    "currentProductionBuild": "passed",
+    "strictReady": "reused existing historical Ready and selectively revalidated changed Family",
+    "newNaturalDiscoveryProven": false,
+    "graphDirections": 12,
+    "rawPositiveDirections": 12,
+    "effectiveQuotedDirections": 0,
+    "effectiveMissingValuationDirections": 12,
+    "naturalValuation": "unmet; donor input-only and original-TX quantities are manual amounts",
+    "formalAdapterReplay": "not_run",
+    "conformanceBoundary": "framework; no family_local/merge_ready upgrade",
+    "originalOpportunityReplay": "not_run; unified opportunity work follows adaptation",
+    "performance4A": "not_run",
+    "performance4B": "not_run"
+  },
+  "reconciliation": {
+    "capabilityQuery": [
+      "curve-underlying-ready",
+      "curve",
+      "dual"
+    ],
+    "selectedTools": [
+      "listener:searcher:curve-plain-historical-ready",
+      "listener:searcher:curve-runtime-dual-historical-fork"
+    ],
+    "manifest": {
+      "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/selection01.json",
+      "sha256": "7774e45caf9f2b459153546fee811d4facdb307b8d8ba37fc1f13133de5d18e5",
+      "bytes": 119580
+    },
+    "agreement": "Production Ready has 12 graph/raw directions but no effective valuation; supplied same-state manual amounts execute at fresh exact quote with source restrictions retained."
+  },
+  "sourceCommitReceipt": {
+    "at": 1791976866.479937,
+    "base": "24450b08958dc2611244e8ff57f34085dbe6560d",
+    "commit": "dc9013a8ceb8d325bd5422592cc24ff6eb3068e0",
+    "sourceSha256": "ea4e35f52e18b03efe600e2022d8da8039167c2269220cede7ddc9896d7da0f2",
+    "sourceFileCount": 1209,
+    "ownedHashes": {
+      "listener/src/searcher/venues/swaps/curve-underlying-family/quote-model.ts": "444c619922cfaab4c9d1f97075995ac0e21f07ba264433b2bc1b23f5b5a8c38e",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/classic-meta-update.ts": "9033208b1e72491fa04e0b8a98e805d5c2901a4e9735d2bfaf497d77969912df",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/classic-meta-quote.ts": "5d6111e10ea7b10876883b6961b1dc241dd014c1b26cd10746c48b865b0d7b99",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/pricing.ts": "ecd16846333afe4bfaa558d801b3feea731b7f300d8a730446aee10b335150dd",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/test/fixtures/classic-meta-update-binding.json": "c5b0e58f257d76561b4c468de7459dbad4fa696f9976f08f38c71a2c54afef15",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-update.ts": "8b3ec1623a12d062cce449a7458756e38e317a9e55c948915f1bde1bf89e63dc",
+      "listener/src/searcher/test/curve-underlying-family-plugin.ts": "70e4352cc81d2a42182d201c9a90f44cfb3b6dff77e5050eb3657bfd3b140648",
+      "listener/src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-refresh.ts": "6632cd31e4dffe2bab748b91e75c219623592fd99641b09a01cbc9d5c38f9ce9",
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts": "aa5f78e4c478c4cb60124fe6da1d4d7baaa654fd7cb5883605c77861cc8b7b34",
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual-safety.test.ts": "2a6b8a68148d33783ab2cc54b26fe1a1f001514d7e4bc8b76813d63fab831496"
+    },
+    "preservedPeerHashes": [
+      {
+        "path": "listener/src/searcher/main.ts",
+        "sha256": "ef78cf7e36734c4044245dc9547a3175ff95409cf84d59dc398717849a57c5fc"
+      },
+      {
+        "path": "listener/src/searcher/ready-family-update-cli.ts",
+        "sha256": "e1380bf6ac4070f15b6145f1d659b339770cd98b6c821c5887af6bdec5087be7"
+      },
+      {
+        "path": "listener/src/searcher/strict-ready-runtime.ts",
+        "sha256": "b2dbc86a38d8da9785f9bef6a6181eedbc49bbe97806911a96a46fce9f6955fa"
+      },
+      {
+        "path": "listener/src/searcher/test/family-dual-execution.ts",
+        "sha256": "28e796b9642570c2317ecdcddccf460ed75601fcdddf2d5030cc65486f5dc2c0"
+      },
+      {
+        "path": "listener/src/searcher/test/strict-ready-runtime.ts",
+        "sha256": "7c58d8cd2c15f479432ed870e42e01313a4c4bed5c7783ded996da72e5ec7a2b"
+      },
+      {
+        "path": "listener/src/searcher/test/universe-rebuild-production.ts",
+        "sha256": "81eda9a66f645be2a523f7057de088b156de3f2365c0a510a56d58293a4f798f"
+      },
+      {
+        "path": "listener/src/searcher/test/universe-rebuild-runner.ts",
+        "sha256": "217a8f482efa05527a583cb50f70164fab7b1d7acd8040a058bbfda8d093b680"
+      },
+      {
+        "path": "listener/src/searcher/test/universe-rebuild-startup-cli.ts",
+        "sha256": "3c4a1e80cf917cacaa3d9ac200748306ffdfb7a32968d92a3c9334fa6bc0cb9d"
+      },
+      {
+        "path": "listener/src/searcher/universe-rebuild-checkpoint.ts",
+        "sha256": "21e545de626609e2bf464eee9c2db071ce55377636f1a21c4a1bdad42b005d98"
+      },
+      {
+        "path": "listener/src/searcher/universe-rebuild-production.ts",
+        "sha256": "17d2a99d27593de5a8e77f6fd2c7d1c202d934449025871314b2e4d3a465adac"
+      },
+      {
+        "path": "listener/src/searcher/universe-rebuild-runner.ts",
+        "sha256": "1b47829e48f57a1460a7c4101da9d9846240d64d954cbe90f5403832f2ea104d"
+      },
+      {
+        "path": "listener/src/searcher/universe-rebuild-startup-cli.ts",
+        "sha256": "eef31a9f53e546fed8d9ddf345bbe1f700962f8a664b793d3869a9d40f501104"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/codec.ts",
+        "sha256": "7493e7654e3a352b5280d5884511663eacf654c7420f0a90fca3307dc5eb9f44"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/exact.ts",
+        "sha256": "69fa1cb8d07dfc0bbfda561408fcbf85dea7ad6b6085d57008823488ef5a39bc"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/execution.ts",
+        "sha256": "081c4a47efbcc76ce01420925fce19d2be74093a935846361735e9a8d00ea32a"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/identity.ts",
+        "sha256": "b7c9d7d9ff003642043ac85c999bd804698ac0347119c5bec1c303e346b44605"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/manifest.ts",
+        "sha256": "c85d7b98fecbe822418f19f7d10767691418500aa0b999311ee73fafacc589d5"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/pricing.ts",
+        "sha256": "da500d7bf3a14a97f0a15718cd83b2d15966edaeb327d06f1644bcdaad1f33cc"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/routes.ts",
+        "sha256": "f06ed74374da44522c1615d33bf7f6ea80feb23424c7e5e2e97282ddbd8d7296"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/state.ts",
+        "sha256": "7e6761bc12151dee18713e90fa229fcc73642122265e31883623b3c34c1e1e41"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/contract.ts",
+        "sha256": "d80ba2c61adc63e07acea44e6f4171b8e9b89cb9a9ffe49c095b55fb8709f78e"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/fixtures.ts",
+        "sha256": "57ca6bfb7cb1f2de27d4cc93dc0136763156ecd6c954f77dadb31b6259bdb6a0"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/types.ts",
+        "sha256": "8773662fc9658eea814d8a244426597652bf0f58ef649e00e538b534fbad24d7"
+      },
+      {
+        "path": "listener/src/searcher/ready-transaction-input.ts",
+        "sha256": "413ce646cb757444e369aaa3408611a85a17c591589b958ebd197c6f48488273"
+      },
+      {
+        "path": "listener/src/searcher/test/ready-transaction-input.ts",
+        "sha256": "5eef53f090ef4ec396f842b789561b227eea00cad16346249d4222efe71ec7d3"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/historical-dual.ts",
+        "sha256": "d543cc0ef0403f14d1924e316d9cfb4bcaccd5bbb50156377e0d63a2ec7f3ae6"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/historical-ready.ts",
+        "sha256": "cccf015d9a3bd5a179746edeff4d8016fa6dc7556f7497f3289b5153d8d6a950"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/implementation-bytecode.json",
+        "sha256": "73d6b8058303119a0b9b08df28a0d01f9274c8273819bd9ca4886d90779e1134"
+      }
+    ],
+    "catalogIndexReceipt": {
+      "method": "canonical createFamilyCapabilityShadowArtifact + serializeFamilyCapabilityShadowArtifact; no working-file or historical-hash replacement",
+      "base": "24450b08958dc2611244e8ff57f34085dbe6560d",
+      "owned": [
+        "curve-underlying:capture",
+        "curve-underlying:discovery",
+        "curve-underlying:exact",
+        "curve-underlying:execution",
+        "curve-underlying:identity",
+        "curve-underlying:instance",
+        "curve-underlying:pricing",
+        "curve-underlying:routes",
+        "curve-underlying:victim"
+      ],
+      "preservedWorkingOnly": [
+        "custom-swap:uniswap-v1:capture",
+        "custom-swap:uniswap-v1:discovery",
+        "custom-swap:uniswap-v1:exact",
+        "custom-swap:uniswap-v1:execution",
+        "custom-swap:uniswap-v1:identity",
+        "custom-swap:uniswap-v1:instance",
+        "custom-swap:uniswap-v1:pricing",
+        "custom-swap:uniswap-v1:routes",
+        "custom-swap:uniswap-v1:victim"
+      ],
+      "headSha256": "c8a58c64d034a31f40f967314d5dd5ab6d2841f2fb1119e88ee2abdd80b09011",
+      "workingSha256": "5b99dd99e0833fe5d9766f96312194a13b34d5dc84ce7138a79991a55bb42452",
+      "indexCandidateSha256": "d98c22e871257049aa97feda5d5838e00672e181fc4430f7ba453550248de40f",
+      "artifactHash": "1d2db6a6487b946147504c51d43f6bc846241105bd1446783535fcc18bdc03fe"
+    },
+    "stat": " .../family-capability-shadow.generated.json        |  22 +-\n .../test/curve-underlying-family-plugin.ts         |   1 +\n .../test/historical-runtime-dual-safety.test.ts    | 140 ++++++++-\n .../test/historical-runtime-dual.ts                | 313 +++++++++++++++------\n .../curve-underlying-family/classic-meta-quote.ts  |   3 +\n .../curve-underlying-family/classic-meta-update.ts |  77 +++++\n .../swaps/curve-underlying-family/pricing.ts       |   9 +-\n .../swaps/curve-underlying-family/quote-model.ts   |  29 +-\n .../test/classic-meta-refresh.ts                   |  62 +++-\n .../test/classic-meta-update.ts                    | 177 ++++++++++++\n .../test/fixtures/classic-meta-update-binding.json |  87 ++++++\n 11 files changed, 810 insertions(+), 110 deletions(-)\n",
+    "commitOutput": "[codex/family-runtime-actual-20261007 dc9013a] fix(curve-underlying): match 5f double-ramp execution quotes\n Committer: root <root@mev-impl-c4d-20261002.us-east1-b.c.eth-token-480803.internal>\nYour name and email address were configured automatically based\non your username and hostname. Please check that they are accurate.\nYou can suppress this message by setting them explicitly:\n\n    git config --global user.name \"Your Name\"\n    git config --global user.email you@example.com\n\nAfter doing this, you may fix the identity used for this commit with:\n\n    git commit --amend --reset-author\n\n 11 files changed, 810 insertions(+), 110 deletions(-)\n create mode 100644 listener/src/searcher/venues/swaps/curve-underlying-family/classic-meta-update.ts\n create mode 100644 listener/src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-update.ts\n create mode 100644 listener/src/searcher/venues/swaps/curve-underlying-family/test/fixtures/classic-meta-update-binding.json\n",
+    "validationScope": "current actual working tree including preserved peer changes; not clean-checkout or merge-ready claim"
+  },
+  "toolEofNormalization": {
+    "operation": "Remove exactly one final LF from each test file; all preceding bytes identical. No production source change or old receipt rewrite.",
+    "files": {
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts": {
+        "beforeSha256": "bc3f7db0866ff2b6b9540eb2a5b30c1a485c0543953dfead481104822040a1c8",
+        "afterSha256": "aa5f78e4c478c4cb60124fe6da1d4d7baaa654fd7cb5883605c77861cc8b7b34"
+      },
+      "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual-safety.test.ts": {
+        "beforeSha256": "0b63d02aeea7a2d44d9ec0ac201e4ffd91e36118f0ece486e6c4843e75fa87c3",
+        "afterSha256": "2a6b8a68148d33783ab2cc54b26fe1a1f001514d7e4bc8b76813d63fab831496"
+      }
+    }
+  },
+  "readySummary": {
+    "tx": "0x7d996f99247b03b809e5eea4989de17f674946b75b1bfddae601311bf0e85a70",
+    "block": 14274089,
+    "blockHash": "0x30ccd5160f0898c018bd53954f0cf36e7910461491848b10530d9b4d6ed3163b",
+    "graphHash": "180dda567ba0fe6d4a53d533218d67e062ceddc9e717c2b12a428ff737b21400",
+    "totalEdges": 12,
+    "targetEdges": [
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "efad1f0b778bdf82cf0ca11aba709ccacaa4d94873422da830ee2d1b2cecdd58",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+        "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0x853d955acef822db058eb8505911ed77f175b99e>0x6b175474e89094c44da98b954eedeac495271d0f\u001fefad1f0b778bdf82cf0ca11aba709ccacaa4d94873422da830ee2d1b2cecdd58"
+      },
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "6cf9d6b366a6dc3ff596d597d4f5e7a1222463d831e803f8e34aa6f7cdb5f2a2",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0x853d955acef822db058eb8505911ed77f175b99e>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f6cf9d6b366a6dc3ff596d597d4f5e7a1222463d831e803f8e34aa6f7cdb5f2a2"
+      },
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "31db201f915fa6293d3dcc93c0a061af4b126ab9039b2a82b37a928ccfed2a7c",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+        "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0x853d955acef822db058eb8505911ed77f175b99e>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f31db201f915fa6293d3dcc93c0a061af4b126ab9039b2a82b37a928ccfed2a7c"
+      },
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "ae17ecb1a901f22eb2cc5d0a82496efb31761fa16c87978b25f69672ea1edf72",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "tokenOut": "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0x6b175474e89094c44da98b954eedeac495271d0f>0x853d955acef822db058eb8505911ed77f175b99e\u001fae17ecb1a901f22eb2cc5d0a82496efb31761fa16c87978b25f69672ea1edf72"
+      },
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "7189341b25f437ed34f57b4ffe8acf5d1a1b6588ebce2c348d9da977dfccbbea",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0x6b175474e89094c44da98b954eedeac495271d0f>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f7189341b25f437ed34f57b4ffe8acf5d1a1b6588ebce2c348d9da977dfccbbea"
+      },
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "75229e510737946c153189fcdb4401bbfe32f1ee51a412d781a693bdaf571732",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0x6b175474e89094c44da98b954eedeac495271d0f>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f75229e510737946c153189fcdb4401bbfe32f1ee51a412d781a693bdaf571732"
+      },
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "779cb8b472842e0291b8f3b2b524b754e8fa45268d9349eba0491a1f4a615c48",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x853d955acef822db058eb8505911ed77f175b99e\u001f779cb8b472842e0291b8f3b2b524b754e8fa45268d9349eba0491a1f4a615c48"
+      },
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "a0ec33cc7cffedf6f921fe717546a5fae73be241e0581b996fed9ff7980486b2",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x6b175474e89094c44da98b954eedeac495271d0f\u001fa0ec33cc7cffedf6f921fe717546a5fae73be241e0581b996fed9ff7980486b2"
+      },
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "fdee7b717121214512c7969a2f02e49844d514c704959826e385128f61c050d9",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xdac17f958d2ee523a2206206994597c13d831ec7\u001ffdee7b717121214512c7969a2f02e49844d514c704959826e385128f61c050d9"
+      },
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "946a9964b407e1ba74b1d8653de0a2a51f4ef46cfec340d24be3b28e476fb823",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "tokenOut": "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0x853d955acef822db058eb8505911ed77f175b99e\u001f946a9964b407e1ba74b1d8653de0a2a51f4ef46cfec340d24be3b28e476fb823"
+      },
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "97106ec68e23e8aafbdddeab5a093d86626eed03f86aeb5c8699c8103bee6784",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0x6b175474e89094c44da98b954eedeac495271d0f\u001f97106ec68e23e8aafbdddeab5a093d86626eed03f86aeb5c8699c8103bee6784"
+      },
+      {
+        "instanceKey": "0xd632f22692fac7611d2aa1c0d552930d43caed3b",
+        "executionVariantKey": "b7762736def29a3dee09660579bd9b3a4e46067a189411f68c7ae679d5c75350",
+        "adapterId": "curve-exchange-underlying",
+        "target": "0xd632f22692FaC7611d2AA1C0D552930D43CAEd3B",
+        "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "curve-underlying\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xd632f22692fac7611d2aa1c0d552930d43caed3b\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fb7762736def29a3dee09660579bd9b3a4e46067a189411f68c7ae679d5c75350"
+      }
+    ],
+    "instances": [
+      "152955e0d43b6b7a6cf19482803e303e7c057854fae1bc59c868391b4fee9457"
+    ],
+    "familyIds": [
+      "curve-underlying"
+    ],
+    "broadcast": false,
+    "claim": "natural single-block strict/Graph; not opportunity or representative performance acceptance"
+  },
+  "reviewedAt": "2026-10-14T11:27:53.414397+00:00",
+  "independentReviews": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-source-independent-review-attempt01.json",
+      "sha256": "8b16e633af9246d75b5e837140128c06a3f71ac4f991e76fcb48513d9d3caa67",
+      "bytes": 13502
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-candidate01-independent-review.json",
+      "sha256": "23a8720f771bd0564e23929a050286e3a6b22c69ccc27cf27d0dc94db3093023",
+      "bytes": 10483
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-dual-clock-boundary-independent-review.json",
+      "sha256": "2c6bd08ea2eb366062012cb7678c6f6d741b423bb92aa8c0926c1f21e921c930",
+      "bytes": 9072
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-tool-patch03-independent-review.json",
+      "sha256": "f4dce5370c6fefc86e21959377a1999bf5459c4eadfecd025a03e7cdec35f867",
+      "bytes": 7943
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-evidence05-independent-review.json",
+      "sha256": "9a4076f7a0c3a52cc0127d8c08216ca315f074f74059997677b7c3c23a6a4127",
+      "bytes": 25569
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-evidence08-independent-review.json",
+      "sha256": "2e257bedac449ca59d5971da47ed7df1489f05607b6d2f17bbbebfd855209574",
+      "bytes": 50932
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-recipient-independent-review.json",
+      "sha256": "c244747e29136a8463c807114c1bc18c210cd272c11d13d4df50b96833981521",
+      "bytes": 52669
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-recipient-independent-recompute.json",
+      "sha256": "d2c3ff7e016401c07d82e399c2f0e7352ba0252992828d9afcf5e3d8dc864864",
+      "bytes": 187478
+    }
+  ],
+  "readySummaryInterpretation": "Generic summary claim does not prove new natural discovery: this round reused and revalidated the original historical Ready; historicalNaturalDiscoveryProven remains false for the reused input.",
+  "preservedFailures": [
+    {
+      "kind": "historical-default-quote-mismatch",
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-combinations-20261014.4zfzi_2o/frax-original-dual-attempt01.json",
+      "sha256": "4bc23a573dbfcfff70dc6cdd1383af55ec2f03b3be26ea7bc5695819dd2ae37e",
+      "amountIn": "500000000000",
+      "beforeQuote": "499692126927421651121141",
+      "sameStateActual": "499699329276493554552688",
+      "rawDifference": "7202349071903431547",
+      "originalTransactionOutputAtDifferentPreState": "499699802768386519441096"
+    },
+    {
+      "kind": "acceptance-tool-clock-read-scope-rejection-before-execution",
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/frax-dual02-original.json",
+        "sha256": "9c2e0e57392a5ee1c26e63a5603717fe32cbc164ab87a851255b07c2ebc1d694",
+        "bytes": 20747
+      },
+      "executions": 0,
+      "forkStopped": true
+    },
+    {
+      "kind": "new-clock-scope-regression-on-old-helper",
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/history03-boundary-baseline.log",
+        "sha256": "1a3c3397fa1a856302a32ed386c9a043a0960e734e3b81a87fe2b8c8da4cd543",
+        "bytes": 1077
+      },
+      "expectedExitCode": 1,
+      "expectedDiagnostic": "bound underlying clock was excluded"
+    }
+  ],
+  "offlineValidation": [
+    {
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/offline01-build.log",
+        "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+        "bytes": 71
+      },
+      "exitCode": 0,
+      "tests": null
+    },
+    {
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/offline01-family.log",
+        "sha256": "d34163adeca320cde3fdcc3948139863e41edd233482bff01fa7ec260bdab4d5",
+        "bytes": 4675
+      },
+      "exitCode": 0,
+      "tests": 39
+    },
+    {
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/offline01-classic.log",
+        "sha256": "bf0a5de68a806114fdae23864b06f5e6de0cea36ec3faaa035cb214459d46371",
+        "bytes": 5976
+      },
+      "exitCode": 0,
+      "tests": 79
+    },
+    {
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/offline01-dual.log",
+        "sha256": "a3c3f6fcf919251691b23a7e401000d383d237641850df7ed8990e8ac95f3910",
+        "bytes": 58080
+      },
+      "exitCode": 0,
+      "tests": 301
+    },
+    {
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/offline01-lifecycle.log",
+        "sha256": "6ef7e8e525f87e9652311bf24bf58e50c0a400fe7ad8ebaccfab3bc1746a73b7",
+        "bytes": 171
+      },
+      "exitCode": 0,
+      "tests": null
+    },
+    {
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/offline01-exact-cache.log",
+        "sha256": "1a4928d1add479b53622b221098eb274a292acfc27f5bce88e352ba3b3f31765",
+        "bytes": 177
+      },
+      "exitCode": 0,
+      "tests": null
+    },
+    {
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/history02-guards-lifecycle.log",
+        "sha256": "d2f028e974b5f3a0766880857e9627989b8f11ccc1b82b2a51fa13874f9f1e7c",
+        "bytes": 1894
+      },
+      "exitCode": 0,
+      "tests": 18
+    },
+    {
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/history03-boundary-candidate.log",
+        "sha256": "3f8906672755b9bd40d2af178d692386b0056e5cc5ebe87072267a51f4ea6b80",
+        "bytes": 1497
+      },
+      "exitCode": 0,
+      "tests": 13
+    },
+    {
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/recipient05-safety.log",
+        "sha256": "3f81832892b597b9139f15ad855db1be16451b1fad4f9a60e8c56ff50228b952",
+        "bytes": 2008
+      },
+      "exitCode": 0,
+      "tests": 18
+    },
+    {
+      "file": {
+        "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/recipient05-build-live.log",
+        "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+        "bytes": 71
+      },
+      "exitCode": 0,
+      "tests": null
+    }
+  ],
+  "nonExecutionPreflightCorrections": [
+    "Hash guard rejected an initial local newline-mismatched tool transfer before any cloud source writes; corrected exact bytes and retained preflight files.",
+    "Catalog staging attempt06 failed on a mistaken peer Family name; current catalog established custom-swap:uniswap-v1; attempt07 succeeded before index/working-tree catalog mutation.",
+    "Commit preflight08 rejected one extra terminal blank line in each tool file; EOF-only normalization preserved all nonterminal bytes and every executed report. No production source or historical rerun."
+  ]
+}

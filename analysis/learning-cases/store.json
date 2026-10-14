@@ -1351,6 +1351,73 @@
       },
       "created_at": "2026-10-14T06:31:23.263795+00:00",
       "updated_at": "2026-10-14T09:55:36.840860+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261014-curve-underlying-clock-read-scope",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Historical Family acceptance helper copied an incomplete underlying read-address list, so the new code-bound clock dependency was rejected before RPC. This is a tool coverage defect, not failed pool identity, swap rejection or opportunity replay.",
+      "evidence": {
+        "acceptanceBlock": 14274089,
+        "acceptanceBlockHash": "0x30ccd5160f0898c018bd53954f0cf36e7910461491848b10530d9b4d6ed3163b",
+        "failure": {
+          "kind": "acceptance-tool-clock-read-scope-rejection-before-execution",
+          "file": {
+            "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/frax-dual02-original.json",
+            "sha256": "9c2e0e57392a5ee1c26e63a5603717fe32cbc164ab87a851255b07c2ebc1d694",
+            "bytes": 20747
+          },
+          "executions": 0,
+          "forkStopped": true
+        },
+        "baselineRegression": {
+          "kind": "new-clock-scope-regression-on-old-helper",
+          "file": {
+            "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/history03-boundary-baseline.log",
+            "sha256": "1a3c3397fa1a856302a32ed386c9a043a0960e734e3b81a87fe2b8c8da4cd543",
+            "bytes": 1077
+          },
+          "expectedExitCode": 1,
+          "expectedDiagnostic": "bound underlying clock was excluded"
+        },
+        "independentConfirmation": {
+          "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-dual-clock-boundary-independent-review.json",
+          "sha256": "2c6bd08ea2eb366062012cb7678c6f6d741b423bb92aa8c0926c1f21e921c930",
+          "bytes": 9072
+        },
+        "independentFixReview": {
+          "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-tool-patch03-independent-review.json",
+          "sha256": "f4dce5370c6fefc86e21959377a1999bf5459c4eadfecd025a03e7cdec35f867",
+          "bytes": 7943
+        },
+        "candidateRegression": {
+          "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence05/history03-boundary-candidate.log",
+          "sha256": "3f8906672755b9bd40d2af178d692386b0056e5cc5ebe87072267a51f4ea6b80",
+          "bytes": 1497
+        },
+        "extendedRegression": {
+          "path": "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/evidence09/recipient05-safety.log",
+          "sha256": "3f81832892b597b9139f15ad855db1be16451b1fad4f9a60e8c56ff50228b952",
+          "bytes": 2008
+        },
+        "after": "26 default groups / 78 successful encodings, plus 26 supplementary recipient encodings, all at the same historical state; raw results and tool manifest pinned in curve-underlying-frax-5f-correctness-20261014.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-runtime-dual-historical-fork",
+        "issue": "curveHistoricalQuoteTargets manually duplicated stale underlying dependencies and omitted the exact code-bound timestamp clock.",
+        "evidence": "New clock-read target regression fails against old helper; nonauthor review agrees; Family-owned refresh address closure fixes the provider rejection while unrelated targets remain rejected.",
+        "codify_target": "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts and historical-runtime-dual-safety.test.ts",
+        "status": "codified",
+        "codify_commit": "dc9013a8ceb8d325bd5422592cc24ff6eb3068e0"
+      },
+      "created_at": "2026-10-14T11:27:53.414397+00:00",
+      "updated_at": "2026-10-14T11:27:53.414397+00:00"
     }
   ]
 }
