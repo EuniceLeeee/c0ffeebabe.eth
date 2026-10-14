@@ -2522,27 +2522,31 @@
     },
     {
       "familyId": "mooniswap",
-      "coverage": "partial",
+      "coverage": "complete",
       "variants": [
         {
           "id": "mooniswap",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "两个实际部署 immutable-normalized runtime 均匹配当前 ERC20 profile；57fb descriptor 仍为 provenance-stripped fixture。",
-            "swapFor(receiver) 当前固定 executor，缺 direct-output 接线和实际 receiver 执行；referral 不能当 receiver。",
-            "不推广至现 profile 之外 native 入口。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
               "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+            },
+            {
+              "path": "docs/research/reports/mooniswap-recipient-evidence-review-20261014.json",
+              "sha256": "47bd4125fcb37ed13d2e59bed42960a3aa2fca474da918c4e39d5a138cd950c6"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/mooniswap-recipient-correctness-20261014.json",
+            "sha256": "9def6c51e49fddb8755b1f4d99d77d9db4aaaa3bc28d38f901a929a5eaaa0805"
+          }
         }
       ],
       "sourceReport": "root-eight-review-v2.json",
@@ -2550,7 +2554,7 @@
       "source": [
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -2598,7 +2602,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/mooniswap-family/runtime-execution.ts",
-          "sha256": "8ed909e370277c77e84994d7004f8d068902fde97b3fc9e8a3791743e001fc42"
+          "sha256": "b1001cafcaf3bdf3ccb544559ba5d9af8e1cc66f5460617a056df394a1916e19"
         },
         {
           "path": "listener/src/searcher/venues/swaps/mooniswap-family/runtime.ts",
@@ -2612,6 +2616,46 @@
       "review": {
         "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
         "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+      },
+      "coverageScope": "Existing verified-erc20-runtime implementation profile; additional deployment inventory remains partial.",
+      "acceptanceAddendum": {
+        "at": "2026-10-14T14:19:29.143316+00:00",
+        "sourceCommit": "408e88eb581e7a23d43444158f65a2112e25e7d9",
+        "review": {
+          "path": "docs/research/reports/mooniswap-recipient-evidence-review-20261014.json",
+          "sha256": "47bd4125fcb37ed13d2e59bed42960a3aa2fca474da918c4e39d5a138cd950c6"
+        },
+        "behavior": {
+          "path": "docs/research/reports/mooniswap-recipient-correctness-20261014.json",
+          "sha256": "9def6c51e49fddb8755b1f4d99d77d9db4aaaa3bc28d38f901a929a5eaaa0805"
+        },
+        "priorGaps": [
+          "两个实际部署 immutable-normalized runtime 均匹配当前 ERC20 profile；57fb descriptor 仍为 provenance-stripped fixture。",
+          "swapFor(receiver) 当前固定 executor，缺 direct-output 接线和实际 receiver 执行；referral 不能当 receiver。",
+          "不推广至现 profile 之外 native 入口。"
+        ],
+        "disposition": "Receiver wiring resolved on current 2c4 profile in both directions; 57fb extra instance remains unverified; native remains outside the unchanged profile. No variant ID removed or admission widened.",
+        "deploymentCoverage": [
+          {
+            "address": "0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21",
+            "interface": "verified",
+            "runtimeHash": "0x4088f6416c9dd0a777577d8f4e4fef5176027e38a6b312b396f0421264cd87a0",
+            "normalizedHash": "0x0f88c1b9bd3506a4f0659e1c75cba5d797d0e04d462f79da7eebd58cc51a6f90",
+            "currentSameSourceIdentity": "verified",
+            "currentQuoteDirectExecution": "verified-both-directions",
+            "sourceUrl": "https://eth.blockscout.com/api/v2/smart-contracts/0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21"
+          },
+          {
+            "address": "0x57fbb3704609da720546898fcfbad910fcf49e25",
+            "interface": "verified",
+            "runtimeHash": "0xbeb7cad9bf341aadbb651e5fb445d836f745bf645d98e5d7e980e60ea1b9b9b6",
+            "normalizedHash": "0x0f88c1b9bd3506a4f0659e1c75cba5d797d0e04d462f79da7eebd58cc51a6f90",
+            "currentSameSourceIdentity": "unverified; prior descriptor provenance omitted",
+            "currentQuoteDirectExecution": "unverified",
+            "preservedAsAdditionalUntestedInstance": true,
+            "sourceUrl": "https://eth.blockscout.com/api/v2/smart-contracts/0x57fbb3704609da720546898fcfbad910fcf49e25"
+          }
+        ]
       }
     },
     {
@@ -6661,10 +6705,10 @@
     "sha256": "25cc557bcefd3b645883bd23b1a4c35edabad77a32bf5fe67315a0b4c4319cc3"
   },
   "lastScopedUpdate": {
-    "at": "2026-10-14T13:00:11.175831+00:00",
-    "familyId": "protocol:psv",
-    "sourceCommit": "4a71243757c691cc25ddfdb343fafa481516f14c",
-    "actualSourceTreeSha256": "a6b0d29c2e1114cf932283d072be969212eeefe95137a3cb2a793a2336d86515",
-    "policy": "Update current common/PSV pins for this actual-source PSV gate only. Other family rows/review hashes remain intact; their old success is not promoted to current shared source."
+    "at": "2026-10-14T14:19:29.143316+00:00",
+    "familyId": "mooniswap",
+    "sourceCommit": "408e88eb581e7a23d43444158f65a2112e25e7d9",
+    "otherFamiliesRevalidated": false,
+    "note": "Only existing ERC20 implementation settlement profile. 57fb is still an unverified additional instance."
   }
 }

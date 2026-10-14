@@ -1,0 +1,1188 @@
+{
+  "schema": "mooniswap-recipient-independent-evidence-review-v1",
+  "createdAt": "2026-10-14T14:11:01.112770+00:00",
+  "reviewer": "/root/interface_protocols_b",
+  "nonAuthorOfProductionChange": true,
+  "task": "Mooniswap quote-output/direct-output 最后一轮只读独立证据复核",
+  "reviewActions": {
+    "localEvidenceReads": true,
+    "independentIntegerRecalculation": true,
+    "fileHashVerification": true,
+    "productionEdits": false,
+    "implEdits": false,
+    "catalogGeneration": false,
+    "newRpcCalls": false,
+    "testsRunByReviewer": false,
+    "buildsRunByReviewer": false
+  },
+  "verdict": {
+    "profileEvidence": "pass",
+    "profileGateRecommendation": "唯一既有 verified-erc20-runtime 实现 profile 的 quote-output/direct-output 结算能力，可以依据本轮实据记通过。",
+    "runtimeProfileId": "verified-erc20-runtime",
+    "interfaceReviewVariantId": "mooniswap",
+    "lineageId": "mooniswap:verified-v2-runtime",
+    "testedDeployment": "0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21",
+    "directionCoverage": [
+      "token0-to-token1",
+      "token1-to-token0"
+    ],
+    "scopeUnchanged": "保留原 Family 唯一已准入的 immutable-normalized、sorted、ERC20-only runtime profile；未删变体、未按样本地址重定义准入、未扩至 native 或 deferred-input。",
+    "why57fbIsNotAProfileBlocker": "57fb 与 2c4 的实际部署代码只在已验证的 token immutables 不同，匹配同一个既有 normalized runtime profile；57fb 的 same-source admission/execution 缺口是额外实例证据缺口，不是新增未测实现变体。2c4 当前生产 issuer、两方向、四种输入和真实实收已经覆盖该实现 profile 的本次接线。",
+    "extraDeploymentStatus": "0x57fbb3704609da720546898fcfbad910fcf49e25 保留 interface/runtime verified、same-source provenance/execution unverified，不借用 2c4 结果宣称其执行通过。",
+    "fullDeploymentInventory": "partial",
+    "currentMechanicalGate": "not-run-by-reviewer; snapshot10 总表仍为旧 partial/gap/unverified 与旧 runtime source pin，不能把本复核当作该旧表已实际通过。",
+    "noNewConcreteProductionBlocker": true,
+    "blockingFindings": [],
+    "mechanicalGateOwner": "父任务负责 current source/commonSource 机械 gate；本独立证据复核未执行该门。",
+    "excludedClaims": [
+      "57fb 实例执行通过",
+      "所有 Mooniswap 部署全验",
+      "fresh-from-zero 自然发现",
+      "原交易 pre-call 数量复现",
+      "真实多腿结算机会复现",
+      "真实 Mooniswap 恶意 token/pool guard 故障回放",
+      "生产时效性或性能通过",
+      "主网部署、签名或广播"
+    ]
+  },
+  "profileSemantics": {
+    "interface": {
+      "swap": "swap(address,address,uint256,uint256,address)",
+      "swapSelector": "0xd5bcb9b5",
+      "swapFor": "swapFor(address,address,uint256,uint256,address,address)",
+      "swapForSelector": "0xe331d039",
+      "getReturn": "getReturn(address,address,uint256)",
+      "getReturnSelector": "0x1e1401f8"
+    },
+    "payer": "executor/msg.sender；pool 先 transferFrom 输入并测量实收，再输出。",
+    "recipient": "swapFor 第六参数 receiver；第五参数保持 zero referral。外部 receiver 与 executor self 均覆盖。",
+    "callback": "none（无面向 executor 的先出后付结算 callback）；不得声明 deferred-input。",
+    "quoteOutput": "readonly getReturn amount preparation；完整 runtime 输入、正输入/输出、真实输入池余额>0、输出池余额>=quote；不把 getReturn 当执行授权。",
+    "activity": "getReturn 不检查 active。真实 swapFor 读取当前 mutable governance 并检查 isActive；inactive 由执行阶段 fail closed。未增加固定 governance 地址或动态 call 中央能力。",
+    "directOutput": "执行前只读 quote，执行后验证 payer 实际扣款==完整输入、recipient 新到账==quote；self 用净差额，external 额外保护 executor 旧输出与 receiver 旧输入；保护 executor native。",
+    "unsupported": "native、未知 settlement kind、零/池/输入 token/输出 token recipient 均 fail closed。全程未新增原生兑换或用户回调能力。"
+  },
+  "sameSourcePins": {
+    "violations": [],
+    "rows": [
+      {
+        "tokenIn": "0x111111111117dc0aa78b770fa6a738034120c302",
+        "tokenOut": "0xaaaaaa20d9e0e2461697782ef11675f668207961",
+        "amountIn": "53528901503105570265",
+        "amountOut": "109173369278802154204",
+        "quotedAt": {
+          "number": 26030091,
+          "hash": "0x589ef7d0d24a9dc2cbccd0c24fe6857794ead5e47e79aad0b8dd875e8e861f53",
+          "generation": 1
+        }
+      },
+      {
+        "tokenIn": "0xaaaaaa20d9e0e2461697782ef11675f668207961",
+        "tokenOut": "0x111111111117dc0aa78b770fa6a738034120c302",
+        "amountIn": "110688582704545487668",
+        "amountOut": "53528901503105570265",
+        "quotedAt": {
+          "number": 26030091,
+          "hash": "0x589ef7d0d24a9dc2cbccd0c24fe6857794ead5e47e79aad0b8dd875e8e861f53",
+          "generation": 1
+        }
+      }
+    ],
+    "sourcePinsEqual": true,
+    "stateRoot": "0x112897724713007667be8b74bb2a38a48592b713b1f9d311be6ca89096caeccc",
+    "currentFamilyDefinitionHash": "55a9aa5357329f4049ff79a0208c98338e31a2377d98bce0a0fce11503869027",
+    "currentMemoFingerprint": "7132a27e343987addbb7def45162a827c32d33dcd43aeab554e3537cadf582cb",
+    "source": {
+      "number": 26030091,
+      "hash": "0x589ef7d0d24a9dc2cbccd0c24fe6857794ead5e47e79aad0b8dd875e8e861f53",
+      "generation": 26030091
+    },
+    "snapshotSourceTree": "f0bddc19ae67884b8a3d9f9e0020d6df022151a43ae15158653daec43824b2f0",
+    "readySHA256": "1a4e0e3b3054513e57010cafddfde40212a5d92677ca288d53fa04693cf7dbd7",
+    "pricesSHA256": "abdbac0dbca86fac07fce64ca11955414e0b17e6335496e81f856a8f22140432",
+    "priceCompleteness": "degraded",
+    "priceIncompleteFamilies": [
+      "univ2-standard"
+    ],
+    "effectiveMidsComplete": true,
+    "mooniswapSourceCoverage": [
+      {
+        "familyId": "mooniswap",
+        "sourceId": "call:mooniswap-swap",
+        "completeThroughBlock": 26030091,
+        "completeThroughHash": "0x589ef7d0d24a9dc2cbccd0c24fe6857794ead5e47e79aad0b8dd875e8e861f53"
+      },
+      {
+        "familyId": "mooniswap",
+        "sourceId": "call:mooniswap-swapFor",
+        "completeThroughBlock": 26030091,
+        "completeThroughHash": "0x589ef7d0d24a9dc2cbccd0c24fe6857794ead5e47e79aad0b8dd875e8e861f53"
+      },
+      {
+        "familyId": "mooniswap",
+        "sourceId": "event:mooniswap-swapped",
+        "completeThroughBlock": 26030091,
+        "completeThroughHash": "0x589ef7d0d24a9dc2cbccd0c24fe6857794ead5e47e79aad0b8dd875e8e861f53"
+      },
+      {
+        "familyId": "mooniswap",
+        "sourceId": "startup-universe",
+        "completeThroughBlock": 26030091,
+        "completeThroughHash": "0x589ef7d0d24a9dc2cbccd0c24fe6857794ead5e47e79aad0b8dd875e8e861f53"
+      }
+    ],
+    "verifiedMemosTotal": 72,
+    "activeInstances": 69,
+    "graphEdges": 138,
+    "checks": "原始 Ready/prices/input/harness 文件 SHA 均与 dual07 inputs 相等；source-before == source-after == dual07.code；input implementation sourceTree/revm 匹配；Ready memo、candidate、definition hash 与 dual admission 匹配；两条 production-effective 行与完整 prices.json 逐字段相等。",
+    "priceGenerationNote": "Ready cutoff.generation=26030091；价格 runtime/quotedAt.generation=1。二者是各自上下文的 generation，均绑定同 N/hash；没有把不同 generation 强行改写成相等。",
+    "sourceTreeScope": "sourcePin 按 listener/src 全树（排除 test/templates）聚合；具体历史入口单独以 SHA 固定。Solidity 由 BotVM artifact metadata 的 source keccak 校验另行绑定。",
+    "aggregateReviewBoundary": "本复核独立验证保存产物间绑定和已提供源文件的哈希。未重新遍历云端完整生产树或重新编译 artifact；完整 current source/commonSource 机械 gate 仍由父任务执行。",
+    "executor": {
+      "address": "0x1000000000000000000000000000000000000002",
+      "ownerAndTransactionOrigin": "0x1000000000000000000000000000000000000001",
+      "historicalCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "executionRuntimeHash": "0x7abb7c759c70c829a2ee4e8712108458fd148ac9e8f6d396caaa9539c9ecb346",
+      "artifactSha256": "a95d791dc8ffb170bc1ee6d6fd00e0993d6445cf03a9b6320bc14ea185b7a87a",
+      "revmBinarySha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+      "provisioning": "历史空代码 actor 上载入当前 source-verified BotVM 的本地 code overlay；historicalRuntimeExecuted=false、replacement=false。实际历史 pool/token runtime 执行，不宣称历史该地址已部署此 BotVM。",
+      "harnessChecks": [
+        "BotVM compilationTarget 正确",
+        "artifact metadata 每个 Solidity source keccak 与实际文件相等",
+        "owner EOA code 边界",
+        "结束时输入/source/artifact/block hash 再验",
+        "REVM closeAndDrain 完成"
+      ]
+    }
+  },
+  "readiness": {
+    "reference": {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/ready07/result.json",
+      "sha256": "8ec29211b207e6d564ad56d34d5506bbf6cb9fe08101b39c82ec1d42a99b3369"
+    },
+    "result": "reused-natural-ready-revalidated-prices-complete",
+    "activeInstances": 69,
+    "graphEdges": 138,
+    "readyAccounting": {
+      "total": 73,
+      "verified": 69,
+      "terminalRejected": 3,
+      "retryable": 1,
+      "remainingUnaccounted": 0
+    },
+    "workflow": "旧 N26030091 自然 Ready 副本进入当前 production rebuild；本轮同 N 日志/调用扫描、选择性重验、当前 source-N state refresh 和 production prices。不是从空 checkpoint 重新发现。",
+    "target": "当前 Ready 只有一个 Mooniswap memo（2c4）；current issuer 两条方向均进入 Graph 且生产 effective price 状态 quoted。",
+    "originalTransaction": "0x03d2dc13a13e6a71bcf21c1f3134c4167eb29cd20bb96ad7853249d1816a2dd8",
+    "originalObservation": {
+      "amountIn": "947347012323163156825",
+      "amountOut": "458914096390731810847",
+      "scope": "original receipt；新执行在 N-end，因此不可要求与原 pre-call 输出相等。"
+    },
+    "historicalNaturalDiscoveryProven": false,
+    "topologyContainsFutureDiscovery": false,
+    "falseFlagMeaning": "当前 blockscan-at-block-cli.ts:463 无条件写 historicalNaturalDiscoveryProven:false，非本样本专有失败信号。保留该 false；只证明本轮复用/重验和已绑定的历史发现来源，不能写 fresh-from-zero。",
+    "cli": {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/listener/src/searcher/blockscan-at-block-cli.ts",
+      "sha256": "0e4af960a5f17e44aa19206e63e0776b9d5532198092e41c32fff0cbe0b7b7ac"
+    },
+    "overallPricing": "完整 prices runtime.completeness=degraded，incompleteFamilyIds=[univ2-standard]；目标 Mooniswap 两行已 quoted。不能将本轮写成全图无降级验收。",
+    "performance": "NOT RUN"
+  },
+  "realHistoricalRecomputation": {
+    "source": {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/dual07.json",
+      "sha256": "8c3966ca948614df37dc5cbb79e10c8c9b79550412ffe2cace003f2daba21e92"
+    },
+    "observationBasis": "独立读取 strict transport 的 token/native delta 和日志，按整数重算 expected debit/credit、quote delta、库存残值，并核对 trustedResults/evidence/source 一致。保存产物没有原始 balanceOf before/after 数值；本报告不伪造这些观测。",
+    "violations": [],
+    "inputGroups": 8,
+    "positiveExecutions": 32,
+    "positiveByEncoding": {
+      "quoted": 8,
+      "runtimeDefault": 8,
+      "directSelf": 8,
+      "directExternal": 8
+    },
+    "newDirectPositiveExecutions": 16,
+    "negativeExecutions": 16,
+    "negativeByType": {
+      "no-input": 8,
+      "post-execution-revert": 8
+    },
+    "newDirectNegativeExecutions": 8,
+    "readonlyQuoteExecutions": 4,
+    "rawAmountRows": [
+      {
+        "direction": "token0-to-token1",
+        "label": "production-effective",
+        "amountIn": "53528901503105570265",
+        "quoteAmountOut": "109173369278802154204",
+        "receipts": [
+          {
+            "encoding": "quoted",
+            "payerDebit": "53528901503105570265",
+            "recipientCredit": "109173369278802154204",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039404055106410024069670"
+            ]
+          },
+          {
+            "encoding": "runtime",
+            "payerDebit": "53528901503105570265",
+            "recipientCredit": "109173369278802154204",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039404055106410024069670"
+            ]
+          },
+          {
+            "encoding": "direct-self",
+            "payerDebit": "53528901503105570265",
+            "recipientCredit": "109173369278802154204",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039404055106410024069670"
+            ]
+          },
+          {
+            "encoding": "direct-external",
+            "payerDebit": "53528901503105570265",
+            "recipientCredit": "109173369278802154204",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": true,
+            "recipientInputDelta": "0",
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039404055106410024069670"
+            ]
+          }
+        ]
+      },
+      {
+        "direction": "token0-to-token1",
+        "label": "original-output-as-reverse-input-at-N-end",
+        "amountIn": "458914096390731810847",
+        "quoteAmountOut": "933000725953044301516",
+        "receipts": [
+          {
+            "encoding": "quoted",
+            "payerDebit": "458914096390731810847",
+            "recipientCredit": "933000725953044301516",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564038998669911522397829088"
+            ]
+          },
+          {
+            "encoding": "runtime",
+            "payerDebit": "458914096390731810847",
+            "recipientCredit": "933000725953044301516",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564038998669911522397829088"
+            ]
+          },
+          {
+            "encoding": "direct-self",
+            "payerDebit": "458914096390731810847",
+            "recipientCredit": "933000725953044301516",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564038998669911522397829088"
+            ]
+          },
+          {
+            "encoding": "direct-external",
+            "payerDebit": "458914096390731810847",
+            "recipientCredit": "933000725953044301516",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": true,
+            "recipientInputDelta": "0",
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564038998669911522397829088"
+            ]
+          }
+        ]
+      },
+      {
+        "direction": "token0-to-token1",
+        "label": "one-token-control",
+        "amountIn": "1000000000000000000",
+        "quoteAmountOut": "2040361722154854276",
+        "receipts": [
+          {
+            "encoding": "quoted",
+            "payerDebit": "1000000000000000000",
+            "recipientCredit": "2040361722154854276",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039456584007913129639935"
+            ]
+          },
+          {
+            "encoding": "runtime",
+            "payerDebit": "1000000000000000000",
+            "recipientCredit": "2040361722154854276",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039456584007913129639935"
+            ]
+          },
+          {
+            "encoding": "direct-self",
+            "payerDebit": "1000000000000000000",
+            "recipientCredit": "2040361722154854276",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039456584007913129639935"
+            ]
+          },
+          {
+            "encoding": "direct-external",
+            "payerDebit": "1000000000000000000",
+            "recipientCredit": "2040361722154854276",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": true,
+            "recipientInputDelta": "0",
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039456584007913129639935"
+            ]
+          }
+        ]
+      },
+      {
+        "direction": "token0-to-token1",
+        "label": "1000-raw-control",
+        "amountIn": "1000",
+        "quoteAmountOut": "2039",
+        "receipts": [
+          {
+            "encoding": "quoted",
+            "payerDebit": "1000",
+            "recipientCredit": "2039",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039457584007913129638935"
+            ]
+          },
+          {
+            "encoding": "runtime",
+            "payerDebit": "1000",
+            "recipientCredit": "2039",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039457584007913129638935"
+            ]
+          },
+          {
+            "encoding": "direct-self",
+            "payerDebit": "1000",
+            "recipientCredit": "2039",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039457584007913129638935"
+            ]
+          },
+          {
+            "encoding": "direct-external",
+            "payerDebit": "1000",
+            "recipientCredit": "2039",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": true,
+            "recipientInputDelta": "0",
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039457584007913129638935"
+            ]
+          }
+        ]
+      },
+      {
+        "direction": "token1-to-token0",
+        "label": "production-effective",
+        "amountIn": "110688582704545487668",
+        "quoteAmountOut": "53528901503105570265",
+        "receipts": [
+          {
+            "encoding": "quoted",
+            "payerDebit": "110688582704545487668",
+            "recipientCredit": "53528901503105570265",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039346895425208584152267"
+            ]
+          },
+          {
+            "encoding": "runtime",
+            "payerDebit": "110688582704545487668",
+            "recipientCredit": "53528901503105570265",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039346895425208584152267"
+            ]
+          },
+          {
+            "encoding": "direct-self",
+            "payerDebit": "110688582704545487668",
+            "recipientCredit": "53528901503105570265",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039346895425208584152267"
+            ]
+          },
+          {
+            "encoding": "direct-external",
+            "payerDebit": "110688582704545487668",
+            "recipientCredit": "53528901503105570265",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": true,
+            "recipientInputDelta": "0",
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039346895425208584152267"
+            ]
+          }
+        ]
+      },
+      {
+        "direction": "token1-to-token0",
+        "label": "original-input-at-N-end",
+        "amountIn": "947347012323163156825",
+        "quoteAmountOut": "456677850945726928721",
+        "receipts": [
+          {
+            "encoding": "quoted",
+            "payerDebit": "947347012323163156825",
+            "recipientCredit": "456677850945726928721",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564038510236995589966483110"
+            ]
+          },
+          {
+            "encoding": "runtime",
+            "payerDebit": "947347012323163156825",
+            "recipientCredit": "456677850945726928721",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564038510236995589966483110"
+            ]
+          },
+          {
+            "encoding": "direct-self",
+            "payerDebit": "947347012323163156825",
+            "recipientCredit": "456677850945726928721",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564038510236995589966483110"
+            ]
+          },
+          {
+            "encoding": "direct-external",
+            "payerDebit": "947347012323163156825",
+            "recipientCredit": "456677850945726928721",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": true,
+            "recipientInputDelta": "0",
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564038510236995589966483110"
+            ]
+          }
+        ]
+      },
+      {
+        "direction": "token1-to-token0",
+        "label": "one-token-control",
+        "amountIn": "1000000000000000000",
+        "quoteAmountOut": "483801593646705345",
+        "receipts": [
+          {
+            "encoding": "quoted",
+            "payerDebit": "1000000000000000000",
+            "recipientCredit": "483801593646705345",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039456584007913129639935"
+            ]
+          },
+          {
+            "encoding": "runtime",
+            "payerDebit": "1000000000000000000",
+            "recipientCredit": "483801593646705345",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039456584007913129639935"
+            ]
+          },
+          {
+            "encoding": "direct-self",
+            "payerDebit": "1000000000000000000",
+            "recipientCredit": "483801593646705345",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039456584007913129639935"
+            ]
+          },
+          {
+            "encoding": "direct-external",
+            "payerDebit": "1000000000000000000",
+            "recipientCredit": "483801593646705345",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": true,
+            "recipientInputDelta": "0",
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039456584007913129639935"
+            ]
+          }
+        ]
+      },
+      {
+        "direction": "token1-to-token0",
+        "label": "1000-raw-control",
+        "amountIn": "1000",
+        "quoteAmountOut": "482",
+        "receipts": [
+          {
+            "encoding": "quoted",
+            "payerDebit": "1000",
+            "recipientCredit": "482",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039457584007913129638935"
+            ]
+          },
+          {
+            "encoding": "runtime",
+            "payerDebit": "1000",
+            "recipientCredit": "482",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039457584007913129638935"
+            ]
+          },
+          {
+            "encoding": "direct-self",
+            "payerDebit": "1000",
+            "recipientCredit": "482",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": null,
+            "recipientInputDelta": null,
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039457584007913129638935"
+            ]
+          },
+          {
+            "encoding": "direct-external",
+            "payerDebit": "1000",
+            "recipientCredit": "482",
+            "quoteDelta": "0",
+            "payerInputRemaining": "101",
+            "executorOldOutputUnchanged": true,
+            "recipientInputDelta": "0",
+            "executorNativeDelta": "0",
+            "approvalValues": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "115792089237316195423570985008687907853269984665640564039457584007913129638935"
+            ]
+          }
+        ]
+      }
+    ],
+    "conclusions": [
+      "32/32 payer debit == full amountIn，pool input delta 同额为正，pool output delta 与 recipient credit 同额反号；32/32 actual recipient credit == production Exact quote，quote delta=0。",
+      "每次成功的 actor input override=amountIn+101，实际扣款后留 101；这是已有输入库存控制，不靠耗尽旧余额凑输入。",
+      "8/8 direct-external 的 executor 旧输出 delta=0、recipient input delta=0；recipient output 由真实 token delta 与 pool->recipient Transfer 交叉确认。executor 的预填输出只是旧库存，不能代替 external receiver 新到账。",
+      "32/32 executor native delta=0；真实历史工具只观察 executor native，未单独观察 owner/recipient native。",
+      "32/32 Swapped sender/receiver/src/dst/amount/result 与执行请求、实际 token transfer 一致，referral=0。",
+      "32/32 approval 首次事件为 MAX_UINT，后续事件为 MAX_UINT-amountIn；程序另实际读 allowance 并确认剩余至少 amountIn，没有清零。事件是辅助证据，不替代 allowance guard。",
+      "4/4 readonly quote 在 executor input=0 时 returned；六个 token/account delta 均0、executor native delta0、logs为空；返回金额通过 VM equal 与当次 Exact 相等。"
+    ],
+    "recipientInventoryLimit": "历史 receiver 使用 owner EOA，其输入余额变化被观察但未播种非零旧输入；非零 receiver 旧输入/输出与 native 的保护补充由合成 BotVM 测试证明。"
+  },
+  "negativeEvidenceBoundary": {
+    "historical": {
+      "noInput": 8,
+      "postExecutionFailure": 8,
+      "sameNoInputCalldataVerified": true,
+      "postFailureSuccessfulProgramPrefixVerified": true,
+      "completion": "全部 reverted-as-declared",
+      "effectArrays": "全部 tokenDeltas/nativeDeltas/logs 为空数组，不能解释为独立测得余额/授权全量回滚。",
+      "rollbackClaim": "实际历史调用的声明 EVM revert；不声称独立 persisted state diff，也不声称真实 Mooniswap 的异常 debit/receipt 故障被注入验过。"
+    },
+    "syntheticEvm": {
+      "source": {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/RuntimeRecipient.t.sol",
+        "sha256": "813930bb9260d2f55d483ce794cf8e8ad584fa88f1a48e60536550cd7207e85e"
+      },
+      "emitter": {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-evm-program.ts",
+        "sha256": "046f4b2d44a3e9ee9989aaf86d6f096f3897e0cf711c25812a70648d0f5e60d9"
+      },
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/evidence/evm09.log",
+        "sha256": "5d8c0ba4a89a321ca7d4a2981c5af31c78e11840d5b63651bed6668029575557"
+      },
+      "testsPassed": 5,
+      "testsFailed": 0,
+      "execution": "真实 BotVM.execute + Family 当前 emitter 生成程序；显式 MoonFixturePool/MoonFixtureToken/MoonFixtureGovernance。",
+      "identityBoundary": "fixture descriptor 是 synthetic，绕过 issuer/实际部署 identity 的建模入口；实际 issuer 与历史池身份由 dual07 独立覆盖。",
+      "positiveCoverage": [
+        "两方向 self/external",
+        "1、1234567、947347012323163156825 等完整输入",
+        "MAX_UINT 首次授权及足额 standing allowance 复用",
+        "未给 payer 输入时 readonly quote 仍可计算",
+        "替换 mutable governance 后 quote 不代表授权，inactive swap 拒绝"
+      ],
+      "rejectionCoverage": [
+        "零/少/多 input debit",
+        "零/少/多 output receipt",
+        "错误 external recipient",
+        "executor 旧输出损失",
+        "receiver 旧输入损失",
+        "executor forced-native 改变",
+        "amount=0",
+        "no input",
+        "inactive governance",
+        "approve(false)",
+        "池输出储备不足",
+        "成功 swap/approve 后附加失败"
+      ],
+      "rollbackComparison": "每个 rejected/后置失败用余额快照哈希直接比前后：executor/receiver/pool 两个 token 的6个余额、2个 allowance、2个 approval counters、pool swaps counter、executor/receiver/pool 三个 native 余额。",
+      "expectedRejectionCallsFromSource": 48,
+      "expectedSuccessfulSwapCallsFromSource": 11,
+      "internalCaseCountBoundary": "48/11 是静态展开确定循环所得；正式日志计数为5个测试，未将内部case数伪装成单独工具 receipt。",
+      "mustNotClaim": "真实 Mooniswap runtime 的恶意 token/pool guard 故障回放或真实池全量状态 diff 回滚。"
+    }
+  },
+  "constructionAndDefault": {
+    "actualIssuer": "dual07 使用当前 Ready memo rehydrateVerifiedInstance、assertIssuedPreparedFamilyInstance、route handle、buildFamilyRuntimeAmountLeg；无 direct 调 Family 私有 builder 替代历史 issuer。",
+    "construction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "forbiddenDuringBuild": 0
+    },
+    "outsideConstruction": {
+      "exactCalls": 8,
+      "quotedCalls": 8
+    },
+    "evidenceMeaning": "constructor guard 在 build 期间拦截 runtime access/RPC；候选生产 builder 本身同步、无 Exact/quoted/RPC。报告的0只限 runtime构造；不能把8次生产 Exact与8次quoted构造写成未发生。",
+    "selector": "runtime-candidate04 的第5项使用真实 sim selector + 合成 deferred 后腿，证明 quote/direct 进入现有选择边界且 Exact/quoted计数0；不声称真实多腿机会或真实后腿EVM。",
+    "defaultBytes": "5/5 离线测试含与旧 RuntimeAmountProgram 编码逐字节相等；旧 source allowance/MAX, swapFor minReturn1, referral0, receiverexecutor, amount patch offset68 与新默认分支保持。",
+    "standingAllowance": "保留 MAX_UINT 策略，不改 temporary-clear；历史实际 allowance guard与Approval日志、合成 EVM 精确 MAX-minus-spend 及 reuse共同支持。",
+    "defaultAliasCaveat": "新增 recipient validation 同样拒绝 executor==输入/输出token 的退化默认别名；正常既有执行器默认bytes未变。未把该拒绝写成所有可能默认参数无变化。",
+    "permissions": "quoteOutput 是只读准备能力，不是 active/可执行保证；swapFor 的 active/transfer/容量检查与最终实际模拟仍关闭失败路径。"
+  },
+  "codeAndTestReview": {
+    "previousFinding": "MOON-TEST-01：负例 model 的成功后置断言会在 emitted guards 被移除时制造异常，导致负例假通过。",
+    "correction": "verify=false 在 inspectRuntime 后立即退出；所有拒绝用例关闭成功后置断言；20个mutation sentinel（两方向×10类fault）对去掉guard的程序必须正常返回。",
+    "baseline": {
+      "reference": {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/runtime-model-baseline04.log",
+        "sha256": "19fa528e2bbae9442bd94915774d2832de6c37de6641f76007cbe7035a538b24"
+      },
+      "passed": 4,
+      "failed": 1,
+      "meaning": "原后置断言缺陷由新增 sentinel 暴露；同 production SHA，失败不是新生产 guard 回归。"
+    },
+    "fixedModel": {
+      "reference": {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/runtime-candidate04.log",
+        "sha256": "2b99f755fd3150a603fd88208d63e5d7261a8f30730f7d146a0a1b745d7e30cb"
+      },
+      "passed": 5,
+      "failed": 0,
+      "modelOnly": true
+    },
+    "contract": {
+      "reference": {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/contract-candidate05.log",
+        "sha256": "f96b0adeb9b787423be21ae689361431474156e4c34c3ae5db8daa62bde3d322"
+      },
+      "passed": 13,
+      "failed": 0
+    },
+    "familyDual": {
+      "reference": {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/family-dual05.log",
+        "sha256": "f53104165db894820ca535794ca981e8f7195474149dc0f9608aa36c832ab7ab"
+      },
+      "passed": 301,
+      "failed": 0
+    },
+    "evm": {
+      "reference": {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/evidence/evm09.log",
+        "sha256": "5d8c0ba4a89a321ca7d4a2981c5af31c78e11840d5b63651bed6668029575557"
+      },
+      "passed": 5,
+      "failed": 0,
+      "syntheticProtocol": true
+    },
+    "toolingDefect": {
+      "id": "tooldef-20261014-mooniswap-negative-postassertion",
+      "status": "父任务计划登记；修复和回归证据已核对，codify_commit 尚未提供，不声称学习闭环已提交。",
+      "codifyCommit": null
+    },
+    "reviewerExecutedTests": false
+  },
+  "deploymentCoverage": [
+    {
+      "address": "0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21",
+      "interface": "verified",
+      "runtimeHash": "0x4088f6416c9dd0a777577d8f4e4fef5176027e38a6b312b396f0421264cd87a0",
+      "normalizedHash": "0x0f88c1b9bd3506a4f0659e1c75cba5d797d0e04d462f79da7eebd58cc51a6f90",
+      "currentSameSourceIdentity": "verified",
+      "currentQuoteDirectExecution": "verified-both-directions",
+      "sourceUrl": "https://eth.blockscout.com/api/v2/smart-contracts/0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21"
+    },
+    {
+      "address": "0x57fbb3704609da720546898fcfbad910fcf49e25",
+      "interface": "verified",
+      "runtimeHash": "0xbeb7cad9bf341aadbb651e5fb445d836f745bf645d98e5d7e980e60ea1b9b9b6",
+      "normalizedHash": "0x0f88c1b9bd3506a4f0659e1c75cba5d797d0e04d462f79da7eebd58cc51a6f90",
+      "currentSameSourceIdentity": "unverified; prior descriptor provenance omitted",
+      "currentQuoteDirectExecution": "unverified",
+      "preservedAsAdditionalUntestedInstance": true,
+      "sourceUrl": "https://eth.blockscout.com/api/v2/smart-contracts/0x57fbb3704609da720546898fcfbad910fcf49e25"
+    }
+  ],
+  "canonicalEvidenceBinding": {
+    "query": "mooniswap",
+    "manifests": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/selection02.json",
+        "sha256": "e3cf089042adb7b833f33abe2f5d7d6aaafe32a3ba99f31188ebf6141fd79532"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/selection06.json",
+        "sha256": "66272270994b7c0a35690b52ac9de0ec16702812ea1880e6e74e4497c8f1945a"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/evidence/selection08.json",
+        "sha256": "46dc030bf2d333fda57f83ec7334b40eddf9258ec2af824ca9b5db82e8110262"
+      }
+    ],
+    "completedEvmReceipt": {
+      "toolId": "listener:searcher:mooniswap-runtime-recipient-evm",
+      "descriptorSha256": "0c01bfeca3c1d0a35a4debf82c515e527d8bf98d76be5e1a5fb1f488167faf21",
+      "exitCode": 0,
+      "stdoutBytes": 2348,
+      "stdoutSha256": "35bf9be69ca891f82493bad8e430a2bd924ab350c19a60bdb80fb9a2a5915f4c",
+      "stdoutHashIndependentlyMatchedInsideLog": true
+    },
+    "otherStdoutMatches": [
+      {
+        "toolId": "listener:searcher:mooniswap-historical-dual",
+        "bytes": 7840,
+        "sha256": "0c8e891820c3c4fc45b32b6593d235db094bb2b793b23b443b18f2b5f3362d55",
+        "matched": true
+      },
+      {
+        "toolId": "listener:searcher:mooniswap-runtime-recipient",
+        "bytes": 823,
+        "sha256": "65cea2c68a0707d09ed1588d683d333d92c4ea3498238edb307d6414cd3ab90b",
+        "matched": true
+      }
+    ],
+    "resolvedPackagingFinding": "snapshot08 selection08 executions=[] 是运行前快照；保留原文件，补充 snapshot10 终态 execution receipt（exit0）后闭合。evm09 log、checks09 test SHA 与本地 candidate 均相等。",
+    "sourceOwnership": "owned10 中六个本轮生产/验收候选 SHA 与本地候选逐一相同；checks04 同时记录生产与model test SHA，checks09 记录 Solidity test SHA。"
+  },
+  "remainingLimits": [
+    "57fb 未有本轮 same-source issuer/两方向实际执行，不得全部署清单宣称通过。",
+    "实际历史负例仅声明 EVM revert；完整相关状态回滚来自真实 BotVM 的显式合成协议测试，必须保持标签。",
+    "历史只测 executor native；外部 recipient native 未由历史 transport 单独观察，当前 VM/Family 也无读取任意recipient native的 guard。",
+    "历史 receiver 为 owner EOA；真实多腿 callback/debt 组合未在该批执行。selector组合只有明确合成测试，单腿能力通过不等于机会复现。",
+    "source N-end 不等于原 TX pre-call；既有完整前序成果保留，不以本轮替换或扩大其结论。",
+    "价格入口 historicalNaturalDiscoveryProven=false 与 Ready 复用限制保留；全图存在 univ2-standard pricing degradation，目标两行未受影响。",
+    "未运行生产阶段时效性/性能矩阵，未得生产上线/盈利结论。",
+    "本报告不替代 current source/commonSource、独立接口行和 typed behavior 文档的机械 gate；总表旧行当前仍未更新。"
+  ],
+  "finalizationItems": [
+    {
+      "kind": "gate-record-update",
+      "status": "pending-parent",
+      "detail": "在保留原报告、57fb额外实例未验及所有变体ID的前提下，追加本轮限域结论和typed behavior证据；重绑当前 Family/commonSource pins并通过现有机械gate。不可仅手改旧状态为pass。"
+    },
+    {
+      "kind": "catalog-preparation-validation",
+      "status": "parent-diagnosed-input-packaging-followup",
+      "detail": "最终父任务消息已将 catalog-index10 归因为 ignored generator input 中缺 package-lock，正在仅补输入文件后生成提交索引；生产源码与历史结果不变。本独立复核没有复跑或另行核验该打包诊断，也不把先前catalog05通过推广到新检查。"
+    },
+    {
+      "kind": "tooling-defect-codify",
+      "status": "pending-parent-commit",
+      "detail": "保留负例后置断言故障对照，登记 LearningCase，并补实际 codify_commit 后才可关闭该工具缺陷。"
+    }
+  ],
+  "artifactPins": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+      "sha256": "b1001cafcaf3bdf3ccb544559ba5d9af8e1cc66f5460617a056df394a1916e19",
+      "bytes": 4397
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-recipient.ts",
+      "sha256": "09e59831ec011c9060cc536afb931fda87696745710ef70e18efc35c1d4123f6",
+      "bytes": 13284
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/historical-dual.ts",
+      "sha256": "497eddff186a2936b1cb5179ceebd9b9826a4f77bdc937152a16cce03195f5e9",
+      "bytes": 25031
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/historical-ready.ts",
+      "sha256": "66e3ee3aa65d59a1efa1bc206f55dd14313e3908f61201d10972bcf652cef997",
+      "bytes": 6262
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/RuntimeRecipient.t.sol",
+      "sha256": "813930bb9260d2f55d483ce794cf8e8ad584fa88f1a48e60536550cd7207e85e",
+      "bytes": 9194
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-evm-program.ts",
+      "sha256": "046f4b2d44a3e9ee9989aaf86d6f096f3897e0cf711c25812a70648d0f5e60d9",
+      "bytes": 1265
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/owned10.json",
+      "sha256": "8dd5aecb9ab1565519b43c166a840e3cf34a5c1f3a8b36c2fbb65ac5df50d9e5",
+      "bytes": 1186
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/mooniswap-quote-direct-design-review.json",
+      "sha256": "6aa3f4675f1f8bfa80b77334df2a0646efbf0dbea1488c5e8c9e100ab1187a33",
+      "bytes": 30843
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/mooniswap-runtime-static-review-round1.json",
+      "sha256": "eebac320c4aeab566740869ab7e805a28a2f53a416ac07aa8c1bbe6681c34d18",
+      "bytes": 13048
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/mooniswap-runtime-static-review.json",
+      "sha256": "9a0c79e5feedd78238e7dc0fef96bf2f22ac660c4687c9624b7ff56eeb1a9a23",
+      "bytes": 17109
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/dual07.json",
+      "sha256": "8c3966ca948614df37dc5cbb79e10c8c9b79550412ffe2cace003f2daba21e92",
+      "bytes": 895528
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/dual07.log",
+      "sha256": "6f5dad6b15b1e62a6cca5b69e798ab323241ce66e0e20a0d259cc17d0dcd64e8",
+      "bytes": 8728
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/ready07/result.json",
+      "sha256": "8ec29211b207e6d564ad56d34d5506bbf6cb9fe08101b39c82ec1d42a99b3369",
+      "bytes": 5034
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/ready07/ready-summary.json",
+      "sha256": "07ae457edf3bf930adbf41ebbbf031f71a81a449c1049dd0d35a771a3f00bf23",
+      "bytes": 17357
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/ready07/source-before.json",
+      "sha256": "79c9096bb8b743029be6533ddb21e487ef34f9fae4f328d9fb374c98d86b80f2",
+      "bytes": 1945
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/ready07/source-after.json",
+      "sha256": "79c9096bb8b743029be6533ddb21e487ef34f9fae4f328d9fb374c98d86b80f2",
+      "bytes": 1945
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/ready07/prices/input.json",
+      "sha256": "b29eaa4b7c61ec6c23bb20a59870a7fee0dfea1b6e477a94a5e7ccd398c547cc",
+      "bytes": 55354
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/ready07.log",
+      "sha256": "731a57c1506658358057536858dbce245e9ba18fb44f26406992e84467c107da",
+      "bytes": 17682
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/runtime-model-baseline04.log",
+      "sha256": "19fa528e2bbae9442bd94915774d2832de6c37de6641f76007cbe7035a538b24",
+      "bytes": 3297
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/runtime-candidate04.log",
+      "sha256": "2b99f755fd3150a603fd88208d63e5d7261a8f30730f7d146a0a1b745d7e30cb",
+      "bytes": 1222
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/checks04.json",
+      "sha256": "e2dd8fe2e27fc3ed87773f03a4efc9339c6ca42063c834e2a1b5c206c4efe421",
+      "bytes": 1421
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/checks05.json",
+      "sha256": "6574b8e500211f109c8d290350fb619c18c166d6e3f7abbee844d30eb09fdbb6",
+      "bytes": 1427
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/contract-candidate05.log",
+      "sha256": "f96b0adeb9b787423be21ae689361431474156e4c34c3ae5db8daa62bde3d322",
+      "bytes": 1851
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/family-dual05.log",
+      "sha256": "f53104165db894820ca535794ca981e8f7195474149dc0f9608aa36c832ab7ab",
+      "bytes": 58081
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/build05.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "bytes": 71
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/catalog05.log",
+      "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+      "bytes": 136
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/selection02.json",
+      "sha256": "e3cf089042adb7b833f33abe2f5d7d6aaafe32a3ba99f31188ebf6141fd79532",
+      "bytes": 6329
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/selection06.json",
+      "sha256": "66272270994b7c0a35690b52ac9de0ec16702812ea1880e6e74e4497c8f1945a",
+      "bytes": 6504
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/evidence/selection08.json",
+      "sha256": "1adf336ba014751994cbad235699c55ce181b85f222840a6c197ec59671ec780",
+      "bytes": 4732
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/evidence/selection08.json",
+      "sha256": "46dc030bf2d333fda57f83ec7334b40eddf9258ec2af824ca9b5db82e8110262",
+      "bytes": 5788
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/evidence/checks09.json",
+      "sha256": "e61e58dee0e512c985481ae0a294bcb74294967971fab8f1e1a8d3dc50d87ca0",
+      "bytes": 724
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/evidence/evm09.log",
+      "sha256": "5d8c0ba4a89a321ca7d4a2981c5af31c78e11840d5b63651bed6668029575557",
+      "bytes": 2967
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/evidence/tool-index09.log",
+      "sha256": "6dbff24bc65f446638453b37ecdcc5ec54b4da18d78c3203ff584a0e808ed6e2",
+      "bytes": 2165
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/evidence/ready07/ready.json",
+      "sha256": "1a4e0e3b3054513e57010cafddfde40212a5d92677ca288d53fa04693cf7dbd7",
+      "bytes": 1945477
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/evidence/ready07/prices/prices.json",
+      "sha256": "abdbac0dbca86fac07fce64ca11955414e0b17e6335496e81f856a8f22140432",
+      "bytes": 1129650
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/listener/src/searcher/blockscan-at-block-cli.ts",
+      "sha256": "0e4af960a5f17e44aa19206e63e0776b9d5532198092e41c32fff0cbe0b7b7ac",
+      "bytes": 41808
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot10/docs/research/reports/family-settlement-interface-review-20261014.json",
+      "sha256": "c10b127f77b557776522359fc1edbab8a56c1896929bb92a652e05be49c7e57a",
+      "bytes": 291280
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+      "sha256": "6d6c5c82fd971d5a55c50817b0738d7524e7f129ec60d5f8fc24af37dffbec54",
+      "bytes": 35161
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/snapshot08/listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+      "sha256": "7f5bb0fb67b61c52c65d8fcf42c663792a6d04a1620a4fe976020d1cdc65ab27",
+      "bytes": 37416
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/identity.ts",
+      "sha256": "8504dcb94950f648dca2a5f9a56c215309f94b7c43b4983e946ceb6877a70424",
+      "bytes": 3833
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/runtime.ts",
+      "sha256": "db26ec7dbd28226f797845507f678df50128fb3ed57fa225e0b62d0c8d8bdbe6",
+      "bytes": 1409
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/prior-source/listener/src/searcher/venues/swaps/mooniswap-family/runtime-execution.ts",
+      "sha256": "8ed909e370277c77e84994d7004f8d068902fde97b3fc9e8a3791743e001fc42",
+      "bytes": 1499
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/root-eight-review-v2.json",
+      "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73",
+      "bytes": 81693
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21.json",
+      "sha256": "863553af664359013358af70f8c4be84efb8297e0412e80f8e74aedb6097c335",
+      "bytes": 160856
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0x57fbb3704609da720546898fcfbad910fcf49e25.json",
+      "sha256": "2233890680584e00fef33ff2bb1f3847efaf85915283bf559f3eb11dc575bab4",
+      "bytes": 207524
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21/Mooniswap.sol",
+      "sha256": "24e36f07a388aa8079fb9f8140e31332bfe9bd56a031ab4556349015fc1fa39e",
+      "bytes": 15438
+    }
+  ]
+}

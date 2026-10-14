@@ -1,0 +1,679 @@
+{
+  "schema": "mooniswap-quote-direct-design-review-v1",
+  "createdAt": "2026-10-14T13:24:34.899721+00:00",
+  "reviewer": "interface_protocols_b",
+  "reviewMode": "independent read-only design review",
+  "familyId": "mooniswap",
+  "baseline": {
+    "root": "/opt/mev-cloud/family-runtime-20261007",
+    "head": "e9e4d4a2ef6f8f7790708dff19728d89dcb5f8f6",
+    "audit": {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/audit01.json",
+      "sha256": "2fb314b818c159944ded6c0378014f3862d45a97eec1f2615076a154fbfb1c14",
+      "bytes": 889142
+    },
+    "auditRecordedAt": "2026-10-14T13:15:27.248058+00:00",
+    "peerHashesUnchangedAsRecorded": true,
+    "scope": "本轮云端实际 source + 追加只读保存的中央 settlement/selector/VM 源码；HEAD 不是未提交源码的替代，下面另 pin 文件",
+    "sourcePins": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/runtime-execution.ts",
+        "sha256": "8ed909e370277c77e84994d7004f8d068902fde97b3fc9e8a3791743e001fc42",
+        "bytes": 1499,
+        "cloudRelativePath": "listener/src/searcher/venues/swaps/mooniswap-family/runtime-execution.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/exact.ts",
+        "sha256": "b07b6eb0efc3fc6341738f335e81b8ff41b969b85f1270cef11b97fb21bb86e2",
+        "bytes": 3957,
+        "cloudRelativePath": "listener/src/searcher/venues/swaps/mooniswap-family/exact.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/state.ts",
+        "sha256": "48a961779397fcbfff47c214c2037bae36d7b57a150d52a774163994228d5008",
+        "bytes": 2177,
+        "cloudRelativePath": "listener/src/searcher/venues/swaps/mooniswap-family/state.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/codec.ts",
+        "sha256": "c20d584819340d1a6105e234821b1f4e7cd9c1bf4b74c88e7f4e891be5d5bbc7",
+        "bytes": 6047,
+        "cloudRelativePath": "listener/src/searcher/venues/swaps/mooniswap-family/codec.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/identity.ts",
+        "sha256": "8504dcb94950f648dca2a5f9a56c215309f94b7c43b4983e946ceb6877a70424",
+        "bytes": 3833,
+        "cloudRelativePath": "listener/src/searcher/venues/swaps/mooniswap-family/identity.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/runtime.ts",
+        "sha256": "db26ec7dbd28226f797845507f678df50128fb3ed57fa225e0b62d0c8d8bdbe6",
+        "bytes": 1409,
+        "cloudRelativePath": "listener/src/searcher/venues/swaps/mooniswap-family/runtime.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/types.ts",
+        "sha256": "1573ed6bf15adcf8d66ec61a36bdeba99b1b4231631bf5f9dbba1c9fec568533",
+        "bytes": 1429,
+        "cloudRelativePath": "listener/src/searcher/venues/swaps/mooniswap-family/types.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/execution.ts",
+        "sha256": "012f73aa11b47ace76995f5754004cf8870bbd659cfee245b1c806b17ab76891",
+        "bytes": 2077,
+        "cloudRelativePath": "listener/src/searcher/venues/swaps/mooniswap-family/execution.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/adapter-family-runtime.ts",
+        "sha256": "70f8d6c64580f1814cedcbeca6d1fc8f7db2cb256f65f5064491f9ac0d66f845",
+        "bytes": 224657,
+        "cloudRelativePath": "listener/src/searcher/venues/adapter-family-runtime.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/adapter-family-plugin.ts",
+        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2",
+        "bytes": 166428,
+        "cloudRelativePath": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d",
+        "bytes": 12298,
+        "cloudRelativePath": "listener/src/adapters/runtime-amount-program.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+        "bytes": 3636,
+        "cloudRelativePath": "listener/src/searcher/venues/runtime-execution.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/execution-asset-boundary.ts",
+        "sha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e",
+        "bytes": 9307,
+        "cloudRelativePath": "listener/src/searcher/execution-asset-boundary.ts",
+        "matchesAudit01SourceSha256": true
+      },
+      {
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/simulator/runtime-settlement.ts",
+        "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5",
+        "contentCapturedAt": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/design-boundary-source.json"
+      },
+      {
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+        "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261",
+        "contentCapturedAt": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/design-boundary-source.json"
+      },
+      {
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/src/RuntimeAmountVM.sol",
+        "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf",
+        "contentCapturedAt": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/design-boundary-source.json"
+      },
+      {
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+        "contentCapturedAt": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/design-boundary-source.json"
+      },
+      {
+        "cloudPath": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/runtime-settlement.ts",
+        "sha256": "1d19a3f5b78b572fc3eb18d4b0667a846ac254049ce1de2031201b7ec260e6de",
+        "contentCapturedAt": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/design-boundary-source.json"
+      }
+    ],
+    "boundaryCapture": {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/design-boundary-source.json",
+      "sha256": "3133d21bd892d32ed57960a31ac4752b37e1b55ec08425683856f3993cf2ea2d",
+      "bytes": 69591
+    },
+    "priorInterfaceAndHistoryReview": {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/mooniswap-readonly-review.json",
+      "sha256": "b695380f04316abb31a45130e21cbafe36e4e3a32be98057ca160cf823dfc4bd",
+      "bytes": 48818
+    },
+    "protocolSourceRefs": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21/Mooniswap.sol",
+        "sha256": "24e36f07a388aa8079fb9f8140e31332bfe9bd56a031ab4556349015fc1fa39e",
+        "bytes": 15438,
+        "anchors": [
+          {
+            "contains": "modifier whenNotShutdown",
+            "lines": [
+              83
+            ]
+          },
+          {
+            "contains": "mooniswapFactoryGovernance.isActive()",
+            "lines": [
+              84
+            ]
+          },
+          {
+            "contains": "function getReturn",
+            "lines": [
+              132
+            ]
+          },
+          {
+            "contains": "function swapFor",
+            "lines": [
+              228
+            ]
+          },
+          {
+            "contains": "src.uniTransferFrom",
+            "lines": [
+              258
+            ]
+          },
+          {
+            "contains": "result = _getReturn",
+            "lines": [
+              260
+            ]
+          },
+          {
+            "contains": "dst.uniTransfer",
+            "lines": [
+              262
+            ]
+          }
+        ]
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21/MooniswapGovernance.sol",
+        "sha256": "fece0b857d7ec9128a601907088b0ea3bcddaa385de3af16995a83567edc5aa6",
+        "bytes": 8705,
+        "anchors": [
+          {
+            "contains": "public mooniswapFactoryGovernance",
+            "lines": [
+              24
+            ]
+          },
+          {
+            "contains": "function setMooniswapFactoryGovernance",
+            "lines": [
+              36
+            ]
+          },
+          {
+            "contains": "function fee()",
+            "lines": [
+              43
+            ]
+          },
+          {
+            "contains": "function slippageFee()",
+            "lines": [
+              47
+            ]
+          }
+        ]
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/sources-0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21/UniERC20.sol",
+        "sha256": "13503ec720ab7bc9fae4dae63cd304da36ff32d23354bfb5bf127072c04aaa23",
+        "bytes": 3436,
+        "anchors": [
+          {
+            "contains": "function isETH",
+            "lines": [
+              14
+            ]
+          },
+          {
+            "contains": "function uniTransfer",
+            "lines": [
+              26,
+              36
+            ]
+          },
+          {
+            "contains": "to.transfer",
+            "lines": [
+              29
+            ]
+          },
+          {
+            "contains": "safeTransferFrom",
+            "lines": [
+              47
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "verdict": {
+    "decision": "approve-minimal-design-with-explicit-semantics-and-required-rejection-evidence",
+    "quoteOutput": "允许用 transaction-local STATICCALL getReturn 做只读金额准备；不把它声明成 active/可执行性证明。真实 swapFor 当时的 whenNotShutdown.isActive 是执行关闭点。",
+    "directOutput": "与 quoteOutput 一并在 Mooniswap Family 内接线；使用第六参数 receiver，完整实际扣款及新到账检查，保持零 referral/MAX_UINT/default bytes。",
+    "existingActiveReadCapability": "未发现可直接消费寄存器地址作为 CALL target 的现有通用指令。call target 固定，patch 仅改 calldata；当前 descriptor 无 source-current governance 供固定 target 使用。",
+    "centralChangeRequired": false,
+    "protocolAbiChangeRequired": false,
+    "newRpcOrOffchainExactDuringConstructionRequired": false,
+    "priorRecommendationCorrection": "上轮只补 direct-output 的建议能提供独立 receiver 编码，但不足以使该 Family 进入当前 callback settlement root。最小完整接线应同时补 quote-output。",
+    "executionAcceptance": "not performed; no implementation/behavior/gate pass asserted"
+  },
+  "centralConsumption": {
+    "selectionRequirements": [
+      "2..6 legs, positive amount/minimumProfit, no maximum-input leg",
+      "last leg must declare deferredInput recipient",
+      "every preceding leg must declare quoteOutput",
+      "penultimate leg must declare directOutput",
+      "closed continuous token path and production blocksPrefixInversion guard remain in force"
+    ],
+    "requestBinding": "本轮 runtime-settlement.ts 已把每个 quote-output 绑定到实际 receiver：中间腿为 executor，倒数腿为最后一腿的 debt recipient；direct-output 请求使用同一个 recipient。Mooniswap 应验证/echo 此请求，即使其报价公式不依赖 receiver。",
+    "amountPreparation": "每个 quote.program 通过 run(program,inputReg=8,outputReg=8,readOnly=true) 执行。r0 输出仅成为最后一腿的预备输入/债务金额，不构成到账或成功。",
+    "realExecution": "最后一腿真实释放输入并回调执行 payment program；payment 必须执行每个前缀 leg，实际量逐腿由 receiver balance delta 传递，输入实际扣款必须正数且精确等于本腿工作输入。",
+    "failurePath": "Mooniswap swapFor revert -> RuntimeAmountVM _runtimeCall detects !ok -> _runtimeHopFailure always reverts -> callback/root fails atomically. If outer callback protocol catches a reverted callback, the callback-scope marker rollback also leaves the VM callback completion check unsatisfied. Family deferred debt/receipt guards remain required.",
+    "ranking": "生产 selector 仍 simulate 整个构造。sim.success=false 的 EVM revert 不能作为盈利候选；只接受 sim.success 且 netProfit>0。既有 funded runtime 分支仍须真实执行 swapFor，不能用 quote 成功替代。",
+    "economicCostLimit": "inactive 可在只读准备后才导致整笔模拟失败，产生失败试额成本；这是早筛覆盖/性能差异，不是 active 许可被绕过。不要把该 quote 复用作对外已获执行许可的 Exact 结论。",
+    "staticEvidenceAnchors": [
+      {
+        "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+        "anchors": [
+          {
+            "contains": "every(leg => leg.settlement?.quoteOutput)",
+            "lines": [
+              19
+            ]
+          },
+          {
+            "contains": "settlement?.directOutput",
+            "lines": [
+              20
+            ]
+          },
+          {
+            "contains": "kind: \"quote-output\"",
+            "lines": [
+              27
+            ]
+          },
+          {
+            "contains": "kind: \"direct-output\"",
+            "lines": [
+              28
+            ]
+          },
+          {
+            "contains": "run(leg.program",
+            "lines": [
+              42
+            ]
+          },
+          {
+            "contains": "equal(4, 7)",
+            "lines": [
+              44
+            ]
+          },
+          {
+            "contains": "run(quote.program",
+            "lines": [
+              55
+            ]
+          },
+          {
+            "contains": "run(deferred.program",
+            "lines": [
+              56
+            ]
+          },
+          {
+            "contains": "nativeBalance",
+            "lines": [
+              54,
+              62
+            ]
+          }
+        ]
+      },
+      {
+        "path": "src/RuntimeAmountVM.sol",
+        "anchors": [
+          {
+            "contains": "runtime readonly call",
+            "lines": [
+              158
+            ]
+          },
+          {
+            "contains": "runtime readonly allowance",
+            "lines": [
+              180
+            ]
+          },
+          {
+            "contains": "readOnly || mode == 1",
+            "lines": [
+              208
+            ]
+          },
+          {
+            "contains": "target = _address(data, ip)",
+            "lines": [
+              219
+            ]
+          },
+          {
+            "contains": "offset >= 4",
+            "lines": [
+              233
+            ]
+          },
+          {
+            "contains": "target.staticcall",
+            "lines": [
+              250
+            ]
+          },
+          {
+            "contains": "if (!ok)",
+            "lines": [
+              252
+            ]
+          },
+          {
+            "contains": "revert RuntimeHopFailed",
+            "lines": [
+              275
+            ]
+          },
+          {
+            "contains": "address(this).balance",
+            "lines": [
+              79,
+              128,
+              189
+            ]
+          },
+          {
+            "contains": "runtime callback missing",
+            "lines": [
+              254
+            ]
+          }
+        ]
+      },
+      {
+        "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+        "anchors": [
+          {
+            "contains": "buildRuntimeSettlementRoot({",
+            "lines": [
+              54
+            ]
+          },
+          {
+            "contains": "blocksPrefixInversion",
+            "lines": [
+              59
+            ]
+          },
+          {
+            "contains": "const propagated = runtimeLegs ? null",
+            "lines": [
+              63
+            ]
+          },
+          {
+            "contains": "await input.simulate",
+            "lines": [
+              91
+            ]
+          },
+          {
+            "contains": "if (!sim.success)",
+            "lines": [
+              102
+            ]
+          },
+          {
+            "contains": "sim.netProfit > 0n",
+            "lines": [
+              109
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "activeSemantics": {
+    "verifiedImplementation": "0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21 verified direct implementation; runtime and historical Ready binding recorded in prior report. Second matching deployment remains additional source evidence only.",
+    "getReturn": "Mooniswap.sol 134..135 调用 _getReturn，使用当前 virtual balances、fee、slippage、decay；函数没有 whenNotShutdown，可能在 inactive 时仍返回正数。",
+    "swapFor": "Mooniswap.sol 228 的 payable/nonReentrant/whenNotShutdown entry，在资金转移前通过 modifier 调用当前 mooniswapFactoryGovernance.isActive()，false 或失败则 revert。",
+    "mutableGovernance": "MooniswapGovernance.sol 24 保存 storage 地址，36..40 的 onlyOwner setter 可更换；不能把首次 Ready/cached governance 当 immutable 身份写死进程序。",
+    "chainExactUnchanged": "Exact 的 dependent program 先读取 pool governance/token 绑定，按同源地址调用 isActive；decode 拒绝 inactive。这个较强的链外报价接口必须继续保留；runtime readonly quote 不宣称与 Exact 的权限预筛完全相同。",
+    "availableGenericInstructions": "RuntimeAmountProgram 支持常量、checked math/equality、固定 target call/staticcall、result/calldata load、allowance、自身 nativeBalance、只读可传递的 nested run。返回地址可载入寄存器/patch 调用数据，却不能作为 _runtimeCall 的 target。",
+    "noSafeShortcut": [
+      "不可固定旧 governance 地址而不证明当前绑定；会在治理地址更换后读错权限。",
+      "不可把 fee/getReturn 正常返回当 isActive=true。",
+      "不可把 staticcall swapFor 当 readonly active probe：nonReentrant/state-writing 路径不适合作为 view，失败也无法区分 inactive。",
+      "不引入未验证 multicall/helper/self-script 包装，只为绕过当前固定 target 边界。",
+      "若未来要求 quote 阶段独立证明 active，再单独设计通用动态 target 或来源绑定的 runtime evidence；当前最小适配不需要它。"
+    ],
+    "necessaryTruthfulClaim": "quoteOutput = read-only amount preparation under current pool state; execution eligibility and actual net receipt are established only by successful guarded execution."
+  },
+  "minimalFamilyImplementation": {
+    "editBoundary": "Mooniswap runtime-execution.ts plus Family/issuer/composer test coverage; retain Exact/pricing/identity/native domain and central algorithms.",
+    "capabilityDeclaration": "默认 leg 保持 program bytes，新增 settlement:{quoteOutput:true,directOutput:true} 供 root 发现能力；每种请求返回 exact settlementRequest。不给 Mooniswap 声明 deferredInput。",
+    "requestHandling": "使用 buildRuntimeLeg 的正式输入类型/RuntimeSettlementRequest；quote-output recipient 缺省 executor；显式 quote/direct recipient 用现成地址验证，拒绝 zero/pool/token 等非法收款对象及未知请求；保留 deferred-input=null。",
+    "quoteProgram": [
+      "用未改写的本腿完整输入 r0，checked positive input guard；不得为过关减 1 或替换参考金额。",
+      "读取实际 tokenIn.balanceOf(pool) 并要求 >0；读取 tokenOut.balanceOf(pool)。",
+      "STATICCALL pool.getReturn(tokenIn,tokenOut,r0)，amount 参数 patch offset=68；保留 verified pool 原 virtual-balance/fee 计算，不手写 V2 公式。",
+      "要求结果 >0 且 <= 当前真实输出储备；短返回/外部 staticcall 失败/checked math 失败直接拒绝。",
+      "只在 quote 分支结束把结果放 r0；该分支无 approve、swap、value、callback。保持 quote request/receiver 绑定。",
+      "不要求 quote 阶段读取 executor 的可用输入余额：此程序运行在最终腿释放资金之前，工作输入是上层已限额的金额；真实 debit guard 在付款时生效。"
+    ],
+    "directProgram": [
+      "真实 swap 前用同样完整输入在当前交易状态重新读取 getReturn 并做正值/储备检查；保存 amountIn 和 expected quote，不覆盖直接执行的 r0。",
+      "保存 executor input/output、recipient input/output 与 executor native 基线；receiver==executor 时按同一账户去重处理，避免矛盾的零变动断言。",
+      "保留 Family MAX_UINT standing allowance 与现有 pool spender，仅替换 swapFor 第六参数；第五参数始终为零 referral；金额仍 patch offset=68。",
+      "可保持当前 minReturn=1 并以真实 recipient delta==当前准备的 expected output 强制执行；若改成动态 expected minReturn，需单独说明变动/回归，但默认路径 bytes 必须不变。",
+      "swapFor 的 active false/revert 一律传播；成功后要求 executor 实际 input debit==完整输入，recipient 新 output delta==expected quote>0，executor 旧 output/recipient 旧 input（distinct 时）与 executor native 不变。",
+      "核对 actual delta，不以 swapFor return/event/transfer bool 代替到账；standing allowance 不擅自新增清零。"
+    ],
+    "nativeClaimBoundary": {
+      "programCanGuard": "executor nativeBalance before/after；所有 ERC20 calls value=0，当前 admitted profile 继续拒绝 native token。",
+      "programCannotDirectlyGuard": "现有 nativeBalance 指令仅 address(this).balance；没有任意外部 recipient.balance 读取指令。因此不能宣称程序独立保护任意 receiver 的 native 余额。",
+      "acceptanceCanMeasure": "历史验收可独立记录 payer/recipient 原生币前后余额，证明受测实际 ERC20 样本没有变动。此行为证据与程序的通用强制边界须分开。"
+    }
+  },
+  "requiredNegativeCases": [
+    {
+      "id": "inactive-readonly-preparation-and-execution",
+      "mustObserve": "模型给出正 getReturn/足够储备但当前 governance.isActive=false：quote-only 允许成功且零状态写入，direct/default真实 swap 失败，完整 root 原子失败并不成为 selector 成功候选。",
+      "specificCaution": "不要要求 inactive 在任何 approve call 之前被发现；若 allowance 更新已尝试，EVM revert 应回滚它。必须证明 rollback，而不是仅有抛错桩。"
+    },
+    {
+      "id": "governance-changed-after-admission",
+      "mustObserve": "旧 governance active、新 governance inactive：执行调用当前绑定并拒绝；反向新 active 时不被旧 inactive 锁死。不得消费 cached Ready governance 当运行时真相。"
+    },
+    {
+      "id": "quote-to-execution-change",
+      "mustObserve": "只读 quote 到实际回调 prefix 之间，active 变 false 或实际 output 偏离原债务：真实执行/债务结算拒绝并整笔回滚；不接受仅 quote success。"
+    },
+    {
+      "id": "root-revert-propagation",
+      "mustObserve": "两腿及多前缀组合中，Mooniswap 在倒数/更早前缀位置都实际执行；模拟 inactive 导致最后一腿已释放的输入、所有 approvals、payer/recipient token/native 变化原子回滚。callback 捕获失败也不能让 root 成功。"
+    },
+    {
+      "id": "readonly-transitive",
+      "mustObserve": "quote 只允许 STATICCALL/read operations；恶意 nested run 尝试非静态 call、allowance 或 value 被真实 VM 拒绝，不能只靠 emitter 标签。"
+    },
+    {
+      "id": "amount-and-reserves",
+      "mustObserve": "完整 amount 0、无输入储备、quote 0、quote>输出储备、短返回、getReturn revert/溢出均拒绝；相等储备边界允许按协议结果验证。不以减输入/小额样例规避。"
+    },
+    {
+      "id": "recipient-and-request",
+      "mustObserve": "quote-output 绑定 root 实际接收者，direct 使用同一 receiver；零/错误/池或 token 地址、未知模式、ignored/mismatched request 拒绝；零 referral 不与 receiver 混淆。"
+    },
+    {
+      "id": "actual-debit-receipt-and-inventory",
+      "mustObserve": "zero/under/over debit、wrong/zero/short/extra recipient credit、仅返回正确数值但余额不变、payer 旧 output 被动用、recipient 旧 input 被动用、executor native 改变均拒绝；既有 recipient output 库存不能补差。"
+    },
+    {
+      "id": "no-fresh-input-same-calldata",
+      "mustObserve": "每个 direct 正例以同 issued calldata 撤去新输入再执行，观察实际 EVM 原子失败和 rollback；不把 transport error 当拒绝证据。"
+    },
+    {
+      "id": "deferred-unavailable-and-native",
+      "mustObserve": "Mooniswap deferred-input request 继续 null；native/mismatching executable/route binding/caller source 错误继续关闭。"
+    },
+    {
+      "id": "default-and-interface-preservation",
+      "mustObserve": "无请求 program bytes、MAX_UINT allowance、zero referral、executor receiver、原 quoted action/Exact 的 active 拒绝保持；quote/direct 构造 Exact/RPC 调用为0。"
+    },
+    {
+      "id": "production-selection-reachable",
+      "mustObserve": "实际 strict issuer 生成 normal/quote/direct legs，通过当前 buildRuntimeSettlementRoot 非空并实际执行；只补 direct 不应被当成已进入此路径。用 Exact/quoted 抛错桩证明生产 runtime 构造没有偷偷回退。"
+    },
+    {
+      "id": "historical-evidence-separation",
+      "mustObserve": "两 ERC20 方向、生产参考金额及第二金额的 quote/direct 新证据明确 pin 当前执行源码与状态；原 self/default/全前序成功只保留原有结论。inactive/governance-switch 若仅 fixture，必须标明非历史真实 state acceptance。"
+    }
+  ],
+  "limits": [
+    "本次仅设计静态审查；未写生产代码、未修改主表/IMPL/catalog，未执行 RPC、build、tests、fork 或新机会复现。",
+    "static preparation 可给 inactive pool 正金额；该能力不提供 active 早筛或交易一定成功承诺。",
+    "报价到执行中的任意状态差异仍由实际到账、债务、库存、模拟成功约束；设计可失败关闭不等于已完成实际验收。",
+    "外部 recipient native 余额只有验收可独立观测，现有 VM 不提供该账户任意 nativeBalance 指令。",
+    "没有为 native 方向、其他 Mooniswap runtime 或新债务策略扩大支持。"
+  ],
+  "actionsPerformed": {
+    "readOnlySourceReads": true,
+    "localJsonReportsOnly": true,
+    "rpcCalls": 0,
+    "testsRun": false,
+    "buildsRun": false,
+    "catalogGenerated": false,
+    "remoteMutations": false,
+    "processControlActions": false
+  },
+  "sourceAnchors": [
+    {
+      "path": "listener/src/searcher/venues/swaps/mooniswap-family/state.ts",
+      "anchors": [
+        {
+          "contains": "This address is mutable",
+          "lines": [
+            17
+          ]
+        },
+        {
+          "contains": "governanceRound",
+          "lines": [
+            15
+          ]
+        },
+        {
+          "contains": "isActive",
+          "lines": [
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/mooniswap-family/exact.ts",
+      "anchors": [
+        {
+          "contains": "inactive governance",
+          "lines": [
+            45
+          ]
+        },
+        {
+          "contains": "output unavailable",
+          "lines": [
+            47
+          ]
+        },
+        {
+          "contains": "getReturn",
+          "lines": [
+            18,
+            27
+          ]
+        }
+      ]
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "anchors": [
+        {
+          "contains": "call(target: string",
+          "lines": [
+            36
+          ]
+        },
+        {
+          "contains": "addressToBytes(target)",
+          "lines": [
+            45
+          ]
+        },
+        {
+          "contains": "nativeBalance(dst",
+          "lines": [
+            26
+          ]
+        },
+        {
+          "contains": "run(program:",
+          "lines": [
+            59
+          ]
+        },
+        {
+          "contains": "quoteOutput?: true",
+          "lines": [
+            149
+          ]
+        }
+      ]
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "anchors": [
+        {
+          "contains": "isDeepStrictEqual(leg.settlementRequest",
+          "lines": [
+            2801
+          ]
+        },
+        {
+          "contains": "settlement: Object.freeze",
+          "lines": [
+            2792,
+            2820
+          ]
+        },
+        {
+          "contains": "if (input.settlement !== undefined && native)",
+          "lines": [
+            2815
+          ]
+        }
+      ]
+    }
+  ]
+}

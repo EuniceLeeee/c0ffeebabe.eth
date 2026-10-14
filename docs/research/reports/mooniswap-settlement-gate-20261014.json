@@ -1,0 +1,53 @@
+{
+  "kind": "family-settlement-gate-receipt-v1",
+  "createdAt": "2026-10-14T14:24:15.693790+00:00",
+  "familyId": "mooniswap",
+  "scope": "Existing ERC20 runtime profile settlement capability acceptance only; not every deployment, formal replay/family_local, whole-loop opportunity or performance acceptance.",
+  "sourceCommit": "408e88eb581e7a23d43444158f65a2112e25e7d9",
+  "actualSourceTreeSha256": "f0bddc19ae67884b8a3d9f9e0020d6df022151a43ae15158653daec43824b2f0",
+  "result": "pass",
+  "installedInventoryCount": 46,
+  "gateResult": {
+    "exit": 0,
+    "elapsedSeconds": 46.6982696056366,
+    "log": "/opt/mev-cloud/family-runtime-20261007/logs/mooniswap-recipient-20261014.djcveerb/settlement-gate15.log",
+    "sha256": "3bfc18506600a718c692d95b28eba2d4fdbc9cc7b0453eaf822402a968169d1d",
+    "selectionSha256": "3a26c6c8c5e624bde6bf5d4fd7c9ab7b2f97ca24c2fc65ff8393485f412ab955"
+  },
+  "toolQuery": [
+    "settlement"
+  ],
+  "selectedTool": "listener:searcher:family-settlement-review",
+  "manifest": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/mooniswap-recipient-20261014.djcveerb/selection14.json",
+    "sha256": "3a26c6c8c5e624bde6bf5d4fd7c9ab7b2f97ca24c2fc65ff8393485f412ab955"
+  },
+  "evidence": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/mooniswap-recipient-20261014.djcveerb/settlement-gate15.log",
+    "sha256": "3bfc18506600a718c692d95b28eba2d4fdbc9cc7b0453eaf822402a968169d1d"
+  },
+  "behaviorEvidence": {
+    "path": "docs/research/reports/mooniswap-recipient-correctness-20261014.json",
+    "sha256": "9def6c51e49fddb8755b1f4d99d77d9db4aaaa3bc28d38f901a929a5eaaa0805"
+  },
+  "reviewDocument": {
+    "path": "docs/research/reports/family-settlement-interface-review-20261014.json",
+    "sha256": "c467dd8e6d6fe2cf234800fe65fafde2a7687bd10eea9920050568c6f37d0bf7"
+  },
+  "otherFamilies": "The other 45 inventory rows remain unchanged. This scoped run does not revalidate them.",
+  "extraDeployment": "57fb retains same-source identity/execution unverified. Native remains outside the unchanged accepted profile.",
+  "peerFilesPreserved": 28,
+  "learningCase": {
+    "id": "tooldef-20261014-mooniswap-negative-postassertion",
+    "codifyCommit": "408e88eb581e7a23d43444158f65a2112e25e7d9",
+    "priorCasesPreserved": 42
+  },
+  "packagingRepair": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/mooniswap-recipient-20261014.djcveerb/catalog-input-repair12.json",
+    "sha256": "ed4c10a5a21bba383be59193b3862c93622b40ba06f18b591776ae6c1797336c"
+  },
+  "canonicalIndexArtifact": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/mooniswap-recipient-20261014.djcveerb/catalog-index12-receipt.json",
+    "sha256": "edd3a0f1e886cb21344e1a0472fc12688601a766a0c0a5e7c015be0fe4641bd4"
+  }
+}

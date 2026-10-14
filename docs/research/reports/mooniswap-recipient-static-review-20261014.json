@@ -1,0 +1,372 @@
+{
+  "schema": "mooniswap-runtime-candidate-static-review-v1",
+  "createdAt": "2026-10-14T13:31:37.861382+00:00",
+  "reviewer": "interface_protocols_b",
+  "nonAuthor": true,
+  "scope": {
+    "candidateFiles": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+        "sha256": "b1001cafcaf3bdf3ccb544559ba5d9af8e1cc66f5460617a056df394a1916e19",
+        "bytes": 4397,
+        "lines": 66
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-recipient.ts",
+        "sha256": "09e59831ec011c9060cc536afb931fda87696745710ef70e18efc35c1d4123f6",
+        "bytes": 13284,
+        "lines": 166
+      }
+    ],
+    "productionSourceChangedByReviewer": false,
+    "testsRun": false,
+    "rpcCalls": 0,
+    "buildsRun": false,
+    "catalogGenerated": false,
+    "remoteWrites": false,
+    "modelClassification": "explicitly synthetic ABI/effect interpreter; not EVM execution or rollback evidence",
+    "baselineDesignReview": {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/mooniswap-quote-direct-design-review.json",
+      "sha256": "6aa3f4675f1f8bfa80b77334df2a0646efbf0dbea1488c5e8c9e100ab1187a33",
+      "bytes": 30843,
+      "lines": 679
+    },
+    "initialCandidateFilePins": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+        "sha256": "b1001cafcaf3bdf3ccb544559ba5d9af8e1cc66f5460617a056df394a1916e19",
+        "bytes": 4397,
+        "lines": 66,
+        "reviewedSha256": "b1001cafcaf3bdf3ccb544559ba5d9af8e1cc66f5460617a056df394a1916e19",
+        "stillMatchesReviewedContent": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-recipient.ts",
+        "sha256": "09e59831ec011c9060cc536afb931fda87696745710ef70e18efc35c1d4123f6",
+        "bytes": 13284,
+        "lines": 166,
+        "reviewedSha256": "e6286dbf789031e45f0a4ebf26b22fd8ece433c61dfaaa4b4a060832119d2d5f",
+        "stillMatchesReviewedContent": false
+      }
+    ]
+  },
+  "verdict": {
+    "productionLogic": "no concrete new production-logic blocker found by static inspection of reviewed hash",
+    "offlineRejectionEvidence": "identified false-positive control flow corrected by static inspection; actual runner results remain pending",
+    "blockingFindings": 0,
+    "resolvedFindings": 1,
+    "executionAcceptance": "unverified; actual tests/current-source historical issuer and EVM checks are not performed by this review"
+  },
+  "findings": [
+    {
+      "id": "MOON-TEST-01",
+      "priority": "P2",
+      "classification": "negative-test false positive",
+      "blocks": "treating offline rejection suite as proof that emitted balance/native guards reject faults",
+      "file": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-recipient.ts",
+      "primaryLines": {
+        "start": 120,
+        "end": 123
+      },
+      "relatedLines": [
+        {
+          "start": 75,
+          "end": 79
+        }
+      ],
+      "title": "拒绝用例可由测试自己的成功后置断言抛错而误通过",
+      "detail": "assert.throws 包住整个 model。model 先执行 inspectRuntime（75），随后无条件检查 native/calls/approvals 与预期成功余额（76–79）。若被测程序缺少 debit/receipt/旧库存/native guard，inspectRuntime 可以正常返回；注入 fault 造成的余额偏差仍会在这些测试自身断言处抛错，于是 assert.throws 仍通过。",
+      "affectedFaults": [
+        "zero-output",
+        "short-output",
+        "extra-output",
+        "zero-debit",
+        "under-debit",
+        "over-debit",
+        "native",
+        "wrong-recipient",
+        "old-output",
+        "receiver-input"
+      ],
+      "staticCounterexample": "以 external old-output 为例：删除 runtime-execution.ts 49 的 payer output equal guard，fixture 会使 executor old output 从103变102。程序其余检查可正常结束，model 79 的 assert.equal(...,103n) 再抛错，120–123 的 assert.throws 将误判生产 guard 已拒绝。类似地，删除完整扣款或 native guard 后，对应成功后置断言也会掩盖缺失。此为静态控制流推导，未运行 mutation/test。",
+      "minimalFix": "把 interpreter execution 与 positive-case postconditions 拆开；负例 assert.throws 仅覆盖 inspectRuntime 执行。可给 model 添加 verify=false 在 inspectRuntime 之后立即返回，负例传 false，正例仍核对全部余额断言。",
+      "regressionProof": "增加一个控制：只删除单个 old-output/native/debit guard 的程序，在对应 fault 下 interpreter 必须正常返回而外层 assert.throws 应失败；该控制不能依靠测试后置断言。验证修正后的测试确实能发现缺 guard。",
+      "doesNotClaim": "当前生产候选已经缺失 guard；目前候选 guard 均实际存在。问题在负例不能独立证明它们。",
+      "status": "resolved-by-static-inspection",
+      "originalTestSha256": "e6286dbf789031e45f0a4ebf26b22fd8ece433c61dfaaa4b4a060832119d2d5f",
+      "resolution": {
+        "testSha256": "09e59831ec011c9060cc536afb931fda87696745710ef70e18efc35c1d4123f6",
+        "lines": [
+          {
+            "start": 75,
+            "end": 80
+          },
+          {
+            "start": 121,
+            "end": 125
+          },
+          {
+            "start": 129,
+            "end": 135
+          }
+        ],
+        "confirmed": [
+          "model 调用 inspectRuntime 后立即在 verify=false 时返回；后续成功余额/native断言不再进入拒绝用例。",
+          "所有direct fault及zero-amount拒绝调用均显式传 root=false,verify=false。",
+          "新增独立无guard程序，对10类余额/到账/native fault在两个方向均使用doesNotThrow；其balance模拟有足够基线，不会由模型余额下溢替代guard检查。",
+          "原始P2意见与原hash/行号保留；生产候选文件未因测试修复发生改变。"
+        ],
+        "scopeLimit": "仅静态检查控制流与case列表，未运行测试/删除guard mutation；actual pass/runner baseline仍须独立留存。"
+      }
+    }
+  ],
+  "staticChecks": [
+    {
+      "area": "完整输入与返回寄存器",
+      "file": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+      "lines": [
+        30,
+        39,
+        41,
+        45,
+        60,
+        62,
+        65
+      ],
+      "status": "consistent-by-inspection",
+      "reason": "quote 子程序用完整 r0 patch getReturn amount offset68，正输入 guard 只写 scratch r1；nested run 将 quote r0 返回到父 r8，父 r0 保持原始 input。swapFor amount 仍 patch父 r0；post-debit等于r0。没有减一或用输出覆盖输入。"
+    },
+    {
+      "area": "实际 receiver 新到账",
+      "file": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+      "lines": [
+        32,
+        40,
+        46,
+        47
+      ],
+      "status": "consistent-by-inspection",
+      "reason": "swapFor 第六参数为recipient，第五参数零referral。读取recipient tokenOut前后余额并比较差值==预先保存quote r8；不读取swapFor返回值为到账。输出减少会checked underflow，zero/short/extra实际delta与正quote不等。"
+    },
+    {
+      "area": "self/external别名",
+      "file": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+      "lines": [
+        19,
+        31,
+        32,
+        34,
+        35,
+        36,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50
+      ],
+      "status": "consistent-by-inspection",
+      "reason": "self时输入token与输出token不同，检查完整输入debit与自身输出increment；仅external额外要求executor旧output不变、recipient旧input不变，避免self上不可能的零变化断言。pool/token/zero recipient被拒绝。"
+    },
+    {
+      "area": "输入工作金额和旧库存",
+      "file": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+      "lines": [
+        31,
+        35,
+        36,
+        45,
+        47,
+        49,
+        50
+      ],
+      "status": "consistent-with-enclosing-runtime-contract",
+      "reason": "per-leg检查精确净debit及输出增量，external关联库存保持。区分新资金与executor旧输入仍依赖共用root opening floor/route inventory边界；候选没有另造freshness状态。独立历史入口必须真实设置并核对该边界。"
+    },
+    {
+      "area": "默认 program bytes",
+      "file": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+      "lines": [
+        15,
+        17,
+        18,
+        28,
+        29,
+        39,
+        40,
+        41,
+        43,
+        52
+      ],
+      "status": "unchanged-for-existing-valid-executor-by-inspection",
+      "reason": "无settlement时直接保留原两指令 allowance+swapFor、minReturn1、零referral、executor receiver和patch68；新增capability metadata不进入program bytes。已有测试82–87独立重建旧字节 recipe。",
+      "qualification": "新recipient地址检查19–21也应用于默认分支，故executor恰等于route token时现在会提前拒绝；原实现只显式拒绝executor==pool。当前真实受测executor不属于这些地址，byte-preservation结论限于原正常执行地址。"
+    },
+    {
+      "area": "MAX_UINT原策略",
+      "file": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+      "lines": [
+        38,
+        39
+      ],
+      "status": "preserved",
+      "reason": "allowance minimum仍r0、grant仍MAX_UINT、spender仍pool，无新增approve(0)/grant清零。synthetic allowance handler只核opcode参数，实际已有授权复用/失败处理由共用VM执行与后续验收证明。"
+    },
+    {
+      "area": "只读 getReturn 与权限边界",
+      "file": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+      "lines": [
+        27,
+        30,
+        55,
+        56,
+        57,
+        58,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65
+      ],
+      "status": "matches-approved-design",
+      "reason": "quoteProgram只有STATICCALL/loads/checked math，要求input>0、quote>0、pool input reserve>0、quote<=pool output reserve。getReturn不检查active的限制已明确，direct真实swapFor仍负责当时mutable governance.active关闭；未写死治理地址或虚构early active检查。"
+    },
+    {
+      "area": "声明和请求",
+      "file": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+      "lines": [
+        7,
+        16,
+        22,
+        23,
+        24,
+        25,
+        27
+      ],
+      "status": "consistent-by-inspection",
+      "reason": "使用正式buildRuntimeLeg输入类型；quote/direct声明可供中央root发现；echo原settlementRequest；未知模式/deferred返回null；native token继续null。此metadata不是执行通过结论。"
+    },
+    {
+      "area": "executor native",
+      "file": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+      "lines": [
+        33,
+        47
+      ],
+      "status": "executor-only-guard-present",
+      "reason": "nativeBalance5/6比较executor native；当前opcode不读取foreign recipient native，不应扩成任意recipient native运行时强制保护宣称。历史验收可独立观测双方native。"
+    },
+    {
+      "area": "生产selector测试",
+      "file": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-recipient.ts",
+      "lines": [
+        138,
+        143,
+        145,
+        148,
+        149,
+        150,
+        158,
+        160,
+        164
+      ],
+      "status": "useful-synthetic-composition-check-only",
+      "reason": "调用实际createBlockScanSimAmountSelector，并在模拟器中解释settlementProgram；Exact/quoted/RPC抛错桩可检查无链外构造。session直接调用Family builder、descriptor为synthetic/provenance=[]，不证明strict issuer准入/请求来源或实际EVM行为。文件首行已如实说明。",
+      "reviewedTestSha256": "09e59831ec011c9060cc536afb931fda87696745710ef70e18efc35c1d4123f6"
+    }
+  ],
+  "remainingAcceptanceLimits": [
+    "MOON-TEST-01 的模型隔离与10类guard-removal sentinel已静态核对；实际测试通过仍待runner产物。",
+    "synthetic model 在失败时不实现状态回滚；本报告与候选均不将assert.throws算EVM原子回滚。",
+    "inactive目前由模拟swapFor抛错表示，尚未覆盖完整root失败/selector拒绝结果和mutable governance换址；后续真实或单独标注fixture证据应补。",
+    "实际strict issuer/source pins/当前Ready runtime identity未由此synthetic test建立；parent已安排后续历史验收。",
+    "后续应核对同calldata无新输入、真实扣款/receiver到账、旧库存/双方native及rollback，保持源状态；未在本轮执行。",
+    "quote短返回/STATICCALL失败、寄存器隔离/readonly恶意mutation等边界可复用共用VM证据；本候选测试不独立证明这些EVM属性。",
+    "未运行编译或测试，故不对类型检查/测试实际通过作结论。"
+  ],
+  "supportingSources": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/runtime-execution.ts",
+      "sha256": "8ed909e370277c77e84994d7004f8d068902fde97b3fc9e8a3791743e001fc42",
+      "bytes": 1499,
+      "lines": 22
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/venues/swaps/mooniswap-family/codec.ts",
+      "sha256": "c20d584819340d1a6105e234821b1f4e7cd9c1bf4b74c88e7f4e891be5d5bbc7",
+      "bytes": 6047,
+      "lines": 95
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/searcher/test/runtime-program-testkit.ts",
+      "sha256": "30c90ff597cdf9f4f8191a079361d3e004107f583880baf4a84fea20eb1ac714",
+      "bytes": 4925,
+      "lines": 88
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/source/listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d",
+      "bytes": 12298,
+      "lines": 203
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/design-boundary-source.json",
+      "sha256": "3133d21bd892d32ed57960a31ac4752b37e1b55ec08425683856f3993cf2ea2d",
+      "bytes": 69591,
+      "lines": 1
+    }
+  ],
+  "updatedAt": "2026-10-14T13:32:45.726656+00:00",
+  "reviewIterations": [
+    {
+      "round": 1,
+      "scope": "initial candidate hashes",
+      "reviewedFiles": [
+        {
+          "file": "runtime-execution.ts",
+          "sha256": "b1001cafcaf3bdf3ccb544559ba5d9af8e1cc66f5460617a056df394a1916e19"
+        },
+        {
+          "file": "runtime-recipient.ts",
+          "sha256": "e6286dbf789031e45f0a4ebf26b22fd8ece433c61dfaaa4b4a060832119d2d5f"
+        }
+      ],
+      "finding": "MOON-TEST-01 open",
+      "archive": {
+        "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/mooniswap-runtime-static-review-round1.json",
+        "sha256": "eebac320c4aeab566740869ab7e805a28a2f53a416ac07aa8c1bbe6681c34d18",
+        "bytes": 13048,
+        "lines": 279
+      },
+      "testsRunByReviewer": false
+    },
+    {
+      "round": 2,
+      "scope": "verify=false isolation and guard-removal sentinel static review",
+      "reviewedFiles": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-execution.ts",
+          "sha256": "b1001cafcaf3bdf3ccb544559ba5d9af8e1cc66f5460617a056df394a1916e19",
+          "bytes": 4397,
+          "lines": 66
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/mooniswap-recipient-20261014.4pu7rdf0/candidate/runtime-recipient.ts",
+          "sha256": "09e59831ec011c9060cc536afb931fda87696745710ef70e18efc35c1d4123f6",
+          "bytes": 13284,
+          "lines": 166
+        }
+      ],
+      "finding": "MOON-TEST-01 resolved-by-static-inspection; execution confirmation pending",
+      "testsRunByReviewer": false
+    }
+  ],
+  "toolingDefectFollowup": {
+    "parentReported": "将通过本轮独立审查登记 tooling_defect；源码提交后补 codify_commit。",
+    "reviewerVerifiedRegistration": false,
+    "codifyCommit": null,
+    "baselineRun": "parent reports original version baseline is running through canonical tool-run; reviewer did not inspect or claim its result"
+  }
+}

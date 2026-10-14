@@ -1460,6 +1460,47 @@
       },
       "created_at": "2026-10-14T13:00:11.175831+00:00",
       "updated_at": "2026-10-14T13:00:11.175831+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261014-mooniswap-negative-postassertion",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "New runtime-recipient negative model wrapped success post-assertions in assert.throws, allowing false positive failures when emitted safety guards were removed. Tool-only classification, not original transaction causal lane.",
+      "evidence": {
+        "baseline": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/mooniswap-recipient-20261014.djcveerb/runtime-model-baseline04.log",
+          "sha256": "19fa528e2bbae9442bd94915774d2832de6c37de6641f76007cbe7035a538b24"
+        },
+        "fixed": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/mooniswap-recipient-20261014.djcveerb/runtime-candidate04.log",
+          "sha256": "2b99f755fd3150a603fd88208d63e5d7261a8f30730f7d146a0a1b745d7e30cb"
+        },
+        "independentStaticReview": {
+          "path": "docs/research/reports/mooniswap-recipient-static-review-20261014.json",
+          "sha256": "9a0c79e5feedd78238e7dc0fef96bf2f22ac660c4687c9624b7ff56eeb1a9a23"
+        },
+        "independentEvidenceReview": {
+          "path": "docs/research/reports/mooniswap-recipient-evidence-review-20261014.json",
+          "sha256": "47bd4125fcb37ed13d2e59bed42960a3aa2fca474da918c4e39d5a138cd950c6"
+        },
+        "transition": "Same production runtime: guardless sentinel reveals model defect at 4/5; negative path now returns after interpreter and all 20 guardless controls are required not to throw; corrected suite 5/5."
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:mooniswap-runtime-recipient",
+        "issue": "Negative assert.throws captured positive balance/allowance post-assertions rather than requiring emitted-program rejection.",
+        "evidence": "Independent non-author finding MOON-TEST-01 agrees; preserved failing mutation sentinel and fixed tool-run receipts.",
+        "codify_target": "listener/src/searcher/venues/swaps/mooniswap-family/test/runtime-recipient.ts: stop negative path after runtime interpretation, add 20 no-guard sentinels.",
+        "status": "codified",
+        "codify_commit": "408e88eb581e7a23d43444158f65a2112e25e7d9"
+      },
+      "created_at": "2026-10-14T14:19:29.143316+00:00",
+      "updated_at": "2026-10-14T14:19:29.143316+00:00"
     }
   ]
 }
