@@ -1,0 +1,271 @@
+{
+  "kind": "tooling-defect-closure",
+  "caseId": "tooldef-20261014-composition-default-disabled-family-set",
+  "codifyCommit": "315467723f3f9ecc211846d4d37999e0abe558bc",
+  "scope": "Canonical default policy test only; no change to Few activation and no Vault acceptance claim.",
+  "independentReview": {
+    "schema_version": 1,
+    "kind": "non-author-canonical-tooling-defect-adjudication",
+    "created_at_utc": "2026-10-14T00:47:32.980403+00:00",
+    "reviewer": "Codex /root/curve_ready_review",
+    "scope": "Only the production-family-composition default-activation inconsistency; not repeated Few EVM acceptance or Vault implementation acceptance.",
+    "root": "/opt/mev-cloud/family-runtime-20261007",
+    "head": "957470a2793d3c5c7152dd2a82435666f43957b0",
+    "finding": {
+      "classification": "confirmed_tooling_defect",
+      "priority": "P2",
+      "status": "Confirmed independently; implementation and canonical rerun are owned by the author and were not performed by this reviewer.",
+      "title": "Canonical default-disabled expectation omits the explicitly disabled Few and Vault entries",
+      "location": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/production-family-composition.ts",
+        "lines": [
+          23,
+          49
+        ]
+      },
+      "cause": "defaultDisabledSources contains 15 entries but omits few-wrapped.production.ts and vault-spot.production.ts. Lines 41-43 therefore require true for these entries despite their explicit false defaults. The exact full disabled-set assertion at lines 48-49 also requires the same additions.",
+      "observedFailure": "Saved canonical-04 invocation exited 1 at line 42: few-wrapped.production.ts actual false, expected true.",
+      "expectedBehavior": "Preserve entry-owned defaults and explicit runtime overrides while validating every installed definition and exact active action closure.",
+      "implementationAssessment": "No activation implementation defect was found in this narrow review. Both explicit false defaults and generated inclusion are internally consistent; this is not an approval of other Vault behavior."
+    },
+    "evidence": {
+      "fewEntry": {
+        "line": 14,
+        "defaultEnabled": false,
+        "envKey": "SEARCHER_FAMILY_FEW_WRAPPED_ENABLED",
+        "authorizedCommit": "78cb6625c52f4b1e0f7c4fc432a1332979683b31",
+        "currentHeadAndPriorCommitSameBytes": true,
+        "sha256": "68a682228336af73d60ee8a8ead331c5a1e6af8e779c41c3ac90ad9f9bd25b7b"
+      },
+      "vaultEntry": {
+        "line": 14,
+        "defaultEnabled": false,
+        "envKey": "SEARCHER_FAMILY_VAULT_SPOT_ENABLED",
+        "uncommittedNewFamily": true
+      },
+      "activation": {
+        "defaultAssignmentLines": [
+          18,
+          19
+        ],
+        "resolutionLines": [
+          39,
+          45
+        ],
+        "meaning": "defaultEnabled always retains input.enabled; unset override preserves that default, only exact 0/1 are accepted, and override changes enabled only."
+      },
+      "generatedEntries": {
+        "uniqueCount": 45,
+        "staticSourceCount": 45,
+        "fewImportLine": 21,
+        "fewEntryLine": 68,
+        "vaultImportLine": 43,
+        "vaultEntryLine": 90,
+        "eachTargetPresentExactlyOnce": true
+      },
+      "staticDefaultComparison": {
+        "declaredFalseCount": 17,
+        "testExpectedFalseCount": 15,
+        "missingFromTest": [
+          "few-wrapped.production.ts",
+          "vault-spot.production.ts"
+        ],
+        "otherMissingOrExtra": [],
+        "all45DefaultsParsed": true,
+        "scope": "Read-only static comparison; not an execution of the modules."
+      },
+      "generatedCapabilities": {
+        "rows": 495,
+        "fewRows": 11,
+        "vaultRows": 11,
+        "complete": true,
+        "legacyCount": 0,
+        "issueCount": 0,
+        "artifactHash": "a1120a2f63953a300cac48301a098dcf0bb7614d824a6f42b9bb2807008e87f9",
+        "scope": "Saved generated structure inspected; generator and hash-validation code were not rerun."
+      },
+      "loader": {
+        "installedEntrySourceLines": [
+          115,
+          125
+        ],
+        "partitionLines": [
+          258,
+          266
+        ],
+        "meaning": "Both enabled and disabled definitions are loaded and validated; entry activation partitions runtime plugins."
+      },
+      "composition": {
+        "allDefinitionValidationLines": [
+          54,
+          74
+        ],
+        "activeProjectionLines": [
+          75,
+          88
+        ],
+        "meaning": "Disabled status does not waive generated-artifact completeness or definition validation; only active IDs project into the active catalog/actions."
+      },
+      "canonicalReceipt": {
+        "toolId": "listener:searcher:production-family-composition",
+        "descriptorSha256": "23d50ca96fd4e71865829e0befdda20085cea5a0e855ff03544efd69bedd8672",
+        "exitCode": 1,
+        "startedAt": "2026-10-14T00:41:51.768Z",
+        "finishedAt": "2026-10-14T00:41:52.867Z",
+        "stdoutSha256": "87f379669bd6c437ff41f09652e359b98310c2276d66782ce77a03dfbb0957eb",
+        "stderrSha256": "30dd88019216680f0a0285f2cc8e89f2f5218213d092cae38e08fe56a10018ac",
+        "stdoutBytes": 133,
+        "stderrBytes": 475,
+        "scope": "Read from saved machine receipt, with matching saved assertion failure; stream hashes were not separately reconstructed in this narrow adjudication."
+      }
+    },
+    "minimalFix": {
+      "files": [
+        "listener/src/searcher/test/production-family-composition.ts"
+      ],
+      "change": "Add exactly few-wrapped.production.ts and vault-spot.production.ts to the independent defaultDisabledSources expectation.",
+      "retain": [
+        "The explicit expected-default policy table and exact complete disabled-set equality",
+        "Environment-key naming and override/default checks",
+        "Frozen activation objects",
+        "Generated installed-entry closure and enabled/disabled partition checks",
+        "Required capability counts and uniqueness",
+        "Family and infra action ownership, disjointness, and exact bootstrap registry closure"
+      ],
+      "doNotChange": [
+        "Production Few or Vault activation defaults to make the test pass",
+        "Generated entries or capability rows to conceal installed disabled definitions",
+        "Expected defaults by deriving them from the same actual activation being tested",
+        "Central loader/composition safety guards"
+      ]
+    },
+    "regressionRecommendation": {
+      "required": "Rerun the same indexed canonical composition tool after the two-entry expectation fix; preserve canonical-04 as the pre-fix failure.",
+      "focusedModes": [
+        "With both Few and Vault override keys unset, verify both remain defaultEnabled=false and enabled=false.",
+        "With explicit 1 for these keys, verify defaultEnabled remains false while each joins active catalog/actions.",
+        "With explicit 0, verify each remains disabled and excluded from active catalog/actions."
+      ],
+      "existingCoverageToReuse": "production-family-activation.ts lines 74-97 cover boolean defaults, exact 0/1, invalid overrides, frozen objects and late environment changes. Lines 108-145 cover default partitions, all enabled, per-entry disabled action/catalog removal, restoration and all disabled. Use the existing indexed activation test if additional coverage is needed; no production helper rewrite is warranted.",
+      "policyRegression": "Keep the independent expected-disabled set so an unintended false-to-true default edit remains a failure; do not turn the test into a self-comparison."
+    },
+    "closureRequirement": "Per the repository tooling-defect rule, retain this confirmed disagreement, record the exact LearningCase, apply the minimal fix and regression, and bind the eventual codify_commit before closing the author round. This review does not fabricate that future completion.",
+    "actual_file_sha256": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/production-family-composition.ts",
+        "sha256": "61e92e0d9f7638a7dade5212f497526427db3d248bd189f6ce89f129b9c79579",
+        "bytes": 5625
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/production-families/few-wrapped.production.ts",
+        "sha256": "68a682228336af73d60ee8a8ead331c5a1e6af8e779c41c3ac90ad9f9bd25b7b",
+        "bytes": 1202
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/production-families/vault-spot.production.ts",
+        "sha256": "f54a842fbb8dd2a5647f20c595d29564d25174fc7f0001e551fe9253578d375b",
+        "bytes": 1114
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/production-families/activation.ts",
+        "sha256": "7d9ec6c0cd865301f809d0b27bd85bbb2765e2d9be02485fc80a3d20cc427f38",
+        "bytes": 2440
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/production-families/loader.ts",
+        "sha256": "328df37e26ae0b6b2188070e7e6ad85c2658093cba0572294369c585a683c849",
+        "bytes": 16285
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/production-family-composition.ts",
+        "sha256": "516900d983dc94c2c951377e3922b2daee0e00fdc3306ad17d00a7564b9293bb",
+        "bytes": 6375
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/generated/production-family-entries.generated.ts",
+        "sha256": "8134be324021b243e12b9490968b41b54bc11aca6c36cabe4bf935a097d202f1",
+        "bytes": 7539
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/generated/family-capability-shadow.generated.json",
+        "sha256": "d45557805058397aadded597e0141f033f1cc0c4297c3b6cacef4642175348c5"
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/production-family-activation.ts",
+        "sha256": "4810cddf2e7f9e257e5b26e107b52ecdf3f830fbfefe289773fb3ea593c712b6",
+        "bytes": 10002
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/canonical-04.log",
+        "sha256": "5dac7e7455cc56de9b68ecb5a9aaa0bcc475ef19fc7209e6ba145ed054fbca15",
+        "bytes": 1017
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/tool-selection03.json",
+        "sha256": "4f6fd29f6b8238c0ac3d3d87497a3c1d985d91923fc4a7b2a90bb313089fb22f"
+      }
+    ],
+    "ran_gate": {
+      "reviewerRanCanonicalTool": false,
+      "reviewerRanTests": false,
+      "reviewerRanBuild": false,
+      "reviewerRpcCalls": 0,
+      "reviewerEvmExecutions": 0,
+      "reviewerSourceOrGeneratedEdits": 0,
+      "actions": [
+        "Read source and saved canonical evidence",
+        "Read git HEAD and Few entry bytes at HEAD and 78cb6625",
+        "Compute SHA-256 of the actual files",
+        "Statically enumerate 45 generated entries and declared default policies",
+        "Inspect saved generated capability rows and existing activation regression assertions"
+      ]
+    },
+    "limits": [
+      "This report is the before-fix adjudication; it does not claim the patched canonical tool passed.",
+      "No source, generated, IMPL, runtime environment or process lifecycle was changed.",
+      "No Few EVM rerun, Vault acceptance, RPC, build, generation, full suite or live process was started.",
+      "File fingerprints identify the observed working-tree versions; subsequent author changes require their own recorded hashes."
+    ]
+  },
+  "evidence": {
+    "baseline": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/canonical-04.log",
+      "sha256": "5dac7e7455cc56de9b68ecb5a9aaa0bcc475ef19fc7209e6ba145ed054fbca15",
+      "bytes": 1017
+    },
+    "independentReview": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/composition-tooldef-independent-review.json",
+      "sha256": "4eaaac120e182495d052ea6149cd5313bea94e1d80fb2850b0e4e87a36ce9823",
+      "bytes": 11037
+    },
+    "fixedRuns": [
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/composition-fixed-default.log",
+        "sha256": "4adadb4a1192f2a1966ef312a30faeda1dd1befa9d810b72aee4c70f668e1248",
+        "bytes": 666
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/composition-fixed-few-on.log",
+        "sha256": "ec4ae556ab4d018869299725163e53321d20f1de64390d08373a08b1f3a0a177",
+        "bytes": 666
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/composition-fixed-vault-on.log",
+        "sha256": "ec4ae556ab4d018869299725163e53321d20f1de64390d08373a08b1f3a0a177",
+        "bytes": 666
+      },
+      {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/composition-fixed-both-off.log",
+        "sha256": "4adadb4a1192f2a1966ef312a30faeda1dd1befa9d810b72aee4c70f668e1248",
+        "bytes": 666
+      }
+    ],
+    "configuration": "Keep both production defaultEnabled=false; explicitly exercise on/off overrides and installed/active/action closure.",
+    "publicationScope": "This commit closes the existing Few omission. The new, still-uncommitted Vault Family also adds its disabled-source expectation alongside its implementation. The four fixed test runs validated the current actual dirty workspace, not a clean-branch or formal merge acceptance."
+  },
+  "limitations": [
+    "Current actual dirty workspace test runs; no clean-branch or formal gate claim",
+    "Vault implementation and historical acceptance remain in progress"
+  ],
+  "goalStatus": "active"
+}

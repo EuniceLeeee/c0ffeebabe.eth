@@ -170,12 +170,12 @@
           "waEthUSDT",
           "waEthUSDC"
         ],
-        "correction_2026_07_06": "Refined: the 6 vaults with no DEX share-venue are NOT dead — coffee closes them via Morpho Blue CREDIT (0x9be73297, ~$1 net). The defect is that venue-discovery checks NEITHER a DEX return venue NOR a credit return path; it promotes on asset()/previewRedeem alone.",
+        "correction_2026_07_06": "Refined: the 6 vaults with no DEX share-venue are NOT dead \u2014 coffee closes them via Morpho Blue CREDIT (0x9be73297, ~$1 net). The defect is that venue-discovery checks NEITHER a DEX return venue NOR a credit return path; it promotes on asset()/previewRedeem alone.",
         "hunt_measurement": "searcher:blockscan-hunt over 4 live blocks: scanner surfaces+prices protocol (PSM) rings but ZERO protocol ring is +EV; only sub-cent pure-DEX dust solves. DEX-NAV protocol class is par at measured blocks."
       },
       "tooling_defect": {
         "tool": "analysis/src/discovery venue-discovery + adapter-probe classifier",
-        "issue": "classifies an ERC4626 as loop-closable from asset()+previewRedeem alone; checks NEITHER a DEX share-venue NOR a credit return path — so vaults are promoted into the live graph with their actual return leg (DEX or Morpho credit) unverified",
+        "issue": "classifies an ERC4626 as loop-closable from asset()+previewRedeem alone; checks NEITHER a DEX share-venue NOR a credit return path \u2014 so vaults are promoted into the live graph with their actual return leg (DEX or Morpho credit) unverified",
         "evidence": "node active-pools.json exact token0/token1 match: steakUSDC/steakUSDT/srUSDe/sfrxETH/waEthUSDT/waEthUSDC each have 0 share-token swap venues; wstETH 7, sUSDS 2",
         "codify_target": "analysis/src/discovery: gate vault promotion on a return-path check (DEX share-venue OR a wired credit edge); + main.ts banner count of loop-closable protocol edges",
         "status": "open"
@@ -195,11 +195,11 @@
       "primary_gap": "none_tooling_only",
       "gap_detail": "no_single_competitor_tx_report_mode",
       "evidence": {
-        "finding": "Postmortem of coffee tx 0x15352456 (block 25472647): bundle-postmortem requires a bundle_submitted match (errors on a competitor-only tx); census-report computes winner_style/touchedVenues per tx but drops the record when ALL venues are in_graph (census-report.ts:180 continue) and reports net_realized_usd=0 / qualifying=0 — reads as 'no profit / nothing found' when the truth is 'profitable ($0.54 tx-profit) but no route gap'. Analyst had to hand-assemble the verdict from tx-profit + raw logs.",
+        "finding": "Postmortem of coffee tx 0x15352456 (block 25472647): bundle-postmortem requires a bundle_submitted match (errors on a competitor-only tx); census-report computes winner_style/touchedVenues per tx but drops the record when ALL venues are in_graph (census-report.ts:180 continue) and reports net_realized_usd=0 / qualifying=0 \u2014 reads as 'no profit / nothing found' when the truth is 'profitable ($0.54 tx-profit) but no route gap'. Analyst had to hand-assemble the verdict from tx-profit + raw logs.",
         "tx": "0x153524566a94f24094c1f083c0b9d98899787f8968943f0f6200230dc45e8e02",
         "cross_check": "tx-profit realized $0.54 net $0.49; census net_realized_usd=0 (by-design filter, not stale math)",
         "divergence_20260707": "0xf698e6c2 (blk 25476156, coffee STBT loop): census route_gap_decisive=false while hand receipt-walk shows TWO out-of-graph venues (curve metapool 0x892d701d STBT/3CRV + non-standard STBT->ETH venue 0x7d002303). Root cause: distinct_out_of_graph counts univ2/3/4 lineage ONLY - curve/exotic venue gaps are invisible to the census verdict.",
-        "fix_20260707": "Single-tx facet SHIPPED as bundle-postmortem any-tx mode (9858d57, 0b4e06c, ea043f4, e55aa9b): --tx full-hash with no bundle_submitted match runs a competitor postmortem — PnL, winner_style incl. new keeper_claim/rfq_fill (non-comparable), venues incl. curve/balancer/pancake/dodo/psm lineages with in_graph (runtime-graph authoritative), same-block prior movers, our-events venue overlap, flow ledger. Verified on all 5 F-010/011/012 txs + Ambiguous/classic regressions on-node. REMAINING OPEN facet: census-report verdict distinct_out_of_graph is still univ2/3/4-only."
+        "fix_20260707": "Single-tx facet SHIPPED as bundle-postmortem any-tx mode (9858d57, 0b4e06c, ea043f4, e55aa9b): --tx full-hash with no bundle_submitted match runs a competitor postmortem \u2014 PnL, winner_style incl. new keeper_claim/rfq_fill (non-comparable), venues incl. curve/balancer/pancake/dodo/psm lineages with in_graph (runtime-graph authoritative), same-block prior movers, our-events venue overlap, flow ledger. Verified on all 5 F-010/011/012 txs + Ambiguous/classic regressions on-node. REMAINING OPEN facet: census-report verdict distinct_out_of_graph is still univ2/3/4-only."
       },
       "tooling_defect": {
         "tool": "analysis/src/cli/census-report.ts (+ bundle-postmortem.ts single-tx entry)",
@@ -222,7 +222,7 @@
       "gap_detail": "inventory_vault_rebalance_misclassified_atomic",
       "evidence": {
         "finding": "bundle-postmortem winner_style catches CEX-DEX one_leg_inventory (via winner_moved_price_beyond_prestate tick heuristic) but NOT vault-share inventory rebalance. 0x9be73297 (steakUSDC/steakUSDT rebalance through private vault contracts) has a closed-loop flash flow -> would misclassify as atomic_loop, polluting competitor analysis.",
-        "verified": "on-chain 24568128->24568129: mediator 0x4825ef drew 291,368 steakUSDC from a pre-held 2,751,718 inventory; bundler 0xb82809 kept +293,404 steakUSDT. NET position change, not atomic. The executor 0xe08d97 intra-tx net was only +WETH (looks atomic) — inventory hidden in helper contracts.",
+        "verified": "on-chain 24568128->24568129: mediator 0x4825ef drew 291,368 steakUSDC from a pre-held 2,751,718 inventory; bundler 0xb82809 kept +293,404 steakUSDT. NET position change, not atomic. The executor 0xe08d97 intra-tx net was only +WETH (looks atomic) \u2014 inventory hidden in helper contracts.",
         "signal": "cleanest catch = share-token net mint/burn imbalance from the receipt: for each ERC4626/vault-share token, net(minted-burned) != 0 => inventory/non-atomic. Robust version = check the bot contract-cluster before/after block balances."
       },
       "tooling_defect": {
@@ -248,7 +248,7 @@
       "primary_gap": "none_tooling_only",
       "gap_detail": "reconcile_gate_misses_ssm_wrapped_canonical_runs",
       "evidence": {
-        "finding": "guard-tool-reconcile.py / guard-reconcile-stop.py do not credit canonical tool runs (npm run tx-profit / census-report / bundle-postmortem) when they execute inside `aws ssm send-command` parameters — the standard zero-CU node-side path per the bundle-postmortem skill. Result: pending entries accumulate across an entire postmortem session (4 txs, all reconciled on-node) and the Stop gate blocks with false positives; cleared via the sanctioned rm path 2026-07-07.",
+        "finding": "guard-tool-reconcile.py / guard-reconcile-stop.py do not credit canonical tool runs (npm run tx-profit / census-report / bundle-postmortem) when they execute inside `aws ssm send-command` parameters \u2014 the standard zero-CU node-side path per the bundle-postmortem skill. Result: pending entries accumulate across an entire postmortem session (4 txs, all reconciled on-node) and the Stop gate blocks with false positives; cleared via the sanctioned rm path 2026-07-07.",
         "session": "57680a96 (2026-07-06/07 coffee postmortems F-010/F-011)"
       },
       "tooling_defect": {
@@ -280,7 +280,7 @@
         "tool": "listener/src/searcher/test/overlay-venue-coverage.ts (searcher:overlay-coverage)",
         "issue": "routedSwapVenues pulls all SWAP_ADAPTERS ids (incl. protocol-leg descriptors) but seedForAdapter covers only univ2/univ3/univ4 -> test permanently red for protocol descriptors; failures get mis-attributed to whatever descriptor was added last",
         "evidence": "overlay-venue-coverage.ts:47-57,131-166,190-195; red at HEAD for erc4626-deposit before any silo change",
-        "codify_target": "listener/src/searcher/test/overlay-venue-coverage.ts — add protocol-leg exact-overlay seeds to seedForAdapter, or exclude slotKind=protocol ids via an explicit allowlist with a comment",
+        "codify_target": "listener/src/searcher/test/overlay-venue-coverage.ts \u2014 add protocol-leg exact-overlay seeds to seedForAdapter, or exclude slotKind=protocol ids via an explicit allowlist with a comment",
         "status": "open"
       },
       "created_at": "2026-07-07T01:52:27.000Z",
@@ -1251,6 +1251,64 @@
       },
       "created_at": "2026-10-13T21:54:59.428518+00:00",
       "updated_at": "2026-10-13T22:13:49.287193+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261014-composition-default-disabled-family-set",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Canonical production Family composition test omitted explicitly default-disabled Few and new Vault sources from its independent policy expectation set. This is a test-policy defect, not an opportunity or runtime acceptance.",
+      "evidence": {
+        "baseline": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/canonical-04.log",
+          "sha256": "5dac7e7455cc56de9b68ecb5a9aaa0bcc475ef19fc7209e6ba145ed054fbca15",
+          "bytes": 1017
+        },
+        "independentReview": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/composition-tooldef-independent-review.json",
+          "sha256": "4eaaac120e182495d052ea6149cd5313bea94e1d80fb2850b0e4e87a36ce9823",
+          "bytes": 11037
+        },
+        "fixedRuns": [
+          {
+            "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/composition-fixed-default.log",
+            "sha256": "4adadb4a1192f2a1966ef312a30faeda1dd1befa9d810b72aee4c70f668e1248",
+            "bytes": 666
+          },
+          {
+            "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/composition-fixed-few-on.log",
+            "sha256": "ec4ae556ab4d018869299725163e53321d20f1de64390d08373a08b1f3a0a177",
+            "bytes": 666
+          },
+          {
+            "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/composition-fixed-vault-on.log",
+            "sha256": "ec4ae556ab4d018869299725163e53321d20f1de64390d08373a08b1f3a0a177",
+            "bytes": 666
+          },
+          {
+            "path": "/opt/mev-cloud/family-runtime-20261007/logs/stage3-vault-swap-20261014.sh8jqyhk/composition-fixed-both-off.log",
+            "sha256": "4adadb4a1192f2a1966ef312a30faeda1dd1befa9d810b72aee4c70f668e1248",
+            "bytes": 666
+          }
+        ],
+        "configuration": "Keep both production defaultEnabled=false; explicitly exercise on/off overrides and installed/active/action closure.",
+        "publicationScope": "This commit closes the existing Few omission. The new, still-uncommitted Vault Family also adds its disabled-source expectation alongside its implementation. The four fixed test runs validated the current actual dirty workspace, not a clean-branch or formal merge acceptance."
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:production-family-composition",
+        "issue": "The existing canonical default-disabled policy set omitted the already committed Few Family and incorrectly required its default to be true.",
+        "evidence": "Original canonical failure and independent non-author code review agree; same canonical test passes default, Few override on, Vault override on, and both explicitly off after the two-source-set fix.",
+        "codify_target": "listener/src/searcher/test/production-family-composition.ts: add Few to the independent default-disabled expectation set; all default/override/action closure checks retained.",
+        "status": "codified",
+        "codify_commit": "315467723f3f9ecc211846d4d37999e0abe558bc"
+      },
+      "created_at": "2026-10-14T00:52:33.536632+00:00",
+      "updated_at": "2026-10-14T01:09:03.057541+00:00"
     }
   ]
 }
