@@ -24,7 +24,7 @@ export function buildRuntimeSettlementRoot(input: {
   }
   const quotes: RuntimeAmountLeg[] = [], execution: Leg[] = [];
   for (let i = 0; i < legs.length - 1; i++) {
-    const quote = input.build(i, { kind: "quote-output" });
+    const quote = input.build(i, { kind: "quote-output", recipient: i === legs.length - 2 ? recipient : executor });
     const action = i === legs.length - 2 ? input.build(i, { kind: "direct-output", recipient }) : legs[i]!;
     if (!quote || !action) return null;
     quotes.push(quote); execution.push({ ...action, tokenIn: legs[i]!.tokenIn, tokenOut: legs[i]!.tokenOut });

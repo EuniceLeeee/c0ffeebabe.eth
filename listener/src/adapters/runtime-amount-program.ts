@@ -17,8 +17,8 @@ export class RuntimeAmountProgram {
     if (value < 0n || value > ethers.MaxUint256) throw new Error("runtime constant uint256");
     return this.push(new Uint8Array([0, reg(dst)]), uint256ToBytes(value));
   }
-  math(op: "add" | "sub" | "mul" | "div" | "shr" | "and" | "neg", dst: number, a: number, b = a): this {
-    return this.push(new Uint8Array([2, ["add", "sub", "mul", "div", "shr", "and", "neg"].indexOf(op), reg(dst), reg(a), reg(b)]));
+  math(op: "add" | "sub" | "mul" | "div" | "shr" | "and" | "neg" | "eq", dst: number, a: number, b = a): this {
+    return this.push(new Uint8Array([2, ["add", "sub", "mul", "div", "shr", "and", "neg", "eq"].indexOf(op), reg(dst), reg(a), reg(b)]));
   }
   equal(a: number, b: number): this { return this.push(new Uint8Array([3, reg(a), reg(b)])); }
   load(dst: number, offset: number): this { return this.push(new Uint8Array([6, reg(dst)]), uint24ToBytes(offset)); }
@@ -152,8 +152,10 @@ export interface RuntimeSettlementCapabilities {
    * The Family owns any subsequent protocol payment or ledger update. */
   readonly deferredInput?: string;
 }
+/** Omitted quote receiver means executor. The composer supplies the real
+ * receiver so caller/receiver-sensitive Families prepare the same operation. */
 export type RuntimeSettlementRequest =
-  | { readonly kind: "quote-output" }
+  | { readonly kind: "quote-output"; readonly recipient?: string }
   | { readonly kind: "direct-output"; readonly recipient: string }
   | { readonly kind: "deferred-input"; readonly paymentProgram: string; readonly paymentAmount: bigint };
 export const runtimeAmountFlowAdapter: ActionAdapter = {

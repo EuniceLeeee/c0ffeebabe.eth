@@ -56,6 +56,7 @@ export function inspectRuntime(program: string, amount: bigint, input: {
         else if (op === 4) { assert(b < 256n); set(d, a >> b); }
         else if (op === 5) set(d, a & b);
         else if (op === 6) { assert(a < (1n << 255n)); set(d, BigInt.asUintN(256, -a)); }
+        else if (op === 7) set(d, a === b ? 1n : 0n);
         else assert.fail("math opcode");
         break;
       }

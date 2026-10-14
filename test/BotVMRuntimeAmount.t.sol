@@ -163,6 +163,24 @@ contract BotVMRuntimeAmountTest is Test {
         vm.expectRevert(stdError.arithmeticError); bot.execute(script(p, 1));
         vm.expectRevert(stdError.indexOOBError); bot.execute(script(abi.encodePacked(hex"010010", uint256(1)), 1));
     }
+    function testFuzzEqualityProducesBooleanAcrossFullUint256(uint256 left, uint256 right) public {
+        bytes memory p = abi.encodePacked(hex"010001", left, hex"0002", right,
+            hex"0207030102", hex"0004", uint256(left == right ? 1 : 0), hex"030304");
+        bot.execute(script(p, 100));
+        // Assert-equal is still a rejecting guard, not the new value operator.
+        if (left != right) { vm.expectRevert("runtime amount mismatch"); bot.execute(script(abi.encodePacked(hex"010001", left, hex"0002", right, hex"030102"), 100)); }
+    }
+    function testEqualityAliasesAndReadonlyNesting() public {
+        bytes memory child = abi.encodePacked(hex"010001", type(uint256).max,
+            hex"0002", uint256(0), hex"0207000102");
+        bytes memory p = abi.encodePacked(hex"0108000301", uint24(child.length), child,
+            hex"0004", uint256(0), hex"030304");
+        bot.execute(script(p, 100));
+        p = abi.encodePacked(hex"010001", type(uint256).max, hex"0207010101",
+            hex"0002", uint256(1), hex"030102");
+        bot.execute(script(p, 100));
+        vm.expectRevert("runtime math opcode"); bot.execute(script(hex"010208010000", 100));
+    }
     function callbackProgram(RuntimeTestCallback cb, bytes memory inner) internal pure returns(bytes memory) {
         return abi.encodePacked(uint8(1), callOp(address(cb), abi.encodeCall(RuntimeTestCallback.run, (inner)), "", 68, 68));
     }

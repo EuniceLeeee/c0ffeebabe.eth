@@ -3,14 +3,15 @@ import { RuntimeAmountProgram, runtimeDeferredPayment, runtimeDeferredOpeningFlo
 import { runtimeExecutor, runtimeExactApproval, runtimeClearApproval } from "../../runtime-execution.js";
 import { ABI, binding, profile, amount, takerData } from "./codec.js";
 import type { Binding } from "./types.js";
-export function quoteProgram(b: Binding, i: number, executor: string) {
+export function quoteProgram(b: Binding, i: number, executor: string, recipient?: string) {
   const d = binding(b.router, b.order, b.tokens);
   if ((i !== 0 && i !== 1) || !profile(d.order) || d.strategyHash !== b.strategyHash) throw new Error("aqua execution binding");
   runtimeExecutor(executor, d.router, d.aqua, d.order.maker, ...d.tokens);
+  const receiver = recipient === undefined ? undefined : runtimeExecutor(recipient, d.router, d.aqua, d.order.maker, ...d.tokens);
   // Deployed v1 SwapVM.sol:110 expressly supports STATICCALL. The admitted
   // concentration/flat fee/XYC/salt program has no state-writing instruction.
   return new RuntimeAmountProgram().constant(15, 1n).math("sub", 14, 0, 15)
-    .call(d.router, ABI.encodeFunctionData("quote", [d.order, d.tokens[i], d.tokens[1-i], 0n, takerData(1n)]),
+    .call(d.router, ABI.encodeFunctionData("quote", [d.order, d.tokens[i], d.tokens[1-i], 0n, takerData(1n, receiver === undefined ? {} : { recipient: receiver })]),
       { static: true, patches: [{ offset: 100, reg: 0 }] })
     .load(1, 0).equal(1, 0).load(2, 64).constant(3, BigInt(d.strategyHash)).equal(2, 3)
     .load(4, 32).math("sub", 14, 4, 15).constant(3, 0n).math("add", 0, 4, 3);

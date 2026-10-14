@@ -26,14 +26,15 @@ export function buildUniV2RuntimeLeg(input: RuntimeInput): RuntimeAmountLeg | nu
     throw new Error("univ2 runtime invalid execution addresses");
   }
   const request = input.settlement;
-  const recipient = request?.kind === "direct-output" ? ethers.getAddress(request.recipient) : executor;
+  const recipient = request?.kind === "direct-output" || request?.kind === "quote-output" && request.recipient !== undefined
+    ? ethers.getAddress(request.recipient!) : executor;
   if ([ethers.ZeroAddress, r.tokenIn, r.tokenOut, d.pool].some(address => sameAddress(recipient, address))) {
     throw new Error("univ2 runtime invalid output recipient");
   }
   // The pool-quote path pays inside swap's callback to `to`. Sending output
   // elsewhere would also send our payment continuation to that recipient.
   // Retain its executor-recipient path until a separate settlement is verified.
-  if (request?.kind === "direct-output" && d.quoteModel.kind === "pool-get-amount-out") return null;
+  if ((request?.kind === "direct-output" || !sameAddress(recipient, executor)) && d.quoteModel.kind === "pool-get-amount-out") return null;
   const finish = (p: RuntimeAmountProgram): RuntimeAmountLeg => ({ actionAdapterId: "univ2-swap", program: ethers.hexlify(p.bytes()),
     settlement: { quoteOutput: true, ...(d.quoteModel.kind === "constant-product" ? { directOutput: true as const } : {}), deferredInput: d.pool },
     ...(request === undefined ? {} : { settlementRequest: request }) });

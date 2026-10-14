@@ -21,7 +21,7 @@ import { createRebuildWiring } from "../../../../universe-rebuild-production.js"
 import { planFragmentNodes } from "../../../../solver/plan-fragment-requirements.js";
 import { assertIssuedPreparedFamilyInstance, buildFamilyExecutionFragment, buildFamilyRuntimeAmountLeg,
   executeFamilyExactQuote, type PreparedFamilyInstance } from "../../../adapter-family-runtime.js";
-import type { AdapterRequest, AdapterRequestResult, ObservedEffects } from "../../../adapter-request-program.js";
+import type { AdapterRequest, AdapterRequestResult, ObservedEffects, RequestRequirements } from "../../../adapter-request-program.js";
 import { asPricedFamily } from "../../../family-capability-catalog.js";
 import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
@@ -30,7 +30,8 @@ import { sourcePin } from "../../../../test/family-integration/kyber-yb-compound
 import { assertPriceInput, productionAmount, constructionGuard, assertExecutorCode, assertOriginAccountCode, json, sha, same } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 import { assertHistoricalDiscoveryReceipt } from "../../../../test/family-integration/three-family/historical-input-observations.js";
 import { FAMILY } from "../manifest.js";
-import { ABI } from "../codec.js";
+import { ABI, call, decode } from "../codec.js";
+import { stateRequests, decodeState, assertCapacity, requirements as stateRequirements } from "../state.js";
 import type { Descriptor, Route } from "../types.js";
 
 const N = 26152596, HASH = "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb";
@@ -43,12 +44,14 @@ const effects = ["return-data", "revert-data", "token-delta", "native-delta", "l
 const requirements = { transports: ["effect-delta-simulation"] as const, caller: "executor" as const, effects };
 
 async function main(argv = process.argv.slice(2)) {
-  const args = new Map<string, string>(), names = ["--ready", "--prices", "--rpc-file", "--revm-bin", "--out"];
+  const args = new Map<string, string>(), requiredNames = ["--ready", "--prices", "--rpc-file", "--revm-bin", "--out"], names = [...requiredNames, "--scope"];
   for (let i = 0; i < argv.length; i += 2) {
     assert(names.includes(argv[i]!) && !args.has(argv[i]!) && argv[i + 1]); args.set(argv[i]!, argv[i + 1]!);
   }
-  assert(names.every(name => args.has(name)));
-  const fd = openSync(args.get("--out")!, "wx", 0o600), report: any = { result: "failed", samples: [], tx: TX,
+  assert(requiredNames.every(name => args.has(name)));
+  const scope = args.get("--scope") ?? "default-and-external";
+  assert(scope === "default-and-external" || scope === "self-recipient", "unsupported acceptance scope");
+  const fd = openSync(args.get("--out")!, "wx", 0o600), report: any = { result: "failed", scope, samples: [], tx: TX,
     claim: "N-end production quote/quoted/runtime single-leg receipts, not original pre-call parity or full-loop execution",
     performance: "NOT RUN", signing: false, broadcast: false, protocolOverrides: false, actorOnlyFunding: true };
   const abort = new AbortController(), deadlineAtMs = Date.now() + 480_000;
@@ -62,7 +65,7 @@ async function main(argv = process.argv.slice(2)) {
     const paths = [readyPath, pricesPath, resolve(dirname(pricesPath), "input.json"), fileURLToPath(import.meta.url)];
     const pins = () => paths.map(path => ({ path, sha256: sha(readFileSync(path)) }));
     report.inputs = pins(); report.code = sourcePin(); report.revmSha256 = sha(readFileSync(args.get("--revm-bin")!));
-    assert.equal(report.revmSha256, "36f22eecfdf8c92c3914347ace5a488b6ea3b53cd4b2b5f44d2943e7d17e903d");
+    assert.equal(report.revmSha256, "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6");
     const prices = parseAtBlockJson(readFileSync(pricesPath, "utf8")), provenance = parseAtBlockJson(readFileSync(paths[2]!, "utf8"));
     const envelope = await new UniverseRebuildCheckpointStore({ path: readyPath }).load(); assert(envelope && !envelope.inProgressRun);
     const { ready, graph } = resolveStrictReadyRuntime(envelope.readyGeneration), source = ready.cutoff;
@@ -136,6 +139,17 @@ async function main(argv = process.argv.slice(2)) {
         getStorage: async (a: string, slot: string, n: number) => { assert.equal(n, N); return rpc("eth_getStorageAt", [a, slot, pin]); } } as never });
     const adapters = [...family.plugin.actionAdapters, ...PRODUCTION_INFRA_ACTION_ADAPTERS];
     const compile = (node: ResolvedPlanNode): Uint8Array => { const a = adapters.find(a => a.id === node.adapterId); assert(a); return a.encode(node, executor, concatBytes(...node.children.map(compile))); };
+    const dispatch = async (requests: readonly AdapterRequest[], declaredRequirements: RequestRequirements, label: string) => {
+      const outcome = await executeAdapterWork({ runtime, control: { signal: abort.signal, deadlineAtMs }, intent: {
+        stage: "exact-refine", familyId: FAMILY, source, generation: source.generation, programInput: undefined,
+        program: { requirements: () => declaredRequirements,
+          buildRequests: () => requests, decode: ({ results }): readonly AdapterRequestResult[] => results } } });
+      if (outcome.status !== "resolved") { (report.unresolvedWork ??= []).push({ label, outcome }); throw Error(label + " unresolved"); }
+      return { outcome, results: outcome.executed.evidence };
+    };
+    const stateRead = await dispatch(stateRequests(d), stateRequirements, "recipient state");
+    const state = decodeState(d, stateRead.results, source); report.recipientState = { state, evidence: stateRead.outcome };
+    assert(!same(state.treasury, executor)); report.recipientSamples = [];
     report.productionReferences = [];
     for (const route of instance.routes as readonly Route[]) {
     const handle = instance.routeHandles.find(h => h.routeKey === route.routeKey)!; assert(handle);
@@ -147,14 +161,16 @@ async function main(argv = process.argv.slice(2)) {
       ["one-token-control", 10n ** BigInt(route.direction === "sell-gem" ? d.gemDecimals : d.stableDecimals)], ["one-raw-control", 1n]];
     for (const [label, amountIn] of inputs) {
       const trial: any = { label, direction: route.direction, amountIn, tokenIn: route.tokenIn, tokenOut: route.tokenOut, status: "failed", executions: [] }; report.samples.push(trial);
+      const allowanceCheck = runtimeProgramScript(new RuntimeAmountProgram().call(route.tokenIn, ABI.encodeFunctionData("allowance", [executor, TARGET]), { static: true })
+        .load(1, 0).constant(2, 0n).equal(1, 2).bytes(), 0n);
+      // A narrow follow-up can cover the self-recipient branch without rerunning accepted default/external cases.
+      if (scope === "default-and-external") {
       stage = "production-exact";
       const quote = await guard.exact(() => executeFamilyExactQuote({ family, route: handle, amountIn, source, generation: source.generation, executor, runtimeEvidence: [], runtime, control: { signal: abort.signal, deadlineAtMs } }));
       trial.quote = quote; assert.equal(quote.status, "resolved"); if (quote.status !== "resolved") throw new Error("Exact unresolved");
       if (label === "production-effective") assert.equal(quote.amountOut, p.amountOut);
       const fragment = guard.quoted(() => buildFamilyExecutionFragment({ family, route: handle, exact: quote, minAmountOut: quote.amountOut, executor, runtimeEvidence: [], actionOwnership: catalog }));
       assert.equal(fragment.status, "resolved"); if (fragment.status !== "resolved") throw new Error("quoted fragment unresolved");
-      const allowanceCheck = runtimeProgramScript(new RuntimeAmountProgram().call(route.tokenIn, ABI.encodeFunctionData("allowance", [executor, TARGET]), { static: true })
-        .load(1, 0).constant(2, 0n).equal(1, 2).bytes(), 0n);
       const scripts = [["quoted", concatBytes(...planFragmentNodes(fragment.fragment, route.tokenIn, amountIn).map(compile), allowanceCheck)],
         ["runtime", concatBytes(runtimeProgramScript(ethers.getBytes(leg.program), amountIn), allowanceCheck)]] as const;
       for (const [encoding, script] of scripts) for (const negative of label === "production-effective" ? ["none", "no-input", "post-execution-revert"] : ["none"]) {
@@ -192,7 +208,57 @@ async function main(argv = process.argv.slice(2)) {
           assert(returned.effects?.tokenDeltas?.every(d => d.delta === 0n) ?? true); }
         result.status = "pass";
       }
-      trial.status = "pass"; console.log(json({ label, direction: route.direction, status: trial.status, amountOut: quote.amountOut }));
+      }
+      for (const recipient of scope === "self-recipient" ? [executor] : [owner, state.treasury]) {
+        const extra: any = { direction: route.direction, label, amountIn, recipient, tokenIn: route.tokenIn, tokenOut: route.tokenOut, status: "failed", executions: [] };
+        report.recipientSamples.push(extra); stage = "recipient-preview";
+        const preview = route.direction === "sell-gem" ? "previewSellGem" : "previewBuyGem";
+        const query = await dispatch([call("recipient-preview", TARGET, ABI.encodeFunctionData(preview, [amountIn, recipient]), { kind: "executor" })], { transports: ["eth-call"], caller: "executor" }, "recipient preview");
+        const result = query.results[0]; assert(result.ok && result.completion === "returned");
+        if (!result.ok || result.completion !== "returned") throw Error("recipient preview failed");
+        const [net, fee] = decode(preview, result.data); assertCapacity(d, state, route.direction, amountIn, net, fee);
+        const credit: bigint = net + (same(state.treasury, recipient) ? fee : 0n);
+        extra.preview = query.outcome; extra.previewNet = net; extra.fee = fee; extra.expectedReceipt = credit;
+        const direct = guard.build(() => buildFamilyRuntimeAmountLeg({ family, route: handle, source, executor, runtime: guard.runtime(runtime), runtimeEvidence: [], actionOwnership: catalog,
+          settlement: { kind: "direct-output", recipient } })); assert(direct);
+        const prepared = guard.build(() => buildFamilyRuntimeAmountLeg({ family, route: handle, source, executor, runtime: guard.runtime(runtime), runtimeEvidence: [], actionOwnership: catalog,
+          settlement: { kind: "quote-output", recipient } })); assert(prepared);
+        extra.direct = direct; extra.preparedQuote = prepared;
+        const checkQuote = new RuntimeAmountProgram().run(prepared.program, 0, 1, true).constant(2, credit).equal(1, 2);
+        const script = concatBytes(runtimeProgramScript(checkQuote.bytes(), amountIn), runtimeProgramScript(ethers.getBytes(direct.program), amountIn), allowanceCheck);
+        for (const negative of label === "production-effective" ? ["none", "no-input", "post-execution-revert"] : ["none"]) {
+          stage = "recipient-execution:" + negative;
+          const scriptToRun = negative === "post-execution-revert" ? concatBytes(script,
+            runtimeProgramScript(new RuntimeAmountProgram().constant(0, 0n).constant(1, 1n).equal(0, 1).bytes(), 0n)) : script;
+          const caller = { kind: "executor" as const }, actors = [...new Set([executor, TARGET, recipient, state.treasury].map(a => a.toLowerCase()))];
+          const request: AdapterRequest = { id: "psv-recipient", required: false, kind: "effect-delta-simulation",
+            call: { caller, executionMode: "executor-program", to: executor, data: buildSubscriptCalldata(scriptToRun) },
+            overrideIntent: { caller, nativeBalanceWei: 17n, tokenBalances: [{ token: route.tokenIn, amount: negative === "no-input" ? 0n : amountIn + 101n },
+              { token: route.tokenOut, amount: credit + 103n }] },
+            observeTokenBalances: [route.tokenIn, route.tokenOut].flatMap(token => actors.map(account => ({ token, account: same(account, executor) ? caller : account }))), observe: effects };
+          const execution: any = { negative, request, status: "failed" }; extra.executions.push(execution);
+          const run = await dispatch([request], requirements, "recipient execution"); execution.outcome = run.outcome;
+          const returned = run.results[0]; assert(returned.ok, "transport failure is not an EVM negative"); if (!returned.ok) throw Error("recipient transport failed");
+          if (negative === "none") {
+            assert.equal(returned.completion, "returned"); assert.equal(returned.data, "0x");
+            const deltas = returned.effects?.tokenDeltas; assert.equal(deltas?.length, actors.length * 2);
+            for (const token of [route.tokenIn, route.tokenOut]) for (const account of actors) {
+              let delta = 0n;
+              if (same(token, route.tokenIn)) delta = same(account, executor) ? -amountIn : same(account, TARGET) ? amountIn : 0n;
+              else { if (same(account, TARGET)) delta -= net + fee; if (same(account, recipient)) delta += net; if (same(account, state.treasury)) delta += fee; }
+              const observed = deltas!.filter(x => same(x.token, token) && same(x.account, account)); assert.equal(observed.length, 1); assert.equal(observed[0].delta, delta);
+            }
+            const native = returned.effects?.nativeDeltas; assert.equal(native?.length, 1); assert(same(native![0].account, executor)); assert.equal(native![0].delta, 0n);
+            const events = returned.effects?.logs?.filter(l => same(l.address, TARGET) && same(l.topics[0], ABI.getEvent("Swap")!.topicHash));
+            assert.equal(events?.length, 1); const event = ABI.parseLog({ data: events![0].data, topics: [...events![0].topics] })!.args;
+            assert(same(event.sender, executor) && same(event.recipient, recipient)); assert.equal(event.amountIn, amountIn); assert.equal(event.amountOut, net); assert.equal(event.fee, fee);
+            execution.quoteReceiptDelta = 0n;
+          } else { assert.equal(returned.completion, "reverted-as-declared"); assert(returned.effects?.tokenDeltas?.every(x => x.delta === 0n) ?? true); }
+          execution.status = "pass";
+        }
+        extra.status = "pass";
+      }
+      trial.status = "pass"; console.log(json({ label, direction: route.direction, status: trial.status, defaultAmountOut: trial.quote?.amountOut }));
     }
     }
     report.runtimeConstruction = { exactCalls: 0, quotedCalls: 0, rpcCalls: 0, quotedFallback: false, scope: "production issuer; selector contract separately tested offline" };

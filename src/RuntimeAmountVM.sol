@@ -170,6 +170,7 @@ abstract contract RuntimeAmountVM {
                 else if (kind == 4) { require(b < 256, "runtime shift"); r[dst] = a >> b; }
                 else if (kind == 5) r[dst] = a & b;
                 else if (kind == 6) { require(a < (1 << 255), "runtime signed range"); unchecked { r[dst] = 0 - a; } }
+                else if (kind == 7) r[dst] = a == b ? 1 : 0;
                 else revert("runtime math opcode");
                 ip += 4;
             } else if (op == 3) {

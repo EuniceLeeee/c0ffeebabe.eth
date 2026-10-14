@@ -12,7 +12,7 @@ export const execution = {
     assertRoute(i.descriptor, i.route);
     const request = i.settlement;
     if (request && !["quote-output", "direct-output", "deferred-input"].includes(request.kind)) return null;
-    const program = request?.kind === "quote-output" ? quoteProgram(i.descriptor, i.route.i, i.executor)
+    const program = request?.kind === "quote-output" ? quoteProgram(i.descriptor, i.route.i, i.executor, request.recipient)
       : swapProgram(i.descriptor, i.route.i, i.executor, 1n, request);
     return { ...runtimeLeg(ACTION, program), settlement: { quoteOutput: true, directOutput: true,
       // This is the measured callback funding account, not the final maker.

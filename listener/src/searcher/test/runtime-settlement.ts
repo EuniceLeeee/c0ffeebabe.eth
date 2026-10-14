@@ -46,7 +46,7 @@ function builder(index: number, request: RuntimeSettlementRequest): RuntimeAmoun
 }
 
 function scenario(options: { debitDelta?: bigint; creditDelta?: bigint; release?: bigint;
-  returned?: bigint; wrongReceiver?: boolean; changeNative?: bigint; stealIntermediate?: bigint } = {}) {
+  returned?: bigint; wrongReceiver?: boolean; changeNative?: bigint; stealIntermediate?: bigint; recipientDependent?: boolean } = {}) {
   const balances = new Map<string, bigint>();
   const key = (t: string, actor: string) => t.toLowerCase() + ":" + actor.toLowerCase();
   const get = (t: string, actor: string) => balances.get(key(t, actor)) ?? 0n;
@@ -83,7 +83,13 @@ function scenario(options: { debitDelta?: bigint; creditDelta?: bigint; release?
       calldata: abi.encodeFunctionData("settle", [amount, encoded]) });
     return "0x";
   };
-  const root = buildRuntimeSettlementRoot({ legs: legs(), amount: 100n, minimumProfit: 1n, executor, build: builder });
+  const root = buildRuntimeSettlementRoot({ legs: legs(), amount: 100n, minimumProfit: 1n, executor, build(index, request) {
+    if (options.recipientDependent && index === 0 && request.kind === "quote-output") {
+      const p = new RuntimeAmountProgram().constant(1, request.recipient === debtRecipient ? 2n : 3n).math("mul", 0, 0, 1);
+      return { actionAdapterId: "fixture-prefix", program: ethers.hexlify(p.bytes()), settlementRequest: request };
+    }
+    return builder(index, request);
+  } });
   assert(root);
   return { root, get, get native() { return native; }, get prefixCalls() { return prefixCalls; },
     run() { return inspectRuntime(root.params.settlementProgram as string, 100n, { call, nativeBalance: () => native }); } };
@@ -169,4 +175,21 @@ test(`production selector retains funded actual-amount fallback at tolerance=${t
   assert.equal(selected.root.adapterId, "fixture-funding"); assert(funded > 0);
   assert.equal(deferred, maximum ? 0 : funded); assert.equal(exact, 0); assert.equal(quoted, 0);
   assert(events.filter(e => e.type === "sim_amount_construction").every(e => e.mode === "runtime-actual"));
+});
+
+test("settlement quotes the actual receiver before calculating callback debt", () => {
+  const s = scenario({ recipientDependent: true }); s.run();
+  assert.equal(s.get(a, executor), 1020n); assert.equal(s.get(b, debtRecipient), 755n);
+});
+
+test("settlement binds each prefix quote to its actual intermediate or debt receiver", () => {
+  const requested: Array<[number, RuntimeSettlementRequest]> = [];
+  const list = legs(), third = { ...list[1]!, tokenIn: a, tokenOut: a };
+  const c = address(106);
+  const root = buildRuntimeSettlementRoot({ legs: [list[0]!, { ...list[0]!, tokenIn: b, tokenOut: c },
+    { ...third, tokenIn: c }], amount: 100n, minimumProfit: 1n, executor,
+    build(index, request) { requested.push([index, request]); return { actionAdapterId: "fixture", program: plain }; } });
+  assert(root);
+  assert.deepEqual(requested.filter(([, r]) => r.kind === "quote-output"),
+    [[0, { kind: "quote-output", recipient: executor }], [1, { kind: "quote-output", recipient: debtRecipient }]]);
 });

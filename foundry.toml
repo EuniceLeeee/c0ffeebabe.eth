@@ -14,3 +14,8 @@ mainnet = "${MAINNET_RPC_URL}"
 [fmt]
 line_length = 120
 tab_width = 4
+
+# Local PSV runtime-template correctness; opted in explicitly by profile and --ffi.
+[profile.psv_recipient]
+test = "listener/src/searcher/venues/protocols/psv-family/test"
+fs_permissions = [{ access = "read", path = "./listener/src/searcher/venues/protocols/psv-family/test/source-runtime.json" }]

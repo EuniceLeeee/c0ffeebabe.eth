@@ -18,7 +18,7 @@ export function fixture() { return { target: addr(81), implementation: addr(83),
   proxyCode: template.proxy as string, code: implementationCode(), gemCode: "0x6000", stableCode: "0x6001",
   gemDecimals: 6, stableDecimals: 6, paused: false, tin: WAD / 1000n, tout: WAD / 2000n,
   maxPerTransaction: 0n, maxPerBlock: 0n, remaining: ethers.MaxUint256, gemReserve: 10n ** 15n, stableReserve: 10n ** 15n,
-  exempt: false, mutate: (_r: any) => {} }; }
+  exempt: false, exemptRecipients: new Set<string>(), mutate: (_r: any) => {} }; }
 export type Fixture = ReturnType<typeof fixture>;
 export const returned = (id: string, data: string): AdapterRequestResult => ({ id, ok: true, source, completion: "returned", data,
   provenance: { kind: "synthetic", fingerprint: "psv-contract" } });
@@ -35,11 +35,11 @@ export function reads(f: Fixture, requests: readonly AdapterRequest[]): AdapterR
     case "paused": case "tin": case "tout": case "treasury": case "maxPerTransaction": case "maxPerBlock": v = [f[c.name]]; break;
     case "getRemainingBlockCapacity": v = [f.remaining]; break;
     case "getReserves": v = [f.stableReserve, f.gemReserve]; break;
-    case "whitelist": v = [f.exempt]; break;
+    case "whitelist": v = [f.exempt || f.exemptRecipients.has(String(c.args[0]).toLowerCase())]; break;
     case "previewSellGem": case "previewBuyGem": {
       const sell = c.name === "previewSellGem", wad = c.args[0] * 10n ** BigInt(18 - (sell ? f.gemDecimals : f.stableDecimals));
       const scale = 10n ** BigInt(18 - (sell ? f.stableDecimals : f.gemDecimals));
-      const fee = f.exempt ? 0n : wad * (sell ? f.tout : f.tin) / WAD / scale; v = [wad / scale - fee, fee]; break;
+      const fee = f.exempt || f.exemptRecipients.has(String(c.args[1]).toLowerCase()) ? 0n : wad * (sell ? f.tout : f.tin) / WAD / scale; v = [wad / scale - fee, fee]; break;
     }
     default: throw Error("unexpected fixture call " + c.name);
   }
