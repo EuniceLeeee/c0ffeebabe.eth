@@ -2173,6 +2173,35 @@
       },
       "created_at": "2026-10-15T14:33:35.910666+00:00",
       "updated_at": "2026-10-15T14:33:35.910666+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-set-basic-basket-direct-contract",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e",
+      "target_block": 26130046,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/set-basic-recipient-tooling-correction-20261015.json",
+        "before": "docs/research/reports/set-basic-recipient-tooling-correction-20261015.json",
+        "after": "docs/research/reports/family-basic-only-gates-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:family-direct-recipient",
+        "issue": "Shared line170 unconditionally expected null for Basic multi-component direct and line172 omitted its capability, despite newly implemented post-redemption selected-component delivery. The real emitter correctly returns a supported leg.",
+        "evidence": "{\"id\": \"tooldef-20261015-set-basic-basket-direct-contract\", \"kind\": \"tooling_defect\", \"status\": \"fixed-and-canonical-regression-passed-awaiting-parent-codify-commit\", \"codify_commit\": null, \"tool\": \"listener:searcher:family-direct-recipient\", \"target\": \"listener/src/searcher/test/family-direct-recipient.ts\", \"issue\": \"Shared line170 unconditionally expected null for Basic multi-component direct and line172 omitted its capability, despite newly implemented post-redemption selected-component delivery. The real emitter correctly returns a supported leg.\", \"before\": {\"suite\": \"16/17; Basic construction assertion fails before full execution\", \"evidence\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/shared-evidence10/basic-direct101.log\", \"sha256\": \"55998832b21d2a12ec02013031c1fecca7f60d863be0c1b58e65995b12bffd9c\"}}, \"fix\": \"Only Basic multicomponent expects nonnull, directOutput=true and exact request echo. Legacy Core multicomponent remains null; both quote-output and deferred-input remain null.\", \"regression\": \"Current shared contract checks accepted Basic and retains unsupported Legacy/quote/deferred cases. Separate family model7/7 and actual local BotVM6/6 cover full transfer effects and rollback.\", \"after\": \"docs/research/reports/family-basic-only-gates-20261015.json\", \"review\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/v1-shared-review08.json\", \"sha256\": \"1ee4a7b55716abef4af55ef239c512acdc6147ccd03b720b042790d59ef4eb40\"}, \"beforeSource\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/shared-source07/listener/src/searcher/test/family-direct-recipient.ts\", \"sha256\": \"130b5ed5fd16760d2040f6ed345902d9c864e3ab289c7e57147ea8f14c4baa7e\"}, \"afterSource\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/shared-candidate08/listener/src/searcher/test/family-direct-recipient.ts\", \"sha256\": \"57d99904923d0ae1453e88fcab3a7fe95609832a9bac6fbaeb85f9d842caac84\"}, \"productionModifiedForToolFix\": false, \"tx\": \"0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e\", \"block\": 26130046, \"report\": \"docs/research/reports/set-basic-recipient-tooling-correction-20261015.json\"}",
+        "codify_target": "listener/src/searcher/test/family-direct-recipient.ts",
+        "codify_commit": "c479aea51176983873032af121fdae5942cc6fc8",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T15:49:38.833782+00:00",
+      "updated_at": "2026-10-15T15:49:38.833782+00:00"
     }
   ]
 }
