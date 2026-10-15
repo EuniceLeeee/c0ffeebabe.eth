@@ -9,6 +9,7 @@ import { CRYPTOPOOL_INTERFACE, LT_INTERFACE } from "./abi.js";
 const TOKEN = new ethers.Interface([
   "function balanceOf(address) view returns(uint256)",
   "function approve(address,uint256) returns(bool)",
+  "function allowance(address,address) view returns(uint256)",
 ]);
 const DEPOSIT = "deposit(uint256,uint256,uint256)";
 export const DEPOSIT_DEBT_POLICY = "pool-balanced-v1" as const;
@@ -164,6 +165,7 @@ export function depositProgram(s: DepositSurface, executor: string,
   const recipient = actorFor(s, options.recipient ?? actor);
   const balance = TOKEN.encodeFunctionData("balanceOf", [actor]);
   const outputBalance = TOKEN.encodeFunctionData("balanceOf", [recipient]);
+  const external = options.recipient !== undefined && actor.toLowerCase() !== recipient.toLowerCase();
   const p = new RuntimeAmountProgram().constant(12, 1n).math("sub", 11, 0, 12).nativeBalance(9);
   if (options.quotedDebt === undefined) {
     p.call(s.cryptopool, CRYPTOPOOL_INTERFACE.encodeFunctionData("balances", [0n]), { static: true }).load(1, 0)
@@ -173,6 +175,9 @@ export function depositProgram(s: DepositSurface, executor: string,
   p.call(s.asset, balance, { static: true }).load(14, 0)
     .call(s.lt, outputBalance, { static: true }).load(13, 0)
     .call(s.stablecoin, balance, { static: true }).load(15, 0);
+  if (external) p.call(s.lt, balance, { static: true }).load(4, 0)
+    .call(s.asset, outputBalance, { static: true }).load(5, 0)
+    .call(s.stablecoin, outputBalance, { static: true }).load(6, 0);
   // Exact approval and cleanup, no permanent max allowance. Bool-returning
   // approval is the supported asset contract here, never ignored false/empty.
   p.call(s.asset, TOKEN.encodeFunctionData("approve", [s.lt, 0n])).load(1, 0).equal(1, 12)
@@ -187,5 +192,10 @@ export function depositProgram(s: DepositSurface, executor: string,
     .call(s.lt, outputBalance, { static: true }).load(1, 0).math("sub", 1, 1, 13).equal(1, 10)
     .constant(2, minimum).math("sub", 2, 1, 2)
     .nativeBalance(1).equal(1, 9);
+  if (options.recipient !== undefined) p.call(s.asset, TOKEN.encodeFunctionData("allowance", [actor, s.lt]), { static: true })
+    .load(1, 0).constant(2, 0n).equal(1, 2);
+  if (external) p.call(s.lt, balance, { static: true }).load(1, 0).equal(1, 4)
+    .call(s.asset, outputBalance, { static: true }).load(1, 0).equal(1, 5)
+    .call(s.stablecoin, outputBalance, { static: true }).load(1, 0).equal(1, 6);
   return p;
 }

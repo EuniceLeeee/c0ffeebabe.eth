@@ -1,0 +1,65 @@
+{
+  "scope": "Fresh non-author limited compatibility certification; prior executions retain their original runtime and transport identity, not new current default historical executions",
+  "result": "retain old 48 positive and 24 declared reverts for selected three ordinary LT instances under bounded compatibility below",
+  "oldEvidencePreparation": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/default-reuse-preparation04.json",
+    "sha256": "5a90827122c817aed622f2b06d9eb33a465b38f8e7646784d19c0a9953830e18"
+  },
+  "scriptComparison": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/v1-default-script-comparison91.json",
+    "sha256": "11e9567bc3f302f8e5f94769b033c1db858df1f9873eba2f16c466169a1be692"
+  },
+  "identicalQuotedAndRuntimePrograms": 24,
+  "oldRuntimeBinding": {
+    "artifact": "/opt/mev-cloud/family-runtime-20261007/logs/blockscan-direct-sync-20261012.MCA5F4/source/out/BotVM.sol/BotVM.json",
+    "sha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+    "owner": "0x1000000000000000000000000000000000000001",
+    "patchedRuntimeKeccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec"
+  },
+  "oldRuntimeSourceMetadata": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/old-runtime76-binding.json",
+    "sha256": "14b62700342da938e15adf3b43056a5e5685437efeea5dabd0d8eff290b3e766"
+  },
+  "sharedCompatibilityAudit": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/default-reuse73.json",
+    "sha256": "3b5066292099162cd767c97f4f4c60bb893a5fe3155c77250ba06605b2082982"
+  },
+  "nativeBoundaryCurrentAudit": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/common-native-compatibility-v1-84.json",
+    "sha256": "b909b63f34bbcca86db3340d55cf3891cf7dae4874da25c3741969fe6263c93b"
+  },
+  "currentSharedPins": [
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+    }
+  ],
+  "conclusions": [
+    "Independently hashed original three raw reports and matched every current newly issued quoted/default runtime program to old successful script hashes: 12 fixed amounts times 2 encodings. Same-N input and amounts retained.",
+    "Read-only reconstructed owner-patched runtime from frozen artifact1e3429; keccak62a3 exactly matches all three old YB reports. Thus old VM compiled-source metadata proof applies by exact runtime identity, not cross-family name inference.",
+    "Frozen/current BotVM ordinary mode and RuntimeAmountVM old opcodes/patch semantics are already narrowly audited; actual current five shared pins equal those audited. New native direct tolerance branch is not entered by ordinary ERC20 LT legs, including WETH as ERC20.",
+    "YB production additions are explicit direct-only. Current golden default/quoted bytes and the 24 actual sampled default script matches substantiate unchanged default emitter semantics.",
+    "Fresh direct 48/48 uses current common transport/VM and real instances; it is separate evidence, not relabeling old default executions."
+  ],
+  "limitations": [
+    "Old REVM binary36f22e remains old execution identity; no binary equivalence claimed to currente5cb. Current shared regressions and real direct executions supply present integration context.",
+    "No whole prior dirty-tree per-file equivalence inferred from aggregate hash. Old natural/spliced input distinctions and emergency-withdraw exclusion retained.",
+    "No new opportunity replay, performance or absent interface variants certified."
+  ]
+}

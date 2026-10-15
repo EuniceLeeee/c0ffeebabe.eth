@@ -1,0 +1,301 @@
+{
+  "schema": "dodo-gsp-recipient-correctness/v1",
+  "familyId": "custom-swap:dodo-v2",
+  "result": "pass-declared-two-GSP-four-direction-correctness",
+  "implementationReady": true,
+  "blockingFindings": [],
+  "scope": "Two already admitted actual GSP immutable clones, sellBase/sellQuote, direct self/external; current Exact plus quoted construction and runtime issuer construction; authenticated old 16 default/quoted executions retained as old evidence.",
+  "currentHistorical": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/direct10.json",
+    "sha256": "046cbe8ee636821f9e1afe2cea88fc39edec6922f1463ff37d8559aaa19647b5"
+  },
+  "counts": {
+    "positive": 32,
+    "declaredRevert": 32,
+    "tokenDeltas": 96,
+    "nativeDeltas": 32,
+    "exactProbe": 0,
+    "approvalCleared": 0,
+    "outputTransferOrMint": 32,
+    "inputTransferOrBurn": 32
+  },
+  "source": {
+    "number": 26016874,
+    "hash": "0xf2a4a8104b5ed1113df782166fbceeac9b8debdfef3a20a2b3993218215e5f0d",
+    "sourceTreeSha256": "39bb9cc067399a3f0b71f9542a86de9f927c864aef10799a5f3627e6caf20717",
+    "productionManifest": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/production-source09.json",
+      "sha256": "ccd542bf2f54eea610e607ca64fae4ecf6855dda4417e8bd49b6207c7f59de83"
+    },
+    "productionStable": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/production-stable10.json",
+      "sha256": "b652c2014afb46893cea60055ac8abd914ab88fb9cf3f502ed5591cd9f4be42c"
+    },
+    "executorArtifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/out/BotVM.sol/BotVM.json",
+      "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "sources": [
+        {
+          "path": "src/BotVM.sol",
+          "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f",
+          "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+        },
+        {
+          "path": "src/Constants.sol",
+          "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751",
+          "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+        },
+        {
+          "path": "src/RuntimeAmountVM.sol",
+          "keccak256": "0xf139ad9c54d2b073a8dfff0c39e5742d4c270e92daa957817be88f4a80355565",
+          "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+        },
+        {
+          "path": "src/interfaces/IERC20.sol",
+          "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d",
+          "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+        }
+      ]
+    },
+    "executorOwner": "0x1000000000000000000000000000000000000001",
+    "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6"
+  },
+  "deployedBindings": [
+    {
+      "pool": "0x04571c32a4e1c5f39bc3a238cb95b215058c432c",
+      "source": {
+        "number": 26016874,
+        "hash": "0xf2a4a8104b5ed1113df782166fbceeac9b8debdfef3a20a2b3993218215e5f0d",
+        "generation": 26016874
+      },
+      "cloneCodeHash": "0x5a20f1c25e0c9a706137a46298153e276f6c16ecfc23a2e5a6a7dd2e48646f5b",
+      "implementation": "0x78d43a889F42a344Fe98C3fb9455791Dc8178d55",
+      "implementationCodeHash": "0xca891afa31c4ea7ff3aab590ad957be486008c5b7412f3110c9c9dbe8eb5c493",
+      "implementationCodeBytes": 19253,
+      "registry": "0x710409D2121B7C8EA4aCAdd6803FDE2D85DF6473",
+      "registryCodeHash": "0x0c02b3c8f0d6b42485a63a7598cca8edf753d349abc1579c07e2079d3e3ea677",
+      "descriptor": {
+        "baseToken": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "familyId": "custom-swap:dodo-v2",
+        "instanceKey": "0x04571c32a4e1c5f39bc3a238cb95b215058c432c",
+        "lineageId": "dodo-v2:registry-member",
+        "pool": "0x04571C32A4E1c5f39Bc3a238Cb95B215058c432C",
+        "provenance": [
+          {
+            "evidenceHash": "49834a4f09d568d25dde29b589ecef7ddf6c2b0e4eb7bc4ff916412ac9f95dd2",
+            "kind": "registry-reverse-behavior-proof",
+            "subject": "0x710409D2121B7C8EA4aCAdd6803FDE2D85DF6473"
+          }
+        ],
+        "quoteActorBinding": {
+          "actor": "0x1000000000000000000000000000000000000001",
+          "feeSemantics": "getUserFeeRate(actor)",
+          "inputSemantics": "balance-reserve-mt-fee-v1",
+          "querySemantics": "querySellBase/querySellQuote(actor,effectiveInput)",
+          "role": "verified-actor"
+        },
+        "quoteToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "registryBinding": {
+          "listedPool": "0x04571C32A4E1c5f39Bc3a238Cb95B215058c432C",
+          "registry": "0x710409D2121B7C8EA4aCAdd6803FDE2D85DF6473"
+        },
+        "runtimeRequirements": [
+          {
+            "freshness": "pinned-block",
+            "kind": "source-state"
+          },
+          {
+            "kind": "execution-actor",
+            "role": "verified-actor"
+          },
+          {
+            "kind": "quote-completion",
+            "mode": "return-data"
+          }
+        ]
+      }
+    },
+    {
+      "pool": "0xb9a4406982d990648093c71eff9f1f63a040152e",
+      "source": {
+        "number": 26016874,
+        "hash": "0xf2a4a8104b5ed1113df782166fbceeac9b8debdfef3a20a2b3993218215e5f0d",
+        "generation": 26016874
+      },
+      "cloneCodeHash": "0x5a20f1c25e0c9a706137a46298153e276f6c16ecfc23a2e5a6a7dd2e48646f5b",
+      "implementation": "0x78d43a889F42a344Fe98C3fb9455791Dc8178d55",
+      "implementationCodeHash": "0xca891afa31c4ea7ff3aab590ad957be486008c5b7412f3110c9c9dbe8eb5c493",
+      "implementationCodeBytes": 19253,
+      "registry": "0x710409D2121B7C8EA4aCAdd6803FDE2D85DF6473",
+      "registryCodeHash": "0x0c02b3c8f0d6b42485a63a7598cca8edf753d349abc1579c07e2079d3e3ea677",
+      "descriptor": {
+        "baseToken": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "familyId": "custom-swap:dodo-v2",
+        "instanceKey": "0xb9a4406982d990648093c71eff9f1f63a040152e",
+        "lineageId": "dodo-v2:registry-member",
+        "pool": "0xB9A4406982D990648093C71eFF9F1f63A040152e",
+        "provenance": [
+          {
+            "evidenceHash": "f24aa3399343d05eda726a3471279e21854bd009ad51036c75098c7aa81f06fa",
+            "kind": "registry-reverse-behavior-proof",
+            "subject": "0x710409D2121B7C8EA4aCAdd6803FDE2D85DF6473"
+          }
+        ],
+        "quoteActorBinding": {
+          "actor": "0x1000000000000000000000000000000000000001",
+          "feeSemantics": "getUserFeeRate(actor)",
+          "inputSemantics": "balance-reserve-mt-fee-v1",
+          "querySemantics": "querySellBase/querySellQuote(actor,effectiveInput)",
+          "role": "verified-actor"
+        },
+        "quoteToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "registryBinding": {
+          "listedPool": "0xB9A4406982D990648093C71eFF9F1f63A040152e",
+          "registry": "0x710409D2121B7C8EA4aCAdd6803FDE2D85DF6473"
+        },
+        "runtimeRequirements": [
+          {
+            "freshness": "pinned-block",
+            "kind": "source-state"
+          },
+          {
+            "kind": "execution-actor",
+            "role": "verified-actor"
+          },
+          {
+            "kind": "quote-completion",
+            "mode": "return-data"
+          }
+        ]
+      }
+    }
+  ],
+  "semantics": {
+    "input": "Transfer full requested A from executor into pool before sell; exact actual debit must equal positive A. DODOSwap.fromAmount may include old surplus and is not substituted for payer debit.",
+    "output": "sellBase/sellQuote recipient receives positive actual output exactly equal to method return and current same-state Exact quote; both old input/output inventories and actor native are protected.",
+    "callback": "Ordinary swap has no caller callback; separate flashLoan entry is outside this swap claim, not deferred-input.",
+    "feeActor": "Same runtime execution transactionOrigin preserved in quoteActorBinding; recipient changes do not substitute the fee actor.",
+    "tokenReturn": "Token true/empty/false return bytes do not substitute for balance evidence; actual transfer effects govern. No approvals are used.",
+    "unsupported": "quote-output and deferred-input requests remain rejected; no flash-loan/native/extra instance expansion."
+  },
+  "runtimeConstruction": {
+    "directions": 4,
+    "exactCalls": 0,
+    "rpcCalls": 0,
+    "quotedFallback": false
+  },
+  "localEVM": {
+    "report": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/evm09/result.json",
+      "sha256": "756488731f52fe2acece3cecd9ce2eb1f96c1125fa5916636947f7d93fef25af"
+    },
+    "programs": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/evm09/programs.json",
+      "sha256": "4fa37677870928b7786823a92ee5ef8325925d3b7d64419078b2d442c2cfa58e"
+    },
+    "stdout": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/evm09/forge.stdout.log",
+      "sha256": "b48fc3169821677bb22f23710d0eea22d3f573473d23535e0fed4b7cf6897836"
+    },
+    "exitCode": 0,
+    "functions": 5,
+    "positive": 24,
+    "faultRollback": 44,
+    "unguardedSentinels": 22,
+    "zeroInput": 4,
+    "unfunded": 4,
+    "scope": "Actual local BotVM and production-emitted program; synthetic GSP ABI pool and tokens, not historical protocol rollback.",
+    "sourceStable": true
+  },
+  "offline": {
+    "family": "pass",
+    "existingHistoricalContract": "4/4",
+    "recipientContract": "17/17",
+    "checks": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/checks09.json",
+      "sha256": "10db80d68483d9a2df5926a3c263efb8b0157d62453579f7f68088e7c256a0f2"
+    },
+    "canonicalSelection": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/selection09.json",
+      "sha256": "b9bbaf761c83441c5a49b124ae8a76117cbdfe29024f5235a62261caa6e4e0d1"
+    },
+    "historicalReceipts": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/historical-checks10.json",
+      "sha256": "69bafa037666102d610596d5adaa3c64f507b8758a3fa2bf5a7f0c663615328a"
+    }
+  },
+  "ready": {
+    "receipt": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/ready10/receipt.json",
+      "sha256": "63e9606c09fffc983b6c0797146b55b761638364e85bb751ab1096dddef57b07"
+    },
+    "summary": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/ready10/ready-summary.json",
+      "sha256": "91f289c9a20b0ddaa440a5e3848b385b3d2b464133f625e575e82d20344ff585"
+    },
+    "prices": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/ready10/prices/prices.json",
+      "sha256": "9f807bad4148f7cb4d1ee0708409839be5a72256164062ca4fdee48e81d0e98a"
+    },
+    "input": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/ready10/prices/input.json",
+      "sha256": "9485f3bad78dd73ba42078c8bdb7052067935cef61bfe7bb994ab782e563d3b8"
+    },
+    "claim": "Protected existing same-N Ready copy with current production revalidation; not new from-zero natural discovery."
+  },
+  "defaultReuse": {
+    "positive": 16,
+    "currentRerun": false,
+    "unchangedScripts": 16,
+    "amountGroups": 8,
+    "raw": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/old-evidence/dual-current-attempt02.json",
+      "sha256": "0201f9a6d3a29614062dcdc02780aebf1348b72fae5a325dfb3995b854cda481"
+    },
+    "certification": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/v1-default-reuse-review93.json",
+      "sha256": "925c7390f55417f3cb34d9236b7a47ce324adb529a2f9420676689d050fe20d5"
+    },
+    "comparison": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/v1-default-script-comparison92.json",
+      "sha256": "7b1ab752ad7b5f9c1783a7bf15338c4251eb7410a5107d4b9fd0bf9cb3ae58c5"
+    },
+    "scope": "Byte-identical default/quoted scripts; exact old 0x8811 owner-patched artifact and metadata source bindings authenticated, with narrow current shared-VM compatibility review. Old binary/tree identity retained."
+  },
+  "reviews": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/root-independent94.json",
+      "sha256": "d8be260ac9b056073e2aca366ef52049da832a797541fd6a7316aabdb40d4abe"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/v1-production-review01.json",
+      "sha256": "4192aed31910db8989da1c975cb6b80f7c8133c1920183d377ffb4d0d8f5c19b"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/v1-harness-review07.json",
+      "sha256": "53949851e5c40fb8d45762ede3928502d5af702fb39b17fd91e1dc1f90e73d1f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/v1-default-reuse-review93.json",
+      "sha256": "925c7390f55417f3cb34d9236b7a47ce324adb529a2f9420676689d050fe20d5"
+    }
+  ],
+  "failuresAndFixes": {
+    "sharedFixture": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/shared89-v1-independent-review.json",
+      "sha256": "c45f1792be03e7e4cb5881e32f251e319442c50202da2a55aace5fad17319332"
+    },
+    "learningCaseCandidates": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yb-dodo-tooling-candidates94.json",
+      "sha256": "0a43d008b01f07031d89d109fac35da344441767d8fbdc56c566f246e55e151d"
+    },
+    "claim": "Original shared88 fake-return fixture failure retained; shared89 fixes model return and adds bad-return-only regression, 17/17. No production guard weakened."
+  },
+  "limitations": [
+    "Historical rejected strict results report main Revert and omit effects; not independent storageDiff rollback evidence. Complete rollback is separate synthetic local BotVM evidence.",
+    "Original transaction call-prestate not restored; same-N end-state quote/execution equality is separate from original TX output.",
+    "DSP/DVM/DPP are preserved additional interface candidates, not selected actual instances in this GSP acceptance; no success is inferred for them.",
+    "No new natural price/discovery, Adapter Replay, opportunity reproduction, representative performance or merge-ready claim."
+  ]
+}

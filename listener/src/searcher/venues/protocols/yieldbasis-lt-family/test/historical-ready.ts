@@ -76,6 +76,7 @@ async function main() {
     { flag: "wx", mode: 0o600 },
   );
   let stage = "receipt";
+  let reusePath: string | null = null, reuseBytes: Buffer | null = null;
   try {
     if (executorProgram) save("executor-runtime-code.json", loadBotVmRuntimeCode(owner));
     const receipt = await provider.send("eth_getTransactionReceipt", [tx]);
@@ -94,14 +95,14 @@ async function main() {
     const checkpoint = resolve(out, "ready.json");
     // Keep the original immutable; the production scoped updater decides what
     // must be rediscovered or reattested. No hand-edited memo/hash/graph fields.
-    const reusePath = args.has("--reuse-ready") ? resolve(args.get("--reuse-ready")!) : null;
+    reusePath = args.has("--reuse-ready") ? resolve(args.get("--reuse-ready")!) : null;
     let familyUpdateScope;
-    let reuseBytes: Buffer | null = null;
     if (reusePath) {
+      assert(!existsSync(reusePath + ".lock") && !existsSync(reusePath + ".attestation-journal"), "original Ready active");
       reuseBytes = readFileSync(reusePath);
       familyUpdateScope = readyReuseScope(await new UniverseRebuildCheckpointStore({ path: reusePath }).load(), block, header.hash);
       copyFileSync(reusePath, checkpoint, constants.COPYFILE_EXCL);
-      assert(readFileSync(checkpoint).equals(reuseBytes), "source Ready changed while copying");
+      assert(readFileSync(checkpoint).equals(reuseBytes) && readFileSync(reusePath).equals(reuseBytes), "source Ready changed while copying");
       save("reused-ready.json", { path: reusePath,
         sha256: createHash("sha256").update(reuseBytes).digest("hex"), ...familyUpdateScope });
     }
@@ -147,7 +148,12 @@ async function main() {
     console.error(JSON.stringify({ stage, message }));
     process.exitCode = 1;
   } finally {
-    provider.destroy();
+    try {
+      if (reusePath && reuseBytes) {
+        assert(!existsSync(reusePath + ".lock") && !existsSync(reusePath + ".attestation-journal"));
+        assert(readFileSync(reusePath).equals(reuseBytes), "original Ready changed");
+      }
+    } finally { provider.destroy(); }
   }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(() => {

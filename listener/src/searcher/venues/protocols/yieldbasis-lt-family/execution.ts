@@ -32,20 +32,30 @@ import type {
  * checks, and the specified-amount `buildFragment` path — which carries the real
  * floor — is the one used for quoted execution.
  */
-/** Only the receiver changes: LT burns the executor's shares and retains its
- * live staker/killed/liquidity checks. Both observed deltas are independent. */
-export function withdrawRecipientProgram(d: Pick<YieldBasisLtDescriptor, "lt" | "asset">,
+/** Explicit direct settlement keeps both actors' unrelated inventory intact.
+ * Protocol rebasing of the bound staker is not caller-funded debt or a callback. */
+export function withdrawRecipientProgram(d: Pick<YieldBasisLtDescriptor, "lt" | "asset" | "stablecoin">,
   executor: string, recipient: string): RuntimeAmountProgram {
-  runtimeExecutor(executor, d.lt, d.asset); runtimeExecutor(recipient, d.lt, d.asset);
+  runtimeExecutor(executor, d.lt, d.asset, d.stablecoin); runtimeExecutor(recipient, d.lt, d.asset, d.stablecoin);
   const read = (owner: string) => ERC20_INTERFACE.encodeFunctionData("balanceOf", [owner]);
-  return new RuntimeAmountProgram().constant(15, 1n).math("sub", 12, 0, 15).nativeBalance(9)
-    .call(d.lt, read(executor), { static: true }).load(1, 0)
+  const external = lower(recipient) !== lower(executor);
+  const p = new RuntimeAmountProgram().constant(15, 1n).math("sub", 12, 0, 15).nativeBalance(9)
+    .call(d.lt, read(executor), { static: true }).load(1, 0).math("sub", 12, 1, 0)
     .call(d.asset, read(recipient), { static: true }).load(2, 0)
-    .call(d.lt, LT_INTERFACE.encodeFunctionData("withdraw(uint256,uint256,address)", [0n, 1n, recipient]),
+    .call(d.stablecoin, read(executor), { static: true }).load(7, 0);
+  if (external) p.call(d.asset, read(executor), { static: true }).load(5, 0)
+    .call(d.lt, read(recipient), { static: true }).load(6, 0)
+    .call(d.stablecoin, read(recipient), { static: true }).load(8, 0);
+  p.call(d.lt, LT_INTERFACE.encodeFunctionData("withdraw(uint256,uint256,address)", [0n, 1n, recipient]),
       { patches: [{ offset: 4, reg: 0 }] }).load(3, 0)
     .call(d.lt, read(executor), { static: true }).load(4, 0).math("sub", 4, 1, 4).equal(4, 0)
     .call(d.asset, read(recipient), { static: true }).load(4, 0).math("sub", 4, 4, 2).equal(4, 3)
-    .math("sub", 12, 4, 15).nativeBalance(4).equal(4, 9);
+    .math("sub", 12, 4, 15)
+    .call(d.stablecoin, read(executor), { static: true }).load(4, 0).equal(4, 7);
+  if (external) p.call(d.asset, read(executor), { static: true }).load(4, 0).equal(4, 5)
+    .call(d.lt, read(recipient), { static: true }).load(4, 0).equal(4, 6)
+    .call(d.stablecoin, read(recipient), { static: true }).load(4, 0).equal(4, 8);
+  return p.nativeBalance(4).equal(4, 9);
 }
 export const yieldBasisLtExecution: ExecutionSemantics<
   YieldBasisLtDescriptor,
@@ -58,7 +68,8 @@ export const yieldBasisLtExecution: ExecutionSemantics<
     runtimeExecutor(executor, d.lt, d.asset);
     const request = input.settlement;
     if (request && request.kind !== "direct-output") return null;
-    const recipient = request ? runtimeExecutor(request.recipient, d.lt, d.asset, d.stablecoin, d.cryptopool, d.amm) : executor;
+    if (request) runtimeExecutor(executor, d.lt, d.asset, d.stablecoin, d.cryptopool, d.amm, d.staker);
+    const recipient = request ? runtimeExecutor(request.recipient, d.lt, d.asset, d.stablecoin, d.cryptopool, d.amm, d.staker) : executor;
     const settle = { settlement: { directOutput: true as const }, ...(request ? { settlementRequest: request } : {}) };
     if (r.direction === "deposit") return { ...runtimeLeg(YIELDBASIS_DEPOSIT_ACTION,
       depositProgram(d, executor, request ? { recipient } : {})), ...settle };

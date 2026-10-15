@@ -1807,22 +1807,32 @@
         {
           "id": "GSP",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "separate-funding",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "两个 N26016874 immutable clone 与当前 public proxy 相等，但历史 implementation 原字节未保留在该 pin 文件。",
-            "旧两池普通双执行不验证新外部 recipient 模式；当前 direct 实际执行仍缺。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidenceNote": "both saved N26016874 proxy code hashes exactly match public immutable clone, implementation pointer78d43; implementation verified source read",
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
               "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+            },
+            {
+              "path": "docs/research/reports/dodo-gsp-recipient-actual-correctness-20261015.json",
+              "sha256": "8a46d5b6e525cff50bb40ecf5c0ec6c9ce07f67983a74a7756d24194695202f3"
+            },
+            {
+              "path": "docs/research/reports/dodo-gsp-recipient-independent-20261015.json",
+              "sha256": "d8be260ac9b056073e2aca366ef52049da832a797541fd6a7316aabdb40d4abe"
             }
-          ]
+          ],
+          "scope": "Only two actual N26016874 GSP instances, four ERC20 swap directions, ordinary swap callback none; separate-funding denotes the unexpanded flashLoan interface.",
+          "executionEvidence": {
+            "path": "docs/research/reports/dodo-gsp-recipient-current-behavior-20261015.json",
+            "sha256": "6a0e17daa8b9f8eb292a7b83c8bc7b544022eb3eada8521813778f991c4bd7eb"
+          }
         },
         {
           "id": "DSP",
@@ -1894,7 +1904,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -1966,7 +1976,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/dodo-v2-family/execution.ts",
-          "sha256": "335ca09973c75b3198f2353ef608873472f47a8621acb1a0567bd5e80833698f"
+          "sha256": "d7aacd7e44c7ad8d516579ca59132b106c31ad8691bd0e35d265e8b626334328"
         },
         {
           "path": "listener/src/searcher/venues/swaps/dodo-v2-family/identity.ts",
@@ -1990,8 +2000,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
-        "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+        "path": "docs/research/reports/current-interface-custom-swap-dodo-v2-20261015.json",
+        "sha256": "370b470a67c51dd51936588895a5e619447d6ff68ea4e6657379a569bda074a2"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/dodo-gsp-recipient-actual-correctness-20261015.json",
+        "sha256": "8a46d5b6e525cff50bb40ecf5c0ec6c9ce07f67983a74a7756d24194695202f3"
       }
     },
     {
@@ -6215,40 +6229,60 @@
         {
           "id": "LT deposit receiver overload",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "conditional",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "3 个实际 LT 部署源码已核实，历史 Ready 缺各自确切 runtime codeHash。",
-            "缺当前接线的指定收款方到账与 staker 限制拒绝证据；内部 AMM 操作不是调用者结算回调。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/yieldbasis-recipient-actual-correctness-20261015.json",
+              "sha256": "f752372f5b12f0b8e745b4dd56be2dbb2701bc85b53917504ed2b105b14d7d08"
+            },
+            {
+              "path": "docs/research/reports/yieldbasis-recipient-independent-20261015.json",
+              "sha256": "e33620d08de6d8053c47e24cd1682858a1ff9788d2902003a734227bafe04a4e"
             }
-          ]
+          ],
+          "scope": "Three same-N admitted LT ERC20 instances; self/external receiver excluding bound unsafe aliases and staker",
+          "executionEvidence": {
+            "path": "docs/research/reports/yieldbasis-recipient-current-behavior-20261015.json",
+            "sha256": "43ab6b1cbb365119ae0a564b77c75b66c8e17580baea5a776b1f2306c0e6e084"
+          }
         },
         {
           "id": "LT ordinary withdraw receiver overload",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "conditional",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "3 个实际 LT 部署源码已核实，历史 Ready 缺各自确切 runtime codeHash。",
-            "缺当前接线的指定收款方到账与 staker 限制拒绝证据；内部 AMM 操作不是调用者结算回调。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/yieldbasis-recipient-actual-correctness-20261015.json",
+              "sha256": "f752372f5b12f0b8e745b4dd56be2dbb2701bc85b53917504ed2b105b14d7d08"
+            },
+            {
+              "path": "docs/research/reports/yieldbasis-recipient-independent-20261015.json",
+              "sha256": "e33620d08de6d8053c47e24cd1682858a1ff9788d2902003a734227bafe04a4e"
             }
-          ]
+          ],
+          "scope": "Three same-N admitted LT ERC20 instances; self/external receiver excluding bound unsafe aliases and staker",
+          "executionEvidence": {
+            "path": "docs/research/reports/yieldbasis-recipient-current-behavior-20261015.json",
+            "sha256": "43ab6b1cbb365119ae0a564b77c75b66c8e17580baea5a776b1f2306c0e6e084"
+          }
         }
       ],
       "domain": "protocol",
@@ -6259,7 +6293,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -6307,11 +6341,11 @@
         },
         {
           "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/deposit.ts",
-          "sha256": "09407e66ff549d6605812cadc21fa40335fdca75eedc8897bce6d579157b501b"
+          "sha256": "f8a053a6b9cc732c02da438a93cbb570ec7d5d957a062060170b9e6e40d9d711"
         },
         {
           "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/execution.ts",
-          "sha256": "920adb2314b834f384d1bf60f1fd869f3aed062fac47bc51f98a9c7a2a8e5e36"
+          "sha256": "730d48aabcb61d8c7e2bef39198b90c674d3f87a180c3fa39f9bc52645632fff"
         },
         {
           "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/identity.ts",
@@ -6339,8 +6373,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-        "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+        "path": "docs/research/reports/current-interface-protocol-yieldbasis-lt-20261015.json",
+        "sha256": "d2ec8cb05dc7d7acab1a004cc0d3e1127a96cf589c4367e1c809bb7e776366a9"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/yieldbasis-recipient-actual-correctness-20261015.json",
+        "sha256": "f752372f5b12f0b8e745b4dd56be2dbb2701bc85b53917504ed2b105b14d7d08"
       }
     },
     {
@@ -7612,8 +7650,8 @@
     ]
   },
   "currentScopedUpdate": {
-    "scope": "Frax synchronous Custodian, Legacy Set Core unary four directions and fee sample, Fluid three existing pools authenticated reuse plus four independent insufficient-input controls.",
-    "priorInventorySha256": "a7e09c74fe33291dabc1cfd6bb972fa5fb6b9c9b53b5427307e91c7ef8c2eeeb",
+    "scope": "YB three ordinary ERC20 LT instances and DODO two registered GSP pools direct receipt acceptance; default evidence certified reuse.",
+    "priorInventorySha256": "8bf7e0c3bda243fd34b49569acd1cb9e089122cc47068f2e0ba8a893e4b5e12e",
     "allOtherVariantStatesPreserved": true,
     "allFamiliesPassed": false
   }

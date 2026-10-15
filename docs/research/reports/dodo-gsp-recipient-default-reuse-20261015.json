@@ -1,0 +1,109 @@
+{
+  "result": "limited-default-evidence-reuse-certified",
+  "scope": "Original 16 quoted/runtime executions retained as original historical evidence; not newly executed on current runtime. Current 32 direct executions remain separate.",
+  "oldArtifact": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/rounding-central-20261009.V3Y8qS/BotVM-before.json",
+    "runtimeKeccak256": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+    "sha256": "ff8b61348f037390645448c44d923b5cb43fbda34afe0ff5a34dfaf2a3676b0b",
+    "sources": {
+      "src/BotVM.sol": {
+        "keccak256": "0x56b2c959bba3574e408f9c0eb7dfb7f889cda7298142a6a8affef7f106d24126",
+        "urls": [
+          "bzz-raw://6d9ba4a7a315acd48e115529e3a17b90ba6f066f496d6b49c8318e617468fb5d",
+          "dweb:/ipfs/QmNgB9gPb4XuvHjW667NSgL7fy9XqUdLPTf2U5D6nSfkpi"
+        ],
+        "license": "MIT"
+      },
+      "src/Constants.sol": {
+        "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751",
+        "urls": [
+          "bzz-raw://e90d927e539a8166b5992e690d968bb8c00671aa23a792fc144f3912f1fbaddd",
+          "dweb:/ipfs/QmW5nCWUBkqWXQ7hRbdLSUvzgtbngYSs7WVQW5hYjLaw29"
+        ],
+        "license": "MIT"
+      },
+      "src/RuntimeAmountVM.sol": {
+        "keccak256": "0x29a6dc264210d22fb8f2d4ca3708001ea1d798b99847b068231b8092bce555ca",
+        "urls": [
+          "bzz-raw://36408aba2a489373b95b7e4025f44ef6f282ec3b36c8828379d10bd386f422c5",
+          "dweb:/ipfs/QmWV1ebUyuWknkHhAnJyQp9DbVa3htvB9bTCgB7D1K56Pt"
+        ],
+        "license": "MIT"
+      },
+      "src/interfaces/IERC20.sol": {
+        "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d",
+        "urls": [
+          "bzz-raw://a03a6b67dfd093ae5268d99658ee5401b61210b9e9b7af1e2b1c02b234d5b898",
+          "dweb:/ipfs/QmPTcjfCvjYQYQLwf9jLpLTdHZ1gZNCJsJTQ9Fj43Sbei4"
+        ],
+        "license": "MIT"
+      }
+    },
+    "localArtifact": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/old-runtime92.json",
+    "localSha256": "6790bb3497771b95ff18a555504c14174d73b876b215e3dfdd95c7234d8e8962",
+    "patchedOwner": "0x1000000000000000000000000000000000000001",
+    "patchedRuntimeKeccak256": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+    "sourceBindings": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/old-source92/exact/src/BotVM.sol",
+        "sha256": "5cc05fe179c3c39ffae2eadd4ae066c8498948f5fcdb42b705acbe44658b6c66",
+        "keccak256": "0x56b2c959bba3574e408f9c0eb7dfb7f889cda7298142a6a8affef7f106d24126"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/old-source92/dc901/src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+        "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/old-source92/exact/src/RuntimeAmountVM.sol",
+        "sha256": "6d286940c1ba7d7a308cbc4dfd4e592cecded80ae1c520b858e1ef525323fb0c",
+        "keccak256": "0x29a6dc264210d22fb8f2d4ca3708001ea1d798b99847b068231b8092bce555ca"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/old-source92/dc901/src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+        "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+      }
+    ]
+  },
+  "scriptEquality": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/v1-default-script-comparison92.json",
+    "sha256": "7b1ab752ad7b5f9c1783a7bf15338c4251eb7410a5107d4b9fd0bf9cb3ae58c5",
+    "amounts": 8,
+    "identicalScripts": 16
+  },
+  "raws": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/old-evidence/dual-current-attempt02.json",
+      "sha256": "0201f9a6d3a29614062dcdc02780aebf1348b72fae5a325dfb3995b854cda481"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/direct10.json",
+      "sha256": "046cbe8ee636821f9e1afe2cea88fc39edec6922f1463ff37d8559aaa19647b5"
+    }
+  ],
+  "compatibility": {
+    "actualCurrentSources": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/source90/src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/source90/src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+      }
+    ],
+    "findings": [
+      "DODO execution emitter changes are exclusively explicit settlement request branch; current saved default scripts are byte-identical to all original 16 scripts.",
+      "BotVM differences only preserve special diagnostic revert bytes on failed CALL/value/wrap. Successful ordinary CALL behavior and owner/entry checks unchanged.",
+      "Legacy standalone RuntimeAmountProgram opcodes 0..7, call modes 0/1 and allowance emitters keep arithmetic/call behavior. New readonly=false/depth=0 entry guard holds. New mode2/op8 are not in legacy default scripts. Old samples invoke standalone programs, not the changed closed-flow rounding path.",
+      "Legacy failed ordinary calls still revert: empty flow context preserves old diagnostic fallback. No old 1-unit rejection upgraded into new default policy.",
+      "Ordinary ERC20 asset boundary returns before newly added native settlement branch. Current direct evidence separately proves stronger exact debit/receipt constraints."
+    ],
+    "notClaims": [
+      "No new default EVM run",
+      "No representative performance or opportunity replay",
+      "No blanket equality of old/current VM or old aggregate source tree"
+    ]
+  }
+}

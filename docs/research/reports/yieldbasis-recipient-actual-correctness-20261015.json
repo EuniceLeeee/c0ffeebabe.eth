@@ -1,0 +1,413 @@
+{
+  "schema": "yieldbasis-recipient-correctness/v1",
+  "familyId": "protocol:yieldbasis-lt",
+  "result": "pass-declared-ordinary-LT-direct-correctness",
+  "implementationReady": true,
+  "blockingFindings": [],
+  "scope": "Current issued runtime direct self/external deposit and ordinary withdraw for three already admitted actual ERC20 LT instances; current Exact/quoted construction, plus authenticated prior default/quoted execution reuse.",
+  "counts": {
+    "positive": 48,
+    "declaredRevert": 48,
+    "tokenDeltas": 216,
+    "nativeDeltas": 48,
+    "exactProbe": 6,
+    "approvalCleared": 24,
+    "outputTransferOrMint": 48,
+    "inputTransferOrBurn": 48
+  },
+  "currentHistorical": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence10/direct08-weth.json",
+      "sha256": "874769a1397794434b2fbc419d170ada117e8d1c9304c4c2c8acf145edc738c0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence10/direct08-cbbtc.json",
+      "sha256": "0affb65d7f8ccbfbb66a3290f339e5779d0900d81fed42e3375df9691990c220"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence10/direct08-wbtc.json",
+      "sha256": "0d19c77aff4818acf6c62b9023f49b9f230c697845a35c2e0e0f2ed9c0f982ac"
+    }
+  ],
+  "sameNInstances": [
+    {
+      "instance": "0x2b9c9f3bdceb5d8e36a4704f08a78fca53343cea",
+      "block": 26003536,
+      "hash": "0xf913fc4aaaeca0fd9fcd871c1a2b0159e1ecc3679724fff679a061ca7bedeaad",
+      "result": "pass",
+      "deployedBindings": [
+        {
+          "label": "lt",
+          "address": "0x2B9c9f3BdcEb5d8E36a4704F08a78Fca53343cEa",
+          "source": {
+            "number": 26003536,
+            "hash": "0xf913fc4aaaeca0fd9fcd871c1a2b0159e1ecc3679724fff679a061ca7bedeaad",
+            "generation": 26003536
+          },
+          "codeHash": "0x08effd62c0c84d577fcd8bfcb3ac16a1f9e96d011b3b2180a5576db4e5ce6101",
+          "codeBytes": 23420
+        },
+        {
+          "label": "asset",
+          "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "source": {
+            "number": 26003536,
+            "hash": "0xf913fc4aaaeca0fd9fcd871c1a2b0159e1ecc3679724fff679a061ca7bedeaad",
+            "generation": 26003536
+          },
+          "codeHash": "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23",
+          "codeBytes": 3124
+        },
+        {
+          "label": "stablecoin",
+          "address": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "source": {
+            "number": 26003536,
+            "hash": "0xf913fc4aaaeca0fd9fcd871c1a2b0159e1ecc3679724fff679a061ca7bedeaad",
+            "generation": 26003536
+          },
+          "codeHash": "0x7d33300cc75c4738e04e1f8c838b8b4fbb1c40d046131088463f70f9c712325f",
+          "codeBytes": 3572
+        },
+        {
+          "label": "cryptopool",
+          "address": "0x656341Ef90b622c6634e0573772FfB7f3669b9f3",
+          "source": {
+            "number": 26003536,
+            "hash": "0xf913fc4aaaeca0fd9fcd871c1a2b0159e1ecc3679724fff679a061ca7bedeaad",
+            "generation": 26003536
+          },
+          "codeHash": "0x116eeee684882885cda3ddf0287d0979f71d64030fbec90f1f52924cf0e7643a",
+          "codeBytes": 23498
+        },
+        {
+          "label": "amm",
+          "address": "0x5f8D24F33Cc5a1D5D1bf012261E6A2214C92233c",
+          "source": {
+            "number": 26003536,
+            "hash": "0xf913fc4aaaeca0fd9fcd871c1a2b0159e1ecc3679724fff679a061ca7bedeaad",
+            "generation": 26003536
+          },
+          "codeHash": "0xf010330f35d428c09b655f8894e395b1d665e4dd5b99598ce6fd22ac5fbb7b46",
+          "codeBytes": 9100
+        },
+        {
+          "label": "staker",
+          "address": "0xd829456FD63Ada7DE0657714A3A7A26DE403E3D8",
+          "source": {
+            "number": 26003536,
+            "hash": "0xf913fc4aaaeca0fd9fcd871c1a2b0159e1ecc3679724fff679a061ca7bedeaad",
+            "generation": 26003536
+          },
+          "codeHash": "0x664b48057347bd342da9b43db456c55f8ad74c775e0ec695896200c5d209c12d",
+          "codeBytes": 16029
+        }
+      ]
+    },
+    {
+      "instance": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+      "block": 25978646,
+      "hash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4",
+      "result": "pass-with-spliced-reference",
+      "deployedBindings": [
+        {
+          "label": "lt",
+          "address": "0x722FC3640BA007C3E9867CCdB0dCa59F2e2F29F9",
+          "source": {
+            "number": 25978646,
+            "hash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4",
+            "generation": 25978646
+          },
+          "codeHash": "0x51b12ac4ad9956528cbdd6d3db82d3bf64e492f2a6baeb3bb730b88c95a62e87",
+          "codeBytes": 23420
+        },
+        {
+          "label": "asset",
+          "address": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+          "source": {
+            "number": 25978646,
+            "hash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4",
+            "generation": 25978646
+          },
+          "codeHash": "0x91149353e08445ba77a52bf7e4cef919054027f4ad42812b4314bbaf2abd8b71",
+          "codeBytes": 1550
+        },
+        {
+          "label": "stablecoin",
+          "address": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "source": {
+            "number": 25978646,
+            "hash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4",
+            "generation": 25978646
+          },
+          "codeHash": "0x7d33300cc75c4738e04e1f8c838b8b4fbb1c40d046131088463f70f9c712325f",
+          "codeBytes": 3572
+        },
+        {
+          "label": "cryptopool",
+          "address": "0x862CB4E988FB66E72f128d1183829f8c05B6c6A0",
+          "source": {
+            "number": 25978646,
+            "hash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4",
+            "generation": 25978646
+          },
+          "codeHash": "0xd19e3a232367411c825df98165c95898c08e181fe2e0f9211445f48eb4c0dc62",
+          "codeBytes": 23498
+        },
+        {
+          "label": "amm",
+          "address": "0x49F51d7e279252F3C9a09678fdC65B4dBd5CB196",
+          "source": {
+            "number": 25978646,
+            "hash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4",
+            "generation": 25978646
+          },
+          "codeHash": "0xc178206a2203c9ac9d2c720377473bc55c2fcc516bd8126a0810fb02d10b52e3",
+          "codeBytes": 9100
+        },
+        {
+          "label": "staker",
+          "address": "0xF8764cBcdb15a9E4c7CA1b0b8a578d9ebEEC1b6f",
+          "source": {
+            "number": 25978646,
+            "hash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4",
+            "generation": 25978646
+          },
+          "codeHash": "0x2852d605f870e3f37758288c4da34acaea74f965350ff75e8cb74d8ac6c5f5b8",
+          "codeBytes": 16029
+        }
+      ]
+    },
+    {
+      "instance": "0x651d4b8168488fa163d85304662e8278d4c55baa",
+      "block": 25981574,
+      "hash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+      "result": "pass-with-spliced-reference",
+      "deployedBindings": [
+        {
+          "label": "lt",
+          "address": "0x651D4b8168488FA163D85304662E8278d4c55BAa",
+          "source": {
+            "number": 25981574,
+            "hash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+            "generation": 25981574
+          },
+          "codeHash": "0x0b738fcc9b25ab4f5663f497516ee1b187b0170a42ba9588205e68e57c70e9fd",
+          "codeBytes": 23420
+        },
+        {
+          "label": "asset",
+          "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+          "source": {
+            "number": 25981574,
+            "hash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+            "generation": 25981574
+          },
+          "codeHash": "0x131ff5c755b710d543ea70fede2eb38e5d15b1456df0ae932ba12e2786f7e5df",
+          "codeBytes": 4582
+        },
+        {
+          "label": "stablecoin",
+          "address": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "source": {
+            "number": 25981574,
+            "hash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+            "generation": 25981574
+          },
+          "codeHash": "0x7d33300cc75c4738e04e1f8c838b8b4fbb1c40d046131088463f70f9c712325f",
+          "codeBytes": 3572
+        },
+        {
+          "label": "cryptopool",
+          "address": "0x313698667d7FDD6789a9BC70821309ff891E729A",
+          "source": {
+            "number": 25981574,
+            "hash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+            "generation": 25981574
+          },
+          "codeHash": "0xe4ac67017f888827e6efe22cd8edc37bf562166368f6eb62837bff2e4a4a23e8",
+          "codeBytes": 23498
+        },
+        {
+          "label": "amm",
+          "address": "0x7b9817eb5C49A99875138A5d52bF64a8B2cFFFFE",
+          "source": {
+            "number": 25981574,
+            "hash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+            "generation": 25981574
+          },
+          "codeHash": "0x804007480a42292415f94cec5e5fe263f168f446fe1e36ac5c423c9e52288780",
+          "codeBytes": 9100
+        },
+        {
+          "label": "staker",
+          "address": "0xAa0b1d265F23972eafB7d088e963BD31403A58F5",
+          "source": {
+            "number": 25981574,
+            "hash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+            "generation": 25981574
+          },
+          "codeHash": "0x815c38de908569a9e33b1dde7a0e168385d013313654f40e7c9de70ef8cca0d9",
+          "codeBytes": 16029
+        }
+      ]
+    }
+  ],
+  "runtimeConstruction": {
+    "exactCalls": 0,
+    "rpcCalls": 0,
+    "quotedFallback": false,
+    "directionsPerInstance": 2
+  },
+  "executor": {
+    "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+    "owner": "0x1000000000000000000000000000000000000001",
+    "runtimeKeccak256": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "artifactCurrentSolidityMetadataVerifiedBeforeAfter": true
+  },
+  "source": {
+    "listenerProductionTreeSha256": "39bb9cc067399a3f0b71f9542a86de9f927c864aef10799a5f3627e6caf20717",
+    "fullProductionSnapshot": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence09/production-source06.json",
+      "sha256": "ccd542bf2f54eea610e607ca64fae4ecf6855dda4417e8bd49b6207c7f59de83"
+    },
+    "stable": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence10/production-stable08.json",
+      "sha256": "9fadad49ee4e9e9e7bbfb1c3ba5174c338a6b929a44f33f487ae6ab5810eb347"
+    },
+    "owned": [
+      {
+        "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/deposit.ts",
+        "sha256": "f8a053a6b9cc732c02da438a93cbb570ec7d5d957a062060170b9e6e40d9d711"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/execution.ts",
+        "sha256": "730d48aabcb61d8c7e2bef39198b90c674d3f87a180c3fa39f9bc52645632fff"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/test/historical-dual.ts",
+        "sha256": "951b9bd9177a385d4e831c0371a7dd4aee8694e6de2fc1ac3c31f8da0367632f"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/test/historical-ready.ts",
+        "sha256": "ed59b2a62a3fa7965bc279fee734d277ee0bb03395582e85bb56bf157169feac"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/test/recipient-default-bytes.json",
+        "sha256": "ee71426ec9b689619a95dc1421a1d1883e08ee26c44d505cc91140ce6f9d40d5"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/test/recipient-evm.ts",
+        "sha256": "e32fda229c650a31bb79baf5910e232d5a47e4bb14581a3189b2cf3bf31459e5"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/test/recipient-observations.ts",
+        "sha256": "63ac19a42cd5af0ddd32e9bddfc07e95a62d3737651a7dae46afcc37e32e92f0"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/test/recipient.test.ts",
+        "sha256": "c263648e8b96a97b0fe41450047a5e8d31d54e1b635bf59eae5cc607367c2d9c"
+      },
+      {
+        "path": "test/YieldBasisRecipient.t.sol",
+        "sha256": "213ec7a989b16314d4616b324e3bcda67b5fad975953e5a22cab414f26c19511"
+      }
+    ]
+  },
+  "offline": {
+    "legacyContract": {
+      "passed": 16,
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence09/legacy-contract06.log",
+        "sha256": "36f87f7c915775cb53630b195dbec2184887c2d1b0dbdd579143eb90c367a85b"
+      }
+    },
+    "recipientContract": {
+      "passed": 26,
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence09/recipient-contract07.log",
+        "sha256": "20c5bfa47a83035c7a0cecb76789b20a46db92b44fadabf626c6aa6d9f9f5dee"
+      }
+    },
+    "evm": {
+      "testFunctionsPassed": 5,
+      "positiveCases": 8,
+      "faultRollbackCases": 54,
+      "unguardedSyntheticSentinels": 27,
+      "zeroAmountCases": 4,
+      "unfundedIdenticalScriptCases": 4,
+      "scope": "Real local BotVM plus production emitter; synthetic LT/pool/token. Independent rollback covers stock, native, allowance, supply and protocol state only in this local fixture.",
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence09/evm07/result.json",
+        "sha256": "aac44081d03dcbb6a1623fdde29287648068d821e0cde129ab34bb5b197be284"
+      },
+      "stdout": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence09/evm07/forge.stdout.log",
+        "sha256": "0ea1f0648db9f034381ae186453a80988f0749564240e095ce4364d7c449e7d3"
+      }
+    }
+  },
+  "previousDefaultEvidence": {
+    "positive": 48,
+    "declaredRevert": 24,
+    "identicalCurrentQuotedAndRuntimePrograms": 24,
+    "reexecutedThisBatch": false,
+    "review": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/v1-default-reuse-review91.json",
+      "sha256": "f17a7753b7341078ee1ca72414496b5486d3634d17e31cbbb420dd677e0353e0"
+    }
+  },
+  "reviews": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/root-independent92.json",
+      "sha256": "e33620d08de6d8053c47e24cd1682858a1ff9788d2902003a734227bafe04a4e"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/v1-harness-review85.json",
+      "sha256": "64d9601f555da1703c07eb68e98e116372556a7d52320d5d122300c1f2e9950b"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/v1-test-only-review07.json",
+      "sha256": "1072233f6259e268f8accca473e3ffffbaef8e2596ec1d69912b4e7689421790"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/v1-default-reuse-review91.json",
+      "sha256": "f17a7753b7341078ee1ca72414496b5486d3634d17e31cbbb420dd677e0353e0"
+    }
+  ],
+  "canonicalReceipts": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence09/selection06.json",
+      "sha256": "5622a38b1411c2d2850e42060a554100b5a8cb2b909203e1dc3ef1e517af562c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence10/selection07.json",
+      "sha256": "cedb41ad49d5ec65f96ed19b35a7432f1311ab6eda60f4717de32e690272f209"
+    }
+  ],
+  "retainedFailure": {
+    "scope": "Test fixture self actor used ...0005; production historical CLI correctly requires ...0002. No production defect.",
+    "evidence": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence09/recipient-contract06.log",
+      "sha256": "df6cdbbd99256381453f8df41d32903ab60397b91812c6e8da98b78a4860cf1d"
+    },
+    "fixedBy": [
+      "Two test-only files in applied07; wrong-actor rejection remains asserted",
+      "Metadata source/artifact pin and regression added before any new historical execution"
+    ],
+    "fixedEvidence": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence09/checks07.json",
+      "sha256": "3a48fecb32c2650413adcd47c29f21dedc3af154cd21a520d78d618ebf575d54"
+    },
+    "codifyCommit": "parent-owned pending commit"
+  },
+  "limitations": [
+    "BTC samples retain pass-with-spliced-reference: donor provides input size only; target quote/execution and reverse minted input are actual same-N. No natural BTC valuation claim.",
+    "Same-N Ready is protected reuse plus current production revalidation, not fresh-from-zero discovery.",
+    "Historical negatives prove strict declared main revert; no independent post-rollback historical storageDiff observation. Local EVM rollback is separate synthetic evidence.",
+    "LT staker rebasing is intentional; total supply equality is not falsely inferred from actor mint/burn. Staker receiver/actor endpoints are rejected.",
+    "No callback continuation/deferred-input or quote-output claim; internal AMM/staker interaction is not caller settlement callback.",
+    "No emergency withdraw, native asset adaptation, new opportunity, formal Adapter Replay, performance, live or broadcast claim.",
+    "Activation remains the existing explicit opt-in; no default activation change."
+  ]
+}

@@ -440,7 +440,11 @@
     "test:set-redemption-family:recipient-contract": "tsx src/searcher/venues/protocols/set-redemption-family/test/recipient-contract.ts",
     "test:fluid-dex-family:unfunded-ready": "tsx src/searcher/venues/swaps/fluid-dex-family/test/unfunded-ready.ts",
     "test:fluid-dex-family:unfunded-historical": "tsx src/searcher/venues/swaps/fluid-dex-family/test/unfunded-historical.ts",
-    "test:fluid-dex-family:unfunded-contract": "tsx src/searcher/venues/swaps/fluid-dex-family/test/unfunded-contract.ts"
+    "test:fluid-dex-family:unfunded-contract": "tsx src/searcher/venues/swaps/fluid-dex-family/test/unfunded-contract.ts",
+    "searcher:yieldbasis-lt-recipient-contract": "node --import tsx --test src/searcher/venues/protocols/yieldbasis-lt-family/test/recipient.test.ts",
+    "searcher:yieldbasis-lt-recipient-evm": "node --import tsx src/searcher/venues/protocols/yieldbasis-lt-family/test/recipient-evm.ts",
+    "searcher:dodo-v2-recipient-contract": "node --import tsx --test src/searcher/venues/swaps/dodo-v2-family/test/recipient.test.ts",
+    "searcher:dodo-v2-recipient-evm": "node --import tsx src/searcher/venues/swaps/dodo-v2-family/test/recipient-evm.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

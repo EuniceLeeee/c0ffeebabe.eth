@@ -37,7 +37,7 @@ const swaps = new ethers.Interface([
   "function sellBase(address) returns(uint256)", "function sellQuote(address) returns(uint256)",
 ]);
 const release = new ethers.Interface(["function fixtureRelease(uint256)"]);
-type Fault = "none" | "wrong-recipient" | "short-output" | "old-output-only" | "under-debit" | "over-debit" | "native";
+type Fault = "none" | "wrong-recipient" | "short-output" | "old-output-only" | "under-debit" | "over-debit" | "native" | "bad-return";
 type Build = (request?: RuntimeSettlementRequest) => RuntimeAmountLeg | null;
 
 function runRecipientModel(input: {
@@ -123,6 +123,7 @@ function runRecipientModel(input: {
         assert.equal(q.args[3], 1n); to = q.args[4];
       } else {
         assert.equal(q.name, input.kind === "dodo-base" ? "sellBase" : "sellQuote"); to = q.args[0];
+        returnWord = input.fault === "bad-return" ? expectedOutput + 1n : expectedOutput;
       }
       assert.equal(get(input.tokenIn, input.custody), 1000n + amount, "prepayment precedes the ordinary swap");
     }
@@ -131,7 +132,7 @@ function runRecipientModel(input: {
     add(input.tokenOut, input.custody, -received);
     add(input.tokenOut, input.fault === "wrong-recipient" ? actor : to, received);
     if (input.fault === "native") native--;
-    return word(returnWord); // Ekubo additionally checks its packed ABI; all receipts remain independently measured.
+    return word(returnWord); // Typed protocol return values are checked against independently measured receipts.
   };
   const result = inspectRuntime(root.params.settlementProgram as string, amount, {
     call, nativeBalance: () => native,
@@ -181,7 +182,7 @@ for (const route of dodoV2Routes.project({ descriptor: dodo })) test(`DODO ${rou
   const build: Build = settlement => dodoV2Execution.buildRuntimeLeg({ ...base, transactionOrigin: origin,
     ...(settlement ? { settlement } : {}) });
   assert.throws(() => dodoV2Execution.buildRuntimeLeg({ ...base, settlement: { kind: "direct-output", recipient } }), /origin/);
-  for (const fault of ["none", "wrong-recipient", "short-output", "old-output-only", "under-debit", "over-debit", "native"] as const) {
+  for (const fault of ["none", "wrong-recipient", "short-output", "old-output-only", "under-debit", "over-debit", "native", "bad-return"] as const) {
     const run = () => runRecipientModel({ build, tokenIn: route.tokenIn, tokenOut: route.tokenOut, custody: pool,
       kind: route.direction === "sell-base" ? "dodo-base" : "dodo-quote", fault });
     if (fault === "none") run(); else assert.throws(run, /runtime amount mismatch|checked uint256 math/);

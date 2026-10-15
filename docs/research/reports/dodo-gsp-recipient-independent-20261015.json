@@ -1,0 +1,38 @@
+{
+  "schema": "dodo-gsp-current-direct-independent-review/v1",
+  "result": "pass",
+  "counts": {
+    "positive": 32,
+    "declaredRevert": 32,
+    "tokenDeltas": 96,
+    "nativeDeltas": 32,
+    "exactProbe": 0,
+    "approvalCleared": 0,
+    "outputTransferOrMint": 32,
+    "inputTransferOrBurn": 32
+  },
+  "reports": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/evidence11/direct10.json",
+      "sha256": "046cbe8ee636821f9e1afe2cea88fc39edec6922f1463ff37d8559aaa19647b5",
+      "tx": "0x00085da9420425f8f3de1243d41d71ff160984310edf5474341fbe628375bc3e",
+      "source": {
+        "number": 26016874,
+        "hash": "0xf2a4a8104b5ed1113df782166fbceeac9b8debdfef3a20a2b3993218215e5f0d"
+      },
+      "positive": 32,
+      "declaredRevert": 32,
+      "directions": [
+        "sell-base",
+        "sell-quote"
+      ]
+    }
+  ],
+  "sourceBinding": {
+    "tree": "39bb9cc067399a3f0b71f9542a86de9f927c864aef10799a5f3627e6caf20717",
+    "rows": 1244,
+    "fullManifest": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/source90/production-source.json",
+    "sha256": "79e57ce20c4c34f18b93958dff1a3f24dad07b3b2539f8413fc6cfca912fa818"
+  },
+  "scope": "Raw same-state current production issuer direct self/external; full requested debit and quote/receipt/Transfer agreement, unrelated observed inventory/native unchanged; current artifact metadata reviewed separately by fresh agent. Raw rejected effects omitted, not independent storageDiff rollback. Existing default/quoted reuse certification separate. Borrowed input provenance retained, not new natural valuation; no original opportunity or performance claim."
+}

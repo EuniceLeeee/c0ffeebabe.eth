@@ -1,0 +1,59 @@
+[
+  {
+    "family": "protocol:yieldbasis-lt",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T14:28:39.220032+00:00",
+    "finishedAt": "2026-10-15T14:29:29.338835+00:00",
+    "logSha256": "7a7f0e8b641fcd519f44ca4977fac05d816cd23fdf9ec37a8b4ed81477879c8e",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/two-gate97-selection.json",
+    "manifestSha256": "546cb2c823749a7cf823ba97f5c9b44a8ae55ec4c324792edc51491d6074d882",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:yieldbasis-lt",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  {
+    "family": "custom-swap:dodo-v2",
+    "exitCode": 1,
+    "startedAt": "2026-10-15T14:29:29.339197+00:00",
+    "finishedAt": "2026-10-15T14:30:19.317909+00:00",
+    "logSha256": "32d6ec14b7460e4484c8a7ac6e232dd731ffd77869cb73118b50cb98db304b16",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/two-gate97-selection.json",
+    "manifestSha256": "897cb1bea81c224bbc32b44e5b660cfa82f9d66c1a7b6fe4204845ff92e7e097",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "custom-swap:dodo-v2",
+          "passed": false,
+          "failures": [
+            "variant coverage is incomplete",
+            "DSP: deployment identity; execution evidence; DSP \u5b9e\u9645 proxy/implementation \u6e90\u7801\u5df2\u8bfb\uff0c\u4f46 descriptor \u4e3a provenance-stripped fixture\uff0c\u672a\u5efa\u7acb N implementation \u5b57\u8282\u7ed1\u5b9a\u3002; \u65b0 direct \u5b9e\u9645\u6267\u884c\u672a\u9a8c\u8bc1\u3002",
+            "DVM: deployment identity; execution evidence; DVM \u5730\u5740\u5728 N26016874 registry \u8fd4\u56de\u4e2d\uff0c\u4f46\u672c\u8303\u56f4\u65e0 N proxy/implementation \u5b57\u8282\u6216\u9010\u5b9e\u4f8b\u51c6\u5165\u8bc1\u636e\u3002; \u65b0 direct \u5b9e\u9645\u6267\u884c\u672a\u9a8c\u8bc1\u3002",
+            "DPP: deployment identity; execution evidence; DPP \u5730\u5740\u5728 N26016874 registry \u8fd4\u56de\u4e2d\uff0c\u4f46\u672c\u8303\u56f4\u65e0 N proxy/implementation \u5b57\u8282\u6216\u9010\u5b9e\u4f8b\u51c6\u5165\u8bc1\u636e\u3002; \u65b0 direct \u5b9e\u9645\u6267\u884c\u672a\u9a8c\u8bc1\u3002"
+          ]
+        }
+      ]
+    }
+  }
+]

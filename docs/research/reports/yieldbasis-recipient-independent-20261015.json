@@ -1,0 +1,71 @@
+{
+  "schema": "yieldbasis-current-direct-independent-review/v1",
+  "result": "pass",
+  "counts": {
+    "positive": 48,
+    "declaredRevert": 48,
+    "tokenDeltas": 216,
+    "nativeDeltas": 48,
+    "exactProbe": 6,
+    "approvalCleared": 24,
+    "outputTransferOrMint": 48,
+    "inputTransferOrBurn": 48
+  },
+  "reports": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence10/direct08-weth.json",
+      "sha256": "874769a1397794434b2fbc419d170ada117e8d1c9304c4c2c8acf145edc738c0",
+      "tx": "0x022a9ff85219675bcf0a0a2b17c76ac72b98d5e2c4177bc104edff56e706ee77",
+      "source": {
+        "number": 26003536,
+        "hash": "0xf913fc4aaaeca0fd9fcd871c1a2b0159e1ecc3679724fff679a061ca7bedeaad",
+        "generation": 26003536
+      },
+      "positive": 16,
+      "declaredRevert": 16,
+      "directions": [
+        "deposit",
+        "withdraw"
+      ]
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence10/direct08-cbbtc.json",
+      "sha256": "0affb65d7f8ccbfbb66a3290f339e5779d0900d81fed42e3375df9691990c220",
+      "tx": "0x1d1f257fc96b602e28292c8ff49a8e9924c3872a48ad0f9cf5d1b2af68d13e60",
+      "source": {
+        "number": 25978646,
+        "hash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4",
+        "generation": 25978646
+      },
+      "positive": 16,
+      "declaredRevert": 16,
+      "directions": [
+        "deposit",
+        "withdraw"
+      ]
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence10/direct08-wbtc.json",
+      "sha256": "0d19c77aff4818acf6c62b9023f49b9f230c697845a35c2e0e0f2ed9c0f982ac",
+      "tx": "0x061eb9595d5deb25b4e5b410a415e3e4567f28f7566c80aaf86cf30cada6a73e",
+      "source": {
+        "number": 25981574,
+        "hash": "0x2c5ccdd115c093cd23b1ab3c54d9d94bc50d8f8a1c5a945571ff312e60f8cc04",
+        "generation": 25981574
+      },
+      "positive": 16,
+      "declaredRevert": 16,
+      "directions": [
+        "deposit",
+        "withdraw"
+      ]
+    }
+  ],
+  "sourceBinding": {
+    "tree": "39bb9cc067399a3f0b71f9542a86de9f927c864aef10799a5f3627e6caf20717",
+    "rows": 1244,
+    "fullManifest": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/source90/production-source.json",
+    "sha256": "79e57ce20c4c34f18b93958dff1a3f24dad07b3b2539f8413fc6cfca912fa818"
+  },
+  "scope": "Raw same-state current production issuer direct self/external; full requested debit and quote/receipt/Transfer agreement, unrelated observed inventory/native unchanged; current artifact metadata reviewed separately by fresh agent. Raw rejected effects omitted, not independent storageDiff rollback. Existing default/quoted reuse certification separate. BTC borrowed input is not natural valuation; no original opportunity or performance claim."
+}

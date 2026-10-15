@@ -3,10 +3,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { closeSync, openSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ethers } from "ethers";
-import { runtimeProgramScript } from "../../../../../adapters/runtime-amount-program.js";
+import { RuntimeAmountProgram, runtimeProgramScript } from "../../../../../adapters/runtime-amount-program.js";
 import { concatBytes } from "../../../../../encoder.js";
 import type { ResolvedPlanNode } from "../../../../../types.js";
 import { loadBotVmRuntimeCode } from "../../../../../shared/executor/botvm-executor.js";
@@ -31,6 +31,7 @@ import { assertHistoricalDiscoveryReceipt, assertHistoricalPriceDirection } from
 import { DODO_V2_FAMILY_ID } from "../manifest.js";
 import { DODO_V2_EVENT_INTERFACE } from "../../dodo-v2-abi.js";
 import { referenceAmount } from "./reference-amount.js";
+import { assertRecipientEffects } from "./recipient-observations.js";
 
 const N = 26016874, HASH = "0xf2a4a8104b5ed1113df782166fbceeac9b8debdfef3a20a2b3993218215e5f0d";
 const TX = "0x00085da9420425f8f3de1243d41d71ff160984310edf5474341fbe628375bc3e";
@@ -40,6 +41,21 @@ const EFFECTS = ["return-data", "revert-data", "token-delta", "native-delta", "l
 const json = (v: unknown) => JSON.stringify(v, (_, x) => typeof x === "bigint" ? x.toString() : x, 2);
 const sha = (v: string | Uint8Array) => createHash("sha256").update(v).digest("hex");
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+export function verifyExecutorSources(root: string, artifactPath: string) {
+  const bytes = readFileSync(artifactPath), artifact = JSON.parse(bytes.toString());
+  const metadata = typeof artifact.metadata === "string" ? JSON.parse(artifact.metadata) : artifact.metadata;
+  assert.equal(metadata.settings.compilationTarget["src/BotVM.sol"], "BotVM");
+  const entries = Object.entries(metadata.sources) as [string, { keccak256: string }][];
+  assert(entries.length > 0 && Object.hasOwn(metadata.sources, "src/BotVM.sol"));
+  const sources = entries.map(([name, entry]) => {
+    const path = realpathSync(resolve(root, name));
+    assert(name.endsWith(".sol") && !relative(realpathSync(root), path).startsWith(".."));
+    const content = readFileSync(path); assert.equal(ethers.keccak256(content), entry.keccak256);
+    return { path: name, keccak256: entry.keccak256, sha256: sha(content) };
+  });
+  return { artifactSha256: sha(bytes), sources };
+}
 
 export function assertExecutorCodeProvenance(value: unknown, expectedCodeHash: string): void {
   // Production price artifacts may omit this optional counterfactual field.
@@ -77,18 +93,21 @@ function sourcePin() {
 
 async function main() {
   const args = new Map<string, string>();
-  const required = ["--ready", "--prices", "--rpc-env", "--revm-bin", "--out"];
-  const allowed = [...required, "--amounts-prices", "--amount-edge-keys"];
+  const required = ["--ready", "--prices", "--revm-bin", "--out"];
+  const allowed = [...required, "--rpc-env", "--rpc-file", "--amounts-prices", "--amount-edge-keys", "--recipient"];
   for (let i = 2; i < process.argv.length; i += 2) {
     const key = process.argv[i]!, value = process.argv[i + 1];
     assert(allowed.includes(key) && !args.has(key) && value); args.set(key, value);
   }
   for (const key of required) assert(args.has(key));
-  assert.equal(args.get("--rpc-env"), "MAINNET_RPC_URL");
+  assert(args.has("--rpc-env") !== args.has("--rpc-file"));
+  if (args.has("--rpc-env")) assert.equal(args.get("--rpc-env"), "MAINNET_RPC_URL");
+  const recipient = args.has("--recipient") ? ethers.getAddress(args.get("--recipient")!) : undefined;
+  if (recipient) assert(!same(recipient, EXECUTOR) && recipient !== ethers.ZeroAddress);
   assert.equal(args.has("--amounts-prices"), args.has("--amount-edge-keys"));
   const fd = openSync(args.get("--out")!, "wx", 0o600), report: any = { result: "failed", samples: [],
-    tx: TX, block: N, hash: HASH, broadcast: false,
-    claim: "same-N production quote/quoted/runtime receipts; spliced amounts do not prove natural valuation; no original-precall, profitability or representative latency verdict" };
+    tx: TX, block: N, hash: HASH, broadcast: false, controls: [],
+    claim: recipient ? "supplementary direct-only same-N issuer/Exact and actual receipts; default/quoted constructed only for byte reuse, no new default execution claim" : "same-N production quote/quoted/runtime receipts; spliced amounts do not prove natural valuation; no original-precall, profitability or representative latency verdict" };
   const abort = new AbortController(), deadlineAtMs = Date.now() + 600_000;
   const timer = setTimeout(() => abort.abort(new Error("historical dual deadline")), 600_000);
   let simulation: ReturnType<typeof createRevmStrictSourceSimulation> | undefined, rpcUrl = "", reads = 0;
@@ -97,7 +116,9 @@ async function main() {
   const error = (e: unknown) => ({ stage, message: redact(e instanceof Error ? e.message : e) });
   try {
     const readyPath = realpathSync(args.get("--ready")!), pricesPath = realpathSync(args.get("--prices")!);
-    const paths = [readyPath, pricesPath, resolve(dirname(pricesPath), "input.json")];
+    const root = fileURLToPath(new URL("../../../../../../../", import.meta.url));
+    const artifactPath = realpathSync(resolve(root, "out/BotVM.sol/BotVM.json"));
+    const paths = [readyPath, pricesPath, resolve(dirname(pricesPath), "input.json"), args.get("--revm-bin")!, fileURLToPath(import.meta.url), fileURLToPath(new URL("./recipient-observations.ts", import.meta.url)), artifactPath];
     let donor: any, donorKeys: readonly string[] | undefined;
     if (args.has("--amounts-prices")) {
       const donorPath = realpathSync(args.get("--amounts-prices")!);
@@ -148,13 +169,13 @@ async function main() {
         }
         const route = instance.routes.find(r => same(r.tokenIn, row.tokenIn) && same(r.tokenOut, row.tokenOut))!; assert(route);
         const handle = instance.routeHandles.find(r => r.routeKey === route.routeKey)!; assert(handle);
-        return { row, route, handle, ref, pool: instance.instanceKey };
+        return { row, route, handle, ref, pool: instance.instanceKey, descriptor: instance.descriptor as any };
       });
     });
     assert.equal(rows.length, 4);
     report.ready = { graphHash: ready.graphHash, memos: memos.map(m => ({ fingerprint: m.memoFingerprint, familyDefinitionHash: m.familyDefinitionHash, candidate: m.candidateSnapshot })) };
     report.prices = rows.map(r => ({ targetRow: r.row, reference: r.ref }));
-    rpcUrl = process.env.MAINNET_RPC_URL!; assert(typeof rpcUrl === "string" && /^https?:\/\//.test(rpcUrl));
+    rpcUrl = args.has("--rpc-file") ? JSON.parse(readFileSync(args.get("--rpc-file")!, "utf8")).MAINNET_RPC_URL : process.env.MAINNET_RPC_URL!; assert(typeof rpcUrl === "string" && /^https?:\/\//.test(rpcUrl));
     const pin = { blockHash: HASH, requireCanonical: true };
     const rpc = async (method: string, params: unknown[]) => {
       assert(!constructing); assert(["eth_chainId", "eth_getBlockByNumber", "eth_getTransactionReceipt", "eth_call", "eth_getCode", "eth_getStorageAt"].includes(method));
@@ -179,13 +200,32 @@ async function main() {
     });
     assert(POOLS.every(pool => originals.some((o: any) => same(pool, o.pool))));
     report.original = { swaps: originals, comparison: "original call-prestate not restored; N-end output may differ" };
-    const executorRuntimeCode = loadBotVmRuntimeCode(OWNER); report.executorCodeHash = executorRuntimeCode.keccak256;
+    report.originalReceipt = receipt; report.deployedBindings = [];
+    for (const pool of POOLS) {
+      const descriptor = rows.find(r => same(r.pool, pool))!.descriptor;
+      const code = await rpc("eth_getCode", [pool, pin]);
+      const clone = /^0x363d3d373d3d3d363d73([a-fA-F0-9]{40})5af43d82803e903d91602b57fd5bf3$/.exec(code);
+      assert(clone, "expected historical GSP immutable clone");
+      const implementation = ethers.getAddress("0x" + clone[1]);
+      const implementationCode = await rpc("eth_getCode", [implementation, pin]); assert(implementationCode !== "0x");
+      const registry = descriptor.registryBinding.registry, registryCode = await rpc("eth_getCode", [registry, pin]); assert(registryCode !== "0x");
+      report.deployedBindings.push({ pool, source, cloneCodeHash: ethers.keccak256(code), implementation,
+        implementationCodeHash: ethers.keccak256(implementationCode), implementationCodeBytes: ethers.getBytes(implementationCode).length,
+        registry, registryCodeHash: ethers.keccak256(registryCode), descriptor });
+    }
+    report.executorArtifact = { path: artifactPath, ...verifyExecutorSources(root, artifactPath) };
+    const executorRuntimeCode = loadBotVmRuntimeCode(OWNER); report.executorCodeHash = executorRuntimeCode.keccak256; report.executorOwner = OWNER;
     // Pure eth_call prices need no executor override. A non-null binding may
     // never be waived; the newly executed programs always bind trusted code.
     assertExecutorCodeProvenance(provenance.counterfactualExecutorCode, executorRuntimeCode.keccak256);
     simulation = createRevmStrictSourceSimulation({ identity: { source, rpcUrl, chainId: 1, stateRoot: header.stateRoot }, executorRuntimeCode,
       control: { signal: abort.signal, deadlineAtMs }, executionGasLimit: 0x1000000,
-      createClient: ({ onFatal }) => new RevmSimClient({ executablePath: args.get("--revm-bin")!, timeoutMs: 90_000, onFatal }),
+      createClient: ({ onFatal }) => {
+        const client = new RevmSimClient({ executablePath: args.get("--revm-bin")!, timeoutMs: 90_000, onFatal });
+        const strict = client.strictSimulate.bind(client);
+        client.strictSimulate = async (...input) => { const result = await strict(...input); (report.strictCalls ??= []).push({ stage, result }); return result; };
+        return client;
+      },
       onFatal: () => abort.abort(new Error("source/transport fatal")) });
     const runtime = createStrictCentralAdapterRuntime({ simulator: simulation.transport, executor: EXECUTOR, transactionOrigin: OWNER,
       generationFence: { assertCurrent(g, s) { assert.equal(g, source.generation); assert.deepEqual(s, source); abort.signal.throwIfAborted(); } },
@@ -205,6 +245,14 @@ async function main() {
         Object.defineProperty(input, key, { get() { constructionReads++; throw new Error("runtime construction read a quote/amount"); } });
       const leg = buildFamilyRuntimeAmountLeg(input); assert(leg, "runtime fallback is not accepted"); return leg;
     });
+    const directLegs = recipient ? rows.map(({ handle }) => [EXECUTOR, recipient].map(receiver => {
+      const input: any = { family, route: handle, source, runtime: guardedRuntime, executor: EXECUTOR, runtimeEvidence: [], actionOwnership: catalog,
+        settlement: { kind: "direct-output", recipient: receiver } };
+      for (const key of ["amountIn", "quotedAmountOut", "minAmountOut", "exact", "exactEvidence"])
+        Object.defineProperty(input, key, { get() { constructionReads++; throw new Error("direct construction read a quote/amount"); } });
+      const leg = buildFamilyRuntimeAmountLeg(input); assert(leg, "direct runtime fallback is not accepted");
+      assert.deepEqual(leg.settlementRequest, input.settlement); return leg;
+    })) : undefined;
     constructing = false; assert.equal(constructionReads, 0); assert.equal(reads, beforeConstruction);
     report.runtimeConstruction = { directions: legs.length, exactCalls: 0, rpcCalls: 0, quotedFallback: false };
     const adapters = [...family.plugin.actionAdapters, ...PRODUCTION_INFRA_ACTION_ADAPTERS];
@@ -226,25 +274,51 @@ async function main() {
           if (label === "production-effective") assert.equal(quote.amountOut, row.amountOut, "saved effective differs");
           const fragment = buildFamilyExecutionFragment({ family, route: handle, exact: quote, minAmountOut: quote.amountOut, executor: EXECUTOR, runtimeEvidence: [], actionOwnership: catalog });
           assert.equal(fragment.status, "resolved"); if (fragment.status !== "resolved") throw new Error("quoted fragment unresolved");
-          const scripts = [["quoted", concatBytes(...planFragmentNodes(fragment.fragment, row.tokenIn, amountIn).map(compile))],
+          const originalScripts = [["quoted", concatBytes(...planFragmentNodes(fragment.fragment, row.tokenIn, amountIn).map(compile))],
             ["runtime", runtimeProgramScript(ethers.getBytes(legs[index]!.program), amountIn)]] as const;
-          for (const [encoding, script] of scripts) {
-            stage = encoding; const result: any = { encoding, status: "failed", scriptHash: ethers.keccak256(script) }; sample.executions.push(result);
-            const caller = { kind: "executor" as const }, request: AdapterRequest = { id: "execute", kind: "effect-delta-simulation",
+          sample.defaultProgramHashes = originalScripts.map(([encoding, script]) => ({ encoding, hash: ethers.keccak256(script) }));
+          const scripts: readonly (readonly [string, Uint8Array])[] = recipient ? [
+            ["direct-self", runtimeProgramScript(ethers.getBytes(directLegs![index]![0]!.program), amountIn)],
+            ["direct-external", runtimeProgramScript(ethers.getBytes(directLegs![index]![1]!.program), amountIn)]] : originalScripts;
+          const modes = recipient ? ["input-only", "old-inventory", "missing-input", "post-execution-revert"] : ["old-inventory"];
+          for (const [encoding, originalScript] of scripts) for (const mode of modes) {
+            const chosenRecipient = encoding === "direct-external" ? recipient! : EXECUTOR;
+            const script = mode === "post-execution-revert" ? concatBytes(originalScript, runtimeProgramScript(
+              new RuntimeAmountProgram().constant(1, 0n).constant(2, 1n).equal(1, 2).bytes(), 0n)) : originalScript;
+            stage = encoding + ":" + mode; const negative = mode === "missing-input" || mode === "post-execution-revert", inventory = mode !== "input-only";
+            const result: any = { encoding, mode, recipient: chosenRecipient, status: "failed", scriptHash: ethers.keccak256(script) };
+            (negative ? report.controls : sample.executions).push(result);
+            const caller = { kind: "executor" as const }, request: AdapterRequest = { id: "execute", ...(recipient ? { required: false } : {}), kind: "effect-delta-simulation",
               call: { caller, executionMode: "executor-program", to: EXECUTOR, data: buildSubscriptCalldata(script) },
-              overrideIntent: { caller, tokenBalances: [{ token: row.tokenIn, amount: amountIn + 101n }, { token: row.tokenOut, amount: quote.amountOut + 103n }] },
-              observeTokenBalances: [row.tokenIn, row.tokenOut].map(token => ({ token, account: caller })), observe: EFFECTS };
+              overrideIntent: { caller, ...(recipient ? { nativeBalanceWei: 17n } : {}), tokenBalances: [
+                { token: row.tokenIn, amount: mode === "missing-input" ? 0n : amountIn + (inventory ? 101n : 0n) },
+                { token: row.tokenOut, amount: inventory ? quote.amountOut + 103n : 0n }] },
+              observeTokenBalances: [row.tokenIn, row.tokenOut].flatMap(token => [EXECUTOR, ...(same(chosenRecipient, EXECUTOR) ? [] : [chosenRecipient])]
+                .map(account => ({ token, account: same(account, EXECUTOR) ? caller : account }))), observe: EFFECTS };
+            result.request = request;
             const begin = performance.now(); const outcome = await executeAdapterWork({ runtime, control: { signal: abort.signal, deadlineAtMs }, intent: {
               stage: "exact-refine", familyId: DODO_V2_FAMILY_ID, source, generation: source.generation, programInput: undefined,
               program: { requirements: () => ({ transports: ["effect-delta-simulation"], caller: "executor", effects: EFFECTS }), buildRequests: () => [request], decode: ({ results }) => results } } });
             result.diagnosticMs = performance.now() - begin; result.outcome = outcome;
             assert.equal(outcome.status, "resolved"); if (outcome.status !== "resolved") throw new Error("execution issuer unresolved");
             const evidence = outcome.executed.evidence; assert.equal(evidence.length, 1); const returned = evidence[0]!;
-            assert(returned.ok && returned.data === "0x", "program reverted or returned unexpected data"); assert.deepEqual(returned.source, source);
-            assertObservedLeg(returned.effects, row.tokenIn, row.tokenOut, amountIn, quote.amountOut);
+            assert(returned.ok, "transport failure is not execution/revert evidence"); assert.deepEqual(returned.source, source);
+            if (negative) {
+              assert.equal(returned.completion, "reverted-as-declared");
+              result.rollbackScope = "strict declared main revert only; no independent post-rollback storage observation";
+              for (const effect of [...(returned.effects?.tokenDeltas ?? []), ...(returned.effects?.nativeDeltas ?? [])]) assert.equal(effect.delta, 0n);
+              result.status = "pass"; continue;
+            }
+            assert(returned.completion === "returned" && returned.data === "0x", "program reverted or returned unexpected data");
+            if (recipient) assertRecipientEffects(returned.effects, pool, EXECUTOR, chosenRecipient, row.tokenIn, row.tokenOut, amountIn, quote.amountOut);
+            else assertObservedLeg(returned.effects, row.tokenIn, row.tokenOut, amountIn, quote.amountOut);
             result.effects = returned.effects; result.quoteDelta = 0n; result.oldInventoryConsumed = 0n; result.status = "pass";
           }
-          assert.deepEqual(sample.executions[0].effects.tokenDeltas, sample.executions[1].effects.tokenDeltas);
+          assert.equal(sample.executions.length, recipient ? 4 : 2);
+          for (const e of sample.executions) {
+            const peer = recipient ? sample.executions.find((x: any) => x.encoding === e.encoding) : sample.executions[0];
+            assert.deepEqual(peer.effects.tokenDeltas, e.effects.tokenDeltas);
+          }
           sample.status = "pass";
         } catch (e) { sample.error = error(e); }
         console.log(json({ pool, direction: sample.direction, label, status: sample.status, error: sample.error }));
@@ -252,11 +326,14 @@ async function main() {
       }
     }
     assert.equal(report.samples.length, 8); assert(report.samples.every((s: any) => s.status === "pass"));
+    if (recipient) { assert.equal(report.controls.length, 32); assert(report.controls.every((c: any) => c.status === "pass")); }
     assert.equal((await rpc("eth_getBlockByNumber", [ethers.toQuantity(N), false])).hash, HASH);
-    assert.equal(sourcePin(), report.sourceTreeSha256); assert.deepEqual(inputPins(), report.inputs); report.result = "pass";
+    assert.equal(sourcePin(), report.sourceTreeSha256); assert.deepEqual(inputPins(), report.inputs);
+    assert.equal(loadBotVmRuntimeCode(OWNER).keccak256, report.executorCodeHash);
+    assert.deepEqual({ path: artifactPath, ...verifyExecutorSources(root, artifactPath) }, report.executorArtifact); report.result = "pass";
   } catch (e) { report.error = error(e); process.exitCode = 1; }
   finally {
-    const start = performance.now(); try { await simulation?.closeAndDrain(); } catch (e) { report.drainError = error(e); report.result = "failed"; process.exitCode = 1; }
+    const start = performance.now(); try { await simulation?.closeAndDrain(); report.drained = true; } catch (e) { report.drainError = error(e); report.result = "failed"; process.exitCode = 1; }
     clearTimeout(timer); report.drainDiagnosticMs = performance.now() - start; report.directReads = reads;
     writeFileSync(fd, redact(json(report)) + "\n"); closeSync(fd);
     console.log(json({ result: report.result, error: report.error, samples: report.samples.length, executions: report.samples.reduce((n: number, s: any) => n + s.executions.filter((e: any) => e.status === "pass").length, 0) }));

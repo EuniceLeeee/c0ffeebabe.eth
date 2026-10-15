@@ -1,0 +1,66 @@
+[
+  {
+    "pool": "0xb9a4406982d990648093c71eff9f1f63a040152e",
+    "base": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "quote": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "direction": "sell-base",
+    "amountIn": "5141854",
+    "runtimeScriptHash": "0x4b29b3536cf3632555422147a4f75787609c8e83db38cda92095efd8e4430327"
+  },
+  {
+    "pool": "0xb9a4406982d990648093c71eff9f1f63a040152e",
+    "base": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "quote": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "direction": "sell-base",
+    "amountIn": "2",
+    "runtimeScriptHash": "0xc53506f2560c9796ed960568a2c0c8cfdf3e7ddaa0bbc2caa895324f12a2b84a"
+  },
+  {
+    "pool": "0xb9a4406982d990648093c71eff9f1f63a040152e",
+    "base": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "quote": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "direction": "sell-quote",
+    "amountIn": "641",
+    "runtimeScriptHash": "0xce1a88f5d38c4d306b6ff61cf802bf903f8c8e8c2593d17a10636b1322ade34c"
+  },
+  {
+    "pool": "0xb9a4406982d990648093c71eff9f1f63a040152e",
+    "base": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "quote": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "direction": "sell-quote",
+    "amountIn": "6410",
+    "runtimeScriptHash": "0xbfe4131fba39fe62741dc804452006229e78818b9fe0f7969597002b6a4cff68"
+  },
+  {
+    "pool": "0x04571c32a4e1c5f39bc3a238cb95b215058c432c",
+    "base": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "quote": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "direction": "sell-base",
+    "amountIn": "5141854",
+    "runtimeScriptHash": "0x75c205611c6bdc90a2e283a381e2199dc5113130d57e7266f10f94d4cf35ad97"
+  },
+  {
+    "pool": "0x04571c32a4e1c5f39bc3a238cb95b215058c432c",
+    "base": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "quote": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "direction": "sell-base",
+    "amountIn": "51418540",
+    "runtimeScriptHash": "0x00d0ca40111050890fa9d39919b60954c56a1bd67b396088377123bbd5b2fdad"
+  },
+  {
+    "pool": "0x04571c32a4e1c5f39bc3a238cb95b215058c432c",
+    "base": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "quote": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "direction": "sell-quote",
+    "amountIn": "641",
+    "runtimeScriptHash": "0x66318b20ad92422065aea5463d0199cc73f74dc45cbe01ac144245105297c041"
+  },
+  {
+    "pool": "0x04571c32a4e1c5f39bc3a238cb95b215058c432c",
+    "base": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "quote": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "direction": "sell-quote",
+    "amountIn": "1443574",
+    "runtimeScriptHash": "0x2879a644272683da5c997b495121bed8ec1824be211fbfc6c43d6ce01de8c4ca"
+  }
+]
