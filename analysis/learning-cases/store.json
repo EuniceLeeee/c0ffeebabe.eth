@@ -877,7 +877,8 @@
         "issue": "Namespaced swap capability falsely absent; unassessed receipt-only protocol identities falsely counted as known gaps.",
         "evidence": "Same 27 TX export and diagnostic activations: 2 false Balancer gaps and 2 known protocol gaps become 0/0, preserving 2 unassessed protocol TXs and all 27 requires_trace.",
         "codify_target": "analysis/src/discovery/loop-coverage.ts; analysis/src/cli/venue-discovery-bq.ts; boundary/corpus regressions",
-        "status": "open"
+        "status": "codified",
+        "codify_commit": "8e42bc437deea71e213f1e28014a573ca793b6c2"
       },
       "created_at": "2026-10-15T05:16:27.751853Z",
       "updated_at": "2026-10-15T05:16:27.751853Z"
