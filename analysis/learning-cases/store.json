@@ -2289,6 +2289,35 @@
       },
       "created_at": "2026-10-15T15:57:52.895983+00:00",
       "updated_at": "2026-10-15T15:57:52.895983+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-historical-pinned-quote-read-transport",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x10b7f1d5ac14281c916b4f94bd8c781c2795bfdd7d1a527885e83f4f22ec9ae3",
+      "target_block": 26075823,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/xwin-current-tooling-correction-20261015.json",
+        "before": "docs/research/reports/xwin-current-tooling-correction-20261015.json",
+        "after": "docs/research/reports/family-xwin-current-gates-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:kyber-yb-compound-dual-historical-fork",
+        "issue": "Historical readonly quote transport must preserve canonical source without forcing full state-reader calls through lazy fork",
+        "evidence": "{\"kind\": \"tooling_defect\", \"status\": \"fixed; independent raw and canonical regression passed; actual parent codify_commit pending\", \"title\": \"Historical readonly quote transport must preserve canonical source without forcing full state-reader calls through lazy fork\", \"finding\": {\"kind\": \"tooling_defect\", \"status\": \"confirmed fork read transport limitation; candidate awaiting canonical regression and actual execution\", \"original\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin100/evidence106/xwin-mint-dual106.json\", \"sha256\": \"e4172da79e7d6d1f0354c2514f502ea2a5664b21e72369d3aeb68907ca0ed9a4\"}, \"upstreamReaderCodeAndWbtcControl\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin100/diagnostic107/reader-upstream107.json\", \"sha256\": \"d55d67778afd0a65ae57270b14d09abea1081683b7c9dd7c66e2a7d5574be016\"}, \"upstreamActualFailedWethRequest\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin100/diagnostic107/reader-weth-upstream108.json\", \"sha256\": \"be3ce9690975a2aeafb8d4e04cb19b5bff7ad65b6fb7b6fa2f131195fc8cfc3d\"}, \"source\": {\"number\": 26075823, \"hash\": \"0x4256c70c1fba6d441343680f94d07e2a1034dddb5628bb11858b9157490b501c\", \"generation\": 26075823}, \"observations\": {\"trials\": [{\"amountIn\": \"5330762\", \"quoteMs\": 60676.933213, \"status\": \"failed\", \"reason\": \"adapter-work:transport:aborted\"}, {\"amountIn\": \"1\", \"quoteMs\": 60155.744732, \"status\": \"failed\", \"reason\": \"adapter-work:transport:aborted\"}], \"readerCodeBytes\": 5858, \"wbtc\": {\"elapsedMs\": 185.76, \"returnBytes\": 74272}, \"weth\": {\"elapsedMs\": 608.01, \"returnBytes\": 331136}}, \"rootCauseBoundary\": \"The same full WETH reader request succeeds at same blockHash on canonical upstream, while historical harness read-only provider runs through Anvil lazy fork and exceeds30s per-call plus one retry. Original WBTC success is a distinct control, not a substitute for WETH. Exact internal source-state requests and complete25/24 window stay unchanged. No evidence of missing reader deployment or new Family arithmetic defect.\", \"fix\": \"Explicit generic source-pinned upstream quote read provider option only; default fork unchanged, real execution and traces remain same-N isolated fork. No timeout/window/amount/price modifications.\", \"candidate\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/handoff109.json\", \"sha256\": \"7e239fa5ed79d7ab890261e16c31c5fc3ec3a530db03b50055b7c0d5b0b4b98e\"}, \"codify_commit\": null, \"limits\": [\"No production phase timing claim\", \"No original failure overwritten\", \"No new matrix execution performed yet\"]}, \"fix\": \"Explicit enum --quote-read-transport fork|upstream; default fork; pinned canonical sameN read-only call/code/storage via existing configured source provider; full production requests/amount/windows unchanged; effects/funding/trace remain isolated fork.\", \"additionalEntryFailure\": \"Initial110 option named quote-read-rpc hit legitimate canonical secret-name safety gate before harness. Renamed public enum; never weakened or bypassed safety gate; invalidURL and oldname regression.\", \"canonical\": {\"checks\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/evidence111/checks111.json\", \"sha256\": \"14add041f1681a8cd1164cc655c9660358c82de21167594afdea83016c7366b7\"}, \"manifest\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/evidence111/selection111.json\", \"sha256\": \"0ad85fcbc2b27a2aa737ab858b5aac852bcc6608e531691e72c4005dd24422f0\"}, \"quoteTransportTests\": 3, \"inputOnlyTests\": 2, \"allExitZero\": true}, \"actual\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/current-dual-compact112.json\", \"sha256\": \"827ef638abbf0674aa6d8e8642e1b49c66df40b9fd40fbf76e0308448803782a\"}, \"freshReview\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/v1-independent-source-review111.json\", \"sha256\": \"663cc146d4398bdcdf04afa5ca55c93e60c23b10ff0e6d3e39c455ef3d32b8c1\"}, \"codify_commit\": null, \"independent\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/v1-independent-raw112.json\", \"sha256\": \"9c83b4fe1938f72e4d03d09e17dda5306eae3d09742eba138a03dbd4436e673f\"}, \"incrementReview\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/v1-increment-review112.json\", \"sha256\": \"9760ab8d39f2cd513944796cd34c6315ebbd8c00ba6731a341d36321cd716f3c\"}}",
+        "codify_target": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+        "codify_commit": "775509c7449619e74d188fa42b9ca2edb54c41d8",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T16:16:39.216875+00:00",
+      "updated_at": "2026-10-15T16:16:39.216875+00:00"
     }
   ]
 }
