@@ -447,7 +447,14 @@
     "searcher:dodo-v2-recipient-evm": "node --import tsx src/searcher/venues/swaps/dodo-v2-family/test/recipient-evm.ts",
     "searcher:caller-only-ready": "tsx src/searcher/venues/protocols/token-migration-family/test/caller-ready.ts",
     "searcher:caller-only-historical": "tsx src/searcher/venues/protocols/token-migration-family/test/caller-historical.ts",
-    "searcher:caller-only-observations": "tsx --test src/searcher/venues/protocols/token-migration-family/test/caller-observations.test.ts"
+    "searcher:caller-only-observations": "tsx --test src/searcher/venues/protocols/token-migration-family/test/caller-observations.test.ts",
+    "scripts": {
+      "searcher:set-basic-recipient-contract": "node --import tsx --test src/searcher/venues/protocols/set-redemption-family/test/basic-recipient.test.ts",
+      "searcher:set-basic-recipient-evm": "node --import tsx src/searcher/venues/protocols/set-redemption-family/test/basic-recipient-evm.ts",
+      "searcher:set-basic-recipient-historical": "node --import tsx src/searcher/venues/protocols/set-redemption-family/test/basic-recipient-historical.ts"
+    },
+    "reuseExistingReadyEntry": "test:set-redemption-family:recipient-ready",
+    "claim": "Only three new own entries; existing Basic/Legacy default tools and package scripts retained."
   },
   "dependencies": {
     "ethers": "^6.13.0"

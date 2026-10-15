@@ -1,0 +1,256 @@
+{
+  "schema": "set-basic-selected-component-recipient-correctness/v1",
+  "familyId": "protocol:set-redemption",
+  "variantId": "BasicIssuanceModule redemption",
+  "result": "pass-declared-four-component-correctness",
+  "implementationReady": true,
+  "blockingFindings": [],
+  "independentHistoricalReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/root-independent106.json",
+    "sha256": "0e42d3737bb6c67b75d571606d8f2a433d9916087d7e1bdc8953daec16d565f7"
+  },
+  "scope": "One already admitted actual BasicIssuance 0.7.6 four-component Set at N26130046, all four installed Graph directions, self/external direct. Full basket redeems to actor; only selected component new receipt is forwarded.",
+  "currentHistorical": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/direct08.json",
+    "sha256": "7fcdae31c3ec8b552d49c88020829a4b25c31d2afa4a79c0165aebec3004fc65"
+  },
+  "counts": {
+    "positive": 32,
+    "declaredRevert": 32,
+    "rawStrictResults": 64,
+    "tokenDeltas": 480,
+    "actorNativeDeltas": 32,
+    "setSupplyDeltas": 32,
+    "fullInputBurns": 32,
+    "wholeBasketComponentTransfers": 128,
+    "externalSelectedTransfers": 16,
+    "currentExactQuotes": 8,
+    "defaultAndQuotedProgramsReconstructedOnly": 16
+  },
+  "source": {
+    "number": 26130046,
+    "hash": "0xebe62a2654fcaff75910a7d71dc65d34cff1c721d372cd8bf51c807c532932a8",
+    "tx": "0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e",
+    "sourceTreeSha256": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+    "productionManifest": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/production-source07.json",
+      "sha256": "fc7226726a7a5668f6c2c3e2a419be57b93beca5db18207ea42aa9f8d0641195"
+    },
+    "productionStable": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/production-stable08.json",
+      "sha256": "2b80745bc0223a4a6e3016edc89f3305cdaed13ed087caa7f2b36264ede77ada"
+    },
+    "executorArtifact": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/out/BotVM.sol/BotVM.json",
+      "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "sources": [
+        {
+          "path": "src/BotVM.sol",
+          "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f",
+          "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+        },
+        {
+          "path": "src/Constants.sol",
+          "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751",
+          "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+        },
+        {
+          "path": "src/RuntimeAmountVM.sol",
+          "keccak256": "0xf139ad9c54d2b073a8dfff0c39e5742d4c270e92daa957817be88f4a80355565",
+          "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+        },
+        {
+          "path": "src/interfaces/IERC20.sol",
+          "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d",
+          "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+        }
+      ]
+    },
+    "executorOwner": "0x1000000000000000000000000000000000000001",
+    "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6"
+  },
+  "deployedBindings": [
+    {
+      "address": "0xdece030c4538ae391aa8660c8e8209aa0e3225a3",
+      "source": {
+        "number": 26130046,
+        "hash": "0xebe62a2654fcaff75910a7d71dc65d34cff1c721d372cd8bf51c807c532932a8",
+        "generation": 26130046
+      },
+      "codeHash": "0x096df383c453967864ea5f66d0a6e454e4ca4696578f47981d2480d8d4a80b5f",
+      "codeBytes": 13970
+    },
+    {
+      "address": "0xba1030459e75f6041f938c5470f4e0f6468d5253",
+      "source": {
+        "number": 26130046,
+        "hash": "0xebe62a2654fcaff75910a7d71dc65d34cff1c721d372cd8bf51c807c532932a8",
+        "generation": 26130046
+      },
+      "codeHash": "0xf4498b92792be6f31f103a61ef5449d8934aa50b27688a62d723cbbeea3eae9c",
+      "codeBytes": 6987
+    },
+    {
+      "address": "0xe0cf093ce6649ef94fe46726745346afc25214d8",
+      "source": {
+        "number": 26130046,
+        "hash": "0xebe62a2654fcaff75910a7d71dc65d34cff1c721d372cd8bf51c807c532932a8",
+        "generation": 26130046
+      },
+      "codeHash": "0x68eda30eb20f541497f968a47921b7807d8a1eef1afe43a96484aa581ead1942",
+      "codeBytes": 10446
+    }
+  ],
+  "semantics": {
+    "payer": "Executor burns full positive requested Set A. No new caller approval or debt.",
+    "receiver": "Protocol redeem(set,A,actor) delivers every component to actor. External direct then transfers only route-selected actual new receipt. Other components remain actor-owned. This is a post-redemption handoff, not protocol-level whole-basket external delivery.",
+    "inventory": "All four component deltas measured at actor, external recipient and basket vault. Actor/receiver prior Set and components protected; full basket per-component output guards retained.",
+    "callback": "none; executor-only execSubscript groups are internal program frames, not deferred payment callbacks.",
+    "tokenReturn": "True/empty/false token return bytes never substitute for actual transfer debit/credit. Actual complete effects required.",
+    "unsupported": "Basic issue route not installed. quote-output/deferred-input rejected. No extra native or hypothetical unary instance acceptance."
+  },
+  "runtimeConstruction": {
+    "directions": 4,
+    "exactCalls": 0,
+    "quotedCalls": 0,
+    "rpcCalls": 0,
+    "quotedFallback": false
+  },
+  "localEVM": {
+    "report": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/evm07/result.json",
+      "sha256": "ba3e54f608421d59e6025e69cb83521e999b5c315a1f2c09a208691730a61f31"
+    },
+    "programs": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/evm07/programs.json",
+      "sha256": "a8824e511b0e1ecd6eab7b7066aad17020676895426d112ba4fad08f35916428"
+    },
+    "stdout": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/evm07/forge.stdout.log",
+      "sha256": "bb5143573a617ffc051478d3244b97c9dafe545a9b3d5d4f338888d90dab818d"
+    },
+    "artifact": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/evm07/out/SetBasicRecipient.t.sol/SetBasicRecipientTest.json",
+      "sha256": "d6555f8dd431cf063b83671faffffbce53bdb6a5db17b7daf9a85c55479f48e8"
+    },
+    "functions": 6,
+    "positive": 42,
+    "faultRollback": 76,
+    "zeroInput": 8,
+    "unfunded": 8,
+    "unguardedSentinels": 76,
+    "scope": "Actual BotVM with production emitter, synthetic Basic basket/module and fault tokens. Independent complete balances/supply/allowance/native rollback; not historical protocol storage rollback.",
+    "sourceStable": true
+  },
+  "offline": {
+    "basicContract": "7/7",
+    "legacyRecipientContract": "2/2",
+    "existingHistoricalContract": "12/12",
+    "checks": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/checks07.json",
+      "sha256": "7b3ce4c272953e27c37ee4e6320351440a6a41634ce23a29173d22182162e2fe"
+    },
+    "selection": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/selection07.json",
+      "sha256": "51ac90fd7800a669a1dbcaf4e33557b87fd61750db924f91cf2277705d8bf3e6"
+    },
+    "historicalReceipts": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/historical-checks08.json",
+      "sha256": "44c8f4c2db311f08d2b0c2d512cac36822307b2bdce409b182485063f95d6545"
+    },
+    "historicalSelection": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/selection08.json",
+      "sha256": "236333c44bb0dcdb3c28657a2a872db45f4cd78622182e1e5a9297dd6f20f854"
+    },
+    "parentBuildAndDual": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/shared-evidence10/basic101-checks.json",
+      "sha256": "71875b31def3929e0b4c0e3b2701388d9a42b0c39c702a69ac0322664ca67785"
+    },
+    "sharedDirectFinal": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/shared-evidence10/basic103-checks.json",
+      "sha256": "abf82ac8683e02f9f1dbfc33690cfb232ee0cad3e6b70805bb657e7aa7daa45e"
+    }
+  },
+  "ready": {
+    "ready": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/ready08/ready.json",
+      "sha256": "01d712e68f08d93bae6deb156d074b0da711a9ac3d689646fc0720ef801559bb"
+    },
+    "summary": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/ready08/ready-summary.json",
+      "sha256": "a879130d9d3b1c2ee07d4007e402310917a1fdc3033a83c25965d70176635fdf"
+    },
+    "reuse": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/ready08/reused-ready.json",
+      "sha256": "6ffa29ed556a4710c28977811e4c7bdb4069bf7dba87f82c438f5a8d61c54269"
+    },
+    "originalBefore": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/original-ready-before08.json",
+      "sha256": "b72536d66266b3bfdb09e347e4e46f274d3324e8af7f6198dcbd7e7b24b27460"
+    },
+    "originalAfter": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/original-ready-after08.json",
+      "sha256": "665c21739524e817fe4584f7678d325504f3d901c0310e8c54a2662239fc8f3c"
+    },
+    "claim": "Existing same-N original Ready copied immutably then current production scoped revalidation; one instance/four routes. Not fresh-from-zero discovery or new natural prices. Original quantities retained only; all current quotes recalc."
+  },
+  "defaultReuse": {
+    "positive": 16,
+    "currentRerun": false,
+    "unchangedScripts": 16,
+    "amountGroups": 8,
+    "raw": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/old-evidence/execution-02.json",
+      "sha256": "c18da10b58f9692c0beaadf0655e806c69b4e5647b5b489b48f16367d6ca8b4b"
+    },
+    "certification": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/v1-default-reuse09.json",
+      "sha256": "5b06a19b2835807f71c5736c415855a2e14adf56b6e0f8ae4553c317a7c25a83"
+    },
+    "scope": "Exact original runtime8811 recovered and owner/metadata-bound, current 16 script hashes equal. Old reported artifact JSON b540 differs from recovered ff8b; both hashes preserved and not conflated."
+  },
+  "reviews": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/v1-production-review04.json",
+      "sha256": "44068cf75b3fabd47c80720925f5da0c0bf2c36dff182e3e5b62fa223fa2d162"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/v1-harness-review05.json",
+      "sha256": "e0268c7f1d243d1456dc5c8c79ef8e4a72df174ec2fe540efff779ab0b88709e"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/v1-shared-review08.json",
+      "sha256": "1ee4a7b55716abef4af55ef239c512acdc6147ccd03b720b042790d59ef4eb40"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/v1-default-reuse09.json",
+      "sha256": "5b06a19b2835807f71c5736c415855a2e14adf56b6e0f8ae4553c317a7c25a83"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/root-independent106.json",
+      "sha256": "0e42d3737bb6c67b75d571606d8f2a433d9916087d7e1bdc8953daec16d565f7"
+    }
+  ],
+  "failuresAndFixes": {
+    "sharedFixture": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/learning-case10.json",
+      "sha256": "6761bb7f46497f26dd8d928efb602f6b4525595ce0db7017447edb4c284def12"
+    },
+    "historicalCleanup": "Before first historical execution, reviewed one-line drain error now sets both top-level failed and exit1; original candidate05 retained. No historical failure was overwritten.",
+    "drainApplied": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/drain-applied08.json",
+      "sha256": "fb2bf6541ca01e1b4f04e6c70b7509c604c0c7a8d007d46be37175ae94131218"
+    }
+  },
+  "limitations": [
+    "Historical negative strict results report main Revert and omit effects; independent whole-state rollback is provided only by synthetic local BotVM tests.",
+    "Historical observes actor native; external native and seeded positive receiver old balances are covered by local EVM, not claimed as historical arbitrary-recipient native observations.",
+    "Current historical uses original legal production-P and original TX amount at N-end. No new natural valuation, original TX call-prestate restoration, Adapter Replay, opportunity, representative performance or merge-ready claim.",
+    "Basic issue and additional no-instance variants are preserved outside selected installed redemption scope."
+  ],
+  "supersedesAuthoredPendingReport": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/compact10.json",
+    "sha256": "076e8ef2feee520fba04a7832a717dd5b7148f566cebead49864f4b6c69cdae7"
+  }
+}

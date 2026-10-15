@@ -1,0 +1,27 @@
+{
+  "result": "pass",
+  "schema": "set-basic-multicomponent-current-independent/v1",
+  "report": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/direct08.json",
+    "sha256": "7fcdae31c3ec8b552d49c88020829a4b25c31d2afa4a79c0165aebec3004fc65",
+    "tx": "0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e",
+    "block": 26130046,
+    "hash": "0xebe62a2654fcaff75910a7d71dc65d34cff1c721d372cd8bf51c807c532932a8",
+    "sourceTreeSha256": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8"
+  },
+  "counts": {
+    "positive": 32,
+    "declaredRevert": 32,
+    "tokenDeltas": 480,
+    "nativeDeltas": 32,
+    "setSupplyDeltas": 32,
+    "wholeBasketEvents": 32,
+    "forwardSelectedActualReceipt": 16
+  },
+  "scope": "Four actual component routes with two amounts and self/external recipients, no invented unary descriptor. Whole basket redeemed to executor; only selected newly received component forwarded, other components retained at executor. Independent quote/actual amount, full Set burn, all4 component transfers and15 ledger deltas verified; no direct native protocol recipient claim.",
+  "limits": [
+    "Historical reverts omit effects, not independent storageDiff proof; current synthetic BotVM6 safety suite separately records controlled faults/rollback.",
+    "Default/quoted16 authenticated old executions plus current byte equality separate; no old execution rerun.",
+    "No Basic issue expansion, new strategy, natural valuation, opportunity or performance upgrade."
+  ]
+}

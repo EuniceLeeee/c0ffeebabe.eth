@@ -6,7 +6,7 @@ import { address, MODULE, SET, TOKEN, uint, WAD } from "./codec.js";
 import { ACTION } from "./manifest.js";
 import { actionId, assertRoute } from "./routes.js";
 import { CORE, LEGACY_SET } from "./legacy.js";
-import { setDirectProgram } from "./direct.js";
+import { setBasketDirectProgram, setDirectProgram } from "./direct.js";
 import { legacyIssueRuntime } from "./issuance.js";
 import type { Descriptor, Evidence, Route } from "./types.js";
 const SUBSCRIPT = new Interface(["function execSubscript(bytes)"]);
@@ -46,12 +46,13 @@ export const execution = {
     assertRoute(d, r);
     const actor = runtimeExecutor(executor, d.set, d.module, d.controller, ...d.components);
     const request = input.settlement;
-    // The selected route tracks one token. Do not route an entire basket to a
-    // next-hop recipient without an explicit multi-asset settlement contract.
-    if (request && (request.kind !== "direct-output" || d.components.length !== 1)) return null;
+    // A Basic basket still redeems to the actor. Explicit direct settlement
+    // forwards only this route's new component receipt; side outputs stay put.
+    // Legacy multi-component settlement retains its existing unsupported scope.
+    if (request && (request.kind !== "direct-output" || d.legacy && d.components.length !== 1)) return null;
     const recipient = request ? runtimeExecutor(request.recipient, d.set, d.module, d.controller, ...d.components,
       ...(d.legacy ? [d.legacy.factory, d.legacy.vault, ...(d.legacy.issuance ? [d.legacy.issuance.transferProxy] : [])] : [])) : actor;
-    const settle = d.components.length === 1 ? { settlement: { directOutput: true as const },
+    const settle = !d.legacy || d.components.length === 1 ? { settlement: { directOutput: true as const },
       ...(request ? { settlementRequest: request } : {}) } : {};
     if (r.issue) {
       runtimeExecutor(actor, d.legacy!.factory, d.legacy!.vault, d.legacy!.issuance!.transferProxy);
@@ -63,6 +64,8 @@ export const execution = {
       const program = legacyRuntime(d, actor, undefined, recipient);
       return { ...runtimeLeg(actionId(d), request ? setDirectProgram(program, r.tokenIn, r.tokenOut, actor, recipient) : program), ...settle };
     }
+    const basketDirect = !!request && d.components.length > 1;
+    const redeemRecipient = basketDirect ? actor : recipient;
     // Each invocation has <=125 instructions and r4..r11 for eight receipts.
     // Parent thresholds stay live across the existing executor-only self call;
     // only the innermost invocation redeems. No basket component is truncated.
@@ -84,7 +87,7 @@ export const execution = {
         p.call(d.set, SET.encodeFunctionData("getDefaultPositionRealUnit", [token]), { static: true })
           .load(2, 0).math("sub", 3, 15, 2)
           .math("mul", 2, 0, 2).math("div", 2, 2, 1)
-          .call(token, TOKEN.encodeFunctionData("balanceOf", [recipient]), { static: true })
+          .call(token, TOKEN.encodeFunctionData("balanceOf", [redeemRecipient]), { static: true })
           .load(threshold, 0).math("add", threshold, threshold, 2);
       }
       if (nested) {
@@ -95,13 +98,13 @@ export const execution = {
       } else {
         // Bound BasicIssuance entry point retains native eligibility/transfer
         // checks and burns caller Set. No approvals, fees or output routing added.
-        p.call(d.module, MODULE.encodeFunctionData("redeem", [d.set, 0n, recipient]),
+        p.call(d.module, MODULE.encodeFunctionData("redeem", [d.set, 0n, redeemRecipient]),
           { patches: [{ offset: 36, reg: 0 }] });
       }
       p.call(d.set, TOKEN.encodeFunctionData("balanceOf", [actor]), { static: true })
         .load(2, 0).math("sub", 2, 14, 2).equal(2, 0);
       for (let n = first; n < end; n++)
-        p.call(d.components[n], TOKEN.encodeFunctionData("balanceOf", [recipient]), { static: true })
+        p.call(d.components[n], TOKEN.encodeFunctionData("balanceOf", [redeemRecipient]), { static: true })
           .load(2, 0).math("sub", 2, 2, 4 + n - first);
       nested = p;
     }
@@ -109,7 +112,10 @@ export const execution = {
     // They never become the next hop's input: runtime-amount-flow measures the
     // actual receipt independently. Old inventory cannot cover an underpayment.
     if (!nested) throw new Error("set-redemption empty runtime basket");
-    return { ...runtimeLeg(ACTION, request ? setDirectProgram(nested, r.tokenIn, r.tokenOut, actor, recipient) : nested), ...settle };
+    const program = request ? basketDirect
+      ? setBasketDirectProgram(nested, d.components, r.tokenIn, r.tokenOut, actor, recipient)
+      : setDirectProgram(nested, r.tokenIn, r.tokenOut, actor, recipient) : nested;
+    return { ...runtimeLeg(ACTION, program), ...settle };
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(i) {

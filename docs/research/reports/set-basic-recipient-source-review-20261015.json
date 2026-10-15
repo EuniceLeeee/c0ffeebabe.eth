@@ -1,0 +1,35 @@
+{
+  "result": "source-review-no-blocker",
+  "scope": "Non-author source-only review; no actual correctness or performance pass claim.",
+  "files": [
+    {
+      "path": "listener/src/searcher/venues/protocols/set-redemption-family/direct.ts",
+      "sha256": "96c7b4903fe28ec79204887faa2c2a0e6fd508d1b5ccff946202b586165d5bbc",
+      "beforeSha256": "32573a6f1902655190a11f87b518fb7c14d79172c74edb04c00022cbf525d6c8"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/set-redemption-family/execution.ts",
+      "sha256": "cca2c67cc56ce9202e767cca7c1651fcf5b1945586fca62e5eb2a73741e809c0",
+      "beforeSha256": "d332b4e415fe4cb37bdbcce3de18183cd06dfa73e7eeb533e49981ed63e072a6"
+    }
+  ],
+  "findings": [
+    "Basic retains full basket redemption to executor; selected component post-redemption new receipt alone is forwarded to external receiver. Original legacy multi-component unsupported scope stays unchanged.",
+    "Outer original separate frame preserves full Set debit, positive selected receipt, executor native, old selected output and external receiver input. Selected handoff computes amount from actor post/pre balance and requires receiver delta exactly that amount and actor selected balance restored.",
+    "Other components remain actor-owned; actor snapshots span only handoff, preserving both new basket receipts and prior inventory. Receiver side-component snapshots span entire redemption and handoff.",
+    "preserveComponents chunks at 8 tokens, registers1..8 snapshots and9 comparison. Executor-only execSubscript payload amount offset69 matches existing Basic nested helper. No direct .run depth growth for number of chunks; each self-call starts isolated VM registers and entry requires msg.sender=self.",
+    "Ordinary nested self-call opens no protocol callback. Existing VM saves/restores callback/transient scope. No callback/deferred capability introduced.",
+    "Each preserve frame <=41 instructions; existing 64KiB program encoding bound still fails closed. Actual 4-component and larger supported encoding boundaries remain execution/regression obligations.",
+    "Transfer return bytes are not trusted: empty/false return may only pass if exact actual sender debit and receiver credit occur. A false no-op, fee/short receipt or excess debit fails measured guards.",
+    "Default Basic no-request emitted program is textually unchanged after recipient variable resolves actor. Legacy unary/default/quoted programs retained; directOutput capability now advertises supported Basic forwarding.",
+    "Final incremental r4 stores selected receipt, p.run(handoff,4,15) passes receipt into the child while preserving all parent r0=A. Recipient exact receipt compares r3 to r4; selected actor balance still restores r1. Register isolation unchanged."
+  ],
+  "requiredActualChecks": [
+    "All four selected directions, self/external and old inventory",
+    "Real callback not applicable; this is ordinary self-call and post-redemption transfer",
+    "Token return false/no-op versus false with actual transfer/empty semantics",
+    "Side-output actor or receiver mutations reject and atomically revert",
+    "128-instruction/64KiB/nesting limits and original default byte comparison"
+  ],
+  "priorSourceReview": "logs/family-implementation-20261015.0exjskqq/set-basic95/v1-production-review03.json"
+}

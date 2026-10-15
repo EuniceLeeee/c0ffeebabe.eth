@@ -1,0 +1,192 @@
+{
+  "result": "limited-old-default-sixteen-execution-reuse-certified",
+  "scope": "Old 16 successes remain original source executions; current program re-emission identical. Not 16 new EVM executions.",
+  "oldRaw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/old-evidence/execution-02.json",
+    "sha256": "c18da10b58f9692c0beaadf0655e806c69b4e5647b5b489b48f16367d6ca8b4b"
+  },
+  "currentRaw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/direct08.json",
+    "sha256": "7fcdae31c3ec8b552d49c88020829a4b25c31d2afa4a79c0165aebec3004fc65"
+  },
+  "oldSourcePin": {
+    "headAtStart": "68323fbf104da8c0e11e0e6f17d36413970a1a2e",
+    "sourceTreeSha256": "87b7960377432f998086cc1b6254e83bf2926b0766c98d870f0010435eb1990b",
+    "fileCount": 924,
+    "soliditySha256": "7b319c28f6988c67720a66b7437c09fe222148ff0073429ae1515dcacf420364",
+    "packageSha256": "3252a06d36447abf23d266e8d1c0261386fb3ee6dad0e765c8633de62a4aa01f",
+    "testSha256": "fcea5ee19cdf2b35d35a2c2038bfd7885a6913ec4fdf8b5208679186e8f450c8",
+    "helperSha256": "214d2ab962904994e00bacd7e69c0370f3c638b8c0ce8b01b905c375972b4d07",
+    "artifactSha256": "b540fa04dc3b20421abe08f4294cdd9e247c4b6284cbfa89fffbf053a0677c98",
+    "familyDefinitionHash": "6be672a19ae80a4a216aee27d89e0593804233723ef5650ef1b3a465f44463a1",
+    "familyMemoDefinitionHash": "3d8ab29299d4581e070d31225e997dad06f5726c420a9586b91295c87d316a63"
+  },
+  "source": {
+    "number": 26130046,
+    "hash": "0xebe62a2654fcaff75910a7d71dc65d34cff1c721d372cd8bf51c807c532932a8",
+    "generation": 26130046
+  },
+  "actors": {
+    "executor": "0x1000000000000000000000000000000000000002",
+    "owner": "0x1000000000000000000000000000000000000001"
+  },
+  "oldInjectedRuntimeKeccak256": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+  "recoveredMatchingRuntime": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/old-runtime92.json",
+    "sha256": "6790bb3497771b95ff18a555504c14174d73b876b215e3dfdd95c7234d8e8962",
+    "scope": "Exact owner-patched deployed bytes match old report; artifact JSON hash differs from original b540 record and is not rewritten."
+  },
+  "oldVmMetadataCompatibilityCertificate": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/v1-default-reuse-review93.json",
+    "sha256": "925c7390f55417f3cb34d9236b7a47ce324adb529a2f9420676689d050fe20d5"
+  },
+  "currentCommon": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/current/src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "sameAsCertifiedCommonSource": true,
+      "certificateSource": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/source90/src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+      }
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/evidence09/current/src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+      "sameAsCertifiedCommonSource": true,
+      "certificateSource": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/source90/src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+      }
+    }
+  ],
+  "matches": [
+    {
+      "component": "0x5f64ab1544d28732f0a24f4713c2c8ec0da089f0",
+      "label": "production-P",
+      "amountIn": "110232218640402497",
+      "encoding": "old-fragment",
+      "scriptHash": "0x4c359da5de7a0104ddc836bc6fd96ff19cf66e35f6525ed3a3c98fc246610bd0"
+    },
+    {
+      "component": "0x5f64ab1544d28732f0a24f4713c2c8ec0da089f0",
+      "label": "production-P",
+      "amountIn": "110232218640402497",
+      "encoding": "runtime-program",
+      "scriptHash": "0x2eb3e95708dcb14f82dcfa328bcabc944a24fff59297414ac91aec3816e93011"
+    },
+    {
+      "component": "0x5f64ab1544d28732f0a24f4713c2c8ec0da089f0",
+      "label": "historical-amount-at-N",
+      "amountIn": "66538227599871553",
+      "encoding": "old-fragment",
+      "scriptHash": "0x87e725cdfcc63246cc3db961c2291f81211730016adc712b82ecdc86311170f8"
+    },
+    {
+      "component": "0x5f64ab1544d28732f0a24f4713c2c8ec0da089f0",
+      "label": "historical-amount-at-N",
+      "amountIn": "66538227599871553",
+      "encoding": "runtime-program",
+      "scriptHash": "0xbc7aa6ee30972046a89181cd493deba43a88a23a37d9cea46ecbd95c91d964a3"
+    },
+    {
+      "component": "0x037a54aab062628c9bbae1fdb1583c195585fe41",
+      "label": "production-P",
+      "amountIn": "110232218640402497",
+      "encoding": "old-fragment",
+      "scriptHash": "0x4c359da5de7a0104ddc836bc6fd96ff19cf66e35f6525ed3a3c98fc246610bd0"
+    },
+    {
+      "component": "0x037a54aab062628c9bbae1fdb1583c195585fe41",
+      "label": "production-P",
+      "amountIn": "110232218640402497",
+      "encoding": "runtime-program",
+      "scriptHash": "0x2eb3e95708dcb14f82dcfa328bcabc944a24fff59297414ac91aec3816e93011"
+    },
+    {
+      "component": "0x037a54aab062628c9bbae1fdb1583c195585fe41",
+      "label": "historical-amount-at-N",
+      "amountIn": "66538227599871553",
+      "encoding": "old-fragment",
+      "scriptHash": "0x87e725cdfcc63246cc3db961c2291f81211730016adc712b82ecdc86311170f8"
+    },
+    {
+      "component": "0x037a54aab062628c9bbae1fdb1583c195585fe41",
+      "label": "historical-amount-at-N",
+      "amountIn": "66538227599871553",
+      "encoding": "runtime-program",
+      "scriptHash": "0xbc7aa6ee30972046a89181cd493deba43a88a23a37d9cea46ecbd95c91d964a3"
+    },
+    {
+      "component": "0x514910771af9ca656af840dff83e8264ecf986ca",
+      "label": "production-P",
+      "amountIn": "110232218640402497",
+      "encoding": "old-fragment",
+      "scriptHash": "0x4c359da5de7a0104ddc836bc6fd96ff19cf66e35f6525ed3a3c98fc246610bd0"
+    },
+    {
+      "component": "0x514910771af9ca656af840dff83e8264ecf986ca",
+      "label": "production-P",
+      "amountIn": "110232218640402497",
+      "encoding": "runtime-program",
+      "scriptHash": "0x2eb3e95708dcb14f82dcfa328bcabc944a24fff59297414ac91aec3816e93011"
+    },
+    {
+      "component": "0x514910771af9ca656af840dff83e8264ecf986ca",
+      "label": "historical-amount-at-N",
+      "amountIn": "66538227599871553",
+      "encoding": "old-fragment",
+      "scriptHash": "0x87e725cdfcc63246cc3db961c2291f81211730016adc712b82ecdc86311170f8"
+    },
+    {
+      "component": "0x514910771af9ca656af840dff83e8264ecf986ca",
+      "label": "historical-amount-at-N",
+      "amountIn": "66538227599871553",
+      "encoding": "runtime-program",
+      "scriptHash": "0xbc7aa6ee30972046a89181cd493deba43a88a23a37d9cea46ecbd95c91d964a3"
+    },
+    {
+      "component": "0x5218e472cfcfe0b64a064f055b43b4cdc9efd3a6",
+      "label": "production-P",
+      "amountIn": "110232218640402497",
+      "encoding": "old-fragment",
+      "scriptHash": "0x4c359da5de7a0104ddc836bc6fd96ff19cf66e35f6525ed3a3c98fc246610bd0"
+    },
+    {
+      "component": "0x5218e472cfcfe0b64a064f055b43b4cdc9efd3a6",
+      "label": "production-P",
+      "amountIn": "110232218640402497",
+      "encoding": "runtime-program",
+      "scriptHash": "0x2eb3e95708dcb14f82dcfa328bcabc944a24fff59297414ac91aec3816e93011"
+    },
+    {
+      "component": "0x5218e472cfcfe0b64a064f055b43b4cdc9efd3a6",
+      "label": "historical-amount-at-N",
+      "amountIn": "66538227599871553",
+      "encoding": "old-fragment",
+      "scriptHash": "0x87e725cdfcc63246cc3db961c2291f81211730016adc712b82ecdc86311170f8"
+    },
+    {
+      "component": "0x5218e472cfcfe0b64a064f055b43b4cdc9efd3a6",
+      "label": "historical-amount-at-N",
+      "amountIn": "66538227599871553",
+      "encoding": "runtime-program",
+      "scriptHash": "0xbc7aa6ee30972046a89181cd493deba43a88a23a37d9cea46ecbd95c91d964a3"
+    }
+  ],
+  "productionReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set-basic95/v1-production-review04.json",
+    "sha256": "44068cf75b3fabd47c80720925f5da0c0bf2c36dff182e3e5b62fa223fa2d162"
+  },
+  "compatibility": [
+    "Basic original full-basket default and quoted paths unchanged; only explicit direct uses new post-redemption forwarding, independently reviewed.",
+    "Each old quoted and runtime script is byte-identical to current current-quote construction at same N and amount across all four components.",
+    "Recovered exact old injected VM is same fully source-bound runtime certified in DODO93; no family-name-based artifact substitution.",
+    "Current ordinary ERC20 asset boundary returns before native branch. Old scripts use legacy standalone runtime operations/self execSubscript; new deferred/opcode branches are not triggered. Changed revert propagation does not change successful default result."
+  ],
+  "limitations": [
+    "Old reported artifact JSON SHA b540 retained; recovered metadata-bearing exact runtime artifact JSON ff8b is separately identified.",
+    "Current direct 32/32 raw review is parent-owned and separate.",
+    "No current new default execution, opportunity or latency claim."
+  ]
+}

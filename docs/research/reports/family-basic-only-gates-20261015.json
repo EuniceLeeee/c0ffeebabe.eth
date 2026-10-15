@@ -1,0 +1,31 @@
+[
+  {
+    "family": "protocol:set-redemption",
+    "exitCode": 1,
+    "startedAt": "2026-10-15T15:47:21.026489+00:00",
+    "finishedAt": "2026-10-15T15:48:11.220086+00:00",
+    "logSha256": "ebf42a0ddc0678873253bd9b3bd14770b6a292b72aa7faac5e38bf40c7fcb5b0",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/basic-gate108-selection.json",
+    "manifestSha256": "e554fc0d5b09d8d516d2f4eaafe7b99ba4603bd7357ba4b517df451a1992f6f3",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:set-redemption",
+          "passed": false,
+          "failures": [
+            "variant coverage is incomplete",
+            "BasicIssuanceModule issue ABI (not installed issue route): capability wiring; execution evidence; \u8fd9\u662f\u5df2\u6838\u5b9e\u7684 Basic issue ABI\uff0c\u975e\u5f53\u524d\u5df2\u5b89\u88c5 issue \u8def\u7531\uff1b\u4e0d\u80fd\u7531\u63a5\u53e3\u5b58\u5728\u5ba3\u79f0\u63a5\u7ebf\u3002; \u7ba1\u7406\u8005 preIssueHook \u4e0d\u662f\u4ed8\u6b3e\u65b9\u5ef6\u8fdf\u7ed3\u7b97\u56de\u8c03\uff1b\u65e0\u8be5\u6a21\u5f0f\u6267\u884c\u8bc1\u636e\u3002"
+          ]
+        }
+      ]
+    }
+  }
+]

@@ -5456,11 +5456,15 @@
             {
               "path": "docs/research/reports/set-legacy-recipient-provenance-20261015.json",
               "sha256": "25ac335c259795604fd31cc0de9a01cf19d6b1e93b72518cedce3cddb440ee64"
+            },
+            {
+              "path": "docs/research/reports/set-basic-recipient-legacy-compatibility-20261015.json",
+              "sha256": "885e3cdd443a28e38b1badfb962188a698edaa0645a941492d2c50c49ef03675"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/set-legacy-current-behavior-20261015.json",
-            "sha256": "fa1e38ac1839599a85ca3b9ee54ffdced49db0e278bb909f617116aa0e2fec50"
+            "path": "docs/research/reports/set-legacy-after-basic-current-behavior-20261015.json",
+            "sha256": "f87af748c370a5f457a2ccdc926baec298562a0f5ee9b9caa0321c84f258cec9"
           },
           "scope": "Legacy unary Core SetToken/RebalancingV3 issue/redeem; actual0.5%fee example; self/external recipient.44 actual positive176faultrejections including88 successful-call ancestor rollbacks. Default/quoted bytes preserved; old default results retain original pins, not new current EVM certification. Basic unary receiver, multicomponent receiver, natural valuation, opportunity and performance not upgraded."
         },
@@ -5489,11 +5493,15 @@
             {
               "path": "docs/research/reports/set-legacy-recipient-provenance-20261015.json",
               "sha256": "25ac335c259795604fd31cc0de9a01cf19d6b1e93b72518cedce3cddb440ee64"
+            },
+            {
+              "path": "docs/research/reports/set-basic-recipient-legacy-compatibility-20261015.json",
+              "sha256": "885e3cdd443a28e38b1badfb962188a698edaa0645a941492d2c50c49ef03675"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/set-legacy-current-behavior-20261015.json",
-            "sha256": "fa1e38ac1839599a85ca3b9ee54ffdced49db0e278bb909f617116aa0e2fec50"
+            "path": "docs/research/reports/set-legacy-after-basic-current-behavior-20261015.json",
+            "sha256": "f87af748c370a5f457a2ccdc926baec298562a0f5ee9b9caa0321c84f258cec9"
           },
           "scope": "Legacy unary Core SetToken/RebalancingV3 issue/redeem; actual0.5%fee example; self/external recipient.44 actual positive176faultrejections including88 successful-call ancestor rollbacks. Default/quoted bytes preserved; old default results retain original pins, not new current EVM certification. Basic unary receiver, multicomponent receiver, natural valuation, opportunity and performance not upgraded."
         },
@@ -5503,18 +5511,32 @@
           "identity": "verified",
           "callback": "none",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "当前 directOutput 限单一成分 descriptor，篮子变体尚无完整多资产接线。",
-            "缺当前源码下本变体指定收款方的扣款、到账、旧库存与回滚执行证据。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/set-basic-recipient-actual-correctness-20261015.json",
+              "sha256": "87887224f9ada6997fa4182fbfaa1f554fb3a42d8b474b1ba960b523409044a2"
+            },
+            {
+              "path": "docs/research/reports/set-basic-recipient-independent-20261015.json",
+              "sha256": "0e42d3737bb6c67b75d571606d8f2a433d9916087d7e1bdc8953daec16d565f7"
+            },
+            {
+              "path": "docs/research/reports/set-basic-recipient-default-reuse-20261015.json",
+              "sha256": "5b06a19b2835807f71c5736c415855a2e14adf56b6e0f8ae4553c317a7c25a83"
             }
-          ]
+          ],
+          "scope": "One already admitted actual BasicIssuance 0.7.6 four-component Set at N26130046, all four installed Graph directions, self/external direct. Full basket redeems to actor; only selected component new receipt is forwarded.",
+          "executionEvidence": {
+            "path": "docs/research/reports/set-basic-recipient-current-behavior-20261015.json",
+            "sha256": "b2de31d639ac9b7385378a2e45b6758720f573597c092e244cf31ceef05ff41a"
+          }
         },
         {
           "id": "BasicIssuanceModule issue ABI (not installed issue route)",
@@ -5580,11 +5602,11 @@
         },
         {
           "path": "listener/src/searcher/venues/protocols/set-redemption-family/direct.ts",
-          "sha256": "32573a6f1902655190a11f87b518fb7c14d79172c74edb04c00022cbf525d6c8"
+          "sha256": "96c7b4903fe28ec79204887faa2c2a0e6fd508d1b5ccff946202b586165d5bbc"
         },
         {
           "path": "listener/src/searcher/venues/protocols/set-redemption-family/execution.ts",
-          "sha256": "d332b4e415fe4cb37bdbcce3de18183cd06dfa73e7eeb533e49981ed63e072a6"
+          "sha256": "cca2c67cc56ce9202e767cca7c1651fcf5b1945586fca62e5eb2a73741e809c0"
         },
         {
           "path": "listener/src/searcher/venues/protocols/set-redemption-family/identity.ts",
@@ -5624,12 +5646,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/current-interface-protocol-set-redemption-20261015.json",
-        "sha256": "a22226bca1f1d193c22e311619e91a0a358c0b7902cbb40c7f3468ae7447ab7c"
+        "path": "docs/research/reports/current-interface-protocol-set-redemption-after-basic-20261015.json",
+        "sha256": "296c84b5461fd782ba0ff53dd0ae01edf775b510d8cf6675ce075400e01dabdf"
       },
       "currentScopedEvidence": {
-        "path": "docs/research/reports/set-legacy-recipient-correctness-20261015.json",
-        "sha256": "bfc0eee174a2725290f3aa2349d7294e4f909856a256e8f756fcafb834bd01de"
+        "path": "docs/research/reports/set-basic-recipient-actual-correctness-20261015.json",
+        "sha256": "87887224f9ada6997fa4182fbfaa1f554fb3a42d8b474b1ba960b523409044a2"
       }
     },
     {
@@ -7703,8 +7725,8 @@
     ]
   },
   "currentScopedUpdate": {
-    "scope": "Migration actual caller-only and BTB mint/redeem; no production implementation change. xWin pending identity join unchanged.",
-    "priorInventorySha256": "33dee3ad321297f94a3f72f29ef7728dca98d1939b9c3c13ac7fafd0cf8c2bf5",
+    "scope": "Basic four-component redemption recipient path; preserve Legacy through exact current compatibility view. Uninstalled issue not upgraded.",
+    "priorInventorySha256": "f26a6c7e9123ea0d86414268a9f560135657d79b6c844068ccb10f47912eb0c8",
     "allOtherVariantStatesPreserved": true,
     "allFamiliesPassed": false
   }

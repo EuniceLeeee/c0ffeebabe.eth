@@ -12416,7 +12416,7 @@
         "familyId": "protocol:set-redemption",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "ff9890a8f7550162cb8b193717d182c8f00ba55ee920ad31d0107c53df529b60",
+        "contentHash": "8b45c841f4aea82f7f06b90241c98400050b02c8f00f2bec6fe5c40867111e72",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -16573,5 +16573,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "cb77b5cf5eeb477de98590568defdf1f9b44a991b3b87c40c20d3c154cec1183"
+  "artifactHash": "bf5b518468094936985b6acf19c40fa5a8cac4e8039485359a9f8a0de14b914e"
 }

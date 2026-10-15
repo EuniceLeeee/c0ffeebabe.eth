@@ -167,9 +167,18 @@ for (const legacy of [true, false]) test(`Set ${legacy ? "Core" : "Basic"} unary
     else { run(); assert.equal(m.get(d.set, actor), 101n); assert.equal(m.get(d.components[0], actor), 103n); assert.equal(m.get(d.components[0], recipient), 307n); }
   }
   const basket = setDescriptor(legacy, 2), basketRoute = setRoutes.project({ descriptor: basket })[0];
-  assert.equal(setExecution.buildRuntimeLeg!({ descriptor: basket, route: basketRoute, executor: actor, runtimeEvidence: [], settlement: request } as any), null);
+  const basketLeg = setExecution.buildRuntimeLeg!({ descriptor: basket, route: basketRoute, executor: actor, runtimeEvidence: [], settlement: request } as any);
+  if (legacy) assert.equal(basketLeg, null, "Core multi-component direct remains unsupported");
+  else {
+    assert(basketLeg, "Basic redeems the full basket to actor, then delivers the selected new component");
+    assert.equal(basketLeg.settlement?.directOutput, true);
+    assert.deepEqual(basketLeg.settlementRequest, request);
+  }
   const defaultLeg = setExecution.buildRuntimeLeg!({ descriptor: basket, route: basketRoute, executor: actor, runtimeEvidence: [] } as any)!;
-  assert.equal(defaultLeg.settlement?.directOutput, undefined, "multi-asset default stays available without a direct-output declaration");
+  assert.equal(defaultLeg.settlement?.directOutput, legacy ? undefined : true);
+  for (const kind of ["quote-output", "deferred-input"]) {
+    assert.equal(setExecution.buildRuntimeLeg!({ descriptor: basket, route: basketRoute, executor: actor, runtimeEvidence: [], settlement: { kind, recipient } } as any), null);
+  }
 });
 
 test("Set unary issueTo uses caller component/Vault credit; recipient fee identity controls its net minimum", () => {
