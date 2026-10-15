@@ -1,0 +1,167 @@
+{
+  "kind": "oneswap-precision-current-scope-review",
+  "status": "PASS-no-new-applicable-adaptation-gap",
+  "reviewFinal": true,
+  "scope": "Read-only current-source authentication of completed actual scopes; not a new historical execution or full-matrix expansion.",
+  "implementationReady": true,
+  "blockingFindings": [],
+  "families": [
+    {
+      "familyId": "custom-swap:oneswap",
+      "status": "completed-for-actual-selected-scope",
+      "implementationReady": true,
+      "currentSourceCompatible": true,
+      "mandatoryAdaptationGaps": [],
+      "scope": {
+        "family": "custom-swap:oneswap",
+        "action": "oneswap-market-order",
+        "instances": [
+          "0x1025f2334e88a4a0e93e5e2ff4a4e67317682b60",
+          "0x7e8dc7c0fef7bb84304cc5c2dacf5e583198ca4f"
+        ],
+        "variants": [
+          "isOnlySwap=true AMM",
+          "isOnlySwap=false AMM+orderbook pool; actual selected N liquidity fills AMM"
+        ],
+        "directions": [
+          "native ETH input normalized as WETH to ONES",
+          "ONES to native ETH output normalized as WETH"
+        ],
+        "modes": [
+          "specified quote and quoted execution",
+          "runtime default",
+          "runtime direct-self",
+          "runtime direct-external"
+        ],
+        "callback": "unsupported deferred-input and quote-output rejected at construction; native receive fallback is not debt callback",
+        "correctnessState": {
+          "number": 26130639,
+          "hash": "0x69fe42671a3df6c3bfcdc98f44d7078870696568246b1d9dfd976d2f3a0e42e5",
+          "generation": 26130639
+        }
+      },
+      "actualHistoricalCounts": {
+        "positive": 32,
+        "zeroInputRejections": 16,
+        "otherRejections": 24,
+        "postSuccessStorageRollbackControls": 8
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap56/evidence60/historical60.json",
+        "sha256": "4ec19b6eebfcc8e40427234849ee2e993147fde7b9e9183835009d1fc63b40d0"
+      },
+      "originalNonAuthorReview": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap56/root-independent61.json",
+        "sha256": "275a4c1ebe32cacdb745daa7167c8d9d65905da1db24b80d4e0b70feec7c8100"
+      },
+      "currentConstructionCompatibility": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap-precision115/current-compat04.json",
+        "sha256": "079ec80c8758e18b5e12c06fb735e1b956427036e96d1905dcc33043976b2a66"
+      },
+      "completeProductionFilesUnchanged": 18,
+      "variantIds": [
+        "native-ONES-AMM",
+        "native-ONES-AMM-orderbook"
+      ],
+      "capability": {
+        "specifiedAmountQuote": "verified by retained actual evidence",
+        "quotedExecution": "retained actual execution; current complete emitted calldata identical",
+        "runtimeDefault": "retained actual execution; current complete emitted calldata identical",
+        "directOutput": "verified retained actual self/external receipt, with scoped current source compatibility; native output is first received by executor then measured/wrapped and delivered as WETH",
+        "quoteOutput": "unsupported; remains null",
+        "deferredInput": "unsupported; input-first operation has no caller debt continuation"
+      },
+      "limitations": [
+        "isOnlySwap=false is an actual admitted AMM+orderbook pool, but the selected historical fills were AMM. No separate orderbook-only execution claim; no observed applicable additional target is presently established.",
+        "Historical Ready is a selectively revalidated copy, naturalDiscovery=false. Quote reads and current issuer execution were real at N26130639; reference/original transaction amounts supplied input only.",
+        "112-bit overflow controls can reject at funding boundaries; do not attribute every one to a Family-specific guard. Original failed59 observer and corrected60 are preserved.",
+        "Old natural runtime and positive-EV evidence remains valid only under its original recorded configuration; this review does not upgrade that to a new opportunity or performance run."
+      ]
+    },
+    {
+      "familyId": "custom-swap:precision-pool",
+      "status": "completed-for-actual-selected-scope",
+      "implementationReady": true,
+      "currentSourceCompatible": true,
+      "mandatoryAdaptationGaps": [],
+      "scope": {
+        "pool": "0x0155358241411dB868BA714aE7c83A27087e3D6E",
+        "source": {
+          "number": 26129175,
+          "hash": "0xf924162840314cea5b4f7a49aa84827ac258d3ad715dea045140754d1a200b03",
+          "generation": 26129175
+        },
+        "directions": [
+          "native-to-token",
+          "token-to-native"
+        ],
+        "modes": [
+          "quoted",
+          "runtime-default",
+          "direct-self",
+          "direct-external"
+        ],
+        "originalTransaction": "0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554",
+        "historicalNaturalDiscoveryProven": false,
+        "topologyContainsFutureDiscovery": false,
+        "claim": "N-end production quote/quoted/runtime single-leg receipts, not original pre-call parity or full-loop execution"
+      },
+      "actualHistoricalCounts": {
+        "positive": 16,
+        "strictDeclaredRevert": 16,
+        "independentHistoricalNegativeStorageDiff": 0
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/dual10.json",
+        "sha256": "6d2d0659a6b732eb59a84cd92771155f0a7ac81d9bf3d17e924fb89324131cb5"
+      },
+      "originalNonAuthorReview": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/root-independent61.json",
+        "sha256": "df11eacd5c0f35ad1f5146bddad2a81a88fd50147a4ab2e564432f274d1d40fc"
+      },
+      "currentConstructionCompatibility": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap-precision115/current-compat04.json",
+        "sha256": "079ec80c8758e18b5e12c06fb735e1b956427036e96d1905dcc33043976b2a66"
+      },
+      "completeProductionFilesUnchanged": 17,
+      "variantIds": [
+        "zero-hook-zero-creator-fee-native"
+      ],
+      "capability": {
+        "specifiedAmountQuote": "verified by retained actual evidence",
+        "quotedExecution": "retained actual execution; current complete emitted calldata identical",
+        "runtimeDefault": "retained actual execution; current complete emitted calldata identical",
+        "directOutput": "verified retained actual self/external receipt, with scoped current source compatibility; native output is first received by executor then measured/wrapped and delivered as WETH",
+        "quoteOutput": "unsupported; remains null",
+        "deferredInput": "unsupported; input-first operation has no caller debt continuation"
+      },
+      "limitations": [
+        "Only actual zero-hook/zero-creator-fee native pool and both directions. Hooked or creator-fee extra candidates are not installed commitments or required absent-instance acceptance gaps.",
+        "Historical Ready is a selectively revalidated copy, naturalDiscovery=false. N26129175 execution is an end-state single-leg check, not original pre-call parity or full-loop replay.",
+        "16 strict negatives show reverted-as-declared with empty exposed effects; they do not independently observe historical storage rollback. Existing four local real-BotVM fault tests use a synthetic pool and are separately scoped.",
+        "Old natural runtime and positive-EV evidence remains valid only under its original recorded configuration; this review does not upgrade that to a new opportunity or performance run."
+      ]
+    }
+  ],
+  "currentSourceCompatibility": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap-precision115/current-compat04.json",
+    "sha256": "079ec80c8758e18b5e12c06fb735e1b956427036e96d1905dcc33043976b2a66"
+  },
+  "implRead": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "sha256": "076425c4a7fd56fe4daafd126a587bde5b706ed7dd7d2420a0af0fdbe836c606"
+  },
+  "implRecommendation": "Keep both rows completed in their existing actual scopes. Optionally append this supplemental certificate; existing current-native-boundary-reuse inventory references already cover the boundary change. No source, inventory or gate change is required; no new or hypothetical variant matrix is required.",
+  "newActions": {
+    "rpc": 0,
+    "historicalExecutions": 0,
+    "evmTests": 0,
+    "builds": 0,
+    "productionWrites": 0,
+    "pureSavedCalldataReconstructions": 64
+  },
+  "existingInventory": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap-precision115/inventory-observation04.json",
+    "sha256": "1b342d7ed664cadbab46f7049a595a4875e4ee94070537b244a39f1ee9f092bb"
+  }
+}

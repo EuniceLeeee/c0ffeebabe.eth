@@ -1,0 +1,1792 @@
+{
+  "kind": "current-source-compatibility-certificate",
+  "status": "PASS-scoped-historical-reuse",
+  "newHistoricalExecution": false,
+  "reviewer": "interface_protocols_b; current read-only construction/source certificate; original independent raw reviews remain root-owned",
+  "scope": "Only installed OneSwap two native/ONES pools and PrecisionPool selected zero-hook zero-creator-fee native pool. No protocol, source, registry, catalog, IMPL or shared-file writes; no RPC, build, test runner or EVM execution.",
+  "observedHead": "8a277504455baaa07251e1c91e7a244771e5018c",
+  "originalImplementationCommit": "7fc5bf1935b5fe15f8334c0c85b4092881ecded7",
+  "currentSourceStable": true,
+  "currentSource": [
+    {
+      "path": "listener/src/adapters/registry.ts",
+      "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/compiler.ts",
+      "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-credit-runtime.ts",
+      "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+      "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+      "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+      "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+    },
+    {
+      "path": "listener/src/searcher/adapter-funding-runtime.ts",
+      "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+    },
+    {
+      "path": "listener/src/searcher/adapter-work-intent.ts",
+      "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+    },
+    {
+      "path": "listener/src/searcher/amount-quote-continuity.ts",
+      "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+    },
+    {
+      "path": "listener/src/searcher/blockscan-route-identity.ts",
+      "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+    },
+    {
+      "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+      "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+    },
+    {
+      "path": "listener/src/searcher/exact-prefix-plan.ts",
+      "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+    },
+    {
+      "path": "listener/src/searcher/exact-trial-state.ts",
+      "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
+    },
+    {
+      "path": "listener/src/searcher/identity-asset-metadata.ts",
+      "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+    },
+    {
+      "path": "listener/src/searcher/runtime-evidence.ts",
+      "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+    },
+    {
+      "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+      "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+    },
+    {
+      "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+      "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+      "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+      "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-bounds.ts",
+      "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-propagation.ts",
+      "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-rejection.ts",
+      "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-builder.ts",
+      "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+      "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+    },
+    {
+      "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+      "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+    },
+    {
+      "path": "listener/src/searcher/strategy-taxonomy.ts",
+      "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+    },
+    {
+      "path": "listener/src/searcher/strict-production-runtime-session.ts",
+      "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+      "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-program.ts",
+      "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+    },
+    {
+      "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+      "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+      "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/oneswap.production.ts",
+      "sha256": "1e63ca689b050854972594c48c9e67339fc8f42bce9c0091dd402a8911765141"
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/precision-pool.production.ts",
+      "sha256": "317f79acaf08fcb6e538e383de46520dd8f4ef62c0474a60378d5900ad2fce05"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+      "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-instance-identity.ts",
+      "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/action.ts",
+      "sha256": "e6a84afc5ce0b59ecfa0833acd824aa71b2af86ea0c7d64297707e6799cf77cc"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/capture.ts",
+      "sha256": "672a28144027cd0ddd2bf8addfa761f9d151373fcde4b33a641a8d278d2a6acc"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/codec.ts",
+      "sha256": "f41a5333ee1ea2fe872271d58c1d4c99de1945cd7e9d56a263a1209a20fc1d7e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/discovery.ts",
+      "sha256": "2c93528e57fb38f41517ec218d9d62d49f90ac1b672f3ed4a49062af36fe26c5"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/exact.ts",
+      "sha256": "cfa4658526a84e99d8e286e2f1522f5797b764941be6c6d2b5f067bc871ae3d5"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/execution.ts",
+      "sha256": "b1e73367c5908e1ff845b0112e7248d784b55ceaa4704d0f817466f9c4c2c1be"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/identity.ts",
+      "sha256": "5c4eee10c878b3c505da09ca4ec253c96401afe449075783ff69c3082d93273b"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/instance.ts",
+      "sha256": "53e2d85ee6c8dad446985c816f89d4ed40eaba26589f87afeeafe7e5d01a061f"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/manifest.ts",
+      "sha256": "7a1e56e495bae2d982e1fb4edf4eb8c65200758b37ef826b4d0d64555310355e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/math.ts",
+      "sha256": "8fdafc6543367a7749eaac924e1821058a4f88635d523f8e7548f02ccf86cce0"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/pricing.ts",
+      "sha256": "cb778c26eb5e3654691b9888d95ccf097dfeafde7376604754621f06e2bba61a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/proxy.ts",
+      "sha256": "70daf5e85114493cfa4107fab1d89d7d6c65ccd220a3c8851c4ffe28b5391c10"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/routes.ts",
+      "sha256": "0c1e80d2874dd60fe4d370046f0cc8b8ace3679286a43a60440aac5d11f62d0e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/runtime-execution.ts",
+      "sha256": "dd019deef62cd206b28d4495239c3a914cff1fc33c914942f8b900fc36bb4bd1"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/state.ts",
+      "sha256": "9de0ee681153355bacbc7d979abe713fc6a716bf661a6198bf2a14d2c3db70b1"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/swap.ts",
+      "sha256": "e3493b2cce1487df4a5198c723629f9959638bfc0514928772a912b5dbdf9d25"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/oneswap-family/types.ts",
+      "sha256": "33c02ee4d4b47cb3c031b1d484e53fcec5859c345d9be3c9d2e9356065b75117"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/action.ts",
+      "sha256": "f02bf7b70b10e81ab0b853c8b3d47c6b30ca4079e2493ec9f8a509dfa3f62747"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/capture.ts",
+      "sha256": "672a28144027cd0ddd2bf8addfa761f9d151373fcde4b33a641a8d278d2a6acc"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/codec.ts",
+      "sha256": "83ea51352200b7cc3727f3c9ee98451fa5e1bb2ee4a1a7cda9cc1654936b8485"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/discovery.ts",
+      "sha256": "e16098f78b651f65e20e83d2cc8826b6acdd2023b4e1505201ad32ce60248279"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/exact.ts",
+      "sha256": "eed46974538d55d7001e2637d9552bdac8a81dcb655c4908d0aae8381c4ce951"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/execution.ts",
+      "sha256": "afe501f19295aa0f4bef85aece42f4730cc8877b5965ed5c2d2fdbca8906ac2e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/identity.ts",
+      "sha256": "8c79751ca0e2db7125ddc8e4e2b471566ce74e90eed0b68517392b96e6a38f62"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/instance.ts",
+      "sha256": "fefc3bb71548ed66aefc9d495e78929f9be8e44c28a6d526de1cb025d347e6fa"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/manifest.ts",
+      "sha256": "db3c6be9675ad5879b3a87b4ba242a4801cf2380cd023d01e220cc79f2d4ee55"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/pricing.ts",
+      "sha256": "864dd5f053dff10044a3d94141dee2da6354390dbaab0627dab7458822b885c1"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/routes.ts",
+      "sha256": "3ae2f1ac9c1ad3fbe6e8cc338108632f5e97fa4ebd44a49a191311d5532a0ce0"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/runtime-execution.ts",
+      "sha256": "48416262c6b2ddbf7af174602ca3762f428df0988aac709651729efa3262e94d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/runtime.ts",
+      "sha256": "25c5dfb54de9b42dbbae9ef93c13064de4c79c96b135fda8f57df193788e2565"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/state.ts",
+      "sha256": "e51f8b819822c0faeb148196f531436d48d0b6bbc52aa35910ebb19f219ccdbb"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/swap.ts",
+      "sha256": "a3ab9fa514b018c461816ad0ccdefc02fdfb5269007959a79994882cb48c8239"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/types.ts",
+      "sha256": "b7833a7949f701335b269a8fedbc0d87a38cd4c0ee938f9072445151cb6c4132"
+    },
+    {
+      "path": "listener/src/shared/constants/addresses.ts",
+      "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-executor.ts",
+      "sha256": "0725c2f4798b0a292dfec6f0ccad5cc4299da7e9187db2dc7635b0b895a4bfa0"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+    },
+    {
+      "path": "listener/src/shared/state/state-backend.ts",
+      "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+    },
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "src/BotVMEncoder.sol",
+      "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+    },
+    {
+      "path": "src/BotVMScriptBuilder.sol",
+      "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+    },
+    {
+      "path": "src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+    },
+    {
+      "path": "src/FlashArb.sol",
+      "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+    },
+    {
+      "path": "src/interfaces/IFluidVault.sol",
+      "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+    },
+    {
+      "path": "src/interfaces/IMorpho.sol",
+      "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+    },
+    {
+      "path": "src/interfaces/ISwap.sol",
+      "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+    }
+  ],
+  "executionSourceTreeSha256": "ba3ccc44eed639cfd0c4859e74841739452bbaaf7506c752aadd646135191b66",
+  "sourceComparisons": [
+    {
+      "familyId": "custom-swap:oneswap",
+      "executionClosurePins": 17,
+      "commonPins": 57,
+      "unchangedRecordedPins": 73,
+      "changedRecordedPins": [
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/execution-asset-boundary.ts",
+          "executionTimeSha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872",
+          "currentSha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4",
+          "unchanged": false
+        }
+      ],
+      "comparison": [
+        {
+          "group": "source",
+          "path": "listener/src/adapters/runtime-amount-program.ts",
+          "executionTimeSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "currentSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/encoder.ts",
+          "executionTimeSha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a",
+          "currentSha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+          "executionTimeSha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5",
+          "currentSha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/canonical-value.ts",
+          "executionTimeSha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961",
+          "currentSha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/family-owned-action.ts",
+          "executionTimeSha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2",
+          "currentSha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/production-families/oneswap.production.ts",
+          "executionTimeSha256": "1e63ca689b050854972594c48c9e67339fc8f42bce9c0091dd402a8911765141",
+          "currentSha256": "1e63ca689b050854972594c48c9e67339fc8f42bce9c0091dd402a8911765141",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/runtime-execution.ts",
+          "executionTimeSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "currentSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/action.ts",
+          "executionTimeSha256": "e6a84afc5ce0b59ecfa0833acd824aa71b2af86ea0c7d64297707e6799cf77cc",
+          "currentSha256": "e6a84afc5ce0b59ecfa0833acd824aa71b2af86ea0c7d64297707e6799cf77cc",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/codec.ts",
+          "executionTimeSha256": "f41a5333ee1ea2fe872271d58c1d4c99de1945cd7e9d56a263a1209a20fc1d7e",
+          "currentSha256": "f41a5333ee1ea2fe872271d58c1d4c99de1945cd7e9d56a263a1209a20fc1d7e",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/execution.ts",
+          "executionTimeSha256": "b1e73367c5908e1ff845b0112e7248d784b55ceaa4704d0f817466f9c4c2c1be",
+          "currentSha256": "b1e73367c5908e1ff845b0112e7248d784b55ceaa4704d0f817466f9c4c2c1be",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/identity.ts",
+          "executionTimeSha256": "5c4eee10c878b3c505da09ca4ec253c96401afe449075783ff69c3082d93273b",
+          "currentSha256": "5c4eee10c878b3c505da09ca4ec253c96401afe449075783ff69c3082d93273b",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/instance.ts",
+          "executionTimeSha256": "53e2d85ee6c8dad446985c816f89d4ed40eaba26589f87afeeafe7e5d01a061f",
+          "currentSha256": "53e2d85ee6c8dad446985c816f89d4ed40eaba26589f87afeeafe7e5d01a061f",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/manifest.ts",
+          "executionTimeSha256": "7a1e56e495bae2d982e1fb4edf4eb8c65200758b37ef826b4d0d64555310355e",
+          "currentSha256": "7a1e56e495bae2d982e1fb4edf4eb8c65200758b37ef826b4d0d64555310355e",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/proxy.ts",
+          "executionTimeSha256": "70daf5e85114493cfa4107fab1d89d7d6c65ccd220a3c8851c4ffe28b5391c10",
+          "currentSha256": "70daf5e85114493cfa4107fab1d89d7d6c65ccd220a3c8851c4ffe28b5391c10",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/routes.ts",
+          "executionTimeSha256": "0c1e80d2874dd60fe4d370046f0cc8b8ace3679286a43a60440aac5d11f62d0e",
+          "currentSha256": "0c1e80d2874dd60fe4d370046f0cc8b8ace3679286a43a60440aac5d11f62d0e",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/runtime-execution.ts",
+          "executionTimeSha256": "dd019deef62cd206b28d4495239c3a914cff1fc33c914942f8b900fc36bb4bd1",
+          "currentSha256": "dd019deef62cd206b28d4495239c3a914cff1fc33c914942f8b900fc36bb4bd1",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/shared/executor/amount-rounding.ts",
+          "executionTimeSha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+          "currentSha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/adapters/registry.ts",
+          "executionTimeSha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0",
+          "currentSha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/adapters/runtime-amount-program.ts",
+          "executionTimeSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "currentSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/compiler.ts",
+          "executionTimeSha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08",
+          "currentSha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/encoder.ts",
+          "executionTimeSha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a",
+          "currentSha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-credit-runtime.ts",
+          "executionTimeSha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a",
+          "currentSha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+          "executionTimeSha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10",
+          "currentSha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+          "executionTimeSha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad",
+          "currentSha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+          "executionTimeSha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7",
+          "currentSha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-funding-runtime.ts",
+          "executionTimeSha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29",
+          "currentSha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-work-intent.ts",
+          "executionTimeSha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6",
+          "currentSha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/amount-quote-continuity.ts",
+          "executionTimeSha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5",
+          "currentSha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/blockscan-route-identity.ts",
+          "executionTimeSha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be",
+          "currentSha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+          "executionTimeSha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330",
+          "currentSha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/exact-prefix-plan.ts",
+          "executionTimeSha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1",
+          "currentSha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/exact-trial-state.ts",
+          "executionTimeSha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5",
+          "currentSha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/execution-asset-boundary.ts",
+          "executionTimeSha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872",
+          "currentSha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4",
+          "unchanged": false
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/identity-asset-metadata.ts",
+          "executionTimeSha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878",
+          "currentSha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/runtime-evidence.ts",
+          "executionTimeSha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24",
+          "currentSha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+          "executionTimeSha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261",
+          "currentSha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+          "executionTimeSha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5",
+          "currentSha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+          "executionTimeSha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4",
+          "currentSha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+          "executionTimeSha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1",
+          "currentSha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/amount-bounds.ts",
+          "executionTimeSha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0",
+          "currentSha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/amount-propagation.ts",
+          "executionTimeSha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280",
+          "currentSha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/amount-rejection.ts",
+          "executionTimeSha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95",
+          "currentSha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/plan-builder.ts",
+          "executionTimeSha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525",
+          "currentSha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+          "executionTimeSha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7",
+          "currentSha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+          "executionTimeSha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d",
+          "currentSha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/strategy-taxonomy.ts",
+          "executionTimeSha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83",
+          "currentSha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/strict-production-runtime-session.ts",
+          "executionTimeSha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19",
+          "currentSha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+          "executionTimeSha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12",
+          "currentSha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+          "executionTimeSha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5",
+          "currentSha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+          "executionTimeSha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2",
+          "currentSha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+          "executionTimeSha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd",
+          "currentSha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+          "executionTimeSha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633",
+          "currentSha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-request-program.ts",
+          "executionTimeSha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab",
+          "currentSha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+          "executionTimeSha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c",
+          "currentSha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/canonical-value.ts",
+          "executionTimeSha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961",
+          "currentSha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+          "executionTimeSha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d",
+          "currentSha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/family-owned-action.ts",
+          "executionTimeSha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2",
+          "currentSha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+          "executionTimeSha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292",
+          "currentSha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/route-instance-identity.ts",
+          "executionTimeSha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3",
+          "currentSha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/runtime-execution.ts",
+          "executionTimeSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "currentSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/shared/constants/addresses.ts",
+          "executionTimeSha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3",
+          "currentSha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/shared/executor/amount-rounding.ts",
+          "executionTimeSha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+          "currentSha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/shared/executor/botvm-program-entry.ts",
+          "executionTimeSha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0",
+          "currentSha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/shared/state/state-backend.ts",
+          "executionTimeSha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15",
+          "currentSha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/BotVM.sol",
+          "executionTimeSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "currentSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/BotVMEncoder.sol",
+          "executionTimeSha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8",
+          "currentSha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/BotVMScriptBuilder.sol",
+          "executionTimeSha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec",
+          "currentSha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/Constants.sol",
+          "executionTimeSha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "currentSha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/FlashArb.sol",
+          "executionTimeSha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8",
+          "currentSha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/RuntimeAmountVM.sol",
+          "executionTimeSha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+          "currentSha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/interfaces/IERC20.sol",
+          "executionTimeSha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "currentSha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/interfaces/IFluidVault.sol",
+          "executionTimeSha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91",
+          "currentSha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/interfaces/IMorpho.sol",
+          "executionTimeSha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01",
+          "currentSha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/interfaces/ISwap.sol",
+          "executionTimeSha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866",
+          "currentSha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866",
+          "unchanged": true
+        }
+      ],
+      "completeFamilyProductionPins": [
+        {
+          "path": "listener/src/searcher/venues/production-families/oneswap.production.ts",
+          "historicalSha256": "1e63ca689b050854972594c48c9e67339fc8f42bce9c0091dd402a8911765141",
+          "currentSha256": "1e63ca689b050854972594c48c9e67339fc8f42bce9c0091dd402a8911765141",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/action.ts",
+          "historicalSha256": "e6a84afc5ce0b59ecfa0833acd824aa71b2af86ea0c7d64297707e6799cf77cc",
+          "currentSha256": "e6a84afc5ce0b59ecfa0833acd824aa71b2af86ea0c7d64297707e6799cf77cc",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/capture.ts",
+          "historicalSha256": "672a28144027cd0ddd2bf8addfa761f9d151373fcde4b33a641a8d278d2a6acc",
+          "currentSha256": "672a28144027cd0ddd2bf8addfa761f9d151373fcde4b33a641a8d278d2a6acc",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/codec.ts",
+          "historicalSha256": "f41a5333ee1ea2fe872271d58c1d4c99de1945cd7e9d56a263a1209a20fc1d7e",
+          "currentSha256": "f41a5333ee1ea2fe872271d58c1d4c99de1945cd7e9d56a263a1209a20fc1d7e",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/discovery.ts",
+          "historicalSha256": "2c93528e57fb38f41517ec218d9d62d49f90ac1b672f3ed4a49062af36fe26c5",
+          "currentSha256": "2c93528e57fb38f41517ec218d9d62d49f90ac1b672f3ed4a49062af36fe26c5",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/exact.ts",
+          "historicalSha256": "cfa4658526a84e99d8e286e2f1522f5797b764941be6c6d2b5f067bc871ae3d5",
+          "currentSha256": "cfa4658526a84e99d8e286e2f1522f5797b764941be6c6d2b5f067bc871ae3d5",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/execution.ts",
+          "historicalSha256": "b1e73367c5908e1ff845b0112e7248d784b55ceaa4704d0f817466f9c4c2c1be",
+          "currentSha256": "b1e73367c5908e1ff845b0112e7248d784b55ceaa4704d0f817466f9c4c2c1be",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/identity.ts",
+          "historicalSha256": "5c4eee10c878b3c505da09ca4ec253c96401afe449075783ff69c3082d93273b",
+          "currentSha256": "5c4eee10c878b3c505da09ca4ec253c96401afe449075783ff69c3082d93273b",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/instance.ts",
+          "historicalSha256": "53e2d85ee6c8dad446985c816f89d4ed40eaba26589f87afeeafe7e5d01a061f",
+          "currentSha256": "53e2d85ee6c8dad446985c816f89d4ed40eaba26589f87afeeafe7e5d01a061f",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/manifest.ts",
+          "historicalSha256": "7a1e56e495bae2d982e1fb4edf4eb8c65200758b37ef826b4d0d64555310355e",
+          "currentSha256": "7a1e56e495bae2d982e1fb4edf4eb8c65200758b37ef826b4d0d64555310355e",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/math.ts",
+          "historicalSha256": "8fdafc6543367a7749eaac924e1821058a4f88635d523f8e7548f02ccf86cce0",
+          "currentSha256": "8fdafc6543367a7749eaac924e1821058a4f88635d523f8e7548f02ccf86cce0",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/pricing.ts",
+          "historicalSha256": "cb778c26eb5e3654691b9888d95ccf097dfeafde7376604754621f06e2bba61a",
+          "currentSha256": "cb778c26eb5e3654691b9888d95ccf097dfeafde7376604754621f06e2bba61a",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/proxy.ts",
+          "historicalSha256": "70daf5e85114493cfa4107fab1d89d7d6c65ccd220a3c8851c4ffe28b5391c10",
+          "currentSha256": "70daf5e85114493cfa4107fab1d89d7d6c65ccd220a3c8851c4ffe28b5391c10",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/routes.ts",
+          "historicalSha256": "0c1e80d2874dd60fe4d370046f0cc8b8ace3679286a43a60440aac5d11f62d0e",
+          "currentSha256": "0c1e80d2874dd60fe4d370046f0cc8b8ace3679286a43a60440aac5d11f62d0e",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/runtime-execution.ts",
+          "historicalSha256": "dd019deef62cd206b28d4495239c3a914cff1fc33c914942f8b900fc36bb4bd1",
+          "currentSha256": "dd019deef62cd206b28d4495239c3a914cff1fc33c914942f8b900fc36bb4bd1",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/state.ts",
+          "historicalSha256": "9de0ee681153355bacbc7d979abe713fc6a716bf661a6198bf2a14d2c3db70b1",
+          "currentSha256": "9de0ee681153355bacbc7d979abe713fc6a716bf661a6198bf2a14d2c3db70b1",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/swap.ts",
+          "historicalSha256": "e3493b2cce1487df4a5198c723629f9959638bfc0514928772a912b5dbdf9d25",
+          "currentSha256": "e3493b2cce1487df4a5198c723629f9959638bfc0514928772a912b5dbdf9d25",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/types.ts",
+          "historicalSha256": "33c02ee4d4b47cb3c031b1d484e53fcec5859c345d9be3c9d2e9356065b75117",
+          "currentSha256": "33c02ee4d4b47cb3c031b1d484e53fcec5859c345d9be3c9d2e9356065b75117",
+          "unchanged": true
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:precision-pool",
+      "executionClosurePins": 17,
+      "commonPins": 57,
+      "unchangedRecordedPins": 73,
+      "changedRecordedPins": [
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/execution-asset-boundary.ts",
+          "executionTimeSha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872",
+          "currentSha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4",
+          "unchanged": false
+        }
+      ],
+      "comparison": [
+        {
+          "group": "source",
+          "path": "listener/src/adapters/runtime-amount-program.ts",
+          "executionTimeSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "currentSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/encoder.ts",
+          "executionTimeSha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a",
+          "currentSha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+          "executionTimeSha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5",
+          "currentSha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/canonical-value.ts",
+          "executionTimeSha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961",
+          "currentSha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/family-owned-action.ts",
+          "executionTimeSha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2",
+          "currentSha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/production-families/precision-pool.production.ts",
+          "executionTimeSha256": "317f79acaf08fcb6e538e383de46520dd8f4ef62c0474a60378d5900ad2fce05",
+          "currentSha256": "317f79acaf08fcb6e538e383de46520dd8f4ef62c0474a60378d5900ad2fce05",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/runtime-execution.ts",
+          "executionTimeSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "currentSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/action.ts",
+          "executionTimeSha256": "f02bf7b70b10e81ab0b853c8b3d47c6b30ca4079e2493ec9f8a509dfa3f62747",
+          "currentSha256": "f02bf7b70b10e81ab0b853c8b3d47c6b30ca4079e2493ec9f8a509dfa3f62747",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/codec.ts",
+          "executionTimeSha256": "83ea51352200b7cc3727f3c9ee98451fa5e1bb2ee4a1a7cda9cc1654936b8485",
+          "currentSha256": "83ea51352200b7cc3727f3c9ee98451fa5e1bb2ee4a1a7cda9cc1654936b8485",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/execution.ts",
+          "executionTimeSha256": "afe501f19295aa0f4bef85aece42f4730cc8877b5965ed5c2d2fdbca8906ac2e",
+          "currentSha256": "afe501f19295aa0f4bef85aece42f4730cc8877b5965ed5c2d2fdbca8906ac2e",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/identity.ts",
+          "executionTimeSha256": "8c79751ca0e2db7125ddc8e4e2b471566ce74e90eed0b68517392b96e6a38f62",
+          "currentSha256": "8c79751ca0e2db7125ddc8e4e2b471566ce74e90eed0b68517392b96e6a38f62",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/instance.ts",
+          "executionTimeSha256": "fefc3bb71548ed66aefc9d495e78929f9be8e44c28a6d526de1cb025d347e6fa",
+          "currentSha256": "fefc3bb71548ed66aefc9d495e78929f9be8e44c28a6d526de1cb025d347e6fa",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/manifest.ts",
+          "executionTimeSha256": "db3c6be9675ad5879b3a87b4ba242a4801cf2380cd023d01e220cc79f2d4ee55",
+          "currentSha256": "db3c6be9675ad5879b3a87b4ba242a4801cf2380cd023d01e220cc79f2d4ee55",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/routes.ts",
+          "executionTimeSha256": "3ae2f1ac9c1ad3fbe6e8cc338108632f5e97fa4ebd44a49a191311d5532a0ce0",
+          "currentSha256": "3ae2f1ac9c1ad3fbe6e8cc338108632f5e97fa4ebd44a49a191311d5532a0ce0",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/runtime-execution.ts",
+          "executionTimeSha256": "48416262c6b2ddbf7af174602ca3762f428df0988aac709651729efa3262e94d",
+          "currentSha256": "48416262c6b2ddbf7af174602ca3762f428df0988aac709651729efa3262e94d",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/runtime.ts",
+          "executionTimeSha256": "25c5dfb54de9b42dbbae9ef93c13064de4c79c96b135fda8f57df193788e2565",
+          "currentSha256": "25c5dfb54de9b42dbbae9ef93c13064de4c79c96b135fda8f57df193788e2565",
+          "unchanged": true
+        },
+        {
+          "group": "source",
+          "path": "listener/src/shared/executor/amount-rounding.ts",
+          "executionTimeSha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+          "currentSha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/adapters/registry.ts",
+          "executionTimeSha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0",
+          "currentSha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/adapters/runtime-amount-program.ts",
+          "executionTimeSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "currentSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/compiler.ts",
+          "executionTimeSha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08",
+          "currentSha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/encoder.ts",
+          "executionTimeSha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a",
+          "currentSha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-credit-runtime.ts",
+          "executionTimeSha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a",
+          "currentSha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+          "executionTimeSha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10",
+          "currentSha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+          "executionTimeSha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad",
+          "currentSha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+          "executionTimeSha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7",
+          "currentSha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-funding-runtime.ts",
+          "executionTimeSha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29",
+          "currentSha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/adapter-work-intent.ts",
+          "executionTimeSha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6",
+          "currentSha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/amount-quote-continuity.ts",
+          "executionTimeSha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5",
+          "currentSha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/blockscan-route-identity.ts",
+          "executionTimeSha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be",
+          "currentSha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+          "executionTimeSha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330",
+          "currentSha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/exact-prefix-plan.ts",
+          "executionTimeSha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1",
+          "currentSha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/exact-trial-state.ts",
+          "executionTimeSha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5",
+          "currentSha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/execution-asset-boundary.ts",
+          "executionTimeSha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872",
+          "currentSha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4",
+          "unchanged": false
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/identity-asset-metadata.ts",
+          "executionTimeSha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878",
+          "currentSha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/runtime-evidence.ts",
+          "executionTimeSha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24",
+          "currentSha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+          "executionTimeSha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261",
+          "currentSha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+          "executionTimeSha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5",
+          "currentSha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+          "executionTimeSha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4",
+          "currentSha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+          "executionTimeSha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1",
+          "currentSha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/amount-bounds.ts",
+          "executionTimeSha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0",
+          "currentSha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/amount-propagation.ts",
+          "executionTimeSha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280",
+          "currentSha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/amount-rejection.ts",
+          "executionTimeSha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95",
+          "currentSha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/plan-builder.ts",
+          "executionTimeSha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525",
+          "currentSha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+          "executionTimeSha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7",
+          "currentSha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+          "executionTimeSha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d",
+          "currentSha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/strategy-taxonomy.ts",
+          "executionTimeSha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83",
+          "currentSha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/strict-production-runtime-session.ts",
+          "executionTimeSha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19",
+          "currentSha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+          "executionTimeSha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12",
+          "currentSha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+          "executionTimeSha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5",
+          "currentSha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+          "executionTimeSha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2",
+          "currentSha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+          "executionTimeSha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd",
+          "currentSha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+          "executionTimeSha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633",
+          "currentSha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/adapter-request-program.ts",
+          "executionTimeSha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab",
+          "currentSha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+          "executionTimeSha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c",
+          "currentSha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/canonical-value.ts",
+          "executionTimeSha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961",
+          "currentSha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+          "executionTimeSha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d",
+          "currentSha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/family-owned-action.ts",
+          "executionTimeSha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2",
+          "currentSha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+          "executionTimeSha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292",
+          "currentSha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/route-instance-identity.ts",
+          "executionTimeSha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3",
+          "currentSha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/searcher/venues/runtime-execution.ts",
+          "executionTimeSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "currentSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/shared/constants/addresses.ts",
+          "executionTimeSha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3",
+          "currentSha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/shared/executor/amount-rounding.ts",
+          "executionTimeSha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+          "currentSha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/shared/executor/botvm-program-entry.ts",
+          "executionTimeSha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0",
+          "currentSha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "listener/src/shared/state/state-backend.ts",
+          "executionTimeSha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15",
+          "currentSha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/BotVM.sol",
+          "executionTimeSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "currentSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/BotVMEncoder.sol",
+          "executionTimeSha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8",
+          "currentSha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/BotVMScriptBuilder.sol",
+          "executionTimeSha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec",
+          "currentSha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/Constants.sol",
+          "executionTimeSha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "currentSha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/FlashArb.sol",
+          "executionTimeSha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8",
+          "currentSha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/RuntimeAmountVM.sol",
+          "executionTimeSha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+          "currentSha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/interfaces/IERC20.sol",
+          "executionTimeSha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "currentSha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/interfaces/IFluidVault.sol",
+          "executionTimeSha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91",
+          "currentSha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/interfaces/IMorpho.sol",
+          "executionTimeSha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01",
+          "currentSha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01",
+          "unchanged": true
+        },
+        {
+          "group": "commonSource",
+          "path": "src/interfaces/ISwap.sol",
+          "executionTimeSha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866",
+          "currentSha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866",
+          "unchanged": true
+        }
+      ],
+      "completeFamilyProductionPins": [
+        {
+          "path": "listener/src/searcher/venues/production-families/precision-pool.production.ts",
+          "historicalSha256": "317f79acaf08fcb6e538e383de46520dd8f4ef62c0474a60378d5900ad2fce05",
+          "currentSha256": "317f79acaf08fcb6e538e383de46520dd8f4ef62c0474a60378d5900ad2fce05",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/action.ts",
+          "historicalSha256": "f02bf7b70b10e81ab0b853c8b3d47c6b30ca4079e2493ec9f8a509dfa3f62747",
+          "currentSha256": "f02bf7b70b10e81ab0b853c8b3d47c6b30ca4079e2493ec9f8a509dfa3f62747",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/capture.ts",
+          "historicalSha256": "672a28144027cd0ddd2bf8addfa761f9d151373fcde4b33a641a8d278d2a6acc",
+          "currentSha256": "672a28144027cd0ddd2bf8addfa761f9d151373fcde4b33a641a8d278d2a6acc",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/codec.ts",
+          "historicalSha256": "83ea51352200b7cc3727f3c9ee98451fa5e1bb2ee4a1a7cda9cc1654936b8485",
+          "currentSha256": "83ea51352200b7cc3727f3c9ee98451fa5e1bb2ee4a1a7cda9cc1654936b8485",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/discovery.ts",
+          "historicalSha256": "e16098f78b651f65e20e83d2cc8826b6acdd2023b4e1505201ad32ce60248279",
+          "currentSha256": "e16098f78b651f65e20e83d2cc8826b6acdd2023b4e1505201ad32ce60248279",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/exact.ts",
+          "historicalSha256": "eed46974538d55d7001e2637d9552bdac8a81dcb655c4908d0aae8381c4ce951",
+          "currentSha256": "eed46974538d55d7001e2637d9552bdac8a81dcb655c4908d0aae8381c4ce951",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/execution.ts",
+          "historicalSha256": "afe501f19295aa0f4bef85aece42f4730cc8877b5965ed5c2d2fdbca8906ac2e",
+          "currentSha256": "afe501f19295aa0f4bef85aece42f4730cc8877b5965ed5c2d2fdbca8906ac2e",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/identity.ts",
+          "historicalSha256": "8c79751ca0e2db7125ddc8e4e2b471566ce74e90eed0b68517392b96e6a38f62",
+          "currentSha256": "8c79751ca0e2db7125ddc8e4e2b471566ce74e90eed0b68517392b96e6a38f62",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/instance.ts",
+          "historicalSha256": "fefc3bb71548ed66aefc9d495e78929f9be8e44c28a6d526de1cb025d347e6fa",
+          "currentSha256": "fefc3bb71548ed66aefc9d495e78929f9be8e44c28a6d526de1cb025d347e6fa",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/manifest.ts",
+          "historicalSha256": "db3c6be9675ad5879b3a87b4ba242a4801cf2380cd023d01e220cc79f2d4ee55",
+          "currentSha256": "db3c6be9675ad5879b3a87b4ba242a4801cf2380cd023d01e220cc79f2d4ee55",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/pricing.ts",
+          "historicalSha256": "864dd5f053dff10044a3d94141dee2da6354390dbaab0627dab7458822b885c1",
+          "currentSha256": "864dd5f053dff10044a3d94141dee2da6354390dbaab0627dab7458822b885c1",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/routes.ts",
+          "historicalSha256": "3ae2f1ac9c1ad3fbe6e8cc338108632f5e97fa4ebd44a49a191311d5532a0ce0",
+          "currentSha256": "3ae2f1ac9c1ad3fbe6e8cc338108632f5e97fa4ebd44a49a191311d5532a0ce0",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/runtime-execution.ts",
+          "historicalSha256": "48416262c6b2ddbf7af174602ca3762f428df0988aac709651729efa3262e94d",
+          "currentSha256": "48416262c6b2ddbf7af174602ca3762f428df0988aac709651729efa3262e94d",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/runtime.ts",
+          "historicalSha256": "25c5dfb54de9b42dbbae9ef93c13064de4c79c96b135fda8f57df193788e2565",
+          "currentSha256": "25c5dfb54de9b42dbbae9ef93c13064de4c79c96b135fda8f57df193788e2565",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/state.ts",
+          "historicalSha256": "e51f8b819822c0faeb148196f531436d48d0b6bbc52aa35910ebb19f219ccdbb",
+          "currentSha256": "e51f8b819822c0faeb148196f531436d48d0b6bbc52aa35910ebb19f219ccdbb",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/swap.ts",
+          "historicalSha256": "a3ab9fa514b018c461816ad0ccdefc02fdfb5269007959a79994882cb48c8239",
+          "currentSha256": "a3ab9fa514b018c461816ad0ccdefc02fdfb5269007959a79994882cb48c8239",
+          "unchanged": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/types.ts",
+          "historicalSha256": "b7833a7949f701335b269a8fedbc0d87a38cd4c0ee938f9072445151cb6c4132",
+          "currentSha256": "b7833a7949f701335b269a8fedbc0d87a38cd4c0ee938f9072445151cb6c4132",
+          "unchanged": true
+        }
+      ]
+    }
+  ],
+  "reconstruction": {
+    "evidence": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap-precision115/reemit02.json",
+      "sha256": "055673a21e99c93b9cbcfde1e0a0e04312e0f380cd814cb4b8e8130ebacb233c"
+    },
+    "implementation": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap-precision115/reemit02.mjs",
+      "sha256": "3314112938844ab78358d06523d1f1119825fff3eecd3f312aaf49ba2f5dec24"
+    },
+    "inputProjection": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap-precision115/inputs02.json",
+      "sha256": "31e0f5959845b3cde7396adc941d64bdf819ffd5921cea3c860e59fd57153d46"
+    },
+    "remoteReceipt": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap-precision115/reemit02-output.json",
+      "sha256": "7ef699d07470cd3e784b50760955c5e7de9f663089e3be071c8ee4afe2727ca6"
+    },
+    "savedCalldata": 64,
+    "historicalBoundaryReemissionMatches": 64,
+    "currentCompleteCalldataUnchanged": 32,
+    "currentDirectOuterCalldataChanged": 32,
+    "composition": "Current real Family route/buildFragment/buildRuntimeLeg/action emitters plus actual common boundary. Historical boundary loaded from exact committed bytes in memory; no files installed. Saved quote outputs are construction inputs, not freshly computed quotes.",
+    "countsByFamily": [
+      {
+        "familyId": "custom-swap:oneswap",
+        "positiveCalldata": 32,
+        "negativeCalldata": 0,
+        "completeDefaultQuotedMatches": 16,
+        "directCalldataWithGuardDelta": 16
+      },
+      {
+        "familyId": "custom-swap:precision-pool",
+        "positiveCalldata": 16,
+        "negativeCalldata": 16,
+        "completeDefaultQuotedMatches": 16,
+        "directCalldataWithGuardDelta": 16
+      }
+    ],
+    "notNewExecution": true
+  },
+  "onlyProductionDifference": {
+    "path": "listener/src/searcher/execution-asset-boundary.ts",
+    "executionTimeSha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872",
+    "currentSha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4",
+    "diff": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap-precision115/diffs/listener__src__searcher__execution-asset-boundary.ts",
+      "sha256": "22092407d54d56d8866aae777ae8902e6fda34d7630d0628f7098175db4255c8"
+    },
+    "change": "Explicit direct common boundary changes residual == 0 to residual in [0,1] plus actual positive debit; original default/quoted bytes are unchanged.",
+    "applicableCompatibilityReason": [
+      "Both Family raw programs are byte-identical and require full actual raw input debit == r0; their direct paths also require positive input and independently measured output.",
+      "OneSwap runtime-execution.ts lines 23-24 and 42-43; PrecisionPool runtime-execution.ts lines 28 and 51 independently retain these guards. Recipient mapping, measured native wrap/WETH delivery, old inventory, and Precision temporary allowance cleanup are unchanged.",
+      "All saved same-N successful states had exact full input debit and zero residual. The current common guard accepts those same states. No-input and explicit post-execution-revert controls retain their operative rejection instructions. This is scoped source/behavior compatibility, not a claim of direct byte identity or fresh current EVM execution.",
+      "The certified scope uses the same actual historical token and canonical WETH code/state. This certificate does not assert universal equivalence for hypothetical alternative WETH/token behavior or unexecuted profiles."
+    ],
+    "existingCommonRegression": {
+      "receipt": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/apply-boundary82-output.log",
+        "sha256": "beb25a3a2323a084a1b2dc2a84f47187a45b1ae944ae1c937f56937fc9ba70fa"
+      },
+      "sourceReview": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/boundary82/independent-review.json",
+        "sha256": "00cfe8ab68da535a9c75ae2e8c9f903c6973a475691212cf7b3310ec5a817a4d"
+      },
+      "result": "Existing canonical boundary EVM exit 0 on 2026-10-15; not rerun in this certificate."
+    }
+  },
+  "executor": {
+    "artifactPath": "out/BotVM.sol/BotVM.json",
+    "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+    "compilerSources": [
+      {
+        "path": "src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+        "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+      },
+      {
+        "path": "src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+        "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+      },
+      {
+        "path": "src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+        "keccak256": "0xf139ad9c54d2b073a8dfff0c39e5742d4c270e92daa957817be88f4a80355565"
+      },
+      {
+        "path": "src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+        "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+      }
+    ],
+    "immutablePatches": [
+      {
+        "start": 136,
+        "length": 32
+      },
+      {
+        "start": 480,
+        "length": 32
+      },
+      {
+        "start": 559,
+        "length": 32
+      }
+    ],
+    "owner": "0x1000000000000000000000000000000000000001",
+    "runtimeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "matchesHistoricalArtifactAndRuntime": true
+  },
+  "limitations": [
+    "Historical source pins are preserved as execution-time facts. A current compatibility view must reference this certificate and both source sets rather than replacing old behavior hashes.",
+    "Existing inventory already uses current-native-boundary-reuse views and all 57 global common pins match the current read-only source. No inventory replacement or fresh gate execution is needed for this supplement.",
+    "No new natural discovery, fresh price generation, original pre-call opportunity replay, Adapter Replay, performance or merge-ready claim."
+  ],
+  "blockingFindings": [],
+  "existingInventory": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap-precision115/inventory-observation04.json",
+    "sha256": "1b342d7ed664cadbab46f7049a595a4875e4ee94070537b244a39f1ee9f092bb"
+  },
+  "supplementalOnly": true
+}

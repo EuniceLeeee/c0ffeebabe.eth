@@ -1,0 +1,70 @@
+{
+  "kind": "existing-inventory-read-only-observation",
+  "status": "retain-existing-completed-status",
+  "source": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap-precision115/current/docs/research/reports/family-settlement-interface-review-20261014.json",
+    "sha256": "58d923c397f1f6279a65e37db98b9689045f81bc85de9d2ab0a8f016570c5062"
+  },
+  "globalCommonPinsCurrent": 57,
+  "globalCommonPinsAllMatchReadOnlySource": true,
+  "mutationRequired": false,
+  "newGateRunRequired": false,
+  "newGateRunPerformed": false,
+  "families": [
+    {
+      "familyId": "custom-swap:oneswap",
+      "coverage": "complete",
+      "variants": [
+        {
+          "id": "native-ONES-AMM",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "input-first",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionEvidence": {
+            "path": "docs/research/reports/current-native-boundary-reuse-7d80bd330a14a57f-20261015.json",
+            "sha256": "3b4f0bf39c845adf49d1fde0fc83e3a8bc05b320dca7086e8f6b10ead31f8fa4"
+          }
+        },
+        {
+          "id": "native-ONES-AMM-orderbook",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "input-first",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionEvidence": {
+            "path": "docs/research/reports/current-native-boundary-reuse-7d80bd330a14a57f-20261015.json",
+            "sha256": "3b4f0bf39c845adf49d1fde0fc83e3a8bc05b320dca7086e8f6b10ead31f8fa4"
+          }
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:precision-pool",
+      "coverage": "complete",
+      "variants": [
+        {
+          "id": "zero-hook-zero-creator-fee-native",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "input-first",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionEvidence": {
+            "path": "docs/research/reports/current-native-boundary-reuse-488de8773403e401-20261015.json",
+            "sha256": "af4f6157363f883628955aaa120f492c70dd3cb279a21cd859da6da543df34b0"
+          }
+        }
+      ]
+    }
+  ],
+  "note": "Existing inventory already points to current-native-boundary-reuse evidence. This supplemental saved-calldata reconstruction does not replace those references, rewrite old source pins or reopen acceptance."
+}
