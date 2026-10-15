@@ -1,0 +1,406 @@
+{
+  "schema": "impl-scope-independent-review-v1",
+  "reviewFinal": true,
+  "scope": "Read-only review of IMPL scope/queue and four named original-TX Family mappings; no execution or production changes.",
+  "baseHead": "b393243b5454bfda52754889bc45909ed6f3c280",
+  "reviewedImpl": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "sha256": "b2ecc838ae4b4e89cc7159fc6436d60cfa0bb0032c2f70a7b9445deb12147451"
+  },
+  "stage": "Final bounded scope review",
+  "policyVerdict": "No-instance extra variants are nonblocking scope boundaries, while actual listed instances/actions and installed promised paths remain required. Preserve old successes under their original pins.",
+  "findings": [
+    {
+      "id": "scope50-current-installed-catalog-omits-two-existing-families",
+      "severity": "necessary-integration-gap",
+      "families": [
+        "custom-swap:oneswap",
+        "custom-swap:precision-pool"
+      ],
+      "recommendation": "Replace generic mapping-pending wording with current Family installation/production wiring gap; retain completed historical facts and reuse the recovered implementation."
+    },
+    {
+      "id": "scope50-migration-btb-are-not-implementation-gaps",
+      "severity": "documentation-correction",
+      "recommendation": "Name current Family/profile explicitly and replace runtime-implementation ambiguity with current-runtime historical evidence pending. Both installed emitters exist; older quoted fallback success remains valid."
+    },
+    {
+      "id": "scope50-historical-identity-evidence-recovered",
+      "severity": "evidence-join",
+      "recommendation": "Do not repeat the old claim that no historical target runtime binding exists for these two samples. N-end Ready descriptor codeHash/provenance has been recovered and matches verified public runtime; full current runtime behavior is still pending."
+    },
+    {
+      "id": "scope50-gate-scope-is-not-impl-scope",
+      "severity": "documentation-boundary",
+      "recommendation": "Preserve all prior variant IDs/evidence/statuses and old hashes. Add a separate applicability/scope note; do not treat every unresolved interface candidate as required implementation, and do not claim the existing all-variants gate passed."
+    }
+  ],
+  "rowMappings": [
+    {
+      "name": "OneSwap",
+      "originalTx": "0xdf6b912487a08189ea8a69e93fba7e1428df1edb22d41c1c5cd85c994e23cfef",
+      "familyId": "custom-swap:oneswap",
+      "actionId": "oneswap-market-order",
+      "classification": "current-installation-and-production-wiring-gap",
+      "oldSuccessPreserved": true,
+      "reimplementFromScratchRequired": false,
+      "currentEvidence": "Exact HEAD listener/src has no Family source/entry; saved cloud dirty inventory has no corresponding addition. The installed-46 review omits both, so installed completeness is not IMPL completeness.",
+      "oldSourceRoot": "/Users/eunice/.codex/worktrees/sim-one-rpc-benchmark/MEV/listener/src/searcher/venues/swaps/oneswap-family",
+      "oldSourceFilesMatchedToAcceptancePins": 19,
+      "sources": [
+        {
+          "path": "/Users/eunice/.codex/worktrees/sim-one-rpc-benchmark/MEV/logs/oneswap-family-20261006.H6Cd8E/owned-source-snapshot.json",
+          "sha256": "2951efc8b8115ef02dd1c441daab49efdbaf87625a14f9e3d251ce7e8e5eb4b2"
+        },
+        {
+          "path": "/Users/eunice/.codex/worktrees/sim-one-rpc-benchmark/MEV/listener/src/searcher/venues/production-families/oneswap.production.ts",
+          "sha256": "1e63ca689b050854972594c48c9e67339fc8f42bce9c0091dd402a8911765141"
+        },
+        {
+          "path": "/Users/eunice/.codex/worktrees/sim-one-rpc-benchmark/MEV/listener/src/searcher/venues/swaps/oneswap-family/runtime-execution.ts",
+          "sha256": "f72943882eea5408df9f36e8f1e968cda4fe0145b0900974ce9dff0b22971cf1"
+        }
+      ],
+      "historicalEvidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/replay-history/1/0xdf6b912487a08189ea8a69e93fba7e1428df1edb22d41c1c5cd85c994e23cfef/20261006-oneswap-natural-runtime-ev-i4ioos.json",
+          "sha256": "0b2fd45298d93571f9cdc4372d8327a425944766a37579205e160cf503ef6308"
+        }
+      ],
+      "necessaryNextStep": "Reuse the saved Family and original bounded evidence, integrate with current production interfaces/registration, then validate only affected current-source boundaries; do not reopen prior scope or invent additional variants.",
+      "instances": [
+        "0x1025f2334e88a4a0e93e5e2ff4a4e67317682b60",
+        "0x7e8dc7c0fef7bb84304cc5c2dacf5e583198ca4f"
+      ],
+      "preservedResult": "N26130639 topology, S/E26130638; natural core #1/2, runtime actual amount selection, final simulation/positive EV in the old source scope.",
+      "mappingWarning": "Not univ2-standard or vault-spot."
+    },
+    {
+      "name": "PrecisionPool",
+      "originalTx": "0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554",
+      "familyId": "custom-swap:precision-pool",
+      "actionId": "precision-pool-swap",
+      "classification": "current-installation-and-production-wiring-gap",
+      "oldSuccessPreserved": true,
+      "reimplementFromScratchRequired": false,
+      "currentEvidence": "Exact HEAD listener/src has no Family source/entry; saved cloud dirty inventory has no corresponding addition. The installed-46 review omits both, so installed completeness is not IMPL completeness.",
+      "oldSourceRoot": "/Users/eunice/.codex/worktrees/sim-one-rpc-benchmark/MEV/listener/src/searcher/venues/swaps/precision-pool-family",
+      "oldSourceFilesMatchedToAcceptancePins": 20,
+      "sources": [
+        {
+          "path": "/Users/eunice/.codex/worktrees/sim-one-rpc-benchmark/MEV/logs/precision-pool-implementation-20261006.sERrIM/final-handoff.json",
+          "sha256": "9884e7222cbfc00c2684a9e8b4971857c13d67f17d9e93640285d179ef87e581"
+        },
+        {
+          "path": "/Users/eunice/.codex/worktrees/sim-one-rpc-benchmark/MEV/listener/src/searcher/venues/production-families/precision-pool.production.ts",
+          "sha256": "317f79acaf08fcb6e538e383de46520dd8f4ef62c0474a60378d5900ad2fce05"
+        },
+        {
+          "path": "/Users/eunice/.codex/worktrees/sim-one-rpc-benchmark/MEV/listener/src/searcher/venues/swaps/precision-pool-family/runtime-execution.ts",
+          "sha256": "df1b9c6508c0bfde165216db91128e2866b746f881eaac8bb9973289f54867a1"
+        }
+      ],
+      "historicalEvidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/replay-history/1/0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554/20261006-precision-natural-runtime-ev-i4ioos.json",
+          "sha256": "6e196bec4594befd82c45b8972a74e8a71845344c3995334f3e766ffa4aec9ba"
+        }
+      ],
+      "necessaryNextStep": "Reuse the saved Family and original bounded evidence, integrate with current production interfaces/registration, then validate only affected current-source boundaries; do not reopen prior scope or invent additional variants.",
+      "instances": [
+        "0x0155358241411db868ba714ae7c83a27087e3d6e"
+      ],
+      "preservedResult": "N26129175 topology, S/E26129174; core natural #1/7, runtime/final EV in the old source scope; native-in/out N-end EVM evidence also saved.",
+      "mappingWarning": "PrecisionPool leg is not univ4. Original/core route may also contain V4; the new V4 gate cannot replace this distinct Family.",
+      "historicalDualEvidence": {
+        "path": "/Users/eunice/.codex/worktrees/sim-one-rpc-benchmark/MEV/logs/precision-pool-implementation-20261006.sERrIM/parity-N-evm/summary.json",
+        "sha256": "8d7d153d137314aeb96d720fbe5bdbfcbd3168d3c631cd59f3696ddda025a40f"
+      }
+    },
+    {
+      "name": "GenericTokenMigration",
+      "originalTx": "0x576dcfa02ef2f8c2a2038ed17070e14a757c9c2e0b2e19b2de65ff65b9e7c583",
+      "familyId": "protocol:token-migration",
+      "instances": [
+        "0x5c30d7494da55e23f62130c642c22af1814ef65d"
+      ],
+      "classification": "implemented-current-runtime-historical-acceptance-pending",
+      "currentInstalled": true,
+      "entryDefaultEnabled": true,
+      "oldSuccessPreserved": true,
+      "currentRuntimeImplementation": {
+        "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+        "path": "listener/src/searcher/venues/protocols/token-migration-family/execution.ts",
+        "sha256": "a5714bd55e9cbc0d586f6d0586d67e25940318f38ac3fe1e98febcb94b99a575"
+      },
+      "currentEntry": {
+        "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+        "path": "listener/src/searcher/venues/production-families/token-migration.production.ts",
+        "sha256": "ef20c6e59e177f6cac70c1c5f005c00714bfe65660c1385b379c7ce8bc408b5c"
+      },
+      "selectedInterface": [
+        {
+          "signature": "migrateBIT(uint256)",
+          "selector": "0xf5720c4a",
+          "status": "verified ABI/source signature"
+        },
+        {
+          "signature": "migrateAllBIT()",
+          "selector": "0x8e65b383",
+          "status": "verified ABI/source signature"
+        }
+      ],
+      "capabilityBoundary": {
+        "recipient": "caller-only",
+        "callback": "none",
+        "newRecipientOrDeferredImplementationRequired": false
+      },
+      "savedHistoricalIdentity": {
+        "source": {
+          "generation": 26029585,
+          "hash": "0x7d657e10588fe0327698837441079dc5568813e20a53057ae806a28ab210dead",
+          "number": 26029585
+        },
+        "codeHash": "0x4a7ead31f678c7783283ddc2d29401970a5dcd0e16e8896ac914df997f784fb9",
+        "matchesVerifiedPublicRuntime": true,
+        "provenance": [
+          {
+            "evidenceHash": "aff9490e7a09429ccc5ac99764db0f415da9c61caa9e4678516bcc6b7d97221d",
+            "kind": "mantle-runtime-immutable-binding",
+            "subject": "0x5C30D7494DA55e23f62130C642C22AF1814EF65d"
+          }
+        ],
+        "ready": {
+          "path": "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/results/migration-target-final/ready.json",
+          "sha256": "9fd67bcef9525b84ac57fbf3079d613a7371380d332b8017ebdcad686e7058b7"
+        },
+        "readyShaMatchesArchivedArtifact": true,
+        "limit": "Recovered N-end descriptor binding; this is not new current-emitter execution or an independent reconstruction of original call prestate."
+      },
+      "historicalEvidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/replay-history/1/0x576dcfa02ef2f8c2a2038ed17070e14a757c9c2e0b2e19b2de65ff65b9e7c583/20261005-cloud-sim-autonomous-migration-goxbeh.json",
+          "sha256": "2ee6d98ee8e35493ac2962c8fe6beb4193f3916e82ba1e8cc7aac3abaeb313b3"
+        }
+      ],
+      "existingRunConstruction": "quoted fallback",
+      "necessaryGap": "Bind the current emitted runtime to actual selected-instance same-state debit/receipt and rejection controls. The saved +EV run uses quoted fallback; cached identity/math and offline contracts do not substitute for that execution. No missing production emitter found.",
+      "suggestedImplWording": "旧自然/quoted正EV成果保留；当前runtime已实现并注册，同N历史身份资料已定位，待当前runtime实收与拒绝证据绑定；不新增协议不存在的收款方/回调能力。",
+      "actionId": "token-migration",
+      "profile": "token-migration:mantle-solc-0.8.13-v1",
+      "actualAssets": {
+        "input": "0x44108f0223a3c3028f5fe7aec7f9bb2e66bef82f",
+        "output": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "numerator": "43750",
+        "denominator": "1000000000000000000"
+      },
+      "mappingWarning": "Generic Token Migration maps to protocol:token-migration, not protocol:token-conversion. Mantle ABI names are not the actual asset symbols; this instance is ACX→USDC. Original migrateAllBIT is discovery evidence; bounded production action is migrateBIT(uint256)."
+    },
+    {
+      "name": "BTBBear",
+      "originalTx": "0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91",
+      "familyId": "protocol:token-conversion",
+      "instances": [
+        "0x88888880d5ca13018d2dc11e2e4744bd91a5656f"
+      ],
+      "classification": "implemented-current-runtime-historical-acceptance-pending",
+      "currentInstalled": true,
+      "entryDefaultEnabled": true,
+      "oldSuccessPreserved": true,
+      "currentRuntimeImplementation": {
+        "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+        "path": "listener/src/searcher/venues/protocols/token-conversion-family/execution.ts",
+        "sha256": "b4f067be38d44ca577e01915f39f43811ab84e3649651fa69aafe03f2ec01923"
+      },
+      "currentEntry": {
+        "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+        "path": "listener/src/searcher/venues/production-families/token-conversion.production.ts",
+        "sha256": "6ced719b80923094475ae8fd9f184a4a8f523d5c6e1caada947b2f82890e7fca"
+      },
+      "selectedInterface": [
+        {
+          "signature": "mint(uint256)",
+          "selector": "0xa0712d68",
+          "status": "verified ABI/source signature"
+        },
+        {
+          "signature": "redeem(uint256)",
+          "selector": "0xdb006a75",
+          "status": "verified ABI/source signature"
+        }
+      ],
+      "capabilityBoundary": {
+        "recipient": "caller-only",
+        "callback": "none",
+        "newRecipientOrDeferredImplementationRequired": false
+      },
+      "savedHistoricalIdentity": {
+        "source": {
+          "generation": 26029369,
+          "hash": "0x8406ef83427bd09be91ef479edff4830d245d4c4658b75299b12e37c8ac20928",
+          "number": 26029369
+        },
+        "codeHash": "0x97389cd4ca6fdc85ea4eafdbd49a2d9e7dd84b48a84ea6276da34884bb31d066",
+        "matchesVerifiedPublicRuntime": true,
+        "provenance": [
+          {
+            "evidenceHash": "ea7d87256477d1b457bb577b9d5f79414e016aea1f01ac10015378609fc29a7e",
+            "kind": "normalized-runtime-immutable-and-balance-proof",
+            "subject": "0x88888880d5Ca13018D2dC11e2e4744BD91a5656f"
+          }
+        ],
+        "ready": {
+          "path": "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/results/btb-target-final/ready.json",
+          "sha256": "f9cfb43404b884418cb6a2c7072528332e6d0615d7fb0b7320934360d7051225"
+        },
+        "readyShaMatchesArchivedArtifact": true,
+        "limit": "Recovered N-end descriptor binding; this is not new current-emitter execution or an independent reconstruction of original call prestate."
+      },
+      "historicalEvidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/replay-history/1/0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91/20261005-cloud-sim-autonomous-btb-goxbeh.json",
+          "sha256": "ee7bbb72fb53de9bb352beba7ef27329bc68958246006a461b29ce6ff93cc056"
+        }
+      ],
+      "existingRunConstruction": "quoted fallback",
+      "necessaryGap": "Bind the current emitted runtime to actual selected-instance same-state debit/receipt and rejection controls. The saved +EV run uses quoted fallback; cached identity/math and offline contracts do not substitute for that execution. No missing production emitter found.",
+      "suggestedImplWording": "旧自然/quoted正EV成果保留；当前runtime已实现并注册，同N历史身份资料已定位，待当前runtime实收与拒绝证据绑定；不新增协议不存在的收款方/回调能力。",
+      "actionIds": [
+        "token-conversion-mint",
+        "token-conversion-redeem"
+      ],
+      "profile": "btb-bear-v1",
+      "actualAssets": {
+        "asset": "0x88888888c90cd71b35830dabfd24743dbc135b51",
+        "receipt": "0x88888880d5ca13018d2dc11e2e4744bd91a5656f"
+      },
+      "mappingWarning": "This is the BTB Bear variant, not xWin. Successful xWin runtime evidence does not prove BTB runtime; mint receipt is distinct from the later taxed share transfer."
+    }
+  ],
+  "currentRegistrationEvidence": [
+    {
+      "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+      "path": "listener/src/searcher/generated/production-family-entries.generated.ts",
+      "sha256": "e4e67790514d8293535366ba41c3b8b5c4cbab85df3974e1b5573c2dd17bf421"
+    },
+    {
+      "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+      "path": "listener/src/searcher/generated/family-capability-shadow.generated.json",
+      "sha256": "f783050e4899760c1b2cb7a0aff6182338a51752484f4a0288b72b39a93c6578"
+    },
+    {
+      "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+      "path": "docs/research/reports/family-settlement-interface-review-20261014.json",
+      "sha256": "236863a8e06899fc1a68d6cdb5132150350f3c852ebb05c05f25ac100033db44"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/resume50-output.log",
+      "sha256": "f8103ec1974c5659807688788748031d7b9c919f9a6431c5871a5f2efc00c22a"
+    }
+  ],
+  "safety": {
+    "rpc": 0,
+    "tests": 0,
+    "builds": 0,
+    "productionWrites": 0,
+    "implWrites": 0,
+    "gitWrites": 0
+  },
+  "priorStageSha256": "6fdde7114762d0be617e7b8973ef434fb22d5fcadd355e8367ff6b78b62b5baf",
+  "initialPolicyEditCheck": {
+    "before": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/impl-before50-050a5b89e177.md",
+      "sha256": "050a5b89e17713221f21ee102dcc477c114eb2d303b2b0041cc0327bdde9be0f"
+    },
+    "protocolRowsOtherThanFa439Unchanged": true
+  },
+  "inventoryScope": {
+    "inventory": {
+      "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+      "path": "docs/research/reports/family-settlement-interface-review-20261014.json",
+      "sha256": "236863a8e06899fc1a68d6cdb5132150350f3c852ebb05c05f25ac100033db44"
+    },
+    "gate": {
+      "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+      "path": "listener/src/searcher/test/family-settlement-review.ts",
+      "sha256": "020e8283f0369df564e461580a92ffe650e6a29cb082c3b7f3eb366bc0ab645f"
+    },
+    "observedGateBehavior": "reviewFailures at lines 96–111 requires every listed variant interface/identity/wiring and execution (except none+no recipient); evidenceFailures at lines 127–130 requires exact variant-ID equality to the independently hashed report. Schema v1 has no applicability or no-instance status. Thus an all-variant fail can coexist with completion of the user-selected real-instance scope.",
+    "noVariantDeletedOrUpgraded": true,
+    "noGateOrOldHashEdited": true,
+    "minimalDocumentation": "Keep the exhaustive interface inventory as a historical register. Add a pinned scope disposition per existing ID: actual selected/claimed path; implemented path awaiting actual evidence; unselected interface candidate; or no actual instance located. Preserve unknown as unknown; only selected/claimed real paths enter this IMPL work queue. Later changes to machine applicability need separate review, not silent deletion or not-required misuse.",
+    "examples": [
+      {
+        "familyId": "protocol:set-redemption",
+        "variant": "BasicIssuanceModule issue ABI (not installed issue route)",
+        "disposition": "unselected interface candidate; no automatic new issue implementation task"
+      },
+      {
+        "familyId": "swap:algebra-integral",
+        "variant": "swapWithPaymentInAdvance/unselected",
+        "disposition": "unselected input-first interface; no automatic deferred-input implementation task"
+      },
+      {
+        "familyId": "curve-plain",
+        "variants": [
+          "received-no-receiver declared mode without distinct real Ready sample",
+          "received-uint declared mode without distinct real Ready sample",
+          "native-exchange-uint declared mode without distinct real Ready sample"
+        ],
+        "disposition": "no distinct real Ready sample located in the old audit; retain unsupported/unverified boundary and reject unknown behavior, do not invent mandatory historical samples"
+      },
+      {
+        "familyId": "univ4-fee-hook",
+        "variant": "fa439 native extra outside the accepted eight variant IDs",
+        "disposition": "no initialized native instance found within the saved discovery bound; nonblocking extra scope boundary. Existing fa439 ERC20 result and all eight accepted IDs remain unchanged."
+      }
+    ],
+    "realScopeMustNotBeExcused": "Actual IMPL target instances, selected actions, and advertised applicable execution paths still require evidence. Missing OneSwap/Precision installation is real; Fluid four strict USDT controls remain unresolved. A missing evidence join is not proof of missing code."
+  },
+  "queueDisposition": {
+    "confirmedMissingCurrentImplementationIntegration": [
+      "custom-swap:oneswap",
+      "custom-swap:precision-pool"
+    ],
+    "confirmedImplementedAwaitingCurrentRuntimeEvidence": [
+      "protocol:token-migration / original ACX→USDC instance",
+      "protocol:token-conversion / btb-bear-v1"
+    ],
+    "preserveImplementedStatus": [
+      "Curve plain",
+      "Curve underlying nativeAlias recipient",
+      "Ekubo native recipient",
+      "InfiniFi Gateway recipient",
+      "Silo synchronous redeem recipient"
+    ],
+    "yearn": "Current four-parameter callback work belongs to the active independent acceptance agent; this report does not issue or revoke its result. Old default/direct/route successes stay pinned to their scope.",
+    "minimumQueueCorrection": "Split implementation/integration work from actual-evidence completion. Keep the planned Yearn-first order, then integrate OneSwap/Precision from recovered source; handle the listed existing new-path evidence incrementally without redoing original passed paths.",
+    "genericVariantWording": "Replace generic “未覆盖变体仍未完成” with “本表已有实例/已选动作尚缺的具体证据列为待补；无实际实例的额外profile保留边界，不计必补缺口”。Do not erase the underlying old failed/unverified records."
+  },
+  "retainedEvidence": [
+    {
+      "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+      "path": "docs/research/reports/family-runtime-actual-20261007-stage1.json",
+      "sha256": "be589b45097a593b54286ee00ddaddf815829225826b2d1957bad8810f60b0c2"
+    },
+    {
+      "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+      "path": "docs/research/reports/family-offline-prestate-progress-20261008.json",
+      "sha256": "41cc61646ef637e3e93586b0c1419d7af39f775d8d227195b4ca65c87cd775c7"
+    },
+    {
+      "commit": "b393243b5454bfda52754889bc45909ed6f3c280",
+      "path": "docs/research/reports/family-goal-closeout-20261008.json",
+      "sha256": "7214299210946311904ac8af6b063faa00fe048d374b5a55e4e4423a07517da3"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interfaces-protocols-b-20261014.json",
+      "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+    }
+  ],
+  "limitations": [
+    "No tests, RPC, rebuild, opportunity replay or performance measurement was performed by this reviewer.",
+    "This is a bounded queue/mapping review, not a new whole-inventory acceptance or a machine-gate pass.",
+    "Recovered historical identities and earlier successes retain their exact N/source/implementation scope; no blanket current behavior upgrade."
+  ]
+}

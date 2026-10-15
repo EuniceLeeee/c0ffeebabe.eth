@@ -1,0 +1,183 @@
+{
+  "schema": "yearn54-independent-raw-execution-review-v1",
+  "reviewer": "/root/v4_accept26",
+  "status": "PASS-actual-four-argument-callback-correctness",
+  "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yearn51/evidence54/callback54.json",
+  "sha256": "d9650d652177a4dcea042a1879e11b8a92da87fc3614b97667dcf7e2a5d5482d",
+  "source": {
+    "number": 26152335,
+    "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+    "generation": 26152335
+  },
+  "positives": 8,
+  "rejections": 48,
+  "inactiveSafeNoops": 8,
+  "independentlyRecomputedTokenRows": 64,
+  "actualCallbacksDecoded": 8,
+  "amounts": [
+    {
+      "label": "borrowed-production-input-at-N",
+      "budget": "5137296582894235185",
+      "out": "2041007520497841855",
+      "debt": "5137296582894235183",
+      "refund": "2"
+    },
+    {
+      "label": "original-budget-at-N",
+      "budget": "267759246788654353808",
+      "out": "106378642455288485048",
+      "debt": "267759246788654353808",
+      "refund": "0"
+    },
+    {
+      "label": "original-budget-plus-two-wei",
+      "budget": "267759246788654353810",
+      "out": "106378642455288485048",
+      "debt": "267759246788654353808",
+      "refund": "2"
+    },
+    {
+      "label": "capacity-capped-budget",
+      "budget": "1945528466888290612819",
+      "out": "772943155644044667101",
+      "debt": "1945528466888290612802",
+      "refund": "17"
+    }
+  ],
+  "checks": "Raw calldata/order/actual debt/output/getAmountNeeded floor and inverse/capacity/approvals0-debt-0/64 raw storage rows/native balances/48 rollback storage-union controls/inactive no-op state independently verified. New execution used current production issuer; four external comparison quotes remain separate from zero-Exact runtime construction.",
+  "canonicalChecks": [
+    {
+      "name": "build54",
+      "exitCode": 0,
+      "startedAt": "2026-10-15T08:32:38.247897+00:00",
+      "finishedAt": "2026-10-15T08:32:46.450879+00:00",
+      "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "name": "index54",
+      "exitCode": 0,
+      "startedAt": "2026-10-15T08:32:46.451190+00:00",
+      "finishedAt": "2026-10-15T08:32:46.803909+00:00",
+      "logSha256": "f2da53b2bc9997ce27e64006f4fbec1153aca0572807177578b4f0b3a7b9eb7e"
+    },
+    {
+      "name": "observation54",
+      "exitCode": 0,
+      "startedAt": "2026-10-15T08:32:46.804447+00:00",
+      "finishedAt": "2026-10-15T08:32:47.702208+00:00",
+      "logSha256": "f82609ba18932ecb14a0d135ec5de30df9141c9a346d4d1d85c65e0c72054908"
+    },
+    {
+      "name": "callback54",
+      "exitCode": 0,
+      "startedAt": "2026-10-15T08:32:47.782261+00:00",
+      "finishedAt": "2026-10-15T08:32:53.270646+00:00",
+      "logSha256": "19e5cdfa41b3309f5606a3e8d5ae63f57c5f38d1dc375085682ff2b7e6c294e3"
+    }
+  ],
+  "ready": {
+    "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yearn51/evidence54/ready53/ready.json",
+    "sha256": "4e96ae7db47864639809d79f4b01fdeae8795d9ea3a599edc777a09e03a3341b",
+    "originalUnchanged": "Original hash protected by Ready harness; source-before=after independently checked.",
+    "naturalDiscovery": false
+  },
+  "executor": {
+    "codeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+  },
+  "fixture": {
+    "file": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/v1-v4-25/fixture-out37/V4NativeFundingFixture.sol/V4NativeFundingFixture.json",
+    "sha256": "d3ec0329f6064686f0818b41e7ec7776ccee0258f7c36e9c5c282240e5f42bd8",
+    "codeHash": "0x9a6cca1073f098178e1a46224de450865ef61bcc9245487bc938ca008f23264b",
+    "scope": "isolated actual Yearn callback funding; no protocol code replacement, no market route"
+  },
+  "construction": {
+    "exactCalls": 0,
+    "quotedCalls": 0,
+    "rpcCalls": 0,
+    "quotedFallback": false,
+    "scope": "production issuer; maximum mask/selector and generic flow inventory safety have separate offline/EVM contracts; this historical run executes four-argument Yearn callbacks with an isolated funding fixture"
+  },
+  "priorEvidenceReuse": {
+    "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/yearn54-reuse-independent-review.json",
+    "sha256": "042697e1fe1ca6578f5d513f117d611e3a1defe9f8382eee728144c752428592",
+    "positives": 16,
+    "rejections": 8,
+    "newEvmRun": false
+  },
+  "preservedFailure": {
+    "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yearn51/evidence54/callback53.json",
+    "sha256": "966766c71620d3c9d402a92d91430b55b3c03cd1d676de1a921aa217d754bebb",
+    "classification": "RPC observation id race before any callback execution; repaired by captured per-request id; canonical observer suite7 passed54."
+  },
+  "limits": [
+    "Fixed1 raw sold funding fixture supplies full want budget; not a real market return route or profitable opportunity.",
+    "Only existing Yearn v1.0.4 auction:sold take direction. No invented variants.",
+    "Original TX receipt amounts are input reference; same N-end execution is not original mid-block reproduction.",
+    "Natural valuation/opportunity replay/performance not established by this report."
+  ],
+  "reviewerActions": {
+    "rpc": 0,
+    "evmRuns": 0,
+    "productionChanges": 0
+  },
+  "currentSourceClosure": {
+    "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yearn51/current-source54.json",
+    "sha256": "ee6aafe41d9bdf3c66c8cdd95d367c8d08ae2a240c54c94e7d51fe6badf71c4b",
+    "head": "420273a8a7290b3b9da05ca3b77ce192c3024fed",
+    "computedSourceTreeSha256": "bac5dbd82e63b545a93bb16f5b7fb3f45ec17de26598cd9f2807bcb3ca12ff6c",
+    "ownedPins": 5,
+    "historicalHarnessAndHelperPins": {
+      "sourceTreeSha256": "bac5dbd82e63b545a93bb16f5b7fb3f45ec17de26598cd9f2807bcb3ca12ff6c",
+      "harnessSha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a",
+      "evidenceSha256": "21667eebf6b97b6e18ad9ec4230d615a1d8e46478fcd8fc19339f01ec9c800f4",
+      "observationHelpers": [
+        {
+          "path": "./v4-native-settlement.ts",
+          "sha256": "a12bf0f92a006a594cbec2caf5ba4cfa0a31faea28a912c7701b54e71be1c664"
+        },
+        {
+          "path": "../three-family/historical-input-observations.ts",
+          "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+        },
+        {
+          "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+          "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+        },
+        {
+          "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+          "sha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43"
+        },
+        {
+          "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+          "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+        },
+        {
+          "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+          "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+        },
+        {
+          "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+          "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+        },
+        {
+          "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+          "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+        },
+        {
+          "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+          "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+        },
+        {
+          "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+          "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+        }
+      ]
+    },
+    "executorArtifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+    "fixtureArtifact": "d3ec0329f6064686f0818b41e7ec7776ccee0258f7c36e9c5c282240e5f42bd8",
+    "artifactScope": "Historical harness pins and final invariance assertions; current source export excludes artifacts and shared test helper files, no new artifact rehash claimed.",
+    "activeProcesses": [],
+    "independentlyRecomputedTreeDigestEntries": 1205
+  }
+}

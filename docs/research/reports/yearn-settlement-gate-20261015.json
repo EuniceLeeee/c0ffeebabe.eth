@@ -1,0 +1,26 @@
+{
+  "scope": "Yearn settlement capability acceptance only",
+  "exitCode": 0,
+  "startedAt": "2026-10-15T08:48:05.164196+00:00",
+  "finishedAt": "2026-10-15T08:48:54.628161+00:00",
+  "logSha256": "fc51421b1285c171af2e72a6fc137198a77f5048523a4615ca6147733e1b0cd6",
+  "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/yearn51/gate57-selection.json",
+  "manifestSha256": "ec5f57f12c9d84c4f4069893c4bcd9dae1cb566bd2cb3a89653f8cba238106a3",
+  "query": [
+    "family",
+    "settlement"
+  ],
+  "tool": "listener:searcher:family-settlement-review",
+  "allFamiliesPassedClaim": false,
+  "result": {
+    "scope": "settlement capability acceptance only",
+    "installed": 46,
+    "results": [
+      {
+        "familyId": "protocol:yearn-auction",
+        "passed": true,
+        "failures": []
+      }
+    ]
+  }
+}

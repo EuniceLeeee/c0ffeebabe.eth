@@ -5641,14 +5641,22 @@
           "callback": "none",
           "recipient": "no",
           "wiring": "verified",
-          "execution": "not-required",
+          "execution": "verified",
           "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/yearn-settlement-current-review-20261015.json",
+              "sha256": "3262865b25309ad0f7726222e64dfa3f18f537c7289833af977a1e6051ba0124"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/yearn-settlement-behavior-20261015.json",
+            "sha256": "7eb99a99da70efe1b402332689358a1b6bfd595a52bac006934b98b5d8bab9d5"
+          }
         },
         {
           "id": "take 3 parameters",
@@ -5657,16 +5665,22 @@
           "callback": "none",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "缺当前 3 参数指定收款方模式的实际扣款、到账、旧库存和回滚证据。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/yearn-settlement-current-review-20261015.json",
+              "sha256": "3262865b25309ad0f7726222e64dfa3f18f537c7289833af977a1e6051ba0124"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/yearn-settlement-behavior-20261015.json",
+            "sha256": "7eb99a99da70efe1b402332689358a1b6bfd595a52bac006934b98b5d8bab9d5"
+          }
         },
         {
           "id": "take 4 parameters with nonempty data",
@@ -5674,19 +5688,23 @@
           "identity": "verified",
           "callback": "output-first",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "实际 auction 支持非空 data 先出款后回调再扣 want；当前未编码 4 参数/continuation，也未声明 deferredInput。",
-            "maximum-input/amountTaken 需在共用组合中正确处理；不能当固定 exact-input。",
-            "缺绑定 taker/callback 对象、原付款方、债务金额、出款顺序及回滚/授权清理的执行证据。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/yearn-settlement-current-review-20261015.json",
+              "sha256": "3262865b25309ad0f7726222e64dfa3f18f537c7289833af977a1e6051ba0124"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/yearn-settlement-behavior-20261015.json",
+            "sha256": "7eb99a99da70efe1b402332689358a1b6bfd595a52bac006934b98b5d8bab9d5"
+          }
         }
       ],
       "domain": "protocol",
@@ -5697,7 +5715,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -5745,7 +5763,7 @@
         },
         {
           "path": "listener/src/searcher/venues/protocols/yearn-auction-family/execution.ts",
-          "sha256": "06048173f5f171fb590501f165b3ca6cbcb8d4eeae2e3715053c50c443f1a548"
+          "sha256": "b5c86148d0dbe9638ea755f9c4d07a786da467e44004a097e18ce28307513f40"
         },
         {
           "path": "listener/src/searcher/venues/protocols/yearn-auction-family/identity.ts",
@@ -5766,6 +5784,10 @@
         {
           "path": "listener/src/searcher/venues/protocols/yearn-auction-family/routes.ts",
           "sha256": "f0c917d71beff5cdcec6e0bf3d3647c5408f951daa88dba0f99c572fb15a96b4"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/yearn-auction-family/runtime-settlement.ts",
+          "sha256": "add4b063ad894a88173dde59b2f1b3b72ab6ca0159112dcaa67bb5de16e58043"
         },
         {
           "path": "listener/src/searcher/venues/protocols/yearn-auction-family/runtime-shape.ts",
@@ -5789,8 +5811,8 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-        "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+        "path": "docs/research/reports/yearn-settlement-current-review-20261015.json",
+        "sha256": "3262865b25309ad0f7726222e64dfa3f18f537c7289833af977a1e6051ba0124"
       }
     },
     {
@@ -6845,5 +6867,13 @@
       "univ4-fee-hook"
     ],
     "scope": "Current actual working baseline sampled settlement correctness; other Family evidence remains unchanged and has NOT been reaccepted against the new common source."
+  },
+  "yearnScopedUpdate": {
+    "at": "2026-10-15T08:44:46.900735+00:00",
+    "families": [
+      "protocol:yearn-auction"
+    ],
+    "other45FamiliesUnchanged": true,
+    "scope": "Actual selected modes only; original 3 variant IDs retained. Common pins unchanged. This is not all-family completion."
   }
 }

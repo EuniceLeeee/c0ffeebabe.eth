@@ -387,7 +387,10 @@
     "searcher:v4-erc20-settlement-ready": "tsx src/searcher/test/family-integration/kyber-yb-compound/v4-erc20-ready.ts",
     "searcher:v4-erc20-observation-contract": "node --import tsx --test src/searcher/venues/swaps/univ4-family/test/history-erc20-observation.test.ts",
     "searcher:v4-tiered-exact-contract": "node --import tsx --test src/searcher/venues/swaps/univ4-fee-hook-family/test/tiered-exact.ts",
-    "searcher:v4-fee-hook-reference-contract": "node --import tsx --test src/searcher/venues/swaps/univ4-fee-hook-family/test/sat1.ts src/searcher/venues/swaps/univ4-fee-hook-family/test/sat1-local.ts"
+    "searcher:v4-fee-hook-reference-contract": "node --import tsx --test src/searcher/venues/swaps/univ4-fee-hook-family/test/sat1.ts src/searcher/venues/swaps/univ4-fee-hook-family/test/sat1-local.ts",
+    "searcher:yearn-auction-family-callback-historical": "node --import tsx src/searcher/venues/protocols/yearn-auction-family/test/callback-historical.ts",
+    "searcher:yearn-auction-family-callback-ready": "node --import tsx src/searcher/venues/protocols/yearn-auction-family/test/callback-ready.ts",
+    "searcher:yearn-auction-family-callback-observation": "node --import tsx --test src/searcher/venues/protocols/yearn-auction-family/test/callback-evidence.test.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

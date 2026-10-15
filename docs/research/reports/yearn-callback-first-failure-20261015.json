@@ -1,0 +1,15 @@
+{
+  "kind": "preserved-harness-failure",
+  "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/yearn51/callback53.json",
+  "sha256": "966766c71620d3c9d402a92d91430b55b3c03cd1d676de1a921aa217d754bebb",
+  "result": "failed",
+  "failureBeforeActualCallback": true,
+  "reason": "local concurrent replies compared against mutable global counter; 7 !== 9",
+  "repair": "capture immutable request id; concurrent reverse-order response regression; wrong ids still rejected",
+  "drained": true,
+  "forkDrained": true,
+  "independentReview": {
+    "path": "docs/research/reports/yearn-callback-rpc-review-20261015.json",
+    "sha256": "ce884f2660118a37bdbac9c70d29bc27fca52c718f3bd904d5d67b7140003d44"
+  }
+}

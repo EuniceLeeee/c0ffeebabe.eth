@@ -1,0 +1,68 @@
+{
+  "schema": "yearn-existing-history-reuse-independent-review-v1",
+  "status": "PASS-reuse-only",
+  "reviewer": "/root/v4_accept26",
+  "evidence": {
+    "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yearn-reuse54.json",
+    "sha256": "c70fd3df5b89ca43851311907cc51d179e99f75fc0e923288126d053a83b150b",
+    "oldReport": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yearn51/docs/research/reports/yearn-recipient-historical-progress-20261015.json",
+    "oldReportSha256": "627b1ec5cff8ed5cfd507ecd63ad1fc709dd6190bd73647da01d22b13d66d838"
+  },
+  "scope": "Existing 16 default/quoted/runtime/direct historical positives and 8 refusals; does not cover newly requested four-argument historical callback.",
+  "pins": {
+    "entries": 82,
+    "uniquePaths": 72,
+    "unchangedEntries": 80,
+    "changedPaths": 2,
+    "locallyRehashedCurrentUnchangedPaths": [
+      "listener/src/adapters/runtime-amount-program.ts",
+      "listener/src/searcher/simulator/runtime-settlement.ts",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/action.ts",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/codec.ts",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/execution.ts",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/identity.ts",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/instance.ts",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/manifest.ts",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/pricing.ts",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/routes.ts",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/runtime-settlement.ts",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/runtime-shape.ts",
+      "listener/src/searcher/venues/protocols/yearn-auction-family/state.ts"
+    ],
+    "remainingUnchangedPins": "Parent current-cloud read-only audit; no repeated cloud fetch.",
+    "changedFullSourceFilesIndependentlyRehashed": [
+      {
+        "path": "listener/src/searcher/execution-asset-boundary.ts",
+        "group": "commonSource",
+        "previousSha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0",
+        "currentSha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872",
+        "diffFromHarnessCommit": "diff --git a/listener/src/searcher/execution-asset-boundary.ts b/listener/src/searcher/execution-asset-boundary.ts\nindex 3f32bf5..adfb154 100644\n--- a/listener/src/searcher/execution-asset-boundary.ts\n+++ b/listener/src/searcher/execution-asset-boundary.ts\n@@ -73,6 +73,10 @@ export function mapRuntimeAssetSettlementRequest(input: {\n }): RuntimeSettlementRequest | null | undefined {\n   const native = executionNativeSides(input.route), request = input.request;\n   if (!native || request === undefined) return request;\n+  if (request.kind === \"deferred-input\") {\n+    if (request.paymentAmount <= 0n || request.paymentAmount > ethers.MaxUint256) throw new Error(\"native deferred payment amount\");\n+    return request;\n+  }\n   if (request.kind !== \"quote-output\" && request.kind !== \"direct-output\") return null;\n   const recipient = request.recipient ?? (request.kind === \"quote-output\" ? input.executor : undefined);\n   if (typeof recipient !== \"string\") throw new Error(\"native settlement recipient missing\");\n@@ -80,6 +84,59 @@ export function mapRuntimeAssetSettlementRequest(input: {\n   return native.output ? Object.freeze({ ...request, recipient: input.executor }) : request;\n }\n \n+/** Callback owners call these common conversion operations at their own\n+ * output/payment boundaries. No protocol ABI, debt calculation or callback\n+ * layout is part of this helper. Registers must survive the owning operation. */\n+export function runtimeDeferredAssetBoundary(p: RuntimeAmountProgram, route: RouteAssets, executor: string,\n+  registers: { nativeBefore: number; wrappedBefore: number; scratch: number; other: number }) {\n+  const sides = executionNativeSides(route);\n+  if (!sides) throw new Error(\"deferred native asset declaration\");\n+  const actor = runtimeExecutor(executor, route.tokenIn, route.tokenOut);\n+  const { nativeBefore, wrappedBefore, scratch, other } = registers, used = Object.values(registers);\n+  if (used.some(r => !Number.isInteger(r) || r <= 0 || r >= 16) || new Set(used).size !== 4) {\n+    throw new Error(\"deferred native registers\");\n+  }\n+  const balance = RUNTIME_ERC20.encodeFunctionData(\"balanceOf\", [actor]);\n+  const native = runtimeNativeBoundary(p, ADDR.WETH, nativeBefore, scratch);\n+  p.call(ADDR.WETH, balance, { static: true }).load(wrappedBefore, 0);\n+  return {\n+    wrapOutput(): void {\n+      if (!sides.output) throw new Error(\"deferred output is not native\");\n+      native.wrapOutput();\n+      p.call(ADDR.WETH, balance, { static: true }).load(other, 0)\n+        .math(\"sub\", other, other, wrappedBefore).equal(other, scratch);\n+      native.assertRestored();\n+    },\n+    unwrapPayment(debtReg: number): void {\n+      if (!sides.input || !Number.isInteger(debtReg) || debtReg <= 0 || debtReg >= 16 || used.includes(debtReg)) {\n+        throw new Error(\"deferred native debt register\");\n+      }\n+      // A claimed continuation result cannot stand in for actual fresh WETH.\n+      p.call(ADDR.WETH, balance, { static: true }).load(scratch, 0)\n+        .math(\"sub\", scratch, scratch, wrappedBefore).equal(scratch, debtReg);\n+      native.unwrapInput(debtReg);\n+      p.call(ADDR.WETH, balance, { static: true }).load(scratch, 0).equal(scratch, wrappedBefore)\n+        .nativeBalance(scratch).math(\"sub\", scratch, scratch, nativeBefore).equal(scratch, debtReg);\n+    },\n+    assertRestored(): void { native.assertRestored(); },\n+  };\n+}\n+\n+/** Deferred input is supplied inside the callback. Never apply a funded\n+ * balance-r0 check or pre-unwrap here; the owning operation uses the shared\n+ * callback conversion above. The outer composer retains its profit gate. */\n+function deferredEnvelope(route: RouteAssets, executor: string, leg: RuntimeAmountLeg): RuntimeAmountProgram {\n+  const actor = runtimeExecutor(executor, route.tokenIn, route.tokenOut);\n+  const balance = RUNTIME_ERC20.encodeFunctionData(\"balanceOf\", [actor]);\n+  return new RuntimeAmountProgram().constant(4, 1n).math(\"sub\", 5, 0, 4)\n+    .call(route.tokenIn, balance, { static: true }).load(1, 0)\n+    .call(route.tokenOut, balance, { static: true }).load(2, 0).nativeBalance(3)\n+    .run(leg.program, 0, 6)\n+    .call(route.tokenIn, balance, { static: true }).load(4, 0).equal(4, 1)\n+    .call(route.tokenOut, balance, { static: true }).load(4, 0).math(\"sub\", 4, 4, 2)\n+    .nativeBalance(4).equal(4, 3);\n+}\n+\n /** A nested program keeps boundary registers private even for callback-heavy\n  * operations. Only existing VM instructions are used; no protocol ABI enters\n  * the central envelope. All safety checks execute inside the same transaction. */\n@@ -158,7 +215,10 @@ export function applyRuntimeAssetBoundary(input: {\n }): RuntimeAmountLeg {\n   if (!executionNativeSides(input.route)) return input.leg;\n   if (input.leg.settlementRequest?.kind === \"quote-output\") return input.leg;\n-  if (input.leg.settlementRequest?.kind === \"deferred-input\") throw new Error(\"native deferred settlement unsupported\");\n+  if (input.leg.settlementRequest?.kind === \"deferred-input\") {\n+    if (!input.leg.settlement?.deferredInput) throw new Error(\"native deferred capability missing\");\n+    return Object.freeze({ ...input.leg, program: ethers.hexlify(deferredEnvelope(input.route, input.executor, input.leg).bytes()) });\n+  }\n   const program = envelope({ ...input,\n     ...(input.leg.settlementRequest?.kind === \"direct-output\" ? { recipient: input.leg.settlementRequest.recipient } : {}),\n     script: runtimeProgramScript(ethers.getBytes(input.leg.program)),\n"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+        "group": "commonSource",
+        "previousSha256": "34b545c41cf72f738da01aa38b9fcbb02b27268119c0e1e7cd67ce516761bb09",
+        "currentSha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd",
+        "diffFromHarnessCommit": "diff --git a/listener/src/searcher/venues/adapter-family-runtime.ts b/listener/src/searcher/venues/adapter-family-runtime.ts\nindex e5227bd..943d62a 100644\n--- a/listener/src/searcher/venues/adapter-family-runtime.ts\n+++ b/listener/src/searcher/venues/adapter-family-runtime.ts\n@@ -2786,7 +2786,7 @@ export function buildFamilyRuntimeAmountLeg(input: {\n   input.runtime.generationFence.assertCurrent(input.source.generation, input.source);\n   const builder = input.family.plugin.execution.buildRuntimeLeg;\n   if (!builder) return null;\n-  const native = executionNativeSides(record.route);\n+  executionNativeSides(record.route);\n   const requested = mapRuntimeAssetSettlementRequest({ route: record.route, executor: input.executor, request: input.settlement });\n   if (requested === null) return null;\n   const leg = builder(Object.freeze({ descriptor: record.instance.descriptor, route: record.route,\n@@ -2814,12 +2814,9 @@ export function buildFamilyRuntimeAmountLeg(input: {\n   if (requested?.kind === \"quote-output\" && leg.settlement?.quoteOutput !== true ||\n       requested?.kind === \"direct-output\" && leg.settlement?.directOutput !== true ||\n       requested?.kind === \"deferred-input\" && leg.settlement?.deferredInput === undefined) return null;\n-  // Native quote/direct use the same Family contract. A native deferred\n-  // callback still lacks a proven boundary and remains unavailable.\n-  const settlement = native && leg.settlement ? {\n-    ...(leg.settlement.quoteOutput ? { quoteOutput: true as const } : {}),\n-    ...(leg.settlement.directOutput ? { directOutput: true as const } : {}),\n-  } : leg.settlement;\n+  // Native lifecycle is selected by the common boundary. Preserve the\n+  // Family's declared debt recipient, including callback-funded native input.\n+  const settlement = leg.settlement;\n   return applyRuntimeAssetBoundary({ route: record.route, executor: input.executor,\n     leg: Object.freeze({ actionAdapterId: leg.actionAdapterId, program: leg.program,\n       ...(leg.inputMode === undefined ? {} : { inputMode: leg.inputMode }),\n"
+      }
+    ]
+  },
+  "semanticReview": {
+    "route": "Current Yearn routes.project emits no executionAssets; tokenIn=crvUSD and tokenOut=ALCX, both ERC20.",
+    "nativeDetection": "executionNativeSides immediately returns null when executionAssets absent.",
+    "mapRequest": "Returns original request before any newly added native deferred branch.",
+    "materialization": "applyRuntimeAssetBoundary immediately returns original leg for this route.",
+    "issuer": "Old native ? strippedSettlement : leg.settlement evaluates leg.settlement for Yearn. New direct leg.settlement is identical. Both versions still call executionNativeSides validation.",
+    "result": "Both changed files have no behavior change on the original Yearn request paths. Family runtime/execution, common amount helper/composer and VM artifact inputs remain equal per pins."
+  },
+  "limitations": [
+    "Reuse authenticates prior tested source/state/evidence; it is not a new EVM run at current HEAD.",
+    "Source-only equivalence does not establish natural discovery, valuation, original transaction prefix replay, profitable return route or performance.",
+    "Four-argument callback historical acceptance still awaiting its distinct actual execution evidence."
+  ],
+  "reviewerActions": {
+    "rpc": 0,
+    "evm": 0,
+    "productionEdits": 0
+  }
+}
