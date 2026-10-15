@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { createInterface } from "node:readline";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ethers } from "ethers";
@@ -697,6 +698,18 @@ export interface BlockScanRingEvidence {
   error?: string;
 }
 
+export interface BlockScanTimingEvidence {
+  source_block: number;
+  outcome?: string;
+  decision?: string;
+  total_ms?: number;
+  candidates?: number;
+  planned?: number;
+  quote_positive?: number;
+  exact_source_block_hash?: string;
+  stages?: Record<string, { status: string; stage_ms?: number; cumulative_ms?: number | null }>;
+}
+
 export interface BlockScanActivity {
   sourceBlock: number;
   status: BlockScanLogStatus;
@@ -711,6 +724,7 @@ export interface BlockScanActivity {
   budgetExceeded: boolean;
   minBlock?: number;
   maxBlock?: number;
+  timing?: BlockScanTimingEvidence;
 }
 
 export function blockScanSourceBlockForTarget(targetBlock: number): number {
@@ -740,7 +754,7 @@ export function competitorArbTokenSet(
  * pass and its matching stage line closes it. A later `skipped=busy` marker is
  * an overlapping head notification, not a new active pass.
  */
-export function blockScanActivityAtBlock(logText: string, sourceBlock: number): BlockScanActivity {
+function createBlockScanActivityParser(sourceBlock: number) {
   const anyBlockRe = /\[searcher\/blockscan\]\s+block=(\d+)\b/;
   const warmRe = /\[searcher\/blockscan\]\s+block=(\d+)\s+warm=(?:full|incremental)\b/;
   const summaryRe = /\[searcher\/blockscan\]\s+block=(\d+)\s+scannedPairs=/;
@@ -762,15 +776,37 @@ export function blockScanActivityAtBlock(logText: string, sourceBlock: number): 
   let sawError = false;
   let passLine: string | undefined;
   let anySubmitted = false;
+  let timing: BlockScanTimingEvidence | undefined;
   const rings: BlockScanRingEvidence[] = [];
   const scannedTokens = new Set<string>();
 
-  for (const line of logText.split(/\r?\n/)) {
+  const includeBlock = (block: number): void => {
+    minBlock = minBlock === undefined ? block : Math.min(minBlock, block);
+    maxBlock = maxBlock === undefined ? block : Math.max(maxBlock, block);
+  };
+  const addLine = (line: string): void => {
+    if (line.includes('"block_scan_timing"')) {
+      const jsonStart = line.indexOf("{");
+      try {
+        const record = JSON.parse(line.slice(jsonStart));
+        if (record?.type === "block_scan_timing" && Number.isSafeInteger(record.source_block)) {
+          includeBlock(record.source_block);
+          if (record.source_block === sourceBlock) {
+            const { source_block, outcome, decision, total_ms, candidates, planned,
+              quote_positive, exact_source_block_hash, stages } = record;
+            timing = { source_block, outcome, decision, total_ms, candidates, planned,
+              quote_positive, exact_source_block_hash, stages };
+            passLine = line;
+          }
+          return;
+        }
+      } catch {
+        // A truncated/invalid record cannot establish a completed pass.
+      }
+    }
     const anyBlock = line.match(anyBlockRe);
     if (anyBlock) {
-      const block = Number(anyBlock[1]);
-      minBlock = minBlock === undefined ? block : Math.min(minBlock, block);
-      maxBlock = maxBlock === undefined ? block : Math.max(maxBlock, block);
+      includeBlock(Number(anyBlock[1]));
     }
 
     const busy = line.match(busyRe);
@@ -778,7 +814,7 @@ export function blockScanActivityAtBlock(logText: string, sourceBlock: number): 
       if (Number(busy[1]) === sourceBlock) skippedBusy = true;
       // Crucial: a busy notification is emitted while another pass is still
       // producing untagged solve lines. It must not change activeBlock.
-      continue;
+      return;
     }
 
     const warm = line.match(warmRe);
@@ -788,7 +824,7 @@ export function blockScanActivityAtBlock(logText: string, sourceBlock: number): 
         sawWarm = true;
         passLine = line;
       }
-      continue;
+      return;
     }
 
     const budget = line.match(budgetRe);
@@ -808,7 +844,7 @@ export function blockScanActivityAtBlock(logText: string, sourceBlock: number): 
         passLine = line;
       }
       if (activeBlock === block) activeBlock = null;
-      continue;
+      return;
     }
 
     const solve = line.match(solveRe);
@@ -826,35 +862,60 @@ export function blockScanActivityAtBlock(logText: string, sourceBlock: number): 
     const submitted = line.match(submittedRe);
     const submittedBlock = submitted?.[1] ? Number(submitted[1]) : activeBlock;
     if (submitted && submittedBlock === sourceBlock) anySubmitted = true;
-  }
-
-  const detailComplete = sawWarm && sawSummary && sawStage;
-  let status: BlockScanLogStatus;
-  if (minBlock === undefined || maxBlock === undefined) status = "unknown_log_empty";
-  else if (sourceBlock < minBlock) status = "unknown_log_rotated";
-  else if (sourceBlock > maxBlock) status = "unknown_log_not_covered";
-  else if (detailComplete && budgetExceeded) status = "budget_exceeded";
-  else if (detailComplete) status = "complete";
-  else if (sawError) status = "error";
-  else if (sawWarm || sawSummary || sawStage || budgetExceeded) status = "incomplete";
-  else if (skippedBusy) status = "skipped_busy";
-  else status = "not_running";
-
-  return {
-    sourceBlock,
-    status,
-    ran: sawStage,
-    detailComplete,
-    passLine,
-    scannedTokens,
-    rings,
-    ringCount: rings.length,
-    anySubmitted,
-    skippedBusy,
-    budgetExceeded,
-    minBlock,
-    maxBlock,
   };
+
+  const finish = (): BlockScanActivity => {
+    // Timing proves pass/stage activity, not route coverage: modern routes live in sidecars.
+    const detailComplete = timing === undefined && sawWarm && sawSummary && sawStage;
+    let status: BlockScanLogStatus;
+    if (minBlock === undefined || maxBlock === undefined) status = "unknown_log_empty";
+    else if (sourceBlock < minBlock) status = "unknown_log_rotated";
+    else if (sourceBlock > maxBlock) status = "unknown_log_not_covered";
+    else if (timing) status = "incomplete";
+    else if (detailComplete && budgetExceeded) status = "budget_exceeded";
+    else if (detailComplete) status = "complete";
+    else if (sawError) status = "error";
+    else if (sawWarm || sawSummary || sawStage || budgetExceeded) status = "incomplete";
+    else if (skippedBusy) status = "skipped_busy";
+    else status = "not_running";
+
+    return {
+      sourceBlock,
+      status,
+      ran: timing ? Object.values(timing.stages ?? {}).some((stage) => stage?.status === "ran") : sawStage,
+      detailComplete,
+      passLine,
+      scannedTokens,
+      rings,
+      ringCount: rings.length,
+      anySubmitted,
+      skippedBusy,
+      budgetExceeded,
+      minBlock,
+      maxBlock,
+      timing,
+    };
+  };
+  return { addLine, finish };
+}
+
+export function blockScanActivityAtBlock(logText: string, sourceBlock: number): BlockScanActivity {
+  const parser = createBlockScanActivityParser(sourceBlock);
+  for (const line of logText.split(/\r?\n/)) parser.addLine(line);
+  return parser.finish();
+}
+
+export async function blockScanActivityFromLog(logPath: string, sourceBlock: number): Promise<BlockScanActivity> {
+  const parser = createBlockScanActivityParser(sourceBlock);
+  const input = createReadStream(logPath, { encoding: "utf8" });
+  const lines = createInterface({ input, crlfDelay: Infinity });
+  try {
+    for await (const line of lines) parser.addLine(line);
+  } finally {
+    lines.close();
+    input.destroy();
+  }
+  return parser.finish();
 }
 
 export interface OurBlockScanForTarget {
@@ -864,12 +925,12 @@ export interface OurBlockScanForTarget {
   ran: boolean;
   detail_complete: boolean;
   pass_line?: string;
-  solve_ring_count: number;
-  solve_ring_token_count: number;
+  solve_ring_count: number | null;
+  solve_ring_token_count: number | null;
   competitor_token_count: number;
-  token_overlap_count: number;
+  token_overlap_count: number | null;
   token_overlap_tokens: string[];
-  fully_covered_by_ring_count: number;
+  fully_covered_by_ring_count: number | null;
   any_submitted: boolean;
   jsonl_submission_seen: boolean;
   related_jsonl_submission_seen: boolean;
@@ -878,6 +939,7 @@ export interface OurBlockScanForTarget {
   log_min_source_block?: number;
   log_max_source_block?: number;
   log_error?: string;
+  timing?: BlockScanTimingEvidence;
   limitations: string[];
 }
 
@@ -894,7 +956,7 @@ export function blockScanSubmissionCycleTokenSets(events: Json[], targetBlock: n
     ));
 }
 
-async function blockScanEvidenceForTarget(
+export async function blockScanEvidenceForTarget(
   logPath: string,
   targetBlock: number,
   competitorTokens: Set<string>,
@@ -916,23 +978,24 @@ async function blockScanEvidenceForTarget(
       "ring logs contain solved candidate rings, not the full scannedPairs token universe",
       "native ETH without a wrapped-token flow edge is not represented in the token join",
       "text submission lines are pass-wide; only JSONL cycle_id tokens can establish route-token coverage",
+      "modern timing proves pass/stage activity only; route coverage is unknown without route sidecars",
     ],
   };
 
-  let logText: string;
+  let activity: BlockScanActivity;
   try {
-    logText = await readFile(logPath, "utf8");
+    activity = await blockScanActivityFromLog(logPath, sourceBlock);
   } catch (err) {
     return {
       ...base,
       status: "log_unavailable",
       ran: false,
       detail_complete: false,
-      solve_ring_count: 0,
-      solve_ring_token_count: 0,
-      token_overlap_count: 0,
+      solve_ring_count: null,
+      solve_ring_token_count: null,
+      token_overlap_count: null,
       token_overlap_tokens: [],
-      fully_covered_by_ring_count: 0,
+      fully_covered_by_ring_count: null,
       any_submitted: jsonlSubmissionSeen,
       jsonl_submission_seen: jsonlSubmissionSeen,
       related_jsonl_submission_seen: relatedJsonlSubmissionCount > 0,
@@ -942,7 +1005,7 @@ async function blockScanEvidenceForTarget(
     };
   }
 
-  const activity = blockScanActivityAtBlock(logText, sourceBlock);
+  const ringEvidenceKnown = activity.detailComplete && activity.timing === undefined;
   const overlap = [...competitorTokens]
     .filter((token) => activity.scannedTokens.has(token))
     .sort();
@@ -958,11 +1021,11 @@ async function blockScanEvidenceForTarget(
     ran: activity.ran,
     detail_complete: activity.detailComplete,
     pass_line: activity.passLine,
-    solve_ring_count: activity.ringCount,
-    solve_ring_token_count: activity.scannedTokens.size,
-    token_overlap_count: overlap.length,
+    solve_ring_count: ringEvidenceKnown ? activity.ringCount : null,
+    solve_ring_token_count: ringEvidenceKnown ? activity.scannedTokens.size : null,
+    token_overlap_count: ringEvidenceKnown ? overlap.length : null,
     token_overlap_tokens: overlap,
-    fully_covered_by_ring_count: fullyCoveredByRingCount,
+    fully_covered_by_ring_count: ringEvidenceKnown ? fullyCoveredByRingCount : null,
     any_submitted: activity.anySubmitted || jsonlSubmissionSeen,
     jsonl_submission_seen: jsonlSubmissionSeen,
     related_jsonl_submission_seen: relatedJsonlSubmissionCount > 0,
@@ -970,6 +1033,7 @@ async function blockScanEvidenceForTarget(
     text_submission_seen: activity.anySubmitted,
     log_min_source_block: activity.minBlock,
     log_max_source_block: activity.maxBlock,
+    timing: activity.timing,
   };
 }
 
@@ -1232,11 +1296,18 @@ function renderAnyTxSummary(report: any): string {
   if (blockScan) {
     lines.push(
       `  our block-scan for target ${blockScan.target_block}: source=${blockScan.source_block} `
-      + `status=${blockScan.status} rings=${blockScan.solve_ring_count} `
-      + `token_overlap=${blockScan.token_overlap_count}/${blockScan.competitor_token_count} `
+      + `status=${blockScan.status} rings=${blockScan.solve_ring_count ?? "unknown"} `
+      + `token_overlap=${blockScan.token_overlap_count ?? "unknown"}/${blockScan.competitor_token_count} `
       + `pass_submitted=${blockScan.any_submitted} `
       + `related_jsonl_submitted=${blockScan.related_jsonl_submission_count}`,
     );
+    if (blockScan.timing) {
+      const timing: BlockScanTimingEvidence = blockScan.timing;
+      lines.push(`    timing: outcome=${timing.outcome ?? "unknown"} decision=${timing.decision ?? "unknown"} `
+        + `total_ms=${timing.total_ms ?? "unknown"} stages=`
+        + Object.entries(timing.stages ?? {}).map(([name, stage]) => `${name}:${stage?.status ?? "unknown"}`).join(",")
+        + " route_coverage=unknown");
+    }
   }
   return lines.join("\n");
 }

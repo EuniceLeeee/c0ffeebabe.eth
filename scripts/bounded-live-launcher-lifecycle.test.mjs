@@ -132,25 +132,41 @@ test('real timer callback does not leak rejection when both revoke writes and un
   } finally { process.off('unhandledRejection', onUnhandled); }
 });
 
-for (const outcome of ['success', 'nonzero', 'throws']) {
+for (const outcome of ['success', 'nonzero', 'throws', 'active-service', 'cleanup-failure', 'low-disk', 'no-confirmation']) {
   test('systemd credential input cleanup: ' + outcome, async () => {
     const profile = { wallet: '0x' + '1'.repeat(40), executor: '0x' + '2'.repeat(40),
       release: '/mock/release', releaseSha256: 'manifest-sha', ready: '/mock/ready', runs: '/mock/runs', node: '/mock/node' };
     const options = { profile: '/mock/profile.json', blocks: 3 }, release = { config: base, readySha256: sha('ready') };
     const files = new Map([[options.profile, 'profile'], [profile.ready, 'ready']]);
-    let destroyed = 0, invoked = 0; const logged = [];
+    let destroyed = 0, invoked = 0, cleaned = 0, diskChecked = 0; const logged = [];
     const deps = { assert, join, sha, makeRunConfig, MARKER: '/mock/marker', UNIT: 'mock.service',
+      MANUAL_RUNS: profile.runs,
       process: { getuid: () => 0 }, assertNoSearcher() {}, existsSync: file => files.has(file),
       inspector: async () => ({ provider: { destroy() { destroyed++; } },
         ethers: { Wallet: class { constructor() { this.address = profile.wallet; } } } }),
-      receiveKey: async () => 'mock-not-a-key', randomUUID: () => '00000000-0000-0000-0000-000000000000',
+      receiveKey: async () => { if (outcome === 'no-confirmation') throw new Error('not confirmed'); return 'mock-not-a-key'; },
+      randomUUID: () => '00000000-0000-0000-0000-000000000000',
+      cleanupOldRunLogs(root, current, options) {
+        cleaned++; assert.equal(root, profile.runs); assert(current.startsWith(root + '/live-'));
+        assert.deepEqual(options, { apply: true }); assert.equal(invoked, 0);
+        assert(![...files.keys()].some(path => path.endsWith('.credential.json')));
+        if (outcome === 'cleanup-failure') throw new Error('mock cleanup failure');
+        return { deletedFiles: 6, deletedBytes: 123, deletedAllocatedBytes: 4096, audit: current + '/old-runs-cleanup.jsonl' };
+      },
+      assertStartDisk(root) {
+        diskChecked++; assert.equal(root, profile.runs); assert.equal(cleaned, 1); assert.equal(invoked, 0);
+        if (outcome === 'low-disk') throw new Error('mock low disk');
+      },
       mkdirSync() {}, constants: { COPYFILE_EXCL: 1 },
       exclusiveJson(file, value) { assert(!files.has(file)); files.set(file, structuredClone(value)); },
       copyFileSync(from, to) { assert(!files.has(to)); files.set(to, files.get(from)); },
       readFileSync: file => files.get(file), unlinkSync: file => files.delete(file),
       console: { log: value => logged.push(value) },
       spawnSync(command, args) {
+        if (command === '/usr/bin/systemctl') return { status: 0,
+          stdout: outcome === 'active-service' ? 'MainPID=123\nActiveState=active\n' : 'MainPID=0\nActiveState=inactive\n' };
         invoked++; assert.equal(command, '/usr/bin/systemd-run');
+        assert.equal(cleaned, 1); assert.equal(diskChecked, 1);
         assert(args.includes('--property=Type=exec')); assert(args.includes('--property=Restart=no'));
         const credentialArg = args.find(arg => arg.startsWith('--property=LoadCredential=owner:')); assert(credentialArg);
         assert(files.has(credentialArg.slice('--property=LoadCredential=owner:'.length)));
@@ -161,9 +177,20 @@ for (const outcome of ['success', 'nonzero', 'throws']) {
     };
     const pending = bind(startSource, deps)(options, profile, release);
     if (outcome === 'success') await pending; else await assert.rejects(pending);
-    assert.equal(invoked, 1); assert.equal(destroyed, 1);
+    assert.equal(invoked, ['success', 'nonzero', 'throws'].includes(outcome) ? 1 : 0); assert.equal(destroyed, 1);
+    assert.equal(cleaned, ['active-service', 'no-confirmation'].includes(outcome) ? 0 : 1);
     assert.equal([...files.keys()].filter(file => file.endsWith('.credential.json')).length, 0);
     assert(!JSON.stringify([...files.values()]).includes('mock-not-a-key'));
     assert(!logged.join('').includes('mock-not-a-key'));
   });
 }
+
+test('read-only modes cannot apply cleanup; disk guard moves only for explicit broadcast', () => {
+  const main = source.slice(source.indexOf('export async function main('));
+  assert(main.indexOf("options.mode === 'status'") < main.indexOf('verifyRelease('));
+  assert(main.includes("verifyRelease(profile, options.mode !== 'broadcast')"));
+  assert(main.includes("if (options.mode === 'broadcast') return start(options, profile, release);"));
+  assert(main.includes('cleanupOldRunLogs(profile.runs);'));
+  assert(!main.includes('apply: true'));
+  assert(startSource.includes("assert.equal(profile.runs, MANUAL_RUNS"));
+});

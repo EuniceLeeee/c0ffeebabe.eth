@@ -10,6 +10,7 @@ import type { CanonicalSource } from "../venues/adapter-request-program.js";
 import type { SimulationResult } from "./botvm-simulator.js";
 import { createSimAmountSelector, type createTrialLimiter, type TrialControl } from "./sim-amount-selector.js";
 import type { AmountSimulation } from "./sim-amount-search.js";
+import { buildRuntimeSettlementRoot } from "./runtime-settlement.js";
 
 /** Strict runtime programs pass actual receipts between hops without Exact.
  * Unsupported routes retain strict quoted construction; actual execution
@@ -25,6 +26,8 @@ export function createBlockScanSimAmountSelector(input: {
   runtimeAmounts?: boolean;
   /** Source-pinned per-token maximum-borrow entry selected once by the caller. */
   fundingActionId?: string;
+  /** Paired execution benchmark control, not an independent search policy. */
+  callbackSettlement?: boolean;
 }) {
   return createSimAmountSelector({
     record: input.record,
@@ -48,6 +51,13 @@ export function createBlockScanSimAmountSelector(input: {
             return leg === null ? null : { ...leg, tokenIn: edge.tokenIn, tokenOut: edge.tokenOut };
           });
           const runtimeLegs = legs !== null && legs.every(leg => leg !== null) ? legs : null;
+          const settlement = input.callbackSettlement === false || !runtimeLegs ||
+              !runtimeLegs.at(-1)?.settlement?.deferredInput ||
+              plan.tokenPath.edges.some(edge => session.blocksPrefixInversion(edge)) ? null : buildRuntimeSettlementRoot({
+            legs: runtimeLegs, amount, minimumProfit: plan.opportunity.targetNetProfit ?? 1n, executor: input.executor,
+            build: (index, request) => session.buildRuntimeAmountLeg({ edge: plan.tokenPath.edges[index]!, executor: input.executor,
+              runtimeEvidence: opts.runtimeEvidence ?? [], settlement: request }),
+          });
           input.record?.({ type: "sim_amount_construction", mode: runtimeLegs ? "runtime-actual" : "quoted",
             ...identity,
             hops: plan.tokenPath.edges.length, unsupportedLegs: legs?.filter(leg => leg === null).length ?? null });
@@ -63,10 +73,10 @@ export function createBlockScanSimAmountSelector(input: {
             : [input.fundingActionId];
           if (!actions.length) throw new Error("sim amount selector missing verified funding action");
           let best: AmountSimulation<ResolvedPlan> = { success: false, reason: "no positive executable funding action" };
-          for (const action of actions) {
+          for (const action of [...(settlement ? [null] : []), ...actions]) {
             control.signal.throwIfAborted();
             const buildStart = performance.now();
-            const root = runtimeLegs ? session.buildFundingRoot({ actionAdapterId: action,
+            const root = action === null ? settlement! : runtimeLegs ? session.buildFundingRoot({ actionAdapterId: action,
               asset: plan.opportunity.flashToken, amount, minProfit: plan.opportunity.targetNetProfit ?? 1n,
               children: [{ adapterId: "runtime-amount-flow", target: input.executor,
                 tokenIn: plan.opportunity.flashToken, tokenOut: plan.opportunity.flashToken, amount,
@@ -83,7 +93,7 @@ export function createBlockScanSimAmountSelector(input: {
             finally { if (opts.timing) opts.timing.simMs += performance.now() - simStart; }
             control.signal.throwIfAborted();
             input.record?.({ type: "sim_amount_execution", mode: runtimeLegs ? "runtime-actual" : "quoted",
-              ...identity, fundingActionId: action,
+              ...identity, fundingActionId: action, settlementMode: action === null ? "deferred-input" : "funded",
               amount: amount.toString(), success: sim.success, gasUsed: sim.gasUsed.toString(),
               grossProfit: sim.grossProfit.toString(), netProfit: sim.netProfit.toString(),
               failureKind: sim.failure?.kind ?? null, failureCode: sim.failure?.code ?? null });
@@ -100,6 +110,9 @@ export function createBlockScanSimAmountSelector(input: {
             if (sim.netProfit > 0n && (!best.success || sim.netProfit > best.profit)) {
               best = { success: true, profit: sim.netProfit, value: { ...candidate, netProfit: sim.netProfit } };
             }
+            // The existing funded construction remains available when the
+            // deferred composition cannot execute at this amount/state.
+            if (action === null && best.success) break;
           }
           return best;
         } catch (error) {

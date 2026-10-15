@@ -1,6 +1,59 @@
 {
   "cases": [
     {
+      "learning_case_id": "tooldef-20261013-postmortem-large-modern-blockscan-log",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+      "source_block": 26182688,
+      "target_block": 26182689,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "analysis_log_read_and_timing_coverage_not_a_production_route_verdict",
+      "evidence": {
+        "baseline_code_sha256": "1d7b1b50976483a31328e0f1b0cee925df545a73e4f520db32e5f6de3ee99938",
+        "observed_log_bytes": 572982312,
+        "baseline_log_error": "Invalid string length",
+        "manual_timing_artifact": "logs/tx-c191d9-gap-20261013.aQnqxW/live-block-timings.json",
+        "manual_timing_line": 521872,
+        "manual_total_ms": 3297.963736000005,
+        "manual_decision": "no_positive_quote",
+        "manual_stages": "state/enumeration/planner_solver ran; final_sim/ev not-run",
+        "independent_defect_review": {
+          "reviewer": "/root/postmortem_coverage_review",
+          "verdict": "Whole-file UTF-8 reading causes the observed failure; the legacy-only parser independently misses modern timing. Neither absence of a readable log nor missing route sidecars proves zero routes."
+        },
+        "independent_fix_review": {
+          "reviewer": "/root",
+          "verdict": "No blocking findings: shared parser preserves legacy attribution, timing retains not-run stages, absent route sidecars remain unknown, and missing/chunked/CRLF/truncated inputs are covered."
+        },
+        "validation": {
+          "regression_tests": "25/25 passed; logs/postmortem-log-fix-20261013/tests-final.log",
+          "typecheck": "analysis TypeScript --noEmit passed; logs/postmortem-log-fix-20261013/build-final.log",
+          "baseline_artifact": "logs/postmortem-log-fix-20261013/baseline.json",
+          "actual_log_artifact": "logs/postmortem-log-fix-20261013/actual-log-final.json",
+          "actual_log_bytes": 656523979,
+          "actual_log_result": "source_block=26182688, ran=true, status=incomplete, route counts=null; timing total_ms/decision/stages exactly match independent recovery",
+          "reader_elapsed_ms": 2005.032219,
+          "reader_max_rss_kb": 198240,
+          "fixed_code_sha256": "c58e58e400da2b5f689c34a26d6d1532a2ae7f90d40fdbb446be15483d8ff1e5"
+        },
+        "scope": "Analysis reader/summary only. No route sidecar interface, production program/config changes, RPC calls or live process control."
+      },
+      "tooling_defect": {
+        "tool": "analysis:bundle-postmortem",
+        "issue": "Whole-file UTF-8 reading fails above the V8 string limit; legacy-only block-scan parsing ignores current block_scan_timing evidence and the report renders unavailable ring counts as zero.",
+        "evidence": "Source 26182688 exists at live.log line 521872 with total_ms=3297.963736000005 and decision=no_positive_quote, but the canonical report returned log_unavailable with Invalid string length for the 572982312-byte log.",
+        "codify_target": "analysis/src/cli/bundle-postmortem.ts and analysis/src/test/blockscan-log-join.ts: stream lines, preserve source-bound modern stage timing, keep missing route coverage unknown, retain legacy attribution regressions and verify the actual >512MiB log without RPC.",
+        "status": "codified",
+        "codify_commit": "b33ca4d20d6aaae729d9f9cd5df6c77f00a79a60"
+      },
+      "created_at": "2026-10-13T10:16:29Z",
+      "updated_at": "2026-10-13T10:20:47Z"
+    },
+    {
       "learning_case_id": "tooldef-20261007-prerequisite-cache-idle-socket-reset",
       "status": "manual_required",
       "strategy_kind": "block-scan",
@@ -600,7 +653,9 @@
       "learning_case_id": "tooldef-20260916-canonical-family-metadata-classified-as-dispatch",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -627,7 +682,9 @@
       "learning_case_id": "tooldef-20260916-runtime-session-stale-valuation-and-gas-fixtures",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -654,7 +711,9 @@
       "learning_case_id": "tooldef-20261007-blockscan-pass-latency-large-log",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -679,7 +738,9 @@
       "learning_case_id": "tooldef-20261007-redact-live-run-event-range-stack",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -734,6 +795,93 @@
       },
       "created_at": "2026-10-07T09:16:09Z",
       "updated_at": "2026-10-07T09:16:09Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-receipt-capability-and-instance-evidence",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x153a5d8a7a73d66c6796a8c4fa8930e99a621cb268c3cdae484af4f90c5d12db",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "receipt_capability_and_instance_evidence_misclassification",
+      "evidence": {
+        "scope": "Offline 27-TX receipt classification and manual Ready artifact. No live process/broadcast change; no strategy comparability assertion. Export tools cannot attest exact live window.",
+        "manual": "Enabled Balancer V2 owns custom-swap:balancer-v2 descriptor. Exact pool IDs verified. ERC4626 events alone cannot distinguish verified 0x395da89bdb9431621a75df4e2e3b993acc2cab3d from rejected 0x5fbaa3a3b489199338fbd85f7e3d444dc0504f33.",
+        "reviewer": "Fresh non-author Codex review confirmed both defects and found no blocking issue in fix. Mandated CLI review was first attempted but CLI rejected model version.",
+        "regression": "New tests: 0/2 before, 2/2 after. Full related suite: 20/20 after updating empty-registry assertions; original baseline was 9/18.",
+        "canonical_after": {
+          "schema_version": 4,
+          "coverage_scope": "receipt_log_emitters_only",
+          "routability_scope": "production_listener_descriptors_receipt_only",
+          "transactionCount": 27,
+          "txsWithVaultLeg": 0,
+          "txsWithProtocolLeg": 0,
+          "txsWithNamedProtocolEvidence": 2,
+          "txsWithObservedSwaps": 26,
+          "observedSwapVenueCount": 60,
+          "observedSwapEmitterCount": 60,
+          "swapRouteGapTxs": 0,
+          "swapRouteGapCount": 0,
+          "unassessedSwapTxs": 26,
+          "unassessedSwapVenueCount": 60,
+          "observedFundingVenueCount": 16,
+          "fundingIdentityGapTxs": 0,
+          "fundingIdentityGapCount": 0,
+          "fundingRouteGapTxs": 0,
+          "fundingRouteGapCount": 0,
+          "protocolAdapterCandidateTxCount": 0,
+          "requiresTraceTxCount": 27,
+          "knownProtocolGapTxs": 0,
+          "unassessedProtocolTxs": 2,
+          "unassessedProtocolVenueCount": 2,
+          "unclassifiedEmitterTxs": 17,
+          "removed_v4_fields": [
+            "perTx[].swapVenues",
+            "perTx[].fullyCovered",
+            "perTx[].gapVenues",
+            "summary.txs",
+            "summary.observedSwapVenues",
+            "summary.observedSwapEmitters",
+            "summary.swapRouteGaps",
+            "summary.unassessedSwapVenues",
+            "summary.observedFundingVenues",
+            "summary.fundingIdentityGaps",
+            "summary.fundingRouteGaps",
+            "summary.deprecated_aliases",
+            "summary.fullyCovered",
+            "summary.oneGapWithVault",
+            "summary.protocolAdapterCandidates",
+            "summary.requiresTrace"
+          ],
+          "receiptRouteCoverageCompleteTxCount": 0,
+          "singleProtocolVenueGapWithProtocolLegTxCount": 0
+        },
+        "capability_query": [
+          "historical-export",
+          "rebuild"
+        ],
+        "selected_tool_ids": [
+          "analysis:venue-discovery-bq",
+          "listener:searcher:universe-rebuild-status"
+        ],
+        "manifest_path": "/opt/mev-cloud/app-run2/logs/coffee-sql-20261015-UZMWgX/semantic-review/final-tool-manifest.json",
+        "manifest_sha256": "e7b4240fa872aafae10129db29626c0fc1aa475608af6452ea6e67b496b792a8"
+      },
+      "tooling_defect": {
+        "tool": "analysis:venue-discovery-bq",
+        "issue": "Namespaced swap capability falsely absent; unassessed receipt-only protocol identities falsely counted as known gaps.",
+        "evidence": "Same 27 TX export and diagnostic activations: 2 false Balancer gaps and 2 known protocol gaps become 0/0, preserving 2 unassessed protocol TXs and all 27 requires_trace.",
+        "codify_target": "analysis/src/discovery/loop-coverage.ts; analysis/src/cli/venue-discovery-bq.ts; boundary/corpus regressions",
+        "status": "codified",
+        "codify_commit": "8e42bc437deea71e213f1e28014a573ca793b6c2"
+      },
+      "created_at": "2026-10-15T05:16:27.751853Z",
+      "updated_at": "2026-10-15T05:16:27.751853Z"
     }
   ]
 }

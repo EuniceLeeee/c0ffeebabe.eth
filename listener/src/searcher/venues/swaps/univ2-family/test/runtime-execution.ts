@@ -112,6 +112,34 @@ function run(leg: RuntimeAmountLeg | null, amount: bigint, onCall: (call: Call) 
   assert.equal(registers[0], amount);
 }
 
+test("V2 direct debt settlement pays the bounded input and sends the callback debt without duplicate reads", () => {
+  for (const route of univ2Routes.project({ descriptor: v2 })) for (const debt of [1n, 123n, 10n ** 20n]) {
+    const amountIn = 123456789n;
+    const settlement = { kind: "settle-output" as const, recipient: factory, amountIn };
+    const leg = univ2Execution.buildRuntimeLeg({ descriptor: v2, route, executor, runtimeEvidence: [], settlement });
+    assert.equal(leg?.settlement?.settleOutput, true);
+    assert.deepEqual(leg?.settlementRequest, settlement);
+    let calls = 0;
+    run(leg, debt, call => {
+      assert.equal(call.static, false, "no balance or reserve calls on the prepared payment path");
+      if (calls++ === 0) {
+        assert.equal(call.target, route.tokenIn);
+        assert.deepEqual([...erc20.decodeFunctionData("transfer", call.data)], [pool, amountIn]);
+      } else {
+        assert.equal(call.target, pool);
+        assert.deepEqual([...UNIV2_PAIR_INTERFACE.decodeFunctionData("swap", call.data)],
+          [route.direction === "zero-for-one" ? 0n : debt, route.direction === "zero-for-one" ? debt : 0n, factory, "0x"]);
+      }
+      return "0x";
+    });
+    assert.equal(calls, 2);
+  }
+  for (const amountIn of [0n, -1n, ethers.MaxUint256 + 1n]) assert.throws(() => univ2Execution.buildRuntimeLeg({
+    descriptor: v2, route: univ2Routes.project({ descriptor: v2 })[0]!, executor, runtimeEvidence: [],
+    settlement: { kind: "settle-output", recipient: factory, amountIn },
+  }), /settlement amount/);
+});
+
 test("V2 runtime patches the nominal debit but prices the actual pair credit in both directions", () => {
   const reserves = [(1n << 80n) + 13n, (1n << 75n) + 37n];
   for (const feeBps of [0n, 25n, 30n, 9999n]) {

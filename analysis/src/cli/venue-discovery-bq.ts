@@ -80,6 +80,7 @@ async function runLoopCoverage(perTx: TxLoopCoverage[], outPath: string): Promis
       `protocol_adapter_candidates=${summary.protocolAdapterCandidateTxCount}`,
       `requires_trace=${summary.requiresTraceTxCount}`,
       `known_protocol_gap_txs=${summary.knownProtocolGapTxs}`,
+      `unassessed_protocol_txs=${summary.unassessedProtocolTxs}`,
       `unclassified_emitter_txs=${summary.unclassifiedEmitterTxs}`,
     ].join(" "),
   );
@@ -99,7 +100,8 @@ export function buildLoopCoverageOutput(perTx: TxLoopCoverage[]) {
   );
   const withProtocol = sorted.filter((t) => t.protocolVenues.length >= 1);
   const withNamedProtocolEvidence = sorted.filter(
-    (t) => t.protocolVenues.length >= 1 || t.protocolVenueGaps.length >= 1,
+    (t) => t.protocolVenues.length >= 1 || t.protocolVenueGaps.length >= 1
+      || t.unassessedProtocolVenues.length >= 1,
   );
   const withObservedSwaps = sorted.filter((t) => t.observedSwapVenues.length >= 1);
   const withUnassessedSwaps = sorted.filter((t) =>
@@ -133,6 +135,8 @@ export function buildLoopCoverageOutput(perTx: TxLoopCoverage[]) {
     protocolAdapterCandidateTxCount: perTx.filter((t) => t.protocolAdapterCandidate).length,
     requiresTraceTxCount: sorted.filter((t) => t.comparability === "requires_trace").length,
     knownProtocolGapTxs: perTx.filter((t) => t.protocolVenueGaps.length > 0).length,
+    unassessedProtocolTxs: perTx.filter((t) => t.unassessedProtocolVenues.length > 0).length,
+    unassessedProtocolVenueCount: perTx.reduce((count, t) => count + t.unassessedProtocolVenues.length, 0),
     unclassifiedEmitterTxs: perTx.filter((t) => t.unclassifiedEmitters.length > 0).length,
     removed_v4_fields: [
       "perTx[].swapVenues",

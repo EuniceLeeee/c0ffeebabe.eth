@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import { getBytes, Interface, keccak256, toUtf8Bytes } from "ethers";
 import { compilePlan } from "../../shared/compiler/compiler.js";
 import { bytesToHex } from "../../shared/compiler/encoder.js";
-import { buildExecuteCalldata, type BotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
+import { buildExecuteCalldata, buildRawExecuteCalldata, canUseRawExecuteCalldata, type BotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
 import { postJsonRpc, StateCallAbortedError } from "../../shared/state/state-backend.js";
 import type { BlockScanObservedHeader } from "../blockscan-observed-header.js";
 import { nextBlockBaseFee } from "../ev-evaluator.js";
@@ -58,6 +58,8 @@ type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonl
  * Schemas 3/4 measure pre/post in N+1, excluding passive N→N+1 yield; 4 adds a
  * failure-only diagnostic slot. Schemas
  * 1/2 retain their original N pre-balance and exact two-request wire replay.
+ * 5/6 are the corresponding same-block raw-entry forms (without/with diagnosis).
+ * The schema binds the entry independently of the replay process configuration.
  */
 export type EthSimulateV1ExecutionInput = DeepReadonly<ReturnType<typeof prepareExecutionInput> |
   ReturnType<typeof prepareLegacyExecutionInput>>;
@@ -72,6 +74,7 @@ export function buildEthSimulateV1ExecutionInput(input: {
   owner: string; profitToken: string; scriptHex: string;
   executorRuntimeCode?: BotVmRuntimeCode;
   diagnosticKey?: string;
+  executionEntry?: "raw";
 }) {
   return freezeInput(prepareExecutionInput(input));
 }
@@ -81,6 +84,7 @@ type PreparationInput = {
   owner: string; profitToken: string; scriptHex: string;
   executorRuntimeCode?: BotVmRuntimeCode;
   diagnosticKey?: string;
+  executionEntry?: "raw";
 };
 
 function prepareExecutionInput(input: PreparationInput) {
@@ -106,7 +110,9 @@ function prepareExecutionInput(input: PreparationInput) {
       !input.executorRuntimeCode || !supportsHopDiagnostics(input.executorRuntimeCode.code))) {
     throw new Error("invalid final simulation hop diagnostic key or executor");
   }
-  return { ...primary, schemaVersion: diagnosticKey === undefined ? 3 as const : 4 as const,
+  return { ...primary, schemaVersion: input.executionEntry === "raw"
+      ? diagnosticKey === undefined ? 5 as const : 6 as const
+      : diagnosticKey === undefined ? 3 as const : 4 as const,
     ...(diagnosticKey === undefined ? {} : { diagnosticKey }),
     simulateParams: [{ ...simulateParams[0], blockStateCalls: [{ ...block,
       stateOverrides: { ...block.stateOverrides,
@@ -120,14 +126,15 @@ function prepareExecutionInput(input: PreparationInput) {
 }
 
 // Private reconstruction only: no production mode/configuration switch.
-function prepareLegacyExecutionInput({ source, header, executor, owner, profitToken, scriptHex, executorRuntimeCode: codeInput }: PreparationInput) {
+function prepareLegacyExecutionInput({ source, header, executor, owner, profitToken, scriptHex, executorRuntimeCode: codeInput, executionEntry }: PreparationInput) {
   const blockOverrides = targetContext(source, header);
   validateCaller(executor, owner);
   if (typeof profitToken !== "string" || !ADDRESS.test(profitToken) ||
       typeof scriptHex !== "string" || !/^0x(?:[0-9a-fA-F]{2})*$/.test(scriptHex)) {
     throw new Error("invalid final simulation profit token or script");
   }
-  const calldata = buildExecuteCalldata(getBytes(scriptHex));
+  if (executionEntry !== undefined && executionEntry !== "raw") throw new Error("invalid final simulation execution entry");
+  const calldata = executionEntry === "raw" ? buildRawExecuteCalldata(getBytes(scriptHex)) : buildExecuteCalldata(getBytes(scriptHex));
   const pinnedBlock = { blockHash: source.hash, requireCanonical: true as const };
   // Preserve historical direct-call wire semantics exactly (not STATICCALL).
   const observer = { from: ZERO_ADDRESS, to: profitToken,
@@ -168,7 +175,7 @@ function prepareLegacyExecutionInput({ source, header, executor, owner, profitTo
 export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulateV1ExecutionInput {
   try {
     const saved = record(value), source = record(saved?.source), header = record(saved?.sourceHeader);
-    if (!saved || ![1, 2, 3, 4].includes(saved.schemaVersion as number) || !source || !header ||
+    if (!saved || ![1, 2, 3, 4, 5, 6].includes(saved.schemaVersion as number) || !source || !header ||
         typeof source.number !== "number" || typeof source.hash !== "string" ||
         typeof source.generation !== "number" || typeof header.hash !== "string" ||
         typeof header.parentHash !== "string" || typeof saved.executor !== "string" ||
@@ -178,7 +185,7 @@ export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulate
       if (typeof field !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(field)) throw new Error();
       return BigInt(field);
     };
-    const canonical = freezeInput((saved.schemaVersion === 3 || saved.schemaVersion === 4 ? prepareExecutionInput : prepareLegacyExecutionInput)({
+    const canonical = freezeInput(((saved.schemaVersion as number) >= 3 ? prepareExecutionInput : prepareLegacyExecutionInput)({
       source: { number: source.number, hash: source.hash, generation: source.generation },
       header: { number: Number(decimal(header.number)), hash: header.hash, parentHash: header.parentHash,
         timestamp: Number(decimal(header.timestamp)), baseFeePerGas: decimal(header.baseFeePerGas),
@@ -187,7 +194,8 @@ export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulate
       ...(saved.executorRuntimeCode === undefined ? {} : {
         executorRuntimeCode: validateExecutorRuntimeCode(saved.executorRuntimeCode),
       }),
-      ...(saved.schemaVersion === 4 ? { diagnosticKey: typeof saved.diagnosticKey === "string"
+      ...(saved.schemaVersion === 5 || saved.schemaVersion === 6 ? { executionEntry: "raw" as const } : {}),
+      ...(saved.schemaVersion === 4 || saved.schemaVersion === 6 ? { diagnosticKey: typeof saved.diagnosticKey === "string"
         ? saved.diagnosticKey : "invalid" } : {}),
     }));
     if (!isDeepStrictEqual(value, canonical)) throw new Error();
@@ -243,9 +251,11 @@ export class EthSimulateV1Simulator {
     readonly executor: string,
     readonly owner: string,
     executorRuntimeCode?: BotVmRuntimeCode,
+    private readonly preferRawEntry = false,
   ) {
     validateCaller(executor, owner);
     this.executorRuntimeCode = validateExecutorRuntimeCode(executorRuntimeCode);
+    if (typeof preferRawEntry !== "boolean") throw new Error("invalid final simulation entry preference");
   }
 
   /** Opt-in bounded evidence only: exact endpoint-free input and public hex
@@ -283,6 +293,7 @@ export class EthSimulateV1Simulator {
     const scriptHex = bytesToHex(compilePlan(plan.root, this.executor));
     const input = buildEthSimulateV1ExecutionInput({ source, header, executor: this.executor,
       owner: this.owner, profitToken, scriptHex,
+      ...(this.preferRawEntry && canUseRawExecuteCalldata(getBytes(scriptHex)) ? { executionEntry: "raw" as const } : {}),
       ...(this.executorRuntimeCode === undefined ? {} : { executorRuntimeCode: this.executorRuntimeCode }),
       ...(this.executorRuntimeCode && supportsHopDiagnostics(this.executorRuntimeCode.code)
         ? { diagnosticKey: `0x${randomBytes(32).toString("hex")}` } : {}) });
@@ -305,7 +316,7 @@ export class EthSimulateV1Simulator {
       throw new Error("invalid final simulation control or profit token");
     }
     const { profitToken, calldata, scriptHex, simulateParams } = saved;
-    const sameBlock = saved.schemaVersion === 3 || saved.schemaVersion === 4;
+    const sameBlock = saved.schemaVersion >= 3;
     const codeEvidence = saved.executorRuntimeCode === undefined ? {} : {
       counterfactualExecutorCode: { address: this.executor.toLowerCase(), keccak256: saved.executorRuntimeCode.keccak256 },
     };
@@ -425,7 +436,7 @@ export class EthSimulateV1Simulator {
     const remaining = Math.min(3000, control.deadlineAtMs - Date.now());
     if (remaining <= 0 || control.signal.aborted) return null;
     const block = saved.simulateParams[0].blockStateCalls[0];
-    const tx = block.calls[saved.schemaVersion === 3 || saved.schemaVersion === 4 ? 1 : 0];
+    const tx = block.calls[saved.schemaVersion >= 3 ? 1 : 0];
     try {
       const response = await postJsonRpc(this.rpcUrl, { jsonrpc: "2.0", id: 1, method: "debug_traceCall",
         params: [tx, saved.simulateParams[1], { tracer: "callTracer", timeout: "3s",

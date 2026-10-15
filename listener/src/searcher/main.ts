@@ -12,6 +12,8 @@ import {
   forkBotVmRuntimeReceipt,
   installForkBotVm,
   loadBotVmRuntimeCode,
+  canUseRawExecuteCalldata,
+  rawExecutionEntryEnabled,
   type ForkBotVmRuntimeReceipt,
 } from "../shared/executor/botvm-executor.js";
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
@@ -45,7 +47,10 @@ import { buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried,
 import { effectiveEthPricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
 import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
-import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
+import { initEvents, emitEvent, emitSubmissionEvidence, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
+import { resolveBribeGasBasis } from "../shared/submission-fees.js";
+import type { BuilderEvidenceSink } from "../shared/builder-observations.js";
+import { SubmissionFollowup } from "../shared/submission-followup.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import { normalizeTransactionOrigin } from "./adapter-work-intent.js";
@@ -1632,6 +1637,17 @@ async function main(): Promise<void> {
   }
   const finalSimulationExecutorRuntimeCode = dryRunBotVmCodeOverride
     ? loadBotVmRuntimeCode(executionIdentity.transactionOrigin) : undefined;
+  const rawExecutionEntry = rawExecutionEntryEnabled(process.env.SEARCHER_BOTVM_RAW_ENTRY);
+  if (rawExecutionEntry) {
+    if (!enableBlockScan || blockScanFinalSimulationMethod !== "eth_simulateV1") {
+      throw new Error("raw executor entry requires block-scan eth_simulateV1 final simulation");
+    }
+    const expected = loadBotVmRuntimeCode(executionIdentity.transactionOrigin);
+    if (!dryRunBotVmCodeOverride && ethers.keccak256(await provider.getCode(executionIdentity.executor)) !== expected.keccak256) {
+      throw new Error("raw executor entry requires the exact tested deployed runtime");
+    }
+    console.log(`[searcher/live] executor=solidity-yul raw-entry=if-compatible codehash=${expected.keccak256}`);
+  }
   if (finalSimulationExecutorRuntimeCode !== undefined) {
     console.log(`[searcher/live] ${JSON.stringify({ counterfactualExecutorCode: true,
       keccak256: finalSimulationExecutorRuntimeCode.keccak256 })}`);
@@ -1776,7 +1792,24 @@ async function main(): Promise<void> {
   // revm/hybrid backends are constructed after the routing graph is built (they
   // need it to encode the victim overlay); default to rpc until then.
   let liveBackend: LiveStateBackend = rpcLiveBackend;
+  let submissionEvidenceFailure: Error | undefined;
+  const recordSubmissionEvidence: BuilderEvidenceSink = event => {
+    if (submissionEvidenceFailure) throw submissionEvidenceFailure;
+    try { emitSubmissionEvidence(event); }
+    catch {
+      const failure = new Error("submission evidence unavailable; stopping runtime");
+      submissionEvidenceFailure = failure;
+      requestRuntimeStop.fail(failure);
+      throw failure;
+    }
+  };
+  const submissionFollowup = config.dryRun ? undefined : new SubmissionFollowup({
+    evidence: recordSubmissionEvidence,
+    onError: () => requestRuntimeStop.fail(new Error("submission follow-up evidence unavailable")),
+  });
   const bundleRouter: BundleRouter = createBundleRouter({
+    bribeGasBasis: resolveBribeGasBasis(process.env.SEARCHER_BRIBE_GAS_BASIS),
+    evidence: recordSubmissionEvidence,
     dryRun: config.dryRun,
     wallet: config.wallet,
     provider,
@@ -2642,7 +2675,7 @@ async function main(): Promise<void> {
     }),
     directFinalSimulation: enableBlockScan && blockScanFinalSimulationMethod === "eth_simulateV1"
       ? Object.assign(new EthSimulateV1Simulator(config.rpcUrl, executionIdentity.executor, executionIdentity.transactionOrigin,
-          finalSimulationExecutorRuntimeCode),
+          finalSimulationExecutorRuntimeCode, rawExecutionEntry),
           { concurrency: blockScanFinalSimulationConcurrency })
       : undefined,
     rpcUrl: config.rpcUrl,
@@ -2661,6 +2694,8 @@ async function main(): Promise<void> {
             source: input.source, header: input.header,
             executor: executionIdentity.executor, owner: executionIdentity.transactionOrigin,
             profitToken: input.resolved.profitToken, scriptHex: input.scriptHex,
+            ...(rawExecutionEntry && canUseRawExecuteCalldata(ethers.getBytes(input.scriptHex))
+              ? { executionEntry: "raw" as const } : {}),
             ...(finalSimulationExecutorRuntimeCode === undefined ? {} : { executorRuntimeCode: finalSimulationExecutorRuntimeCode }),
           });
           const receipt = solverInputRecorder.record({
@@ -3140,11 +3175,13 @@ async function main(): Promise<void> {
   if (config.stateUpdaterEnabled && !enableBlockScan) {
     provider.on("block", (blockNumber: number) => runStateUpdate(blockNumber, "block"));
   }
+  submissionFollowup?.start();
   const blockScanHeadFeed = enableBlockScan && !blindProductionAudit
     ? startBlockScanHeadFeed({
       url: config.wsUrl,
       signal: blockScanRuntimeAbort.signal,
       onHead(number, hash) {
+        submissionFollowup?.noteHead(number, hash, "ws");
         blockScanActivityProvider.noteHead(number, hash);
         blockScanRuntimeLoop.schedule(number);
       },
@@ -3156,12 +3193,17 @@ async function main(): Promise<void> {
     // latest-head scheduler; a hint cannot authorize a canonical source.
     provider.on(
       "block",
-      (blockNumber: number) => blockScanRuntimeLoop.schedule(blockNumber),
+      (blockNumber: number) => {
+        submissionFollowup?.noteHead(blockNumber, null, "http");
+        blockScanRuntimeLoop.schedule(blockNumber);
+      },
     );
     // Close the listener-registration race and warm from the current canonical
     // head rather than the early startup discovery anchor. The runtime loop
     // owns discovery/CAS and retries fail-closed without taking down backrun.
-    blockScanRuntimeLoop.schedule(await provider.getBlockNumber());
+    const startupHead = await provider.getBlockNumber();
+    submissionFollowup?.noteHead(startupHead, null, "startup");
+    blockScanRuntimeLoop.schedule(startupHead);
   }
 
   // Track the latest mined block from the WS newHeads stream so the per-hint hot
@@ -3170,6 +3212,7 @@ async function main(): Promise<void> {
   const blockTracker = { latest: await provider.getBlockNumber() };
   if (!blindProductionAudit) {
     provider.on("block", (blockNumber: number) => {
+      submissionFollowup?.noteHead(blockNumber, null, "http");
       if (blockNumber > blockTracker.latest) blockTracker.latest = blockNumber;
       submissionCoordinator.onBlock(blockNumber);
     });
@@ -3197,6 +3240,9 @@ async function main(): Promise<void> {
             `${error instanceof Error ? error.message : String(error)}`,
         );
       }
+      // Keep recording receipts while existing runtime workers drain; never start new trading work.
+      try { await submissionFollowup?.close(); }
+      catch { console.warn("[searcher/live] submission follow-up evidence incomplete at shutdown"); }
       try {
         await blockScanRouteTelemetry.shutdown();
       } catch (error) {

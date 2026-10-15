@@ -1,6 +1,8 @@
 import { ethers } from "ethers";
 import { submitBundle, submitMevShareBundle, submitStandaloneBundle } from "../../submitter.js";
 import type { SubmitResult } from "../../types.js";
+import type { BuilderEvidenceSink } from "../../shared/builder-observations.js";
+import type { BribeGasBasis } from "../../shared/submission-fees.js";
 
 export interface BundleSubmission {
   victimTxHash: string;
@@ -13,7 +15,7 @@ export interface BundleSubmission {
   expectedProfitEth?: bigint;
   /** Fraction of post-gas expected surplus to pay as priority-fee bribe, in bps. */
   bribeBps?: number;
-  /** Maximum total priority-fee budget in wei, computed by the searcher economics gate. */
+  /** EV-approved bid; an expected payment when bribeGasBasis is measured-gas. */
   bribeWei?: bigint;
   /** Exact EIP-1559 base fee for targetBlock, shared with the EV calculation. */
   maxBaseFeePerGas?: bigint;
@@ -117,6 +119,8 @@ export class ProductionBundleRouter implements BundleRouter {
     private readonly wallet: ethers.Wallet,
     private readonly provider: ethers.JsonRpcProvider,
     private readonly botvmAddress: string,
+    private readonly evidence?: BuilderEvidenceSink,
+    private readonly bribeGasBasis: BribeGasBasis = "gas-limit",
   ) {}
 
   async submit(bundle: BundleSubmission): Promise<SubmitResult[]> {
@@ -126,6 +130,9 @@ export class ProductionBundleRouter implements BundleRouter {
     if (economicsReject) return [economicsReject];
     const gasUsed = Number(bundle.gasUsed);
     const bribe = {
+      bribeGasBasis: this.bribeGasBasis,
+      expectedProfitEth: bundle.expectedProfitEth,
+      evidence: this.evidence,
       bribeWei: bundle.bribeWei!,
       maxBaseFeePerGas: bundle.maxBaseFeePerGas!,
     };
@@ -174,7 +181,7 @@ export class ProductionBundleRouter implements BundleRouter {
     }
 
     for (const result of results) {
-      const status = result.accepted ? "ACCEPTED" : "REJECTED";
+      const status = result.receiptStatus?.toUpperCase() ?? (result.accepted ? "ACCEPTED" : "REJECTED");
       console.log(
         `[searcher/live] ${result.builder}: ${status}` +
           `${result.bundleHash ? ` bundleHash=${result.bundleHash}` : ""}` +
@@ -187,6 +194,8 @@ export class ProductionBundleRouter implements BundleRouter {
 }
 
 export function createBundleRouter(input: {
+  bribeGasBasis?: BribeGasBasis;
+  evidence?: BuilderEvidenceSink;
   dryRun: boolean;
   wallet: ethers.Wallet;
   provider: ethers.JsonRpcProvider;
@@ -199,5 +208,7 @@ export function createBundleRouter(input: {
       input.wallet,
       input.provider,
       input.botvmAddress,
+      input.evidence,
+      input.bribeGasBasis,
     );
 }

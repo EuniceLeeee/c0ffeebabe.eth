@@ -221,7 +221,7 @@
   "fullCorpusEvidence": {
     "generatedAt": "2026-07-15T05:08:00.000Z",
     "sourceSha256": "156930644045a3769306424660a7eaf87ad0c9190e556b7894d2282be89f415e",
-    "canonicalOutputSha256": "dfb6234a3b8a8fa12a5b1794c3c2084d44103808786c8253f7f5eb0895a92e33",
+    "canonicalOutputSha256": "3a541d358a3938d82158b89eaf05d711fd46ca02621c3445f5faa2d021cdfed2",
     "corpus": {
       "transactionCount": 857,
       "receiptLogRowCount": 18541
@@ -236,7 +236,18 @@
         "0xbeef01735c132ada46aa9aa4c54623caa92a64cb",
         "0xbeef047a543e45807105e51a8bbefcc5950fcfba"
       ],
-      "erc4626GapTxs": [
+      "fluidUnassessedTxs": [
+        "0x175f7024e178f064c5a50b971a2ac60706a3279f0c98fb7848c002c9b99288aa",
+        "0x47219a33ae580dea56b404eceb51318c9b47520d1571bc2bb585f86efa99a8ec",
+        "0x484919a55f7d316b10fae53da052a25d8bd0036a641fcc7ab41d5719867e42aa",
+        "0x4f9599715b3869a2169d9deb21bd4c1423f274deed4514f315629d91a284a7da",
+        "0x5510422fc8dde642946ab0ef22ff96a3c139e676668249ed0c19e302962e53e9",
+        "0x75029b3fb2454e0808e23e291649abb536f7d5a530ad81ae0918e71a2c7afee3",
+        "0x806d9ff87e91b2109b5642cd6fd0ea6d0f577328a5b07c74ca4f60a5eb92495d",
+        "0x9be73297e0fd8b0ff9760356480b372e3f78b12ce6bc6dc9bb83888d1314b862"
+      ],
+      "changedTxCount": 32,
+      "erc4626UnassessedTxs": [
         "0x01544ac92f200759658ec4a47b64ab798e19fe3fa13bf38e27de3a6699fb2aa5",
         "0x0627b82ebb141a27718d21571346930e6db49a809af42699276d8c7f01f7642a",
         "0x090415f6f675b5ef3bd3ff96ff4a5fa46fe87f962a1e1ee3009ff8eb2327a039",
@@ -266,18 +277,7 @@
         "0xec08ec0068abec74bc8a02717a7563cf89fa5b36a1ec4a1450360be039b8da48",
         "0xf2130409bfe9636c5cb6e7b85c523b07a0e20c209508f43a6e375607da3a4527",
         "0xfd2b659a996feb6b252a48d7449571c9521973d0ce0a61c35d62a495a2aa5a5f"
-      ],
-      "fluidUnassessedTxs": [
-        "0x175f7024e178f064c5a50b971a2ac60706a3279f0c98fb7848c002c9b99288aa",
-        "0x47219a33ae580dea56b404eceb51318c9b47520d1571bc2bb585f86efa99a8ec",
-        "0x484919a55f7d316b10fae53da052a25d8bd0036a641fcc7ab41d5719867e42aa",
-        "0x4f9599715b3869a2169d9deb21bd4c1423f274deed4514f315629d91a284a7da",
-        "0x5510422fc8dde642946ab0ef22ff96a3c139e676668249ed0c19e302962e53e9",
-        "0x75029b3fb2454e0808e23e291649abb536f7d5a530ad81ae0918e71a2c7afee3",
-        "0x806d9ff87e91b2109b5642cd6fd0ea6d0f577328a5b07c74ca4f60a5eb92495d",
-        "0x9be73297e0fd8b0ff9760356480b372e3f78b12ce6bc6dc9bb83888d1314b862"
-      ],
-      "changedTxCount": 32
+      ]
     },
     "summary": {
       "schema_version": 4,
@@ -285,7 +285,7 @@
       "routability_scope": "production_listener_descriptors_receipt_only",
       "transactionCount": 857,
       "txsWithVaultLeg": 0,
-      "txsWithProtocolLeg": 33,
+      "txsWithProtocolLeg": 0,
       "txsWithNamedProtocolEvidence": 78,
       "txsWithObservedSwaps": 741,
       "observedSwapVenueCount": 1967,
@@ -299,9 +299,11 @@
       "fundingIdentityGapCount": 7,
       "fundingRouteGapTxs": 0,
       "fundingRouteGapCount": 0,
-      "protocolAdapterCandidateTxCount": 24,
+      "protocolAdapterCandidateTxCount": 0,
       "requiresTraceTxCount": 857,
-      "knownProtocolGapTxs": 54,
+      "knownProtocolGapTxs": 0,
+      "unassessedProtocolTxs": 78,
+      "unassessedProtocolVenueCount": 145,
       "unclassifiedEmitterTxs": 702,
       "removed_v4_fields": [
         "perTx[].swapVenues",
@@ -322,7 +324,7 @@
         "summary.requiresTrace"
       ],
       "receiptRouteCoverageCompleteTxCount": 0,
-      "singleProtocolVenueGapWithProtocolLegTxCount": 6
+      "singleProtocolVenueGapWithProtocolLegTxCount": 0
     },
     "eventTxs": {
       "balancerFlashLoan": [

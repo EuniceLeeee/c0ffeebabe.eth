@@ -28,6 +28,7 @@ test('default is read-only; explicit bounded block count only', () => {
   for (const parse of [parseArguments, parseClientArgs]) {
     assert.equal(parse(['--broadcast']).blocks, 2500);
     assert.equal(parse(['--broadcast', '--blocks', '250']).blocks, 250);
+    assert.equal(parse(['--broadcast', '--blocks', '500']).blocks, 500);
     for (const n of ['0', '-1', '2501', '1.5', '1e3', '2500junk']) assert.throws(() => parse(['--blocks', n]));
     assert.throws(() => parse(['--check', '--broadcast']));
     assert.throws(() => parse(['--broadcast', '--broadcast']));
@@ -43,6 +44,15 @@ test('fresh 2500 source heights begin AFTER state-ready observation', () => {
   const timing = n => JSON.stringify({ type: 'block_scan_timing', source_block: n });
   assert.equal(window.observe(timing(2599), 6), null);
   assert.deepEqual(window.observe(timing(2600), 6), { completed: true });
+});
+
+test('requested 500-source-block run stops at its exact boundary without a restart', () => {
+  const window = fresh('run-500', 500);
+  assert.deepEqual(activate(window), { activated: true, from: 101, to: 600, count: 500 });
+  assert.equal(window.permit.firstTargetBlock, 102); assert.equal(window.permit.lastTargetBlock, 601);
+  assert.equal(window.observe('{"type":"block_scan_timing","source_block":599}', 6), null);
+  assert.deepEqual(window.observe('{"type":"block_scan_timing","source_block":600}', 6), { completed: true });
+  window.stop(); assert.equal(window.permit.status, 'stopped');
 });
 test('warmup, catchup and failed state preparation do not activate', () => {
   for (const [startup_warm, status, transitions] of [[true, 'ran', 1], [false, 'ran', 2], [false, 'failed', 1]]) {
@@ -62,12 +72,15 @@ test('second run has independent baseline, permit and counter; no cross-run blac
   const a = makeRunConfig(base, profile, '/runs/one'), b = makeRunConfig(base, profile, '/runs/two');
   assert.equal(a.SEARCHER_LIVE_SESSION_PATH, '/runs/one/permit.json');
   assert.equal(b.SEARCHER_LIVE_SESSION_ID, 'two');
-  for (const key of ['SEARCHER_EVENTS_PATH', 'SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH', 'SEARCHER_BLOCKSCAN_MID_HISTORY_PATH', 'SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH', 'SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH']) assert.notEqual(a[key], b[key]);
+  for (const key of ['SEARCHER_EVENTS_PATH', 'SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH', 'SEARCHER_BLOCKSCAN_MID_HISTORY_PATH', 'SEARCHER_BLOCKSCAN_SOLVER_INPUTS_PATH', 'SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH', 'SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH']) assert.notEqual(a[key], b[key]);
   assert.equal(b.SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE, '0');
   assert.equal(b.SEARCHER_DRY_RUN_USE_READY_GENERATION, '0');
   assert.equal(b.SEARCHER_USE_READY_GENERATION, '1');
-  assert.equal(b.SEARCHER_BRIBE_BPS, '5000');
+  assert.equal(b.SEARCHER_BRIBE_BPS, '9900');
   assert.equal(b.SEARCHER_BRIBE_ALL_ABOVE_GAS, '0');
+  assert.equal(b.SEARCHER_BRIBE_GAS_BASIS, 'measured-gas');
+  assert.equal(b.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_PATH, '/runs/two/solver-inputs.jsonl');
+  assert.equal(b.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_MAX_BYTES, String(10 * 1024 ** 3));
   assert.equal(b.SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT, '0.02');
   assert.equal(b.SEARCHER_BLOCKSCAN_MAX_CANDIDATES, '10');
   assert.equal(b.SEARCHER_BLOCKSCAN_REFINE_CANDIDATES, '512');

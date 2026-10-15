@@ -10,6 +10,8 @@ const WALLET = "0x1111111111111111111111111111111111111111";
 const EXECUTOR = "0x2222222222222222222222222222222222222222";
 const NOW = 1_800_000_000_000;
 const BASELINE = 2_000_000_000_000_000n;
+const BUNDLE_HASH = "0x" + "ab".repeat(32);
+const TITAN_URL = "https://us.rpc.titanbuilder.xyz";
 
 async function main(): Promise<void> {
   const savedPath = process.env.SEARCHER_LIVE_SESSION_PATH;
@@ -23,6 +25,9 @@ async function main(): Promise<void> {
   let signs = 0;
   let auths = 0;
   let sends = 0;
+  let failingBuilderUrl: string | undefined;
+  let titanReceipt: string | undefined;
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
   let balance = BASELINE;
   let onNonce: (() => void) | undefined;
   let onBalance: (() => void) | undefined;
@@ -56,6 +61,9 @@ async function main(): Promise<void> {
     process.env.SEARCHER_LIVE_SESSION_PATH = path;
     process.env.SEARCHER_LIVE_SESSION_ID = permit.runId;
     signs = auths = sends = 0;
+    requests.length = 0;
+    failingBuilderUrl = undefined;
+    titanReceipt = undefined;
     balance = BASELINE;
     onNonce = onBalance = onSign = onAuth = onFetch = undefined;
     write();
@@ -92,10 +100,14 @@ async function main(): Promise<void> {
   }
   try {
     console.log = () => {};
-    globalThis.fetch = (async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
       sends++;
+      requests.push({ url, init });
       onFetch?.();
-      return { ok: true, status: 200, text: async () => '{"result":{"bundleHash":"mock"}}' } as Response;
+      if (url === failingBuilderUrl) throw new TypeError("fetch failed");
+      return { ok: true, status: 200, text: async () => url === TITAN_URL && titanReceipt !== undefined
+        ? titanReceipt : JSON.stringify({ jsonrpc: "2.0", id: 1, result: { bundleHash: BUNDLE_HASH } }) } as Response;
     }) as typeof fetch;
 
     reset();
@@ -111,8 +123,63 @@ async function main(): Promise<void> {
     const result = await submitStandaloneBundle(params);
     assert.equal(signs, 1);
     assert.equal(auths, 1);
-    assert.equal(sends, 4);
-    assert.equal(result.filter((entry) => entry.accepted).length, 4);
+    assert.equal(sends, 5);
+    assert.equal(result.filter((entry) => entry.accepted).length, 5);
+    assert.deepEqual(result.map((entry) => entry.builder), [
+      "flashbots", "titan", "beaverbuild", "bombora", "bobthebuilder",
+    ]);
+    const expectedUrls = [
+      "https://relay.flashbots.net",
+      TITAN_URL,
+      "https://rpc.beaverbuild.org",
+      "https://rpc.bombora.build",
+      "https://rpc.bobthebuilder.xyz",
+    ].sort();
+    function assertRequests(txs: string[]): void {
+      assert.deepEqual(requests.map((request) => request.url).sort(), expectedUrls);
+      for (const request of requests) {
+        const body = JSON.parse(String(request.init?.body));
+        assert.equal(body.method, "eth_sendBundle");
+        assert.deepEqual(body.params, [{ txs, blockNumber: "0x65" }]);
+        const headers = request.init?.headers as Record<string, string>;
+        assert.equal(headers["X-Flashbots-Signature"],
+          request.url === "https://relay.flashbots.net" ? WALLET + ":mock-auth" : undefined);
+      }
+    }
+    assertRequests(["0x01"]);
+    checks++;
+
+    reset();
+    failingBuilderUrl = TITAN_URL;
+    const transportFailure = await submitStandaloneBundle(params);
+    assert.equal(transportFailure.filter((entry) => entry.accepted).length, 4);
+    assert.equal(transportFailure.find((entry) => entry.builder === "titan")?.error, "fetch failed");
+    assertRequests(["0x01"]);
+    checks++;
+
+    for (const [receipt, error] of [
+      [{ result: { bundleHash: BUNDLE_HASH } }, "response_id_mismatch"],
+      [{ id: 2, result: { bundleHash: BUNDLE_HASH } }, "response_id_mismatch"],
+      [{ id: 1, result: { bundleHash: "mock" } }, "missing_or_invalid_bundle_hash"],
+    ] as const) {
+      reset();
+      titanReceipt = JSON.stringify(receipt);
+      const invalid = await submitStandaloneBundle(params);
+      assert.equal(invalid.filter((entry) => entry.accepted).length, 4);
+      const titan = invalid.find((entry) => entry.builder === "titan");
+      assert.equal(titan?.accepted, false);
+      assert.equal(titan?.receiptStatus, "unconfirmed");
+      assert.equal(titan?.error, error);
+      assertRequests(["0x01"]);
+      checks++;
+    }
+
+    reset();
+    delete process.env.SEARCHER_LIVE_SESSION_PATH;
+    delete process.env.SEARCHER_LIVE_SESSION_ID;
+    const backrun = await submitBundle({ ...params, victimRawTx: "0x02" });
+    assert.equal(backrun.filter((entry) => entry.accepted).length, 5);
+    assertRequests(["0x02", "0x01"]);
     checks++;
 
     for (const [patch, code] of [
@@ -181,6 +248,16 @@ async function main(): Promise<void> {
     await blocked("balance-limit");
     reset();
     await blocked("balance-limit", { bribeWei: 1_000_000_000_000_000n });
+    reset();
+    const measuredBid = { ...params, bribeWei: 740_000_000_000_000n,
+      expectedProfitEth: 1_000_000_000_000_000n };
+    await buildSignedBackrunTx(measuredBid); // Legacy diluted fee fits the half-balance floor.
+    assert.equal(signs, 1);
+    reset();
+    await assert.rejects(buildSignedBackrunTx({ ...measuredBid, bribeGasBasis: "measured-gas" }),
+      { message: "bounded-live:balance-limit" });
+    assert.equal(signs + auths + sends, 0); // Higher fee must still cover the whole 30% buffer.
+    checks++;
     reset();
     balance = BASELINE / 2n + 130_000_000_000_000n;
     await buildSignedBackrunTx(params);

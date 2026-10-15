@@ -19,6 +19,8 @@ import {RuntimeAmountVM} from "./RuntimeAmountVM.sol";
 ///   field1 (1B): callback_active flag
 ///   field2 (3B): resume_offset — calldata offset where sub-script bytes start
 ///   field3 (3B): auxiliary_offset
+/// The low 160 bits hold the authenticated runtime callback target. Legacy
+/// state updates preserve those bits; zero means legacy callback semantics.
 contract BotVM is RuntimeAmountVM {
     address public immutable owner;
 
@@ -48,6 +50,12 @@ contract BotVM is RuntimeAmountVM {
         _runVM(script);
     }
 
+    /// Script follows the selector directly, without ABI offset/length/padding.
+    /// Runtime callback payloads and their amount/hash offsets are unchanged.
+    function executeRaw() external onlyOwner {
+        _runVM(msg.data[4:]);
+    }
+
     /// @notice Self-call entry: run a sub-script. Only callable by self.
     ///         Original bot uses selector 0xcabcfc90 for this path.
     function execSubscript(bytes calldata script) external {
@@ -70,7 +78,9 @@ contract BotVM is RuntimeAmountVM {
     ///   - unlockCallback(bytes):                        field2 = 68
     ///   - uniswapV3SwapCallback(int256, int256, bytes): field2 = 132
     fallback() external payable {
-        (,uint24 field2,) = _loadState();
+        uint256 state;
+        assembly ("memory-safe") { state := tload(STATE_SLOT) }
+        uint24 field2 = uint24(state >> 224);
 
         if (field2 == 0) return; // no pending callback — empty return
 
@@ -78,17 +88,12 @@ contract BotVM is RuntimeAmountVM {
         // The ABI-encoded bytes length sits 32 bytes before that.
         uint256 scriptLen;
         uint256 scriptStart = uint256(field2);
-        assembly {
+        assembly ("memory-safe") {
             scriptLen := calldataload(sub(scriptStart, 32))
         }
-        _checkRuntimeCallback(scriptStart, scriptLen);
-
-        // Copy sub-script from calldata to memory
-        bytes memory script = new bytes(scriptLen);
-        assembly {
-            calldatacopy(add(script, 32), scriptStart, scriptLen)
-        }
-
+        // Authenticate and execute the same allocation, rather than copying
+        // the callback once to hash it and a second time to interpret it.
+        bytes memory script = _checkRuntimeCallback(scriptStart, scriptLen, state);
         _runVM(script);
     }
 
@@ -101,6 +106,34 @@ contract BotVM is RuntimeAmountVM {
     function _runVM(bytes memory script) internal {
         uint256 ip = 0; // instruction pointer (avoid 'pc' — reserved in Yul)
         uint256 end = script.length;
+
+        // The compiler's runtime entry is normally a single 0x0e program.
+        // Keep the multi-opcode interpreter for all other scripts. Exact
+        // length matching prevents trailing actions from being skipped.
+        // Call-only 0x0f has neither an unused amount nor a duplicate length.
+        uint256 start;
+        uint256 size;
+        uint256 amount;
+        bool validVersion = true;
+        assembly ("memory-safe") {
+            let header := mload(add(script, 32))
+            let first := byte(0, header)
+            if and(gt(end, 2), eq(first, 15)) {
+                start := 1
+                size := sub(end, 1)
+                validVersion := eq(byte(1, header), 2)
+            }
+            if and(gt(end, 35), eq(first, 14)) {
+                size := shr(232, mload(add(script, 65)))
+                amount := mload(add(script, 33))
+                if eq(size, sub(end, 36)) { start := 36 }
+            }
+        }
+        require(validVersion, "runtime sequence version");
+        if (start != 0) {
+            _runRuntimeProgramSlice(script, start, size, amount);
+            return;
+        }
 
         while (ip < end) {
             uint8 op = uint8(script[ip]);
@@ -143,9 +176,10 @@ contract BotVM is RuntimeAmountVM {
                 // ── RETURN ──
                 // Layout: [data_len:3][data:N]
                 uint24 dataLen = _readUint24(script, ip);
+                require(ip + 3 + dataLen <= end, "script return bounds");
                 uint256 ipLocal = ip; // shadow for assembly
                 // Copy return data and halt
-                assembly {
+                assembly ("memory-safe") {
                     let dataStart := add(add(script, 32), add(ipLocal, 3))
                     return(dataStart, dataLen)
                 }
@@ -249,15 +283,16 @@ contract BotVM is RuntimeAmountVM {
                 require(ip + 35 <= end, "runtime program header");
                 uint256 size = _readUint24(script, ip + 32);
                 require(ip + 35 + size <= end, "runtime program bounds");
-                _runRuntimeProgram(_readBytes(script, ip + 35, size), _readUint256(script, ip));
+                _runRuntimeProgramSlice(script, ip + 35, size, _readUint256(script, ip));
                 ip += 35 + size;
             }
             else if (op == 0x0d) {
                 // ── REVERT ──
                 // Layout: [data_len:3][data:N]
                 uint24 dataLen = _readUint24(script, ip);
+                require(ip + 3 + dataLen <= end, "script revert bounds");
                 uint256 ipLocal = ip;
-                assembly {
+                assembly ("memory-safe") {
                     let dataStart := add(add(script, 32), add(ipLocal, 3))
                     revert(dataStart, dataLen)
                 }
@@ -284,10 +319,6 @@ contract BotVM is RuntimeAmountVM {
         require(_readAllowance(token, spender) == grant, "allowance not set");
     }
 
-    function _runtimeEnsureAllowance(address token, address spender, uint256 minimum, uint256 grant) internal override {
-        _ensureAllowance(token, spender, minimum, grant);
-    }
-
     function _readAllowance(address token, address spender) internal view returns (uint256 value) {
         (bool ok, bytes memory result) = token.staticcall(abi.encodeCall(IERC20.allowance, (address(this), spender)));
         require(ok && result.length == 32, "allowance read failed");
@@ -300,7 +331,7 @@ contract BotVM is RuntimeAmountVM {
         if (result.length == 0) return true;
         if (result.length != 32) return false;
         uint256 returned;
-        assembly { returned := mload(add(result, 32)) }
+        assembly ("memory-safe") { returned := mload(add(result, 32)) }
         return returned == 1;
     }
 
@@ -395,7 +426,7 @@ contract BotVM is RuntimeAmountVM {
     ///      Exact replica of the original bot's bit layout.
     function _loadState() internal view returns (uint8 field1, uint24 field2, uint24 field3) {
         uint256 word;
-        assembly {
+        assembly ("memory-safe") {
             word := tload(STATE_SLOT)
         }
         field1 = uint8(word >> 248);
@@ -406,8 +437,10 @@ contract BotVM is RuntimeAmountVM {
     /// @dev Pack and store fields into TSLOT 0x1337.
     function _saveState(uint8 f1, uint24 f2, uint24 f3) internal {
         uint256 packed = (uint256(f1) << 248) | (uint256(f2) << 224) | (uint256(f3) << 200);
-        assembly {
-            tstore(STATE_SLOT, packed)
+        assembly ("memory-safe") {
+            // Legacy opcodes may change their own fields, never disable the
+            // surrounding runtime call's authenticated callback scope.
+            tstore(STATE_SLOT, or(packed, and(tload(STATE_SLOT), 0xffffffffffffffffffffffffffffffffffffffff)))
         }
     }
 
@@ -415,28 +448,32 @@ contract BotVM is RuntimeAmountVM {
 
     /// @dev Read 20-byte address from script at offset.
     function _readAddress(bytes memory script, uint256 offset) internal pure returns (address addr) {
-        assembly {
+        require(offset <= script.length && script.length - offset >= 20, "script address bounds");
+        assembly ("memory-safe") {
             addr := shr(96, mload(add(add(script, 32), offset)))
         }
     }
 
     /// @dev Read 3-byte uint24 from script at offset.
     function _readUint24(bytes memory script, uint256 offset) internal pure returns (uint24 val) {
-        assembly {
+        require(offset <= script.length && script.length - offset >= 3, "script size bounds");
+        assembly ("memory-safe") {
             val := shr(232, mload(add(add(script, 32), offset)))
         }
     }
 
     /// @dev Read 12-byte uint96 from script at offset.
     function _readUint96(bytes memory script, uint256 offset) internal pure returns (uint96 val) {
-        assembly {
+        require(offset <= script.length && script.length - offset >= 12, "script value bounds");
+        assembly ("memory-safe") {
             val := shr(160, mload(add(add(script, 32), offset)))
         }
     }
 
     /// @dev Read 32-byte uint256 from script at offset.
     function _readUint256(bytes memory script, uint256 offset) internal pure returns (uint256 val) {
-        assembly {
+        require(offset <= script.length && script.length - offset >= 32, "script word bounds");
+        assembly ("memory-safe") {
             val := mload(add(add(script, 32), offset))
         }
     }
@@ -447,14 +484,10 @@ contract BotVM is RuntimeAmountVM {
         pure
         returns (bytes memory result)
     {
+        require(offset <= script.length && length <= script.length - offset, "script slice bounds");
         result = new bytes(length);
-        assembly {
-            let src := add(add(script, 32), offset)
-            let dst := add(result, 32)
-            // Copy word by word
-            for { let i := 0 } lt(i, length) { i := add(i, 32) } {
-                mstore(add(dst, i), mload(add(src, i)))
-            }
+        assembly ("memory-safe") {
+            mcopy(add(result, 32), add(add(script, 32), offset), length)
         }
     }
 

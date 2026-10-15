@@ -29,6 +29,8 @@ export interface SimResult {
 export interface SubmitResult {
   builder: string;
   accepted: boolean;
+  /** RPC receipt only; an unconfirmed response is not proof of builder rejection. */
+  receiptStatus?: "rpc_acknowledged" | "rpc_rejected" | "unconfirmed";
   bundleHash?: string;
   /** Signed transaction hash in production; stable unsigned diagnostic ID in dry-run. */
   backrunTxHash?: string;

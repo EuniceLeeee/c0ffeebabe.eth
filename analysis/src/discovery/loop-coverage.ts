@@ -187,7 +187,9 @@ export const OUR_VAULT_ADDRESSES: ReadonlySet<string> = new Set(
 const PRODUCTION_SWAP_LINEAGES: ReadonlySet<string> = new Set(
   listDescriptors()
     .filter((descriptor) => descriptor.edgeKind === "swap" && descriptor.action === "swap")
-    .map((descriptor) => descriptor.lineage),
+    // Family-owned swap descriptors may namespace their lineage; compare the
+    // semantic lineage without treating descriptor presence as instance admission.
+    .map((descriptor) => descriptor.lineage.replace(/^custom-swap:/, "")),
 );
 
 const PRODUCTION_FLASH_LINEAGES: ReadonlySet<string> = new Set(
@@ -249,6 +251,14 @@ export interface ObservedVenue {
 /** @deprecated Use ObservedVenue. The alias no longer exposes a scalar class. */
 export type ClassifiedVenue = ObservedVenue;
 
+export interface UnassessedProtocolVenue {
+  addr: string;
+  topic0: string;
+  productionRoutability: "unassessed";
+  reason: "protocol_identity_or_instance_not_attested";
+  in_graph: null;
+}
+
 export interface TxLoopCoverage {
   tx: string;
   /** OUR vault addresses that emitted a real ERC4626 event in this transaction. */
@@ -267,8 +277,10 @@ export interface TxLoopCoverage {
   fundingRouteGaps: ObservedFundingVenue[];
   /** Distinct emitter addresses with at least one observed swap event. */
   observedSwapEmitterCount: number;
-  /** Named protocol events whose emitter has no matching registered adapter. */
+  /** Identity-attested protocol events whose action has no matching adapter. */
   protocolVenueGaps: Array<{ addr: string; topic0: string }>;
+  /** Recognized protocol events without attested emitter/instance identity. */
+  unassessedProtocolVenues: UnassessedProtocolVenue[];
   /** One entry per unrecognized topic (or role-less known topic) needing trace inspection. */
   unclassifiedEmitters: Array<{ addr: string; topic0: string }>;
   /** Receipt evidence maps every named protocol leg to an adapter. Still requires a trace. */
@@ -305,6 +317,7 @@ export function classifyTxLoopCoverage(input: VenueScanInput): TxLoopCoverage {
   const vaults = new Set<string>();
   const protocolVenues = new Set<string>();
   const protocolVenueGaps: Array<{ addr: string; topic0: string }> = [];
+  const unassessedProtocolVenues: UnassessedProtocolVenue[] = [];
   const unclassifiedEmitters: Array<{ addr: string; topic0: string }> = [];
 
   for (const [addr, topicSet] of topicsByEmitter) {
@@ -359,7 +372,12 @@ export function classifyTxLoopCoverage(input: VenueScanInput): TxLoopCoverage {
         if (entry?.adapter === "erc4626") vaults.add(addr);
       }
       for (const topic0 of namedProtocolTopics) {
-        if (!hasRegisteredProtocolEvent(entry, topic0)) {
+        if (!entry) {
+          unassessedProtocolVenues.push({
+            addr, topic0, productionRoutability: "unassessed",
+            reason: "protocol_identity_or_instance_not_attested", in_graph: null,
+          });
+        } else if (!hasRegisteredProtocolEvent(entry, topic0)) {
           protocolVenueGaps.push({ addr, topic0 });
         }
       }
@@ -388,9 +406,11 @@ export function classifyTxLoopCoverage(input: VenueScanInput): TxLoopCoverage {
     (venue) => venue.productionRoutability === "unassessed",
   );
   const sortedProtocolGaps = protocolVenueGaps.sort(compareEmitterTopic);
+  const sortedUnassessedProtocols = unassessedProtocolVenues.sort(compareEmitterTopic);
   const sortedUnclassified = unclassifiedEmitters.sort(compareEmitterTopic);
   const sortedProtocolVenues = [...protocolVenues].sort();
-  const protocolAdapterCandidate = sortedProtocolVenues.length >= 1 && sortedProtocolGaps.length === 0;
+  const protocolAdapterCandidate = sortedProtocolVenues.length >= 1
+    && sortedProtocolGaps.length === 0 && sortedUnassessedProtocols.length === 0;
 
   return {
     tx: input.txHash ?? "",
@@ -403,6 +423,7 @@ export function classifyTxLoopCoverage(input: VenueScanInput): TxLoopCoverage {
     fundingRouteGaps,
     observedSwapEmitterCount: new Set(sortedObservedSwaps.map((venue) => venue.addr)).size,
     protocolVenueGaps: sortedProtocolGaps,
+    unassessedProtocolVenues: sortedUnassessedProtocols,
     unclassifiedEmitters: sortedUnclassified,
     protocolAdapterCandidate,
     receiptRouteCoverageComplete: protocolAdapterCandidate
