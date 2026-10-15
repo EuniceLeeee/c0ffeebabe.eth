@@ -454,7 +454,12 @@
       "searcher:set-basic-recipient-historical": "node --import tsx src/searcher/venues/protocols/set-redemption-family/test/basic-recipient-historical.ts"
     },
     "reuseExistingReadyEntry": "test:set-redemption-family:recipient-ready",
-    "claim": "Only three new own entries; existing Basic/Legacy default tools and package scripts retained."
+    "claim": "Only three new own entries; existing Basic/Legacy default tools and package scripts retained.",
+    "test:erc4626-family:standard-recipient-contract": "tsx src/searcher/venues/protocols/erc4626-family/test/standard-recipient-contract.ts",
+    "test:erc4626-family:standard-recipient-ready": "tsx src/searcher/venues/protocols/erc4626-family/test/standard-recipient-ready.ts",
+    "test:erc4626-family:standard-recipient-historical": "tsx src/searcher/venues/protocols/erc4626-family/test/standard-recipient-historical.ts",
+    "test:erc4626-family:standard-insufficient-contract": "tsx src/searcher/venues/protocols/erc4626-family/test/standard-insufficient-contract.ts",
+    "test:erc4626-family:standard-recipient-observations": "tsx --test src/searcher/venues/protocols/erc4626-family/test/standard-recipient-observations.test.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

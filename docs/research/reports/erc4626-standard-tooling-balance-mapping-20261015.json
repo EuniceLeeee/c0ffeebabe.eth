@@ -1,0 +1,68 @@
+{
+  "kind": "tooling_defect",
+  "status": "fixed; canonical6 and real same-N supplement passed; pending actual codify_commit",
+  "title": "Access-list fixture must distinguish the balance mapping from other getter reads",
+  "failure": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence93/0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d-recipient93.json",
+    "sha256": "8d51e4c8dd9bfe298e684da6e9b092a36a7c9b449dfcacf8f9bf48b0c8564577",
+    "stage": "quoted:deposit:original-event-input:insufficient-cost",
+    "cause": "Actual getter accessList2keys rejected by single-key funding fixture; original positive successfully reused, no new Strict execution",
+    "drained": true,
+    "forkDrained": true
+  },
+  "fix": "Match actual accessed keys to generic address->uint256 mapping candidates, require unique key; preserve dual-sentinel/protected-protocol-balance/totalSupply proofs; never modify other read keys or swallow RPC errors.",
+  "codify_commit": null,
+  "freshReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/root-mapping-review99.json",
+    "sha256": "09af0dafbf957edfd9cb337a623424effd743ff602a78aa143fe62c326762302",
+    "verdict": "fresh-source-review-no-blocker"
+  },
+  "canonical": {
+    "observer94-checks.json": {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence94/observer94-checks.json",
+      "sha256": "3d77c38cc13424d76edb8fa34ca91a0b4831178be4116193aed896fda63cf1b3"
+    },
+    "observer94-insufficient-contract.log": {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence94/observer94-insufficient-contract.log",
+      "sha256": "e4c844096a5f0a6d4566e9e87eb63930b9e058c82da30d499718ecb5a77e32df"
+    },
+    "observer94-selection.json": {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence94/observer94-selection.json",
+      "sha256": "5fe76efa0b26b2b4fbdb656455fa4a55216347671d00c54f0a2467c6a47becae"
+    }
+  },
+  "actual": {
+    "file": "evidence94/0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d-recipient94.json",
+    "sha256": "3aa74f73f4a55aeb37ff13cc4ed52a6ddc6f90732118b2abaaae69b2bea84629",
+    "independentInsufficientRejections": 16,
+    "slotProofs": [
+      {
+        "token": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "key": "0xfbb6d79c2d5fc9f9d8e4505ed798f1fc4cad12b6dc532657cb068de9cb9f4ab3",
+        "actualAccessKeys": [
+          "0x000000000000000000000000000000000000000000000000000000000000000a",
+          "0xfbb6d79c2d5fc9f9d8e4505ed798f1fc4cad12b6dc532657cb068de9cb9f4ab3"
+        ],
+        "probes": [
+          "717171717171",
+          "919191919193"
+        ],
+        "protectedBalance": "0",
+        "supply": "0x0000000000000000000000000000000000000000000000000139ba31cb3cb614"
+      },
+      {
+        "token": "0x2bD3A43863c07B6A01581FADa0E1614ca5DF0E3d",
+        "key": "0x3ba7a8f983096cb698cbbd878bc5d7e59cbf792187cd22f642bd44b8021b1db1",
+        "actualAccessKeys": [
+          "0x3ba7a8f983096cb698cbbd878bc5d7e59cbf792187cd22f642bd44b8021b1db1"
+        ],
+        "probes": [
+          "717171717171",
+          "919191919193"
+        ],
+        "protectedBalance": "0",
+        "supply": "0x000000000000000000000000000000000000000000006d1f06ff35ae1203ea7e"
+      }
+    ]
+  }
+}

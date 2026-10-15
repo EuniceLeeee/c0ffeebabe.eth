@@ -8309,7 +8309,7 @@
         "familyId": "protocol:erc4626",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "88dc6e8186453f0ffffc7cba59a7b0b619ddd5b39432cb3204686eaf6bc4e936",
+        "contentHash": "d9624c45f2d46fe18cc85843c392c663ee3fd9179aa971098ae6741a1ebc50e6",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -16573,5 +16573,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "bf5b518468094936985b6acf19c40fa5a8cac4e8039485359a9f8a0de14b914e"
+  "artifactHash": "3ce8132cba8fe0557ad64747a871448ce9efac22f4de157ed8cf2fde4d0fe867"
 }

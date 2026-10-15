@@ -1,0 +1,80 @@
+{
+  "status": "compatible-standard-only-wrapper-change",
+  "scope": "Current source view for existing Frax Custodian/InfiniFi evidence; no old hashes rewritten and no new EVM claim",
+  "before": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/actual/listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
+    "sha256": "ad052a5817001600ed9883c3162577d7980b2258f42d46e3f2018b356f48e062"
+  },
+  "after": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/candidate/listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
+    "sha256": "04b818ef65ecffe236377424ba9a6e481141d9de349a35656be08281d10066b8"
+  },
+  "currentSource": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/production-source97.json",
+    "sha256": "487afab9784fa4b1720c6f95fdc289d4cc899dd1e2f2994bac6e6cfdc3908828"
+  },
+  "priorFraxSource": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/source90/production-source.json",
+    "sha256": "79e57ce20c4c34f18b93958dff1a3f24dad07b3b2539f8413fc6cfca912fa818"
+  },
+  "dispatchAndQuotedBodyByteIdentical": true,
+  "dispatchSha256": "b7119fa368462fc87b09e181f7bd6274a2d11abf855d83fb398344106632e2a9",
+  "finding": "Only standardRecipientProgram adds external-recipient actor-old-output/recipient-old-input guards. InfiniFi and Custodian branches return earlier via unchanged own programs. Default/quoted dispatch body also byte-identical.",
+  "unchangedVariantFiles": [
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
+      "sha256": "2e7bcb43dee7f332e2cedce6e4a4bf9301013f11d2d92601e04a8ba2fd25f0e1"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian.ts",
+      "sha256": "0d5c0806203c498836853282676a736084bdce0be1a782971389eeefd21730cc"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
+      "sha256": "18f472bdc8ea14762195b84f4881d4514f8f52116abe5095e0ffc86c2c0d5d36"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+      "sha256": "56559ed4ed13939d32553cd37492be7f71a1e1e7c71e811f59dd985bfebcef3f"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/binding.ts",
+      "sha256": "9a10b80d659ad840a7668bff0703fe45f4a25d58e871b5117e8c46d83bb41a53"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/exact.ts",
+      "sha256": "f212054cb66eed928d7d76281e75c3bc498d8c1090f9917d818e1cc5bc092346"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/types.ts",
+      "sha256": "004fae4ab809d4114ce4bc679227ed36ff5df370deba02cb6e753886813b58f4"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/abi.ts",
+      "sha256": "947cd09e9876b001ec16ec07afbb5320000d301c06b184d63bbbd662c8c6fa96"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/identity.ts",
+      "sha256": "aaa7c0f8ba4595906beabfe3487c5a8eea148e6164c4c26fbbc14310b42281ae"
+    }
+  ],
+  "priorEvidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/independent-raw-review89.json",
+      "sha256": "630cab77a966ede7feb19234fc70cfa2cc12b53266c81be654ddcdb4b386cabb"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/independent-default-raw-review90.json",
+      "sha256": "1c5138105a7e7360ee20f3438b324af6d2ead22383664a05a2979a61852f50b0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi-delivery76/infinifi-recipient-correctness-20261015.json",
+      "sha256": "bb8f89f630459f07a17de91fa5f8e2689a2e9912ac1cd7621dfc4814ca761784"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi-delivery76/infinifi-recipient-independent-20261015.json",
+      "sha256": "015d0926b9cb627ead1d7965070ded113a1fc3887e9be75d1ccf83e1873dff88"
+    }
+  ],
+  "limits": "This certifies the ad052→04b818 standard-only change. Earlier source compatibility remains as separately recorded in original reports."
+}

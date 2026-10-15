@@ -1,0 +1,404 @@
+{
+  "scope": "Non-author supplement to root-last-two109. Independently decoded48 positive protocol events and96 supply deltas, verified both current deployed interfaces/implementation bytes, protocol-specific event recipient semantics, MAX approval, metadata/runtime and1244-file source. No EVM cases repeated.",
+  "rootBalanceReviews": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/root-last-two109.json",
+      "sha256": "7ef90d1c0d25624f4918af3caebd6f235c6382978c95a87395bdd98dfc9df018"
+    }
+  ],
+  "productionSources": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/production-source92.json",
+      "sha256": "38fe8ae8709462e453df7ac6d6ef9a137c073d31036ba477a3ebae185182e9fc",
+      "tree": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+      "count": 1244
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence95/production-source95.json",
+      "sha256": "487afab9784fa4b1720c6f95fdc289d4cc899dd1e2f2994bac6e6cfdc3908828",
+      "tree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "count": 1244
+    }
+  ],
+  "artifact": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/out/BotVM.sol/BotVM.json",
+    "sha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+  },
+  "metadata": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+      "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+      "keccak256": "0xf139ad9c54d2b073a8dfff0c39e5742d4c270e92daa957817be88f4a80355565"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+      "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+    }
+  ],
+  "runtimeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+  "results": [
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/0x90551c1795392094fe6d29b758eccd233cfaa260-recipient97.json",
+        "sha256": "69723da5dc70c3475d96654c7ea1e42f0355f6364f53a5397a980a01e0f513c8"
+      },
+      "source": {
+        "number": 26030897,
+        "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+      },
+      "target": "0x90551c1795392094FE6D29B758EcCD233cFAa260",
+      "verifiedDirections": {
+        "deposit": true,
+        "redeem": true
+      },
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0x90551c1795392094FE6D29B758EcCD233cFAa260",
+          "codeHash": "0x22f5fcde01d5702c916f85fff3958152ecb7fd03612e5600b1e72d1536ec2097",
+          "bytes": 21098
+        },
+        {
+          "role": "asset",
+          "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "codeHash": "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23",
+          "bytes": 3124
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "positive": 32,
+      "events": 32,
+      "supplyChecks": 64,
+      "approvalEvents": 16,
+      "approvalValues": [
+        "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+      ],
+      "nonUserSupplyChanges": [],
+      "verifiedPublicInterface": {
+        "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-a/blockscout/0x90551c1795392094fe6d29b758eccd233cfaa260.json",
+        "sha256": "9b2bc3de35fe1cbf6cd2a9aba99b5df6ba9bb91b72d077f9cc4d7da133781227",
+        "runtimeAddress": "0x90551c1795392094FE6D29B758EcCD233cFAa260",
+        "runtimeKeccak256": "0x22f5fcde01d5702c916f85fff3958152ecb7fd03612e5600b1e72d1536ec2097",
+        "byteForByteMatchToHistorical": true,
+        "verifiedName": "fTokenNativeUnderlying",
+        "actuallyTestedDirections": [
+          "deposit",
+          "redeem"
+        ],
+        "deferredSettlementClaim": false
+      },
+      "additionalSameStateDependencies": {
+        "target": "0x90551c1795392094FE6D29B758EcCD233cFAa260",
+        "source": {
+          "number": 26030897,
+          "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+        },
+        "profile": "fTokenNativeUnderlying",
+        "reads": [
+          {
+            "method": "getData",
+            "data": "0x00000000000000000000000052aa899454998be5b000ad077a46bbe360f4e49700000000000000000000000054b91a0d94cb471f37f949c60f7fa7935b551d030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000022d473030f116ddee9f6b43ac78ba3000000000000000000000000264786ef916af64a1db19f513f24a3681734ce92000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002f79a3a591f45e1416000000000000000000000000000000000000000000000000000000fbd7f5edb7000000000000000000000000000000000000000000000000000000fbd7f5edb6",
+            "values": [
+              "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497",
+              "0x54B91A0D94cb471F37f949c60F7Fa7935b551D03",
+              "0x0000000000000000000000000000000000000000",
+              "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+              "0x264786EF916af64a1DB19F513F24a3681734ce92",
+              false,
+              "875762002810430690326",
+              "1081660009911",
+              "1081660009910"
+            ]
+          }
+        ],
+        "dependencies": [
+          {
+            "role": "getData:liquidity_",
+            "address": "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497",
+            "codeHash": "0xb3a458c72a3a0b3aa773f2c3e21d0eadfb06dacdc4568f447d9019d1c1451c35",
+            "bytes": 4462
+          },
+          {
+            "role": "getData:lendingFactory_",
+            "address": "0x54B91A0D94cb471F37f949c60F7Fa7935b551D03",
+            "codeHash": "0x8489c155ce8c58e8fd4a6dc6799c1e5d23259b55f69ceaeb8d525db13da01e9a",
+            "bytes": 8305
+          },
+          {
+            "role": "getData:permit2_",
+            "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+            "codeHash": "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131",
+            "bytes": 9152
+          },
+          {
+            "role": "getData:rebalancer_",
+            "address": "0x264786EF916af64a1DB19F513F24a3681734ce92",
+            "codeHash": "0xd3acf4a091e11e7c6e6942cc82e5f454b757f358fbfd431023c9b37c3dc0cbee",
+            "bytes": 190
+          }
+        ]
+      }
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/0xc58d044404d8b14e953c115e67823784dea53d8f-recipient97.json",
+        "sha256": "1d738c09a22da78df66dc4d797d39b255046026974d4222f955e2818c4a5872f"
+      },
+      "source": {
+        "number": 26130609,
+        "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+      },
+      "target": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+      "verifiedDirections": {
+        "deposit": true,
+        "redeem": false
+      },
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+          "codeHash": "0x5b0e439fb0a0a92b1bf954173ae0448302fac6a1387441ec83ab818b1e679763",
+          "bytes": 813
+        },
+        {
+          "role": "asset",
+          "address": "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3",
+          "codeHash": "0x6ca5462ff0355c610301f701d0bb1136becca144e195da86d240b5e604ef9625",
+          "bytes": 7567
+        },
+        {
+          "role": "implementation",
+          "address": "0xe91869F96806b480dd61d57E17919068d35AC09C",
+          "codeHash": "0x00a677195572fd5b32aded34c7ee75fb8e96bf7cea30c142f9cdcb2ffcc5835c",
+          "bytes": 16889
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x000000000000000000000000e91869f96806b480dd61d57e17919068d35ac09c"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "positive": 16,
+      "events": 16,
+      "supplyChecks": 32,
+      "approvalEvents": 16,
+      "approvalValues": [
+        "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+      ],
+      "nonUserSupplyChanges": [],
+      "verifiedPublicInterface": {
+        "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-a/blockscout/0xe91869f96806b480dd61d57e17919068d35ac09c.json",
+        "sha256": "79c9b061a7bf11f104f1d1d817fc13165b8095f70dc8072a7b61931520259f02",
+        "runtimeAddress": "0xe91869F96806b480dd61d57E17919068d35AC09C",
+        "runtimeKeccak256": "0x00a677195572fd5b32aded34c7ee75fb8e96bf7cea30c142f9cdcb2ffcc5835c",
+        "byteForByteMatchToHistorical": true,
+        "verifiedName": "Tranche",
+        "actuallyTestedDirections": [
+          "deposit"
+        ],
+        "deferredSettlementClaim": false
+      },
+      "additionalSameStateDependencies": {
+        "target": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+        "source": {
+          "number": 26130609,
+          "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+        },
+        "profile": "Tranche",
+        "reads": [
+          {
+            "method": "asset",
+            "data": "0x0000000000000000000000004c9edd5852cd905f086c759e8383e09bff1e68b3",
+            "values": [
+              "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"
+            ]
+          },
+          {
+            "method": "cdo",
+            "data": "0x000000000000000000000000908b3921aae4fc17191d382bb61020f2ee6c0e20",
+            "values": [
+              "0x908B3921aaE4fC17191D382BB61020f2Ee6C0e20"
+            ]
+          }
+        ],
+        "dependencies": [
+          {
+            "role": "asset:0",
+            "address": "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3",
+            "codeHash": "0x6ca5462ff0355c610301f701d0bb1136becca144e195da86d240b5e604ef9625",
+            "bytes": 7567
+          },
+          {
+            "role": "cdo:0",
+            "address": "0x908B3921aaE4fC17191D382BB61020f2Ee6C0e20",
+            "codeHash": "0x6d37585a31398052ff87ccf8d41bec026537111fee9d43a56d884e8e8b8552ca",
+            "bytes": 813
+          }
+        ]
+      },
+      "reusedSameStateNestedDependencyBindings": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
+        "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
+        "bindings": {
+          "cdo": "0x908B3921aaE4fC17191D382BB61020f2Ee6C0e20",
+          "strategy": "0xdbf4FB6C310C1C85D0b41B5DbCA06096F2E7099F",
+          "cooldown": "0xd6dAD17d025cDdDEd27305aEbAB8b277996A6fAF",
+          "isJunior": true,
+          "cooldownSeconds": "0",
+          "contracts": [
+            {
+              "label": "tranche",
+              "address": "0xc58d044404d8b14e953c115e67823784dea53d8f",
+              "source": {
+                "number": 26130609,
+                "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc",
+                "generation": 26130609
+              },
+              "codeHash": "0x5b0e439fb0a0a92b1bf954173ae0448302fac6a1387441ec83ab818b1e679763",
+              "codeBytes": 813,
+              "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+              "storage": "0x000000000000000000000000e91869f96806b480dd61d57e17919068d35ac09c",
+              "implementation": "0xe91869F96806b480dd61d57E17919068d35AC09C",
+              "implementationCodeHash": "0x00a677195572fd5b32aded34c7ee75fb8e96bf7cea30c142f9cdcb2ffcc5835c"
+            },
+            {
+              "label": "cdo",
+              "address": "0x908B3921aaE4fC17191D382BB61020f2Ee6C0e20",
+              "source": {
+                "number": 26130609,
+                "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc",
+                "generation": 26130609
+              },
+              "codeHash": "0x6d37585a31398052ff87ccf8d41bec026537111fee9d43a56d884e8e8b8552ca",
+              "codeBytes": 813,
+              "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+              "storage": "0x000000000000000000000000b3d4f2c2123f8c3ca85ae7a6d48aa2ef049c79ba",
+              "implementation": "0xb3d4f2C2123f8C3CA85aE7A6D48aA2ef049c79bA",
+              "implementationCodeHash": "0x467549a4b585f1b5379382b73341ca3cbf5739bcf4a3d0fe748be73b63f4fe35"
+            },
+            {
+              "label": "strategy",
+              "address": "0xdbf4FB6C310C1C85D0b41B5DbCA06096F2E7099F",
+              "source": {
+                "number": 26130609,
+                "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc",
+                "generation": 26130609
+              },
+              "codeHash": "0x1b2ce04c8c8bb77b7d81abd02ffe94e1cf284fd24836a7a84f732f4af3324561",
+              "codeBytes": 813,
+              "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+              "storage": "0x0000000000000000000000002b9796606c8480312a572742c00f606ef4adb107",
+              "implementation": "0x2B9796606c8480312a572742C00F606ef4ADB107",
+              "implementationCodeHash": "0xdf803a5aadb7898b328e794e877d9ca7d79b9021bed2c84e8c618eae7ea14ea0"
+            },
+            {
+              "label": "cooldown",
+              "address": "0xd6dAD17d025cDdDEd27305aEbAB8b277996A6fAF",
+              "source": {
+                "number": 26130609,
+                "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc",
+                "generation": 26130609
+              },
+              "codeHash": "0x95d041d841023ab3a89672fd37dafc8dc322d7342550b4233d2a4f991a68c420",
+              "codeBytes": 813,
+              "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+              "storage": "0x00000000000000000000000073dfde427d6f9271a451dd01415c8f26e6292219",
+              "implementation": "0x73dFDe427d6F9271a451DD01415c8f26E6292219",
+              "implementationCodeHash": "0x2cf38722dfee235a9c936f23b6a493b4146ca026229bbe5c66c48b0c11aa0afa"
+            },
+            {
+              "label": "payout",
+              "address": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+              "source": {
+                "number": 26130609,
+                "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc",
+                "generation": 26130609
+              },
+              "codeHash": "0xadc4989c92fab525a1a22b3f60f5b61b77f9eb11b693e8afeba5736ea4b502e3",
+              "codeBytes": 17299,
+              "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+              "storage": "0x0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        "scope": "Only same-block identity/implementation/state bindings reused; no claim generic deposit has independently executed Silo payout redemption."
+      }
+    }
+  ],
+  "result": "last-two-selected-targets-independent-interface-source-event-supply-review-pass",
+  "interfaceSources": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-a/sources/0x90551c1795392094fe6d29b758eccd233cfaa260/000-fTokenNativeUnderlying.sol",
+      "sha256": "914dfafff18f8c9253205952699c646873da37061cc8775c4293dc9a0d865949"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-a/sources/0xe91869f96806b480dd61d57e17919068d35ac09c/000-Tranche.sol",
+      "sha256": "a92482e689b0bdecb99829002e071dac2d4348fcfa188899ba843e2f5e1ed97c"
+    }
+  ],
+  "dependencyReads": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/dependencies110.jsonl",
+      "sha256": "a689b75af992871e125055173eefe00f1e5c88c0e4bd1e27aaa56c0a08d03561"
+    }
+  ],
+  "findings": [
+    "Fluid90551 current deployed bytecode exactly matches verified fTokenNativeUnderlying. Ordinary ERC4626 deposit pulls WETH then withdraws it into internal native Liquidity; ordinary redeem withdraws native to vault, emits inherited Withdraw(receiver=vault), deposits WETH then transfers to final receiver. This is protocol-internal wrapping, not Family native-asset or deferred settlement support.",
+    "Every Fluid redeem has exactly one ordered inherited Withdraw then WETH.Deposit(vault,Q) then WETH.Transfer(vault,actualReceiver,Q), with exact full share debit and independent receiver WETH receipt inherited from parent raw review. No event receiver substitution is accepted without actual unique ordered wrap/transfer proof.",
+    "WETH supply deltas independently equal Deposit minus Withdrawal logs, while fToken share supply equals all zero-address Transfer mint/burn. This correctly observes real WETH supply burn on deposit and mint on redeem; no false constant-underlying-supply assumption.",
+    "Fluid original96 59 raw requests are source/runtime/effects-bound saved reobservations. Final97 performs57 additional requests; earlier successes are not repeated or counted as fresh execution. Original observer failure preserved. Canonical observer regressions and fresh candidate review separately pinned.",
+    "StrataC58 current implementation e918 exact public bytecode matches historical proxy slot. Base deposit updates CDO accounting, transfers underlying and mints requested receiver shares. This generic Family selects deposit-only, consistent with actual alternate-payout redemption requiring its separate Silo Family. Do not upgrade generic redeem from mere ABI existence.",
+    "Same-block CDO/strategy/cooldown implementations from existing independently-accepted Silo evidence are reused only for dependency identity: exact target block, tranche code, proxy implementation, and independently re-read CDO code all match. No same-name or cross-block inference.",
+    "Actual standing MAX deposit approvals remain; no zero-clearance claim. No callback/deferred, opportunity, natural valuation, latency or performance claim."
+  ],
+  "priorObserverReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-event-review97.json",
+    "sha256": "94a2ab9aaf044846bb47d3b50a3b0b05664ab9a0a7791da11583bcd741c5efc7"
+  },
+  "limits": [
+    "Selected current18-target matrix has separate first6 and ten-target certificates; this certificate adds exactly two targets.",
+    "MainRevert remains declared failure; no newly claimed full historical storageDiff.",
+    "Native balances of protocol internals not separately claimed; executor/native and token receipt are actual checked boundaries.",
+    "Does not establish unsupported genericStrata redeem or direct native ERC4626 methods."
+  ],
+  "reconcile": {
+    "kind": "non-author read-only reconciliation of existing canonical97 results and root raw review",
+    "rootReview": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/root-last-two109.json",
+      "sha256": "7ef90d1c0d25624f4918af3caebd6f235c6382978c95a87395bdd98dfc9df018"
+    },
+    "canonical": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/checks97.json",
+      "sha256": "a7a1b39b05db1fc35e85f6411b747b96ca8c6b48a9754db2cf70b8af6823a04a"
+    }
+  }
+}

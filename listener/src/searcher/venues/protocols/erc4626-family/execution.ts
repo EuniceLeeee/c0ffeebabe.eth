@@ -29,12 +29,21 @@ export function standardRecipientProgram(d: Pick<Erc4626Descriptor, "vault" | "s
   const p = new RuntimeAmountProgram().constant(15, 1n).math("sub", 12, 0, 15).nativeBalance(9);
   p.call(input, abi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(1, 0)
     .call(output, abi.encodeFunctionData("balanceOf", [recipient]), { static: true }).load(2, 0);
+  const external = recipient.toLowerCase() !== executor.toLowerCase();
+  if (external) {
+    p.call(output, abi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(11, 0)
+      .call(input, abi.encodeFunctionData("balanceOf", [recipient]), { static: true }).load(10, 0);
+  }
   if (deposit) p.allowance(input, d.vault, 0, MAX_UINT256);
   p.call(d.vault, abi.encodeFunctionData(direction, deposit ? [0n, recipient] : [0n, recipient, executor]),
     { patches: [{ offset: 4, reg: 0 }] }).load(3, 0)
     .call(input, abi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(4, 0).math("sub", 4, 1, 4).equal(4, 0)
     .call(output, abi.encodeFunctionData("balanceOf", [recipient]), { static: true }).load(4, 0).math("sub", 4, 4, 2).equal(4, 3)
     .math("sub", 12, 4, 15).nativeBalance(4).equal(4, 9);
+  if (external) {
+    p.call(output, abi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(4, 0).equal(4, 11)
+      .call(input, abi.encodeFunctionData("balanceOf", [recipient]), { static: true }).load(4, 0).equal(4, 10);
+  }
   return p;
 }
 export const erc4626Execution: ExecutionSemantics<

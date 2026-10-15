@@ -1,0 +1,102 @@
+{
+  "result": "six-completed-targets-raw-token-and-native-accounting-pass",
+  "sourceBinding": {
+    "manifest": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/production-source92.json",
+    "sha256": "38fe8ae8709462e453df7ac6d6ef9a137c073d31036ba477a3ebae185182e9fc",
+    "tree": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+    "rows": 1244
+  },
+  "counts": {
+    "positive": 144,
+    "declaredReverts": 360,
+    "tokenDeltas": 576,
+    "nativeDeltas": 144,
+    "zeroInputReverts": 18
+  },
+  "reports": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003-recipient92.json",
+      "sha256": "7b7aeaab0dda71f725031e48ecb16ad8c5a1d6318f714d7575596782d037d647",
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "tx": "0xf391d02add5e6cbbd98836d9eacdb66de3e5d76ef3874134145a6563a126ee86",
+      "positive": 16,
+      "declaredReverts": 40,
+      "rawCasesReviewed": 58,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0x55c1b6e461a6334b567baf0feb5d728715446f05-recipient92.json",
+      "sha256": "3f82516205401b78e9ab954da6113b6d15e918c1e2592afaecb1b678712ee4ea",
+      "source": {
+        "number": 25887363,
+        "hash": "0xc03086eb3caae34426e0243f1c98c253a12531043373463e83e258ebcca500dd"
+      },
+      "tx": "0x7f814e6d8d5712e44897b82f512904b274b62dcd6164dbc891425dd3eb952a21",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2-recipient92.json",
+      "sha256": "1b04ee0e37e8693ae2e4169ec24a117de16cfaaf8806ed4897a50ec51713c624",
+      "source": {
+        "number": 25887356,
+        "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+      },
+      "tx": "0xb754ad99a4b4d671bb271d300e718d5011d1d9c3372bda5c66363663b94259ba",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f-recipient92.json",
+      "sha256": "c50f82848539920be0b177d02657311294f6c113f9fb4c80d20acb83a7f6a219",
+      "source": {
+        "number": 25887356,
+        "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+      },
+      "tx": "0x313ec84844ecef501c750fc619a1afb723cfe90bb866dffed9bcb06dc977f71a",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xd166337499e176bbc38a1fbd113ab144e5bd2df7-recipient92.json",
+      "sha256": "0b532adf7821a34405d56660edcdb8cd61cdbc617ba7b21bcbac56e4fabaa462",
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "tx": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+      "positive": 16,
+      "declaredReverts": 40,
+      "rawCasesReviewed": 58,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066-recipient92.json",
+      "sha256": "ccc92419d5302d07e4c45be61979b887175976ee99161d48ec801993dc093b14",
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "tx": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+      "positive": 16,
+      "declaredReverts": 40,
+      "rawCasesReviewed": 58,
+      "rawAdditional": 0
+    }
+  ],
+  "limits": [
+    "Only six completed target reports; failed seventh preserved separately.",
+    "Reviewed all sample executions against original strict outputs, exact full input, same-state quote/new receiver receipt, observed actor/recipient old assets/native unchanged.",
+    "Zero-input roundTrips reviewed separately; protocol logs/identity/metadata binding and synthetic safety review remain separately required; no independent historical storageDiff rollback claim.",
+    "Not natural valuation, opportunity, performance, all variants or all18 targets completion."
+  ]
+}

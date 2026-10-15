@@ -1,0 +1,862 @@
+{
+  "status": "pass-current-standard-erc4626-scoped-correctness",
+  "familyId": "protocol:erc4626",
+  "scope": "Existing standard ERC4626 deployments only; full-amount Exact+quoted/default runtime/direct self/external, current same-N production Ready. No opportunity or performance claim. Frax and InfiniFi separate evidence reused with source compatibility.",
+  "targetCount": 18,
+  "directionCount": 32,
+  "variantLabels": {
+    "standard/Fluid fToken ERC20 underlying": [
+      "0x2411802d8bea09be0af8fd8d08314a63e706b29c"
+    ],
+    "standard/Morpho VaultV2 v1": [
+      "0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d",
+      "0x55c1b6e461a6334b567baf0feb5d728715446f05",
+      "0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf",
+      "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f"
+    ],
+    "standard/GenericVaultBridgeToken": [
+      "0x2c24b57e2ccd1f273045af6a5f632504c432374f"
+    ],
+    "standard/Strata USDe tranche pair": [
+      "0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003",
+      "0xc58d044404d8b14e953c115e67823784dea53d8f"
+    ],
+    "standard/MetaMorphoV1_1": [
+      "0x812b2c6ab3f4471c0e43d4bb61098a9211017427"
+    ],
+    "standard/Fluid fTokenNativeUnderlying ERC20-WETH entry": [
+      "0x90551c1795392094fe6d29b758eccd233cfaa260"
+    ],
+    "standard/Euler EVault beacon instances": [
+      "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+      "0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2"
+    ],
+    "standard/Sky SUsds": [
+      "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd"
+    ],
+    "standard/UsdcVault": [
+      "0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe"
+    ],
+    "standard/SavingsUsdd": [
+      "0xc5d6a7b61d18afa11435a889557b068bb9f29930"
+    ],
+    "standard/StakedUSDat": [
+      "0xd166337499e176bbc38a1fbd113ab144e5bd2df7"
+    ],
+    "standard/Morpho VaultV2 v2": [
+      "0xe05fadf242331808f504661bea65972594869826"
+    ],
+    "standard/Strata standard tranche (new exit-mode version)": [
+      "0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066"
+    ]
+  },
+  "counts": {
+    "pass": 512,
+    "correctly-rejected": 1264,
+    "zero-input": 64,
+    "independent-insufficient-input-rejection-strict-resource-limited": 16
+  },
+  "results": [
+    {
+      "target": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+      "variant": "standard/Fluid fToken ERC20 underlying",
+      "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+      "block": {
+        "number": 26030897,
+        "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x2411802d8bea09be0af8fd8d08314a63e706b29c-recipient96.json",
+        "sha256": "d00cbe1910f7029c494d759ed014afc22852b9e535cfde1c9132bc9a844c42cd"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "new-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 0
+    },
+    {
+      "target": "0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d",
+      "variant": "standard/Morpho VaultV2 v1",
+      "tx": "0x844abb56e58a4e33e5b8dcaa27e4cc4dc8ce8d10b531b01d99023b2bd588c545",
+      "block": {
+        "number": 25887366,
+        "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence94/0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d-recipient94.json",
+        "sha256": "3aa74f73f4a55aeb37ff13cc4ed52a6ddc6f90732118b2abaaae69b2bea84629"
+      },
+      "counts": {
+        "pass": 32,
+        "independent-insufficient-input-rejection-strict-resource-limited": 16,
+        "correctly-rejected": 64,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "reused-prior-positive": 1,
+        "reused-prior-strict-resource-classification": 1,
+        "new-strict-execution": 95,
+        "new-strict-resource-classification": 15
+      },
+      "newRawStrict": 114,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "drained",
+      "sourcePinRef": 1
+    },
+    {
+      "target": "0x2c24b57e2ccd1f273045af6a5f632504c432374f",
+      "variant": "standard/GenericVaultBridgeToken",
+      "tx": "0xf8c2d77cd220781f380d60afa26bbb09cf944f9eeebd98d3a663701c8e99f484",
+      "block": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x2c24b57e2ccd1f273045af6a5f632504c432374f-recipient96.json",
+        "sha256": "80a3b741e6adfc39d26debb614a2ee2dbb02259b05157a3c111a8320b4740f7d"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "new-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 0
+    },
+    {
+      "target": "0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003",
+      "variant": "standard/Strata USDe tranche pair",
+      "tx": "0xf391d02add5e6cbbd98836d9eacdb66de3e5d76ef3874134145a6563a126ee86",
+      "block": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "directions": [
+        "deposit"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003-recipient92.json",
+        "sha256": "7b7aeaab0dda71f725031e48ecb16ad8c5a1d6318f714d7575596782d037d647"
+      },
+      "counts": {
+        "pass": 16,
+        "correctly-rejected": 40,
+        "zero-input": 2
+      },
+      "executionOrigins": {
+        "original-strict-execution": 56
+      },
+      "newRawStrict": 58,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 1
+    },
+    {
+      "target": "0x55c1b6e461a6334b567baf0feb5d728715446f05",
+      "variant": "standard/Morpho VaultV2 v1",
+      "tx": "0x7f814e6d8d5712e44897b82f512904b274b62dcd6164dbc891425dd3eb952a21",
+      "block": {
+        "number": 25887363,
+        "hash": "0xc03086eb3caae34426e0243f1c98c253a12531043373463e83e258ebcca500dd"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0x55c1b6e461a6334b567baf0feb5d728715446f05-recipient92.json",
+        "sha256": "3f82516205401b78e9ab954da6113b6d15e918c1e2592afaecb1b678712ee4ea"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "original-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 1
+    },
+    {
+      "target": "0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf",
+      "variant": "standard/Morpho VaultV2 v1",
+      "tx": "0x844abb56e58a4e33e5b8dcaa27e4cc4dc8ce8d10b531b01d99023b2bd588c545",
+      "block": {
+        "number": 25887366,
+        "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf-recipient96.json",
+        "sha256": "28543989287b1f7d50be31c272c01ee1598b9c70d498fc80f0b13bef3cee6b70"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "new-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 0
+    },
+    {
+      "target": "0x812b2c6ab3f4471c0e43d4bb61098a9211017427",
+      "variant": "standard/MetaMorphoV1_1",
+      "tx": "0xf8c2d77cd220781f380d60afa26bbb09cf944f9eeebd98d3a663701c8e99f484",
+      "block": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x812b2c6ab3f4471c0e43d4bb61098a9211017427-recipient96.json",
+        "sha256": "fb1a13e84f315452262f71c7de165de5fb422b6158544ca5128748c60cd9466d"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "new-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 0
+    },
+    {
+      "target": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+      "variant": "standard/Fluid fTokenNativeUnderlying ERC20-WETH entry",
+      "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+      "block": {
+        "number": 26030897,
+        "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/0x90551c1795392094fe6d29b758eccd233cfaa260-recipient97.json",
+        "sha256": "69723da5dc70c3475d96654c7ea1e42f0355f6364f53a5397a980a01e0f513c8"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "reobserved-saved-current-request": 57,
+        "new-strict-execution": 55
+      },
+      "newRawStrict": 57,
+      "savedRawReobserved": 59,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 2
+    },
+    {
+      "target": "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+      "variant": "standard/Euler EVault beacon instances",
+      "tx": "0x428e9a180d4da24d330450230c32f4c015ebcf4d34ddedc0d803cc66b018f4da",
+      "block": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x9bd52f2805c6af014132874124686e7b248c2cbb-recipient96.json",
+        "sha256": "cae4d4dbfec2794b66176b14c46ddccd21b8bad16003df53500bc6817484bdf6"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "new-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 0
+    },
+    {
+      "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+      "variant": "standard/Sky SUsds",
+      "tx": "0x50298ce419fc776024bd9570fcd094cf732b06e4ff09c884353778aca5218927",
+      "block": {
+        "number": 25898023,
+        "hash": "0xf73f6eb56286ba9025f4f0dfcc002cee3b35dbce8d9ff4dbbb113ba4a6885c1c"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xa3931d71877c0e7a3148cb7eb4463524fec27fbd-recipient96.json",
+        "sha256": "592c656fed00eed3ef52d46b8e13aca897e3e213db45ba8e558e037c62485678"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "new-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 0
+    },
+    {
+      "target": "0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2",
+      "variant": "standard/Euler EVault beacon instances",
+      "tx": "0xb754ad99a4b4d671bb271d300e718d5011d1d9c3372bda5c66363663b94259ba",
+      "block": {
+        "number": 25887356,
+        "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2-recipient92.json",
+        "sha256": "1b04ee0e37e8693ae2e4169ec24a117de16cfaaf8806ed4897a50ec51713c624"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "original-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 1
+    },
+    {
+      "target": "0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe",
+      "variant": "standard/UsdcVault",
+      "tx": "0x50298ce419fc776024bd9570fcd094cf732b06e4ff09c884353778aca5218927",
+      "block": {
+        "number": 25898023,
+        "hash": "0xf73f6eb56286ba9025f4f0dfcc002cee3b35dbce8d9ff4dbbb113ba4a6885c1c"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe-recipient96.json",
+        "sha256": "47d51259f69d2a2c963c5847351efd703919eedb77dcdd8b3f008323d970785d"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "new-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 0
+    },
+    {
+      "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+      "variant": "standard/Morpho VaultV2 v1",
+      "tx": "0x313ec84844ecef501c750fc619a1afb723cfe90bb866dffed9bcb06dc977f71a",
+      "block": {
+        "number": 25887356,
+        "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f-recipient92.json",
+        "sha256": "c50f82848539920be0b177d02657311294f6c113f9fb4c80d20acb83a7f6a219"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "original-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 1
+    },
+    {
+      "target": "0xc58d044404d8b14e953c115e67823784dea53d8f",
+      "variant": "standard/Strata USDe tranche pair",
+      "tx": "0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01",
+      "block": {
+        "number": 26130609,
+        "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+      },
+      "directions": [
+        "deposit"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/0xc58d044404d8b14e953c115e67823784dea53d8f-recipient97.json",
+        "sha256": "1d738c09a22da78df66dc4d797d39b255046026974d4222f955e2818c4a5872f"
+      },
+      "counts": {
+        "pass": 16,
+        "correctly-rejected": 40,
+        "zero-input": 2
+      },
+      "executionOrigins": {
+        "new-strict-execution": 56
+      },
+      "newRawStrict": 58,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 2
+    },
+    {
+      "target": "0xc5d6a7b61d18afa11435a889557b068bb9f29930",
+      "variant": "standard/SavingsUsdd",
+      "tx": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+      "block": {
+        "number": 25887370,
+        "hash": "0xf7e7ec2b6beabe318004a040dc0ed13bf17db9d4664ad223ba991fa2ef285b45"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xc5d6a7b61d18afa11435a889557b068bb9f29930-recipient96.json",
+        "sha256": "20f6c577a6ce0acd847581b6cafb6da296cc6aa345bbb29e7219eb1caf6f717b"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "new-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 0
+    },
+    {
+      "target": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+      "variant": "standard/StakedUSDat",
+      "tx": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+      "block": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "directions": [
+        "deposit"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xd166337499e176bbc38a1fbd113ab144e5bd2df7-recipient92.json",
+        "sha256": "0b532adf7821a34405d56660edcdb8cd61cdbc617ba7b21bcbac56e4fabaa462"
+      },
+      "counts": {
+        "pass": 16,
+        "correctly-rejected": 40,
+        "zero-input": 2
+      },
+      "executionOrigins": {
+        "original-strict-execution": 56
+      },
+      "newRawStrict": 58,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 1
+    },
+    {
+      "target": "0xe05fadf242331808f504661bea65972594869826",
+      "variant": "standard/Morpho VaultV2 v2",
+      "tx": "0x2aee44cae8118bdd958667dbf92874fa166b273df9543e40c9fd9454bfffed5a",
+      "block": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "directions": [
+        "deposit",
+        "redeem"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xe05fadf242331808f504661bea65972594869826-recipient96.json",
+        "sha256": "31813bc7fb255210de1a0df49ec985f8d8d736dc797d5a84187dad233d626fd7"
+      },
+      "counts": {
+        "pass": 32,
+        "correctly-rejected": 80,
+        "zero-input": 4
+      },
+      "executionOrigins": {
+        "new-strict-execution": 112
+      },
+      "newRawStrict": 116,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 0
+    },
+    {
+      "target": "0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066",
+      "variant": "standard/Strata standard tranche (new exit-mode version)",
+      "tx": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+      "block": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "directions": [
+        "deposit"
+      ],
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066-recipient92.json",
+        "sha256": "ccc92419d5302d07e4c45be61979b887175976ee99161d48ec801993dc093b14"
+      },
+      "counts": {
+        "pass": 16,
+        "correctly-rejected": 40,
+        "zero-input": 2
+      },
+      "executionOrigins": {
+        "original-strict-execution": 56
+      },
+      "newRawStrict": 58,
+      "savedRawReobserved": 0,
+      "drained": true,
+      "forkState": "not-started",
+      "sourcePinRef": 1
+    }
+  ],
+  "independentReviews": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/root-partial97.json",
+      "sha256": "259d9c43d0a2b81b375fe2f3ddddb7f01349a345ce8701301c73ac801f2aad5d"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-independent-six98.json",
+      "sha256": "35bf1182def6139308bf4997aad9a8cf9d28e6c9870bdd26f32b9a8a6a4cbbf0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/root-target7-independent104.json",
+      "sha256": "a8c48633677fe5aaa60703ca3fec9570acd4b4476802b93f50a71b71fdb01dca"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/root-partial105.json",
+      "sha256": "92a222ed9b75ee6674d139d21e9747371b02864ccc504472a6349bdd7a5dacb1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/root-last-two109.json",
+      "sha256": "7ef90d1c0d25624f4918af3caebd6f235c6382978c95a87395bdd98dfc9df018"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-event-review97.json",
+      "sha256": "94a2ab9aaf044846bb47d3b50a3b0b05664ab9a0a7791da11583bcd741c5efc7"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-independent-ten108.json",
+      "sha256": "4e71ccaf0e7bb020a8d6020ed2ae58bc912572ca70374bfc4817d4c4655327a7"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-independent-last-two110.json",
+      "sha256": "5e7ece888e40190fcfdbfee971253306257afdc333d42cc1e5c56fa2dd94ba3c"
+    }
+  ],
+  "sourceReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-source-review91.json",
+    "sha256": "0e263f46fa04a99df4ad9d8e2466600eb4d5703603d8e09bd42294ff06af6180"
+  },
+  "harnessReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-harness-review92.json",
+    "sha256": "0b57bb21bb018dcd9c2e1c4c6d915383c45928d903f243ea840c9432bd37481d"
+  },
+  "eventObserverFix": {
+    "diagnosis": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/event97-diagnosis.json",
+      "sha256": "5533566fc2a4fb0e478489c5fb2a8fa6b6ef8bfc0c539bef51f7ee991f414213"
+    },
+    "files": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/event97-handoff.json",
+      "sha256": "390a10277c6f5e1c1af534bad394f1940795893654b06255197877c641117f16"
+    },
+    "canonicalChecks": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/checks97.json",
+      "sha256": "a7a1b39b05db1fc35e85f6411b747b96ca8c6b48a9754db2cf70b8af6823a04a"
+    },
+    "sourceReview": "v1 fresh source review; final compact pending"
+  },
+  "limitations": [
+    "Original transaction amounts only; current quote/execution same state, no natural-price claim",
+    "Four targets current deposit-only; unavailable redemption directions not fabricated",
+    "Strict 16 USDT insufficient calls retain resource-limited classification; independent same-N full-A INVALID and storage/native rollback supplement separately",
+    "MainRevert ordinary negatives are trusted transport declared rollback, not independent storageDiff",
+    "Standard MAX allowance policy retained",
+    "No phase4 local or representative performance tests run"
+  ],
+  "allSourceClosure": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/source-closure98.json",
+    "sha256": "cc9bf6dd1c05420f22aa3680c189e397fc406c83f3dc002bd1f8a8319ef9dcee"
+  },
+  "variantCompatibility": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/frax-infinifi-standard-compat98.json",
+    "sha256": "f5dd223c04212c94b9ed49d6765c19bbff6e3bf54c3c38589f3dcea7d86ad8bc"
+  },
+  "processClosure": {
+    "fetch": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/fetch-metadata.json",
+      "sha256": "11b408921a23847e07bce47ccd2fc36aabd437cb778f185393d00bf968073594"
+    },
+    "correctOwnedPort": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/port18965-check.json",
+      "sha256": "cce50ab127e1d6c6bf374124722ab188939e61804c5b89d92f1967788f606a7e"
+    },
+    "note": "Initial fetch metadata queried port18975 due filename replacement; actual owned18965 checked separately empty. No process restart."
+  },
+  "failures": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/failure-register98.json",
+    "sha256": "64e6d576020d52374b01bb6b69b845aadbf7bf5afefaa17db7fc23f41ad33659"
+  },
+  "owned": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/owned-final99.json",
+    "sha256": "1a6aa446925861a539ba75ea18392ee3e7c87cfb896ef29a75921c83ed0b0b84"
+  },
+  "sourceCompatibility": {
+    "priorToCurrent": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence95/source-diff95.json",
+      "sha256": "f6fec7c48faa8053937cdd36a6cd89ad61e453fe6620c133e4c98e000e10129f"
+    },
+    "finding": "Only Set Basic direct/execution plus generated catalog differ between old23b06 and currentd126. Current standard ERC4626 production04b818 and shared execution closure unchanged across these batches; Ready/catalog revalidated in current source."
+  },
+  "currentSharedObserverCompatibility": {
+    "before": "21667eebf6b97b6e18ad9ec4230d615a1d8e46478fcd8fc19339f01ec9c800f4",
+    "after": "beb18634cce1c9c46bc9590a9d8038e5256caa5a5d9d91e2bd10512c8ffbea34",
+    "review": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin100/v4-source-review104.json",
+      "sha256": "e33c3cb2d212754cf698a6bcb64bd06c1a5e575232fe9dbc59e124d65cc8ca98"
+    },
+    "scope": "Only xWin input-only flag labels; standard source/request unchanged. Other saved observation helper hashes asserted identical."
+  },
+  "sourcePins": [
+    {
+      "sourceTreeSha256": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "harnessSha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a",
+      "evidenceSha256": "21667eebf6b97b6e18ad9ec4230d615a1d8e46478fcd8fc19339f01ec9c800f4",
+      "observationHelpers": [
+        {
+          "path": "./v4-native-settlement.ts",
+          "sha256": "a12bf0f92a006a594cbec2caf5ba4cfa0a31faea28a912c7701b54e71be1c664"
+        },
+        {
+          "path": "../three-family/historical-input-observations.ts",
+          "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+        },
+        {
+          "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+          "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+        },
+        {
+          "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+          "sha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43"
+        },
+        {
+          "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+          "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+        },
+        {
+          "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+          "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+        },
+        {
+          "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+          "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+        },
+        {
+          "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+          "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+        },
+        {
+          "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+          "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+        },
+        {
+          "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+          "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+        }
+      ]
+    },
+    {
+      "sourceTreeSha256": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+      "harnessSha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a",
+      "evidenceSha256": "21667eebf6b97b6e18ad9ec4230d615a1d8e46478fcd8fc19339f01ec9c800f4",
+      "observationHelpers": [
+        {
+          "path": "./v4-native-settlement.ts",
+          "sha256": "a12bf0f92a006a594cbec2caf5ba4cfa0a31faea28a912c7701b54e71be1c664"
+        },
+        {
+          "path": "../three-family/historical-input-observations.ts",
+          "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+        },
+        {
+          "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+          "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+        },
+        {
+          "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+          "sha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43"
+        },
+        {
+          "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+          "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+        },
+        {
+          "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+          "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+        },
+        {
+          "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+          "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+        },
+        {
+          "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+          "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+        },
+        {
+          "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+          "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+        },
+        {
+          "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+          "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+        }
+      ]
+    },
+    {
+      "sourceTreeSha256": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "harnessSha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a",
+      "evidenceSha256": "beb18634cce1c9c46bc9590a9d8038e5256caa5a5d9d91e2bd10512c8ffbea34",
+      "observationHelpers": [
+        {
+          "path": "./v4-native-settlement.ts",
+          "sha256": "a12bf0f92a006a594cbec2caf5ba4cfa0a31faea28a912c7701b54e71be1c664"
+        },
+        {
+          "path": "../three-family/historical-input-observations.ts",
+          "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+        },
+        {
+          "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+          "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+        },
+        {
+          "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+          "sha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43"
+        },
+        {
+          "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+          "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+        },
+        {
+          "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+          "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+        },
+        {
+          "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+          "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+        },
+        {
+          "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+          "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+        },
+        {
+          "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+          "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+        },
+        {
+          "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+          "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+        }
+      ]
+    }
+  ],
+  "runtimeConstructionAll": {
+    "rpc": 0,
+    "exact": 0,
+    "quotedFallback": false,
+    "binding": "Each original raw report retains its full counts; all 18 checked individually"
+  },
+  "approval": "Standard ERC4626 standing MAX allowance remains; no clearance claim",
+  "nativeBoundary": "Only ERC20 entry, including WETH native-underlying wrapper; no native overload expansion",
+  "completionBoundary": "18 actual targets/32 current directions; independent raw/identity/interface/events/source review complete. Opportunity and phase4 performance remain outside this correctness claim."
+}

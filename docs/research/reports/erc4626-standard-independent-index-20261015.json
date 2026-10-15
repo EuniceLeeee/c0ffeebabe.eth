@@ -1,0 +1,61 @@
+{
+  "result": "18-selected-current-standard-targets-non-author-interface-event-source-join-complete",
+  "certificates": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-independent-six98.json",
+      "sha256": "35bf1182def6139308bf4997aad9a8cf9d28e6c9870bdd26f32b9a8a6a4cbbf0",
+      "targetCount": 6,
+      "positiveEvents": 144,
+      "supplyChecks": 288,
+      "targets": [
+        "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
+        "0x55C1B6e461a6334B567bAF0FEb5D728715446f05",
+        "0xaF5372792a29dC6b296d6FFD4AA3386aff8f9BB2",
+        "0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f",
+        "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+        "0xFaa9a0e1Db9E22AE3A20B2B58a68DC24D053d066"
+      ]
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-independent-ten108.json",
+      "sha256": "4e71ccaf0e7bb020a8d6020ed2ae58bc912572ca70374bfc4817d4c4655327a7",
+      "targetCount": 10,
+      "positiveEvents": 320,
+      "supplyChecks": 640,
+      "targets": [
+        "0x2bD3A43863c07B6A01581FADa0E1614ca5DF0E3d",
+        "0x2411802D8BEA09be0aF8fD8D08314a63e706b29C",
+        "0x2C24B57e2CCd1f273045Af6A5f632504C432374F",
+        "0x56bfa6f53669B836D1E0Dfa5e99706b12c373ecf",
+        "0x812B2C6Ab3f4471c0E43D4BB61098a9211017427",
+        "0x9bD52F2805c6aF014132874124686e7b248c2Cbb",
+        "0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD",
+        "0xBc65ad17c5C0a2A4D159fa5a503f4992c7B545FE",
+        "0xC5d6A7B61d18AfA11435a889557b068BB9f29930",
+        "0xe05faDf242331808f504661BEA65972594869826"
+      ]
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-independent-last-two110.json",
+      "sha256": "5e7ece888e40190fcfdbfee971253306257afdc333d42cc1e5c56fa2dd94ba3c",
+      "targetCount": 2,
+      "positiveEvents": 48,
+      "supplyChecks": 96,
+      "targets": [
+        "0x90551c1795392094FE6D29B758EcCD233cFAa260",
+        "0xC58D044404d8B14e953C115E67823784dEA53d8F"
+      ]
+    }
+  ],
+  "totals": {
+    "targets": 18,
+    "positiveEvents": 512,
+    "supplyChecks": 1024
+  },
+  "limits": [
+    "Existing canonical executions reviewed; no repeat EVM run performed.",
+    "Independent balance/rejection review owned by root and referenced separately within certificates.",
+    "Actual supported directions only; generic deposit-only variants not promoted to redeem.",
+    "No performance or opportunity-replay claim."
+  ]
+}

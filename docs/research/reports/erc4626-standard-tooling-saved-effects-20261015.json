@@ -1,0 +1,24 @@
+{
+  "kind": "tooling_defect",
+  "status": "fixed and canonical saved-shape regression passed; pending actual codify_commit",
+  "title": "Saved effect-delta receipt reuse must follow actual serialized delta-only schema",
+  "foundDuring": "fresh non-author source review before candidate installation or execution",
+  "finding": "Candidate reuse parser attempted BigInt(before/after) although saved Adapter effects contain delta only. This would throw on undefined. No failing candidate execution occurred. Original target7 historical failure was separate StrictRevm InvalidFEOpcode resource classification, not this parser bug.",
+  "fix": "Convert only existing delta fields and preserve all other saved receipt properties; do not synthesize before/after or repeat original successful EVM call.",
+  "regression": "standard-insufficient-contract.ts saved actual target7 successful effects shape:4token/1native/2supply delta, unchanged source object, absent before/after, malformed delta rejected.",
+  "freshReviewer": "root",
+  "review": {
+    "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/root-resource-review98.json",
+    "sha256": "ee5213e1fbc5f8ec88e94ed23aa251f6e6356c1b2f1c188f986ef6f580f102d0"
+  },
+  "codify_commit": null,
+  "limitations": "Parent fills actual canonical receipt and actual commit before closing current tooling case; no invented before-run failure.",
+  "canonical": {
+    "checks": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence93/checks93.json",
+    "checksSha256": "06e631bf9c42f93095139e4f6e680425aace8b8edd3d086a57f7b15307a0512c",
+    "log": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence93/check93-insufficient-contract.log",
+    "logSha256": "eacb775ef08ba6365f48c0dacb053f1c85f73b09ef22bf1a861e0b5a74a7a8bc",
+    "tests": 5,
+    "exit": 0
+  }
+}

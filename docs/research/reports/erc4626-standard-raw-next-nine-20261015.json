@@ -1,0 +1,141 @@
+{
+  "result": "nine-additional-completed-targets-raw-token-and-native-accounting-pass",
+  "sourceBinding": {
+    "manifest": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence95/production-source95.json",
+    "sha256": "487afab9784fa4b1720c6f95fdc289d4cc899dd1e2f2994bac6e6cfdc3908828",
+    "tree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+    "rows": 1244
+  },
+  "counts": {
+    "positive": 288,
+    "declaredReverts": 720,
+    "tokenDeltas": 1152,
+    "nativeDeltas": 288,
+    "zeroInputReverts": 36
+  },
+  "reports": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x2411802d8bea09be0af8fd8d08314a63e706b29c-recipient96.json",
+      "sha256": "d00cbe1910f7029c494d759ed014afc22852b9e535cfde1c9132bc9a844c42cd",
+      "source": {
+        "number": 26030897,
+        "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+      },
+      "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x2c24b57e2ccd1f273045af6a5f632504c432374f-recipient96.json",
+      "sha256": "80a3b741e6adfc39d26debb614a2ee2dbb02259b05157a3c111a8320b4740f7d",
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "tx": "0xf8c2d77cd220781f380d60afa26bbb09cf944f9eeebd98d3a663701c8e99f484",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf-recipient96.json",
+      "sha256": "28543989287b1f7d50be31c272c01ee1598b9c70d498fc80f0b13bef3cee6b70",
+      "source": {
+        "number": 25887366,
+        "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
+      },
+      "tx": "0x844abb56e58a4e33e5b8dcaa27e4cc4dc8ce8d10b531b01d99023b2bd588c545",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x812b2c6ab3f4471c0e43d4bb61098a9211017427-recipient96.json",
+      "sha256": "fb1a13e84f315452262f71c7de165de5fb422b6158544ca5128748c60cd9466d",
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "tx": "0xf8c2d77cd220781f380d60afa26bbb09cf944f9eeebd98d3a663701c8e99f484",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x9bd52f2805c6af014132874124686e7b248c2cbb-recipient96.json",
+      "sha256": "cae4d4dbfec2794b66176b14c46ddccd21b8bad16003df53500bc6817484bdf6",
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "tx": "0x428e9a180d4da24d330450230c32f4c015ebcf4d34ddedc0d803cc66b018f4da",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xa3931d71877c0e7a3148cb7eb4463524fec27fbd-recipient96.json",
+      "sha256": "592c656fed00eed3ef52d46b8e13aca897e3e213db45ba8e558e037c62485678",
+      "source": {
+        "number": 25898023,
+        "hash": "0xf73f6eb56286ba9025f4f0dfcc002cee3b35dbce8d9ff4dbbb113ba4a6885c1c"
+      },
+      "tx": "0x50298ce419fc776024bd9570fcd094cf732b06e4ff09c884353778aca5218927",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe-recipient96.json",
+      "sha256": "47d51259f69d2a2c963c5847351efd703919eedb77dcdd8b3f008323d970785d",
+      "source": {
+        "number": 25898023,
+        "hash": "0xf73f6eb56286ba9025f4f0dfcc002cee3b35dbce8d9ff4dbbb113ba4a6885c1c"
+      },
+      "tx": "0x50298ce419fc776024bd9570fcd094cf732b06e4ff09c884353778aca5218927",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xc5d6a7b61d18afa11435a889557b068bb9f29930-recipient96.json",
+      "sha256": "20f6c577a6ce0acd847581b6cafb6da296cc6aa345bbb29e7219eb1caf6f717b",
+      "source": {
+        "number": 25887370,
+        "hash": "0xf7e7ec2b6beabe318004a040dc0ed13bf17db9d4664ad223ba991fa2ef285b45"
+      },
+      "tx": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xe05fadf242331808f504661bea65972594869826-recipient96.json",
+      "sha256": "31813bc7fb255210de1a0df49ec985f8d8d736dc797d5a84187dad233d626fd7",
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "tx": "0x2aee44cae8118bdd958667dbf92874fa166b273df9543e40c9fd9454bfffed5a",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 116,
+      "rawAdditional": 0
+    }
+  ],
+  "limits": [
+    "Only nine new completed targets; all older target reports and current Fluid native-wrapper observer failure preserved separately.",
+    "Reviewed all sample executions against original strict outputs, exact full input, same-state quote/new receiver receipt, observed actor/recipient old assets/native unchanged.",
+    "Zero-input roundTrips reviewed separately; protocol logs/identity/metadata binding and synthetic safety review remain separately required; no independent historical storageDiff rollback claim.",
+    "Not natural valuation, opportunity, performance, all variants or all18 targets completion."
+  ]
+}

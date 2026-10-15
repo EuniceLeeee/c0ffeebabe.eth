@@ -1,0 +1,28 @@
+[
+  {
+    "family": "protocol:erc4626",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T15:55:07.817020+00:00",
+    "finishedAt": "2026-10-15T15:55:58.136052+00:00",
+    "logSha256": "2b0b86766d9c38b4384d90cf5ee9c7bb34424ab6cc42bf0b44c9a0f156858c53",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/standard-gate113-selection.json",
+    "manifestSha256": "97b8421eb75d59acbe959d24ae6ef0a881e8e3299b4ca6c8d50df389c0ef0201",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:erc4626",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  }
+]

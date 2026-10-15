@@ -3646,216 +3646,562 @@
     },
     {
       "familyId": "protocol:erc4626",
-      "coverage": "partial",
+      "coverage": "complete",
       "variants": [
         {
           "id": "standard/Morpho VaultV2 v1",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "conditional",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 runtime、permission gates 与 liquidity adapter 状态尚未绑定。",
-            "收款方须通过 shares/assets 接收资格检查。",
-            "当前 direct-output 接线已确认；独立 receiver 当前源码回执待 join，旧 Ready 仅准 deposit。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d 25887366 deposit/redeem, 0x55c1b6e461a6334b567baf0feb5d728715446f05 25887363 deposit/redeem, 0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf 25887366 deposit/redeem, 0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f 25887356 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "actualTargets": [
+            {
+              "target": "0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d",
+              "tx": "0x844abb56e58a4e33e5b8dcaa27e4cc4dc8ce8d10b531b01d99023b2bd588c545",
+              "block": {
+                "number": 25887366,
+                "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "independent-insufficient-input-rejection-strict-resource-limited": 16,
+                "correctly-rejected": 64,
+                "zero-input": 4
+              }
+            },
+            {
+              "target": "0x55c1b6e461a6334b567baf0feb5d728715446f05",
+              "tx": "0x7f814e6d8d5712e44897b82f512904b274b62dcd6164dbc891425dd3eb952a21",
+              "block": {
+                "number": 25887363,
+                "hash": "0xc03086eb3caae34426e0243f1c98c253a12531043373463e83e258ebcca500dd"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
+            },
+            {
+              "target": "0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf",
+              "tx": "0x844abb56e58a4e33e5b8dcaa27e4cc4dc8ce8d10b531b01d99023b2bd588c545",
+              "block": {
+                "number": 25887366,
+                "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
+            },
+            {
+              "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+              "tx": "0x313ec84844ecef501c750fc619a1afb723cfe90bb866dffed9bcb06dc977f71a",
+              "block": {
+                "number": 25887356,
+                "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
             }
           ]
         },
         {
           "id": "standard/Morpho VaultV2 v2",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "conditional",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 runtime、permission gates 与 liquidity adapter 状态尚未绑定。",
-            "独立 receiver 权限及当前接线路径回执待 join；旧 Ready 仅准 deposit。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0xe05fadf242331808f504661bea65972594869826 25887369 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "actualTargets": [
+            {
+              "target": "0xe05fadf242331808f504661bea65972594869826",
+              "tx": "0x2aee44cae8118bdd958667dbf92874fa166b273df9543e40c9fd9454bfffed5a",
+              "block": {
+                "number": 25887369,
+                "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
             }
           ]
         },
         {
           "id": "standard/MetaMorphoV1_1",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 vault/runtime 及 Morpho 依赖绑定待补。",
-            "当前独立 receiver 路径回执待 join；旧 Ready 仅准 deposit，未因此扩展 redeem。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0x812b2c6ab3f4471c0e43d4bb61098a9211017427 25887369 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "actualTargets": [
+            {
+              "target": "0x812b2c6ab3f4471c0e43d4bb61098a9211017427",
+              "tx": "0xf8c2d77cd220781f380d60afa26bbb09cf944f9eeebd98d3a663701c8e99f484",
+              "block": {
+                "number": 25887369,
+                "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
             }
           ]
         },
         {
           "id": "standard/SavingsUsdd",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史实际 runtime 绑定待补。",
-            "独立 receiver 当前接线路径回执待 join；ABI 和默认路径不能替代该证据。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0xc5d6a7b61d18afa11435a889557b068bb9f29930 25887370 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "actualTargets": [
+            {
+              "target": "0xc5d6a7b61d18afa11435a889557b068bb9f29930",
+              "tx": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+              "block": {
+                "number": 25887370,
+                "hash": "0xf7e7ec2b6beabe318004a040dc0ed13bf17db9d4664ad223ba991fa2ef285b45"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
             }
           ]
         },
         {
           "id": "standard/Sky SUsds",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 proxy implementation 及 accrual 状态绑定待补。",
-            "按实际 Ready direction 验收，独立 receiver 当前源码回执待 join。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0xa3931d71877c0e7a3148cb7eb4463524fec27fbd 25898023 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "actualTargets": [
+            {
+              "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+              "tx": "0x50298ce419fc776024bd9570fcd094cf732b06e4ff09c884353778aca5218927",
+              "block": {
+                "number": 25898023,
+                "hash": "0xf73f6eb56286ba9025f4f0dfcc002cee3b35dbce8d9ff4dbbb113ba4a6885c1c"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
             }
           ]
         },
         {
           "id": "standard/GenericVaultBridgeToken",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 proxy/implementation 与 yield-vault 依赖待绑定。",
-            "仅本地 ERC4626 deposit 已准入，不能扩成 depositAndBridge。",
-            "独立 receiver 当前源码回执待 join。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0x2c24b57e2ccd1f273045af6a5f632504c432374f 25887369 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim. Current admitted local deposit/redeem; depositAndBridge is outside scope.",
+          "actualTargets": [
+            {
+              "target": "0x2c24b57e2ccd1f273045af6a5f632504c432374f",
+              "tx": "0xf8c2d77cd220781f380d60afa26bbb09cf944f9eeebd98d3a663701c8e99f484",
+              "block": {
+                "number": 25887369,
+                "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
             }
           ]
         },
         {
           "id": "standard/StakedUSDat",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "conditional",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 proxy implementation 与 caller/receiver restriction 状态待绑定。",
-            "最新实现同步 redeem/withdraw 直接 revert；旧 Ready 仅准 deposit。",
-            "独立 receiver 的 deposit 权限和当前接线回执待 join。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0xd166337499e176bbc38a1fbd113ab144e5bd2df7 25462190 deposit. Source/interface/implementation and dependencies bound independently. No additional variant claim. Only admitted deposit; lock/cooldown/other-token payout is not generic synchronous redeem.",
+          "actualTargets": [
+            {
+              "target": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+              "tx": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+              "block": {
+                "number": 25462190,
+                "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+              },
+              "directions": [
+                "deposit"
+              ],
+              "counts": {
+                "pass": 16,
+                "correctly-rejected": 40,
+                "zero-input": 2
+              }
             }
           ]
         },
         {
           "id": "standard/UsdcVault",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 proxy implementation、PSM/sUSDS 依赖与费用状态待绑定。",
-            "按实际准入方向保留 owner 授权，独立 receiver 当前源码回执待 join。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe 25898023 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "actualTargets": [
+            {
+              "target": "0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe",
+              "tx": "0x50298ce419fc776024bd9570fcd094cf732b06e4ff09c884353778aca5218927",
+              "block": {
+                "number": 25898023,
+                "hash": "0xf73f6eb56286ba9025f4f0dfcc002cee3b35dbce8d9ff4dbbb113ba4a6885c1c"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
             }
           ]
         },
         {
           "id": "standard/Strata standard tranche (new exit-mode version)",
-          "interface": "partial",
-          "identity": "partial",
+          "interface": "verified",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "conditional",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "实际 CDO/strategy 依赖和历史 proxy implementation 尚未完整绑定。",
-            "最新 redeem 可走 SharesLock/cooldown；旧 Ready 仅准 deposit，不算同步 redemption 通过。",
-            "独立 receiver 当前源码回执待 join。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066 25462190 deposit. Source/interface/implementation and dependencies bound independently. No additional variant claim. Only admitted deposit; lock/cooldown/other-token payout is not generic synchronous redeem.",
+          "actualTargets": [
+            {
+              "target": "0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066",
+              "tx": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+              "block": {
+                "number": 25462190,
+                "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+              },
+              "directions": [
+                "deposit"
+              ],
+              "counts": {
+                "pass": 16,
+                "correctly-rejected": 40,
+                "zero-input": 2
+              }
             }
           ]
         },
         {
           "id": "standard/Strata USDe tranche pair",
-          "interface": "partial",
-          "identity": "partial",
+          "interface": "verified",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "conditional",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "Tranche receiver 接线已核对，实际 CDO/strategy 出款和历史关系待绑定。",
-            "旧 generic Ready 仅准 deposit，meta-token payout 属独立 Silo Family。",
-            "独立 receiver 当前源码回执待 join。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003 25462190 deposit, 0xc58d044404d8b14e953c115e67823784dea53d8f 26130609 deposit. Source/interface/implementation and dependencies bound independently. No additional variant claim. Only admitted deposit; lock/cooldown/other-token payout is not generic synchronous redeem.",
+          "actualTargets": [
+            {
+              "target": "0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003",
+              "tx": "0xf391d02add5e6cbbd98836d9eacdb66de3e5d76ef3874134145a6563a126ee86",
+              "block": {
+                "number": 25462190,
+                "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+              },
+              "directions": [
+                "deposit"
+              ],
+              "counts": {
+                "pass": 16,
+                "correctly-rejected": 40,
+                "zero-input": 2
+              }
+            },
+            {
+              "target": "0xc58d044404d8b14e953c115e67823784dea53d8f",
+              "tx": "0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01",
+              "block": {
+                "number": 26130609,
+                "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+              },
+              "directions": [
+                "deposit"
+              ],
+              "counts": {
+                "pass": 16,
+                "correctly-rejected": 40,
+                "zero-input": 2
+              }
             }
           ]
         },
         {
           "id": "standard/Euler EVault beacon instances",
-          "interface": "partial",
-          "identity": "partial",
+          "interface": "verified",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "conditional",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 proxy/beacon/module/hookTarget 配置待绑定。",
-            "hook 是治理配置的内部调用，非请求 receiver 的结算回调。",
-            "独立 receiver 当前源码回执待 join；独立 flashLoan 另行验收。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "independentEntrypoints": [
             {
               "signature": "flashLoan(uint256,bytes)",
@@ -3874,46 +4220,151 @@
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0x9bd52f2805c6af014132874124686e7b248c2cbb 25887369 deposit/redeem, 0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2 25887356 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "actualTargets": [
+            {
+              "target": "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+              "tx": "0x428e9a180d4da24d330450230c32f4c015ebcf4d34ddedc0d803cc66b018f4da",
+              "block": {
+                "number": 25887369,
+                "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
+            },
+            {
+              "target": "0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2",
+              "tx": "0xb754ad99a4b4d671bb271d300e718d5011d1d9c3372bda5c66363663b94259ba",
+              "block": {
+                "number": 25887356,
+                "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
             }
           ]
         },
         {
           "id": "standard/Fluid fToken ERC20 underlying",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "input-first",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 vault/runtime 与 LIQUIDITY 依赖绑定待补。",
-            "LIQUIDITY 回调 fToken 先拉 caller 输入，再 mint receiver；不能给 executor 开 deferredInput。",
-            "旧默认双接口回执保留；独立 receiver 当前接线回执待 join。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0x2411802d8bea09be0af8fd8d08314a63e706b29c 26030897 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "actualTargets": [
+            {
+              "target": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+              "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+              "block": {
+                "number": 26030897,
+                "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
             }
           ]
         },
         {
           "id": "standard/Fluid fTokenNativeUnderlying ERC20-WETH entry",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 runtime 与 liquidity/WETH 依赖状态待绑定。",
-            "普通 ERC20-WETH 路径内部 unwrap/wrap，不扩展 native overload。",
-            "旧默认回执保留；独立 receiver 当前接线回执待 join。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+              "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
+              "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
+            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+          },
+          "scope": "Actual same-N targets/directions only: 0x90551c1795392094fe6d29b758eccd233cfaa260 26030897 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim. ERC20-WETH entry only. Redeem internal Withdraw receiver is vault, followed by ordered WETH Deposit and final Transfer; vault native balance not directly observed, protocol native semantics/event join recorded separately.",
+          "actualTargets": [
+            {
+              "target": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+              "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+              "block": {
+                "number": 26030897,
+                "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+              },
+              "directions": [
+                "deposit",
+                "redeem"
+              ],
+              "counts": {
+                "pass": 32,
+                "correctly-rejected": 80,
+                "zero-input": 4
+              }
             }
           ]
         },
@@ -3946,11 +4397,15 @@
             {
               "path": "docs/research/reports/frax-custodian-default-independent-20261015.json",
               "sha256": "1c5138105a7e7360ee20f3438b324af6d2ead22383664a05a2979a61852f50b0"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-special-compatibility-20261015.json",
+              "sha256": "3b7043cc4bc6446c6efebce7f38aea82a8d593c10fbd0591ffaa427cf1154c72"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/frax-custodian-current-behavior-20261015.json",
-            "sha256": "0ffb60a045dc5e5c76ef863b724e588103368f2cf106d17e38fe3ee0f5c64da8"
+            "path": "docs/research/reports/erc4626-frax-custodian-usdc-0.2.8-after-standard-compatible-20261015.json",
+            "sha256": "469654c382057e701e9a9064529aa4a6dce211f7144bc1204cb45093a25f8030"
           },
           "scope": "One synchronous external-frxUSD Custodian; deposit/redeem, default and direct self/external. 32 historical positives, 80 declared fault reverts plus6zero/dust; omitted historical effects are not independent storageDiff, rollback verified in separate current BotVM synthetic safety suite. Exact/runtime construction0, no fallback. Borrowed amountIn only; no natural valuation, original opportunity or performance claim."
         },
@@ -3975,12 +4430,16 @@
             {
               "path": "docs/research/reports/infinifi-default-reuse-20261015.json",
               "sha256": "4b102b6fb0cf27df2be64d8ba04183bbfc3dcf061af7933e51e8d9a877e0b5a2"
+            },
+            {
+              "path": "docs/research/reports/erc4626-standard-special-compatibility-20261015.json",
+              "sha256": "3b7043cc4bc6446c6efebce7f38aea82a8d593c10fbd0591ffaa427cf1154c72"
             }
           ],
           "scope": "Actual iUSD/staked-iUSD Gateway stake/unstake, self/external direct at N25944594 and N25944595. Other ERC4626 variants unchanged.",
           "executionEvidence": {
-            "path": "docs/research/reports/infinifi-frax-dispatch-compatible-reuse-20261015.json",
-            "sha256": "946e9507d0390030e8051af24a968a4a99fc325dd780bf974cd7209bf78a4bed"
+            "path": "docs/research/reports/erc4626-infinifi-gateway-after-standard-compatible-20261015.json",
+            "sha256": "5f106089f0e27deb0b8f516810c92bf9eace03cdc65f3748ffd9491ef7459a77"
           }
         }
       ],
@@ -4048,7 +4507,7 @@
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
-          "sha256": "ad052a5817001600ed9883c3162577d7980b2258f42d46e3f2018b356f48e062"
+          "sha256": "04b818ef65ecffe236377424ba9a6e481141d9de349a35656be08281d10066b8"
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-family/identity.ts",
@@ -4088,12 +4547,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/current-interface-protocol-erc4626-20261015.json",
-        "sha256": "58f7f9d77de102b1bf30cb623971b76a23c2d9ce738b3eeea8baf9018d43495c"
+        "path": "docs/research/reports/current-interface-protocol-erc4626-after-standard-20261015.json",
+        "sha256": "f018f2f178e6065c0619a520b1d7c60cbf651cfa2dc3b20e1e787a5cbe2c1595"
       },
       "currentScopedEvidence": {
-        "path": "docs/research/reports/frax-custodian-current-correctness-20261015.json",
-        "sha256": "435fbf0da933f8357acfabe14f863fba444f3f958ad706158a213bfe45179f94"
+        "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+        "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
       }
     },
     {
@@ -7725,8 +8184,8 @@
     ]
   },
   "currentScopedUpdate": {
-    "scope": "Basic four-component redemption recipient path; preserve Legacy through exact current compatibility view. Uninstalled issue not upgraded.",
-    "priorInventorySha256": "f26a6c7e9123ea0d86414268a9f560135657d79b6c844068ccb10f47912eb0c8",
+    "scope": "Standard ERC4626 actual18 targets32 directions; source-compatible Frax/InfiniFi reuse, no original evidence rewritten.",
+    "priorInventorySha256": "a0ffc60b91ff9e9a5f7c79e5c3ac6a76b7e909b98bbe415771d1f27271f89ac4",
     "allOtherVariantStatesPreserved": true,
     "allFamiliesPassed": false
   }

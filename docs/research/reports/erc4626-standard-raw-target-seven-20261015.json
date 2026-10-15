@@ -1,0 +1,27 @@
+{
+  "result": "target7-raw-accounting-and-independent-insufficient-rejection-pass",
+  "report": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence94/0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d-recipient94.json",
+    "sha256": "3aa74f73f4a55aeb37ff13cc4ed52a6ddc6f90732118b2abaaae69b2bea84629",
+    "source": {
+      "number": 25887366,
+      "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
+    },
+    "sourceTree": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a"
+  },
+  "counts": {
+    "positive": 32,
+    "newPositive": 31,
+    "declaredReverts": 64,
+    "tokenDeltas": 128,
+    "nativeDeltas": 32,
+    "zeroInputReverts": 4,
+    "independentInsufficient": 16,
+    "reusedStrict": 2
+  },
+  "limits": [
+    "One positive and one Strict resource classification authenticated from original92; not rerun.",
+    "All16 same-state independent full-A transferFrom fail with INVALID at A-1; entire contract storage/native rollback; Strict resource-limited classifications not rewritten.",
+    "Original93 observer and extra transport failure preserved. Protocol event/ABI and all18 deployment coverage remain separate review. No natural valuation, opportunity or performance claim."
+  ]
+}

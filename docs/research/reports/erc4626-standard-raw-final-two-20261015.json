@@ -1,0 +1,52 @@
+{
+  "result": "last-two-completed-targets-raw-token-and-native-accounting-pass",
+  "sourceBinding": {
+    "manifest": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence95/production-source95.json",
+    "sha256": "487afab9784fa4b1720c6f95fdc289d4cc899dd1e2f2994bac6e6cfdc3908828",
+    "tree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+    "rows": 1244
+  },
+  "counts": {
+    "positive": 48,
+    "declaredReverts": 120,
+    "tokenDeltas": 192,
+    "nativeDeltas": 48,
+    "zeroInputReverts": 6
+  },
+  "reports": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/0x90551c1795392094fe6d29b758eccd233cfaa260-recipient97.json",
+      "sha256": "69723da5dc70c3475d96654c7ea1e42f0355f6364f53a5397a980a01e0f513c8",
+      "source": {
+        "number": 26030897,
+        "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+      },
+      "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+      "positive": 32,
+      "declaredReverts": 80,
+      "rawCasesReviewed": 57,
+      "rawReused": 59,
+      "rawAdditional": 0
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/0xc58d044404d8b14e953c115e67823784dea53d8f-recipient97.json",
+      "sha256": "1d738c09a22da78df66dc4d797d39b255046026974d4222f955e2818c4a5872f",
+      "source": {
+        "number": 26130609,
+        "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+      },
+      "tx": "0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01",
+      "positive": 16,
+      "declaredReverts": 40,
+      "rawCasesReviewed": 58,
+      "rawReused": 0,
+      "rawAdditional": 0
+    }
+  ],
+  "limits": [
+    "Final two targets only; 90551 prior96 59 raw cases authenticated and reobserved, not repeated. Prior failures remain unchanged.",
+    "Reviewed all sample executions against original strict outputs, exact full input, same-state quote/new receiver receipt, observed actor/recipient old assets/native unchanged.",
+    "Zero-input roundTrips reviewed separately; protocol logs/identity/metadata binding and synthetic safety review remain separately required; no independent historical storageDiff rollback claim.",
+    "Not natural valuation, opportunity, performance, all variants or all18 targets completion."
+  ]
+}

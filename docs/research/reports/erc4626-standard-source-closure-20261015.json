@@ -1,0 +1,947 @@
+{
+  "scope": "Author byte/source/metadata closure supplemental to independent raw checks; old evidence preserved; no new executions",
+  "sourceExports": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/production-source92.json",
+      "sha256": "38fe8ae8709462e453df7ac6d6ef9a137c073d31036ba477a3ebae185182e9fc",
+      "tree": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+      "rows": 1244
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/production-source96.json",
+      "sha256": "487afab9784fa4b1720c6f95fdc289d4cc899dd1e2f2994bac6e6cfdc3908828",
+      "tree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "rows": 1244
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/production-source97.json",
+      "sha256": "487afab9784fa4b1720c6f95fdc289d4cc899dd1e2f2994bac6e6cfdc3908828",
+      "tree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "rows": 1244
+    }
+  ],
+  "artifact": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/source/out/BotVM.sol/BotVM.json",
+    "sha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+  },
+  "solidityMetadata": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/source/src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/source/src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+      "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/source/src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+      "keccak256": "0xf139ad9c54d2b073a8dfff0c39e5742d4c270e92daa957817be88f4a80355565"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/source/src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+      "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+    }
+  ],
+  "rawStrictCurrentReports": 1795,
+  "reusedRawReferences": 61,
+  "reports": [
+    {
+      "target": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x2411802d8bea09be0af8fd8d08314a63e706b29c-recipient96.json",
+        "sha256": "d00cbe1910f7029c494d759ed014afc22852b9e535cfde1c9132bc9a844c42cd"
+      },
+      "source": {
+        "number": 26030897,
+        "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+      },
+      "sourceTree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0x2411802D8BEA09be0aF8fD8D08314a63e706b29C",
+          "codeHash": "0xe0afde0ba74402463ee8406452ff34d0285f13fa3c8aa9e6f7368e9c098a79e5",
+          "bytes": 19617
+        },
+        {
+          "role": "asset",
+          "address": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+          "codeHash": "0x630181884786c962140041cffa3acffbf39d8c93bde1a62b7b55046e57400557",
+          "bytes": 6492
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence94/0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d-recipient94.json",
+        "sha256": "3aa74f73f4a55aeb37ff13cc4ed52a6ddc6f90732118b2abaaae69b2bea84629"
+      },
+      "source": {
+        "number": 25887366,
+        "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
+      },
+      "sourceTree": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0x2bD3A43863c07B6A01581FADa0E1614ca5DF0E3d",
+          "codeHash": "0xd3e8fb4da2e312d233b8bf884a7e5f4f4fa8bdd4531dcaa4448791251a1b1f5a",
+          "bytes": 21808
+        },
+        {
+          "role": "asset",
+          "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "codeHash": "0xb44fb4e949d0f78f87f79ee46428f23a2a5713ce6fc6e0beb3dda78c2ac1ea55",
+          "bytes": 11075
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0x2c24b57e2ccd1f273045af6a5f632504c432374f",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x2c24b57e2ccd1f273045af6a5f632504c432374f-recipient96.json",
+        "sha256": "80a3b741e6adfc39d26debb614a2ee2dbb02259b05157a3c111a8320b4740f7d"
+      },
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "sourceTree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0x2C24B57e2CCd1f273045Af6A5f632504C432374F",
+          "codeHash": "0x7be240c3bc49eeee8a9ddd3e767501e276858bbe905cb52e4323634fd8f9d477",
+          "bytes": 858
+        },
+        {
+          "role": "asset",
+          "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+          "codeHash": "0x131ff5c755b710d543ea70fede2eb38e5d15b1456df0ae932ba12e2786f7e5df",
+          "bytes": 4582
+        },
+        {
+          "role": "implementation",
+          "address": "0xcC865B0324121b43728176024f58bdbB3afd6f29",
+          "codeHash": "0xaf8cb04951346aeea69fd7d6ee8ef127f095f4ce810d6e27f15e565244f3a030",
+          "bytes": 19473
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x000000000000000000000000cc865b0324121b43728176024f58bdbb3afd6f29"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003-recipient92.json",
+        "sha256": "7b7aeaab0dda71f725031e48ecb16ad8c5a1d6318f714d7575596782d037d647"
+      },
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "sourceTree": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
+          "codeHash": "0x75048f76f2a781e59c38a91ecc029726cd7327670b01af86966ea8eb0e3a5eb0",
+          "bytes": 813
+        },
+        {
+          "role": "asset",
+          "address": "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3",
+          "codeHash": "0x6ca5462ff0355c610301f701d0bb1136becca144e195da86d240b5e604ef9625",
+          "bytes": 7567
+        },
+        {
+          "role": "implementation",
+          "address": "0xE894055CA1c73648927e225f3Ca38Ed48E30210b",
+          "codeHash": "0x00a677195572fd5b32aded34c7ee75fb8e96bf7cea30c142f9cdcb2ffcc5835c",
+          "bytes": 16889
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x000000000000000000000000e894055ca1c73648927e225f3ca38ed48e30210b"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0x55c1b6e461a6334b567baf0feb5d728715446f05",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0x55c1b6e461a6334b567baf0feb5d728715446f05-recipient92.json",
+        "sha256": "3f82516205401b78e9ab954da6113b6d15e918c1e2592afaecb1b678712ee4ea"
+      },
+      "source": {
+        "number": 25887363,
+        "hash": "0xc03086eb3caae34426e0243f1c98c253a12531043373463e83e258ebcca500dd"
+      },
+      "sourceTree": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0x55C1B6e461a6334B567bAF0FEb5D728715446f05",
+          "codeHash": "0xb87264448eb495fa597c09eb4a576b7d6f029cb98957d3cb2491904a39abd8e9",
+          "bytes": 21808
+        },
+        {
+          "role": "asset",
+          "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "codeHash": "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505",
+          "bytes": 2186
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf-recipient96.json",
+        "sha256": "28543989287b1f7d50be31c272c01ee1598b9c70d498fc80f0b13bef3cee6b70"
+      },
+      "source": {
+        "number": 25887366,
+        "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
+      },
+      "sourceTree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0x56bfa6f53669B836D1E0Dfa5e99706b12c373ecf",
+          "codeHash": "0xb87264448eb495fa597c09eb4a576b7d6f029cb98957d3cb2491904a39abd8e9",
+          "bytes": 21808
+        },
+        {
+          "role": "asset",
+          "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "codeHash": "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505",
+          "bytes": 2186
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0x812b2c6ab3f4471c0e43d4bb61098a9211017427",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x812b2c6ab3f4471c0e43d4bb61098a9211017427-recipient96.json",
+        "sha256": "fb1a13e84f315452262f71c7de165de5fb422b6158544ca5128748c60cd9466d"
+      },
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "sourceTree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0x812B2C6Ab3f4471c0E43D4BB61098a9211017427",
+          "codeHash": "0xf6833def11231d82414df84e8fda799029c5d209699411b4455e6e0d3a3a8a9d",
+          "bytes": 19730
+        },
+        {
+          "role": "asset",
+          "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+          "codeHash": "0x131ff5c755b710d543ea70fede2eb38e5d15b1456df0ae932ba12e2786f7e5df",
+          "bytes": 4582
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/0x90551c1795392094fe6d29b758eccd233cfaa260-recipient97.json",
+        "sha256": "69723da5dc70c3475d96654c7ea1e42f0355f6364f53a5397a980a01e0f513c8"
+      },
+      "source": {
+        "number": 26030897,
+        "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6"
+      },
+      "sourceTree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0x90551c1795392094FE6D29B758EcCD233cFAa260",
+          "codeHash": "0x22f5fcde01d5702c916f85fff3958152ecb7fd03612e5600b1e72d1536ec2097",
+          "bytes": 21098
+        },
+        {
+          "role": "asset",
+          "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "codeHash": "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23",
+          "bytes": 3124
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x9bd52f2805c6af014132874124686e7b248c2cbb-recipient96.json",
+        "sha256": "cae4d4dbfec2794b66176b14c46ddccd21b8bad16003df53500bc6817484bdf6"
+      },
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "sourceTree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0x9bD52F2805c6aF014132874124686e7b248c2Cbb",
+          "codeHash": "0x6c65345a1ee3b33339bed9839015bae58dfadd05bb912e1c3f1715c3b2053d8c",
+          "bytes": 366
+        },
+        {
+          "role": "asset",
+          "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "codeHash": "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505",
+          "bytes": 2186
+        },
+        {
+          "role": "beacon",
+          "address": "0x29a56a1b8214D9Cf7c5561811750D5cBDb45CC8e",
+          "codeHash": "0xeae381444da7aebe662b6ab22300b74f721b0e4fdabc514d0bcf88a484e552b2",
+          "bytes": 5631
+        },
+        {
+          "role": "beacon-implementation",
+          "address": "0x8Ff1C814719096b61aBf00Bb46EAd0c9A529Dd7D",
+          "codeHash": "0x8ab1e2b88c325f73a6da0456e31e5d6b6e60e59b342f32517ee9b7582327d10a",
+          "bytes": 23147
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x00000000000000000000000029a56a1b8214d9cf7c5561811750d5cbdb45cc8e"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xa3931d71877c0e7a3148cb7eb4463524fec27fbd-recipient96.json",
+        "sha256": "592c656fed00eed3ef52d46b8e13aca897e3e213db45ba8e558e037c62485678"
+      },
+      "source": {
+        "number": 25898023,
+        "hash": "0xf73f6eb56286ba9025f4f0dfcc002cee3b35dbce8d9ff4dbbb113ba4a6885c1c"
+      },
+      "sourceTree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD",
+          "codeHash": "0xa55c01da656c715cec222ea8fbd63256eb3ca6cbb7236071f2bcbff927f6e35b",
+          "bytes": 170
+        },
+        {
+          "role": "asset",
+          "address": "0xdC035D45d973E3EC169d2276DDab16f1e407384F",
+          "codeHash": "0x13670c37dbba93ae2e7a2538198c3048a60f5fbd567e29ba8b45eed10e3e29f5",
+          "bytes": 170
+        },
+        {
+          "role": "implementation",
+          "address": "0x4e7991e5C547ce825BdEb665EE14a3274f9F61e0",
+          "codeHash": "0xc80a36f3ada09727300a955ca9bbef907b2bc4b3438fc90b826f03bf9be40baa",
+          "bytes": 11231
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000004e7991e5c547ce825bdeb665ee14a3274f9f61e0"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2-recipient92.json",
+        "sha256": "1b04ee0e37e8693ae2e4169ec24a117de16cfaaf8806ed4897a50ec51713c624"
+      },
+      "source": {
+        "number": 25887356,
+        "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+      },
+      "sourceTree": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0xaF5372792a29dC6b296d6FFD4AA3386aff8f9BB2",
+          "codeHash": "0xa90c89d959a1317764066af32d83244155dcfda568080584e6d746569f81f3f6",
+          "bytes": 366
+        },
+        {
+          "role": "asset",
+          "address": "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+          "codeHash": "0x23fd38dfee1f350e13b663717d03529920d67bb8f2582203b4b29b1e0bfd06b7",
+          "bytes": 238
+        },
+        {
+          "role": "beacon",
+          "address": "0x29a56a1b8214D9Cf7c5561811750D5cBDb45CC8e",
+          "codeHash": "0xeae381444da7aebe662b6ab22300b74f721b0e4fdabc514d0bcf88a484e552b2",
+          "bytes": 5631
+        },
+        {
+          "role": "beacon-implementation",
+          "address": "0x8Ff1C814719096b61aBf00Bb46EAd0c9A529Dd7D",
+          "codeHash": "0x8ab1e2b88c325f73a6da0456e31e5d6b6e60e59b342f32517ee9b7582327d10a",
+          "bytes": 23147
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x00000000000000000000000029a56a1b8214d9cf7c5561811750d5cbdb45cc8e"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe-recipient96.json",
+        "sha256": "47d51259f69d2a2c963c5847351efd703919eedb77dcdd8b3f008323d970785d"
+      },
+      "source": {
+        "number": 25898023,
+        "hash": "0xf73f6eb56286ba9025f4f0dfcc002cee3b35dbce8d9ff4dbbb113ba4a6885c1c"
+      },
+      "sourceTree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0xBc65ad17c5C0a2A4D159fa5a503f4992c7B545FE",
+          "codeHash": "0xbe9b8e94d668710d7f221060210f6432bcc39a509505efd2cfd672a7d8a402e3",
+          "bytes": 163
+        },
+        {
+          "role": "asset",
+          "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "codeHash": "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505",
+          "bytes": 2186
+        },
+        {
+          "role": "implementation",
+          "address": "0xf943Cb8D5f06f2bBF352878ebEF3Ec5C537A20bA",
+          "codeHash": "0xb31ac6c961f00a9cb52c78c822c823010c26b765394df91ed9e7419c7e161cfa",
+          "bytes": 16272
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x000000000000000000000000f943cb8d5f06f2bbf352878ebef3ec5c537a20ba"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f-recipient92.json",
+        "sha256": "c50f82848539920be0b177d02657311294f6c113f9fb4c80d20acb83a7f6a219"
+      },
+      "source": {
+        "number": 25887356,
+        "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+      },
+      "sourceTree": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f",
+          "codeHash": "0x2e630a46febc2ccfef2b5c23cba80915a1972d8600157dd860402dd43482a6aa",
+          "bytes": 21808
+        },
+        {
+          "role": "asset",
+          "address": "0x5F7827FDeb7c20b443265Fc2F40845B715385Ff2",
+          "codeHash": "0x5e4dcb0bb1910f6429e5fe91678990088a51c6d1cfe1b31d05fb9d948cc7867c",
+          "bytes": 708
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0xc58d044404d8b14e953c115e67823784dea53d8f",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/0xc58d044404d8b14e953c115e67823784dea53d8f-recipient97.json",
+        "sha256": "1d738c09a22da78df66dc4d797d39b255046026974d4222f955e2818c4a5872f"
+      },
+      "source": {
+        "number": 26130609,
+        "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+      },
+      "sourceTree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+          "codeHash": "0x5b0e439fb0a0a92b1bf954173ae0448302fac6a1387441ec83ab818b1e679763",
+          "bytes": 813
+        },
+        {
+          "role": "asset",
+          "address": "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3",
+          "codeHash": "0x6ca5462ff0355c610301f701d0bb1136becca144e195da86d240b5e604ef9625",
+          "bytes": 7567
+        },
+        {
+          "role": "implementation",
+          "address": "0xe91869F96806b480dd61d57E17919068d35AC09C",
+          "codeHash": "0x00a677195572fd5b32aded34c7ee75fb8e96bf7cea30c142f9cdcb2ffcc5835c",
+          "bytes": 16889
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x000000000000000000000000e91869f96806b480dd61d57e17919068d35ac09c"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0xc5d6a7b61d18afa11435a889557b068bb9f29930",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xc5d6a7b61d18afa11435a889557b068bb9f29930-recipient96.json",
+        "sha256": "20f6c577a6ce0acd847581b6cafb6da296cc6aa345bbb29e7219eb1caf6f717b"
+      },
+      "source": {
+        "number": 25887370,
+        "hash": "0xf7e7ec2b6beabe318004a040dc0ed13bf17db9d4664ad223ba991fa2ef285b45"
+      },
+      "sourceTree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0xC5d6A7B61d18AfA11435a889557b068BB9f29930",
+          "codeHash": "0xdbe06e06c41bb904f8516c1a2e9fdcf65d494f68fcf56656c0ee90613a9da235",
+          "bytes": 11085
+        },
+        {
+          "role": "asset",
+          "address": "0x4f8e5DE400DE08B164E7421B3EE387f461beCD1A",
+          "codeHash": "0xae7e89d01d7fdf74c47df2bdc1371da94895569ca8181ff6ade85110958732d4",
+          "bytes": 4063
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xd166337499e176bbc38a1fbd113ab144e5bd2df7-recipient92.json",
+        "sha256": "0b532adf7821a34405d56660edcdb8cd61cdbc617ba7b21bcbac56e4fabaa462"
+      },
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "sourceTree": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+          "codeHash": "0x145bff91aef4f63089cb6e628ab5fca4daf8e51619106333ceb291ccf406cd86",
+          "bytes": 163
+        },
+        {
+          "role": "asset",
+          "address": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+          "codeHash": "0x6d0ce32ba65bd273fcbdc767be5fd8924abd4ce0d6fb5c84ba39c28be05d2457",
+          "bytes": 761
+        },
+        {
+          "role": "implementation",
+          "address": "0x2005E0CA201a37694125fF267ae57872bEA0a0Ce",
+          "codeHash": "0x555fcdfcc7e072b39cb27f6a0f4619c376a0d6b1f6d2b8d60216d5beaca8d2a2",
+          "bytes": 18642
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000002005e0ca201a37694125ff267ae57872bea0a0ce"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0xe05fadf242331808f504661bea65972594869826",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xe05fadf242331808f504661bea65972594869826-recipient96.json",
+        "sha256": "31813bc7fb255210de1a0df49ec985f8d8d736dc797d5a84187dad233d626fd7"
+      },
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "sourceTree": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0xe05faDf242331808f504661BEA65972594869826",
+          "codeHash": "0xb87264448eb495fa597c09eb4a576b7d6f029cb98957d3cb2491904a39abd8e9",
+          "bytes": 21808
+        },
+        {
+          "role": "asset",
+          "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "codeHash": "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505",
+          "bytes": 2186
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    },
+    {
+      "target": "0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066-recipient92.json",
+        "sha256": "ccc92419d5302d07e4c45be61979b887175976ee99161d48ec801993dc093b14"
+      },
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "sourceTree": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+      "artifact": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bindings": [
+        {
+          "role": "vault",
+          "address": "0xFaa9a0e1Db9E22AE3A20B2B58a68DC24D053d066",
+          "codeHash": "0x2e072440842b0ec478814bbe3ef70888f3801ab0bd2254a795b118447b3a0aef",
+          "bytes": 813
+        },
+        {
+          "role": "asset",
+          "address": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+          "codeHash": "0x6d0ce32ba65bd273fcbdc767be5fd8924abd4ce0d6fb5c84ba39c28be05d2457",
+          "bytes": 761
+        },
+        {
+          "role": "implementation",
+          "address": "0xB8e946cf071De67fD05e12f7658A762b4e80499e",
+          "codeHash": "0xa3d087d5a09b1b90c3154e411e68e6984ff43f0806e2c74f5229ec914c87bfc8",
+          "bytes": 20016
+        }
+      ],
+      "proxySlots": [
+        {
+          "role": "implementation",
+          "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "word": "0x000000000000000000000000b8e946cf071de67fd05e12f7658a762b4e80499e"
+        },
+        {
+          "role": "beacon",
+          "slot": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+          "word": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      }
+    }
+  ]
+}

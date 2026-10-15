@@ -1,0 +1,7 @@
+# 标准 ERC4626 当前范围正确性
+
+18个真实目标、13个变体标签、32个实际准入方向完成同状态报价、quoted、runtime和指定收款自收／外收验收：512正执行、1264严格声明拒绝、64零输入拒绝；另16欠资控制由独立fork验证完整输入拒绝和回滚，原strict资源限制分类保留。非作者逐项核对512组协议事件、1024组供应量及实际部署／实现／依赖，主代理独立核对原始扣款到账。构造Exact=0、无quoted fallback；使用原交易或已有参考输入，不改价格表，不升级自然估值。
+
+标准收款路径新增付款方旧输出及收款方旧输入保护。Frax和InfiniFi先行返回、独立程序及quoted分派未改，原报告以明确兼容视图复用，不改旧源码hash。MAX standing allowance按原协议保留，不声称临时授权清零。Strata和StakedUSDat只计实际deposit方向；不将锁仓或另种payout算同步赎回。Fluid WETH包装型通过内部Withdraw→WETH Deposit→最终Transfer有序事件及全余额核对，未直接观测vault原生币余额这一限制保留。
+
+已有成功执行均复用。保存delta格式、USDT余额映射读槽、Fluid内部事件receiver三项测试工具缺陷修复并有独立审查与针对性回归；原失败、strict资源分类、源指纹preflight失败和观察器失败仍保留。实际生产构建和提交范围构建、相关共用回归通过；独立资金入口、正式Adapter Replay、原机会及4A／4B不由本批升级。

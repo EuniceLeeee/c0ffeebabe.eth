@@ -1,0 +1,56 @@
+{
+  "scope": "Preserved failures and nonexecution preparation faults; successful rows not rerun",
+  "entries": [
+    {
+      "kind": "strict-resource-classification",
+      "ref": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d-recipient92.json",
+        "sha256": "5eeea642791547b5cfd84367b40d02a78ed58d4855717c214348deda8ecc16b2"
+      },
+      "resolution": "Independent same-N full-A token INVALID with rollback; strict resource-limited label retained"
+    },
+    {
+      "kind": "candidate-pre-execution-schema-defect",
+      "ref": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/tooling-case93-candidate.json",
+        "sha256": "0d4a4fe04b05b58d2688178c2bc05caba5f3de6966bccdbd21f308bff60cb23b"
+      }
+    },
+    {
+      "kind": "access-list-balance-fixture",
+      "ref": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/tooling-case94-candidate.json",
+        "sha256": "c3b4d53aa7cd191293321c10c907402e7fb20f3f801b00b8ca113587315162da"
+      }
+    },
+    {
+      "kind": "read-only-gcloud-TLS-transport-before-remote",
+      "ref": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/access94-transport-failure.json",
+        "sha256": "c5053b36ea9780e8f7c626eaa418a62c73d0bf1bc2675f968b7698cb0ca8a8ba"
+      }
+    },
+    {
+      "kind": "preflight-pre-catalog-fingerprint-supplied",
+      "ref": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence95/fingerprint-cause95.json",
+        "sha256": "6beaeb9e8f7c474ad4e55322424cf4ba74209274fb23294203b5004c8711fe2e"
+      }
+    },
+    {
+      "kind": "intermediate-receiver-event-observer",
+      "ref": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/tooling-case97-candidate.json",
+        "sha256": "81603a671285e116074c0b1557edc18c8af6025b6320f3fd552b760dacd5d3f8"
+      }
+    },
+    {
+      "kind": "local-partial-cache-import-only",
+      "ref": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/offline97-scope.json",
+        "sha256": "8b3ba78c8e08a577d28040daa554a6a68f63fbe58e38d313bcb49804179c4837"
+      },
+      "resolution": "Full canonical cloud5 passed; initial local ABI import lacked unrelated common.js, no EVM started"
+    }
+  ]
+}
