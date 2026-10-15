@@ -2115,6 +2115,64 @@
       },
       "created_at": "2026-10-15T14:03:30.270124+00:00",
       "updated_at": "2026-10-15T14:03:30.270124+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-yieldbasis-reference-fixture-actor",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x022a9ff85219675bcf0a0a2b17c76ac72b98d5e2c4177bc104edff56e706ee77",
+      "target_block": 26003536,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/yieldbasis-dodo-tooling-corrections-20261015.json",
+        "before": "docs/research/reports/yieldbasis-dodo-tooling-corrections-20261015.json",
+        "after": "docs/research/reports/family-settlement-yieldbasis-dodo-gates-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:yieldbasis-lt-recipient-contract",
+        "issue": "Reverse mint-reference test built self token delta under fixture executor ...0005, but real historical CLI and helper bind ...0002. Correct identity check found zero matching mint rows and rejected the otherwise intended positive fixture.",
+        "evidence": "{\"id\": \"tooldef-20261015-yieldbasis-reference-fixture-actor\", \"kind\": \"tooling_defect\", \"status\": \"fixed-and-canonical-regression-passed-awaiting-parent-codify-commit\", \"codify_commit\": null, \"tx\": \"0x022a9ff85219675bcf0a0a2b17c76ac72b98d5e2c4177bc104edff56e706ee77\", \"block\": 26003536, \"tool\": \"listener:searcher:yieldbasis-lt-recipient-contract\", \"target\": \"listener/src/searcher/venues/protocols/yieldbasis-lt-family/test/recipient.test.ts\", \"issue\": \"Reverse mint-reference test built self token delta under fixture executor ...0005, but real historical CLI and helper bind ...0002. Correct identity check found zero matching mint rows and rejected the otherwise intended positive fixture.\", \"before\": {\"suite\": \"24/25; only direct-only reverse reference failed at historical-dual.ts:130 with actual0 expected1\", \"evidence\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence09/recipient-contract06.log\", \"sha256\": \"df6cdbbd99256381453f8df41d32903ab60397b91812c6e8da98b78a4860cf1d\"}}, \"fix\": \"Map only the historical-reference fixture self account to the actual CLI executor; assert the original wrong-actor fixture rejects. Keep production/runtime and helper account checks unchanged.\", \"regression\": \"Wrong actor must reject; correct same-N self/external four independent receipts agree; one mismatched mint receipt must reject.\", \"after\": {\"suite\": \"26/26 including artifact-source binding regression\", \"evidence\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence09/recipient-contract07.log\", \"sha256\": \"20c5bfa47a83035c7a0cecb76789b20a46db92b44fadabf626c6aa6d9f9f5dee\"}, \"selection\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/evidence10/selection07.json\", \"sha256\": \"cedb41ad49d5ec65f96ed19b35a7432f1311ab6eda60f4717de32e690272f209\"}}, \"review\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/v1-test-only-review07.json\", \"sha256\": \"1072233f6259e268f8accca473e3ffffbaef8e2596ec1d69912b4e7689421790\"}, \"patch\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/test-only07.patch\", \"sha256\": \"442cdba7e2d36c3677b808b0766a22362df564a1d00c0f712d238907acdb95f0\"}, \"productionModifiedForFix\": false}",
+        "codify_target": "listener/src/searcher/venues/protocols/yieldbasis-lt-family/test/recipient.test.ts",
+        "codify_commit": "f5183f58fcf705ec6400a3a7db3b4f84c685d135",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T14:33:35.910666+00:00",
+      "updated_at": "2026-10-15T14:33:35.910666+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-dodo-direct-model-return",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x00085da9420425f8f3de1243d41d71ff160984310edf5474341fbe628375bc3e",
+      "target_block": 26016874,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/yieldbasis-dodo-tooling-corrections-20261015.json",
+        "before": "docs/research/reports/yieldbasis-dodo-tooling-corrections-20261015.json",
+        "after": "docs/research/reports/family-settlement-yieldbasis-dodo-gates-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:family-direct-recipient",
+        "issue": "Synthetic DODO positive model credited expectedOutput74 but returned unrelated999999, contradicting real GSP sellBase/sellQuote return=receivedAmount. New production actual-return/receipt guard correctly rejected both directional positive fixtures.",
+        "evidence": "{\"id\": \"tooldef-20261015-dodo-direct-model-return\", \"kind\": \"tooling_defect\", \"status\": \"fixed-and-canonical-regression-passed-awaiting-parent-codify-commit\", \"codify_commit\": null, \"tx\": \"0x00085da9420425f8f3de1243d41d71ff160984310edf5474341fbe628375bc3e\", \"block\": 26016874, \"tool\": \"listener:searcher:family-direct-recipient\", \"target\": \"listener/src/searcher/test/family-direct-recipient-swaps.ts\", \"issue\": \"Synthetic DODO positive model credited expectedOutput74 but returned unrelated999999, contradicting real GSP sellBase/sellQuote return=receivedAmount. New production actual-return/receipt guard correctly rejected both directional positive fixtures.\", \"before\": {\"suite\": \"13/17, four failures total: two DODO return defects in this case and two separate Set native-provider fixtures; no conflation\", \"evidence\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/shared12/shared88-family-direct-recipient.log\", \"sha256\": \"992886a51dc4fb8aef266915e47ffbecef15107ad17c17f06f5a3d203cfd4a3f\"}}, \"fix\": \"Return actual expectedOutput for normal DODO fixture behavior. Add DODO-specific bad-return fault that changes only return to output+1 while preserving correct actual balances.\", \"regression\": \"Both DODO directions reject bad-return solely via emitted return=receipt guard; balances/post-state remain otherwise valid.\", \"after\": {\"suite\": \"17/17 after independent DODO and Set fixture repairs\", \"evidence\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/shared12/shared89-family-direct-recipient.log\", \"sha256\": \"8e00f8b77b60e51a8d9754a24de6abe1f080122b1a8344e56ae199d20f71edc7\"}, \"selection\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/shared12/shared88-selection.json\", \"sha256\": \"15ef806c1f639fcca11bd669efb1acf69b8d4105ececfce6d42dec6c828a2796\"}}, \"review\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/shared89-v1-independent-review.json\", \"sha256\": \"c45f1792be03e7e4cb5881e32f251e319442c50202da2a55aace5fad17319332\"}, \"beforeSource\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/shared-base04/listener/src/searcher/test/family-direct-recipient-swaps.ts\", \"sha256\": \"8329edef7bdb23064b8ff4f403a0eccd709aea59433eaf06cf5df6570b870dd0\"}, \"afterSource\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/shared-candidate04/listener/src/searcher/test/family-direct-recipient-swaps.ts\", \"sha256\": \"43a5e6d2819f5f6cf723e8c9053641dc68d5c9d16d269b5e242c120c4f99aa56\"}, \"productionModifiedForFix\": false}",
+        "codify_target": "listener/src/searcher/test/family-direct-recipient-swaps.ts",
+        "codify_commit": "f5183f58fcf705ec6400a3a7db3b4f84c685d135",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T14:33:35.910666+00:00",
+      "updated_at": "2026-10-15T14:33:35.910666+00:00"
     }
   ]
 }
