@@ -1,0 +1,58 @@
+[
+  {
+    "family": "protocol:token-migration",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T15:10:00.889151+00:00",
+    "finishedAt": "2026-10-15T15:10:51.299739+00:00",
+    "logSha256": "3948b7204e419e53642b234c439d9a6a68fd2f078328c1a39ae03aea1cf535a3",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/caller-gate100-selection.json",
+    "manifestSha256": "d83dd34342b73f614f00262077b343b4b573166ffe84e6507a9a7f5194ea52e6",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:token-migration",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  {
+    "family": "protocol:token-conversion",
+    "exitCode": 1,
+    "startedAt": "2026-10-15T15:10:51.300179+00:00",
+    "finishedAt": "2026-10-15T15:11:41.893827+00:00",
+    "logSha256": "c627876a1338a22832a558bc271a8874b08051c7f29680fe215111db5556c37f",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/caller-gate100-selection.json",
+    "manifestSha256": "203d6698a20182f973b6bffbdefcaeb3b17032c301671c1c13c247a94175096f",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:token-conversion",
+          "passed": false,
+          "failures": [
+            "variant coverage is incomplete",
+            "xWin Allocations deposit: deployment identity; \u7f3a N26075823 \u5386\u53f2\u5b9e\u73b0\u69fd/\u5b9e\u73b0 runtime \u7ed1\u5b9a\uff1b\u666e\u901a\u914d\u7f6e\u534f\u8bae\u8c03\u7528\u4e0d\u5c5e\u4e8e\u8c03\u7528\u8005\u7ed3\u7b97\u56de\u8c03\u3002",
+            "xWin Allocations withdraw: deployment identity; \u7f3a N26075823 \u5386\u53f2\u5b9e\u73b0\u69fd/\u5b9e\u73b0 runtime \u7ed1\u5b9a\uff1b\u666e\u901a\u914d\u7f6e\u534f\u8bae\u8c03\u7528\u4e0d\u5c5e\u4e8e\u8c03\u7528\u8005\u7ed3\u7b97\u56de\u8c03\u3002"
+          ]
+        }
+      ]
+    }
+  }
+]

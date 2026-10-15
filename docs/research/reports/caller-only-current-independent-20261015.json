@@ -1,0 +1,60 @@
+{
+  "schema": "caller-only-independent-current-review/v1",
+  "result": "pass",
+  "counts": {
+    "positive": 24,
+    "declaredReject": 48,
+    "zeroReject": 3,
+    "tokenDeltas": 144,
+    "nativeDeltas": 24,
+    "supplyDeltas": 48,
+    "inputTransfers": 24,
+    "outputTransfers": 24,
+    "protocolEvents": 24,
+    "temporaryApprovalCleared": 16
+  },
+  "reports": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/evidence92/migration-dual92.json",
+      "sha256": "0522b6531262681932b6501ed0a2fdb1a9ef7d6c4c50841eac2ec9ef36e21ebc",
+      "tx": "0x576dcfa02ef2f8c2a2038ed17070e14a757c9c2e0b2e19b2de65ff65b9e7c583",
+      "source": {
+        "number": 26029585,
+        "hash": "0x7d657e10588fe0327698837441079dc5568813e20a53057ae806a28ab210dead"
+      },
+      "positive": 8,
+      "declaredReject": 16,
+      "zeroReject": 1,
+      "directions": [
+        "migrate"
+      ]
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/evidence92/btb-dual92.json",
+      "sha256": "5c6c380f30321d31e9b9c2691567699080069bf58afc8bdfc1191d7ef4801fe6",
+      "tx": "0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91",
+      "source": {
+        "number": 26029369,
+        "hash": "0x8406ef83427bd09be91ef479edff4830d245d4c4658b75299b12e37c8ac20928"
+      },
+      "positive": 16,
+      "declaredReject": 32,
+      "zeroReject": 2,
+      "directions": [
+        "mint",
+        "redeem"
+      ]
+    }
+  ],
+  "source": {
+    "sourceTreeSha256": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+    "rows": 1244,
+    "manifestSha256": "9874a928f0d9f6523d438dd22e2ad72575ab50caf44dbe2f1faa0d2629a282b5"
+  },
+  "scope": "Current production caller-only quoted/runtime actual N-state behavior. Original transaction input sizes and one-tenth only; no original transaction output or natural price claim. Full input, quote/receipt, token/native/supply changes and input/output/protocol events crosschecked. Revert effect arrays are transport omissions, not independent storageDiff rollback. Same-N identities and current deployed ABI closure separately recorded. No opportunity/performance upgrade.",
+  "reconciliation": {
+    "manifestSha256": "752546f5ef851a472c1026d3052143d66c2653e5d8774006fafdada7eea08b67",
+    "checksSha256": "a9e6e0ce20cc05a8d3ecb90118dbed448336926a9f4c74046bc5c9e9c98e84ef",
+    "canonicalResult": "five recorded indexed runs exit0; independent raw review agrees"
+  }
+}

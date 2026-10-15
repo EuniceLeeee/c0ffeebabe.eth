@@ -1,0 +1,618 @@
+{
+  "status": "current-caller-only-correctness-independently-verified",
+  "scope": "Current caller-only quote/quoted and buildRuntimeLeg actual correctness. Existing production implementations unchanged. Four new tests and three package entry registrations only.",
+  "samples": [
+    {
+      "family": "protocol:token-migration",
+      "variant": "token-migration:mantle-solc-0.8.13-v1",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/evidence92/migration-dual92.json",
+        "sha256": "0522b6531262681932b6501ed0a2fdb1a9ef7d6c4c50841eac2ec9ef36e21ebc"
+      },
+      "tx": "0x576dcfa02ef2f8c2a2038ed17070e14a757c9c2e0b2e19b2de65ff65b9e7c583",
+      "source": {
+        "number": 26029585,
+        "hash": "0x7d657e10588fe0327698837441079dc5568813e20a53057ae806a28ab210dead"
+      },
+      "directions": [
+        "migrate"
+      ],
+      "positive": 8,
+      "declaredReject": 16,
+      "zeroReject": 1,
+      "rawStrict": 25,
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "current production issuer"
+      },
+      "invocationCounts": {
+        "exact": 2,
+        "quoted": 2,
+        "forbiddenDuringBuild": 0
+      },
+      "actualBindings": [
+        {
+          "address": "0x5c30d7494da55e23f62130c642c22af1814ef65d",
+          "codeHash": "0x4a7ead31f678c7783283ddc2d29401970a5dcd0e16e8896ac914df997f784fb9"
+        },
+        {
+          "address": "0x44108f0223A3C3028F5Fe7AEC7f9bb2E66beF82F",
+          "codeHash": "0xb34d995d9a5ebf38e2d45b7c9ed7ab3a506a89ee25d55c57730eb5639cb965e9"
+        },
+        {
+          "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "codeHash": "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505"
+        }
+      ],
+      "inputs": {
+        "tx": "0x576dcfa02ef2f8c2a2038ed17070e14a757c9c2e0b2e19b2de65ff65b9e7c583",
+        "source": {
+          "number": 26029585,
+          "hash": "0x7d657e10588fe0327698837441079dc5568813e20a53057ae806a28ab210dead"
+        },
+        "inputs": {
+          "migrate": {
+            "amount": "24496647146421036380821",
+            "logIndex": 7,
+            "event": "TokensMigrated",
+            "field": "amountOfBitSwapped"
+          }
+        },
+        "scope": "original token quantity only; smaller input is manual one-tenth, no prices altered"
+      },
+      "amounts": [
+        {
+          "direction": "migrate",
+          "amountIn": "2449664714642103638082",
+          "quoteOut": "107172831"
+        },
+        {
+          "direction": "migrate",
+          "amountIn": "24496647146421036380821",
+          "quoteOut": "1071728312"
+        }
+      ],
+      "ready": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/evidence92/migration-ready92/ready.json",
+        "sha256": "7d9b9c45e0a29c44f06963b277272c130c4bd1f7ad2f7ec9fc191e7e9f09b1c0"
+      },
+      "readyScope": {
+        "kind": "current-production-family-rebuild",
+        "prices": "not run; historical CLI uses original transaction token quantities as input only"
+      }
+    },
+    {
+      "family": "protocol:token-conversion",
+      "variant": "btb-bear-v1",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/evidence92/btb-dual92.json",
+        "sha256": "5c6c380f30321d31e9b9c2691567699080069bf58afc8bdfc1191d7ef4801fe6"
+      },
+      "tx": "0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91",
+      "source": {
+        "number": 26029369,
+        "hash": "0x8406ef83427bd09be91ef479edff4830d245d4c4658b75299b12e37c8ac20928"
+      },
+      "directions": [
+        "mint",
+        "redeem"
+      ],
+      "positive": 16,
+      "declaredReject": 32,
+      "zeroReject": 2,
+      "rawStrict": 50,
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "current production issuer"
+      },
+      "invocationCounts": {
+        "exact": 4,
+        "quoted": 4,
+        "forbiddenDuringBuild": 0
+      },
+      "actualBindings": [
+        {
+          "address": "0x88888880d5ca13018d2dc11e2e4744bd91a5656f",
+          "codeHash": "0x97389cd4ca6fdc85ea4eafdbd49a2d9e7dd84b48a84ea6276da34884bb31d066"
+        },
+        {
+          "address": "0x88888888c90CD71B35830daBFD24743DbC135B51",
+          "codeHash": "0x902161ce91cd6cbce6e828e356aec30432d5209fbb0d797ad2e7895cbcab20fa"
+        }
+      ],
+      "inputs": {
+        "tx": "0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91",
+        "source": {
+          "number": 26029369,
+          "hash": "0x8406ef83427bd09be91ef479edff4830d245d4c4658b75299b12e37c8ac20928"
+        },
+        "inputs": {
+          "mint": {
+            "amount": "134844496078197091206672",
+            "logIndex": 632,
+            "event": "Minted",
+            "field": "btbAmount"
+          },
+          "redeem": {
+            "amount": "134844496078197091206672",
+            "logIndex": 632,
+            "event": "Minted",
+            "field": "btbbAmount (output quantity borrowed as redeem input only)"
+          }
+        },
+        "scope": "original token quantity only; smaller input is manual one-tenth, no prices altered"
+      },
+      "amounts": [
+        {
+          "direction": "mint",
+          "amountIn": "13484449607819709120667",
+          "quoteOut": "13484449607819709120667"
+        },
+        {
+          "direction": "mint",
+          "amountIn": "134844496078197091206672",
+          "quoteOut": "134844496078197091206672"
+        },
+        {
+          "direction": "redeem",
+          "amountIn": "13484449607819709120667",
+          "quoteOut": "13484449607819709120667"
+        },
+        {
+          "direction": "redeem",
+          "amountIn": "134844496078197091206672",
+          "quoteOut": "134844496078197091206672"
+        }
+      ],
+      "ready": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/evidence92/btb-ready92/ready.json",
+        "sha256": "a73d6ffee912a083edef8a86b6f7553d2d7be64637bc055eb247ccab504aee3b"
+      },
+      "readyScope": {
+        "kind": "current-production-family-rebuild",
+        "prices": "not run; historical CLI uses original transaction token quantities as input only"
+      }
+    }
+  ],
+  "totals": {
+    "positive": 24,
+    "declaredReject": 48,
+    "zeroReject": 3
+  },
+  "runtimeArtifact": {
+    "artifact": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/out/BotVM.sol/BotVM.json",
+      "sha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+    },
+    "ownerPatchedRuntimeKeccak256": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "sources": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+      }
+    ],
+    "metadataCurrentSourcesCheckedByBothCli": true
+  },
+  "source": {
+    "export": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/production-source92.json",
+      "sha256": "9874a928f0d9f6523d438dd22e2ad72575ab50caf44dbe2f1faa0d2629a282b5"
+    },
+    "hash": "23b06e32e07adb9dc45f672bf067b14baeb5b2c6cb46c8ff2af04d754b93219a",
+    "files": 1244,
+    "headAtExport": "8fe1fd4ead5056d2680326e5b407163f37193ffb",
+    "note": "report.code.harnessSha256 identifies imported common historical-dual sourcePin helper; actual new caller-historical hash is separately in report.inputs and ownedFiles."
+  },
+  "ownedFiles": [
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/test/caller-historical.ts",
+      "beforeSha256": null,
+      "afterSha256": "43261b2cd4f37a2ab2bd291856283b9b163ec953cd136bb6e6f4d99e41eb46e2",
+      "candidate": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/candidate/listener/src/searcher/venues/protocols/token-migration-family/test/caller-historical.ts"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/test/caller-observations.test.ts",
+      "beforeSha256": null,
+      "afterSha256": "884f7ce1b814d359062cdc2487e59c268b010a3e3559728efeb453a49e2d08e7",
+      "candidate": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/candidate/listener/src/searcher/venues/protocols/token-migration-family/test/caller-observations.test.ts"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/test/caller-ready.ts",
+      "beforeSha256": null,
+      "afterSha256": "74e1adc755a2ab37a431a85f8058d16bc767a5bb419e2f8c3f1a5bcd2e486c8b",
+      "candidate": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/candidate/listener/src/searcher/venues/protocols/token-migration-family/test/caller-ready.ts"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/test/caller-samples.ts",
+      "beforeSha256": null,
+      "afterSha256": "b3bc547a2086b1807e74bdebdb51c8d1033c80cdf94101cc8de8a612837a8c7e",
+      "candidate": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/candidate/listener/src/searcher/venues/protocols/token-migration-family/test/caller-samples.ts"
+    }
+  ],
+  "familySourcePins": [
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/action.ts",
+      "sha256": "ab0954b48dd24d97bd5d9a17bfbc63ffa20ed4a1cdbbbc33c795b0c9c0216dec"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/asset-runtime.ts",
+      "sha256": "842ccbaba1b039ab7139e5333a6361fdaa0381de0f98b5973453e36dd2c24746"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/bear-local.ts",
+      "sha256": "d6868fe0e0094e0311a136a53cffe000b0bfcf6c77ebe49b534b2a3960fe2211"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/binding.ts",
+      "sha256": "a06cfb869de7ddfde53278e6c359bce4c3daef3f1d95c94347cd7d4adece9bf3"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/capture.ts",
+      "sha256": "34b0f5fb84807ccac485db4dce83fa839eacb0f12664e21bb6da7de1aef47b4a"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/discovery.ts",
+      "sha256": "5a34fa564ac61ce832661888586a051e761072c468588ee64d59b74d75a25704"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/exact.ts",
+      "sha256": "e6f019551346e7af0e5f51d34a5574373f60f786b40c52bac9bce247f2cb8739"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/execution.ts",
+      "sha256": "b4f067be38d44ca577e01915f39f43811ab84e3649651fa69aafe03f2ec01923"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/identity.ts",
+      "sha256": "c07cbee5ba49462511a0b581cd3e86b34f9feaa594c256201aab20b0e86b5bdd"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/instance.ts",
+      "sha256": "77f78b1ec8a74f8552c493f1112f5974ceb368570ea8e626a63930f1a5d906f7"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/manifest.ts",
+      "sha256": "a3be52b1330e6f7e1cfdb9c910e26bedada1f60b65777d07787f26f4801de0e9"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/pricing.ts",
+      "sha256": "162176ea642ca038bb6108610de2e248dfac3f81bd609970375f4358585f0672"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/protocol.ts",
+      "sha256": "4eb17638454ec20688e465da120ee238c2e315206b09e90bc2850215d70fad8d"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/routes.ts",
+      "sha256": "472d1349751724bb0165263709722efb842a53c8aef4130089e81f76ec78502e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/sequential.ts",
+      "sha256": "8119ae7129aa8f7c71859df67622d043dca5bc916c47707ea9a8e1aa9262fa25"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/simulation.ts",
+      "sha256": "9c9740681628e01bf91b5cb3be0783e49b0737e78044f59e0bbd8c01524f61c2"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/trial-state.ts",
+      "sha256": "b8a8aff90ca4c2c7535ef43f393a79f6ec82c5a74ad80b960a8eec445ef62182"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/types.ts",
+      "sha256": "831fd8a0765071b8fc4b05a9495e86a1666315e99a1fd2b41e7e26faf35c7360"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/variants.ts",
+      "sha256": "f4c5605e59393cf8546d579a3d4ed4a2fbc1457f2b398159c83e2ec57d31b6f4"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/xwin-dependency-runtime.ts",
+      "sha256": "822e126591bb241e1aadfc9bdeb2d73bb54835918f4c4013323be60dbd48c8b8"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/xwin-identity.ts",
+      "sha256": "405de06db1bc3156b931ad2412604477f784309c8cf092da97b1f4f662ebf3cf"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/xwin-local.ts",
+      "sha256": "ec2a1ef21873e76c0125c8d60c1923cb8f033888455ae2213fac102c077de1ec"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/xwin-math.ts",
+      "sha256": "f4a7ada7c5dff6b9ab700a0c3f7a7de1eb0293aeec17c49152b4a20123f89fd7"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/xwin-pricing.ts",
+      "sha256": "7972008662bced4fd92abec9a9d1a21b291af843a7dd96021f4dd71457c1bac9"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/xwin-transition.ts",
+      "sha256": "c8a941058bf8c38f1f1ee764be2d1b21490cd96b9f4f7cbd38fefe81b4b98757"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/xwin.ts",
+      "sha256": "44c3314593691acd4e98968410d8a96e5b2e3c1997821e0f968d55c4b26a024a"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/action.ts",
+      "sha256": "6069efbf7a37c0cedf703bfcd22065cdd46e8047bc60ef2378683b7272766cee"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/binding.ts",
+      "sha256": "99fce876d62234d6bbe3220a2154d513ba91421d34739f45aef1142fdd11b5ee"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/capture.ts",
+      "sha256": "c83ffd552f019c7136d8aa84ef152fd84e07ad45c8a7cee1feb4be1ec2ddb166"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/codec.ts",
+      "sha256": "77d6dacdec0ddc524392957feb169c24871a1c644d1eb727b89619af2eb594ab"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/discovery.ts",
+      "sha256": "866e4e35fc16d993d0f5439d7c6576226794ddbc69a4d853993c8fa61f24fbd6"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/exact.ts",
+      "sha256": "d4cbd9ad3036aff4c62bbf3285d1d1518693fb4d16f59732208a72c1d60356f5"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/execution.ts",
+      "sha256": "a5714bd55e9cbc0d586f6d0586d67e25940318f38ac3fe1e98febcb94b99a575"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/identity.ts",
+      "sha256": "f62dfc91bb4d30ff69044d9706f4f3b015c1cf3f69aa76b63e55cd0554ac6968"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/instance.ts",
+      "sha256": "29cf57e30114a0d143331b9f0cfc64b335387de439c605c0c07efc90e68fc9e2"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/manifest.ts",
+      "sha256": "5855c288a11f082cfa519cf52740d400510f350c3fd3d814bb03f0bf6c54be5e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/pricing.ts",
+      "sha256": "e777f1b05890939c35734b07e11f676f607bedb6e38db022a6d27bb50fdf6d8a"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/protocol.ts",
+      "sha256": "a8171ed0d8dd3ce0ceaec8029e9afdd01e403a8ce6ad6054ace45ff797233ccf"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/routes.ts",
+      "sha256": "d354cd33640b316c503987e838b33c2c90631bfc01f35e92e76d6862c079707f"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/state.ts",
+      "sha256": "38e47163dd7f6e531b54a5ece65b8dd8d97dc389d3c1f41be2c7543127904281"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-migration-family/types.ts",
+      "sha256": "05615cf3d533363b011f8e5e5aca94863bf5ffa5be504c384b26d492eba44c94"
+    }
+  ],
+  "packagePatch": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/package-patch92.json",
+    "sha256": "56a778280e1777aef703f0089504591136dc64ef718b652bd0ebb012b05dbe0a"
+  },
+  "packageReceipt": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/evidence92/package92.json",
+    "sha256": "f3904651b2cd8b976dc338bda470de98f0b0cf97d8e3c67e5f20180af36794e8"
+  },
+  "canonical": {
+    "selection": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/evidence92/selection92.json",
+      "sha256": "752546f5ef851a472c1026d3052143d66c2653e5d8774006fafdada7eea08b67"
+    },
+    "requestedCapabilities": [
+      "migration",
+      "conversion",
+      "caller",
+      "historical"
+    ],
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:caller-only-observations",
+        "descriptor_sha256": "712a1c1ab7d98fbfaa6f9931ebd8c6b797ba616c8110f71cc08dc01d81742da0",
+        "started_at": "2026-10-15T14:24:08.185Z",
+        "finished_at": "2026-10-15T14:24:08.868Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "aff8a182137b7a31bb48345fb19acb45d9d58b05946c5431cd99f62a56925932",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:caller-only-observations",
+          "--"
+        ],
+        "stdout_sha256": "ddef95f8aa25d1396b4242355a98c94aef21414dd201996a0d1082ea8347762d",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 492,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:caller-only-ready",
+        "descriptor_sha256": "d0d582dc49ab9b64a9cbda291074f8879ee2333887fea35f1b632d064eadb302",
+        "started_at": "2026-10-15T14:24:09.223Z",
+        "finished_at": "2026-10-15T14:24:11.801Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "e7c92d65098630fd364bf0c33eb08c04837b95ca7d296e3ae7c2f92a0f3e7b1f",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:caller-only-ready",
+          "--",
+          "--sample",
+          "migration",
+          "--tx",
+          "0x576dcfa02ef2f8c2a2038ed17070e14a757c9c2e0b2e19b2de65ff65b9e7c583",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/caller-only92/migration-ready92",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--executor",
+          "0x1000000000000000000000000000000000000002",
+          "--owner",
+          "0x1000000000000000000000000000000000000001",
+          "--revm-bin",
+          "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+          "--executor-program",
+          "1",
+          "--reuse-ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/caller-only92/migration-original-ready.json"
+        ],
+        "stdout_sha256": "beee138ea900f86f7d7526a6d4df8321d328835a9eb9f114c9aeeb8bcf366aac",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1780,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:caller-only-historical",
+        "descriptor_sha256": "30a43260d08b4a53a9f75f04f0caff9502e1e4e858da3e5e13f869570ce42e32",
+        "started_at": "2026-10-15T14:24:12.152Z",
+        "finished_at": "2026-10-15T14:24:16.443Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "21f68a7bbbbefb5d6b91bb1888d1d66c7437d1a7de85d4b3d50c23bac7a4c454",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:caller-only-historical",
+          "--",
+          "--sample",
+          "migration",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/caller-only92/migration-ready92/ready.json",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--revm-bin",
+          "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/caller-only92/migration-dual92.json"
+        ],
+        "stdout_sha256": "d0db7b5c1303a501788711a5f71f4d9139bbee70cd31ee6c0326446259e494de",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1014,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:caller-only-ready",
+        "descriptor_sha256": "d0d582dc49ab9b64a9cbda291074f8879ee2333887fea35f1b632d064eadb302",
+        "started_at": "2026-10-15T14:24:16.803Z",
+        "finished_at": "2026-10-15T14:24:22.269Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "bcc41658b2d33c1ccf4d406015704ed161c8d7ca56fd11c36f68beaacf62a2a4",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:caller-only-ready",
+          "--",
+          "--sample",
+          "btb",
+          "--tx",
+          "0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/caller-only92/btb-ready92",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--executor",
+          "0x1000000000000000000000000000000000000002",
+          "--owner",
+          "0x1000000000000000000000000000000000000001",
+          "--revm-bin",
+          "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+          "--executor-program",
+          "1",
+          "--reuse-ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/caller-only92/btb-original-ready.json"
+        ],
+        "stdout_sha256": "be2cf871c1b66998122ff0447f3b9e6d9441f244b61660cfcd9f6cf920aaa1e3",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1703,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:caller-only-historical",
+        "descriptor_sha256": "30a43260d08b4a53a9f75f04f0caff9502e1e4e858da3e5e13f869570ce42e32",
+        "started_at": "2026-10-15T14:24:22.626Z",
+        "finished_at": "2026-10-15T14:24:28.419Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "6bcddbb7b79c0042cc5ad2b9636081b950c54ec23be820b3d0f43aa74da7e02e",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:caller-only-historical",
+          "--",
+          "--sample",
+          "btb",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/caller-only92/btb-ready92/ready.json",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--revm-bin",
+          "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/strict-nested-target.NWbx5i/debug/revm-sim",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/caller-only92/btb-dual92.json"
+        ],
+        "stdout_sha256": "0f3b2f61f6271e3b3a32b3e466fb2b1a5223eb392d6ecb329f50519ca19dbd9a",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1278,
+        "stderr_bytes": 0
+      }
+    ],
+    "checks": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/evidence92/checks92.json",
+      "sha256": "a9e6e0ce20cc05a8d3ecb90118dbed448336926a9f4c74046bc5c9e9c98e84ef"
+    }
+  },
+  "sharedCurrentValidation": {
+    "checks": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/standard95-checks.json",
+    "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/standard95-selection.json",
+    "status": "Parent-provided current build/dual/direct PASS; no redundant rerun"
+  },
+  "boundaries": [
+    "Migration is ACX to USDC by actual on-chain binding; ABI BIT/MNT naming is not token identity.",
+    "BTBBear mint/redeem are 1:1 mint/burn; tax on share transfer is not applied to mint/burn.",
+    "No receiver or callback support claimed: current issuer direct-output, quote-output and deferred-input requests return null.",
+    "Original transaction event amounts plus one-tenth input only. Neither output/identity nor natural production valuation borrowed.",
+    "Legacy Ready copies revalidated by current family-limited production rebuild; no forged partitions or forced admission.",
+    "Declared MainRevert controls omit effects; no independent storageDiff claim. Forced post-revert is a consumer atomicity control.",
+    "No original opportunity replay, complete profitability loop, local/representative performance or deployment claim.",
+    "Original quoted-fallback evidence remains historical; new runtime execution supplies current missing interface proof."
+  ],
+  "process": {
+    "session": 22912,
+    "exit": 0,
+    "drained": true
+  },
+  "toolDefects": [],
+  "independentRawReview": "caller-only-current-independent-20261015.json"
+}

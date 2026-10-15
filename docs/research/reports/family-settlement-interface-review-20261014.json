@@ -5634,43 +5634,73 @@
     },
     {
       "familyId": "protocol:token-conversion",
-      "coverage": "complete",
+      "coverage": "partial",
       "variants": [
         {
           "id": "BTB Bear mint",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "no",
           "wiring": "verified",
-          "execution": "not-required",
-          "gaps": [
-            "缺受测历史实例 runtime 绑定；当前 BTB 模板匹配不足以证明历史实例。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/caller-only-current-correctness-20261015.json",
+              "sha256": "0a9edded8549df15279c73cf66c79f92127c27b435344aa689f6036d4624d38d"
+            },
+            {
+              "path": "docs/research/reports/caller-only-current-independent-20261015.json",
+              "sha256": "442325579591a6e28bf237a2e905e36f695382c240467dfe919acab4ad76ab97"
+            },
+            {
+              "path": "docs/research/reports/btb-current-deployment-interface-20261015.json",
+              "sha256": "5cb2d0a81fae275d439706e0c873c15796914ca450c809373197faf8b2d77580"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/btb-current-behavior-20261015.json",
+            "sha256": "32b28d1e400798669b399ab023f32e91063aa67ec65329f2cb378ec1c29a5311"
+          },
+          "scope": "Current caller-only actual mint/redeem paths; no unsupported recipient/deferred capability declared."
         },
         {
           "id": "BTB Bear redeem",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "no",
           "wiring": "verified",
-          "execution": "not-required",
-          "gaps": [
-            "缺受测历史实例 runtime 绑定；当前 BTB 模板匹配不足以证明历史实例。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/caller-only-current-correctness-20261015.json",
+              "sha256": "0a9edded8549df15279c73cf66c79f92127c27b435344aa689f6036d4624d38d"
+            },
+            {
+              "path": "docs/research/reports/caller-only-current-independent-20261015.json",
+              "sha256": "442325579591a6e28bf237a2e905e36f695382c240467dfe919acab4ad76ab97"
+            },
+            {
+              "path": "docs/research/reports/btb-current-deployment-interface-20261015.json",
+              "sha256": "5cb2d0a81fae275d439706e0c873c15796914ca450c809373197faf8b2d77580"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/btb-current-behavior-20261015.json",
+            "sha256": "32b28d1e400798669b399ab023f32e91063aa67ec65329f2cb378ec1c29a5311"
+          },
+          "scope": "Current caller-only actual mint/redeem paths; no unsupported recipient/deferred capability declared."
         },
         {
           "id": "xWin Allocations deposit",
@@ -5721,7 +5751,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -5805,8 +5835,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-        "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+        "path": "docs/research/reports/btb-current-deployment-interface-20261015.json",
+        "sha256": "5cb2d0a81fae275d439706e0c873c15796914ca450c809373197faf8b2d77580"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/caller-only-current-correctness-20261015.json",
+        "sha256": "0a9edded8549df15279c73cf66c79f92127c27b435344aa689f6036d4624d38d"
       }
     },
     {
@@ -5816,20 +5850,35 @@
         {
           "id": "MantleTokenMigrator immutable variant",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "no",
           "wiring": "verified",
-          "execution": "not-required",
-          "gaps": [
-            "缺历史实际目标 runtime、资产 immutable 与兑换比例绑定；当前模板匹配不能升级为历史实例通过。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/caller-only-current-correctness-20261015.json",
+              "sha256": "0a9edded8549df15279c73cf66c79f92127c27b435344aa689f6036d4624d38d"
+            },
+            {
+              "path": "docs/research/reports/caller-only-current-independent-20261015.json",
+              "sha256": "442325579591a6e28bf237a2e905e36f695382c240467dfe919acab4ad76ab97"
+            },
+            {
+              "path": "docs/research/reports/migration-current-deployment-interface-20261015.json",
+              "sha256": "f3b5accd7ee82d1762af8015999937d12c1534c1767dc20caaf67fe1eb85aab5"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/migration-current-behavior-20261015.json",
+            "sha256": "05efe472d84f8a84c7d892f9e8a459a58162b77b4c1156719fe8a3126a871c3c"
+          },
+          "scope": "Current caller-only actual migrate paths; no unsupported recipient/deferred capability declared."
         }
       ],
       "domain": "protocol",
@@ -5840,7 +5889,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -5908,8 +5957,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-        "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+        "path": "docs/research/reports/migration-current-deployment-interface-20261015.json",
+        "sha256": "f3b5accd7ee82d1762af8015999937d12c1534c1767dc20caaf67fe1eb85aab5"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/caller-only-current-correctness-20261015.json",
+        "sha256": "0a9edded8549df15279c73cf66c79f92127c27b435344aa689f6036d4624d38d"
       }
     },
     {
@@ -7650,8 +7703,8 @@
     ]
   },
   "currentScopedUpdate": {
-    "scope": "YB three ordinary ERC20 LT instances and DODO two registered GSP pools direct receipt acceptance; default evidence certified reuse.",
-    "priorInventorySha256": "8bf7e0c3bda243fd34b49569acd1cb9e089122cc47068f2e0ba8a893e4b5e12e",
+    "scope": "Migration actual caller-only and BTB mint/redeem; no production implementation change. xWin pending identity join unchanged.",
+    "priorInventorySha256": "33dee3ad321297f94a3f72f29ef7728dca98d1939b9c3c13ac7fafd0cf8c2bf5",
     "allOtherVariantStatesPreserved": true,
     "allFamiliesPassed": false
   }

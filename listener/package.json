@@ -444,7 +444,10 @@
     "searcher:yieldbasis-lt-recipient-contract": "node --import tsx --test src/searcher/venues/protocols/yieldbasis-lt-family/test/recipient.test.ts",
     "searcher:yieldbasis-lt-recipient-evm": "node --import tsx src/searcher/venues/protocols/yieldbasis-lt-family/test/recipient-evm.ts",
     "searcher:dodo-v2-recipient-contract": "node --import tsx --test src/searcher/venues/swaps/dodo-v2-family/test/recipient.test.ts",
-    "searcher:dodo-v2-recipient-evm": "node --import tsx src/searcher/venues/swaps/dodo-v2-family/test/recipient-evm.ts"
+    "searcher:dodo-v2-recipient-evm": "node --import tsx src/searcher/venues/swaps/dodo-v2-family/test/recipient-evm.ts",
+    "searcher:caller-only-ready": "tsx src/searcher/venues/protocols/token-migration-family/test/caller-ready.ts",
+    "searcher:caller-only-historical": "tsx src/searcher/venues/protocols/token-migration-family/test/caller-historical.ts",
+    "searcher:caller-only-observations": "tsx --test src/searcher/venues/protocols/token-migration-family/test/caller-observations.test.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"
