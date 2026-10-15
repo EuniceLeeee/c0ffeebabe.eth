@@ -2202,6 +2202,93 @@
       },
       "created_at": "2026-10-15T15:49:38.833782+00:00",
       "updated_at": "2026-10-15T15:49:38.833782+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-erc4626-standard-saved-effects",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x844abb56e58a4e33e5b8dcaa27e4cc4dc8ce8d10b531b01d99023b2bd588c545",
+      "target_block": 25887366,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/erc4626-standard-tooling-saved-effects-20261015.json",
+        "before": "docs/research/reports/erc4626-standard-tooling-saved-effects-20261015.json",
+        "after": "docs/research/reports/family-erc4626-standard-gates-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:test:erc4626-family:standard-insufficient-contract",
+        "issue": "Saved effect-delta receipt reuse must follow actual serialized delta-only schema",
+        "evidence": "{\"kind\": \"tooling_defect\", \"status\": \"fixed and canonical saved-shape regression passed; pending actual codify_commit\", \"title\": \"Saved effect-delta receipt reuse must follow actual serialized delta-only schema\", \"foundDuring\": \"fresh non-author source review before candidate installation or execution\", \"finding\": \"Candidate reuse parser attempted BigInt(before/after) although saved Adapter effects contain delta only. This would throw on undefined. No failing candidate execution occurred. Original target7 historical failure was separate StrictRevm InvalidFEOpcode resource classification, not this parser bug.\", \"fix\": \"Convert only existing delta fields and preserve all other saved receipt properties; do not synthesize before/after or repeat original successful EVM call.\", \"regression\": \"standard-insufficient-contract.ts saved actual target7 successful effects shape:4token/1native/2supply delta, unchanged source object, absent before/after, malformed delta rejected.\", \"freshReviewer\": \"root\", \"review\": {\"file\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/root-resource-review98.json\", \"sha256\": \"ee5213e1fbc5f8ec88e94ed23aa251f6e6356c1b2f1c188f986ef6f580f102d0\"}, \"codify_commit\": null, \"limitations\": \"Parent fills actual canonical receipt and actual commit before closing current tooling case; no invented before-run failure.\", \"canonical\": {\"checks\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence93/checks93.json\", \"checksSha256\": \"06e631bf9c42f93095139e4f6e680425aace8b8edd3d086a57f7b15307a0512c\", \"log\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence93/check93-insufficient-contract.log\", \"logSha256\": \"eacb775ef08ba6365f48c0dacb053f1c85f73b09ef22bf1a861e0b5a74a7a8bc\", \"tests\": 5, \"exit\": 0}}",
+        "codify_target": "listener/src/searcher/venues/protocols/erc4626-family/test/standard-insufficient-evidence.ts",
+        "codify_commit": "2ef3215bac0edb0e18faaa4ca6dbd7f10820116c",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T15:57:52.895983+00:00",
+      "updated_at": "2026-10-15T15:57:52.895983+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-erc4626-standard-balance-mapping",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x844abb56e58a4e33e5b8dcaa27e4cc4dc8ce8d10b531b01d99023b2bd588c545",
+      "target_block": 25887366,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/erc4626-standard-tooling-balance-mapping-20261015.json",
+        "before": "docs/research/reports/erc4626-standard-tooling-balance-mapping-20261015.json",
+        "after": "docs/research/reports/family-erc4626-standard-gates-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:test:erc4626-family:standard-insufficient-contract",
+        "issue": "Access-list fixture must distinguish the balance mapping from other getter reads",
+        "evidence": "{\"kind\": \"tooling_defect\", \"status\": \"fixed; canonical6 and real same-N supplement passed; pending actual codify_commit\", \"title\": \"Access-list fixture must distinguish the balance mapping from other getter reads\", \"failure\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence93/0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d-recipient93.json\", \"sha256\": \"8d51e4c8dd9bfe298e684da6e9b092a36a7c9b449dfcacf8f9bf48b0c8564577\", \"stage\": \"quoted:deposit:original-event-input:insufficient-cost\", \"cause\": \"Actual getter accessList2keys rejected by single-key funding fixture; original positive successfully reused, no new Strict execution\", \"drained\": true, \"forkDrained\": true}, \"fix\": \"Match actual accessed keys to generic address->uint256 mapping candidates, require unique key; preserve dual-sentinel/protected-protocol-balance/totalSupply proofs; never modify other read keys or swallow RPC errors.\", \"codify_commit\": null, \"freshReview\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/root-mapping-review99.json\", \"sha256\": \"09af0dafbf957edfd9cb337a623424effd743ff602a78aa143fe62c326762302\", \"verdict\": \"fresh-source-review-no-blocker\"}, \"canonical\": {\"observer94-checks.json\": {\"file\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence94/observer94-checks.json\", \"sha256\": \"3d77c38cc13424d76edb8fa34ca91a0b4831178be4116193aed896fda63cf1b3\"}, \"observer94-insufficient-contract.log\": {\"file\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence94/observer94-insufficient-contract.log\", \"sha256\": \"e4c844096a5f0a6d4566e9e87eb63930b9e058c82da30d499718ecb5a77e32df\"}, \"observer94-selection.json\": {\"file\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence94/observer94-selection.json\", \"sha256\": \"5fe76efa0b26b2b4fbdb656455fa4a55216347671d00c54f0a2467c6a47becae\"}}, \"actual\": {\"file\": \"evidence94/0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d-recipient94.json\", \"sha256\": \"3aa74f73f4a55aeb37ff13cc4ed52a6ddc6f90732118b2abaaae69b2bea84629\", \"independentInsufficientRejections\": 16, \"slotProofs\": [{\"token\": \"0xdAC17F958D2ee523a2206206994597C13D831ec7\", \"key\": \"0xfbb6d79c2d5fc9f9d8e4505ed798f1fc4cad12b6dc532657cb068de9cb9f4ab3\", \"actualAccessKeys\": [\"0x000000000000000000000000000000000000000000000000000000000000000a\", \"0xfbb6d79c2d5fc9f9d8e4505ed798f1fc4cad12b6dc532657cb068de9cb9f4ab3\"], \"probes\": [\"717171717171\", \"919191919193\"], \"protectedBalance\": \"0\", \"supply\": \"0x0000000000000000000000000000000000000000000000000139ba31cb3cb614\"}, {\"token\": \"0x2bD3A43863c07B6A01581FADa0E1614ca5DF0E3d\", \"key\": \"0x3ba7a8f983096cb698cbbd878bc5d7e59cbf792187cd22f642bd44b8021b1db1\", \"actualAccessKeys\": [\"0x3ba7a8f983096cb698cbbd878bc5d7e59cbf792187cd22f642bd44b8021b1db1\"], \"probes\": [\"717171717171\", \"919191919193\"], \"protectedBalance\": \"0\", \"supply\": \"0x000000000000000000000000000000000000000000006d1f06ff35ae1203ea7e\"}]}}",
+        "codify_target": "listener/src/searcher/venues/protocols/erc4626-family/test/standard-insufficient-evidence.ts",
+        "codify_commit": "2ef3215bac0edb0e18faaa4ca6dbd7f10820116c",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T15:57:52.895983+00:00",
+      "updated_at": "2026-10-15T15:57:52.895983+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-erc4626-standard-native-events",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+      "target_block": 26030897,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/erc4626-standard-tooling-native-events-20261015.json",
+        "before": "docs/research/reports/erc4626-standard-tooling-native-events-20261015.json",
+        "after": "docs/research/reports/family-erc4626-standard-gates-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:test:erc4626-family:standard-recipient-observations",
+        "issue": "ERC4626 native-underlying wrapper event receiver is an intermediate recipient",
+        "evidence": "{\"kind\": \"tooling_defect\", \"status\": \"fixed and canonical5 passed, current same-N remaining execution passed; pending actual codify_commit\", \"codify_commit\": null, \"title\": \"ERC4626 native-underlying wrapper event receiver is an intermediate recipient\", \"failure\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x90551c1795392094fe6d29b758eccd233cfaa260-recipient96.json\", \"sha256\": \"c820ab208307e93fa07324d84a9d697301060dfa0db543ef36195443b0a47c08\"}, \"diagnosis\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/event97-diagnosis.json\", \"sha256\": \"5533566fc2a4fb0e478489c5fb2a8fa6b6ef8bfc0c539bef51f7ee991f414213\"}, \"freshReview\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-event-review97.json\", \"sha256\": \"94a2ab9aaf044846bb47d3b50a3b0b05664ab9a0a7791da11583bcd741c5efc7\"}, \"fix\": \"Accept only redeem/WETH/eventreceiver-vault plus unique ordered exact WETH Deposit(vault,Q), Transfer(vault,final,Q), supplyDelta Q; unchanged complete token/native balance gates. Reobserve saved raw using exact request plus sequential raw correlation.\", \"regressions\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/check97-event-observer.log\", \"sha256\": \"22557d9638a95de4afac8f5fd78e8fe15712e9f20a5fe8e1c2f3a178e48ae07d\"}, \"canonical\": {\"query\": \"erc4626,recipient,historical\", \"manifest\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/selection97.json\", \"sha256\": \"8a956856f30f23eefb5548a9038af428e87f5ad86452bf1e3b50f9ec6ff81cc5\"}, \"checks\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/checks97.json\", \"sha256\": \"a7a1b39b05db1fc35e85f6411b747b96ca8c6b48a9754db2cf70b8af6823a04a\"}}, \"after\": {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/0x90551c1795392094fe6d29b758eccd233cfaa260-recipient97.json\", \"sha256\": \"69723da5dc70c3475d96654c7ea1e42f0355f6364f53a5397a980a01e0f513c8\"}, \"reusedRaw\": 59, \"newRaw\": 57, \"limits\": \"No production code changed by observer repair; first17 positives were saved actual results, not new execution; no independent vault native storageDiff claim.\"}",
+        "codify_target": "listener/src/searcher/venues/protocols/erc4626-family/test/standard-recipient-observations.ts",
+        "codify_commit": "2ef3215bac0edb0e18faaa4ca6dbd7f10820116c",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T15:57:52.895983+00:00",
+      "updated_at": "2026-10-15T15:57:52.895983+00:00"
     }
   ]
 }
