@@ -1,0 +1,13 @@
+{
+  "kind": "tooling_defect",
+  "summary": "New direct acceptance CLI constructed an empty RuntimeAmountProgram before execution",
+  "failureArtifact": "logs/family-implementation-20261015.0exjskqq/few-vault60/actual/logs/family-implementation-20261015.0exjskqq/few-vault60/few-recipient63.json",
+  "failureSha256": "d3e4cb8f17fabd48b0eed727dae792ef6ee05d768128f9fd9d1f09002a3fe08c",
+  "rootCause": "RuntimeAmountProgram requires at least one instruction. Unsupported deferred request fixture and no-fault continuation incorrectly requested bytes from an empty builder.",
+  "freshReviewer": "v4_accept26",
+  "repair": "Family-owned CLI exports recipientContinuation with constant r1=0; both unsupported fixture and post continuation use it. Contract imports actual helper and checks inputs0/1/91 preserved with no calls or allowances.",
+  "productionChangedByRepair": false,
+  "failureScope": "samples0; no historical swap executed; strict source simulation drained",
+  "validation": "canonical run64: both Family contracts and actual historical direct matrices exit0; original failing runs preserved",
+  "codify_commit": "parent to fill at unified commit"
+}

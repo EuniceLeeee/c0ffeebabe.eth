@@ -1,0 +1,181 @@
+{
+  "schema": "ekubo-native-recipient-correctness-handoff-v1",
+  "familyId": "custom-swap:ekubo-router-v1",
+  "implementationReady": true,
+  "authorScopedCorrectness": "pass",
+  "independentReview": {
+    "path": "docs/research/reports/ekubo-native-recipient-independent-20261015.json",
+    "sha256": "20dcb9f4e7f1f63c19146206189bc77d702615c6ebc7aae2c7895a2a65cd95d1"
+  },
+  "scope": {
+    "pool": "0x77e86b8f5da17873d7bdd70efc68a06dd3edc1d6e36b5bd65ff45eece33a31e4",
+    "source": {
+      "number": 26088150,
+      "hash": "0xcd1606be5437c39dae2f04fd1709e6016827cd05323e81674ce8b378f46f86b6",
+      "generation": 26088150
+    },
+    "extension": "none",
+    "directions": [
+      "native ETH -> USDT, external USDT delivery",
+      "USDT -> native ETH at actor -> WETH external delivery"
+    ],
+    "modes": [
+      "direct-self",
+      "direct-external"
+    ],
+    "historicalNaturalDiscoveryProven": false,
+    "topologyContainsFutureDiscovery": false,
+    "supplementaryDirectOnly": true
+  },
+  "actual": {
+    "positive": 8,
+    "strictDeclaredReverts": 8,
+    "readonlyQuoteExecutions": 0,
+    "newQuotedExecutions": 0,
+    "newDefaultExecutions": 0,
+    "exactQueries": 4,
+    "quotedConstructions": 4,
+    "runtimeConstruction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "scope": "production issuer; direct-only production issuer; no fallback or new quoted-execution/market-path opportunity claim"
+    },
+    "positiveEffectsRecomputed": [
+      {
+        "id": "token0-to-token1/production-effective/direct-self/none",
+        "amountIn": "2000000000000000",
+        "quoteAndActualReceipt": "5286195",
+        "payerInputAfter": "101",
+        "executorNativeDelta": "0",
+        "receiptDelta": "0"
+      },
+      {
+        "id": "token0-to-token1/production-effective/direct-external/none",
+        "amountIn": "2000000000000000",
+        "quoteAndActualReceipt": "5286195",
+        "payerInputAfter": "101",
+        "executorNativeDelta": "0",
+        "receiptDelta": "0"
+      },
+      {
+        "id": "token0-to-token1/original-sized-at-N-end/direct-self/none",
+        "amountIn": "101325289534252",
+        "quoteAndActualReceipt": "270624",
+        "payerInputAfter": "101",
+        "executorNativeDelta": "0",
+        "receiptDelta": "0"
+      },
+      {
+        "id": "token0-to-token1/original-sized-at-N-end/direct-external/none",
+        "amountIn": "101325289534252",
+        "quoteAndActualReceipt": "270624",
+        "payerInputAfter": "101",
+        "executorNativeDelta": "0",
+        "receiptDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/production-effective/direct-self/none",
+        "amountIn": "5286195",
+        "quoteAndActualReceipt": "1954743851303043",
+        "payerInputAfter": "101",
+        "executorNativeDelta": "0",
+        "receiptDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/production-effective/direct-external/none",
+        "amountIn": "5286195",
+        "quoteAndActualReceipt": "1954743851303043",
+        "payerInputAfter": "101",
+        "executorNativeDelta": "0",
+        "receiptDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/original-sized-at-N-end/direct-self/none",
+        "amountIn": "270928",
+        "quoteAndActualReceipt": "101223640221428",
+        "payerInputAfter": "101",
+        "executorNativeDelta": "0",
+        "receiptDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/original-sized-at-N-end/direct-external/none",
+        "amountIn": "270928",
+        "quoteAndActualReceipt": "101223640221428",
+        "payerInputAfter": "101",
+        "executorNativeDelta": "0",
+        "receiptDelta": "0"
+      }
+    ],
+    "negativeIds": [
+      "token0-to-token1/production-effective/direct-self/no-input",
+      "token0-to-token1/production-effective/direct-self/post-execution-revert",
+      "token0-to-token1/production-effective/direct-external/no-input",
+      "token0-to-token1/production-effective/direct-external/post-execution-revert",
+      "token1-to-token0/production-effective/direct-self/no-input",
+      "token1-to-token0/production-effective/direct-self/post-execution-revert",
+      "token1-to-token0/production-effective/direct-external/no-input",
+      "token1-to-token0/production-effective/direct-external/post-execution-revert"
+    ],
+    "sameCalldataNoInputCompared": 4,
+    "allSourceFinalPinsPassed": true,
+    "drained": true
+  },
+  "evidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/evidence06/direct05.json",
+      "sha256": "34024accf38adccbfd16c8b9fb1b0adaee84db050d54e900f04361f13987a85f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/evidence06/ready04/ready.json",
+      "sha256": "94695b26970e350b74cca87bdfcd654b124acfed745138e3afa2b31bb3a98f3d"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/evidence06/ready04/prices/input.json",
+      "sha256": "d81b9468281cb9e0347435bb228a284a5cd67ada5451addd1fa29d69cf93cc78"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/evidence06/ready04/prices/prices.json",
+      "sha256": "9ba9fb68ac14272926e7bf00742a1995f54b4d269613b8a5dccfadcd94408754"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/evidence06/selection03.json",
+      "sha256": "0a5ce8a51c285c5975f64ceb2ca091f8b05e8562331cfe566b3b04cbdbf89bff"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/evidence06/current-pins06.json",
+      "sha256": "edb48089314d03f4116697391f1b6f4224ddec415bc41502f9c8cdcdeebd0296"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/reuse-default06.json",
+      "sha256": "c2724d63c36d9101b1196bfee2a08aae0e59efb3b28c6f98333e7e21a745fd96"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-review03.json",
+      "sha256": "071b454f09e966eb035149099f5a5a8a1f18fac39c98534f6fd62292a3b4c0a7"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-evidence13/evm-final/result.json",
+      "sha256": "66d295d73f3b986570939cf3fa8f831603dab48a8aac8f4a3be016091f7a0d3d"
+    }
+  ],
+  "changes": [
+    "One Family-owned test CLI added; two shared package registrations installed by root.",
+    "No Family/common production or catalog change; current source tree dd419fc3a7407aa1280ba5b6aa172ee9326cd564ed0c290b44c76c5ff771f083"
+  ],
+  "limitations": [
+    "Old natural Ready is reused then production revalidated; not fresh-from-zero discovery.",
+    "N-end state not original transaction pre-call state.",
+    "Actual rejection results are declared EVM reverts, with no independent historical post-revert balance observation. Prior local BotVM synthetic fault matrix separately checks atomic rollback.",
+    "External receiver ETH is not independently observed in strict transport; actor native and all graph-asset actor/receiver/Core/Router deltas are observed.",
+    "Only actual no-extension native pool is this supplemental scope; no claim of actual TWAMM extension. No instance-free extra variant is added as mandatory gap.",
+    "No Adapter Replay, opportunity, performance, signing, broadcast or live run.",
+    "This supplement verifies the exact existing native-in or native-out variant only. The existing vanilla ERC20/ERC20 row is retained unchanged; its explicit direct correctness is not supplied by this native evidence."
+  ],
+  "blockingFindings": [],
+  "reuseReview": {
+    "path": "docs/research/reports/ekubo-native-default-reuse-20261015.json",
+    "sha256": "c2724d63c36d9101b1196bfee2a08aae0e59efb3b28c6f98333e7e21a745fd96"
+  }
+}

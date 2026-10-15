@@ -1,0 +1,294 @@
+{
+  "reviewer": "root non-author",
+  "reviews": [
+    {
+      "family": "few",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/few-vault60/evidence64/few-recipient64.json",
+        "sha256": "8d7df7d874a3dde20b7d62ba5a37da64eccb9c6c2650df631c1bd945bf8be921"
+      },
+      "source": {
+        "number": 26182689,
+        "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c"
+      },
+      "positiveExecutions": 20,
+      "declaredFaultReverts": 80,
+      "zeroInputReverts": 4,
+      "faultKinds": {
+        "none": 20,
+        "insufficient-input": 20,
+        "minimum-plus-one": 20,
+        "wrong-receiver-postcondition": 20,
+        "post-revert": 20
+      },
+      "independentActorBalanceChecks": 80,
+      "transferLogBalanceChecks": 100,
+      "verifiedAmounts": [
+        {
+          "direction": "wrap",
+          "label": "manual-original-raw-input",
+          "amountIn": "4387060682263585",
+          "actualReceived": "4387060682263585",
+          "oldOutput": "0"
+        },
+        {
+          "direction": "wrap",
+          "label": "manual-original-raw-input",
+          "amountIn": "4387060682263585",
+          "actualReceived": "4387060682263585",
+          "oldOutput": "103"
+        },
+        {
+          "direction": "wrap",
+          "label": "manual-double-original-raw-input",
+          "amountIn": "8774121364527170",
+          "actualReceived": "8774121364527170",
+          "oldOutput": "0"
+        },
+        {
+          "direction": "wrap",
+          "label": "manual-double-original-raw-input",
+          "amountIn": "8774121364527170",
+          "actualReceived": "8774121364527170",
+          "oldOutput": "103"
+        },
+        {
+          "direction": "wrap",
+          "label": "production-effective",
+          "amountIn": "2000000000000000",
+          "actualReceived": "2000000000000000",
+          "oldOutput": "0"
+        },
+        {
+          "direction": "wrap",
+          "label": "production-effective",
+          "amountIn": "2000000000000000",
+          "actualReceived": "2000000000000000",
+          "oldOutput": "103"
+        },
+        {
+          "direction": "unwrap",
+          "label": "manual-original-raw-input",
+          "amountIn": "4387060682263585",
+          "actualReceived": "4387060682263585",
+          "oldOutput": "0"
+        },
+        {
+          "direction": "unwrap",
+          "label": "manual-original-raw-input",
+          "amountIn": "4387060682263585",
+          "actualReceived": "4387060682263585",
+          "oldOutput": "103"
+        },
+        {
+          "direction": "unwrap",
+          "label": "manual-double-original-raw-input",
+          "amountIn": "8774121364527170",
+          "actualReceived": "8774121364527170",
+          "oldOutput": "0"
+        },
+        {
+          "direction": "unwrap",
+          "label": "manual-double-original-raw-input",
+          "amountIn": "8774121364527170",
+          "actualReceived": "8774121364527170",
+          "oldOutput": "103"
+        },
+        {
+          "direction": "unwrap",
+          "label": "production-effective",
+          "amountIn": "2000000000000000",
+          "actualReceived": "2000000000000000",
+          "oldOutput": "0"
+        },
+        {
+          "direction": "unwrap",
+          "label": "production-effective",
+          "amountIn": "2000000000000000",
+          "actualReceived": "2000000000000000",
+          "oldOutput": "103"
+        },
+        {
+          "direction": "wrap",
+          "label": "manual-original-raw-input",
+          "amountIn": "71854376210288490340",
+          "actualReceived": "71854376210288490340",
+          "oldOutput": "0"
+        },
+        {
+          "direction": "wrap",
+          "label": "manual-original-raw-input",
+          "amountIn": "71854376210288490340",
+          "actualReceived": "71854376210288490340",
+          "oldOutput": "103"
+        },
+        {
+          "direction": "wrap",
+          "label": "manual-double-original-raw-input",
+          "amountIn": "143708752420576980680",
+          "actualReceived": "143708752420576980680",
+          "oldOutput": "0"
+        },
+        {
+          "direction": "wrap",
+          "label": "manual-double-original-raw-input",
+          "amountIn": "143708752420576980680",
+          "actualReceived": "143708752420576980680",
+          "oldOutput": "103"
+        },
+        {
+          "direction": "unwrap",
+          "label": "manual-original-raw-input",
+          "amountIn": "71854376210288490340",
+          "actualReceived": "71854376210288490340",
+          "oldOutput": "0"
+        },
+        {
+          "direction": "unwrap",
+          "label": "manual-original-raw-input",
+          "amountIn": "71854376210288490340",
+          "actualReceived": "71854376210288490340",
+          "oldOutput": "103"
+        },
+        {
+          "direction": "unwrap",
+          "label": "manual-double-original-raw-input",
+          "amountIn": "143708752420576980680",
+          "actualReceived": "143708752420576980680",
+          "oldOutput": "0"
+        },
+        {
+          "direction": "unwrap",
+          "label": "manual-double-original-raw-input",
+          "amountIn": "143708752420576980680",
+          "actualReceived": "143708752420576980680",
+          "oldOutput": "103"
+        }
+      ],
+      "result": "pass",
+      "limits": [
+        "Negative effects omitted by trusted transport; declaration is not independent storage-union rollback.",
+        "Few positive direct branch is production-guarded; default reuse must retain reviewed unchanged byte-stream evidence.",
+        "Vault capacity/zero-output rejections remain failures to execute at those amounts, not successes.",
+        "No natural new valuation, original opportunity or performance claim."
+      ]
+    },
+    {
+      "family": "vault",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/few-vault60/evidence64/vault-recipient64.json",
+        "sha256": "6345b38cef82b8a1d1192ab841591e323e12fa5f995d832eb47b9a37d6752007"
+      },
+      "source": {
+        "number": 26182689,
+        "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c"
+      },
+      "positiveExecutions": 12,
+      "declaredFaultReverts": 54,
+      "zeroInputReverts": 2,
+      "faultKinds": {
+        "same-state-capacity-or-zero-output": 6,
+        "none": 12,
+        "insufficient-input": 12,
+        "minimum-plus-one": 12,
+        "wrong-receiver-postcondition": 12,
+        "post-revert": 12
+      },
+      "independentActorBalanceChecks": 48,
+      "transferLogBalanceChecks": 72,
+      "verifiedAmounts": [
+        {
+          "direction": 0,
+          "label": "manual-legal-diagnostic",
+          "amountIn": "1000000000000",
+          "actualReceived": "61665479",
+          "oldOutput": "0"
+        },
+        {
+          "direction": 0,
+          "label": "manual-legal-diagnostic",
+          "amountIn": "1000000000000",
+          "actualReceived": "61665479",
+          "oldOutput": "103"
+        },
+        {
+          "direction": 0,
+          "label": "manual-double-legal-diagnostic",
+          "amountIn": "2000000000000",
+          "actualReceived": "123330959",
+          "oldOutput": "0"
+        },
+        {
+          "direction": 0,
+          "label": "manual-double-legal-diagnostic",
+          "amountIn": "2000000000000",
+          "actualReceived": "123330959",
+          "oldOutput": "103"
+        },
+        {
+          "direction": 1,
+          "label": "manual-original-output-as-reverse-input",
+          "amountIn": "4430934597103818",
+          "actualReceived": "71560010387267777812",
+          "oldOutput": "0"
+        },
+        {
+          "direction": 1,
+          "label": "manual-original-output-as-reverse-input",
+          "amountIn": "4430934597103818",
+          "actualReceived": "71560010387267777812",
+          "oldOutput": "103"
+        },
+        {
+          "direction": 1,
+          "label": "production-effective",
+          "amountIn": "2000000000000000",
+          "actualReceived": "32300188061471902312",
+          "oldOutput": "0"
+        },
+        {
+          "direction": 1,
+          "label": "production-effective",
+          "amountIn": "2000000000000000",
+          "actualReceived": "32300188061471902312",
+          "oldOutput": "103"
+        },
+        {
+          "direction": 1,
+          "label": "double-production-effective",
+          "amountIn": "4000000000000000",
+          "actualReceived": "64600376122943804625",
+          "oldOutput": "0"
+        },
+        {
+          "direction": 1,
+          "label": "double-production-effective",
+          "amountIn": "4000000000000000",
+          "actualReceived": "64600376122943804625",
+          "oldOutput": "103"
+        },
+        {
+          "direction": 1,
+          "label": "one-raw-unit-boundary",
+          "amountIn": "1",
+          "actualReceived": "16149",
+          "oldOutput": "0"
+        },
+        {
+          "direction": 1,
+          "label": "one-raw-unit-boundary",
+          "amountIn": "1",
+          "actualReceived": "16149",
+          "oldOutput": "103"
+        }
+      ],
+      "result": "pass",
+      "limits": [
+        "Negative effects omitted by trusted transport; declaration is not independent storage-union rollback.",
+        "Few positive direct branch is production-guarded; default reuse must retain reviewed unchanged byte-stream evidence.",
+        "Vault capacity/zero-output rejections remain failures to execute at those amounts, not successes.",
+        "No natural new valuation, original opportunity or performance claim."
+      ]
+    }
+  ]
+}

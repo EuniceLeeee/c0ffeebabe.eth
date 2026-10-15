@@ -1,0 +1,420 @@
+{
+  "familyId": "curve-underlying",
+  "scope": {
+    "familyId": "curve-underlying",
+    "variantIds": [
+      "nativeAlias optimized full runtime",
+      "nativeAlias optimized a85461 clone"
+    ],
+    "instances": [
+      {
+        "pool": "0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14",
+        "tx": "0x4df016bdf45675f8680769ef3403712c92e76d7466fb0597d2cdb4c02cbe0db3",
+        "source": {
+          "number": 26018980,
+          "hash": "0x29e00078ff534b0c7e2347efd97b494d7f30e73eb4e0730fa78aada72c628bf0",
+          "generation": 26018980
+        }
+      },
+      {
+        "pool": "0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92",
+        "tx": "0xcff958cfb929feddc72043ac41c0065774cd9ab0bae4d66e77b7aaf633e8d42c",
+        "source": {
+          "number": 26029240,
+          "hash": "0x8c479064c328fe4b422533f9b57488571e92c1008501c8552070e286ed7a859f",
+          "generation": 26029240
+        }
+      }
+    ],
+    "directions": "full runtime six ordered directions including native input/output and ERC20/ERC20; clone both native directions",
+    "modes": [
+      "specified quote + quoted execution",
+      "runtime default",
+      "runtime direct-self",
+      "runtime direct-external"
+    ],
+    "callback": "exchange_extended is input-first, not deferred-input. This round validates exchange_underlying direct receiver only, not execution of exchange_extended.",
+    "preservedScope": "Old FRAX 12-direction/default/other valid outcomes preserved. No claim of retesting every pool or unrelated Curve variants."
+  },
+  "counts": {
+    "positives": 64,
+    "zeroInputRejections": 32,
+    "forcedPostAndInsufficientRejections": 96
+  },
+  "actual": [
+    {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/evidence63/historical-full62.json",
+      "sha256": "7e6ce47f2292f09d25c49aed54c21828306491adf1ecf5485e126a11f6b88a10",
+      "source": {
+        "number": 26018980,
+        "hash": "0x29e00078ff534b0c7e2347efd97b494d7f30e73eb4e0730fa78aada72c628bf0",
+        "generation": 26018980
+      },
+      "pool": "0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14",
+      "tx": "0x4df016bdf45675f8680769ef3403712c92e76d7466fb0597d2cdb4c02cbe0db3",
+      "amounts": [
+        {
+          "tokenIn": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "label": "same-state-production-input-only",
+          "amountIn": "5156134017648676598",
+          "freshQuoteOut": "1997850202782999"
+        },
+        {
+          "tokenIn": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "label": "ten-times-same-state-production-input",
+          "amountIn": "51561340176486765980",
+          "freshQuoteOut": "19977936491700081"
+        },
+        {
+          "tokenIn": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "tokenOut": "0xD533a949740bb3306d119CC777fa900bA034cd52",
+          "label": "same-state-production-input-only",
+          "amountIn": "5156134017648676598",
+          "freshQuoteOut": "15608443579825234607"
+        },
+        {
+          "tokenIn": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "tokenOut": "0xD533a949740bb3306d119CC777fa900bA034cd52",
+          "label": "ten-times-same-state-production-input",
+          "amountIn": "51561340176486765980",
+          "freshQuoteOut": "156077139182171226439"
+        },
+        {
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "label": "same-state-production-input-only",
+          "amountIn": "2000000000000000",
+          "freshQuoteOut": "5156134017648676598"
+        },
+        {
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "label": "ten-times-same-state-production-input",
+          "amountIn": "20000000000000000",
+          "freshQuoteOut": "51559763352961062557"
+        },
+        {
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xD533a949740bb3306d119CC777fa900bA034cd52",
+          "label": "same-state-production-input-only",
+          "amountIn": "2000000000000000",
+          "freshQuoteOut": "15616851928263677626"
+        },
+        {
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0xD533a949740bb3306d119CC777fa900bA034cd52",
+          "label": "ten-times-same-state-production-input",
+          "amountIn": "20000000000000000",
+          "freshQuoteOut": "156162218760322846529"
+        },
+        {
+          "tokenIn": "0xD533a949740bb3306d119CC777fa900bA034cd52",
+          "tokenOut": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "label": "same-state-production-input-only",
+          "amountIn": "15616851928263677626",
+          "freshQuoteOut": "5153339058862335339"
+        },
+        {
+          "tokenIn": "0xD533a949740bb3306d119CC777fa900bA034cd52",
+          "tokenOut": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "label": "ten-times-same-state-production-input",
+          "amountIn": "156168519282636776260",
+          "freshQuoteOut": "51530310355324936042"
+        },
+        {
+          "tokenIn": "0xD533a949740bb3306d119CC777fa900bA034cd52",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "label": "same-state-production-input-only",
+          "amountIn": "15616851928263677626",
+          "freshQuoteOut": "1997842902028942"
+        },
+        {
+          "tokenIn": "0xD533a949740bb3306d119CC777fa900bA034cd52",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "label": "ten-times-same-state-production-input",
+          "amountIn": "156168519282636776260",
+          "freshQuoteOut": "19977401874086180"
+        }
+      ],
+      "positiveExecutions": 48,
+      "zeroInputReverts": 24,
+      "additionalFaults": 72,
+      "runtimeConstruction": {
+        "directions": 6,
+        "rpcCalls": 0,
+        "exactCalls": 0,
+        "blocked": 0,
+        "quotedFallback": false
+      },
+      "sourcePin": {
+        "sourceTreeSha256": "dd419fc3a7407aa1280ba5b6aa172ee9326cd564ed0c290b44c76c5ff771f083",
+        "fileCount": 1240,
+        "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+        "packageSha256": "73f1768f3419dbfb207a615a7e13ecb51cf2e4d1fbf0d68118f6d0d4cf1034b8",
+        "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+        "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      },
+      "allExactDebitReceipt": true,
+      "forkStopped": true,
+      "sourceStable": true,
+      "ownHarnessSha256": "ac36f8ddc3b38856c4d8e694da35d72cc7921138c50972bd2ab1946019eebf5b"
+    },
+    {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/evidence63/historical-clone63.json",
+      "sha256": "5d9703762e2bb05d183ee4f2afef6b0d8266c46ff17a619ce56baf6f38f4ae35",
+      "source": {
+        "number": 26029240,
+        "hash": "0x8c479064c328fe4b422533f9b57488571e92c1008501c8552070e286ed7a859f",
+        "generation": 26029240
+      },
+      "pool": "0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92",
+      "tx": "0xcff958cfb929feddc72043ac41c0065774cd9ab0bae4d66e77b7aaf633e8d42c",
+      "amounts": [
+        {
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0x365AccFCa291e7D3914637ABf1F7635dB165Bb09",
+          "label": "same-state-production-input-only",
+          "amountIn": "2000000000000000",
+          "freshQuoteOut": "166231363684660222"
+        },
+        {
+          "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "tokenOut": "0x365AccFCa291e7D3914637ABf1F7635dB165Bb09",
+          "label": "ten-times-same-state-production-input",
+          "amountIn": "20000000000000000",
+          "freshQuoteOut": "1662216513170685644"
+        },
+        {
+          "tokenIn": "0x365AccFCa291e7D3914637ABf1F7635dB165Bb09",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "label": "same-state-production-input-only",
+          "amountIn": "166231363684660222",
+          "freshQuoteOut": "1982721587464099"
+        },
+        {
+          "tokenIn": "0x365AccFCa291e7D3914637ABf1F7635dB165Bb09",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "label": "ten-times-same-state-production-input",
+          "amountIn": "1662313636846602220",
+          "freshQuoteOut": "19826077014812327"
+        }
+      ],
+      "positiveExecutions": 16,
+      "zeroInputReverts": 8,
+      "additionalFaults": 24,
+      "runtimeConstruction": {
+        "directions": 2,
+        "rpcCalls": 0,
+        "exactCalls": 0,
+        "blocked": 0,
+        "quotedFallback": false
+      },
+      "sourcePin": {
+        "sourceTreeSha256": "dd419fc3a7407aa1280ba5b6aa172ee9326cd564ed0c290b44c76c5ff771f083",
+        "fileCount": 1240,
+        "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+        "packageSha256": "73f1768f3419dbfb207a615a7e13ecb51cf2e4d1fbf0d68118f6d0d4cf1034b8",
+        "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+        "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      },
+      "allExactDebitReceipt": true,
+      "forkStopped": true,
+      "sourceStable": true,
+      "ownHarnessSha256": "ac36f8ddc3b38856c4d8e694da35d72cc7921138c50972bd2ab1946019eebf5b"
+    }
+  ],
+  "implementation": "No production code changed in this round; two own historical test entrypoints added. Current production selective Ready copies and current issuer used.",
+  "ownHarness": [
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/recipient-ready.ts",
+      "sha256": "d940196c26154a23dfe5479ffb86728826fd85531e1c49d02ad06ff16c624512"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/recipient-historical.ts",
+      "sha256": "ac36f8ddc3b38856c4d8e694da35d72cc7921138c50972bd2ab1946019eebf5b"
+    }
+  ],
+  "sourceReviewedScope": [
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/action.ts",
+      "sha256": "95b808a9aebead4586060e75250ff78581b76e3834ebe63265b8e131ba57db22"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/base-pool-math.ts",
+      "sha256": "2a90955716eb0ad0c5d524491f76dad93f75829f9964d1ecdd3b431eb8075638"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/capture.ts",
+      "sha256": "67277115dbe1c16a937f2bf7b536f3a63bf143c50d9a020ae18f9f504796f71b"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/classic-meta-quote.ts",
+      "sha256": "5d6111e10ea7b10876883b6961b1dc241dd014c1b26cd10746c48b865b0d7b99"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/classic-meta-update.ts",
+      "sha256": "9033208b1e72491fa04e0b8a98e805d5c2901a4e9735d2bfaf497d77969912df"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/codec.ts",
+      "sha256": "29f7e0be78cb03d084aa9ed358e44b19731882d2f112e3197d2f4567ad330d3d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/discovery.ts",
+      "sha256": "cc20e5a7d3def8265f4204589758b6457c638433171f743196a0f87971e5f4bc"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/exact.ts",
+      "sha256": "4a83264d12e70dd5313b1365377ec0c904d15ffc74a82fd53fa8948cd5032285"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts",
+      "sha256": "028f3f169ebb0397d8660a69dd720398a9a3c2bcf95ae4bc953e2f9d54d3f15a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/identity.ts",
+      "sha256": "42b27b56f5aaa1a9844cec6356194c9f4851f9a55be1317bcefbfb1714c1c900"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts",
+      "sha256": "994eca6c0b42656dd832664cf74ed48291f9f057c95eb21c237e33189acc8137"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/legacy-factory.ts",
+      "sha256": "c3f4c7d6d6164b66b5afdfa53db4a24a103fa445cbeed87875e3bddc1a175558"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/legacy-plain.ts",
+      "sha256": "75cec2118ff1fbf6f083cdb69ed11a9a35a1d83b5d4b6e558db2dfb11625155f"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending-execution.ts",
+      "sha256": "67b526cc49977a19b176502062d87ae6753ef8bf94917f6681adeb21da073059"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending-identity.ts",
+      "sha256": "1523624a090e9ea7f8ad19cff92540b51c31ab30378e2e7f86c02b1fb850f491"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending.ts",
+      "sha256": "1f048ceb29e60678dbbbece083ff362612999338cc6c2552234734b851308c58"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+      "sha256": "d968804233baf47e4df834e5708e8644eebe3dd145b01df086c6078e7d27306a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+      "sha256": "9e7ffc251b1f6ebe3d588de16112228fe7a9a68a13262615daca71519b75af9f"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
+      "sha256": "fdc3b5285e7652e0a3b2d6fd5f3ee04a1aa22004a429b3ef01762eab6806d554"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/pricing.ts",
+      "sha256": "ecd16846333afe4bfaa558d801b3feea731b7f300d8a730446aee10b335150dd"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
+      "sha256": "444c619922cfaab4c9d1f97075995ac0e21f07ba264433b2bc1b23f5b5a8c38e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/receipt-observation.ts",
+      "sha256": "f06ca0c0aed90c944305c46149a04a0434536766efedd238903a40a71ae1b8d7"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/recipient-proof.ts",
+      "sha256": "0b80128ebc0b9ed7b8785a4b4cb0c9884372324d475b4398456105014e81996e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/reverse-binding.ts",
+      "sha256": "6d96f08c19fbb40d4cda20e6f17f12650bc5f2edf29271cea1a39cc84e6dcfa6"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/routes.ts",
+      "sha256": "98e9923c0bda8639717a3fbe6a271df55def8a4bd4794575d09df2cde99719ba"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/scaled-behavior.ts",
+      "sha256": "d0ee4af46a75525c452a2e0c66816e87fcaa5f93b1125b9628df1ddeedac050d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/swap.ts",
+      "sha256": "4d5366628470f1e95ac68986c7e6bf48ce4edd3b56d700d0e17048dc2461b18d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/types.ts",
+      "sha256": "c6c65bd1e6ff9685b211d0abe767bbf0ab09d77b59068c089a9572167e44d841"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/v1-factory.ts",
+      "sha256": "4380e1093ab742640dbc9def09015fb3af3718c25905638457395fb7003c3b91"
+    }
+  ],
+  "sourcePin": {
+    "sourceTreeSha256": "dd419fc3a7407aa1280ba5b6aa172ee9326cd564ed0c290b44c76c5ff771f083",
+    "fileCount": 1240,
+    "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+    "packageSha256": "73f1768f3419dbfb207a615a7e13ecb51cf2e4d1fbf0d68118f6d0d4cf1034b8",
+    "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+    "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+    "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+    "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+  },
+  "provenance": {
+    "interfaces": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/interface-provenance61.json",
+      "sha256": "5b9e9c84f2fff891606cba3183a7b5b9e80fa98fe1a7a8162a3edcad6e2fa061"
+    },
+    "sameNCodeComparison": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/code-provenance-comparison63.json",
+      "sha256": "2165bf5a6d136b22ef8d57f433076c51c8262ef5e7c3f319a787d793fd2615b7"
+    },
+    "authorDelivery": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/delivery63.json",
+      "sha256": "a93e9a1403c2e25193c39f3c89d70fcbbceb7b961d31e58fcf6008643cb62f73"
+    }
+  },
+  "checks": {
+    "actual": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/evidence63/checks62.json",
+      "sha256": "dc75a6a969a39708058b776f7e2172e55770d9ba928bd5b168a859a363b5f264"
+    },
+    "cloneResume": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/evidence63/checks63.json",
+      "sha256": "cdd8766d0e583027072c579e422a051ad264bf948580329bb14c2959413de271"
+    },
+    "selection": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/evidence63/selection63.json",
+      "sha256": "c1a9f5e26cb476469eca8f8fe05c755ba43ce6c4bbbef6b4865a971014f98c8f"
+    }
+  },
+  "inputOnlyReference": "same-N saved production effective amountIn and 10x only; source row/block/hash and fresh recorded; output/identity/admission not borrowed",
+  "ready": "production reader and selective family revalidation; prior Ready bytes unchanged, no old hash rewrite; no current price run",
+  "rounding": "Explicit 0/1 gates retained; actual all tested debit and output differences 0; no tolerance weakened; final repayment/profit gates not modified",
+  "independentReview": {
+    "path": "docs/research/reports/curve-underlying-native-recipient-independent-20261015.json",
+    "sha256": "06e0f8a65f6b3415d14f1c476dd6ec80749c47254d915a5e6e82665d92e7bc18"
+  },
+  "retainedInterruption": {
+    "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/run62.err",
+    "stage": "between full completed and clone fork startup, after clone Ready",
+    "cause": "OS TIME_WAIT made raw socket bind fail; no listening socket or process; connect111 and ss evidence retained",
+    "recovery": "full and both Ready not repeated; no-listener check plus SO_REUSEADDR preflight, clone-only resumed to new output; original failure preserved"
+  },
+  "notClaimed": [
+    "opportunity replay",
+    "current natural prices",
+    "4A/4B timing",
+    "new full-family Adapter Replay/conformance",
+    "every deployed pool and variant",
+    "natural opportunity success"
+  ]
+}

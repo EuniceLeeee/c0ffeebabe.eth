@@ -1,0 +1,94 @@
+{
+  "scope": "New current behavior reports bind actual executed source; old reports/hashes remain untouched",
+  "corrections": [
+    {
+      "familyId": "curve-underlying",
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "oldInventoryPin": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc",
+      "currentTestedPin": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "familyId": "custom-swap:ekubo-router-v1",
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "oldInventoryPin": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc",
+      "currentTestedPin": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "familyId": "protocol:few-wrapped",
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "oldInventoryPin": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc",
+      "currentTestedPin": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "familyId": "vault-spot",
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "oldInventoryPin": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc",
+      "currentTestedPin": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "familyId": "curve-underlying",
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+      "oldInventoryPin": "f2d01a805f9a47e10900f52696ec89784365aeb7c567c68a3c7f338b13a735e2",
+      "currentTestedPin": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab"
+    },
+    {
+      "familyId": "curve-underlying",
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/codec.ts",
+      "oldInventoryPin": "2935f76e76be1b6166c4a40b517b9797125c6fc57f1944868bd695bd8deb6d26",
+      "currentTestedPin": "29f7e0be78cb03d084aa9ed358e44b19731882d2f112e3197d2f4567ad330d3d"
+    },
+    {
+      "familyId": "curve-underlying",
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts",
+      "oldInventoryPin": "56ac0e1c5d43f3b85b1858b8379eba073690be00caf74cbde03cda348b042cd2",
+      "currentTestedPin": "028f3f169ebb0397d8660a69dd720398a9a3c2bcf95ae4bc953e2f9d54d3f15a"
+    },
+    {
+      "familyId": "curve-underlying",
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts",
+      "oldInventoryPin": "137cafc05d3edcccbe1c3c1684be7cf0b4204a3c7aac888ed9f0d7ca31ef0351",
+      "currentTestedPin": "994eca6c0b42656dd832664cf74ed48291f9f057c95eb21c237e33189acc8137"
+    },
+    {
+      "familyId": "curve-underlying",
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+      "oldInventoryPin": "56d89e4d1db9609b8f230b110d8d09fc20e440b52ac77a57d18827889b32f643",
+      "currentTestedPin": "9e7ffc251b1f6ebe3d588de16112228fe7a9a68a13262615daca71519b75af9f"
+    },
+    {
+      "familyId": "curve-underlying",
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
+      "oldInventoryPin": "f7a80a177c42ee2d2187f6afee498921a3464290cda0b29e75fd148e0947ee30",
+      "currentTestedPin": "fdc3b5285e7652e0a3b2d6fd5f3ee04a1aa22004a429b3ef01762eab6806d554"
+    },
+    {
+      "familyId": "curve-underlying",
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
+      "oldInventoryPin": "3cfdebb184d8cf680fffe0b068209819b5c2c86abb7a4fa17b03635ad511f36f",
+      "currentTestedPin": "444c619922cfaab4c9d1f97075995ac0e21f07ba264433b2bc1b23f5b5a8c38e"
+    },
+    {
+      "familyId": "curve-underlying",
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/recipient-proof.ts",
+      "oldInventoryPin": null,
+      "currentTestedPin": "0b80128ebc0b9ed7b8785a4b4cb0c9884372324d475b4398456105014e81996e"
+    },
+    {
+      "familyId": "custom-swap:ekubo-router-v1",
+      "path": "listener/src/searcher/venues/swaps/ekubo-family/execution.ts",
+      "oldInventoryPin": "aebf96e6c4ef3f57eae80dc07c82ace89898585932a7cdbb9c6260438abb2e91",
+      "currentTestedPin": "7e1e012180276cf7fa440b42a4ec7dcd49d3cf3caee7e1cbddc023a5876c3f5a"
+    }
+  ],
+  "executionSourceTree": "dd419fc3a7407aa1280ba5b6aa172ee9326cd564ed0c290b44c76c5ff771f083",
+  "pinsEvidence": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/pins-four68.json",
+  "firstFailuresRetained": [
+    "gate66 stale current inventory pin",
+    "gate67 missing recipient-proof source closure entry"
+  ],
+  "independentBindingEvidence": [
+    "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/frax-direct-reuse66.json",
+    "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/evidence06/current-pins06.json",
+    "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/few-vault60/owned-final64.json"
+  ]
+}

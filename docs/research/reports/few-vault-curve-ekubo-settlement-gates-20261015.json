@@ -1,0 +1,112 @@
+[
+  {
+    "family": "protocol:few-wrapped",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T10:14:23.566234+00:00",
+    "finishedAt": "2026-10-15T10:15:13.164572+00:00",
+    "logSha256": "feee5ba022e7a08f4955ce6785af718266d1df18351d7e8ca3b5d0d4a6794e21",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/gate67-selection.json",
+    "manifestSha256": "7ca46660aff6c9bc2347c8d4bf37633db7f4b0256c1602c7f9d5bdac20f5145b",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:few-wrapped",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  {
+    "family": "vault-spot",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T10:15:13.164935+00:00",
+    "finishedAt": "2026-10-15T10:16:02.668095+00:00",
+    "logSha256": "c5aa540e040a86aa8267aa69e35f1bfc58fa8f757adc81c23d6ea72839134101",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/gate67-selection.json",
+    "manifestSha256": "5a533a63cd3e11c74edaadd5c0a2c420ffcdc931825a8c77ddc11a4c4dd15074",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "vault-spot",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  {
+    "family": "custom-swap:ekubo-router-v1",
+    "exitCode": 1,
+    "startedAt": "2026-10-15T10:27:53.299540+00:00",
+    "finishedAt": "2026-10-15T10:28:55.123289+00:00",
+    "logSha256": "0504c3b1c6d080b863cf94aa131a148cb92018c5ff212067415c7108db011f63",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/gate68-selection.json",
+    "manifestSha256": "0bedd51aedb786e479410f21482efc9695cf9968619efadf066f62d29127650f",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "custom-swap:ekubo-router-v1",
+          "passed": false,
+          "failures": [
+            "variant coverage is incomplete",
+            "vanilla ERC20/ERC20: execution evidence; \u771f\u5b9e\u539f\u4ea4\u6613\u8bc1\u660e\u5916\u90e8 receiver\uff0c\u4e14 Core/router \u4e0e N25943731 Ready \u4ee3\u7801\u76f8\u7b49\uff1b\u4e0d\u7b49\u4e8e\u5f53\u524d\u65b0 direct \u7a0b\u5e8f\u5b9e\u9645\u6267\u884c\u3002; \u8f93\u51fa\u867d\u5148\u4e8e payFrom\uff0c\u56de\u8c03\u4ec5 Core\u2192Router\uff0c\u9009\u5b9a Router \u6ca1\u6709 caller continuation\uff0c\u4e0d\u80fd\u6807 deferred\u3002"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "family": "curve-underlying",
+    "exitCode": 1,
+    "startedAt": "2026-10-15T10:33:38.582597+00:00",
+    "finishedAt": "2026-10-15T10:34:28.568641+00:00",
+    "logSha256": "e02d55b09bb2fdc2346dae4d21d71b781e83bd1b952f6384a995658d638bfc71",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/gate69-selection.json",
+    "manifestSha256": "8576355afe10306a6b22adb629cadf4f863dee24c514dad93d66047b79a9aeef",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "curve-underlying",
+          "passed": false,
+          "failures": [
+            "classic meta/3pool 0x213be373fdff327658139c7df330817dad2d5bbe rateSlot16: execution evidence; \u5b9e\u9645 pool/implementation/base \u53ca\u5bf9\u5e94\u5229\u7387 profile \u5df2\u7ed1\u5b9a\uff1b\u7f3a\u5f53\u524d 5 \u53c2\u6570\u6307\u5b9a\u6536\u6b3e\u65b9\u6a21\u5f0f\u6267\u884c\u4e0e\u62d2\u7edd\u8bc1\u636e\u3002",
+            "classic meta/3pool 0x2c7796c0590cc100d70af473993890d457cb2ac9 rateSlot10: execution evidence; \u5b9e\u9645 pool/implementation/base \u53ca\u5bf9\u5e94\u5229\u7387 profile \u5df2\u7ed1\u5b9a\uff1b\u7f3a\u5f53\u524d 5 \u53c2\u6570\u6307\u5b9a\u6536\u6b3e\u65b9\u6a21\u5f0f\u6267\u884c\u4e0e\u62d2\u7edd\u8bc1\u636e\u3002"
+          ]
+        }
+      ]
+    }
+  }
+]

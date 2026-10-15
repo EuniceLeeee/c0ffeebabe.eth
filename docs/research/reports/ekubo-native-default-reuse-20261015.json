@@ -1,0 +1,102 @@
+{
+  "schema": "ekubo-native-retained-default-reuse-v1",
+  "scope": "Author preparation for root independent review; old historical execution is preserved, never relabeled current execution",
+  "oldActual": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/source/logs/ekubo-coffee-20261010.wauxqp/native-dual-2.json",
+    "sha256": "df56a33e4cd25018e1f141dc47979631b2dc4265563378b9c486d1bd9c9a26b0"
+  },
+  "oldAcceptance": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/source/docs/research/reports/ekubo-coffee-acceptance-20261010.json",
+    "sha256": "bee7058c03e433623353a13838f1bdfc5dd969117764de3f9444641064c5a1e9"
+  },
+  "byteComparison": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/evidence06/reuse06.json",
+    "sha256": "7a54a4fba33e5390567327fefd1fefa9f33ea95dbd8c145dd7e366ef011e8e01"
+  },
+  "emissionResult": {
+    "currentProductionIssuerDefaultProgramsEqualOldActualBothDirections": true,
+    "matchingCurrentQuotedProgramsEqualOldActual": 3,
+    "constructionForbiddenCalls": 0
+  },
+  "comparisonRows": [
+    {
+      "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "defaultRuntime": {
+        "oldHash": "0xa186e4ba2b7163f75beece7d25d71b58657b53c919891e84e2eb24a2ccdac3f7",
+        "currentHash": "0xa186e4ba2b7163f75beece7d25d71b58657b53c919891e84e2eb24a2ccdac3f7",
+        "equal": true
+      },
+      "quoted": [
+        {
+          "amountIn": "2000000000000000",
+          "amountOut": "5286195",
+          "oldHash": "0xad79a2b4a0f28a94f1b867c43a99022264c141215d3997d0a0a8501bd599e123",
+          "currentHash": "0xad79a2b4a0f28a94f1b867c43a99022264c141215d3997d0a0a8501bd599e123",
+          "equal": true
+        },
+        {
+          "amountIn": "101325289534252",
+          "amountOut": "270624",
+          "oldHash": "0x5e70ba802cce630a49343f2c70cc9265e4e2f35ebd4b635aec95e10193b88081",
+          "currentHash": "0x5e70ba802cce630a49343f2c70cc9265e4e2f35ebd4b635aec95e10193b88081",
+          "equal": true
+        }
+      ]
+    },
+    {
+      "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "defaultRuntime": {
+        "oldHash": "0x4e851dc4e826981a31ea09338c46e138c939c9eb6d5c8509a97bad4115e11b6f",
+        "currentHash": "0x4e851dc4e826981a31ea09338c46e138c939c9eb6d5c8509a97bad4115e11b6f",
+        "equal": true
+      },
+      "quoted": [
+        {
+          "amountIn": "5286195",
+          "amountOut": "1954743851303043",
+          "oldHash": "0x2cd5d49350f4471e211c0217862e4d28bbd8c6642cff2440cc223fe7c3cec56f",
+          "currentHash": "0x2cd5d49350f4471e211c0217862e4d28bbd8c6642cff2440cc223fe7c3cec56f",
+          "equal": true
+        }
+      ]
+    }
+  ],
+  "compatibility": {
+    "Family": "Default branch retains old full-input swap ABI, MIN1 and MAX_UINT allowance. Current explicit native direct alone enables exact approval/cleanup. Both default issued program hashes equal actual old hashes; 3 identical-input quoted script hashes also equal old actual programs.",
+    "VM": "Read coffee-commit to current-commit RuntimeAmountVM/BotVM diffs. Old opcodes, call modes0/1, allowance instruction and funded native envelope success semantics retained. Added read-only/subprogram/mode2/eq/min paths unused by old programs; maximum-input flow flags unused; diagnostics preserve revert result while adding optional typed envelope. Current localVM and actual direct exercise the retained primitives.",
+    "commonBoundary": "Current default emitted programs match old actual evidence, proving unchanged wrapping/refund/inventory envelope for both directions. V4 deferred additions are not selected.",
+    "localRollback": "Earlier final Ekubo local BotVM fixture uses identical current BotVM/RuntimeAmountVM source pins and unchanged Family execution. Shared native boundary change since that fixture adds deferred behavior; funded/direct branch is unchanged. Synthetic Router/token fault tests remain separately scoped."
+  },
+  "sourceDiffRefs": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/reuse-source06/BotVM.sol.diff",
+      "sha256": "c6eb81bd82ce39dacd836526a88ad3528de501a80236854a3826a71296e90ec7"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/reuse-source06/RuntimeAmountVM.sol.diff",
+      "sha256": "06f27514583a11e1e3d7b958009dc042aaff44d37e7bc0f3484e5b68d4aea69f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/reuse-source06/execution-asset-boundary.ts.diff",
+      "sha256": "57d0e1b10fb24b30a6460268e056ffe51b0ceb6e274da9ef00f128a294a765a9"
+    }
+  ],
+  "oldCommitContext": "b2efc329a64a83a8af1f0caf6f0d7deeeffc4579 source context, not a claim that old saved executor artifact source metadata was freshly recovered. Old run retains its original runtime/artifact hashes.",
+  "oldRuntime": {
+    "keccak256": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+    "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3"
+  },
+  "newRuntime": {
+    "codeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+  },
+  "limits": [
+    "No additional old quoted/default historical execution occurred.",
+    "Program equality is stronger than merely similar source but does not equate old and new VM bytecode or performance.",
+    "Old original-precall/opportunity/valuation limitations remain.",
+    "Root is non-author final reviewer."
+  ],
+  "blockingFindings": []
+}

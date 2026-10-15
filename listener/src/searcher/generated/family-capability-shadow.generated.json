@@ -9331,7 +9331,7 @@
         "familyId": "protocol:few-wrapped",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "11cd4341c8e3e8afe6e1e6478f494d03d6ec96357b92264d689b5f7f3eb5e5f9",
+        "contentHash": "9a830e509d6c0f96ea2a9a7e4d253edd181fd5afecf44deb0e24aa7f7abafc94",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -16569,5 +16569,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "3e144c62a2b69c42aef38f51d8125cf641a13c013f7ab1b9768de6732b7b5d11"
+  "artifactHash": "d05b12e5793fa4895cd59fbff26a8fd8e3ed11703239f9de469f6b4038ff4db6"
 }

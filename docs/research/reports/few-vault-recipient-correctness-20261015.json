@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "baselineHead": "8f0bb812500ba488cc6274fff0ca3450b249fbfc",
+  "scope": "Few and Vault direct-recipient correctness completion only",
+  "productionSourceTreeSha256": "dd419fc3a7407aa1280ba5b6aa172ee9326cd564ed0c290b44c76c5ff771f083",
+  "tx": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+  "N": 26182689,
+  "NHash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c",
+  "implementation": {
+    "few": "Only settlement direct-output branch gained positive input, exact 1:1 debit/receipt, reported return, native/uninvolved inventory and allowance-zero checks. Default no-request branch emits previous program unchanged.",
+    "vault": "No production Family changes. Existing direct guards verified on historical deployment."
+  },
+  "results": {
+    "few": {
+      "targets": [
+        "0xa250cc729bb3323e7933022a67b52200fe354767",
+        "0x0e3fe143de98c73e72942c8f760a2e69d98bc1cb"
+      ],
+      "directions": 4,
+      "amounts": 10,
+      "directPositive": 20,
+      "directFaults": 80,
+      "zeroInputRejected": 4,
+      "contractTests": 11
+    },
+    "vault": {
+      "target": "0x2d0aff409bde00451334011d55c141aff2103744",
+      "directions": 2,
+      "amounts": 12,
+      "directPositive": 12,
+      "directFaults": 48,
+      "statefulCapacityOrZeroOutputRejected": 6,
+      "zeroInputRejected": 2,
+      "contractTests": 8
+    }
+  },
+  "effectiveAmountPolicy": "Preserved original amounts and stored production row amounts; current quote and execution bound to N. Only input amounts borrowed, no old output/identity/current natural valuation claim.",
+  "directFaultKinds": [
+    "insufficient input",
+    "minimum + 1 consumer requirement",
+    "wrong receiver consumer requirement",
+    "post-execution revert"
+  ],
+  "safety": {
+    "runtimeConstructionExact": 0,
+    "runtimeConstructionRpc": 0,
+    "quotedFallback": false,
+    "actualActorAndRecipientDeltasVerified": true,
+    "allowance": "Few wrap approval cleanup enforced and tested; Vault has no approval path",
+    "rollbackEvidence": "Trusted current StrictRevm MainRevert with declared effects omitted atomically; no independent Anvil storageDiff claim",
+    "bothSourceSimulationsDrained": true
+  },
+  "reuseClosure": {
+    "fewDefault": "New conditional emission only executes for direct settlement. Independent source review verifies request-absent byte stream unchanged. Current contract exercises old defaults; old historical default quoted/runtime result is reused, not rerun.",
+    "vaultDefault": "No Vault production source changed. Existing old default quoted/runtime and 500-check independent evidence retained; new run does not relabel those as fresh.",
+    "sharedDependencies": "Current build/shared63 and new direct source closure pinned. No central/VM/runtime-execution change by this work; unrelated peer differences remain recorded in historical provenance. Do not certify unrelated old complete tree hash as identical."
+  },
+  "artifacts": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/few-vault60/evidence64/few-recipient64.json",
+      "sha256": "8d7df7d874a3dde20b7d62ba5a37da64eccb9c6c2650df631c1bd945bf8be921"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/few-vault60/evidence64/vault-recipient64.json",
+      "sha256": "6345b38cef82b8a1d1192ab841591e323e12fa5f995d832eb47b9a37d6752007"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/few-vault60/evidence64/checks63.json",
+      "sha256": "177f0295988eadd36fa09c61dde530b0d9b79b196b80c1103c6c6ad4002b9d20"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/few-vault60/evidence64/checks64.json",
+      "sha256": "cdbe7a63aec48ea35b2459964f9a39be6d113ddde9d3d70a635e4520b1c0f160"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/few-vault60/evidence64/selection64.json",
+      "sha256": "91e871e4e099d48d8816b1417186bb6c5b901da4a74daa4e74abb2811a228518"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/few-vault60/evidence64/owned64.json",
+      "sha256": "0f78a88d8fe654c6268b203a10760fa5219e4173f72256f342c6664dd67a027c"
+    }
+  ],
+  "independentReview": {
+    "path": "docs/research/reports/few-vault-recipient-independent-20261015.json",
+    "sha256": "bc7bd568885c55d0fb8d351d068fb8dd407ddafdec637ec640484495b7393a4a"
+  },
+  "toolDefects": [
+    {
+      "evidence": "few-recipient-tooling-defect62-20261015.json",
+      "codification": "Actual codify_commit recorded in follow-up canonical LearningCase after this source/report commit."
+    },
+    {
+      "evidence": "few-recipient-tooling-defect63-20261015.json",
+      "codification": "Actual codify_commit recorded in follow-up canonical LearningCase after this source/report commit."
+    }
+  ],
+  "inventoryUpdateSuggestion": [
+    {
+      "familyId": "protocol:few-wrapped",
+      "keepExistingVariantIds": true,
+      "directOutput": "historical behavior verified both wrap/unwrap and both retained instances; current direct-only safety repair",
+      "deferredInput": "unsupported; preserve actual deployed interface evidence and explicit null request contract",
+      "defaultEvidence": "reused old, unchanged default emission",
+      "status": "scoped direct correctness complete; performance and formal gates remain unverified"
+    },
+    {
+      "familyId": "vault-spot",
+      "keepExistingVariantIds": true,
+      "directOutput": "historical behavior verified both directions; capacity/zero-output state rejections retained",
+      "deferredInput": "unsupported; preserve actual interface evidence/null request behavior",
+      "defaultEvidence": "old independent 500 checks retained",
+      "status": "scoped direct correctness complete; performance and formal gates remain unverified"
+    }
+  ],
+  "notClaimed": [
+    "natural current valuation rerun",
+    "original pre-call opportunity replay",
+    "Adapter Replay/family_local formal gate",
+    "phase4A",
+    "phase4B",
+    "whole goal complete"
+  ],
+  "sourceReview": {
+    "path": "docs/research/reports/few-vault-recipient-source-review-20261015.json",
+    "sha256": "42003323a5cd21895a800b59ba83b87bd7d1d1265b118f96d25cc10478d99551"
+  }
+}

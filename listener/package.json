@@ -399,7 +399,15 @@
     "searcher:precision-pool-family": "node --import tsx --test src/searcher/venues/swaps/precision-pool-family/test/contract.ts src/searcher/venues/swaps/precision-pool-family/test/recipient.ts src/searcher/venues/swaps/precision-pool-family/test/lifecycle.ts",
     "searcher:precision-pool-recipient-evm": "node --import tsx src/searcher/venues/swaps/precision-pool-family/test/recipient-runtime-evm.ts",
     "searcher:precision-pool-historical-ready": "node --import tsx src/searcher/venues/swaps/precision-pool-family/test/historical-ready.ts",
-    "searcher:precision-pool-historical-dual": "node --import tsx src/searcher/venues/swaps/precision-pool-family/test/historical-dual.ts"
+    "searcher:precision-pool-historical-dual": "node --import tsx src/searcher/venues/swaps/precision-pool-family/test/historical-dual.ts",
+    "searcher:vault-spot-recipient-ready": "tsx src/searcher/venues/swaps/vault-spot-family/test/recipient-ready.ts",
+    "searcher:vault-spot-recipient-historical": "tsx src/searcher/venues/swaps/vault-spot-family/test/recipient-historical.ts",
+    "searcher:few-wrapped-recipient-ready": "tsx src/searcher/venues/protocols/few-wrapped-family/test/recipient-ready.ts",
+    "searcher:few-wrapped-recipient-historical": "tsx src/searcher/venues/protocols/few-wrapped-family/test/recipient-historical.ts",
+    "searcher:ekubo-native-recipient-history": "tsx src/searcher/venues/swaps/ekubo-family/test/historical-recipient.ts",
+    "searcher:ekubo-historical-ready": "tsx src/searcher/venues/swaps/ekubo-family/test/historical-ready.ts",
+    "searcher:curve-underlying-recipient-ready": "tsx src/searcher/venues/swaps/curve-underlying-family/test/recipient-ready.ts",
+    "searcher:curve-underlying-recipient-historical": "tsx src/searcher/venues/swaps/curve-underlying-family/test/recipient-historical.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

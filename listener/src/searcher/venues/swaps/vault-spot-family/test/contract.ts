@@ -127,3 +127,9 @@ test("strict startup nomination reads opaque transaction coordinates and binds t
   assert.equal((await plugin.discovery.nominate!.nominate({nominations:[{...nominations[0],opaque:{...nominations[0].opaque,blockNumber:SOURCE.number-1}}],source:SOURCE,provider})).length,0);
   assert.equal((await plugin.discovery.nominate!.nominate({nominations:[{address:V,opaque:{tokens:[A,B]}}],source:SOURCE,provider})).length,0);
 });
+
+import { recipientContinuation } from "./recipient-historical.js";
+test("recipient CLI continuation is executable and preserves full input",()=>{
+ const program=ethers.hexlify(recipientContinuation().bytes());
+ for(const input of [0n,1n,91n]){const result=inspectRuntime(program,input);assert.equal(result.registers[0],input);assert.equal(result.calls.length,0);assert.equal(result.allowances.length,0);}
+});

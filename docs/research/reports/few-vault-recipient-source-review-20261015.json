@@ -1,0 +1,47 @@
+{
+  "reviewer": "v4_accept26",
+  "result": "source-review-pass",
+  "executionClaim": false,
+  "files": [
+    {
+      "path": "logs/family-implementation-20261015.0exjskqq/few-vault60/candidate/listener/src/searcher/venues/protocols/few-wrapped-family/execution.ts",
+      "sha256": "1fd8f9f8198940cbd7f576d9ffe70934c347fde46b29410178817dfb40f49593"
+    },
+    {
+      "path": "logs/family-implementation-20261015.0exjskqq/few-vault60/candidate/listener/src/searcher/venues/protocols/few-wrapped-family/test/contract.ts",
+      "sha256": "2273a40ebd0fa6facc4e3a414d6596762bd1b245a535f86e6716d3fa46e97054"
+    }
+  ],
+  "checks": [
+    "direct-only emission leaves default branch unchanged",
+    "r1-r8 snapshots do not collide with approval r14/r15; r0 preserves original input",
+    "both directions and self/external receiver exact positive debit and 1:1 receipt",
+    "protocol return equality and approval zero gates",
+    "native and uninvolved actor/recipient token invariants"
+  ],
+  "testsRead": "zero and +/-1 debit, credit, return; old output depletion; nonzero wrap approval",
+  "limitation": "No EVM executed by this reviewer; canonical test63 will establish added negative matrix. Historical native invariance is separate from synthetic native-perturbation coverage.",
+  "followup62": {
+    "failureConfirmed": "Actual canonical test62 9 pass/1 new direct fail native balance fixture required; runtime interpreter opcode5 requires provider omitted by author",
+    "fixReview": "Test-only callback nativeBalance 17 plus post-conversion nativeDelta, defaults0; both -1/+1 asserted for both directions/receiver modes",
+    "fixedTestSha256": "124460df7e90654b5fdcc6d4b3dbab9ec415227c2fd0ae890d04403bf32bf225",
+    "result": "source-review-pass; pending canonical test63, no production edit"
+  },
+  "followup63": {
+    "actual": [
+      {
+        "file": "logs/family-implementation-20261015.0exjskqq/few-vault60/few-recipient63.json",
+        "sha256": "d3e4cb8f17fabd48b0eed727dae792ef6ee05d768128f9fd9d1f09002a3fe08c",
+        "error": {
+          "stage": "inputs",
+          "message": "Error: runtime program size\n    at RuntimeAmountProgram.bytes (/opt/mev-cloud/family-runtime-20261007/listener/src/adapters/runtime-amount-program.ts:61:60)\n    at <anonymous> (/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/few-wrapped-family/test/recipient-historical.ts:120:160)\n    at Array.map (<anonymous>)\n    at main (/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/few-wrapped-family/test/recipient-historical.ts:119:26)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+        },
+        "samples": 0,
+        "drained": true
+      }
+    ],
+    "finding": "Tool constructs empty RuntimeAmountProgram, rejected before EVM; not Family behavior",
+    "fix": "Both own CLI paths use nonempty constant-r1=0 noop, 0/1/91 input contract checks full r0 unchanged, no calls or allowances",
+    "review": "source-review-pass; actual next run pending"
+  }
+}

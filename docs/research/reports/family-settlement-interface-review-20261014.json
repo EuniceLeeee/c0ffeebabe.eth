@@ -1212,22 +1212,27 @@
         {
           "id": "legacy meta implementation 0x5f8908 (generic registry routes)",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "当前 clone 嵌入 0x5f8908 且实现源码已核实，但 generic 历史 Ready 缺 pool/implementation codeHash。",
-            "实际 receiver 可用；当前仅两个 classic quoteModel 接 directOutput，generic 路由未接。",
-            "缺新收款方模式执行证据。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-underlying-frax-direct-reuse-20261015.json",
+              "sha256": "307208a93de5baf5c1a86898968f63dc7f2c8734dea5bcc9780ee33080860727"
             }
-          ]
+          ],
+          "scope": "Actual FRAX instance N14274089, 12 directions. Reuse 26 historical external direct and 26 zero controls after source compatibility review; no new EVM or hypothetical generic instance claim.",
+          "executionEvidence": {
+            "path": "docs/research/reports/curve-underlying-frax-reused-behavior-20261015.json",
+            "sha256": "0b6b7151110ff2e3fdd2218b7f884e2cc1a2e661074d98ce681d7852e11ca351"
+          }
         },
         {
           "id": "nativeAlias optimized full runtime",
@@ -1235,39 +1240,53 @@
           "identity": "verified",
           "callback": "input-first",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "实际 receiver 与输入先付 exchange_extended 未接；当前 nativeAlias 强制无 directOutput。",
-            "native 输出须处理 WETH 边界；该 extended 非 payable，不能推导 native 输入回调。",
-            "缺指定收款方/输入回调模式行为与拒绝证据，不能声明 deferredInput。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-underlying-native-recipient-correctness-20261015.json",
+              "sha256": "8790134d094ccc7615425a5d40ac9d55237334f425aabad2ed3bd049aab470ad"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/curve-underlying-native-recipient-behavior-20261015.json",
+            "sha256": "375deb280b755e3ad0cc52745d953778087f2bd99fec763f2e62ef04a940f61b"
+          },
+          "evidenceNote": "Actual selected-scope historical behavior independently reviewed; old evidence links retained."
         },
         {
           "id": "nativeAlias optimized a85461 clone",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "input-first",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "历史 clone runtime 精确绑定，缺同历史区块实现 runtime。",
-            "receiver/输入先付回调未接；native 精确 msg.value 输入会绕过回调，native 输出需处理 WETH 边界。",
-            "缺新模式行为与拒绝证据，不能声明 output-first/deferredInput。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-underlying-native-recipient-correctness-20261015.json",
+              "sha256": "8790134d094ccc7615425a5d40ac9d55237334f425aabad2ed3bd049aab470ad"
             }
-          ]
+          ],
+          "identityEvidence": {
+            "path": "docs/research/reports/curve-underlying-native-recipient-correctness-20261015.json",
+            "sha256": "8790134d094ccc7615425a5d40ac9d55237334f425aabad2ed3bd049aab470ad"
+          },
+          "executionEvidence": {
+            "path": "docs/research/reports/curve-underlying-native-recipient-behavior-20261015.json",
+            "sha256": "375deb280b755e3ad0cc52745d953778087f2bd99fec763f2e62ef04a940f61b"
+          },
+          "evidenceNote": "Actual selected-scope historical behavior independently reviewed; old evidence links retained."
         },
         {
           "id": "Snow yVault lending",
@@ -1326,7 +1345,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -1354,7 +1373,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
-          "sha256": "f2d01a805f9a47e10900f52696ec89784365aeb7c567c68a3c7f338b13a735e2"
+          "sha256": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-underlying-family/action.ts",
@@ -1362,11 +1381,11 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-underlying-family/codec.ts",
-          "sha256": "2935f76e76be1b6166c4a40b517b9797125c6fc57f1944868bd695bd8deb6d26"
+          "sha256": "29f7e0be78cb03d084aa9ed358e44b19731882d2f112e3197d2f4567ad330d3d"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts",
-          "sha256": "56ac0e1c5d43f3b85b1858b8379eba073690be00caf74cbde03cda348b042cd2"
+          "sha256": "028f3f169ebb0397d8660a69dd720398a9a3c2bcf95ae4bc953e2f9d54d3f15a"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-underlying-family/identity.ts",
@@ -1374,7 +1393,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts",
-          "sha256": "137cafc05d3edcccbe1c3c1684be7cf0b4204a3c7aac888ed9f0d7ca31ef0351"
+          "sha256": "994eca6c0b42656dd832664cf74ed48291f9f057c95eb21c237e33189acc8137"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-underlying-family/legacy-factory.ts",
@@ -1402,15 +1421,19 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
-          "sha256": "56d89e4d1db9609b8f230b110d8d09fc20e440b52ac77a57d18827889b32f643"
+          "sha256": "9e7ffc251b1f6ebe3d588de16112228fe7a9a68a13262615daca71519b75af9f"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
-          "sha256": "f7a80a177c42ee2d2187f6afee498921a3464290cda0b29e75fd148e0947ee30"
+          "sha256": "fdc3b5285e7652e0a3b2d6fd5f3ee04a1aa22004a429b3ef01762eab6806d554"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
-          "sha256": "3cfdebb184d8cf680fffe0b068209819b5c2c86abb7a4fa17b03635ad511f36f"
+          "sha256": "444c619922cfaab4c9d1f97075995ac0e21f07ba264433b2bc1b23f5b5a8c38e"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-underlying-family/recipient-proof.ts",
+          "sha256": "0b80128ebc0b9ed7b8785a4b4cb0c9884372324d475b4398456105014e81996e"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-underlying-family/routes.ts",
@@ -1438,8 +1461,13 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-        "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+        "path": "docs/research/reports/curve-underlying-native-recipient-interface-review-20261015.json",
+        "sha256": "3d6631cc314ebd3654d8b4435880abd0e69ea304b7d0b720a491ec2dfae35ee0"
+      },
+      "preservedPriorSourceReport": null,
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/curve-underlying-native-recipient-correctness-20261015.json",
+        "sha256": "8790134d094ccc7615425a5d40ac9d55237334f425aabad2ed3bd049aab470ad"
       }
     },
     {
@@ -1812,19 +1840,24 @@
           "identity": "verified",
           "callback": "internal-only",
           "recipient": "conditional",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "实际 Router 接口有 receiver，但当前 native route 拒绝新 settlement 模式。",
-            "native direct 未接线/未实测；既有 native 转换/退款边界不能由 ERC20 证明替代。"
-          ],
-          "evidenceNote": "actual deployed source reviewed; current native direct not wired",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "evidenceNote": "Actual selected-scope historical behavior independently reviewed; old evidence links retained.",
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
               "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+            },
+            {
+              "path": "docs/research/reports/ekubo-native-recipient-correctness-20261015.json",
+              "sha256": "f533b5588c5f1db34261cab2b046376120ad50dee7333191a96bc47aa77bd25a"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/ekubo-native-recipient-behavior-20261015.json",
+            "sha256": "bfa797ccfd3dee833a84623954b75872a3048a50dece1b13cb916ad0688ac7cb"
+          }
         }
       ],
       "sourceReport": "eight-family-interface-review-20261014.json",
@@ -1832,7 +1865,7 @@
       "source": [
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -1872,7 +1905,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/ekubo-family/execution.ts",
-          "sha256": "aebf96e6c4ef3f57eae80dc07c82ace89898585932a7cdbb9c6260438abb2e91"
+          "sha256": "7e1e012180276cf7fa440b42a4ec7dcd49d3cf3caee7e1cbddc023a5876c3f5a"
         },
         {
           "path": "listener/src/searcher/venues/swaps/ekubo-family/extension.ts",
@@ -1912,8 +1945,13 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
-        "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+        "path": "docs/research/reports/ekubo-native-recipient-interface-review-20261015.json",
+        "sha256": "04f4d9282a7531278ac075936b97f081544bd1eeb35a69a160fee5a59016b0cf"
+      },
+      "preservedPriorSourceReport": "eight-family-interface-review-20261014.json",
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/ekubo-native-recipient-correctness-20261015.json",
+        "sha256": "f533b5588c5f1db34261cab2b046376120ad50dee7333191a96bc47aa77bd25a"
       }
     },
     {
@@ -4028,18 +4066,23 @@
           "callback": "none",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "两个实际 wrapper runtime 与历史 profile 匹配。",
-            "现有 To 公共事件只证明协议能力，不是当前 Family receiver 模式回执。",
-            "wrapTo/unwrapTo 当前接线须 join 独立 receiver、批准清理和旧库存控制回执；旧默认验收保留。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/few-vault-recipient-correctness-20261015.json",
+              "sha256": "7d6d2e4d68adbe97e5b121b54fc7c17c5db7d1cac7413f100194d3f33fd8323f"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/few-recipient-behavior-20261015.json",
+            "sha256": "241b74fd512f581505a5dfc052b33c18f9fcd651dfca62d14dcfc7ca34d47305"
+          },
+          "evidenceNote": "Actual selected-scope historical behavior independently reviewed; old evidence links retained."
         }
       ],
       "domain": "protocol",
@@ -4050,7 +4093,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -4094,7 +4137,7 @@
         },
         {
           "path": "listener/src/searcher/venues/protocols/few-wrapped-family/execution.ts",
-          "sha256": "34441dc0ff5c196ff77d248089a6ce2c3ca128a37088eb38b5aa0b5ba8a3a37c"
+          "sha256": "1fd8f9f8198940cbd7f576d9ffe70934c347fde46b29410178817dfb40f49593"
         },
         {
           "path": "listener/src/searcher/venues/protocols/few-wrapped-family/identity.ts",
@@ -4126,9 +4169,15 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
-        "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
-      }
+        "path": "docs/research/reports/few-recipient-interface-review-20261015.json",
+        "sha256": "d2a509b4ca1809b1d6a58c90b08d9e92bc80a1d9d4478cb95b32ef0944f1a4c8"
+      },
+      "preservedPriorSourceReport": null,
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/few-vault-recipient-correctness-20261015.json",
+        "sha256": "7d6d2e4d68adbe97e5b121b54fc7c17c5db7d1cac7413f100194d3f33fd8323f"
+      },
+      "gaps": []
     },
     {
       "familyId": "protocol:goldx",
@@ -6767,16 +6816,23 @@
           "callback": "none",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "缺当前源码下两个方向指定收款方实际扣款、到账、旧库存及回滚证据；预转入属于 input-first。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/few-vault-recipient-correctness-20261015.json",
+              "sha256": "7d6d2e4d68adbe97e5b121b54fc7c17c5db7d1cac7413f100194d3f33fd8323f"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/vault-recipient-behavior-20261015.json",
+            "sha256": "e8c534e637c50f8237f11c14b6210d1bca543ca26dbf65c73b1fbd77c6537b75"
+          },
+          "evidenceNote": "Actual selected-scope historical behavior independently reviewed; old evidence links retained."
         }
       ],
       "domain": "swap",
@@ -6787,7 +6843,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -6859,9 +6915,15 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-        "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
-      }
+        "path": "docs/research/reports/vault-recipient-interface-review-20261015.json",
+        "sha256": "430b8f387543e5fc2689dfb787ed66b6fc3d4308028da69cb2c6c40eeaaeb320"
+      },
+      "preservedPriorSourceReport": null,
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/few-vault-recipient-correctness-20261015.json",
+        "sha256": "7d6d2e4d68adbe97e5b121b54fc7c17c5db7d1cac7413f100194d3f33fd8323f"
+      },
+      "gaps": []
     },
     {
       "familyId": "custom-swap:oneswap",
@@ -7178,5 +7240,29 @@
     "commonPinsUnchanged": true,
     "other45RowsUnchanged": true,
     "scope": "Current tested selected scope only; no global completion or performance claim."
+  },
+  "fourFamilyScopedUpdate": {
+    "at": "2026-10-15T10:32:52.311469+00:00",
+    "updated": {
+      "protocol:few-wrapped": [
+        "FewWrappedToken ordinary/To wrap and unwrap"
+      ],
+      "vault-spot": [
+        "Vault pretransferred spot swap"
+      ],
+      "curve-underlying": [
+        "nativeAlias optimized full runtime",
+        "nativeAlias optimized a85461 clone"
+      ],
+      "custom-swap:ekubo-router-v1": [
+        "native-in or native-out"
+      ]
+    },
+    "commonPinsUnchanged": true,
+    "other44RowsUnchanged": true,
+    "noWholeFamilyPassClaimForPartialVariants": [
+      "curve-underlying",
+      "custom-swap:ekubo-router-v1"
+    ]
   }
 }

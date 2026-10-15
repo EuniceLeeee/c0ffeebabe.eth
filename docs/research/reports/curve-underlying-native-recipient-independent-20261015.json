@@ -1,0 +1,168 @@
+{
+  "reviewer": "root non-author",
+  "result": "pass",
+  "scope": "nativeAlias full + clone actual instances, 8 selected directions",
+  "reviews": [
+    {
+      "source": {
+        "number": 26018980,
+        "hash": "0x29e00078ff534b0c7e2347efd97b494d7f30e73eb4e0730fa78aada72c628bf0",
+        "generation": 26018980
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/evidence63/historical-full62.json",
+        "sha256": "7e6ce47f2292f09d25c49aed54c21828306491adf1ecf5485e126a11f6b88a10"
+      },
+      "counts": {
+        "rawBalanceChecks": 192,
+        "positive": 48,
+        "rollbackRejections": 72,
+        "postSuccessRollback": 36,
+        "zeroInputRejections": 24
+      },
+      "amounts": [
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "5156134017648676598",
+          "actualReceived": "1997850202782999",
+          "label": "same-state-production-input-only"
+        },
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "51561340176486765980",
+          "actualReceived": "19977936491700081",
+          "label": "ten-times-same-state-production-input"
+        },
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "5156134017648676598",
+          "actualReceived": "15608443579825234607",
+          "label": "same-state-production-input-only"
+        },
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "51561340176486765980",
+          "actualReceived": "156077139182171226439",
+          "label": "ten-times-same-state-production-input"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "2000000000000000",
+          "actualReceived": "5156134017648676598",
+          "label": "same-state-production-input-only"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "20000000000000000",
+          "actualReceived": "51559763352961062557",
+          "label": "ten-times-same-state-production-input"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "2000000000000000",
+          "actualReceived": "15616851928263677626",
+          "label": "same-state-production-input-only"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "20000000000000000",
+          "actualReceived": "156162218760322846529",
+          "label": "ten-times-same-state-production-input"
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "15616851928263677626",
+          "actualReceived": "5153339058862335339",
+          "label": "same-state-production-input-only"
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "156168519282636776260",
+          "actualReceived": "51530310355324936042",
+          "label": "ten-times-same-state-production-input"
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "15616851928263677626",
+          "actualReceived": "1997842902028942",
+          "label": "same-state-production-input-only"
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "156168519282636776260",
+          "actualReceived": "19977401874086180",
+          "label": "ten-times-same-state-production-input"
+        }
+      ],
+      "status": "pass"
+    },
+    {
+      "source": {
+        "number": 26029240,
+        "hash": "0x8c479064c328fe4b422533f9b57488571e92c1008501c8552070e286ed7a859f",
+        "generation": 26029240
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-underlying61/evidence63/historical-clone63.json",
+        "sha256": "5d9703762e2bb05d183ee4f2afef6b0d8266c46ff17a619ce56baf6f38f4ae35"
+      },
+      "counts": {
+        "rawBalanceChecks": 64,
+        "positive": 16,
+        "rollbackRejections": 24,
+        "postSuccessRollback": 12,
+        "zeroInputRejections": 8
+      },
+      "amounts": [
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x365accfca291e7d3914637abf1f7635db165bb09",
+          "amountIn": "2000000000000000",
+          "actualReceived": "166231363684660222",
+          "label": "same-state-production-input-only"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0x365accfca291e7d3914637abf1f7635db165bb09",
+          "amountIn": "20000000000000000",
+          "actualReceived": "1662216513170685644",
+          "label": "ten-times-same-state-production-input"
+        },
+        {
+          "tokenIn": "0x365accfca291e7d3914637abf1f7635db165bb09",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "166231363684660222",
+          "actualReceived": "1982721587464099",
+          "label": "same-state-production-input-only"
+        },
+        {
+          "tokenIn": "0x365accfca291e7d3914637abf1f7635db165bb09",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "1662313636846602220",
+          "actualReceived": "19826077014812327",
+          "label": "ten-times-same-state-production-input"
+        }
+      ],
+      "status": "pass"
+    }
+  ],
+  "method": "Independent raw slot deltas, full input calldata/value, output returns, WETH conversion, actor native balances, zero/revert storage union and post-success forced revert. No new execution.",
+  "limitations": [
+    "Input-only old production reference; no new natural valuation or original opportunity.",
+    "Other variants and FRAX acceptance retain original evidence.",
+    "No performance or exchange_extended callback claim.",
+    "Original TIME_WAIT runner failure preserved; full successful run reused before clone resume."
+  ]
+}

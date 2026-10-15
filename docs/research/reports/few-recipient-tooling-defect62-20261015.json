@@ -1,0 +1,12 @@
+{
+  "kind": "tooling_defect",
+  "summary": "New Few direct contract fixture omitted required nativeBalance provider",
+  "failureArtifact": "logs/family-implementation-20261015.0exjskqq/few-vault60/actual/logs/family-implementation-20261015.0exjskqq/few-vault60/check62-few-contract.log",
+  "failureSha256": "648a256e8539d327597e594d562bf5fb5132b20921ae9c1066fc55792c2f2d02",
+  "rootCause": "inspectRuntime opcode5 requires explicitly supplied nativeBalance; new production direct leaf adds this opcode but test call fixture supplied only token call behavior",
+  "freshReviewer": "v4_accept26",
+  "repair": "only test contract: nativeBalance=17+(converted?nativeDelta:0), default0 plus both +/-1 native mutation rejects",
+  "productionChangedByRepair": false,
+  "validation": "canonical run64: both Family contracts and actual historical direct matrices exit0; original failing runs preserved",
+  "codify_commit": "parent to fill at unified commit"
+}

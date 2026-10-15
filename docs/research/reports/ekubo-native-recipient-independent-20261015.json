@@ -1,0 +1,67 @@
+{
+  "reviewer": "root non-author",
+  "status": "pass",
+  "raw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/evidence06/direct05.json",
+    "sha256": "34024accf38adccbfd16c8b9fb1b0adaee84db050d54e900f04361f13987a85f"
+  },
+  "source": {
+    "number": 26088150,
+    "hash": "0xcd1606be5437c39dae2f04fd1709e6016827cd05323e81674ce8b378f46f86b6",
+    "generation": 26088150
+  },
+  "counts": {
+    "rawTokenDeltas": 64,
+    "nativeInventoryChecks": 8,
+    "positive": 8,
+    "declaredRejections": 8
+  },
+  "amounts": [
+    {
+      "direction": "token0-to-token1",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "2000000000000000",
+      "actualReceived": "5286195",
+      "label": "production-effective"
+    },
+    {
+      "direction": "token0-to-token1",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "101325289534252",
+      "actualReceived": "270624",
+      "label": "original-sized-at-N-end"
+    },
+    {
+      "direction": "token1-to-token0",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "5286195",
+      "actualReceived": "1954743851303043",
+      "label": "production-effective"
+    },
+    {
+      "direction": "token1-to-token0",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "270928",
+      "actualReceived": "101223640221428",
+      "label": "original-sized-at-N-end"
+    }
+  ],
+  "reuse": {
+    "reviewed": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/reuse-default06.json",
+    "sha256": "c2724d63c36d9101b1196bfee2a08aae0e59efb3b28c6f98333e7e21a745fd96",
+    "result": "pass-scoped-old-default-quoted-evidence-reuse",
+    "defaultPrograms": 2,
+    "quotedPrograms": 3,
+    "method": "Hash-checked original raw and comparison artifacts; inspected actual coffee/current BotVM and RuntimeAmountVM diffs. Default successful opcodes/modes and native wrapping preserved; newly introduced callback/read-only/opcodes not selected. Existing rejection evidence retains declared-revert limits."
+  },
+  "method": "Independent raw strict source attestation, full input/output deltas, native preservation and raw packed signed Core event; no rerun or borrowed output.",
+  "limits": [
+    "8 historical negatives are declared Revert, not full storage-union independent observation.",
+    "No-extension native actual pool only; absence of TWAMM sample is not a new mandatory variant.",
+    "Reused old natural Ready then current production revalidation; no fresh discovery, opportunity or performance claim."
+  ]
+}

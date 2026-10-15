@@ -162,3 +162,41 @@ test("both wrap encodings reject an uncleared approval even if approve returns f
     assert.throws(()=>run(1n),/runtime amount mismatch/);
   }
 });
+
+
+test("direct receiver enforces positive exact 1:1 debit, reported return and new receipt", () => {
+  const d=descriptor(),value=91n;
+  for(const route of plugin.routes.project({descriptor:d}))for(const recipient of [OTHER,EXECUTOR]){
+    const i=inputFor(d,route,value),request={kind:"direct-output" as const,recipient};
+    const leg=plugin.execution.buildRuntimeLeg!({...i,settlement:request})!;assert(leg);assert.deepEqual(leg.settlementRequest,request);
+    const run=(debit=value,credit=value,reported=value,oldSpent=0n,residual=0n,requested=value,nativeDelta=0n)=>{
+      let converted=false;
+      return inspectRuntime(leg.program,requested,{nativeBalance:()=>17n+(converted?nativeDelta:0n),call:c=>{
+        const parsed=ABI.parseTransaction({data:c.data})!;
+        if(parsed.name==="balanceOf"){
+          const input=c.target.toLowerCase()===route.tokenIn.toLowerCase(),actor=parsed.args[0].toLowerCase()===EXECUTOR.toLowerCase();
+          const opening=input?(actor?value+101n:107n):(actor?103n:109n);
+          const delta=input?(actor?-debit:0n):((parsed.args[0].toLowerCase()===recipient.toLowerCase()?credit:0n)-(actor?oldSpent:0n));
+          return ABI.encodeFunctionResult("balanceOf",[opening+(converted?delta:0n)]);
+        }
+        if(parsed.name==="approve")return ABI.encodeFunctionResult("approve",[true]);
+        if(parsed.name==="allowance")return ABI.encodeFunctionResult("allowance",[residual]);
+        assert.equal(parsed.name,`${route.direction}To`);assert.equal(parsed.args[0],requested);assert.equal(parsed.args[1].toLowerCase(),recipient.toLowerCase());converted=true;
+        return ABI.encodeFunctionResult(parsed.name,[reported]);
+      }});
+    };
+    run();
+    for(const debit of [0n,value-1n,value+1n])assert.throws(()=>run(debit));
+    for(const credit of [0n,value-1n,value+1n])assert.throws(()=>run(value,credit));
+    for(const reported of [0n,value-1n,value+1n])assert.throws(()=>run(value,value,reported));
+    assert.throws(()=>run(value,value,value,1n));assert.throws(()=>run(0n,0n,0n,0n,0n,0n));
+    if(route.direction==="wrap")assert.throws(()=>run(value,value,value,0n,1n));
+    for(const nativeDelta of [-1n,1n])assert.throws(()=>run(value,value,value,0n,0n,value,nativeDelta));
+  }
+});
+
+import { recipientContinuation } from "./recipient-historical.js";
+test("recipient CLI continuation is executable and preserves full input",()=>{
+ const program=ethers.hexlify(recipientContinuation().bytes());
+ for(const input of [0n,1n,91n]){const result=inspectRuntime(program,input);assert.equal(result.registers[0],input);assert.equal(result.calls.length,0);assert.equal(result.allowances.length,0);}
+});
