@@ -8,6 +8,6 @@
 
 首次run53在并发响应ID核对中失败，尚未执行真实回调；原失败与退出证据保留。修复后乱序响应成功、错误ID仍拒绝；run54独立保存，不覆盖run53，见[失败记录](yearn-callback-first-failure-20261015.json)。资金夹具不是真实市场回程，不证明盈利；自然估值、原TX机会、正式Adapter Replay及4A／4B继续单列未完成。没有部署、签名、广播或live。
 
-本次范围遵循IMPL最新口径：无实际实例的额外变体只记边界，不制造必补项。当前表内已确认OneSwap与PrecisionPool缺当前生产安装，旧实现与成功证据可复用；Migration与BTBBear已有实现，剩实际runtime补验，见[范围审查](family-impl-current-scope-audit-20261015.json)。按用户授权，各Family由独立subagent并行准备，共享注册生成与云端执行串行协调。
+本次范围遵循IMPL最新口径：无实际实例的额外变体只记边界，不制造必补项。当前表内已确认OneSwap与PrecisionPool缺当前生产安装，旧实现与成功证据可复用；Migration与BTBBear已有实现，剩实际runtime补验，见[范围审查](family-impl-current-scope-audit-20261015.json)。按用户最新要求，用满3个subagent分别推进独立Family从实现到正确性验收；仅共享注册／catalog写入协调串行，独立正确性执行可并行。
 
 完整金额、源、执行记录与限制见[证据摘要](yearn-callback-correctness-20261015.json)。当前结算门结果另附；本报告不声明全任务完成或生产部署通过。

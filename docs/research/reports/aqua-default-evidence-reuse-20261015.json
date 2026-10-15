@@ -1,0 +1,132 @@
+{
+  "schema": "aqua-history20-scoped-reuse-review-v1",
+  "reviewer": "/root/interface_protocols_b",
+  "nonAuthor": true,
+  "reviewFinal": true,
+  "verdict": "reuse-permitted-for-preserved-history20-default-quoted-direct-output-paths",
+  "blockingFindings": [],
+  "scope": "Read-only review of old actual evidence and current Family/common execution diffs. No new RPC, build, test, or EVM. Current callback evidence is separately reviewed by root.",
+  "evidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/aqua-history20-independent-review-20261014.json",
+      "sha256": "445ff4daec484d13fa7ec18ea16abb3cf2146d5fd5f4b9529a95879f0b5e05a8"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/aqua-history20-independent-binding-inputs.json",
+      "sha256": "6d8f260e98e06d5429d5d1d4d5827804e7d74ef2cca4ca17b0b647ae5f177dfb"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/family-reuse57.json",
+      "sha256": "ee228d85851024a7fc40b79890642b17a19d371737cb0c32a82282cf396f3739"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/reuse-shared-diff59.json",
+      "sha256": "f324bfb3192c47b1a4939815d09b9d31b36493781aa24d5e3e9583f2a554d8b1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/root-evidence59/source59.json",
+      "sha256": "c2c36b90873bcb4adc422eb1742fffed0911e9bab19795504fbef9c179eb57d0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/reuse-runtime.ts.diff",
+      "sha256": "866788638e4b60dde205cb3a91482c7669859bbf595817669730ea7be2882a05"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/reuse-execution.ts.diff",
+      "sha256": "24b4ecfa6b4a33d706127c12727daea62e4a349026d6c7138aff91c61a016a70"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/reuse-common60/RuntimeAmountVM.sol.diff",
+      "sha256": "043785228d3562052629d713c4d589f7668bef33760281d413aeab50a80a96e2"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/reuse-common60/adapter-family-runtime.ts.diff",
+      "sha256": "b0e51b1f171aeffc3703395c2060950341097625eb642c4717e6a28314ff9154"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/reuse-common60/execution-asset-boundary.ts.diff",
+      "sha256": "cda9bec14873162f8d3ef8c40d15d6a3b0dc88b9f64673720c741eeb73d1ce24"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/reuse-common60/runtime-amount-program.ts.diff",
+      "sha256": "92f3ef8a7dc2dbba959645da627566167eccb6dd12d8c615a21560faa1f07999"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/reuse-common60/runtime-settlement.ts.diff",
+      "sha256": "2c91ac0c48c4c4d4f828468cbaacb7e80ef4a30da9eca6ca88f915c03175fa20"
+    }
+  ],
+  "verifiedBindings": {
+    "familyFiles": 14,
+    "unchangedFamilyFiles": 12,
+    "familyEntryUnchanged": true,
+    "runtimeExecutionHelpersUnchanged": true,
+    "oldVM": "9f48e0d204342be4079637ac52e73f08470fd112c56aec9cea4272a82c12ee82",
+    "currentVM": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+    "allFiveCommonDiffsRecomputedFromPinnedSource": true,
+    "familyRowsMatchActualFilesAndBothInventories": true,
+    "botVMConstantsIERC20AndStrictTransportUnchanged": true
+  },
+  "pathAnalysis": [
+    {
+      "path": "aqua runtime.ts/execution.ts",
+      "conclusion": "Only quote-output can receive an explicit recipient. swapProgram, quoted fragment/action, default runtime and direct-output invocation remain unchanged. Omitted quote recipient also retains the prior taker bytes."
+    },
+    {
+      "path": "runtime-amount-program.ts",
+      "conclusion": "Old operation indices 0..6 unchanged; mode0/mode1 call headers and byte encodings unchanged when revertBytes absent. New eq/min and expected-revert mode are not used by these old Aqua paths. Maximum-last-leg allowance affects explicit settlement composer only."
+    },
+    {
+      "path": "RuntimeAmountVM.sol",
+      "conclusion": "New math kinds7/8 and callmode2 branches do not alter old math or mode0/mode1 parsing, patching, success/failure handling, callback validation/restoration. Old Aqua default/direct calls use no callback and static quote uses mode1. Bytecode identity changed; this is semantic compatibility review, not a claim of current-VM rerun."
+    },
+    {
+      "path": "adapter-family-runtime.ts / execution-asset-boundary.ts",
+      "conclusion": "Aqua projected routes have no executionAssets; map is identity and native envelope returns the original leg. New explicit capability gates are satisfied by existing Aqua declarations/echo. No change to old ERC20 quoted/default/direct operations."
+    },
+    {
+      "path": "runtime-settlement.ts",
+      "conclusion": "Changes concern composed callback route preparation and maximum final-leg inventory. history20 single-leg quoted/default/direct runs do not execute the composer. Newly explicit quote-recipient/composed paths must rely on new evidence, not this reuse."
+    },
+    {
+      "path": "catalog and unrelated Family changes",
+      "conclusion": "Aqua production entry, admission, routes, action, Exact, codec/profile and runtime helpers match old pins. Other Families added or modified do not affect these single-leg executions; source/definition identities must retain old and new pins rather than rewriting the old evidence."
+    }
+  ],
+  "reusableEvidence": {
+    "countsRetainedVerbatim": {
+      "supplemental": 8,
+      "staticQuote": 4,
+      "directOutput": 4,
+      "defaultPositive": 24,
+      "defaultRejected": 28,
+      "roundTripRejected": 4,
+      "independentChainQuoteRejected": 4
+    },
+    "modes": [
+      "quoted",
+      "runtime-default",
+      "direct-output-external",
+      "quote-output-with-omitted-recipient"
+    ],
+    "binding": "Two exact preserved history20 source blocks/strategies and their recorded amounts, actors, token implementations and original program semantics. Historical executed hashes remain unchanged.",
+    "requiredRerunForThesePreservedModes": []
+  },
+  "notCoveredByReuse": [
+    "New explicit recipient in quote-output or newly composed callback funding; current settlement59 evidence remains separately required.",
+    "Any gas/performance claim, new instance/profile/token behavior, native execution, new valuation or fresh-from-zero discovery.",
+    "Current bytecode re-execution of every old path: not performed and not implied by semantic compatibility review.",
+    "Independent post-revert state observation: old transport reports empty effects; retain original limitation."
+  ],
+  "oldLimitationsRetained": [
+    "The four static quotes have exactly 4 token rows, 1 executor-native row and 2 correct token-supply rows, so no empty-array observation gap is used in this evidence. Four direct outputs have 6 token-account rows, 1 native row and 2 supply rows.",
+    "Observed effects contain deltas and logs, not raw per-account pre/post stateDiff or callTracer trees. Reported after-inventories follow the explicit override baseline plus independently verified deltas. Reverts have empty effects by transport design; do not claim separately read post-revert balances.",
+    "The output recipient is the original configured owner, distinct from executor and maker; executor/origin are unchanged. This does not establish all recipients or token behaviors.",
+    "Supplemental modes use one registration-reserve/100 amount per direction. Original transaction is a registration source, not an original swap amount or original-precall replay.",
+    "No deferred-input/payment-program/callback execution occurs in these 8 supplemental cases. No opportunity, EV, clean-tree integration, formal Adapter Replay or performance conclusion.",
+    "A natural effective rows are quoted; both B effective rows remain missing-valuation with null amountIn/amountOut. Manual same-N success does not repair that missing valuation.",
+    "Ready generation, source/cutoff generation, and per-run pricing generation are separate counters; N/hash and canonical bindings are checked without falsely equating them.",
+    "Current source inventory is a later read and may include parent work after the preserved run; the exact run pin is retained and matching current Aqua source/metadata/artifact is checked separately."
+  ],
+  "minimalFollowup": "No old default/quoted/direct rerun is required by the inspected changes. Preserve history20 raw hashes and this compatibility bridge; attach root independent review of current settlement59 for new callback/explicit quote paths. Do not rewrite history20 as a current-source execution."
+}

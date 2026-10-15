@@ -1,0 +1,96 @@
+{
+  "reviewer": "root non-author",
+  "status": "PASS-selected-two-pool-four-direction-current-correctness",
+  "reviewFinal": true,
+  "raw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap56/evidence60/historical60.json",
+    "sha256": "4ec19b6eebfcc8e40427234849ee2e993147fde7b9e9183835009d1fc63b40d0"
+  },
+  "source": {
+    "number": 26130639,
+    "hash": "0x69fe42671a3df6c3bfcdc98f44d7078870696568246b1d9dfd976d2f3a0e42e5",
+    "generation": 26130639
+  },
+  "sourceTreeSha256": "ba3ccc44eed639cfd0c4859e74841739452bbaaf7506c752aadd646135191b66",
+  "counts": {
+    "rawBalanceChecks": 128,
+    "positive": 32,
+    "rollbackRejections": 24,
+    "postSuccessRollback": 8,
+    "zeroInputRejections": 16
+  },
+  "amounts": [
+    {
+      "pool": "0x1025f2334e88a4a0e93e5e2ff4a4e67317682b60",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x0b342c51d1592c41068d5d4b4da4a68c0a04d5a4",
+      "amountIn": "2000000000000000",
+      "quotedAndReceived": "39252671236359405619",
+      "label": "reference-effective-input-only"
+    },
+    {
+      "pool": "0x1025f2334e88a4a0e93e5e2ff4a4e67317682b60",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x0b342c51d1592c41068d5d4b4da4a68c0a04d5a4",
+      "amountIn": "12122890967166406",
+      "quotedAndReceived": "199683341589615470540",
+      "label": "historical-input-at-N"
+    },
+    {
+      "pool": "0x1025f2334e88a4a0e93e5e2ff4a4e67317682b60",
+      "tokenIn": "0x0b342c51d1592c41068d5d4b4da4a68c0a04d5a4",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "41180007482725825576",
+      "quotedAndReceived": "1922720664824414",
+      "label": "reference-effective-input-only"
+    },
+    {
+      "pool": "0x1025f2334e88a4a0e93e5e2ff4a4e67317682b60",
+      "tokenIn": "0x0b342c51d1592c41068d5d4b4da4a68c0a04d5a4",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "324178882015670094145",
+      "quotedAndReceived": "12001965129768920",
+      "label": "other-pool-historical-input-at-N"
+    },
+    {
+      "pool": "0x7e8dc7c0fef7bb84304cc5c2dacf5e583198ca4f",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x0b342c51d1592c41068d5d4b4da4a68c0a04d5a4",
+      "amountIn": "2000000000000000",
+      "quotedAndReceived": "40358958051954885617",
+      "label": "reference-effective-input-only"
+    },
+    {
+      "pool": "0x7e8dc7c0fef7bb84304cc5c2dacf5e583198ca4f",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x0b342c51d1592c41068d5d4b4da4a68c0a04d5a4",
+      "amountIn": "12122890967166406",
+      "quotedAndReceived": "238502496379306943926",
+      "label": "other-pool-historical-input-at-N"
+    },
+    {
+      "pool": "0x7e8dc7c0fef7bb84304cc5c2dacf5e583198ca4f",
+      "tokenIn": "0x0b342c51d1592c41068d5d4b4da4a68c0a04d5a4",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "41180007482725825576",
+      "quotedAndReceived": "1999758894226854",
+      "label": "reference-effective-input-only"
+    },
+    {
+      "pool": "0x7e8dc7c0fef7bb84304cc5c2dacf5e583198ca4f",
+      "tokenIn": "0x0b342c51d1592c41068d5d4b4da4a68c0a04d5a4",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "324178882015670094145",
+      "quotedAndReceived": "15206492902295524",
+      "label": "historical-input-at-N"
+    }
+  ],
+  "method": "Independent raw calldata and return decoding, raw pre/post token slots for executor/recipient, exact native conversion, full input debit and quote/output equality, old/native inventory and storage-union rollback; post-revert contains successful market call. Current production issuer/source and end-state bound.",
+  "limitations": [
+    "No naturally generated price evidence; selected old row input only.",
+    "No original pre-call opportunity or performance claim.",
+    "112-bit overflow historical controls may reject at funding boundary and are not all attributed to Family guard.",
+    "Failed historical59 retained; successful60 fixes the observer expectation for mapped native-output receiver only."
+  ],
+  "at": "2026-10-15T09:21:58.156853+00:00"
+}

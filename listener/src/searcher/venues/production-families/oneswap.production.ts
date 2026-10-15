@@ -1,0 +1,15 @@
+import { defineSwapFamily } from "../adapter-family-plugin.js";
+import { defineFamilyActivation } from "./activation.js";
+import { action } from "../swaps/oneswap-family/action.js";
+import { capture } from "../swaps/oneswap-family/capture.js";
+import { discovery } from "../swaps/oneswap-family/discovery.js";
+import { exact } from "../swaps/oneswap-family/exact.js";
+import { execution } from "../swaps/oneswap-family/execution.js";
+import { identity } from "../swaps/oneswap-family/identity.js";
+import { instance } from "../swaps/oneswap-family/instance.js";
+import { manifest } from "../swaps/oneswap-family/manifest.js";
+import { pricing } from "../swaps/oneswap-family/pricing.js";
+import { routes } from "../swaps/oneswap-family/routes.js";
+import { swap } from "../swaps/oneswap-family/swap.js";
+export const plugin = defineSwapFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, swap, capture, actionAdapters: [action] });
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_ONESWAP_ENABLED" });

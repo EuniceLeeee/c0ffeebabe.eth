@@ -242,7 +242,7 @@
   "families": [
     {
       "familyId": "aqua-swapvm",
-      "coverage": "partial",
+      "coverage": "complete",
       "variants": [
         {
           "id": "quote-output",
@@ -258,6 +258,10 @@
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
               "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+            },
+            {
+              "path": "docs/research/reports/aqua-current-correctness-20261015.json",
+              "sha256": "93b4fcce6843eb73319f5fa4550355b4bb47b4b8f7a5cc3ed34fc59edd493dd3"
             }
           ],
           "settlementGateScope": "This static quote has no payment/recipient/callback; the callback/recipient gate does not require a settlement execution. Four real static quote parity/no-effect results are separately preserved."
@@ -269,17 +273,23 @@
           "callback": "none",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "四次真实外部收款成功有效；新增收款路径的历史拒绝矩阵尚未单独验全，不能拿默认路径28次拒绝替代。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidenceNote": "原声明原文保留。history20 的 4 次实际 direct-output，两个样本×两个方向；外部 recipient 独立增量、caller/origin 不变。",
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
               "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+            },
+            {
+              "path": "docs/research/reports/aqua-current-correctness-20261015.json",
+              "sha256": "93b4fcce6843eb73319f5fa4550355b4bb47b4b8f7a5cc3ed34fc59edd493dd3"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/aqua-settlement-behavior-20261015.json",
+            "sha256": "de98223f149421d36be907350798df58fcce34598375d33c0c81c8521056d5d5"
+          }
         },
         {
           "id": "deferred-input",
@@ -288,24 +298,28 @@
           "callback": "output-first",
           "recipient": "conditional",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "当前实现有 callback debt/prefix payment/old-inventory 保护，但真实历史 deferred 执行尚待验。",
-            "direct 与 deferred 是不同 request；deferred 输出暂归 executor 供 prefix，不能把已测 direct 收款结论移作 deferred。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidenceNote": "原声明原文保留。源证明 output-first→executor preTransferInCallback→router pull→Aqua.push；callback paymentAccount=executor。",
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
               "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+            },
+            {
+              "path": "docs/research/reports/aqua-current-correctness-20261015.json",
+              "sha256": "93b4fcce6843eb73319f5fa4550355b4bb47b4b8f7a5cc3ed34fc59edd493dd3"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/aqua-settlement-behavior-20261015.json",
+            "sha256": "de98223f149421d36be907350798df58fcce34598375d33c0c81c8521056d5d5"
+          }
         }
       ],
       "sourceReport": "root-eight-review-v2.json",
       "gaps": [
-        "B 样本两个自然 effective 仍 missing-valuation；手工同 N 成功不修复自然估值。",
-        "deferred 子项未验，不能汇总为该族全部能力 execution=verified。"
+        "B natural valuation remains missing; not a scoped adaptation correctness prerequisite. Original credential-refused strategy not upgraded."
       ],
       "domain": "swap",
       "source": [
@@ -315,7 +329,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -359,7 +373,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/aqua-swapvm-family/execution.ts",
-          "sha256": "32631f214301c4f065669138f5c1ffad8927fbe64d2488b88142d3d1f94af455"
+          "sha256": "07674ff2020b90f2c5252b314467a07fbf8cfad43cddaa521e353f05db11dfe0"
         },
         {
           "path": "listener/src/searcher/venues/swaps/aqua-swapvm-family/identity.ts",
@@ -379,7 +393,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/aqua-swapvm-family/runtime.ts",
-          "sha256": "c213d20e23ac341ea35f13cf563619073dbb0b845a94639e68cdfae30dea9a5a"
+          "sha256": "1c00b28582d54acea349e578b09580e57b3e131deffcb5a96e950042a10f613a"
         },
         {
           "path": "listener/src/shared/executor/amount-rounding.ts",
@@ -387,8 +401,8 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
-        "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+        "path": "docs/research/reports/aqua-settlement-current-review-20261015.json",
+        "sha256": "0b5d138fc8e534080763558f28e4accc246a8edd44069f7a30a16068fdb8ffae"
       },
       "preservedBehaviorEvidence": [
         {
@@ -402,7 +416,8 @@
         "defaultPositive": 24,
         "defaultRejected": 28,
         "note": "Historical positive results remain valid. Supplemental direct-recipient rejection coverage is not asserted from the default path."
-      }
+      },
+      "scope": "Two actual registered strategies, four directions. New real output-first callback and direct negative matrix; existing quoted/default/direct positives and static quote evidence certified for scoped reuse. Original credential-refused TX remains refused, not covered by other strategies."
     },
     {
       "familyId": "balancer-v1",
@@ -6847,6 +6862,281 @@
         "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
         "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
       }
+    },
+    {
+      "familyId": "custom-swap:oneswap",
+      "domain": "swap",
+      "coverage": "complete",
+      "source": [
+        {
+          "path": "listener/src/adapters/runtime-amount-program.ts",
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+        },
+        {
+          "path": "listener/src/encoder.ts",
+          "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+          "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+        },
+        {
+          "path": "listener/src/searcher/venues/canonical-value.ts",
+          "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+        },
+        {
+          "path": "listener/src/searcher/venues/family-owned-action.ts",
+          "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+        },
+        {
+          "path": "listener/src/searcher/venues/production-families/oneswap.production.ts",
+          "sha256": "1e63ca689b050854972594c48c9e67339fc8f42bce9c0091dd402a8911765141"
+        },
+        {
+          "path": "listener/src/searcher/venues/runtime-execution.ts",
+          "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/action.ts",
+          "sha256": "e6a84afc5ce0b59ecfa0833acd824aa71b2af86ea0c7d64297707e6799cf77cc"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/codec.ts",
+          "sha256": "f41a5333ee1ea2fe872271d58c1d4c99de1945cd7e9d56a263a1209a20fc1d7e"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/execution.ts",
+          "sha256": "b1e73367c5908e1ff845b0112e7248d784b55ceaa4704d0f817466f9c4c2c1be"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/identity.ts",
+          "sha256": "5c4eee10c878b3c505da09ca4ec253c96401afe449075783ff69c3082d93273b"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/instance.ts",
+          "sha256": "53e2d85ee6c8dad446985c816f89d4ed40eaba26589f87afeeafe7e5d01a061f"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/manifest.ts",
+          "sha256": "7a1e56e495bae2d982e1fb4edf4eb8c65200758b37ef826b4d0d64555310355e"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/proxy.ts",
+          "sha256": "70daf5e85114493cfa4107fab1d89d7d6c65ccd220a3c8851c4ffe28b5391c10"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/routes.ts",
+          "sha256": "0c1e80d2874dd60fe4d370046f0cc8b8ace3679286a43a60440aac5d11f62d0e"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/oneswap-family/runtime-execution.ts",
+          "sha256": "dd019deef62cd206b28d4495239c3a914cff1fc33c914942f8b900fc36bb4bd1"
+        },
+        {
+          "path": "listener/src/shared/executor/amount-rounding.ts",
+          "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+        }
+      ],
+      "review": {
+        "path": "docs/research/reports/oneswap-settlement-current-review-20261015.json",
+        "sha256": "43534f42861d89ce01520fce0a19ab523ccf44e0ab798562d16234e44139198f"
+      },
+      "scope": {
+        "family": "custom-swap:oneswap",
+        "action": "oneswap-market-order",
+        "instances": [
+          "0x1025f2334e88a4a0e93e5e2ff4a4e67317682b60",
+          "0x7e8dc7c0fef7bb84304cc5c2dacf5e583198ca4f"
+        ],
+        "variants": [
+          "isOnlySwap=true AMM",
+          "isOnlySwap=false AMM+orderbook pool; actual selected N liquidity fills AMM"
+        ],
+        "directions": [
+          "native ETH input normalized as WETH to ONES",
+          "ONES to native ETH output normalized as WETH"
+        ],
+        "modes": [
+          "specified quote and quoted execution",
+          "runtime default",
+          "runtime direct-self",
+          "runtime direct-external"
+        ],
+        "callback": "unsupported deferred-input and quote-output rejected at construction; native receive fallback is not debt callback",
+        "correctnessState": {
+          "number": 26130639,
+          "hash": "0x69fe42671a3df6c3bfcdc98f44d7078870696568246b1d9dfd976d2f3a0e42e5",
+          "generation": 26130639
+        }
+      },
+      "variants": [
+        {
+          "id": "native-ONES-AMM",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "input-first",
+          "recipient": "yes",
+          "scope": "isOnlySwap=true at N26130639; both directions; addMarketOrder sender is output recipient; native output stages at executor then shared WETH forward; no caller-deferred callback",
+          "wiring": "verified",
+          "execution": "verified",
+          "evidence": [
+            {
+              "path": "docs/research/reports/oneswap-current-correctness-20261015.json",
+              "sha256": "f46423a34ab3f5552e822cf81bcf802107adcfee580f912baad0508f5171814d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/oneswap-settlement-behavior-20261015.json",
+            "sha256": "6ad42883af189bc2a919a5688ed576c5976cc6d89f0a0d9755498f3ecaf6e3b8"
+          },
+          "gaps": []
+        },
+        {
+          "id": "native-ONES-AMM-orderbook",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "input-first",
+          "recipient": "yes",
+          "scope": "isOnlySwap=false at N26130639; both directions; actual selected liquidity fills AMM. No claim of separate orderbook-only fill acceptance.",
+          "wiring": "verified",
+          "execution": "verified",
+          "evidence": [
+            {
+              "path": "docs/research/reports/oneswap-current-correctness-20261015.json",
+              "sha256": "f46423a34ab3f5552e822cf81bcf802107adcfee580f912baad0508f5171814d"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/oneswap-settlement-behavior-20261015.json",
+            "sha256": "6ad42883af189bc2a919a5688ed576c5976cc6d89f0a0d9755498f3ecaf6e3b8"
+          },
+          "gaps": []
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:precision-pool",
+      "domain": "swap",
+      "coverage": "complete",
+      "source": [
+        {
+          "path": "listener/src/adapters/runtime-amount-program.ts",
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+        },
+        {
+          "path": "listener/src/encoder.ts",
+          "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+          "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+        },
+        {
+          "path": "listener/src/searcher/venues/canonical-value.ts",
+          "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+        },
+        {
+          "path": "listener/src/searcher/venues/family-owned-action.ts",
+          "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+        },
+        {
+          "path": "listener/src/searcher/venues/production-families/precision-pool.production.ts",
+          "sha256": "317f79acaf08fcb6e538e383de46520dd8f4ef62c0474a60378d5900ad2fce05"
+        },
+        {
+          "path": "listener/src/searcher/venues/runtime-execution.ts",
+          "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/action.ts",
+          "sha256": "f02bf7b70b10e81ab0b853c8b3d47c6b30ca4079e2493ec9f8a509dfa3f62747"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/codec.ts",
+          "sha256": "83ea51352200b7cc3727f3c9ee98451fa5e1bb2ee4a1a7cda9cc1654936b8485"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/execution.ts",
+          "sha256": "afe501f19295aa0f4bef85aece42f4730cc8877b5965ed5c2d2fdbca8906ac2e"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/identity.ts",
+          "sha256": "8c79751ca0e2db7125ddc8e4e2b471566ce74e90eed0b68517392b96e6a38f62"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/instance.ts",
+          "sha256": "fefc3bb71548ed66aefc9d495e78929f9be8e44c28a6d526de1cb025d347e6fa"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/manifest.ts",
+          "sha256": "db3c6be9675ad5879b3a87b4ba242a4801cf2380cd023d01e220cc79f2d4ee55"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/routes.ts",
+          "sha256": "3ae2f1ac9c1ad3fbe6e8cc338108632f5e97fa4ebd44a49a191311d5532a0ce0"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/runtime-execution.ts",
+          "sha256": "48416262c6b2ddbf7af174602ca3762f428df0988aac709651729efa3262e94d"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/precision-pool-family/runtime.ts",
+          "sha256": "25c5dfb54de9b42dbbae9ef93c13064de4c79c96b135fda8f57df193788e2565"
+        },
+        {
+          "path": "listener/src/shared/executor/amount-rounding.ts",
+          "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+        }
+      ],
+      "review": {
+        "path": "docs/research/reports/precision-pool-settlement-current-review-20261015.json",
+        "sha256": "19a962cc96023cd674d5ecdc53e018a4c4381f242ab4b517e6e98219277dbe61"
+      },
+      "scope": {
+        "pool": "0x0155358241411dB868BA714aE7c83A27087e3D6E",
+        "source": {
+          "number": 26129175,
+          "hash": "0xf924162840314cea5b4f7a49aa84827ac258d3ad715dea045140754d1a200b03",
+          "generation": 26129175
+        },
+        "directions": [
+          "native-to-token",
+          "token-to-native"
+        ],
+        "modes": [
+          "quoted",
+          "runtime-default",
+          "direct-self",
+          "direct-external"
+        ],
+        "originalTransaction": "0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554",
+        "historicalNaturalDiscoveryProven": false,
+        "topologyContainsFutureDiscovery": false,
+        "claim": "N-end production quote/quoted/runtime single-leg receipts, not original pre-call parity or full-loop execution"
+      },
+      "variants": [
+        {
+          "id": "zero-hook-zero-creator-fee-native",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "input-first",
+          "recipient": "yes",
+          "scope": "actual pool015535... at N26129175, native/token both directions; swapExactIn to is recipient; native out mapped to executor for common WETH forward. No caller deferred input.",
+          "wiring": "verified",
+          "execution": "verified",
+          "evidence": [
+            {
+              "path": "docs/research/reports/precision-pool-current-correctness-20261015.json",
+              "sha256": "42ba4906ba6a83991e60b565d301eea423fa2a3cbb6784ca0ce96c59a504b6a7"
+            }
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/precision-pool-settlement-behavior-20261015.json",
+            "sha256": "e41e29841b7bfe0faf4832abfa61bca5aad51e5d807bb79210d24437b6030a47"
+          },
+          "gaps": []
+        }
+      ]
     }
   ],
   "semantics": [
@@ -6875,5 +7165,18 @@
     ],
     "other45FamiliesUnchanged": true,
     "scope": "Actual selected modes only; original 3 variant IDs retained. Common pins unchanged. This is not all-family completion."
+  },
+  "threeFamilyScopedUpdate": {
+    "at": "2026-10-15T09:49:53.342692+00:00",
+    "added": [
+      "custom-swap:oneswap",
+      "custom-swap:precision-pool"
+    ],
+    "updated": [
+      "aqua-swapvm"
+    ],
+    "commonPinsUnchanged": true,
+    "other45RowsUnchanged": true,
+    "scope": "Current tested selected scope only; no global completion or performance claim."
   }
 }

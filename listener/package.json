@@ -390,7 +390,16 @@
     "searcher:v4-fee-hook-reference-contract": "node --import tsx --test src/searcher/venues/swaps/univ4-fee-hook-family/test/sat1.ts src/searcher/venues/swaps/univ4-fee-hook-family/test/sat1-local.ts",
     "searcher:yearn-auction-family-callback-historical": "node --import tsx src/searcher/venues/protocols/yearn-auction-family/test/callback-historical.ts",
     "searcher:yearn-auction-family-callback-ready": "node --import tsx src/searcher/venues/protocols/yearn-auction-family/test/callback-ready.ts",
-    "searcher:yearn-auction-family-callback-observation": "node --import tsx --test src/searcher/venues/protocols/yearn-auction-family/test/callback-evidence.test.ts"
+    "searcher:yearn-auction-family-callback-observation": "node --import tsx --test src/searcher/venues/protocols/yearn-auction-family/test/callback-evidence.test.ts",
+    "searcher:oneswap-family": "node --import tsx --test src/searcher/venues/swaps/oneswap-family/test/contract.ts",
+    "searcher:oneswap-family-historical-ready": "node --import tsx src/searcher/venues/swaps/oneswap-family/test/historical-ready.ts",
+    "searcher:oneswap-family-historical-recipient": "node --import tsx src/searcher/venues/swaps/oneswap-family/test/historical-recipient.ts",
+    "searcher:aqua-swapvm-settlement-ready": "node --import tsx src/searcher/venues/swaps/aqua-swapvm-family/test/settlement-ready.ts",
+    "searcher:aqua-swapvm-settlement-historical": "node --import tsx src/searcher/venues/swaps/aqua-swapvm-family/test/settlement-historical.ts",
+    "searcher:precision-pool-family": "node --import tsx --test src/searcher/venues/swaps/precision-pool-family/test/contract.ts src/searcher/venues/swaps/precision-pool-family/test/recipient.ts src/searcher/venues/swaps/precision-pool-family/test/lifecycle.ts",
+    "searcher:precision-pool-recipient-evm": "node --import tsx src/searcher/venues/swaps/precision-pool-family/test/recipient-runtime-evm.ts",
+    "searcher:precision-pool-historical-ready": "node --import tsx src/searcher/venues/swaps/precision-pool-family/test/historical-ready.ts",
+    "searcher:precision-pool-historical-dual": "node --import tsx src/searcher/venues/swaps/precision-pool-family/test/historical-dual.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

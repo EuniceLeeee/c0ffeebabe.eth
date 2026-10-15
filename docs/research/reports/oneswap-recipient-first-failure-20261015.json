@@ -1,0 +1,15 @@
+{
+  "raw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/oneswap56/evidence59/historical59.json",
+    "sha256": "a120cae0f1875515ddd4f333a50d039e4e60ce9beab0db5cdadbacaefa078b1a"
+  },
+  "classification": "tooling_defect",
+  "stage": "runtime-construction",
+  "error": "Missing expected exception",
+  "samples": 0,
+  "forkStarted": false,
+  "rootCause": "Observer applied raw protocol receiver pool/factory restrictions to final WETH recipient for native output. Production issuer maps protocol recipient to executor before wrapping/forwarding, so raw receiver restrictions are not restrictions on final ERC20 transfer destination.",
+  "nonAuthor": "v1_accept26 fresh review confirmed from actual59 and current mapRuntimeAssetSettlementRequest source.",
+  "fix": "Hardened direction-correct receiver refusal assertions; added independent contract invoking actual central mapping + Family build for both native directions and zero/token exclusions. Production untouched.",
+  "regression": "contract60 11 tests passed; historical60 32 positives and 40 refusals passed; root must bind LearningCase codify_commit to final precise commit."
+}

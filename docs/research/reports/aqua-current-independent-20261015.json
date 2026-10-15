@@ -1,0 +1,110 @@
+{
+  "reviewer": "root, independent non-author",
+  "status": "PASS-new-deferred-and-direct-negative-scoped-correctness",
+  "reviewFinal": true,
+  "counts": {
+    "positiveCallbacks": 20,
+    "rawBalanceChecks": 160,
+    "inactiveNoops": 20,
+    "deferredRejections": 120,
+    "directRejections": 50
+  },
+  "rawReports": [
+    {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/root-evidence59/settlement59-A.json",
+      "sha256": "84a89c436d0612d0e638274362b8e9e7f8357f0d33e7895662d74a503567f129",
+      "source": {
+        "number": 25680170,
+        "hash": "0x5427a888c4db798a4d40ef19f3d2c6ca4afbb1eb1875a00b0c9bdfa0fc659d76",
+        "generation": 25680170
+      },
+      "tx": "0x5f7b7ecf899086ee6d0df83aa70fba87b6c5ab816511ce58a90ac3eb4154de41",
+      "strategyHash": "0x85133434200cd2ba3cdd3b67e20b1a6cbfa5d2543ab47789acaffc68444733e0",
+      "trials": [
+        {
+          "direction": 0,
+          "amountIn": "5575843886952894314",
+          "amountOut": "243525114683054",
+          "label": "registered-reserve-hundredth"
+        },
+        {
+          "direction": 0,
+          "amountIn": "11151687773905788628",
+          "amountOut": "486823802225704",
+          "label": "double-registered-reserve-hundredth"
+        },
+        {
+          "direction": 0,
+          "amountIn": "45588188816430759093",
+          "amountOut": "1984441871835144",
+          "label": "old-production-effective-input"
+        },
+        {
+          "direction": 1,
+          "amountIn": "268686500229597",
+          "amountOut": "6144704525036193830",
+          "label": "registered-reserve-hundredth"
+        },
+        {
+          "direction": 1,
+          "amountIn": "537373000459194",
+          "amountOut": "12283109625533894852",
+          "label": "double-registered-reserve-hundredth"
+        },
+        {
+          "direction": 1,
+          "amountIn": "2000000000000000",
+          "amountOut": "45588188816430759093",
+          "label": "old-production-effective-input"
+        }
+      ],
+      "sourceTreeSha256": "ba3ccc44eed639cfd0c4859e74841739452bbaaf7506c752aadd646135191b66"
+    },
+    {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/aqua57/root-evidence59/settlement59-B.json",
+      "sha256": "98daab97cb4151d7240129104d44e1fdd4d1a8d1e0b1d28b57b69823e71fd9ea",
+      "source": {
+        "number": 25680171,
+        "hash": "0x8a4a280896735af0405fc9ef9f749d57675fa4c16345da4dbce123ccd769a317",
+        "generation": 25680171
+      },
+      "tx": "0xb838ada738ee6d99540955e7033380bec57e4301efcf0ae62d70d1ba4aa6442a",
+      "strategyHash": "0x358b605c60fa8c1d8c2042bb9a0c24b44e02ee0bebc3020aa8e72b96661db2ab",
+      "trials": [
+        {
+          "direction": 0,
+          "amountIn": "5679036482452270992",
+          "amountOut": "722",
+          "label": "registered-reserve-hundredth"
+        },
+        {
+          "direction": 0,
+          "amountIn": "11358072964904541984",
+          "amountOut": "1444",
+          "label": "double-registered-reserve-hundredth"
+        },
+        {
+          "direction": 1,
+          "amountIn": "794",
+          "amountOut": "6193709890075269123",
+          "label": "registered-reserve-hundredth"
+        },
+        {
+          "direction": 1,
+          "amountIn": "1588",
+          "amountOut": "12388932306360342071",
+          "label": "double-registered-reserve-hundredth"
+        }
+      ],
+      "sourceTreeSha256": "ba3ccc44eed639cfd0c4859e74841739452bbaaf7506c752aadd646135191b66"
+    }
+  ],
+  "method": "Recomputed calldata words/call order, router output and token pull, exact approvals and clear, all actor token balances directly from raw pre/post storage slots, conservation, native and old inventory, all rejection storage unions and inactive callbacks. Checked source/quote/input binding and no runtime Exact/quoted/RPC.",
+  "limits": [
+    "Funding fixture exchanges exactly 1 raw output for full input; not a market route or opportunity.",
+    "Inactive-context checks are inert/reverting no-ops; not active wrong-caller negatives.",
+    "Default/quoted/direct-positive historical evidence reuse still requires source-diff certification separately.",
+    "No natural valuation, original credential-rejected TX support, deployment or performance claim."
+  ],
+  "at": "2026-10-15T09:17:26.030834+00:00"
+}

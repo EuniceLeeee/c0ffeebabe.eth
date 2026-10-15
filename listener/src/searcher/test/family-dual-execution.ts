@@ -1,3 +1,5 @@
+import { descriptor as precisionFixture } from "../venues/swaps/precision-pool-family/test/fixtures.js";
+import { descriptor as oneswapFixture } from "../venues/swaps/oneswap-family/test/fixtures.js";
 import { descriptor as aquaFixture } from "../venues/swaps/aqua-swapvm-family/test/fixtures.js";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -53,6 +55,8 @@ const fixtures: any[] = raw.descriptors;
 fixtures.push(fewWrappedFixture());
 fixtures.push(vaultSpotFixture());
 fixtures.push(aquaFixture());
+fixtures.push(precisionFixture());
+fixtures.push(oneswapFixture());
 // These saved Fluid fixtures are ERC20-only. Upgrade their test shape, not
 // production Ready: real stale descriptors must still be re-attested.
 for (const d of fixtures.filter(d => d.familyId === "fluid-dex")) {
@@ -461,7 +465,7 @@ test("V4 fee hook executes the shared actual-debt callback with Family hookData,
 
 test("settlement: all installed domains remain covered by their existing fixtures", () => {
   assert.deepEqual([...new Set(fixtures.map(d => d.familyId))].sort(), priced.map(x => x.familyId).sort());
-  assert.equal(installed.length, 46, "update the audit deliberately when the installed set changes");
+  assert.equal(installed.length, 48, "update the audit deliberately when the installed set changes");
   for (const entry of installed.filter(x => !priced.includes(x))) {
     assert(["funding", "credit"].includes(entry.plugin.manifest.domain));
     assert((entry.plugin as any)[entry.plugin.manifest.domain], "funding/credit keeps its own contract");

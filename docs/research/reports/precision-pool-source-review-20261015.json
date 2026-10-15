@@ -1,0 +1,20 @@
+{
+  "reviewer": "root; non-author of PrecisionPool patch",
+  "scope": "Static review of restored selected zero-hook/zero-creator-fee Family and common native/recipient wiring. Current actual history and safety runs still required.",
+  "status": "no blocking source finding in reviewed scope; execution acceptance pending",
+  "findings": [
+    "Native routes declare executionAssets and remove private wrapping; shared issuer maps native external output back to executor for WETH delivery.",
+    "Direct path preserves full requested input, checks actual raw debit, protocol return equals recipient receipt, exact temporary allowance and clearing, receiver/executor old inventories and native residue.",
+    "Default existing allowance policy retained; unsupported deferred-input/quote-output requests fail closed, no invented callback support.",
+    "Known runtime/identity profile reused; no instance allowlist introduced by patch.",
+    "Synthetic ABI/EVM tests are scoped local correctness and do not substitute for historical production issuer receipt evidence."
+  ],
+  "sources": {
+    "routes.ts": "3ae2f1ac9c1ad3fbe6e8cc338108632f5e97fa4ebd44a49a191311d5532a0ce0",
+    "execution.ts": "afe501f19295aa0f4bef85aece42f4730cc8877b5965ed5c2d2fdbca8906ac2e",
+    "runtime-execution.ts": "48416262c6b2ddbf7af174602ca3762f428df0988aac709651729efa3262e94d",
+    "test/recipient.ts": "6867b08023e0b05011939ed7b89e42e8d68eae04787c7088ea7ed9014a6664df",
+    "test/recipient-runtime-evm.ts": "833e200159f478e390a233db4eedd083af992b12156c3819bb61e9f4c7187a1c"
+  },
+  "at": "2026-10-15T09:11:15.654399+00:00"
+}

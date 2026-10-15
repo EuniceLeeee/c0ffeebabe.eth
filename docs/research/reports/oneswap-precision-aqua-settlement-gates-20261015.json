@@ -1,0 +1,80 @@
+[
+  {
+    "family": "custom-swap:oneswap",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T09:50:19.129141+00:00",
+    "finishedAt": "2026-10-15T09:51:10.354141+00:00",
+    "logSha256": "a0be030b0c91a8bcf8db6e0318eec7b121da85370ed9e1799c3f619f5bf7a2df",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/gate64-selection.json",
+    "manifestSha256": "4d0d10d63a979f1d5727026adb23d79626387e33a770bd9e09c99312f8560521",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "custom-swap:oneswap",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  {
+    "family": "custom-swap:precision-pool",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T09:51:10.354492+00:00",
+    "finishedAt": "2026-10-15T09:51:59.852991+00:00",
+    "logSha256": "009f4d54d471eae7aa1faadd0caf34aabc9a8ff84dcc07fb91c94ab09a5ec490",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/gate64-selection.json",
+    "manifestSha256": "45216128c5e1f70800cfbfc962172851e0fb5a133d8bb397d3c897af4b0d2204",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "custom-swap:precision-pool",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  {
+    "family": "aqua-swapvm",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T09:51:59.853397+00:00",
+    "finishedAt": "2026-10-15T09:52:53.135058+00:00",
+    "logSha256": "5302766f7d9e54d0107da7794918695ef74b47b8212a85e64101f21631f53731",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/gate64-selection.json",
+    "manifestSha256": "2fcded171cce7f7d7a183f23ae191e501121e6dea19f99aebb77a5c3694f7f5f",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "aqua-swapvm",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  }
+]

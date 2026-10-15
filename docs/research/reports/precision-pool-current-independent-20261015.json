@@ -1,0 +1,69 @@
+{
+  "reviewer": "root non-author",
+  "reviewFinal": true,
+  "status": "PASS-selected-native-pool-current-correctness",
+  "raw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/dual10.json",
+    "sha256": "6d2d0659a6b732eb59a84cd92771155f0a7ac81d9bf3d17e924fb89324131cb5"
+  },
+  "source": {
+    "number": 26129175,
+    "hash": "0xf924162840314cea5b4f7a49aa84827ac258d3ad715dea045140754d1a200b03",
+    "generation": 26129175
+  },
+  "sourceTreeSha256": "ba3ccc44eed639cfd0c4859e74841739452bbaaf7506c752aadd646135191b66",
+  "counts": {
+    "nativeInventoryChecks": 16,
+    "positive": 16,
+    "rawTokenDeltas": 96,
+    "declaredRejections": 16
+  },
+  "amounts": [
+    {
+      "direction": "token0-to-token1",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xa1313eb9f3a445606d9583bcac3ebeb56a858279",
+      "amountIn": "2000000000000000",
+      "quotedAndReceived": "14411279718302382780",
+      "label": "production-effective"
+    },
+    {
+      "direction": "token0-to-token1",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xa1313eb9f3a445606d9583bcac3ebeb56a858279",
+      "amountIn": "3845697088647290",
+      "quotedAndReceived": "27699842032500013448",
+      "label": "original-sized-at-N-end"
+    },
+    {
+      "direction": "token1-to-token0",
+      "tokenIn": "0xa1313eb9f3a445606d9583bcac3ebeb56a858279",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "14411279718302382780",
+      "quotedAndReceived": "1986331120120603",
+      "label": "production-effective"
+    },
+    {
+      "direction": "token1-to-token0",
+      "tokenIn": "0xa1313eb9f3a445606d9583bcac3ebeb56a858279",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "27866654756646780719",
+      "quotedAndReceived": "3839389701799474",
+      "label": "original-sized-at-N-end"
+    }
+  ],
+  "identity": {
+    "poolCodeHash": "0x2b00dc248c8aca746ecb53c13c8cd7b6b0e5983196c6589eed863c2504e1c57a",
+    "factoryCodeHash": "0x78522aad5e76bfc640a2a77a66ab868e668439d99bc413c7a6361c7a273572a5",
+    "factory": "0x000000eb27b557ab426d9e99cfd54ec455799e81",
+    "reverse": "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "scope": "current same-N Ready complete runtime/Market CREATE2 reverse proof, plus same-N code and membership cross-check"
+  },
+  "method": "Matched all 32 raw strict results to issued work and exact historical hash; independently compared quote/input, payer/receiver/pool token deltas and raw Swap ABI event, full input and selected protocol recipient, protected balances/native; no runtime quote fallback. Source independent review and current local BotVM fault matrix complement historical declared reverts.",
+  "limits": [
+    "16 historical negatives are strict declared Revert with empty exposed effects; they are not historical full storage-union traces. Atomic rollback faults separately covered by actual local BotVM synthetic-pool EVM tests.",
+    "Current existing Ready was selectively revalidated, naturalDiscovery=false; no original pre-call opportunity or performance conclusion.",
+    "Only selected zero-hook/zero-creator-fee actual pool scope; no hypothetical variant success."
+  ],
+  "at": "2026-10-15T09:28:20.609796+00:00"
+}

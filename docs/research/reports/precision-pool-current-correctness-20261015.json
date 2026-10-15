@@ -1,0 +1,597 @@
+{
+  "familyId": "custom-swap:precision-pool",
+  "scope": {
+    "pool": "0x0155358241411dB868BA714aE7c83A27087e3D6E",
+    "source": {
+      "number": 26129175,
+      "hash": "0xf924162840314cea5b4f7a49aa84827ac258d3ad715dea045140754d1a200b03",
+      "generation": 26129175
+    },
+    "directions": [
+      "native-to-token",
+      "token-to-native"
+    ],
+    "modes": [
+      "quoted",
+      "runtime-default",
+      "direct-self",
+      "direct-external"
+    ],
+    "originalTransaction": "0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554",
+    "historicalNaturalDiscoveryProven": false,
+    "topologyContainsFutureDiscovery": false,
+    "claim": "N-end production quote/quoted/runtime single-leg receipts, not original pre-call parity or full-loop execution"
+  },
+  "implementation": {
+    "ownedFiles": 27,
+    "candidateMatchesCurrentCloudPins": true,
+    "modifiedRecoveredProduction": [
+      "routes.ts",
+      "execution.ts",
+      "runtime-execution.ts"
+    ],
+    "retained": [
+      "reverse-verified runtime/Market/CREATE2 identity without instance allowlist",
+      "original Exact local-zero + on-chain quoteExactIn method",
+      "original MIN1/full-input and default MAX_UINT allowance policy"
+    ],
+    "changed": [
+      "derive and bind raw native execution assets",
+      "use current common ETH/WETH issuer boundary",
+      "explicit direct: positive exact debit, actual receiver receipt=return, inventory/native preservation, exact temporary allowance cleared"
+    ],
+    "unsupported": [
+      "transaction-local quoteOutput",
+      "deferred-input"
+    ],
+    "defaultByteClaim": "native emitted bytes change because existing common boundary now owns unwrap/wrap; preserved semantics are supported by current same-N default/quoted executions, not asserted byte identity"
+  },
+  "counts": {
+    "positive": 16,
+    "strictDeclaredRejections": 16,
+    "localBotVMTestFunctions": 4,
+    "familyContractTests": 21
+  },
+  "actual": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/dual10.json",
+      "sha256": "6d2d0659a6b732eb59a84cd92771155f0a7ac81d9bf3d17e924fb89324131cb5"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/ready07/result.json",
+      "sha256": "b3203590465befec5dbf8243be5c2d2aba88b4ef386c9230b4a00c950c49af33"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/ready07/prices/input.json",
+      "sha256": "830e0fd6065fec3f10c1c3175d527a1830ac6fbd107ef47c8ba0f99432bb79aa"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/ready07/source-before.json",
+      "sha256": "d9e4cb5a60c3fd123de0e31cf638480bdd15370c8431f35605de048303ab5e55"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/ready07/source-after.json",
+      "sha256": "d9e4cb5a60c3fd123de0e31cf638480bdd15370c8431f35605de048303ab5e55"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/evm/result.json",
+      "sha256": "2cb6079c92cbe4387b0187fcc2faf9700876f0fef9a8c1030192cc50a5e139a1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/contract06.json",
+      "sha256": "cad7fd2327d3e4a92bd70ae19b91ce11c6530ae4c6149708ec9904af500af2c8"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/selection-dual10.json",
+      "sha256": "dc5e70c2a1aeeed7ed8ba3c6214b99890dc864a794444b6f7952e5551115e199"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/selection-ready07.json",
+      "sha256": "8c9e2f144bcd29f774dcb350fa64d6cc7d445e87f43fa7d41829e0c17bb4aa12"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/current-pins11.json",
+      "sha256": "74a78174fd365c5f9466b99eb5d597ebf6e4283da3e15f17dcbd929b61a1ee0f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/precision56/evidence11/manifest.json",
+      "sha256": "39003fd90558a4221243d25a2904f29307c8812ac0d3c37347f08f3a1af0eb48"
+    }
+  ],
+  "results": {
+    "historicalPositiveExecutions": 16,
+    "historicalStrictDeclaredReverts": 16,
+    "samples": 4,
+    "authorRecomputedEffects": [
+      {
+        "id": "token0-to-token1/production-effective/quoted/none",
+        "amountIn": "2000000000000000",
+        "actualReceived": "14411279718302382780",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token0-to-token1/production-effective/runtime/none",
+        "amountIn": "2000000000000000",
+        "actualReceived": "14411279718302382780",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token0-to-token1/production-effective/direct-self/none",
+        "amountIn": "2000000000000000",
+        "actualReceived": "14411279718302382780",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token0-to-token1/production-effective/direct-external/none",
+        "amountIn": "2000000000000000",
+        "actualReceived": "14411279718302382780",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token0-to-token1/original-sized-at-N-end/quoted/none",
+        "amountIn": "3845697088647290",
+        "actualReceived": "27699842032500013448",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token0-to-token1/original-sized-at-N-end/runtime/none",
+        "amountIn": "3845697088647290",
+        "actualReceived": "27699842032500013448",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token0-to-token1/original-sized-at-N-end/direct-self/none",
+        "amountIn": "3845697088647290",
+        "actualReceived": "27699842032500013448",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token0-to-token1/original-sized-at-N-end/direct-external/none",
+        "amountIn": "3845697088647290",
+        "actualReceived": "27699842032500013448",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/production-effective/quoted/none",
+        "amountIn": "14411279718302382780",
+        "actualReceived": "1986331120120603",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/production-effective/runtime/none",
+        "amountIn": "14411279718302382780",
+        "actualReceived": "1986331120120603",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/production-effective/direct-self/none",
+        "amountIn": "14411279718302382780",
+        "actualReceived": "1986331120120603",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/production-effective/direct-external/none",
+        "amountIn": "14411279718302382780",
+        "actualReceived": "1986331120120603",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/original-sized-at-N-end/quoted/none",
+        "amountIn": "27866654756646780719",
+        "actualReceived": "3839389701799474",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/original-sized-at-N-end/runtime/none",
+        "amountIn": "27866654756646780719",
+        "actualReceived": "3839389701799474",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/original-sized-at-N-end/direct-self/none",
+        "amountIn": "27866654756646780719",
+        "actualReceived": "3839389701799474",
+        "quoteDelta": "0"
+      },
+      {
+        "id": "token1-to-token0/original-sized-at-N-end/direct-external/none",
+        "amountIn": "27866654756646780719",
+        "actualReceived": "3839389701799474",
+        "quoteDelta": "0"
+      }
+    ],
+    "runtimeConstruction": {
+      "exactCalls": 0,
+      "quotedCalls": 0,
+      "rpcCalls": 0,
+      "quotedFallback": false,
+      "scope": "production issuer; existing common selector regression is separate, new PrecisionPool composition not a historical opportunity claim"
+    },
+    "invocationCounts": {
+      "exact": 4,
+      "quoted": 4,
+      "forbiddenDuringBuild": 0
+    },
+    "familyContractGroups": 21,
+    "realLocalBotVMTestFunctions": 4,
+    "productionBuild": "root shared59 PASS",
+    "sourceTreeSha256": "ba3ccc44eed639cfd0c4859e74841739452bbaaf7506c752aadd646135191b66",
+    "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6"
+  },
+  "reviews": [
+    {
+      "path": "docs/research/reports/precision-pool-current-independent-20261015.json",
+      "sha256": "df11eacd5c0f35ad1f5146bddad2a81a88fd50147a4ab2e564432f274d1d40fc"
+    },
+    {
+      "path": "docs/research/reports/precision-pool-source-review-20261015.json",
+      "sha256": "a24594d7ba6ea612258e16b6b28841d19b09869778873e4af4f520c0291a984e"
+    }
+  ],
+  "limitations": [
+    "Historical current N-end source, not original transaction pre-call state or route replay.",
+    "Reused old natural Ready and current selective production revalidation; fresh-from-zero discovery not claimed.",
+    "Historical declared-revert evidence is not independent balance rollback observation. Real local BotVM synthetic pool/token matrix separately asserts atomic inventory/native/allowance rollback.",
+    "Historical original external receiver native balance is not independently observed; graph-asset receipt and actor native are observed; native-input Family guard and local VM fixtures provide narrower inventory checks.",
+    "Named source fingerprint dependencies plus current own pins are explicit; not asserted to be a complete transitive import closure.",
+    "Other factory profiles, hooks, creator fees and instances without supported evidence are not added.",
+    "Opportunity, latency, performance, live execution, signing and broadcast not run."
+  ],
+  "schema": "family-scoped-correctness-v1",
+  "result": "selected-scope-adaptation-correctness-pass",
+  "testedHead": "8f0bb812500ba488cc6274fff0ca3450b249fbfc",
+  "testedWholeSourceTreeSha256": "ba3ccc44eed639cfd0c4859e74841739452bbaaf7506c752aadd646135191b66",
+  "sourcePins": [
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/precision-pool.production.ts",
+      "sha256": "317f79acaf08fcb6e538e383de46520dd8f4ef62c0474a60378d5900ad2fce05"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/action.ts",
+      "sha256": "f02bf7b70b10e81ab0b853c8b3d47c6b30ca4079e2493ec9f8a509dfa3f62747"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/codec.ts",
+      "sha256": "83ea51352200b7cc3727f3c9ee98451fa5e1bb2ee4a1a7cda9cc1654936b8485"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/execution.ts",
+      "sha256": "afe501f19295aa0f4bef85aece42f4730cc8877b5965ed5c2d2fdbca8906ac2e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/identity.ts",
+      "sha256": "8c79751ca0e2db7125ddc8e4e2b471566ce74e90eed0b68517392b96e6a38f62"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/instance.ts",
+      "sha256": "fefc3bb71548ed66aefc9d495e78929f9be8e44c28a6d526de1cb025d347e6fa"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/manifest.ts",
+      "sha256": "db3c6be9675ad5879b3a87b4ba242a4801cf2380cd023d01e220cc79f2d4ee55"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/routes.ts",
+      "sha256": "3ae2f1ac9c1ad3fbe6e8cc338108632f5e97fa4ebd44a49a191311d5532a0ce0"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/runtime-execution.ts",
+      "sha256": "48416262c6b2ddbf7af174602ca3762f428df0988aac709651729efa3262e94d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/precision-pool-family/runtime.ts",
+      "sha256": "25c5dfb54de9b42dbbae9ef93c13064de4c79c96b135fda8f57df193788e2565"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    }
+  ],
+  "commonSource": [
+    {
+      "path": "listener/src/adapters/registry.ts",
+      "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/compiler.ts",
+      "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-credit-runtime.ts",
+      "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+      "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+      "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+      "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+    },
+    {
+      "path": "listener/src/searcher/adapter-funding-runtime.ts",
+      "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+    },
+    {
+      "path": "listener/src/searcher/adapter-work-intent.ts",
+      "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+    },
+    {
+      "path": "listener/src/searcher/amount-quote-continuity.ts",
+      "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+    },
+    {
+      "path": "listener/src/searcher/blockscan-route-identity.ts",
+      "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+    },
+    {
+      "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+      "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+    },
+    {
+      "path": "listener/src/searcher/exact-prefix-plan.ts",
+      "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+    },
+    {
+      "path": "listener/src/searcher/exact-trial-state.ts",
+      "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+    },
+    {
+      "path": "listener/src/searcher/identity-asset-metadata.ts",
+      "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+    },
+    {
+      "path": "listener/src/searcher/runtime-evidence.ts",
+      "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+    },
+    {
+      "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+      "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+    },
+    {
+      "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+      "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+      "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+      "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-bounds.ts",
+      "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-propagation.ts",
+      "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-rejection.ts",
+      "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-builder.ts",
+      "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+      "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+    },
+    {
+      "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+      "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+    },
+    {
+      "path": "listener/src/searcher/strategy-taxonomy.ts",
+      "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+    },
+    {
+      "path": "listener/src/searcher/strict-production-runtime-session.ts",
+      "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+      "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-program.ts",
+      "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+    },
+    {
+      "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+      "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+      "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+      "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-instance-identity.ts",
+      "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/constants/addresses.ts",
+      "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+    },
+    {
+      "path": "listener/src/shared/state/state-backend.ts",
+      "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+    },
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "src/BotVMEncoder.sol",
+      "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+    },
+    {
+      "path": "src/BotVMScriptBuilder.sol",
+      "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+    },
+    {
+      "path": "src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+    },
+    {
+      "path": "src/FlashArb.sol",
+      "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+    },
+    {
+      "path": "src/interfaces/IFluidVault.sol",
+      "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+    },
+    {
+      "path": "src/interfaces/IMorpho.sol",
+      "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+    },
+    {
+      "path": "src/interfaces/ISwap.sol",
+      "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+    }
+  ],
+  "sourceNote": "The historical runs share this frozen actual dirty tree. Later independent Few work does not alter these reviewed Family/common paths; existing old hashes are preserved.",
+  "sharedChecks": [
+    {
+      "name": "generate",
+      "exitCode": 0,
+      "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+      "startedAt": "2026-10-15T09:06:55.702534+00:00",
+      "finishedAt": "2026-10-15T09:08:01.002903+00:00"
+    },
+    {
+      "name": "build-live",
+      "exitCode": 0,
+      "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "startedAt": "2026-10-15T09:08:01.022331+00:00",
+      "finishedAt": "2026-10-15T09:08:09.780293+00:00"
+    },
+    {
+      "name": "tool-index",
+      "exitCode": 0,
+      "logSha256": "2775086db2f936e1fabc926c4d7c3c99377ce3bb8f14452c9ddd3e1176685b52",
+      "startedAt": "2026-10-15T09:08:09.780547+00:00",
+      "finishedAt": "2026-10-15T09:08:10.152445+00:00"
+    },
+    {
+      "tool": "listener:searcher:family-dual-execution",
+      "exitCode": 0,
+      "logSha256": "f983236856d97312c0c9950cb10763b8802fbf6772bf73b24d981ab873f143ef",
+      "manifestSha256": "a15098d1624175885847f109176c3e9bc6319982d5a924823b110b91fae2c7a7",
+      "startedAt": "2026-10-15T09:10:49.373628+00:00",
+      "finishedAt": "2026-10-15T09:11:03.941825+00:00"
+    },
+    {
+      "tool": "listener:searcher:family-capability-catalog",
+      "exitCode": 0,
+      "logSha256": "0cff2527ae6c1c78fdc62f859049102af94d8e6f84ee4e563082765a83011a00",
+      "manifestSha256": "1191169a6e56d41cd16f0ebce60eefd10bf399a9b325910fbc4c316b8203b922",
+      "startedAt": "2026-10-15T09:11:03.942057+00:00",
+      "finishedAt": "2026-10-15T09:11:05.411434+00:00"
+    },
+    {
+      "tool": "listener:searcher:family-capability-manifest",
+      "exitCode": 0,
+      "logSha256": "875053ccc3fc4d5a2d0f7df16ebae53c2b39f5d8a5520891cc96c03996d6946a",
+      "manifestSha256": "9b604c7feb9a1f6d326720f57bf61ba72fd991a037fd6adf468e452920575865",
+      "startedAt": "2026-10-15T09:11:05.411779+00:00",
+      "finishedAt": "2026-10-15T09:12:40.482871+00:00"
+    }
+  ],
+  "signing": false,
+  "broadcast": false,
+  "live": false,
+  "performance": "NOT RUN"
+}

@@ -3611,6 +3611,664 @@
     {
       "precision": "capability-exact",
       "identity": {
+        "familyId": "custom-swap:oneswap",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "f431d7aeba28a66841c671a2bdd5dd3f2653f1b45beccf6c22b85c3cb61783b9",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/swaps/oneswap-family/codec.ts",
+          "src/searcher/venues/swaps/oneswap-family/discovery.ts",
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/swaps/oneswap-family/capture.ts",
+        "entryExport": "capture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:oneswap",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:oneswap",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "97b063932d88e8bf6a9dfa6ac98e8df15fa0cd4d33d1282a771ff0f2b56de0da",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/swaps/oneswap-family/codec.ts",
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/swaps/oneswap-family/discovery.ts",
+        "entryExport": "discovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:oneswap",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "7077842bc2bc5996a27adc6052df55fe72c7d672a18409596ab27421143e1e8e",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/swaps/oneswap-family/codec.ts",
+          "src/searcher/venues/swaps/oneswap-family/instance.ts",
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts",
+          "src/searcher/venues/swaps/oneswap-family/math.ts",
+          "src/searcher/venues/swaps/oneswap-family/routes.ts",
+          "src/searcher/venues/swaps/oneswap-family/state.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/swaps/oneswap-family/exact.ts",
+        "entryExport": "exact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:oneswap",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "049881f368f46eef3db196a1dc786492fcdbe96d1de6b8e7ead90f46a2b8a204",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/searcher/venues/swaps/oneswap-family/action.ts",
+          "src/searcher/venues/swaps/oneswap-family/codec.ts",
+          "src/searcher/venues/swaps/oneswap-family/instance.ts",
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts",
+          "src/searcher/venues/swaps/oneswap-family/routes.ts",
+          "src/searcher/venues/swaps/oneswap-family/runtime-execution.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/swaps/oneswap-family/execution.ts",
+        "entryExport": "execution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/oneswap-family/action.ts",
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:oneswap",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:oneswap",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "109707efdfa496561aa2bb8a0a6225b8cf83a358441e23979a34185bd32f07f2",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/oneswap-family/codec.ts",
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts",
+          "src/searcher/venues/swaps/oneswap-family/proxy.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/swaps/oneswap-family/identity.ts",
+        "entryExport": "identity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:oneswap",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "cc70d5bd3433875aa93db6b192d5d66b0a5ebabf5d11bf17b27bb81e0ad3d8b8",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/swaps/oneswap-family/instance.ts",
+        "entryExport": "instance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:oneswap",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "756bd37e331c9c734cf921f0ee60088e636f57df3db8343b4c5ee6c373bbc2b3",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/blockscan-multicall.ts",
+          "src/searcher/detector/blockscan-sizing-constants.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/blockscan-state-capability.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/route-immutable-binding.ts",
+          "src/searcher/venues/route-instance-identity.ts",
+          "src/searcher/venues/swaps/blockscan-state-shared.ts",
+          "src/searcher/venues/swaps/oneswap-family/codec.ts",
+          "src/searcher/venues/swaps/oneswap-family/instance.ts",
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts",
+          "src/searcher/venues/swaps/oneswap-family/math.ts",
+          "src/searcher/venues/swaps/oneswap-family/routes.ts",
+          "src/searcher/venues/swaps/oneswap-family/state.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/swaps/oneswap-family/pricing.ts",
+        "entryExport": "pricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:oneswap",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "c0e6275e0562f2fc9a1d16765556f3467255d1196e152ef9d51aa04965e85ea7",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/oneswap-family/codec.ts",
+          "src/searcher/venues/swaps/oneswap-family/instance.ts",
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/swaps/oneswap-family/routes.ts",
+        "entryExport": "routes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:oneswap",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "1df522f960bfd40814327d4685ac84d0fad3836bc74f6b72026d0e90c8ab7fa6",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:fs@node-es2022-v1",
+          "runtime:node:path@node-es2022-v1",
+          "runtime:node:url@node-es2022-v1",
+          "src/searcher/solver/v2-constant-product-math.ts",
+          "src/searcher/solver/v2-fee.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/landed-event-registry.ts",
+          "src/searcher/venues/swap-observation.ts",
+          "src/searcher/venues/swaps/oneswap-family/codec.ts",
+          "src/searcher/venues/swaps/oneswap-family/discovery.ts",
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/v2-lineage.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": "src/searcher/venues/swaps/oneswap-family/swap.ts",
+        "entryExport": "swap",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/oneswap-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:precision-pool",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "29ce9e375049907b258bbf630a64d97f4919a5da8fac61782911be95ec53b594",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/swaps/precision-pool-family/codec.ts",
+          "src/searcher/venues/swaps/precision-pool-family/discovery.ts",
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/swaps/precision-pool-family/capture.ts",
+        "entryExport": "capture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:precision-pool",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:precision-pool",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "2e801d589ee5dbaf3469956b620b872a0bfb5cb25b34ef1f264a0550635bd398",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/swaps/precision-pool-family/codec.ts",
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/swaps/precision-pool-family/discovery.ts",
+        "entryExport": "discovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:precision-pool",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "55d76cb2c94a74b50d30b2a888c034ab5165d9bb07dde153c1204b37cb008abf",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/swaps/precision-pool-family/codec.ts",
+          "src/searcher/venues/swaps/precision-pool-family/instance.ts",
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts",
+          "src/searcher/venues/swaps/precision-pool-family/routes.ts",
+          "src/searcher/venues/swaps/precision-pool-family/runtime.ts",
+          "src/searcher/venues/swaps/precision-pool-family/state.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/swaps/precision-pool-family/exact.ts",
+        "entryExport": "exact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:precision-pool",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "2e97b74b6bed88b4287974256bf4c3329aae119b9ab88bf79ebf323c75070283",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/searcher/venues/swaps/precision-pool-family/action.ts",
+          "src/searcher/venues/swaps/precision-pool-family/codec.ts",
+          "src/searcher/venues/swaps/precision-pool-family/instance.ts",
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts",
+          "src/searcher/venues/swaps/precision-pool-family/routes.ts",
+          "src/searcher/venues/swaps/precision-pool-family/runtime-execution.ts",
+          "src/searcher/venues/swaps/precision-pool-family/runtime.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/swaps/precision-pool-family/execution.ts",
+        "entryExport": "execution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/precision-pool-family/action.ts",
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:precision-pool",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:precision-pool",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "58c92ecdf0d89010eb5030f7b34d97d19b5356d6ee13ba4250d273b4e75ac2d4",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/precision-pool-family/codec.ts",
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts",
+          "src/searcher/venues/swaps/precision-pool-family/runtime.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/swaps/precision-pool-family/identity.ts",
+        "entryExport": "identity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:precision-pool",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "2ac885ff9d0e48fbc929f63c85b72791f845d84287c3c59d01b08391b6d0be58",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/swaps/precision-pool-family/instance.ts",
+        "entryExport": "instance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:precision-pool",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "8c28a38bf89c4e09223d1ed855d48d5d6d3799a22412f30ed415813eacd504fb",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/blockscan-multicall.ts",
+          "src/searcher/detector/blockscan-sizing-constants.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/blockscan-state-capability.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/route-immutable-binding.ts",
+          "src/searcher/venues/route-instance-identity.ts",
+          "src/searcher/venues/swaps/blockscan-state-shared.ts",
+          "src/searcher/venues/swaps/precision-pool-family/codec.ts",
+          "src/searcher/venues/swaps/precision-pool-family/instance.ts",
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts",
+          "src/searcher/venues/swaps/precision-pool-family/routes.ts",
+          "src/searcher/venues/swaps/precision-pool-family/runtime.ts",
+          "src/searcher/venues/swaps/precision-pool-family/state.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/swaps/precision-pool-family/pricing.ts",
+        "entryExport": "pricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:precision-pool",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "69c9da99d72d1440f975ffc128bb8db577c6326d9b516ab6ba16abe4b93579a2",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/swaps/precision-pool-family/codec.ts",
+          "src/searcher/venues/swaps/precision-pool-family/instance.ts",
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts",
+          "src/searcher/venues/swaps/precision-pool-family/runtime.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/swaps/precision-pool-family/routes.ts",
+        "entryExport": "routes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "custom-swap:precision-pool",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "c1bc4f1dacf2611cbf0b0975d0632954c6b42a483d1b5c74ba111f6c91591146",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:fs@node-es2022-v1",
+          "runtime:node:path@node-es2022-v1",
+          "runtime:node:url@node-es2022-v1",
+          "src/searcher/solver/v2-constant-product-math.ts",
+          "src/searcher/solver/v2-fee.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/landed-event-registry.ts",
+          "src/searcher/venues/swap-observation.ts",
+          "src/searcher/venues/swaps/precision-pool-family/codec.ts",
+          "src/searcher/venues/swaps/precision-pool-family/discovery.ts",
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts",
+          "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/v2-lineage.ts",
+          "src/shared/constants/addresses.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": "src/searcher/venues/swaps/precision-pool-family/swap.ts",
+        "entryExport": "swap",
+        "additionalSourceFiles": [
+          "src/searcher/venues/swaps/precision-pool-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
         "familyId": "custom-swap:uniswap-v1",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
@@ -15911,5 +16569,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "1bfbb2fe2f480c38dffb07a0ca2e2b9bd9ab35ff306fe40e16d1dd158f020dde"
+  "artifactHash": "3e144c62a2b69c42aef38f51d8125cf641a13c013f7ab1b9768de6732b7b5d11"
 }
