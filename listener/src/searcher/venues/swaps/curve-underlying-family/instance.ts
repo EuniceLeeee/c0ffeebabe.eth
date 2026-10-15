@@ -88,6 +88,7 @@ export function curveUnderlyingStaticBindingProjection(
       j: direction.j,
       tokenIn: direction.tokenIn,
       tokenOut: direction.tokenOut,
+      ...(direction.recipient ? { recipient: true } : {}),
     })),
   };
 }

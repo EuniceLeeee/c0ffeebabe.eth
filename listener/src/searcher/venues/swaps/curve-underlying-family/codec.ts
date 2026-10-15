@@ -21,6 +21,13 @@ export const CURVE_UNDERLYING_UINT_INTERFACE = new ethers.Interface([
   "function exchange_underlying(uint256 i, uint256 j, uint256 dx, uint256 minDy)",
 ]);
 
+export const CURVE_UNDERLYING_I128_RECEIVER_INTERFACE = new ethers.Interface([
+  "function exchange_underlying(int128,int128,uint256,uint256,address)",
+]);
+export const CURVE_UNDERLYING_UINT_RECEIVER_INTERFACE = new ethers.Interface([
+  "function exchange_underlying(uint256,uint256,uint256,uint256,address)",
+]);
+
 export const CURVE_UNDERLYING_ERC20_INTERFACE = new ethers.Interface([
   "function decimals() view returns (uint8)",
 ]);
@@ -155,6 +162,10 @@ export function decodeUnderlyingIndicesFromCall(data: string): {
     ? CURVE_UNDERLYING_POOL_INTERFACE
     : selector === CURVE_UNDERLYING_UINT_SELECTOR
     ? CURVE_UNDERLYING_UINT_INTERFACE
+    : selector === CURVE_UNDERLYING_I128_RECEIVER_INTERFACE.getFunction("exchange_underlying")!.selector
+    ? CURVE_UNDERLYING_I128_RECEIVER_INTERFACE
+    : selector === CURVE_UNDERLYING_UINT_RECEIVER_INTERFACE.getFunction("exchange_underlying")!.selector
+    ? CURVE_UNDERLYING_UINT_RECEIVER_INTERFACE
     : null;
   if (iface === null) return null;
   const decoded = iface.decodeFunctionData("exchange_underlying", data);

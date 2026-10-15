@@ -5,7 +5,7 @@ import { buildSubscriptCalldata } from "../../../../shared/executor/botvm-progra
 import { assertExecutionRounding, MAX_EXECUTION_ROUNDING_RAW_UNITS, minimumExecutionOutput } from "../../../../shared/executor/amount-rounding.js";
 import { runtimeExecutor, runtimeExactApproval, runtimeClearApproval, RUNTIME_ERC20 } from "../../runtime-execution.js";
 import type { AdapterRequest } from "../../adapter-request-program.js";
-import { CURVE_UNDERLYING_UINT_INTERFACE, sameAddress } from "./codec.js";
+import { CURVE_UNDERLYING_UINT_INTERFACE, CURVE_UNDERLYING_UINT_RECEIVER_INTERFACE, sameAddress } from "./codec.js";
 import type { CurveUnderlyingDescriptor, CurveUnderlyingNativeAlias, CurveUnderlyingVerifiedDirection } from "./types.js";
 
 export const CURVE_UNDERLYING_NATIVE_ACTION = "curve-exchange-underlying-uint-native";
@@ -37,28 +37,45 @@ export function underlyingNativeAssets(descriptor: Pick<CurveUnderlyingDescripto
  * current-input isolation and independent raw-output minimum checks. */
 export function underlyingNativeAliasProgram(pool: string, tokenIn: string, tokenOut: string,
   i: number, j: number, actor: string, nativeIn: boolean, nativeOut: boolean, minimum = 1n,
-  inputToleranceRawUnits = MAX_EXECUTION_ROUNDING_RAW_UNITS) {
+  inputToleranceRawUnits = MAX_EXECUTION_ROUNDING_RAW_UNITS, recipient?: string) {
   runtimeExecutor(actor, pool, tokenIn, tokenOut);
   assertExecutionRounding(inputToleranceRawUnits);
+  if (recipient) {
+    runtimeExecutor(recipient, pool, tokenIn, tokenOut);
+    if (inputToleranceRawUnits !== 0n || (nativeOut && !sameAddress(recipient, actor)))
+      throw new Error("curve-underlying direct raw recipient/input binding");
+  }
+  const external = recipient !== undefined && !sameAddress(recipient, actor);
   if (![i, j].every(n => Number.isInteger(n) && n >= 0 && n < 8) || i === j || sameAddress(tokenIn, tokenOut) ||
       (nativeIn && nativeOut) || (nativeIn && !sameAddress(tokenIn, ADDR.WETH)) ||
       (nativeOut && !sameAddress(tokenOut, ADDR.WETH)) || minimum < 0n || minimum > ethers.MaxUint256)
     throw new Error("curve-underlying native alias program binding");
   const balance = RUNTIME_ERC20.encodeFunctionData("balanceOf", [actor]);
+  const received = RUNTIME_ERC20.encodeFunctionData("balanceOf", [recipient ?? actor]);
   const p = new RuntimeAmountProgram().constant(15, 0n);
+  if (recipient) p.constant(1, 1n).math("sub", 2, 0, 1);
+  if (recipient && !nativeIn && !nativeOut) p.nativeBalance(13);
   if (nativeIn) p.nativeBalance(4); else p.call(tokenIn, balance, { static: true }).load(4, 0);
   p.math("sub", 6, 4, 0);
-  if (nativeOut) p.nativeBalance(5); else p.call(tokenOut, balance, { static: true }).load(5, 0);
+  if (nativeOut) p.nativeBalance(5); else p.call(tokenOut, received, { static: true }).load(5, 0);
+  if (external) p.call(tokenOut, balance, { static: true }).load(8, 0)
+    .call(tokenIn, received, { static: true }).load(9, 0);
   if (!nativeIn) runtimeExactApproval(p, tokenIn, pool);
-  p.call(pool, CURVE_UNDERLYING_UINT_INTERFACE.encodeFunctionData("exchange_underlying", [i, j, 0n, minimum]),
+  const data = recipient && !nativeOut
+    ? CURVE_UNDERLYING_UINT_RECEIVER_INTERFACE.encodeFunctionData("exchange_underlying", [i, j, 0n, minimum, recipient])
+    : CURVE_UNDERLYING_UINT_INTERFACE.encodeFunctionData("exchange_underlying", [i, j, 0n, minimum]);
+  p.call(pool, data,
     { patches: [{ offset: 68, reg: 0 }], ...(nativeIn ? { valueReg: 0 } : {}) });
   if (!nativeIn) runtimeClearApproval(p, tokenIn, pool);
   if (nativeIn) p.nativeBalance(1); else p.call(tokenIn, balance, { static: true }).load(1, 0);
   p.math("sub", 7, 4, 1).constant(2, 1n).math("sub", 7, 7, 2);
   p.math("sub", 1, 1, 6).constant(2, inputToleranceRawUnits).math("sub", 1, 2, 1);
-  if (nativeOut) p.nativeBalance(1); else p.call(tokenOut, balance, { static: true }).load(1, 0);
+  if (nativeOut) p.nativeBalance(1); else p.call(tokenOut, received, { static: true }).load(1, 0);
   p.math("sub", 1, 1, 5).constant(2, minimum).math("sub", 1, 1, 2);
   if (!nativeIn) p.call(tokenIn, APPROVAL.encodeFunctionData("allowance", [actor, pool]), { static: true }).load(1, 0).equal(1, 15);
+  if (external) p.call(tokenOut, balance, { static: true }).load(1, 0).equal(1, 8)
+    .call(tokenIn, received, { static: true }).load(1, 0).equal(1, 9);
+  if (recipient && !nativeIn && !nativeOut) p.nativeBalance(14).equal(13, 14);
   return p;
 }
 

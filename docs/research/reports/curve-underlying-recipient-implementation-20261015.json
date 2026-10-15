@@ -1,0 +1,2229 @@
+{
+  "schemaVersion": 1,
+  "scope": "Curve underlying nativeAlias recipient implementation and necessary local regression; unified historical acceptance remains pending.",
+  "base": "2def7aee6364663aa3309cfd5815bdf68a0e9d0e",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "familyId": "curve-underlying",
+  "status": "implemented-local-regressions-passed",
+  "implementation": [
+    "Per-direction optional raw uint5 effect probe grants recipient only after exact positive input debit and independent actual receiver receipt. Existing default admission survives ordinary optional rejection.",
+    "Recipient flag is bound into static identity; native output reuses verified caller4 and common measured ETH/WETH delivery; ABI, approval and probes remain Family-owned.",
+    "uint5/int1285 calls nominate through existing registry-based discovery; no per-instance allowlist.",
+    "Generic 5f receiver support already present at base with FRAX historical evidence; not reimplemented or reaccepted."
+  ],
+  "ownedSource": [
+    {
+      "path": "listener/package.json",
+      "before": "e2289f0381123a7e72ccd981a437da0e1168de4a79df10490fc8f0e604f6c24e",
+      "after": "6700b8d90cb6059d6ec131711e4215220b8f7bfc714bc51051f4969de6a0086b"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/codec.ts",
+      "before": "2935f76e76be1b6166c4a40b517b9797125c6fc57f1944868bd695bd8deb6d26",
+      "after": "29f7e0be78cb03d084aa9ed358e44b19731882d2f112e3197d2f4567ad330d3d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/discovery.ts",
+      "before": "ca3f04c2d4b6355ba218e2c089da0a8a67bfc4411fb9ba648bece672bdd5b801",
+      "after": "cc20e5a7d3def8265f4204589758b6457c638433171f743196a0f87971e5f4bc"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts",
+      "before": "56ac0e1c5d43f3b85b1858b8379eba073690be00caf74cbde03cda348b042cd2",
+      "after": "028f3f169ebb0397d8660a69dd720398a9a3c2bcf95ae4bc953e2f9d54d3f15a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts",
+      "before": "137cafc05d3edcccbe1c3c1684be7cf0b4204a3c7aac888ed9f0d7ca31ef0351",
+      "after": "994eca6c0b42656dd832664cf74ed48291f9f057c95eb21c237e33189acc8137"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+      "before": "56d89e4d1db9609b8f230b110d8d09fc20e440b52ac77a57d18827889b32f643",
+      "after": "9e7ffc251b1f6ebe3d588de16112228fe7a9a68a13262615daca71519b75af9f"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
+      "before": "f7a80a177c42ee2d2187f6afee498921a3464290cda0b29e75fd148e0947ee30",
+      "after": "fdc3b5285e7652e0a3b2d6fd5f3ee04a1aa22004a429b3ef01762eab6806d554"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/recipient-proof.ts",
+      "before": null,
+      "after": "0b80128ebc0b9ed7b8785a4b4cb0c9884372324d475b4398456105014e81996e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/native-alias-contract.ts",
+      "before": "c65aaea2ebf7ca937080e76170cac2206335640c38a3c93f0a54af1153530b46",
+      "after": "583ed741357923623a2ce7b3c3afc4a9c02598f7e5707754c60e758463a345c0"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/recipient-runtime-evm.ts",
+      "before": null,
+      "after": "7ae6e66cf16a92421bc43cd7859268044e86762ecb3d26a8e332e2969c78b237"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/types.ts",
+      "before": "2c877620f13f85b3c5f85671b37a512e36569ef8a5e8117cb6d4824572dbdf79",
+      "after": "c6c65bd1e6ff9685b211d0abe767bbf0ab09d77b59068c089a9572167e44d841"
+    },
+    {
+      "path": "test/CurveUnderlyingRecipient.t.sol",
+      "before": null,
+      "after": "a0d3a97cf37042de060015614a28e02371ded885059cb34bfbe926da466a6120"
+    }
+  ],
+  "sourcePins": {
+    "commonSource": [
+      {
+        "path": "listener/src/adapters/registry.ts",
+        "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/compiler.ts",
+        "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-credit-runtime.ts",
+        "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+        "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+        "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+        "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+      },
+      {
+        "path": "listener/src/searcher/adapter-funding-runtime.ts",
+        "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+      },
+      {
+        "path": "listener/src/searcher/adapter-work-intent.ts",
+        "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+      },
+      {
+        "path": "listener/src/searcher/amount-quote-continuity.ts",
+        "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+      },
+      {
+        "path": "listener/src/searcher/blockscan-route-identity.ts",
+        "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+      },
+      {
+        "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+        "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+      },
+      {
+        "path": "listener/src/searcher/exact-prefix-plan.ts",
+        "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+      },
+      {
+        "path": "listener/src/searcher/exact-trial-state.ts",
+        "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+      },
+      {
+        "path": "listener/src/searcher/execution-asset-boundary.ts",
+        "sha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0"
+      },
+      {
+        "path": "listener/src/searcher/identity-asset-metadata.ts",
+        "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+      },
+      {
+        "path": "listener/src/searcher/runtime-evidence.ts",
+        "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+      },
+      {
+        "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+        "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+      },
+      {
+        "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+        "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+        "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+        "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-bounds.ts",
+        "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-propagation.ts",
+        "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-rejection.ts",
+        "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-builder.ts",
+        "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+        "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+      },
+      {
+        "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+        "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+      },
+      {
+        "path": "listener/src/searcher/strategy-taxonomy.ts",
+        "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+      },
+      {
+        "path": "listener/src/searcher/strict-production-runtime-session.ts",
+        "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+        "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+        "sha256": "34b545c41cf72f738da01aa38b9fcbb02b27268119c0e1e7cd67ce516761bb09"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+        "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-program.ts",
+        "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+      },
+      {
+        "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+        "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+        "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+        "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-instance-identity.ts",
+        "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/shared/constants/addresses.ts",
+        "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      },
+      {
+        "path": "listener/src/shared/executor/botvm-program-entry.ts",
+        "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+      },
+      {
+        "path": "listener/src/shared/state/state-backend.ts",
+        "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+      },
+      {
+        "path": "src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+      },
+      {
+        "path": "src/BotVMEncoder.sol",
+        "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+      },
+      {
+        "path": "src/BotVMScriptBuilder.sol",
+        "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+      },
+      {
+        "path": "src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+      },
+      {
+        "path": "src/FlashArb.sol",
+        "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+      },
+      {
+        "path": "src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+      },
+      {
+        "path": "src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+      },
+      {
+        "path": "src/interfaces/IFluidVault.sol",
+        "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+      },
+      {
+        "path": "src/interfaces/IMorpho.sol",
+        "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+      },
+      {
+        "path": "src/interfaces/ISwap.sol",
+        "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+      }
+    ],
+    "source": [
+      {
+        "path": "listener/src/adapters/curve.ts",
+        "sha256": "83720d256a907bcd60830c0ec7d57e9c0f76d432396c53676bbb8bd0c2ba92bf"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/production-families/curve-underlying.production.ts",
+        "sha256": "ddebbf5f112b8211332aa3fae8ab79f822b49a87283c4d6dc5bf82fc6d7b332c"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+        "sha256": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/action.ts",
+        "sha256": "95b808a9aebead4586060e75250ff78581b76e3834ebe63265b8e131ba57db22"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/codec.ts",
+        "sha256": "29f7e0be78cb03d084aa9ed358e44b19731882d2f112e3197d2f4567ad330d3d"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts",
+        "sha256": "028f3f169ebb0397d8660a69dd720398a9a3c2bcf95ae4bc953e2f9d54d3f15a"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/identity.ts",
+        "sha256": "42b27b56f5aaa1a9844cec6356194c9f4851f9a55be1317bcefbfb1714c1c900"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts",
+        "sha256": "994eca6c0b42656dd832664cf74ed48291f9f057c95eb21c237e33189acc8137"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/legacy-factory.ts",
+        "sha256": "c3f4c7d6d6164b66b5afdfa53db4a24a103fa445cbeed87875e3bddc1a175558"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/legacy-plain.ts",
+        "sha256": "75cec2118ff1fbf6f083cdb69ed11a9a35a1d83b5d4b6e558db2dfb11625155f"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending-execution.ts",
+        "sha256": "67b526cc49977a19b176502062d87ae6753ef8bf94917f6681adeb21da073059"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending-identity.ts",
+        "sha256": "1523624a090e9ea7f8ad19cff92540b51c31ab30378e2e7f86c02b1fb850f491"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending.ts",
+        "sha256": "1f048ceb29e60678dbbbece083ff362612999338cc6c2552234734b851308c58"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+        "sha256": "d968804233baf47e4df834e5708e8644eebe3dd145b01df086c6078e7d27306a"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+        "sha256": "9e7ffc251b1f6ebe3d588de16112228fe7a9a68a13262615daca71519b75af9f"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
+        "sha256": "fdc3b5285e7652e0a3b2d6fd5f3ee04a1aa22004a429b3ef01762eab6806d554"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
+        "sha256": "444c619922cfaab4c9d1f97075995ac0e21f07ba264433b2bc1b23f5b5a8c38e"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/recipient-proof.ts",
+        "sha256": "0b80128ebc0b9ed7b8785a4b4cb0c9884372324d475b4398456105014e81996e"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/routes.ts",
+        "sha256": "98e9923c0bda8639717a3fbe6a271df55def8a4bd4794575d09df2cde99719ba"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/scaled-behavior.ts",
+        "sha256": "d0ee4af46a75525c452a2e0c66816e87fcaa5f93b1125b9628df1ddeedac050d"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/v1-factory.ts",
+        "sha256": "4380e1093ab742640dbc9def09015fb3af3718c25905638457395fb7003c3b91"
+      },
+      {
+        "path": "listener/src/shared/constants/addresses.ts",
+        "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      },
+      {
+        "path": "listener/src/shared/executor/botvm-program-entry.ts",
+        "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+      }
+    ]
+  },
+  "catalog": {
+    "method": "Canonical generator on immutable HEAD plus hash-checked owned source. Ignored generator input artifact only; actual workspace and peer files are unchanged.",
+    "workingSha256": "d5dc6d399e654fee9d5eaf841e799a8cf231ccd4a178aeeeedb59320f737b4a4",
+    "ownedSha256": "3b72449b8cc8f606d1a93f2e925a175285322eaf6b3367548aefcde0e51128b8",
+    "peerOnlyDifferences": [
+      "custom-swap:uniswap-v1:capture",
+      "custom-swap:uniswap-v1:discovery",
+      "custom-swap:uniswap-v1:exact",
+      "custom-swap:uniswap-v1:execution",
+      "custom-swap:uniswap-v1:identity",
+      "custom-swap:uniswap-v1:instance",
+      "custom-swap:uniswap-v1:pricing",
+      "custom-swap:uniswap-v1:routes",
+      "custom-swap:uniswap-v1:victim"
+    ]
+  },
+  "checks": {
+    "checks05.json": [
+      {
+        "name": "generate",
+        "exitCode": 0,
+        "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+        "completedAt": "2026-10-15T03:46:59.224119+00:00"
+      },
+      {
+        "name": "index",
+        "exitCode": 0,
+        "sha256": "4859137a6e5249ee4e7f9c7f5a0e0c6ba873a2ff4de6f83d242461efc1db152a",
+        "completedAt": "2026-10-15T03:46:59.570128+00:00"
+      },
+      {
+        "name": "build",
+        "exitCode": 0,
+        "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+        "completedAt": "2026-10-15T03:47:07.678192+00:00"
+      }
+    ],
+    "checks06.json": [
+      {
+        "name": "native",
+        "exitCode": 0,
+        "sha256": "b635a1c8e140dab6001dba559cb3d63af9fd1270863c3380f4a79d2721dbac11",
+        "startedAt": "2026-10-15T03:48:23.035989+00:00",
+        "completedAt": "2026-10-15T03:48:28.140118+00:00"
+      },
+      {
+        "name": "family",
+        "exitCode": 0,
+        "sha256": "a2fae8cbc963ccade601289011504a499be09cfdd3d930b0c8e3033f1ff67e65",
+        "startedAt": "2026-10-15T03:48:28.140312+00:00",
+        "completedAt": "2026-10-15T03:48:32.976762+00:00"
+      },
+      {
+        "name": "classic-recipient",
+        "exitCode": 0,
+        "sha256": "c0506450cb01b9b68314b093f17b8dd5bf6edc9a886afbcf828dcb4c5ee6588d",
+        "startedAt": "2026-10-15T03:48:32.976978+00:00",
+        "completedAt": "2026-10-15T03:48:35.285984+00:00"
+      },
+      {
+        "name": "evm",
+        "exitCode": 0,
+        "sha256": "127957c1a01240ce137c3477b90c059fd0ff83b97d28b1bfb5ada6a1d5c22359",
+        "startedAt": "2026-10-15T03:48:35.286201+00:00",
+        "completedAt": "2026-10-15T03:49:00.410500+00:00"
+      },
+      {
+        "name": "boundary",
+        "exitCode": 0,
+        "sha256": "55450591b9d613f5aa266a1370334e130c434a11a03bf9f3684262d5eb666307",
+        "startedAt": "2026-10-15T03:49:00.410727+00:00",
+        "completedAt": "2026-10-15T03:49:00.952212+00:00"
+      },
+      {
+        "name": "all-family",
+        "exitCode": 0,
+        "sha256": "f4aa60af0557657febd944d4146aecfb5f44658eea1c4958805d7b804d82feb9",
+        "startedAt": "2026-10-15T03:49:00.952496+00:00",
+        "completedAt": "2026-10-15T03:49:08.584236+00:00"
+      },
+      {
+        "name": "strict",
+        "exitCode": 0,
+        "sha256": "e09386e1974c351e90109082d269e3769e07be85b2ccd9aad810381bbbca5adb",
+        "startedAt": "2026-10-15T03:49:08.584521+00:00",
+        "completedAt": "2026-10-15T03:49:11.135804+00:00"
+      }
+    ],
+    "checks07b.json": [
+      {
+        "name": "evm",
+        "exitCode": 0,
+        "sha256": "14261d86192c76bf8065977a5a47cda1a86bda39a7e6e9e4fedf57009c6cfa26",
+        "startedAt": "2026-10-15T03:52:50.450185+00:00",
+        "completedAt": "2026-10-15T03:53:18.054915+00:00"
+      }
+    ],
+    "checks08b.json": [
+      {
+        "name": "regenerate",
+        "exitCode": 0,
+        "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+      },
+      {
+        "name": "catalog",
+        "exitCode": 0,
+        "logSha256": "0c7a545dac6bc48d52f94889a612981f600b01f48fe7745946accfff7aa18d99"
+      },
+      {
+        "name": "owned-build",
+        "exitCode": 0,
+        "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      }
+    ]
+  },
+  "regressions": {
+    "nativeAlias": 30,
+    "family": 40,
+    "actualLocalEvmTests": 7,
+    "allFamily": 301,
+    "strictCentral": 174,
+    "actualAndOwnedOnlyProductionBuild": "passed"
+  },
+  "toolReconciliation": {
+    "query": [
+      "curve"
+    ],
+    "manifestPath": "logs/family-implementation-20261015.0exjskqq/selection05.json",
+    "manifestSha256": "895d68d4a67c02f138ebf6301e7451eaca16656c870dd51754553498237ea011",
+    "selectedTools": [
+      "listener:searcher:curve-underlying-native-contract",
+      "listener:searcher:curve-underlying-family-plugin",
+      "listener:searcher:curve-underlying-direct-recipient",
+      "listener:searcher:curve-underlying-recipient-evm"
+    ],
+    "result": "agrees: current production Family programs, lifecycle and actual local EVM exercised via indexed runners; no historical conclusion"
+  },
+  "evidence": {
+    "catalog-receipt08.json": {
+      "sha256": "76a83039acf35bec9db0ee0fb77367d4ab79f71ee259d2914be7e865bbc39035",
+      "bytes": 721
+    },
+    "check05-build.log": {
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "bytes": 71
+    },
+    "check05-generate.log": {
+      "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+      "bytes": 136
+    },
+    "check05-index.log": {
+      "sha256": "4859137a6e5249ee4e7f9c7f5a0e0c6ba873a2ff4de6f83d242461efc1db152a",
+      "bytes": 2919
+    },
+    "check06-all-family.log": {
+      "sha256": "f4aa60af0557657febd944d4146aecfb5f44658eea1c4958805d7b804d82feb9",
+      "bytes": 58091
+    },
+    "check06-boundary.log": {
+      "sha256": "55450591b9d613f5aa266a1370334e130c434a11a03bf9f3684262d5eb666307",
+      "bytes": 642
+    },
+    "check06-classic-recipient.log": {
+      "sha256": "c0506450cb01b9b68314b093f17b8dd5bf6edc9a886afbcf828dcb4c5ee6588d",
+      "bytes": 966
+    },
+    "check06-evm.log": {
+      "sha256": "127957c1a01240ce137c3477b90c059fd0ff83b97d28b1bfb5ada6a1d5c22359",
+      "bytes": 1819
+    },
+    "check06-family.log": {
+      "sha256": "a2fae8cbc963ccade601289011504a499be09cfdd3d930b0c8e3033f1ff67e65",
+      "bytes": 5188
+    },
+    "check06-native.log": {
+      "sha256": "b635a1c8e140dab6001dba559cb3d63af9fd1270863c3380f4a79d2721dbac11",
+      "bytes": 4353
+    },
+    "check06-strict.log": {
+      "sha256": "e09386e1974c351e90109082d269e3769e07be85b2ccd9aad810381bbbca5adb",
+      "bytes": 16687
+    },
+    "check07-evm.log": {
+      "sha256": "bec7db47f0242b2739ce3de5ecb7ee785764795938c929118fb8d3994e8ff803",
+      "bytes": 826
+    },
+    "check07b-evm.log": {
+      "sha256": "14261d86192c76bf8065977a5a47cda1a86bda39a7e6e9e4fedf57009c6cfa26",
+      "bytes": 1819
+    },
+    "check08-catalog.log": {
+      "sha256": "16997fbb5b176ce42650b8f9f9dcd3193935e5fab5ebcace6bea2624bca380c0",
+      "bytes": 520
+    },
+    "check08b-catalog.log": {
+      "sha256": "0c7a545dac6bc48d52f94889a612981f600b01f48fe7745946accfff7aa18d99",
+      "bytes": 361
+    },
+    "check08b-owned-build.log": {
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "bytes": 71
+    },
+    "check08b-regenerate.log": {
+      "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+      "bytes": 136
+    },
+    "checks05.json": {
+      "sha256": "50b6966b18348a70d5bef792312b21ece0183e9a125e89133d7d80acca8347d4",
+      "bytes": 561
+    },
+    "checks06.json": {
+      "sha256": "9c0c00e4939443e69f37cfa50e9562732b1bc08872990cb9d4ec3deaa3fe1974",
+      "bytes": 1690
+    },
+    "checks07b.json": {
+      "sha256": "a4d707d2dfd2f4d2b689bf012ceb9f335a88373ea83f20051c227bc92c62f264",
+      "bytes": 239
+    },
+    "checks08.json": {
+      "sha256": "ac9d0ad43ada10867428891805720eafbf7b52b59c64c4eef3e407a1a97d08ad",
+      "bytes": 138
+    },
+    "checks08b.json": {
+      "sha256": "edcd924a94c88ef13dd051932151a1b8ff5bdb1eb1461e3299c6775189808f70",
+      "bytes": 415
+    },
+    "current-source08.json": {
+      "sha256": "f000c4fd4a2167f8744090f17df0de10b46b95f3dee3747522cacb04d9369eb6",
+      "bytes": 14395
+    },
+    "evm/forge.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "evm/forge.stdout.log": {
+      "sha256": "e2dc55323ff5e0b2c4a51ace6dec7c791ed57b08d32a11aec57db59d33dfb067",
+      "bytes": 1044
+    },
+    "evm/programs.json": {
+      "sha256": "3111ca27f20b425499d7b75bb8849a5d86627ed4c8024211c1176d17aec781e1",
+      "bytes": 144389
+    },
+    "evm/result.json": {
+      "sha256": "fddffcffb08db920e586a0b10710f0dcc150b084f32f90abe7cc2279dcee4e96",
+      "bytes": 2411
+    },
+    "owned07b.json": {
+      "sha256": "04d45d013ef58ef22729ea4642cbeb15b12c227756e9116fd206e428f6088c67",
+      "bytes": 2861
+    },
+    "selection05.json": {
+      "sha256": "895d68d4a67c02f138ebf6301e7451eaca16656c870dd51754553498237ea011",
+      "bytes": 13862
+    }
+  },
+  "preservedFailedAttempts": [
+    {
+      "artifact": "check07-evm.log",
+      "cause": "Author metadata edit accidentally added a second path argument to forge. No test executed. Corrected exact command and reran final EVM as check07b."
+    },
+    {
+      "artifact": "check08-catalog.log",
+      "cause": "Owned catalog comparison rejected working generated hash left stale after metadata source edit. Regenerated canonical working catalog under lock; comparison and owned build passed as checks08b."
+    }
+  ],
+  "independentReview": {
+    "schemaVersion": 1,
+    "reviewId": "curve-underlying-native-alias-recipient-review02",
+    "createdUtc": "2026-10-15T04:01:39.675Z",
+    "reviewer": {
+      "agent": "/root/interface_protocols_b",
+      "role": "independent non-author",
+      "round": 2,
+      "maximumRounds": 3
+    },
+    "scope": {
+      "familyId": "curve-underlying",
+      "variantId": "metaregistry-uint-native-alias",
+      "stage": "implementation-and-offline-regression",
+      "baselineHead": "2def7aee6364663aa3309cfd5815bdf68a0e9d0e",
+      "cloudRoot": "/opt/mev-cloud/family-runtime-20261007",
+      "candidateRoot": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/candidate",
+      "evidenceRoot": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence08",
+      "description": "单族 nativeAlias uint5 optional receiver 的本批最终实现审查；复用 review01 的实际部署 ABI/实现和 common mapper/issuer 审查，核对最后证据与源码。",
+      "excluded": [
+        "本轮不执行 RPC、测试、build、生成或云端修改。",
+        "不将本轮离线实现结论升为历史、Adapter Replay、机会或性能通过。",
+        "不重开已完成的 FRAX 5f8908 第三 profile。",
+        "不修改生产、IMPL、generated、他人 dirty 或 Git。"
+      ]
+    },
+    "implementationReady": true,
+    "blockingFindings": [],
+    "conclusion": {
+      "decision": "implementation-ready",
+      "blockingFindings": 0,
+      "summary": "本批生产实现与离线验证就绪，无提交实现阶段的具体阻断。最终源码与冻结证据匹配；pass1 的 EVM 依赖 pin 遗漏已补齐并实测验证。",
+      "permittedClaim": "curve-underlying 本批 nativeAlias recipient 接线已实现并通过所列离线回归。",
+      "prohibitedClaims": [
+        "新 recipient 模式已完成真实历史验收",
+        "所有 clone 的 historical implementation identity 已齐",
+        "Adapter Replay/机会复现/性能已通过",
+        "审查者亲自运行了这些测试"
+      ],
+      "historicalAcceptance": "pending-unified-acceptance",
+      "performanceAcceptance": "pending-unified-acceptance",
+      "adapterReplayAcceptance": "not-performed"
+    },
+    "resolvedFindings": [
+      {
+        "id": "UNDERLYING-R1-EVIDENCE-01",
+        "status": "resolved",
+        "classification": "tooling evidence-manifest coverage omission",
+        "originalFinding": "EVM helper 合约从 test/CurvePlainRecipient.t.sol 继承实际 token/pool/wrapper/fault 行为，但初版 result sources 未 pin 此依赖。",
+        "finalChange": "最终 runner 在 sources 中新增 test/CurvePlainRecipient.t.sol 与 native-identity.ts。",
+        "evidence": [
+          {
+            "path": "candidate/listener/src/searcher/venues/swaps/curve-underlying-family/test/recipient-runtime-evm.ts",
+            "sha256": "7ae6e66cf16a92421bc43cd7859268044e86762ecb3d26a8e332e2969c78b237"
+          },
+          {
+            "path": "test/CurvePlainRecipient.t.sol",
+            "sha256": "349f8b1aa5d607d2afe3dbd5fe17388a6574b4f3f47223930f1b0a8f76ae138b",
+            "source": "exact baseline HEAD and final EVM result pin"
+          },
+          {
+            "path": "evidence08/evm/result.json",
+            "validation": "16 source hashes independently match candidate or exact baseline HEAD; fixture hash matches actual programs.json"
+          },
+          {
+            "path": "evidence08/check07b-evm.log",
+            "validation": "7/7 real local EVM tests passed, exitCode 0"
+          }
+        ],
+        "codeDeltaConstraint": "最终 runner 相比 review01 的唯一变化精确等于两项 source pin 增补；反向移除此两字符串后 SHA-256 等于 review01 runner hash。生产 emitter、identity、Solidity fault 合约等其余 11 文件未改。"
+      },
+      {
+        "id": "PIN07-FORGE-ARGUMENT-REPAIR",
+        "status": "resolved-with-original-failure-preserved",
+        "classification": "transient validation-runner editing error",
+        "originalFailure": "补 source pin 的无范围字符串替换同时把 CurvePlainRecipient.t.sol 加入 forge argv，导致 --match-path 与额外 path 同时存在，forge 在执行测试前拒绝。",
+        "diagnostic": "Error: Can not supply both --match-path and |path|",
+        "originalEvidence": "evidence08/check07-evm.log 与 selection05 中 exit_code=1 execution receipt。",
+        "finalCorrection": "pin07b 只删除 argv 中多余路径；source pin 保留。最终候选 spawnSync 仍只有原 --match-path test/CurveUnderlyingRecipient.t.sol。",
+        "verification": "check07b 原始日志和 manifest receipt 均 exit 0；EVM 7/7。此故障不算协议负例或生产失败。"
+      },
+      {
+        "id": "FREEZE08-STALE-CATALOG-REPAIR",
+        "status": "resolved-with-original-failure-preserved",
+        "classification": "generated-input freshness failure",
+        "originalFailure": "首次冻结比较未满足仅 peer UniV1 差异断言，校验主动失败。",
+        "originalEvidence": "evidence08/check08-catalog.log、checks08.json(exitCode=1)。",
+        "finalCorrection": "checks08b 先对实际工作目录规范 regenerate，再从 HEAD+hash-checked owned source 规范生成 owned catalog、比较并执行 owned-only build。",
+        "verification": "regenerate/catalog/owned-build 三项 exit 0；catalog 比较脚本要求 generated.complete、issues/legacy/key inventory 一致，所有剩余 exact capability 差异均为 custom-swap:uniswap-v1。",
+        "limitation": "完整 catalog 内容未作为 evidence08 文件导出；本轮读取了比较脚本、结果 receipt/日志、87 条当前源码 pins 并逐条复算，未自行重新运行生成。"
+      }
+    ],
+    "codeConclusion": {
+      "unchangedFromReview01": true,
+      "productionFilesChangedSinceReview01": [],
+      "currentRunnerChangesSinceReview01": [
+        "listener/src/searcher/venues/swaps/curve-underlying-family/test/recipient-runtime-evm.ts"
+      ],
+      "runnerChangesOnlyEvidencePins": true,
+      "retainedFindings": [
+        "uint256 underlying4/5 的实际 deployed ABI 与 input-first 付款顺序成立；没有新增 callback/deferred 声明。",
+        "receiver 能力由同 source 的独立 per-direction raw effect probe 建立，recipient:true 固定在 static binding/provenance 中；未验证不会误声明。",
+        "可选正常 revert/transport failure/错效果不删除默认已准入方向；跨 source 或缺失/重复证据仍 fail closed。",
+        "显式 direct 要求 A>0 且精确净扣 A；实收、旧库存、approve(A)+clear 检查由 Family raw program 和 common native boundary 合作完成。",
+        "native input 保留 original raw receiver；native output raw receiver=executor，issuer 验 mapped echo 后恢复 original request，再量 ETH 新增、包装且交付 WETH 实收。",
+        "default 4 参路径与既有 0/1 政策保持；原 native/quoted/default 回归通过。此处未声称做过未提供的前后全部 calldata 字节比对。",
+        "classic/FRAX 已完成第三 profile 保留；旧 generic 5f 报告缺口不是本批缺实现。"
+      ],
+      "priorReview": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/underlying-review01.json",
+        "sha256": "3abc646de11b43cb448984530301b789aed0ba1474c119a805980f6115be558f"
+      }
+    },
+    "verification": {
+      "reviewerExecutedTests": false,
+      "method": "只读本地原始日志/JSON/源码与 exact git HEAD；逐项 SHA-256 比对。测试与生成由父任务此前串行运行。",
+      "ownedFiles": {
+        "count": 12,
+        "allCandidateAfterHashesMatch": true,
+        "allBaselineBeforeHashesMatch": true,
+        "pins": [
+          {
+            "path": "listener/package.json",
+            "before": "e2289f0381123a7e72ccd981a437da0e1168de4a79df10490fc8f0e604f6c24e",
+            "after": "6700b8d90cb6059d6ec131711e4215220b8f7bfc714bc51051f4969de6a0086b",
+            "candidateMatches": true,
+            "baselineMatches": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/codec.ts",
+            "before": "2935f76e76be1b6166c4a40b517b9797125c6fc57f1944868bd695bd8deb6d26",
+            "after": "29f7e0be78cb03d084aa9ed358e44b19731882d2f112e3197d2f4567ad330d3d",
+            "candidateMatches": true,
+            "baselineMatches": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/discovery.ts",
+            "before": "ca3f04c2d4b6355ba218e2c089da0a8a67bfc4411fb9ba648bece672bdd5b801",
+            "after": "cc20e5a7d3def8265f4204589758b6457c638433171f743196a0f87971e5f4bc",
+            "candidateMatches": true,
+            "baselineMatches": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts",
+            "before": "56ac0e1c5d43f3b85b1858b8379eba073690be00caf74cbde03cda348b042cd2",
+            "after": "028f3f169ebb0397d8660a69dd720398a9a3c2bcf95ae4bc953e2f9d54d3f15a",
+            "candidateMatches": true,
+            "baselineMatches": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts",
+            "before": "137cafc05d3edcccbe1c3c1684be7cf0b4204a3c7aac888ed9f0d7ca31ef0351",
+            "after": "994eca6c0b42656dd832664cf74ed48291f9f057c95eb21c237e33189acc8137",
+            "candidateMatches": true,
+            "baselineMatches": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+            "before": "56d89e4d1db9609b8f230b110d8d09fc20e440b52ac77a57d18827889b32f643",
+            "after": "9e7ffc251b1f6ebe3d588de16112228fe7a9a68a13262615daca71519b75af9f",
+            "candidateMatches": true,
+            "baselineMatches": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
+            "before": "f7a80a177c42ee2d2187f6afee498921a3464290cda0b29e75fd148e0947ee30",
+            "after": "fdc3b5285e7652e0a3b2d6fd5f3ee04a1aa22004a429b3ef01762eab6806d554",
+            "candidateMatches": true,
+            "baselineMatches": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/recipient-proof.ts",
+            "before": null,
+            "after": "0b80128ebc0b9ed7b8785a4b4cb0c9884372324d475b4398456105014e81996e",
+            "candidateMatches": true,
+            "baselineMatches": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/native-alias-contract.ts",
+            "before": "c65aaea2ebf7ca937080e76170cac2206335640c38a3c93f0a54af1153530b46",
+            "after": "583ed741357923623a2ce7b3c3afc4a9c02598f7e5707754c60e758463a345c0",
+            "candidateMatches": true,
+            "baselineMatches": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/recipient-runtime-evm.ts",
+            "before": null,
+            "after": "7ae6e66cf16a92421bc43cd7859268044e86762ecb3d26a8e332e2969c78b237",
+            "candidateMatches": true,
+            "baselineMatches": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/types.ts",
+            "before": "2c877620f13f85b3c5f85671b37a512e36569ef8a5e8117cb6d4824572dbdf79",
+            "after": "c6c65bd1e6ff9685b211d0abe767bbf0ab09d77b59068c089a9572167e44d841",
+            "candidateMatches": true,
+            "baselineMatches": true
+          },
+          {
+            "path": "test/CurveUnderlyingRecipient.t.sol",
+            "before": null,
+            "after": "a0d3a97cf37042de060015614a28e02371ded885059cb34bfbe926da466a6120",
+            "candidateMatches": true,
+            "baselineMatches": true
+          }
+        ]
+      },
+      "sourceSets": {
+        "declaredCommonCount": 57,
+        "declaredFamilyCount": 30,
+        "all87FileHashesMatchCandidateOrExactHead": true,
+        "enumerationAuthority": "current-source08.json 中 canonical review/generator 声明的 source 集合；审查者核文件内容和 hash，未执行 source closure generator。",
+        "artifact": "evidence08/current-source08.json",
+        "verificationRows": [
+          {
+            "group": "commonSource",
+            "path": "listener/src/adapters/registry.ts",
+            "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/adapters/runtime-amount-program.ts",
+            "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/compiler.ts",
+            "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/encoder.ts",
+            "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/adapter-credit-runtime.ts",
+            "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+            "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+            "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+            "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/adapter-funding-runtime.ts",
+            "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/adapter-work-intent.ts",
+            "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/amount-quote-continuity.ts",
+            "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/blockscan-route-identity.ts",
+            "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+            "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/exact-prefix-plan.ts",
+            "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/exact-trial-state.ts",
+            "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/execution-asset-boundary.ts",
+            "sha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/identity-asset-metadata.ts",
+            "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/runtime-evidence.ts",
+            "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+            "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+            "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+            "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+            "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/solver/amount-bounds.ts",
+            "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/solver/amount-propagation.ts",
+            "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/solver/amount-rejection.ts",
+            "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/solver/plan-builder.ts",
+            "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+            "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+            "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/strategy-taxonomy.ts",
+            "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/strict-production-runtime-session.ts",
+            "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+            "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+            "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+            "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+            "sha256": "34b545c41cf72f738da01aa38b9fcbb02b27268119c0e1e7cd67ce516761bb09",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+            "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/adapter-request-program.ts",
+            "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+            "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/canonical-value.ts",
+            "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+            "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/family-owned-action.ts",
+            "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+            "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/route-instance-identity.ts",
+            "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/searcher/venues/runtime-execution.ts",
+            "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/shared/constants/addresses.ts",
+            "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/shared/executor/amount-rounding.ts",
+            "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/shared/executor/botvm-program-entry.ts",
+            "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "listener/src/shared/state/state-backend.ts",
+            "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "src/BotVM.sol",
+            "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "src/BotVMEncoder.sol",
+            "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "src/BotVMScriptBuilder.sol",
+            "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "src/Constants.sol",
+            "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "src/FlashArb.sol",
+            "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "src/RuntimeAmountVM.sol",
+            "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "src/interfaces/IERC20.sol",
+            "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "src/interfaces/IFluidVault.sol",
+            "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "src/interfaces/IMorpho.sol",
+            "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "commonSource",
+            "path": "src/interfaces/ISwap.sol",
+            "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/adapters/curve.ts",
+            "sha256": "83720d256a907bcd60830c0ec7d57e9c0f76d432396c53676bbb8bd0c2ba92bf",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/adapters/runtime-amount-program.ts",
+            "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/encoder.ts",
+            "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+            "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/canonical-value.ts",
+            "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/family-owned-action.ts",
+            "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/production-families/curve-underlying.production.ts",
+            "sha256": "ddebbf5f112b8211332aa3fae8ab79f822b49a87283c4d6dc5bf82fc6d7b332c",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/runtime-execution.ts",
+            "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+            "sha256": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/action.ts",
+            "sha256": "95b808a9aebead4586060e75250ff78581b76e3834ebe63265b8e131ba57db22",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/codec.ts",
+            "sha256": "29f7e0be78cb03d084aa9ed358e44b19731882d2f112e3197d2f4567ad330d3d",
+            "match": true,
+            "method": "candidate"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts",
+            "sha256": "028f3f169ebb0397d8660a69dd720398a9a3c2bcf95ae4bc953e2f9d54d3f15a",
+            "match": true,
+            "method": "candidate"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/identity.ts",
+            "sha256": "42b27b56f5aaa1a9844cec6356194c9f4851f9a55be1317bcefbfb1714c1c900",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts",
+            "sha256": "994eca6c0b42656dd832664cf74ed48291f9f057c95eb21c237e33189acc8137",
+            "match": true,
+            "method": "candidate"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/legacy-factory.ts",
+            "sha256": "c3f4c7d6d6164b66b5afdfa53db4a24a103fa445cbeed87875e3bddc1a175558",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/legacy-plain.ts",
+            "sha256": "75cec2118ff1fbf6f083cdb69ed11a9a35a1d83b5d4b6e558db2dfb11625155f",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending-execution.ts",
+            "sha256": "67b526cc49977a19b176502062d87ae6753ef8bf94917f6681adeb21da073059",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending-identity.ts",
+            "sha256": "1523624a090e9ea7f8ad19cff92540b51c31ab30378e2e7f86c02b1fb850f491",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending.ts",
+            "sha256": "1f048ceb29e60678dbbbece083ff362612999338cc6c2552234734b851308c58",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+            "sha256": "d968804233baf47e4df834e5708e8644eebe3dd145b01df086c6078e7d27306a",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+            "sha256": "9e7ffc251b1f6ebe3d588de16112228fe7a9a68a13262615daca71519b75af9f",
+            "match": true,
+            "method": "candidate"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
+            "sha256": "fdc3b5285e7652e0a3b2d6fd5f3ee04a1aa22004a429b3ef01762eab6806d554",
+            "match": true,
+            "method": "candidate"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
+            "sha256": "444c619922cfaab4c9d1f97075995ac0e21f07ba264433b2bc1b23f5b5a8c38e",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/recipient-proof.ts",
+            "sha256": "0b80128ebc0b9ed7b8785a4b4cb0c9884372324d475b4398456105014e81996e",
+            "match": true,
+            "method": "candidate"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/routes.ts",
+            "sha256": "98e9923c0bda8639717a3fbe6a271df55def8a4bd4794575d09df2cde99719ba",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/scaled-behavior.ts",
+            "sha256": "d0ee4af46a75525c452a2e0c66816e87fcaa5f93b1125b9628df1ddeedac050d",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/v1-factory.ts",
+            "sha256": "4380e1093ab742640dbc9def09015fb3af3718c25905638457395fb7003c3b91",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/shared/constants/addresses.ts",
+            "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/shared/executor/amount-rounding.ts",
+            "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+            "match": true,
+            "method": "git-show-exact-head"
+          },
+          {
+            "group": "source",
+            "path": "listener/src/shared/executor/botvm-program-entry.ts",
+            "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0",
+            "match": true,
+            "method": "git-show-exact-head"
+          }
+        ]
+      },
+      "offlineTests": [
+        {
+          "name": "native",
+          "tests": 30,
+          "pass": 30,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "log": "evidence08/check06-native.log",
+          "status": "passed"
+        },
+        {
+          "name": "family",
+          "tests": 40,
+          "pass": 40,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "log": "evidence08/check06-family.log",
+          "status": "passed"
+        },
+        {
+          "name": "classic-recipient",
+          "tests": 3,
+          "pass": 3,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "log": "evidence08/check06-classic-recipient.log",
+          "status": "passed"
+        },
+        {
+          "name": "boundary",
+          "tests": 4,
+          "pass": 4,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "log": "evidence08/check06-boundary.log",
+          "status": "passed"
+        },
+        {
+          "name": "all-family",
+          "tests": 301,
+          "pass": 301,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "log": "evidence08/check06-all-family.log",
+          "status": "passed"
+        },
+        {
+          "name": "strict",
+          "tests": 174,
+          "pass": 174,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "log": "evidence08/check06-strict.log",
+          "status": "passed"
+        },
+        {
+          "name": "EVM-final",
+          "tests": 7,
+          "pass": 7,
+          "fail": 0,
+          "skipped": 0,
+          "log": "evidence08/check07b-evm.log",
+          "status": "passed",
+          "earlierSuccessfulRun": "evidence08/check06-evm.log",
+          "intermediateFailurePreserved": "evidence08/check07-evm.log"
+        }
+      ],
+      "buildAndCatalog": {
+        "workingBuild": {
+          "log": "evidence08/check05-build.log",
+          "exitCode": 0
+        },
+        "workingRegenerate": {
+          "log": "evidence08/check08b-regenerate.log",
+          "exitCode": 0
+        },
+        "ownedCatalogComparison": {
+          "log": "evidence08/check08b-catalog.log",
+          "exitCode": 0,
+          "commonSourceCount": 57,
+          "familySourceCount": 30
+        },
+        "ownedOnlyBuild": {
+          "log": "evidence08/check08b-owned-build.log",
+          "exitCode": 0
+        },
+        "workingAndOwnedBuildLogsSameSha256": true,
+        "workingCatalogSha256": "d5dc6d399e654fee9d5eaf841e799a8cf231ccd4a178aeeeedb59320f737b4a4",
+        "ownedCatalogSha256": "3b72449b8cc8f606d1a93f2e925a175285322eaf6b3367548aefcde0e51128b8",
+        "peerDifferenceScope": "9 custom-swap:uniswap-v1 capability entries; parent scoped source snapshot excludes peer changes.",
+        "scopeCaveat": "301 all-family tests 属实际 dirty 工作基线；本次 owned-only 产物另完成规范 catalog 与 build，不声称另跑 owned-only 全族测试。"
+      },
+      "evm": {
+        "status": "passed-offline",
+        "scope": "真实 BotVM/RuntimeAmountVM；production Family programs 和 common boundary；显式 synthetic Curve pool/tokens/wrapper/fault。",
+        "testFunctions": 7,
+        "generatedProgramFixtureCount": 48,
+        "fixtureSha256": "3111ca27f20b425499d7b75bb8849a5d86627ed4c8024211c1176d17aec781e1",
+        "fixtureHashRecomputed": true,
+        "finalResult": {
+          "scope": "Real local BotVM EVM with production Family programs and synthetic Curve/tokens; not historical or performance evidence.",
+          "exitCode": 0,
+          "signal": null,
+          "error": null,
+          "fixtureSha256": "3111ca27f20b425499d7b75bb8849a5d86627ed4c8024211c1176d17aec781e1",
+          "sources": {
+            "src/BotVM.sol": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+            "src/RuntimeAmountVM.sol": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+            "test/CurveUnderlyingRecipient.t.sol": "a0d3a97cf37042de060015614a28e02371ded885059cb34bfbe926da466a6120",
+            "test/CurvePlainRecipient.t.sol": "349f8b1aa5d607d2afe3dbd5fe17388a6574b4f3f47223930f1b0a8f76ae138b",
+            "listener/src/adapters/runtime-amount-program.ts": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+            "listener/src/searcher/venues/runtime-execution.ts": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+            "listener/src/searcher/execution-asset-boundary.ts": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0",
+            "listener/src/searcher/venues/swaps/curve-underlying-family/codec.ts": "29f7e0be78cb03d084aa9ed358e44b19731882d2f112e3197d2f4567ad330d3d",
+            "listener/src/searcher/venues/swaps/curve-underlying-family/routes.ts": "98e9923c0bda8639717a3fbe6a271df55def8a4bd4794575d09df2cde99719ba",
+            "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts": "994eca6c0b42656dd832664cf74ed48291f9f057c95eb21c237e33189acc8137",
+            "listener/src/searcher/venues/swaps/curve-underlying-family/types.ts": "c6c65bd1e6ff9685b211d0abe767bbf0ab09d77b59068c089a9572167e44d841",
+            "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts": "9e7ffc251b1f6ebe3d588de16112228fe7a9a68a13262615daca71519b75af9f",
+            "listener/src/searcher/venues/swaps/curve-underlying-family/recipient-proof.ts": "0b80128ebc0b9ed7b8785a4b4cb0c9884372324d475b4398456105014e81996e",
+            "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts": "fdc3b5285e7652e0a3b2d6fd5f3ee04a1aa22004a429b3ef01762eab6806d554",
+            "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts": "028f3f169ebb0397d8660a69dd720398a9a3c2bcf95ae4bc953e2f9d54d3f15a",
+            "listener/src/searcher/venues/swaps/curve-underlying-family/test/recipient-runtime-evm.ts": "7ae6e66cf16a92421bc43cd7859268044e86762ecb3d26a8e332e2969c78b237"
+          }
+        },
+        "sourcePins": [
+          {
+            "path": "src/BotVM.sol",
+            "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+            "match": true
+          },
+          {
+            "path": "src/RuntimeAmountVM.sol",
+            "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+            "match": true
+          },
+          {
+            "path": "test/CurveUnderlyingRecipient.t.sol",
+            "sha256": "a0d3a97cf37042de060015614a28e02371ded885059cb34bfbe926da466a6120",
+            "match": true
+          },
+          {
+            "path": "test/CurvePlainRecipient.t.sol",
+            "sha256": "349f8b1aa5d607d2afe3dbd5fe17388a6574b4f3f47223930f1b0a8f76ae138b",
+            "match": true
+          },
+          {
+            "path": "listener/src/adapters/runtime-amount-program.ts",
+            "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+            "match": true
+          },
+          {
+            "path": "listener/src/searcher/venues/runtime-execution.ts",
+            "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+            "match": true
+          },
+          {
+            "path": "listener/src/searcher/execution-asset-boundary.ts",
+            "sha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0",
+            "match": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/codec.ts",
+            "sha256": "29f7e0be78cb03d084aa9ed358e44b19731882d2f112e3197d2f4567ad330d3d",
+            "match": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/routes.ts",
+            "sha256": "98e9923c0bda8639717a3fbe6a271df55def8a4bd4794575d09df2cde99719ba",
+            "match": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts",
+            "sha256": "994eca6c0b42656dd832664cf74ed48291f9f057c95eb21c237e33189acc8137",
+            "match": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/types.ts",
+            "sha256": "c6c65bd1e6ff9685b211d0abe767bbf0ab09d77b59068c089a9572167e44d841",
+            "match": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+            "sha256": "9e7ffc251b1f6ebe3d588de16112228fe7a9a68a13262615daca71519b75af9f",
+            "match": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/recipient-proof.ts",
+            "sha256": "0b80128ebc0b9ed7b8785a4b4cb0c9884372324d475b4398456105014e81996e",
+            "match": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
+            "sha256": "fdc3b5285e7652e0a3b2d6fd5f3ee04a1aa22004a429b3ef01762eab6806d554",
+            "match": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts",
+            "sha256": "028f3f169ebb0397d8660a69dd720398a9a3c2bcf95ae4bc953e2f9d54d3f15a",
+            "match": true
+          },
+          {
+            "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/recipient-runtime-evm.ts",
+            "sha256": "7ae6e66cf16a92421bc43cd7859268044e86762ecb3d26a8e332e2969c78b237",
+            "match": true
+          }
+        ],
+        "receiptBoundary": [
+          "测试独立比较 actor/receiver 的实际 token 余额、旧库存、allowance 和 actor native，故障后检查余额/计数回滚。",
+          "测试执行 vm.expectRevert(BotVM.execute) 后再独立核状态；没有把成功后置断言抛错当发出 guard 拒绝。",
+          "覆盖 ERC20/native 方向、default/self/external、A=0/1/100、欠/超扣、零/错 recipient、旧库存、退款/native、授权清理及 return-data 与真实 receipt 的区别。",
+          "48 是生成 program fixture 数量，包含 A=0 和被选择的 default/direct 组合；不能当作 48 历史正执行。",
+          "测试 A=0 拒绝不等于 positive A 相同 calldata 无输入的历史负例；后者统一验收。",
+          "synthetic pool/token 源码证明本地 guards 与 EVM 原子性，不证明实际部署池在指定历史状态的 recipient 行为。"
+        ]
+      },
+      "canonicalToolReconciliation": {
+        "selectionManifest": "evidence08/selection05.json",
+        "requestedCapabilities": [
+          "curve"
+        ],
+        "executionReceiptCount": 6,
+        "executions": [
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:curve-underlying-native-contract",
+            "descriptor_sha256": "1dca7acff386384b830ee09c63cdb15774a830c4c530d2f11b987929d138efa3",
+            "started_at": "2026-10-15T03:48:23.341Z",
+            "finished_at": "2026-10-15T03:48:28.125Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "0371975d310178b0132c09a83388c8b89c71242ea1ba0439eb841aa726cb8175",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:curve-underlying-native-contract",
+              "--"
+            ],
+            "stdout_sha256": "073d0fb013578657a49c99afbd6b5a5e712c9cb16a8aa760086cfba718f17f40",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 3940,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:curve-underlying-family-plugin",
+            "descriptor_sha256": "c936dc96e471069d5fea3d9f1a26335d57cb44ee651e70bd3c0f2c25aa7b452a",
+            "started_at": "2026-10-15T03:48:28.444Z",
+            "finished_at": "2026-10-15T03:48:32.961Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "9774b32543509a85cfc62b81dc08570cefa1e22859beced03aa625b3c52febab",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:curve-underlying-family-plugin",
+              "--"
+            ],
+            "stdout_sha256": "f78452eea2ba1807e7e25e3c453a7ee2f48e4fe54c15d44f95f6d6c1fc586b58",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 4779,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:curve-underlying-direct-recipient",
+            "descriptor_sha256": "c73561f12eb92108f383b5947e959cd52b3ccc545b42b6f7aa55626dc8ff05b8",
+            "started_at": "2026-10-15T03:48:33.279Z",
+            "finished_at": "2026-10-15T03:48:35.272Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "54ac8ff18ede97a007c1b43748b82c17cdb801f2b6470780a0fc6edf6cf07906",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:curve-underlying-direct-recipient",
+              "--"
+            ],
+            "stdout_sha256": "8e962b4c444b6215b4f76e7688e6e74df905cc7991d9d74b61cddac574e46c4d",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 551,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:curve-underlying-recipient-evm",
+            "descriptor_sha256": "1dcf8e7ecbb9cecaa16b5d3b26abe467c8300412659b575fcab0fd2e0284f3fd",
+            "started_at": "2026-10-15T03:48:35.587Z",
+            "finished_at": "2026-10-15T03:49:00.396Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "4d90f1cc9b620e356d77f3d67b4b1f3f64297f69098538fe2849f3a8360ebe85",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:curve-underlying-recipient-evm",
+              "--",
+              "--forge-bin",
+              "/opt/mev-cloud/tools/foundry-v1.4.4/forge"
+            ],
+            "stdout_sha256": "ddd9a851eb4fd9711972ada809ba65194d4a8cf1bc4d5bfaeff8441fed2cf583",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 1353,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:curve-underlying-recipient-evm",
+            "descriptor_sha256": "1dcf8e7ecbb9cecaa16b5d3b26abe467c8300412659b575fcab0fd2e0284f3fd",
+            "started_at": "2026-10-15T03:51:51.525Z",
+            "finished_at": "2026-10-15T03:51:52.149Z",
+            "exit_code": 1,
+            "cwd": "listener",
+            "argv_sha256": "4d90f1cc9b620e356d77f3d67b4b1f3f64297f69098538fe2849f3a8360ebe85",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:curve-underlying-recipient-evm",
+              "--",
+              "--forge-bin",
+              "/opt/mev-cloud/tools/foundry-v1.4.4/forge"
+            ],
+            "stdout_sha256": "6eeea401db7d8463fcb8f6ea50b63a4cf86d8c2d5144c622a9223f0b75d21541",
+            "stderr_sha256": "cb1177cf3fbdda8e20ed25eeb9665e7be648350075e2eb4648dd3679560e8305",
+            "stdout_bytes": 309,
+            "stderr_bytes": 51
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:curve-underlying-recipient-evm",
+            "descriptor_sha256": "1dcf8e7ecbb9cecaa16b5d3b26abe467c8300412659b575fcab0fd2e0284f3fd",
+            "started_at": "2026-10-15T03:52:50.752Z",
+            "finished_at": "2026-10-15T03:53:18.041Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "4d90f1cc9b620e356d77f3d67b4b1f3f64297f69098538fe2849f3a8360ebe85",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:curve-underlying-recipient-evm",
+              "--",
+              "--forge-bin",
+              "/opt/mev-cloud/tools/foundry-v1.4.4/forge"
+            ],
+            "stdout_sha256": "db09de088060df41ef956f2a64a34da0fc374bb421987e77a3c3c90ff48bf770",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 1353,
+            "stderr_bytes": 0
+          }
+        ],
+        "interpretation": "已读 native/family/classic-recipient/EVM 的 tool-run execution receipts，保留 EVM 中间 exit 1 与最终 exit 0。boundary/all-family/strict/build/catalog 另有原始运行日志和 checks receipts。"
+      },
+      "artifactIntegrity": {
+        "exportedFileCount": 29,
+        "checksReceiptToLogHashCount": 15,
+        "allChecksReceiptLogHashesMatch": true,
+        "allCandidateAndSourceChecksMatch": true,
+        "mismatches": [],
+        "checks": [
+          {
+            "receipt": "checks05.json",
+            "name": "generate",
+            "exitCode": 0,
+            "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+            "completedAt": "2026-10-15T03:46:59.224119+00:00",
+            "log": "evidence08/check05-generate.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks05.json",
+            "name": "index",
+            "exitCode": 0,
+            "sha256": "4859137a6e5249ee4e7f9c7f5a0e0c6ba873a2ff4de6f83d242461efc1db152a",
+            "completedAt": "2026-10-15T03:46:59.570128+00:00",
+            "log": "evidence08/check05-index.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks05.json",
+            "name": "build",
+            "exitCode": 0,
+            "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+            "completedAt": "2026-10-15T03:47:07.678192+00:00",
+            "log": "evidence08/check05-build.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks06.json",
+            "name": "native",
+            "exitCode": 0,
+            "sha256": "b635a1c8e140dab6001dba559cb3d63af9fd1270863c3380f4a79d2721dbac11",
+            "startedAt": "2026-10-15T03:48:23.035989+00:00",
+            "completedAt": "2026-10-15T03:48:28.140118+00:00",
+            "log": "evidence08/check06-native.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks06.json",
+            "name": "family",
+            "exitCode": 0,
+            "sha256": "a2fae8cbc963ccade601289011504a499be09cfdd3d930b0c8e3033f1ff67e65",
+            "startedAt": "2026-10-15T03:48:28.140312+00:00",
+            "completedAt": "2026-10-15T03:48:32.976762+00:00",
+            "log": "evidence08/check06-family.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks06.json",
+            "name": "classic-recipient",
+            "exitCode": 0,
+            "sha256": "c0506450cb01b9b68314b093f17b8dd5bf6edc9a886afbcf828dcb4c5ee6588d",
+            "startedAt": "2026-10-15T03:48:32.976978+00:00",
+            "completedAt": "2026-10-15T03:48:35.285984+00:00",
+            "log": "evidence08/check06-classic-recipient.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks06.json",
+            "name": "evm",
+            "exitCode": 0,
+            "sha256": "127957c1a01240ce137c3477b90c059fd0ff83b97d28b1bfb5ada6a1d5c22359",
+            "startedAt": "2026-10-15T03:48:35.286201+00:00",
+            "completedAt": "2026-10-15T03:49:00.410500+00:00",
+            "log": "evidence08/check06-evm.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks06.json",
+            "name": "boundary",
+            "exitCode": 0,
+            "sha256": "55450591b9d613f5aa266a1370334e130c434a11a03bf9f3684262d5eb666307",
+            "startedAt": "2026-10-15T03:49:00.410727+00:00",
+            "completedAt": "2026-10-15T03:49:00.952212+00:00",
+            "log": "evidence08/check06-boundary.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks06.json",
+            "name": "all-family",
+            "exitCode": 0,
+            "sha256": "f4aa60af0557657febd944d4146aecfb5f44658eea1c4958805d7b804d82feb9",
+            "startedAt": "2026-10-15T03:49:00.952496+00:00",
+            "completedAt": "2026-10-15T03:49:08.584236+00:00",
+            "log": "evidence08/check06-all-family.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks06.json",
+            "name": "strict",
+            "exitCode": 0,
+            "sha256": "e09386e1974c351e90109082d269e3769e07be85b2ccd9aad810381bbbca5adb",
+            "startedAt": "2026-10-15T03:49:08.584521+00:00",
+            "completedAt": "2026-10-15T03:49:11.135804+00:00",
+            "log": "evidence08/check06-strict.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks07b.json",
+            "name": "evm",
+            "exitCode": 0,
+            "sha256": "14261d86192c76bf8065977a5a47cda1a86bda39a7e6e9e4fedf57009c6cfa26",
+            "startedAt": "2026-10-15T03:52:50.450185+00:00",
+            "completedAt": "2026-10-15T03:53:18.054915+00:00",
+            "log": "evidence08/check07b-evm.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks08.json",
+            "name": "catalog",
+            "exitCode": 1,
+            "logSha256": "16997fbb5b176ce42650b8f9f9dcd3193935e5fab5ebcace6bea2624bca380c0",
+            "log": "evidence08/check08-catalog.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks08b.json",
+            "name": "regenerate",
+            "exitCode": 0,
+            "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+            "log": "evidence08/check08b-regenerate.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks08b.json",
+            "name": "catalog",
+            "exitCode": 0,
+            "logSha256": "0c7a545dac6bc48d52f94889a612981f600b01f48fe7745946accfff7aa18d99",
+            "log": "evidence08/check08b-catalog.log",
+            "hashMatches": true
+          },
+          {
+            "receipt": "checks08b.json",
+            "name": "owned-build",
+            "exitCode": 0,
+            "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+            "log": "evidence08/check08b-owned-build.log",
+            "hashMatches": true
+          }
+        ],
+        "files": [
+          {
+            "path": "evidence08/catalog-receipt08.json",
+            "sha256": "76a83039acf35bec9db0ee0fb77367d4ab79f71ee259d2914be7e865bbc39035",
+            "bytes": 721
+          },
+          {
+            "path": "evidence08/check05-build.log",
+            "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+            "bytes": 71
+          },
+          {
+            "path": "evidence08/check05-generate.log",
+            "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+            "bytes": 136
+          },
+          {
+            "path": "evidence08/check05-index.log",
+            "sha256": "4859137a6e5249ee4e7f9c7f5a0e0c6ba873a2ff4de6f83d242461efc1db152a",
+            "bytes": 2919
+          },
+          {
+            "path": "evidence08/check06-all-family.log",
+            "sha256": "f4aa60af0557657febd944d4146aecfb5f44658eea1c4958805d7b804d82feb9",
+            "bytes": 58091
+          },
+          {
+            "path": "evidence08/check06-boundary.log",
+            "sha256": "55450591b9d613f5aa266a1370334e130c434a11a03bf9f3684262d5eb666307",
+            "bytes": 642
+          },
+          {
+            "path": "evidence08/check06-classic-recipient.log",
+            "sha256": "c0506450cb01b9b68314b093f17b8dd5bf6edc9a886afbcf828dcb4c5ee6588d",
+            "bytes": 966
+          },
+          {
+            "path": "evidence08/check06-evm.log",
+            "sha256": "127957c1a01240ce137c3477b90c059fd0ff83b97d28b1bfb5ada6a1d5c22359",
+            "bytes": 1819
+          },
+          {
+            "path": "evidence08/check06-family.log",
+            "sha256": "a2fae8cbc963ccade601289011504a499be09cfdd3d930b0c8e3033f1ff67e65",
+            "bytes": 5188
+          },
+          {
+            "path": "evidence08/check06-native.log",
+            "sha256": "b635a1c8e140dab6001dba559cb3d63af9fd1270863c3380f4a79d2721dbac11",
+            "bytes": 4353
+          },
+          {
+            "path": "evidence08/check06-strict.log",
+            "sha256": "e09386e1974c351e90109082d269e3769e07be85b2ccd9aad810381bbbca5adb",
+            "bytes": 16687
+          },
+          {
+            "path": "evidence08/check07-evm.log",
+            "sha256": "bec7db47f0242b2739ce3de5ecb7ee785764795938c929118fb8d3994e8ff803",
+            "bytes": 826
+          },
+          {
+            "path": "evidence08/check07b-evm.log",
+            "sha256": "14261d86192c76bf8065977a5a47cda1a86bda39a7e6e9e4fedf57009c6cfa26",
+            "bytes": 1819
+          },
+          {
+            "path": "evidence08/check08-catalog.log",
+            "sha256": "16997fbb5b176ce42650b8f9f9dcd3193935e5fab5ebcace6bea2624bca380c0",
+            "bytes": 520
+          },
+          {
+            "path": "evidence08/check08b-catalog.log",
+            "sha256": "0c7a545dac6bc48d52f94889a612981f600b01f48fe7745946accfff7aa18d99",
+            "bytes": 361
+          },
+          {
+            "path": "evidence08/check08b-owned-build.log",
+            "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+            "bytes": 71
+          },
+          {
+            "path": "evidence08/check08b-regenerate.log",
+            "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+            "bytes": 136
+          },
+          {
+            "path": "evidence08/checks05.json",
+            "sha256": "50b6966b18348a70d5bef792312b21ece0183e9a125e89133d7d80acca8347d4",
+            "bytes": 561
+          },
+          {
+            "path": "evidence08/checks06.json",
+            "sha256": "9c0c00e4939443e69f37cfa50e9562732b1bc08872990cb9d4ec3deaa3fe1974",
+            "bytes": 1690
+          },
+          {
+            "path": "evidence08/checks07b.json",
+            "sha256": "a4d707d2dfd2f4d2b689bf012ceb9f335a88373ea83f20051c227bc92c62f264",
+            "bytes": 239
+          },
+          {
+            "path": "evidence08/checks08.json",
+            "sha256": "ac9d0ad43ada10867428891805720eafbf7b52b59c64c4eef3e407a1a97d08ad",
+            "bytes": 138
+          },
+          {
+            "path": "evidence08/checks08b.json",
+            "sha256": "edcd924a94c88ef13dd051932151a1b8ff5bdb1eb1461e3299c6775189808f70",
+            "bytes": 415
+          },
+          {
+            "path": "evidence08/current-source08.json",
+            "sha256": "f000c4fd4a2167f8744090f17df0de10b46b95f3dee3747522cacb04d9369eb6",
+            "bytes": 14395
+          },
+          {
+            "path": "evidence08/evm/forge.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "evidence08/evm/forge.stdout.log",
+            "sha256": "e2dc55323ff5e0b2c4a51ace6dec7c791ed57b08d32a11aec57db59d33dfb067",
+            "bytes": 1044
+          },
+          {
+            "path": "evidence08/evm/programs.json",
+            "sha256": "3111ca27f20b425499d7b75bb8849a5d86627ed4c8024211c1176d17aec781e1",
+            "bytes": 144389
+          },
+          {
+            "path": "evidence08/evm/result.json",
+            "sha256": "fddffcffb08db920e586a0b10710f0dcc150b084f32f90abe7cc2279dcee4e96",
+            "bytes": 2411
+          },
+          {
+            "path": "evidence08/owned07b.json",
+            "sha256": "04d45d013ef58ef22729ea4642cbeb15b12c227756e9116fd206e428f6088c67",
+            "bytes": 2861
+          },
+          {
+            "path": "evidence08/selection05.json",
+            "sha256": "895d68d4a67c02f138ebf6301e7451eaca16656c870dd51754553498237ea011",
+            "bytes": 13862
+          }
+        ]
+      }
+    },
+    "remainingAcceptance": [
+      {
+        "id": "historical-recipient-matrix",
+        "status": "deferred-unified-acceptance",
+        "codeBlocker": false,
+        "required": "在统一历史阶段验证真实 deployed full-runtime/clone 所需方向及模式，绑定同 N Ready/source、实际 payer debit、recipient receipt、旧库存、授权、native/WETH 转换；不得把旧 default、quoted 或 raw actor 收款通过移用于新 external 模式。"
+      },
+      {
+        "id": "clone-implementation-at-historical-source",
+        "status": "existing-historical-evidence-gap",
+        "codeBlocker": false,
+        "productionExecutableErrorFound": false,
+        "explanation": "旧 a85461 clone 的 pool runtime hash 与历史 Ready 可匹配，但 implementation 同 N runtime pin 尚不齐；这是历史身份材料绑定待办。本轮未发现因此导致的当前生产可执行错误，也没有要求本批再改代码。保留该限制，不缩删变体以宣称历史全过。"
+      },
+      {
+        "id": "positive-A-unfunded-atomic-rollback",
+        "status": "deferred-unified-acceptance",
+        "codeBlocker": false,
+        "required": "真实同状态下以相同 positive A calldata 去除当前输入后验证 strict 拒绝与独立状态回滚；本地 A=0 用例不替代。"
+      },
+      {
+        "id": "adapter-replay-opportunity-performance",
+        "status": "not-performed-deferred",
+        "codeBlocker": false,
+        "explanation": "统一 Adapter Replay、机会和生产阶段性能验证未进行；不据离线构造/RPC=0 fixture 或 build 通过推导实跑收益/时效。"
+      }
+    ],
+    "handoff": {
+      "sourceCommit": "由父任务处理；本报告不声称已经提交。",
+      "reviewBudget": "本项已完成 2/最多3 轮；现有源码无理由再开一轮。",
+      "priorReportPreserved": true,
+      "onlyFileWritten": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/underlying-review02.json"
+    },
+    "reviewerActions": {
+      "rpcCalls": false,
+      "testsRun": false,
+      "buildRun": false,
+      "catalogGenerated": false,
+      "cloudWrites": false,
+      "productionEdits": false,
+      "gitMutation": false
+    }
+  },
+  "limits": [
+    "Synthetic local EVM is not actual historical pool execution.",
+    "No new Ready, natural valuation, Adapter Replay or opportunity claim.",
+    "Clone implementation same-N code relation and untested variants remain evidence gaps; no claim of entire Curve protocol support.",
+    "4A/4B timing not run.",
+    "No live, deployment, signing or broadcast; peer dirty and checkpoints preserved."
+  ]
+}

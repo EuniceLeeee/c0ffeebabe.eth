@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { underlyingRecipientProbe, provesUnderlyingRecipient } from "./recipient-proof.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import { executionInputMatches, executionOutputMatches } from "../../../../shared/executor/amount-rounding.js";
 import type { IdentitySemantics } from "../../adapter-family-plugin.js";
@@ -69,8 +70,11 @@ export const curveUnderlyingNativeIdentity: IdentitySemantics<CurveUnderlyingCan
         return [amount, amount * 10n].map((dx, probe) => call(`quote:${i}:${j}:${probe}`, prior.pool,
           CURVE_UNDERLYING_NATIVE_QUOTE.encodeFunctionData("get_dy", [i, j, dx])));
       });
-    if (prior.phase === "quotes") return prior.quotes.map(quote =>
-      underlyingNativeAliasProbe(prior.pool, prior.coins, prior.alias, quote, prior.executor!, executionRoundingRawUnits));
+    if (prior.phase === "quotes") return prior.quotes.flatMap(quote => [
+      underlyingNativeAliasProbe(prior.pool, prior.coins, prior.alias, quote, prior.executor!, executionRoundingRawUnits),
+      ...(quote.j === prior.alias.nativeIndex ? [] : [underlyingRecipientProbe(prior.pool, prior.coins,
+        prior.alias, quote, prior.executor!, executionRoundingRawUnits)]),
+    ]);
     return [];
   },
   decode({ step, results }) {
@@ -131,7 +135,11 @@ export const curveUnderlyingNativeIdentity: IdentitySemantics<CurveUnderlyingCan
       const output = rows.filter(r => sameAddress(r.token, quote.tokenOut) && sameAddress(r.account, prior.executor!));
       if (input.length === 1 && output.length === 1 &&
           executionInputMatches(-input[0].delta, quote.behaviorProbeAmountIn, step.executionRoundingRawUnits ?? 0n) &&
-          executionOutputMatches(output[0].delta, quote.behaviorProbeAmountOut, step.executionRoundingRawUnits ?? 0n)) directions.push(quote);
+          executionOutputMatches(output[0].delta, quote.behaviorProbeAmountOut, step.executionRoundingRawUnits ?? 0n)) {
+        const recipient = quote.j !== prior.alias.nativeIndex && provesUnderlyingRecipient(results, quote,
+          prior.alias, prior.executor!, step.executionRoundingRawUnits ?? 0n);
+        directions.push({ ...quote, ...(recipient ? { recipient: true as const } : {}) });
+      }
     }
     return { ...prior, phase: "execution", directions, requestIds } satisfies Evidence;
   },

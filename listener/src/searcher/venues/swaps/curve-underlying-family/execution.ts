@@ -23,16 +23,23 @@ export const curveUnderlyingExecution = {
     const { descriptor: d, route: r, executor } = input;
     assertProjectedRuntimeRoute(r, curveUnderlyingRoutes.project({ descriptor: d })); runtimeExecutor(executor, d.pool);
     const request = input.settlement;
-    const directOutput = !d.lending && !d.nativeAlias && !d.legacyPlain &&
-      supportsClassicUnderlyingRecipient(d.quoteModel);
+    const assets = underlyingNativeAssets(d, r);
+    const direction = d.verifiedDirections.find(q => q.i === r.i && q.j === r.j);
+    const directOutput = d.nativeAlias ? assets?.output === "native" || direction?.recipient === true
+      : !d.lending && !d.legacyPlain && supportsClassicUnderlyingRecipient(d.quoteModel);
     if (request && (request.kind !== "direct-output" || !directOutput)) return null;
     const recipient = request ? runtimeExecutor(request.recipient, d.pool, r.tokenIn, r.tokenOut) : executor;
     if (d.lending) return runtimeLeg(CURVE_UNDERLYING_LENDING_ACTION,
       underlyingLendingProgram(d.pool, r.tokenIn, r.tokenOut, r.i, r.j, executor));
     if (d.nativeAlias) {
-      const assets = underlyingNativeAssets(d, r);
-      return runtimeLeg(CURVE_UNDERLYING_NATIVE_ACTION, underlyingNativeAliasProgram(d.pool, r.tokenIn, r.tokenOut,
-        r.i, r.j, executor, assets?.input === "native", assets?.output === "native"));
+      const program = request
+        ? underlyingNativeAliasProgram(d.pool, r.tokenIn, r.tokenOut, r.i, r.j, executor,
+          assets?.input === "native", assets?.output === "native", 1n, 0n, recipient)
+        : underlyingNativeAliasProgram(d.pool, r.tokenIn, r.tokenOut, r.i, r.j, executor,
+          assets?.input === "native", assets?.output === "native");
+      return { ...runtimeLeg(CURVE_UNDERLYING_NATIVE_ACTION, program),
+        ...(directOutput ? { settlement: { directOutput: true as const } } : {}),
+        ...(request ? { settlementRequest: request } : {}) };
     }
     const signature = request ? "exchange_underlying(int128,int128,uint256,uint256,address)"
       : "exchange_underlying(int128,int128,uint256,uint256)";

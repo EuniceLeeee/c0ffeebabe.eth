@@ -7,6 +7,7 @@ import { explicitReverseBindingUnsupported } from
   "../../adapter-family-plugin.js";
 import {
   canonicalAddress,
+  CURVE_UNDERLYING_I128_RECEIVER_INTERFACE, CURVE_UNDERLYING_UINT_RECEIVER_INTERFACE,
   CURVE_UNDERLYING_I128_SELECTOR,
   CURVE_UNDERLYING_I128_SWAP_TOPIC,
   CURVE_UNDERLYING_UINT_SELECTOR,
@@ -29,6 +30,13 @@ export const CURVE_UNDERLYING_UINT_CALL_PATTERN_ID =
 export const CURVE_UNDERLYING_POOL_SURFACE_PATTERN_ID =
   "curve-underlying-pool-surface";
 
+const recipientCalls = [CURVE_UNDERLYING_I128_RECEIVER_INTERFACE, CURVE_UNDERLYING_UINT_RECEIVER_INTERFACE].map((iface, i) => ({
+  id: `curve-underlying-${i === 0 ? "i128" : "uint"}-recipient-call`,
+  selector: iface.getFunction("exchange_underlying")!.selector as `0x${string}`,
+  signature: iface.getFunction("exchange_underlying")!.format("sighash"),
+  candidateAddress: { from: "call-target" as const },
+}));
+
 export const curveUnderlyingDiscovery = {
   evidenceChannel: "nominate" as const,
   txSeedNominations: true,
@@ -47,7 +55,7 @@ export const curveUnderlyingDiscovery = {
     selector: CURVE_UNDERLYING_UINT_SELECTOR,
     signature: "exchange_underlying(uint256,uint256,uint256,uint256)",
     candidateAddress: { from: "call-target" },
-  }],
+  }, ...recipientCalls],
   logPatterns: [{
     id: CURVE_UNDERLYING_I128_LOG_PATTERN_ID,
     topic: CURVE_UNDERLYING_I128_SWAP_TOPIC as `0x${string}`,
@@ -88,7 +96,7 @@ export const curveUnderlyingDiscovery = {
       selector: CURVE_UNDERLYING_I128_SELECTOR as `0x${string}`,
       signature: "exchange(int128,int128,uint256,uint256)",
       candidateAddress: Object.freeze({ from: "call-target" as const }),
-    }]),
+    }, ...recipientCalls]),
   }),
   reverseBinding: Object.freeze({
     kind: "implementation" as const,
@@ -117,7 +125,7 @@ function decodeCandidate(
   if (
     observation.kind === "call" &&
     (matchedPatternId === CURVE_UNDERLYING_I128_CALL_PATTERN_ID ||
-      matchedPatternId === CURVE_UNDERLYING_UINT_CALL_PATTERN_ID)
+      matchedPatternId === CURVE_UNDERLYING_UINT_CALL_PATTERN_ID || recipientCalls.some(p => p.id === matchedPatternId))
   ) {
     const indices = decodeUnderlyingIndicesFromCall(observation.data);
     if (indices === null) return null;

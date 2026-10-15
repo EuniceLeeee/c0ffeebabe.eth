@@ -30,6 +30,8 @@ export interface CurveUnderlyingVerifiedDirection {
   readonly tokenOut: string;
   readonly behaviorProbeAmountIn: bigint;
   readonly behaviorProbeAmountOut: bigint;
+  /** Optional uint receiver overload proved independently at the identity source. */
+  readonly recipient?: true;
 }
 
 export type CurveUnderlyingRegistryBinding = {

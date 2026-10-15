@@ -14,7 +14,7 @@ import { StrictProductionRuntimeRoot } from "../../../../strict-production-runti
 import { plugin } from "../../../production-families/curve-underlying.production.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { asPricedFamily } from "../../../family-capability-catalog.js";
-import { executeAdapterFamilyLifecycleBatch, executeFamilyExactQuote, buildFamilyExecutionFragment } from "../../../adapter-family-runtime.js";
+import { executeAdapterFamilyLifecycleBatch, executeFamilyExactQuote, buildFamilyExecutionFragment, buildFamilyRuntimeAmountLeg } from "../../../adapter-family-runtime.js";
 import { createBoundedRequestExecutor, declareRequestProgram } from "../../../adapter-request-program.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../../adapter-request-program.js";
 import type { PlanFragment } from "../../../route-leg-adapter.js";
@@ -22,11 +22,13 @@ import { CURVE_UNDERLYING_FAMILY_ID, CURVE_UNDERLYING_REGISTRY_LINEAGE_ID } from
 import {
   CURVE_METAREGISTRY, CURVE_UNDERLYING_META_INTERFACE as META,
   CURVE_UNDERLYING_POOL_INTERFACE as LEGACY, CURVE_UNDERLYING_UINT_INTERFACE as UINT,
+  CURVE_UNDERLYING_I128_RECEIVER_INTERFACE, CURVE_UNDERLYING_UINT_RECEIVER_INTERFACE,
 } from "../codec.js";
 import {
   CURVE_UNDERLYING_NATIVE_ACTION, CURVE_UNDERLYING_NATIVE_QUOTE as QUOTE,
   underlyingNativeAssets, underlyingNativeAliasProbe, underlyingNativeAliasProgram,
 } from "../native.js";
+import { UNDERLYING_PROBE_RECEIVER } from "../recipient-proof.js";
 import type { CurveUnderlyingDescriptor, CurveUnderlyingIdentity, CurveUnderlyingRoute } from "../types.js";
 
 // Entirely offline. The only simulated state is the explicitly synthetic
@@ -172,6 +174,8 @@ interface LifecycleFixture {
   fault?: "short-output" | "unspent-input" | "overdebit" | "native" | "recipient" | "duplicate" | "missing" | "authority" | "deadline";
   foreign?: Partial<CanonicalSource>;
   receiptLoss?: bigint;
+  recipientProof?: boolean;
+  recipientFault?: "zero-debit" | "under-debit" | "over-debit" | "zero-output" | "short-output" | "wrong-recipient" | "native" | "old-input";
 }
 
 const UINT_FIXTURES = [
@@ -190,6 +194,29 @@ async function lifecycle(options: LifecycleFixture = {}) {
       tokenDeltas: [{ token: ADDR.WETH, account: ACTOR, delta: 0n }],
       nativeDeltas: [{ account: ACTOR, delta: options.fault === "authority" ? 1n : 0n }],
     } };
+    if (r.kind === "effect-delta-simulation" && r.id.startsWith("recipient-execution:")) {
+      if (!options.recipientProof) return revertedNativeExecution(r.id);
+      const [, ii, jj] = r.id.split(":"), i = Number(ii), j = Number(jj);
+      const nativeIn = lower(coins[i]) === lower(ADDR.WETH);
+      assert.equal(r.executionAssetBoundary, undefined, "recipient proof observes raw assets");
+      const amount = nativeIn ? r.overrideIntent.nativeBalanceWei! : r.overrideIntent.tokenBalances![0].amount;
+      assert(amount > 0n); assert.equal(r.required, false);
+      const rows = [ACTOR, UNDERLYING_PROBE_RECEIVER].flatMap(account => [coins[i], coins[j]].map(token => ({
+        token, account, delta: lower(account) === lower(UNDERLYING_PROBE_RECEIVER) && token === coins[j] ? fixtureOutput(amount)
+          : !nativeIn && account === ACTOR && token === coins[i] ? -amount : 0n,
+      })));
+      const native = [{ account: ACTOR, delta: nativeIn ? -amount : 0n }];
+      const debit = nativeIn ? native[0] : rows[0];
+      if (options.recipientFault === "zero-debit") debit.delta = 0n;
+      if (options.recipientFault === "under-debit") debit.delta++;
+      if (options.recipientFault === "over-debit") debit.delta--;
+      if (options.recipientFault === "zero-output") rows[3].delta = 0n;
+      if (options.recipientFault === "short-output") rows[3].delta -= 2n;
+      if (options.recipientFault === "wrong-recipient") rows[3].account = OTHER;
+      if (options.recipientFault === "old-input") rows[2].delta--;
+      if (options.recipientFault === "native") native[0].delta++;
+      return { ...ok(r.id, "0x"), effects: { tokenDeltas: rows, nativeDeltas: native, logs: [] } };
+    }
     if (r.kind === "effect-delta-simulation") {
       assert(r.id.startsWith("native-execution:"));
       const [, ii, jj] = r.id.split(":"), i = Number(ii), j = Number(jj);
@@ -402,7 +429,7 @@ for (const fixture of UINT_FIXTURES) test(`${fixture.name} production lifecycle 
     requirements: () => variant.requirements(step), buildRequests: () => requests, decode: ({ results }) => results,
   }, undefined);
   const declared = declare(variant.buildRequests(step));
-  assert.equal(declared.requests.length, fixture.routeCount);
+  assert.equal(declared.requests.length, fixture.routeCount + d.verifiedDirections.filter(q => q.j !== d.nativeAlias!.nativeIndex).length);
   assert.equal(declared.requests.filter(r => r.kind === "effect-delta-simulation" && r.executionAssetBoundary).length,
     fixture.nativeIndex === null ? 0 : 4);
   const a = d.coins.indexOf(TOKEN), b = d.coins.indexOf(OTHER);
@@ -669,7 +696,7 @@ for (const fixture of UINT_FIXTURES) test(`${fixture.name} strict probes forward
       const step = nativeProbeStep(d, selected, [quote]);
       const declared = declareRequestProgram({ requirements: () => variant.requirements(step),
         buildRequests: () => variant.buildRequests(step), decode: ({ results }) => results }, undefined);
-      assert.equal(declared.requests.length, 1);
+      assert.equal(declared.requests.length, route.j === d.nativeAlias!.nativeIndex ? 1 : 2);
       const request = declared.requests[0]; assert(request.kind === "effect-delta-simulation");
       assert.deepEqual(request, underlyingNativeAliasProbe(POOL, d.coins, d.nativeAlias!, quote, ACTOR, selected));
       assert.equal(Object.hasOwn(request, "executionAssetBoundary"), route.executionAssets !== undefined);
@@ -1010,5 +1037,49 @@ test("pure ERC20 lifecycle -> real production session -> sim selector uses actua
     assert.equal(run.rounds.length, beforeSession, "real runtime issuer must not issue transport requests");
     const construction = events.filter(event => event.type === "sim_amount_construction");
     assert(construction.length > 0 && construction.every(event => event.mode === "runtime-actual"));
+  }
+});
+
+for (const coins of [COINS, ERC20_COINS]) test(`recipient capability is optional, source-bound and per direction (${coins[0]})`, async () => {
+  const baseline = await lifecycle({ coins }), passed = await lifecycle({ coins, recipientProof: true });
+  const before = assertVerified(baseline), instance = assertVerified(passed);
+  const d = instance.descriptor as CurveUnderlyingDescriptor;
+  assert.equal(passed.rounds.length, baseline.rounds.length, "optional probes share the existing execution round");
+  for (const [i, route] of instance.routes.entries()) {
+    assert.equal(d.verifiedDirections[i].recipient === true, (route as CurveUnderlyingRoute).j !== d.nativeAlias!.nativeIndex);
+    const build = (run: typeof passed, inst: typeof instance, index: number, recipient: string) => buildFamilyRuntimeAmountLeg({
+      family: run.family, route: inst.routeHandles[index], runtime: run.runtime, source: SOURCE,
+      executor: ACTOR, runtimeEvidence: [], actionOwnership: catalog, settlement: { kind: "direct-output", recipient },
+    });
+    const rounds = passed.rounds.length;
+    for (const receiver of [ACTOR, UNDERLYING_PROBE_RECEIVER]) {
+      const leg = build(passed, instance, i, receiver); assert(leg);
+      assert.equal(leg.settlement?.directOutput, true);
+      const unproven = build(baseline, before, i, receiver);
+      assert.equal(unproven !== null, route.executionAssets?.output === "native");
+    }
+    assert.equal(passed.rounds.length, rounds, "actual issuer construction adds no Exact or RPC requests");
+    if (route.executionAssets?.output !== "native") assert.notEqual(route.bindingRef.fingerprint, before.routes[i].bindingRef.fingerprint);
+    for (const kind of ["quote-output", "deferred-input"] as const)
+      assert.equal(buildFamilyRuntimeAmountLeg({ family: passed.family, route: instance.routeHandles[i], runtime: passed.runtime,
+        source: SOURCE, executor: ACTOR, runtimeEvidence: [], actionOwnership: catalog,
+        settlement: { kind } as any }), null);
+  }
+  for (const recipientFault of ["zero-debit", "under-debit", "over-debit", "zero-output", "short-output", "wrong-recipient", "native", "old-input"] as const) {
+    const run = await lifecycle({ coins, recipientProof: true, recipientFault }), kept = assertVerified(run);
+    assert((kept.descriptor as CurveUnderlyingDescriptor).verifiedDirections.every(q => q.recipient === undefined), recipientFault);
+    assert.equal(kept.routes.length, before.routes.length, "optional failure must preserve default directions");
+  }
+});
+
+test("both receiver selectors nominate through the installed production catalog without admitting a pool", () => {
+  for (const iface of [CURVE_UNDERLYING_I128_RECEIVER_INTERFACE, CURVE_UNDERLYING_UINT_RECEIVER_INTERFACE]) {
+    const observation = { kind: "call" as const, source: SOURCE, target: POOL,
+      data: iface.encodeFunctionData("exchange_underlying", [0,1,100n,1n,UNDERLYING_PROBE_RECEIVER]) };
+    const matches = catalog.matches(observation).filter(m => m.familyId === CURVE_UNDERLYING_FAMILY_ID);
+    assert(matches.length > 0);
+    const candidate = plugin.discovery.decodeCandidate({ observation, matchedPatternId: matches[0].patternId });
+    assert(candidate); assert.equal(candidate.pool,ethers.getAddress(POOL));
+    assert.equal(candidate.hintedI,0); assert.equal(candidate.hintedJ,1);
   }
 });
