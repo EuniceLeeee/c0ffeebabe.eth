@@ -1,0 +1,203 @@
+{
+  "schema": "infinifi-retained-default-reuse-v1",
+  "scope": "Author preparation; old executions retain their original source/runtime hashes and are not relabeled current executions",
+  "result": "retained-default-and-quoted-compatible",
+  "byteProof": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi66/reconcile14.json",
+    "sha256": "97d78684f6e2275ab715fb9dab27aedebd23c2fad078af89372079d368ec9212"
+  },
+  "matchedGroups": 11,
+  "quotedCalldataIdentical": 11,
+  "defaultRuntimeCalldataIdentical": 11,
+  "rows": [
+    {
+      "file": "direct09.json",
+      "oldFile": "erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-dual-reference-1.json",
+      "direction": "deposit",
+      "amountIn": "5131980894925000000",
+      "quote": "4715253459959721041",
+      "oldExecutorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "currentExecutorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "quotedCalldataIdentical": true,
+      "quotedOldCalldataHash": "0x167548de28a82e3f0d575ce4305b1b747009e9203b3ce259462bbea71479ce0d",
+      "quotedCurrentCalldataHash": "0x167548de28a82e3f0d575ce4305b1b747009e9203b3ce259462bbea71479ce0d",
+      "runtimeCalldataIdentical": true,
+      "runtimeOldCalldataHash": "0x3de670489eb7e67b3c512e446ab5398f630616b91c424e11d3029d1579f7756d",
+      "runtimeCurrentCalldataHash": "0x3de670489eb7e67b3c512e446ab5398f630616b91c424e11d3029d1579f7756d"
+    },
+    {
+      "file": "direct09.json",
+      "oldFile": "erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-dual-reference-1.json",
+      "direction": "deposit",
+      "amountIn": "1000000000000000000",
+      "quote": "918797937190806881",
+      "oldExecutorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "currentExecutorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "quotedCalldataIdentical": true,
+      "quotedOldCalldataHash": "0xf93f8bacbd87c65d26c48be458bd63fb80f165bddae4a8ac0c515735ffabcaca",
+      "quotedCurrentCalldataHash": "0xf93f8bacbd87c65d26c48be458bd63fb80f165bddae4a8ac0c515735ffabcaca",
+      "runtimeCalldataIdentical": true,
+      "runtimeOldCalldataHash": "0x6403924172fc28fbc41ea3d1ee29ff32ac1db357ce73703a6c965803daeeba6f",
+      "runtimeCurrentCalldataHash": "0x6403924172fc28fbc41ea3d1ee29ff32ac1db357ce73703a6c965803daeeba6f"
+    },
+    {
+      "file": "direct09.json",
+      "oldFile": "erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-dual-reference-1.json",
+      "direction": "deposit",
+      "amountIn": "857213759247368899192",
+      "quote": "787606233728059501655",
+      "oldExecutorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "currentExecutorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "quotedCalldataIdentical": true,
+      "quotedOldCalldataHash": "0xbafd5113d2f6303183ad37f857fcdd47428a866f6cff1cd9eb497022b98001e7",
+      "quotedCurrentCalldataHash": "0xbafd5113d2f6303183ad37f857fcdd47428a866f6cff1cd9eb497022b98001e7",
+      "runtimeCalldataIdentical": true,
+      "runtimeOldCalldataHash": "0x7b07fff1e2a57f2ee7386395b7076fe0d25f3a6e43543dd3220ce4f909115035",
+      "runtimeCurrentCalldataHash": "0x7b07fff1e2a57f2ee7386395b7076fe0d25f3a6e43543dd3220ce4f909115035"
+    },
+    {
+      "file": "direct09.json",
+      "oldFile": "erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-dual-reference-1.json",
+      "direction": "redeem",
+      "amountIn": "1000000000000000000",
+      "quote": "1088378586327115224",
+      "oldExecutorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "currentExecutorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "quotedCalldataIdentical": true,
+      "quotedOldCalldataHash": "0xf9c5237ff7c8f8a96b081c8f3d74abd9102b76d985ecb8311f803a3ead2fdc81",
+      "quotedCurrentCalldataHash": "0xf9c5237ff7c8f8a96b081c8f3d74abd9102b76d985ecb8311f803a3ead2fdc81",
+      "runtimeCalldataIdentical": true,
+      "runtimeOldCalldataHash": "0xa26f2e8254c965a3ea7ab1efa639f7c028e82ea5ec8b7821b6f13041b0884c9a",
+      "runtimeCurrentCalldataHash": "0xa26f2e8254c965a3ea7ab1efa639f7c028e82ea5ec8b7821b6f13041b0884c9a"
+    },
+    {
+      "file": "direct09.json",
+      "oldFile": "erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-dual-reference-1.json",
+      "direction": "redeem",
+      "amountIn": "787606233728059501656",
+      "quote": "857213759247368899192",
+      "oldExecutorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "currentExecutorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "quotedCalldataIdentical": true,
+      "quotedOldCalldataHash": "0x26d06e976156547a89d5a8369e8733611efa6e5644a114f3d8277ea1868ece28",
+      "quotedCurrentCalldataHash": "0x26d06e976156547a89d5a8369e8733611efa6e5644a114f3d8277ea1868ece28",
+      "runtimeCalldataIdentical": true,
+      "runtimeOldCalldataHash": "0x60ebf79f8d2473e85298d399c1e6a63b4bf2e2a22c450b9e14ce9e758e07279b",
+      "runtimeCurrentCalldataHash": "0x60ebf79f8d2473e85298d399c1e6a63b4bf2e2a22c450b9e14ce9e758e07279b"
+    },
+    {
+      "file": "manual10.json",
+      "oldFile": "manual-four-hop-20261013.ndkrq4vh/infinifi-manual-dual-attempt01.json",
+      "direction": "redeem",
+      "amountIn": "4549931237571597530",
+      "quote": "4952047728233757173",
+      "oldExecutorCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "currentExecutorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "quotedCalldataIdentical": true,
+      "quotedOldCalldataHash": "0x8c8e8c3d12e8489989ce4b93c2cabc8f76e9d4cf884d5852377265db6854e666",
+      "quotedCurrentCalldataHash": "0x8c8e8c3d12e8489989ce4b93c2cabc8f76e9d4cf884d5852377265db6854e666",
+      "runtimeCalldataIdentical": true,
+      "runtimeOldCalldataHash": "0x17fdecbd5d0d67fefc92e582651a735574306952a5968f2178fd0b2e0389e3e4",
+      "runtimeCurrentCalldataHash": "0x17fdecbd5d0d67fefc92e582651a735574306952a5968f2178fd0b2e0389e3e4"
+    },
+    {
+      "file": "manual10.json",
+      "oldFile": "manual-four-hop-20261013.ndkrq4vh/infinifi-manual-dual-attempt01.json",
+      "direction": "redeem",
+      "amountIn": "2274965618785798765",
+      "quote": "2476023864116878586",
+      "oldExecutorCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "currentExecutorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "quotedCalldataIdentical": true,
+      "quotedOldCalldataHash": "0xebc75acec785bb4d7f7f1f0dc3fa31c5af3325e7b6ddb64c7c27de3ad5f7291b",
+      "quotedCurrentCalldataHash": "0xebc75acec785bb4d7f7f1f0dc3fa31c5af3325e7b6ddb64c7c27de3ad5f7291b",
+      "runtimeCalldataIdentical": true,
+      "runtimeOldCalldataHash": "0x0930c8cff97767ba9b15476284f8f32a94cd9a5a402482fcfe1d881914038f2a",
+      "runtimeCurrentCalldataHash": "0x0930c8cff97767ba9b15476284f8f32a94cd9a5a402482fcfe1d881914038f2a"
+    },
+    {
+      "file": "accrued11.json",
+      "oldFile": "erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-dual-accrued-1.json",
+      "direction": "deposit",
+      "amountIn": "1000000000000000000",
+      "quote": "918797915062047803",
+      "oldExecutorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "currentExecutorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "quotedCalldataIdentical": true,
+      "quotedOldCalldataHash": "0xa5f365e8f4a9fff48775ba92048eb834819d19a115774bb869b30bdedf85c0bb",
+      "quotedCurrentCalldataHash": "0xa5f365e8f4a9fff48775ba92048eb834819d19a115774bb869b30bdedf85c0bb",
+      "runtimeCalldataIdentical": true,
+      "runtimeOldCalldataHash": "0x6403924172fc28fbc41ea3d1ee29ff32ac1db357ce73703a6c965803daeeba6f",
+      "runtimeCurrentCalldataHash": "0x6403924172fc28fbc41ea3d1ee29ff32ac1db357ce73703a6c965803daeeba6f"
+    },
+    {
+      "file": "accrued11.json",
+      "oldFile": "erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-dual-accrued-1.json",
+      "direction": "deposit",
+      "amountIn": "857213759247368899192",
+      "quote": "787606214758982744981",
+      "oldExecutorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "currentExecutorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "quotedCalldataIdentical": true,
+      "quotedOldCalldataHash": "0x8deb72b802b49a48cb9c430f0d44bceca301d6787a734a2061ff6d6a97a4ba4c",
+      "quotedCurrentCalldataHash": "0x8deb72b802b49a48cb9c430f0d44bceca301d6787a734a2061ff6d6a97a4ba4c",
+      "runtimeCalldataIdentical": true,
+      "runtimeOldCalldataHash": "0x7b07fff1e2a57f2ee7386395b7076fe0d25f3a6e43543dd3220ce4f909115035",
+      "runtimeCurrentCalldataHash": "0x7b07fff1e2a57f2ee7386395b7076fe0d25f3a6e43543dd3220ce4f909115035"
+    },
+    {
+      "file": "accrued11.json",
+      "oldFile": "erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-dual-accrued-1.json",
+      "direction": "redeem",
+      "amountIn": "1000000000000000000",
+      "quote": "1088378612540134570",
+      "oldExecutorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "currentExecutorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "quotedCalldataIdentical": true,
+      "quotedOldCalldataHash": "0xc58638a1a3bc25751e79d311c6523ff8884c15ae3942805b4d8953cdce9df55f",
+      "quotedCurrentCalldataHash": "0xc58638a1a3bc25751e79d311c6523ff8884c15ae3942805b4d8953cdce9df55f",
+      "runtimeCalldataIdentical": true,
+      "runtimeOldCalldataHash": "0xa26f2e8254c965a3ea7ab1efa639f7c028e82ea5ec8b7821b6f13041b0884c9a",
+      "runtimeCurrentCalldataHash": "0xa26f2e8254c965a3ea7ab1efa639f7c028e82ea5ec8b7821b6f13041b0884c9a"
+    },
+    {
+      "file": "accrued11.json",
+      "oldFile": "erc4626-bridge-diagnosis-20261010.WDNb9H/infinifi-dual-accrued-1.json",
+      "direction": "redeem",
+      "amountIn": "787606233728059501656",
+      "quote": "857213779892906340788",
+      "oldExecutorCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "currentExecutorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "quotedCalldataIdentical": true,
+      "quotedOldCalldataHash": "0x35c9e41228c50023a9d1d07dcd716115401484f3d6a4e77e05e4216db342f2af",
+      "quotedCurrentCalldataHash": "0x35c9e41228c50023a9d1d07dcd716115401484f3d6a4e77e05e4216db342f2af",
+      "runtimeCalldataIdentical": true,
+      "runtimeOldCalldataHash": "0x60ebf79f8d2473e85298d399c1e6a63b4bf2e2a22c450b9e14ce9e758e07279b",
+      "runtimeCurrentCalldataHash": "0x60ebf79f8d2473e85298d399c1e6a63b4bf2e2a22c450b9e14ce9e758e07279b"
+    }
+  ],
+  "priorNonAuthorReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi-review02.json",
+    "sha256": "34160f880fd5fc982c2d70bd54e8e0c289a153e68460913b3f5b31703b637b6b"
+  },
+  "compatibility": {
+    "Family": "Default omitted-recipient branch retains the original program. All 11 current default and quoted calldata hashes equal prior actual calls at the identical source and input. New recipient guards only select explicit direct mode.",
+    "VM": "Old call modes0/1, math0-6 and allowance semantics remain. Added readonly/subprogram/revert-mode/eq/min/deferred paths are unused by old InfiniFi programs; optional diagnostic bubbling does not change success state. Current actual direct uses the same Gateway ABI/identity and primitive effects; current BotVM EVM also executes default programs.",
+    "qualification": "Reviewed retained common VM diffs use the old b2ef source context associated with the 1e1b executor; original artifact metadata was not freshly reconstructed. Program equality does not imply bytecode equality or performance. Later manual historical artifact retains its own hash."
+  },
+  "commonDiffs": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/reuse-source06/RuntimeAmountVM.sol.diff",
+      "sha256": "06f27514583a11e1e3d7b958009dc042aaff44d37e7bc0f3484e5b68d4aea69f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/reuse-source06/BotVM.sol.diff",
+      "sha256": "c6eb81bd82ce39dacd836526a88ad3528de501a80236854a3826a71296e90ec7"
+    }
+  ],
+  "remainingLimits": [
+    "No new actual quoted/default executions; all 22 new positive historical calls are explicit direct.",
+    "Old reference-incomplete/original-precall limits remain.",
+    "Root is final non-author reviewer."
+  ]
+}

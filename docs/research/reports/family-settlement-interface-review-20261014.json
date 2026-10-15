@@ -3701,20 +3701,28 @@
           "identity": "verified",
           "callback": "internal-only",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "历史 gateway/implementation/vault/yieldSharing 代码绑定已匹配。",
-            "stake/unstake 的 _to 是输出 receiver，但当前 Family 拒绝 InfiniFi direct-output。",
-            "须保持奖励状态、gateway 残余和输入/份额约束，补接线及独立 receiver 回执。",
-            "旧默认同状态回执保留其原状态/源码范围。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/infinifi-recipient-correctness-20261015.json",
+              "sha256": "bb8f89f630459f07a17de91fa5f8e2689a2e9912ac1cd7621dfc4814ca761784"
+            },
+            {
+              "path": "docs/research/reports/infinifi-default-reuse-20261015.json",
+              "sha256": "4b102b6fb0cf27df2be64d8ba04183bbfc3dcf061af7933e51e8d9a877e0b5a2"
             }
-          ]
+          ],
+          "scope": "Actual iUSD/staked-iUSD Gateway stake/unstake, self/external direct at N25944594 and N25944595. Other ERC4626 variants unchanged.",
+          "executionEvidence": {
+            "path": "docs/research/reports/infinifi-recipient-behavior-20261015.json",
+            "sha256": "990e5f4d3007517b407947be4266b3899da118006af685957fae128dec3f62b4"
+          }
         }
       ],
       "domain": "protocol",
@@ -3725,7 +3733,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -3781,7 +3789,7 @@
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
-          "sha256": "42326ecb048e5e1d3b73a0e399632d507420dd3775e261a3c88287120b8a5d8c"
+          "sha256": "3af9e90c12046f093ed1d10cb1af23e54f12348d33baf05ab124260bb722ecba"
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-family/identity.ts",
@@ -3789,7 +3797,7 @@
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
-          "sha256": "a45f1262cac1072c29bf38ad2725bfcf872f8c425b393a552c1fe35b97143edf"
+          "sha256": "18f472bdc8ea14762195b84f4881d4514f8f52116abe5095e0ffc86c2c0d5d36"
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-identity.ts",
@@ -3821,8 +3829,8 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
-        "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+        "path": "docs/research/reports/infinifi-recipient-interface-review-20261015.json",
+        "sha256": "844b9997bb04cd9918018c3c34484fac5a0a788ac5b5af2ccc356133e1c33257"
       }
     },
     {

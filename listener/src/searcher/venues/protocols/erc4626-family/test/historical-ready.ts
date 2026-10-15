@@ -1,7 +1,7 @@
 // Thin Family-scoped production Ready/price caller. TX identifies N only;
 // expected instances are checked AFTER natural discovery, never inserted.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ethers } from "ethers";
 import { UniverseRebuildCheckpointStore } from "../../../../universe-rebuild-checkpoint.js";
@@ -17,10 +17,10 @@ async function main() {
   const required = ["--tx", "--rpc-file", "--out", "--executor", "--owner", "--revm-bin", "--expect-vault"];
   for (let i = 2; i < process.argv.length; i += 2) {
     const key = process.argv[i]!, value = process.argv[i + 1];
-    assert(required.includes(key) && !args.has(key) && value && !value.startsWith("--"));
+    assert([...required, "--reuse-ready"].includes(key) && !args.has(key) && value && !value.startsWith("--"));
     args.set(key, value);
   }
-  assert.equal(args.size, required.length);
+  assert(required.every(key => args.has(key)));
   const tx = args.get("--tx")!, out = resolve(args.get("--out")!);
   assert(ethers.isHexString(tx, 32)); assert(!existsSync(out));
   const expected = ethers.getAddress(args.get("--expect-vault")!).toLowerCase();
@@ -50,6 +50,16 @@ async function main() {
     assert(receipt.logs.some((log: any) => log.address.toLowerCase() === expected && log.topics[0]?.toLowerCase() === ERC4626_WITHDRAW_TOPIC));
     save("receipt.json", receipt); save("header.json", header);
     const checkpoint = resolve(out, "ready.json");
+    if (args.has("--reuse-ready")) {
+      const original = resolve(args.get("--reuse-ready")!);
+      const prior = await new UniverseRebuildCheckpointStore({ path: original }).load();
+      assert(prior?.readyGeneration && prior.inProgressRun === null);
+      assert.equal(prior.readyGeneration.cutoff.number, block); assert.equal(prior.readyGeneration.cutoff.hash, header.hash);
+      assert.deepEqual(prior.readyGeneration.universeRange, { fromBlock: block, toBlock: block });
+      assert.equal(prior.readyGeneration.observationScope, undefined);
+      copyFileSync(original, checkpoint, constants.COPYFILE_EXCL);
+      save("reused-ready.json", { original, policy: "copy then normal production revalidation; original untouched" });
+    }
     stage = "production-single-block-ready";
     const ready = await rebuildUniverse({ ...wiring, store: new UniverseRebuildCheckpointStore({ path: checkpoint }),
       runId: `frax-custodian-single-${block}`, observationRange: { fromBlock: block, toBlock: block },

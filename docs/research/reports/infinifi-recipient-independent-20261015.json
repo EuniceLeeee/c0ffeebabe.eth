@@ -1,0 +1,63 @@
+{
+  "reviewer": "v1_accept26 non-author",
+  "result": "independent-raw-pass",
+  "sources": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi66/evidence12/direct09.json",
+      "sha256": "7be3b389984ad8a9672c75eff40cad7435f0c2e05a09685fd69ac7669ed7df11",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+        "generation": 25944594
+      },
+      "positive": 10,
+      "rejected": 20,
+      "sourceTreeSha256": "37ccb00a4ebdf2d056858cef2f86c120890ac57894eb32788390ab1f0bdf3008",
+      "pendingRewards": "0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi66/evidence12/manual10.json",
+      "sha256": "ac959977317fa6d55993ca6b6ea0bf2fd093cddcac14b618b76761c5428fc3a6",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+        "generation": 25944594
+      },
+      "positive": 4,
+      "rejected": 8,
+      "sourceTreeSha256": "37ccb00a4ebdf2d056858cef2f86c120890ac57894eb32788390ab1f0bdf3008",
+      "pendingRewards": "0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi66/evidence12/accrued11.json",
+      "sha256": "c98db11b14d1fce49e69ed6109499ccc460ad259acc3cabd74f25ea8992aff6b",
+      "source": {
+        "number": 25944595,
+        "generation": 25944595,
+        "hash": "0x51a7fb91a39d3dac70e86ee6e13e186522ad4cee2addc7bfe44a718a47c9b10e"
+      },
+      "positive": 8,
+      "rejected": 16,
+      "sourceTreeSha256": "37ccb00a4ebdf2d056858cef2f86c120890ac57894eb32788390ab1f0bdf3008",
+      "pendingRewards": "675478145931876864"
+    }
+  ],
+  "counts": {
+    "positive": 22,
+    "declaredReverts": 44,
+    "independentlyRecomputedBalanceRows": 110
+  },
+  "checks": [
+    "Full runtime input decoded independently from execSubscript packet",
+    "Strict raw node source attestation/current executor code and Success/Revert matched every exported result",
+    "Every observed token delta recomputed from actual Transfer logs and strict raw delta",
+    "Exact input debit/output receipt/Gateway no retained input/output, share mint/burn supply delta, native balance unchanged",
+    "Final owner-to-Gateway input Approval zero",
+    "Four-hop amount donor source/row path is recorded separately; no borrowed output or natural target valuation claim"
+  ],
+  "limits": [
+    "N+1 pending yield is stateful supplemental correctness; N Ready discovery is retained separately",
+    "Negative evidence is declared trusted MainRevert, not independent storageDiff",
+    "No current default execution rerun, natural valuation, opportunity or performance conclusion"
+  ]
+}
