@@ -1,5 +1,5 @@
 import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
-import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
+import { runtimeLeg, runtimeExecutor, runtimeExactApproval, runtimeClearApproval } from "../../runtime-execution.js";
 import { ekuboRouterIface } from "../ekubo/abi.js";
 import { ethers } from "ethers";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
@@ -14,15 +14,29 @@ export const ekuboExecution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertRoute(d, r); runtimeExecutor(executor, EKUBO_ROUTER);
-    const request = input.settlement, directOutput = d.poolKey.token0 !== ethers.ZeroAddress;
-    if (request && (request.kind !== "direct-output" || !directOutput)) return null;
+    const request = input.settlement, nativePair = d.poolKey.token0 === ethers.ZeroAddress;
+    if (request && (request.kind !== "direct-output")) return null;
     const recipient = request ? runtimeExecutor(request.recipient, EKUBO_ROUTER, r.tokenIn, r.tokenOut) : executor;
-    const nativeInput = d.poolKey.token0 === ethers.ZeroAddress && !r.isToken1;
+    const nativeInput = nativePair && !r.isToken1;
+    // Native output is received by the actor and delivered as measured WETH by
+    // the common issuer. A raw Family call cannot bypass that boundary.
+    if (request && nativePair && r.isToken1 && !same(recipient, executor)) return null;
+    const nativeDirect = nativePair && request !== undefined;
     const p = new RuntimeAmountProgram().constant(1, 127n).math("shr", 2, 0, 1).constant(3, 0n).equal(2, 3);
-    if (!nativeInput) p.allowance(r.tokenIn, EKUBO_ROUTER, 0, MAX_UINT);
+    if (nativeDirect) p.constant(4, 1n).math("sub", 5, 0, 4);
+    if (!nativeInput) {
+      if (nativeDirect) runtimeExactApproval(p, r.tokenIn, EKUBO_ROUTER);
+      else p.allowance(r.tokenIn, EKUBO_ROUTER, 0, MAX_UINT);
+    }
     p.call(EKUBO_ROUTER, ekuboRouterIface.encodeFunctionData("swap", [d.poolKey, r.isToken1, 0n, 0n, 0n, 1n, recipient]),
       { patches: [{ offset: 132, reg: 0 }], ...(nativeInput ? { valueReg: 0 } : {}) });
-    return { ...runtimeLeg(EKUBO_ACTION_ID, p), ...(directOutput ? { settlement: { directOutput: true as const } } : {}),
+    if (nativeDirect && !nativeInput) {
+      runtimeClearApproval(p, r.tokenIn, EKUBO_ROUTER);
+      const approval = new ethers.Interface(["function allowance(address,address) view returns(uint256)"]);
+      p.call(r.tokenIn, approval.encodeFunctionData("allowance", [executor, EKUBO_ROUTER]), { static: true })
+        .load(4, 0).constant(5, 0n).equal(4, 5);
+    }
+    return { ...runtimeLeg(EKUBO_ACTION_ID, p), settlement: { directOutput: true as const },
       ...(request ? { settlementRequest: request } : {}) };
   },
   runtimeProjection: () => ({ allowanceSpender: EKUBO_ROUTER, prewarmQuoteCalls: [] }),

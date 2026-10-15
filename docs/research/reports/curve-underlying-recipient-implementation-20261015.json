@@ -689,7 +689,9 @@
     },
     {
       "artifact": "check08-catalog.log",
-      "cause": "Owned catalog comparison rejected working generated hash left stale after metadata source edit. Regenerated canonical working catalog under lock; comparison and owned build passed as checks08b."
+      "cause": "Scratch freezer overwrote its current catalog script with an embedded old Curve plain input script. Strict comparison rejected mixed scopes. Final freeze08b already removed that stale write and used current inputs; it also regenerated the working catalog after metadata edits. Final frozen source/build results remain valid.",
+      "previousCauseDescription": "Owned catalog comparison rejected working generated hash left stale after metadata source edit. Regenerated canonical working catalog under lock; comparison and owned build passed as checks08b.",
+      "causeCorrection": "Rechecked during Ekubo archival after independent reviewer identified the shared scratch-template copying error."
     }
   ],
   "independentReview": {

@@ -193,11 +193,15 @@ for (const route of ekuboRoutes.project({ descriptor: ekuboDescriptor })) test(`
   }
   assert.throws(() => inspectRuntime(build({ kind: "direct-output", recipient })!.program, 1n << 127n), /runtime amount mismatch/);
 });
-test("Ekubo native pairs retain their original default entry and decline direct-output", () => {
+test("Ekubo native pairs expose mapped direct delivery and reject raw external native output", () => {
   const descriptor = ekubo(true);
   for (const route of ekuboRoutes.project({ descriptor })) {
     const input = { descriptor, route, executor: actor, runtimeEvidence: [] };
-    assert.equal(ekuboExecution.buildRuntimeLeg(input)?.settlement?.directOutput, undefined);
-    assert.equal(ekuboExecution.buildRuntimeLeg({ ...input, settlement: { kind: "direct-output", recipient } }), null);
+    assert.equal(ekuboExecution.buildRuntimeLeg(input)?.settlement?.directOutput, true);
+    const direct = ekuboExecution.buildRuntimeLeg({ ...input, settlement: { kind: "direct-output", recipient } });
+    if (route.isToken1) assert.equal(direct, null); else assert(direct);
+    assert(ekuboExecution.buildRuntimeLeg({ ...input, settlement: { kind: "direct-output", recipient: actor } }));
+    assert.equal(ekuboExecution.buildRuntimeLeg({ ...input, settlement: { kind: "quote-output" } }), null);
+    assert.equal(ekuboExecution.buildRuntimeLeg({ ...input, settlement: { kind: "deferred-input", paymentAmount: amount, paymentProgram: "0x" } }), null);
   }
 });

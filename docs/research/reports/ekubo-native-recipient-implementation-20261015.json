@@ -1,0 +1,883 @@
+{
+  "schemaVersion": 1,
+  "familyId": "custom-swap:ekubo-router-v1",
+  "base": "fd263e28c796b6caa2db3ec0c1a1cf2ab747f32d",
+  "status": "implemented-local-regressions-passed",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "implementation": [
+    "Native direct recipient is wired for admitted vanilla/TWAMM descriptors in both directions; raw native output must use actor and the common issuer delivers measured WETH.",
+    "Explicit native settlement uses positive input and exact approval with cleanup; old default and ERC20 byte paths are retained.",
+    "Selected Router internal lock callback does not expose caller continuation; quote-output and deferred-input remain explicitly unsupported."
+  ],
+  "interface": {
+    "sourcePath": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0xd26f20001a72a18c002b00e6710000d68700ce00.json",
+    "sha256": "87e243f3183a4e82f8a6a61f25463f7becc6eb07e2d2778d8a909cdd5020afcb",
+    "routerSourceSha256": "fdd7db83b06d93952ec95e25e269124b06658f00f4df901631a80178081dd90f",
+    "signatures": [
+      "swap((address,address,bytes32),bool,int128,uint96,uint256,int256,address)"
+    ],
+    "anchors": {
+      "explicitRecipient": [
+        314,
+        329
+      ],
+      "lockedSingleSwap": [
+        293,
+        302
+      ]
+    },
+    "findings": [
+      "The selected Router exposes receiver for both native directions. Core->Router lock callback is internal; no caller continuation in selected action, so deferred-input remains unsupported.",
+      "Actual source withdraws output to recipient and uses payFrom/refund internally. This inspection is interface evidence, not new historical execution."
+    ],
+    "scope": "Reuse cached source/runtime equality in prior interface audit; no repeat RPC."
+  },
+  "ownedSource": [
+    {
+      "path": "listener/package.json",
+      "before": "6700b8d90cb6059d6ec131711e4215220b8f7bfc714bc51051f4969de6a0086b",
+      "after": "dc980133cbed2a74670e20da3395f0368364f3295a9b3eba6e59e472239a2640"
+    },
+    {
+      "path": "listener/src/searcher/test/family-direct-recipient-swaps.ts",
+      "before": "f9a532191c2ac60b02c2fd1c35990ec01f1d788a19f03b6803e97f3ae24c0d91",
+      "after": "ba89e8a54b4e95d5286deb8cf7d9c0f3c394b88a0895279257415d3eff63a37b"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/ekubo-family/execution.ts",
+      "before": "aebf96e6c4ef3f57eae80dc07c82ace89898585932a7cdbb9c6260438abb2e91",
+      "after": "7e1e012180276cf7fa440b42a4ec7dcd49d3cf3caee7e1cbddc023a5876c3f5a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/ekubo-family/test/recipient-runtime-evm.ts",
+      "before": null,
+      "after": "48740437cdb43d5d6d104680056d061fa137978e408b96fec0c450e242cd74e5"
+    },
+    {
+      "path": "test/EkuboNativeRecipient.t.sol",
+      "before": null,
+      "after": "4df39b0afbf3ee3464bbcac1228372f7f7cf8bf7f08cfb31331d126cb08c15a5"
+    }
+  ],
+  "sourcePins": {
+    "commonSource": [
+      {
+        "path": "listener/src/adapters/registry.ts",
+        "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/compiler.ts",
+        "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-credit-runtime.ts",
+        "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+        "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+        "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+        "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+      },
+      {
+        "path": "listener/src/searcher/adapter-funding-runtime.ts",
+        "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+      },
+      {
+        "path": "listener/src/searcher/adapter-work-intent.ts",
+        "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+      },
+      {
+        "path": "listener/src/searcher/amount-quote-continuity.ts",
+        "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+      },
+      {
+        "path": "listener/src/searcher/blockscan-route-identity.ts",
+        "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+      },
+      {
+        "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+        "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+      },
+      {
+        "path": "listener/src/searcher/exact-prefix-plan.ts",
+        "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+      },
+      {
+        "path": "listener/src/searcher/exact-trial-state.ts",
+        "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+      },
+      {
+        "path": "listener/src/searcher/execution-asset-boundary.ts",
+        "sha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0"
+      },
+      {
+        "path": "listener/src/searcher/identity-asset-metadata.ts",
+        "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+      },
+      {
+        "path": "listener/src/searcher/runtime-evidence.ts",
+        "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+      },
+      {
+        "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+        "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+      },
+      {
+        "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+        "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+        "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+        "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-bounds.ts",
+        "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-propagation.ts",
+        "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-rejection.ts",
+        "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-builder.ts",
+        "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+        "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+      },
+      {
+        "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+        "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+      },
+      {
+        "path": "listener/src/searcher/strategy-taxonomy.ts",
+        "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+      },
+      {
+        "path": "listener/src/searcher/strict-production-runtime-session.ts",
+        "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+        "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+        "sha256": "34b545c41cf72f738da01aa38b9fcbb02b27268119c0e1e7cd67ce516761bb09"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+        "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-program.ts",
+        "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+      },
+      {
+        "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+        "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+        "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+        "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-instance-identity.ts",
+        "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/shared/constants/addresses.ts",
+        "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      },
+      {
+        "path": "listener/src/shared/executor/botvm-program-entry.ts",
+        "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+      },
+      {
+        "path": "listener/src/shared/state/state-backend.ts",
+        "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+      },
+      {
+        "path": "src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+      },
+      {
+        "path": "src/BotVMEncoder.sol",
+        "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+      },
+      {
+        "path": "src/BotVMScriptBuilder.sol",
+        "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+      },
+      {
+        "path": "src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+      },
+      {
+        "path": "src/FlashArb.sol",
+        "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+      },
+      {
+        "path": "src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+      },
+      {
+        "path": "src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+      },
+      {
+        "path": "src/interfaces/IFluidVault.sol",
+        "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+      },
+      {
+        "path": "src/interfaces/IMorpho.sol",
+        "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+      },
+      {
+        "path": "src/interfaces/ISwap.sol",
+        "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+      }
+    ],
+    "source": [
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/production-families/ekubo.production.ts",
+        "sha256": "8da041db92a01dc2276e29ae553889166159b9ffec78eb2cdc4607bfc75df12d"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+        "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo-family/action.ts",
+        "sha256": "ad320240f01ac0a42fa482ef8d14093af8157d5b9ec1341fcc0230ff59b4b26e"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo-family/codec.ts",
+        "sha256": "dda7e3cb1f7ad5a921f689ef5a5f166c2f010430115ed0313d6da918a0ce071d"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo-family/execution.ts",
+        "sha256": "7e1e012180276cf7fa440b42a4ec7dcd49d3cf3caee7e1cbddc023a5876c3f5a"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo-family/extension.ts",
+        "sha256": "e10bae647bc432145cfddfbdc1dba17099eb7d4ae29196870bceff28686d3d44"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo-family/identity.ts",
+        "sha256": "4f4e9eb8ad488e9769a42e02fa2ae50b01fc0879799bbc5a4d0f80bc49915271"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo-family/instance.ts",
+        "sha256": "03a24d434eb00002d22ec532f38d4e539fb78223625f1ec51ac6f1e718cfa5a8"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo-family/manifest.ts",
+        "sha256": "3197bee73924b83eb58fac76bf188cb2adaa89aa7c52fb7917938fb8af1ed4ef"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo-family/routes.ts",
+        "sha256": "e8c9476c8fca685969d536c5a5a6f21aae359df189dc614b0e9c330c2f90d59b"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo/abi.ts",
+        "sha256": "efd852ad1bda4c9c42562c0f812c5d843a7c91e3ad9c8c611f7e3aa45e72bdde"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/ekubo/pool-key.ts",
+        "sha256": "7694b1419fd1bf1a4bc6d932c543b0ad267b774c8e87c71805f718ee5ab8b961"
+      },
+      {
+        "path": "listener/src/shared/constants/addresses.ts",
+        "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      }
+    ]
+  },
+  "catalog": {
+    "method": "Canonical generator on immutable HEAD plus hash-checked owned source. Ignored generator input artifact only; actual workspace and peer files are unchanged.",
+    "workingSha256": "b77ef26d312e30bda6819dfde2a9257597fcb257fea7e7a36b72558a4eb4b579",
+    "ownedSha256": "e17cc14c6e9f22a66624ecf726b9afad518d6838d6980fc8bf41702fbd6d1eec",
+    "peerOnlyDifferences": [
+      "custom-swap:uniswap-v1:capture",
+      "custom-swap:uniswap-v1:discovery",
+      "custom-swap:uniswap-v1:exact",
+      "custom-swap:uniswap-v1:execution",
+      "custom-swap:uniswap-v1:identity",
+      "custom-swap:uniswap-v1:instance",
+      "custom-swap:uniswap-v1:pricing",
+      "custom-swap:uniswap-v1:routes",
+      "custom-swap:uniswap-v1:victim"
+    ]
+  },
+  "checks": {
+    "checks11.json": [
+      {
+        "name": "generate",
+        "exitCode": 0,
+        "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+        "completedAt": "2026-10-15T04:04:18.310797+00:00"
+      },
+      {
+        "name": "index",
+        "exitCode": 0,
+        "sha256": "a5d0410ca0194ae4fbc864860c0f6c8162991f4cb79840dc516adf2c81e6b78d",
+        "completedAt": "2026-10-15T04:04:18.646937+00:00"
+      },
+      {
+        "name": "build",
+        "exitCode": 0,
+        "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+        "completedAt": "2026-10-15T04:04:26.722067+00:00"
+      }
+    ],
+    "checks12.json": [
+      {
+        "name": "family",
+        "exitCode": 0,
+        "sha256": "1ee0e35004f7082951241d97f408b61c6c9d4c44504515f3e372f64546fcb80e",
+        "startedAt": "2026-10-15T04:05:06.226072+00:00",
+        "completedAt": "2026-10-15T04:05:07.879608+00:00"
+      },
+      {
+        "name": "evm",
+        "exitCode": 0,
+        "sha256": "2ecf612886595e3b8044ad5484085b06fa8055b1bdcd42ea0115b5771b7f60fb",
+        "startedAt": "2026-10-15T04:05:07.879821+00:00",
+        "completedAt": "2026-10-15T04:05:27.316784+00:00"
+      },
+      {
+        "name": "boundary",
+        "exitCode": 0,
+        "sha256": "c4be1d116aa312e531085d4a8b924023d736eda72292e32ba5041f2ebce798fc",
+        "startedAt": "2026-10-15T04:05:27.316996+00:00",
+        "completedAt": "2026-10-15T04:05:27.851392+00:00"
+      },
+      {
+        "name": "all-family",
+        "exitCode": 0,
+        "sha256": "e4aa93e71d71c1948ddc364c8c37bf777a9bac79ab9603446e08491e20e815ee",
+        "startedAt": "2026-10-15T04:05:27.851684+00:00",
+        "completedAt": "2026-10-15T04:05:35.535979+00:00"
+      },
+      {
+        "name": "strict",
+        "exitCode": 0,
+        "sha256": "6d8e3be11b6dd050b647f490736f868004a62e5d812ede9008ad7c4f2e528bd9",
+        "startedAt": "2026-10-15T04:05:35.536254+00:00",
+        "completedAt": "2026-10-15T04:05:38.098886+00:00"
+      }
+    ],
+    "checks13b.json": [
+      {
+        "name": "catalog",
+        "exitCode": 0,
+        "logSha256": "bf73b672600ce8b45030208e252fc9a2a5e9963b1f456fc3c62f8ae01b015e74"
+      },
+      {
+        "name": "owned-build",
+        "exitCode": 0,
+        "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      }
+    ],
+    "checks14b.json": [
+      {
+        "name": "evm-after-whitespace-only-test-format",
+        "exitCode": 0,
+        "sha256": "30208bb27bd644dab32903c7c8ce3fde84307be9b504d3d49f7e77e8f5c70292",
+        "at": "2026-10-15T04:17:14.926955+00:00"
+      }
+    ]
+  },
+  "toolReconciliation": {
+    "query": [
+      "ekubo"
+    ],
+    "selected": [
+      "listener:searcher:ekubo-native-recipient-evm"
+    ],
+    "manifestSha256": "ecf4bb39342a6f1cd48518775cf356c5c4007a72e657400578c21cca08c81731",
+    "result": "agrees: actual local EVM executes production emitter plus shared native boundary; no historical claim"
+  },
+  "evidence": {
+    "base11.json": {
+      "sha256": "491e623cd2f2f84f42d7d70fbd68a86c88e42e11a1698582a2c6a2f5b100feb9",
+      "bytes": 3210
+    },
+    "catalog-receipt13.json": {
+      "sha256": "43acde01849478fed87e5427844ba8ba188269819e483030663d122de5c0075a",
+      "bytes": 721
+    },
+    "check11-build.log": {
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "bytes": 71
+    },
+    "check11-generate.log": {
+      "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+      "bytes": 136
+    },
+    "check11-index.log": {
+      "sha256": "a5d0410ca0194ae4fbc864860c0f6c8162991f4cb79840dc516adf2c81e6b78d",
+      "bytes": 467
+    },
+    "check12-all-family.log": {
+      "sha256": "e4aa93e71d71c1948ddc364c8c37bf777a9bac79ab9603446e08491e20e815ee",
+      "bytes": 58077
+    },
+    "check12-boundary.log": {
+      "sha256": "c4be1d116aa312e531085d4a8b924023d736eda72292e32ba5041f2ebce798fc",
+      "bytes": 642
+    },
+    "check12-evm.log": {
+      "sha256": "2ecf612886595e3b8044ad5484085b06fa8055b1bdcd42ea0115b5771b7f60fb",
+      "bytes": 1321
+    },
+    "check12-family.log": {
+      "sha256": "1ee0e35004f7082951241d97f408b61c6c9d4c44504515f3e372f64546fcb80e",
+      "bytes": 3836
+    },
+    "check12-strict.log": {
+      "sha256": "6d8e3be11b6dd050b647f490736f868004a62e5d812ede9008ad7c4f2e528bd9",
+      "bytes": 16687
+    },
+    "check13-catalog.log": {
+      "sha256": "b942444916ace8040d457a8feb09830e844f7c60dff2c37b7bf1a47b9ac19726",
+      "bytes": 528
+    },
+    "check13-diagnostic.log": {
+      "sha256": "fc869ffce6caeeb09d146305c0756def332283ea3f71d82d75e1ac270a8b7869",
+      "bytes": 49026
+    },
+    "check13b-catalog.log": {
+      "sha256": "bf73b672600ce8b45030208e252fc9a2a5e9963b1f456fc3c62f8ae01b015e74",
+      "bytes": 361
+    },
+    "check13b-owned-build.log": {
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "bytes": 71
+    },
+    "check14b-evm.log": {
+      "sha256": "30208bb27bd644dab32903c7c8ce3fde84307be9b504d3d49f7e77e8f5c70292",
+      "bytes": 1322
+    },
+    "checks11.json": {
+      "sha256": "9bf10046d3d1b56bc874af0b9bbec58a2ae5f1dbce12900ef22347502ed113b6",
+      "bytes": 561
+    },
+    "checks12.json": {
+      "sha256": "b5d4192825d365a5d598af0c7af5fb237263e2fb4c6047a0967e7822a0282133",
+      "bytes": 1201
+    },
+    "checks13.json": {
+      "sha256": "774cdfd3b600d0aa2ad1dd0c1a704318b5871fc1e2ddcc092ab53a48d6bab437",
+      "bytes": 138
+    },
+    "checks13b.json": {
+      "sha256": "5525d0e7961510b9daef8c70f882972dd6e72bc7698ef6e3a44aae33ca81f570",
+      "bytes": 277
+    },
+    "checks14b.json": {
+      "sha256": "de8ccfc3917efd3f3d27d6c4b3b1a93a71755a68abb8ce3bced246c735b17cac",
+      "bytes": 211
+    },
+    "commit14-diffcheck.log": {
+      "sha256": "8b698611990f3cedfbc2d66ad122a94625a815f055be2d248f15e89b63359f48",
+      "bytes": 142
+    },
+    "current-source13.json": {
+      "sha256": "822b38489d1e9d8d8082192387081e46e75973b8b0a589f86e5814bca4170ad7",
+      "bytes": 12418
+    },
+    "evm/forge.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "evm/forge.stdout.log": {
+      "sha256": "59902b204e418e41fd71a7bd835d3928fff99c9151fc5c4c032b35d720841cd0",
+      "bytes": 557
+    },
+    "evm/programs.json": {
+      "sha256": "539f67c70dd809ad8af375f670d15851bd1cd29f5466a7d59970a94d53a958c0",
+      "bytes": 105555
+    },
+    "evm/result.json": {
+      "sha256": "197b376474c0015393627872651a6d8e866024052907085c499e6f2f7d051a02",
+      "bytes": 2285
+    },
+    "evm-final/forge.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "evm-final/forge.stdout.log": {
+      "sha256": "f2d26058ec12f4721c81327d685b3393818bb10424826dca812e9eeb25c35e24",
+      "bytes": 558
+    },
+    "evm-final/programs.json": {
+      "sha256": "539f67c70dd809ad8af375f670d15851bd1cd29f5466a7d59970a94d53a958c0",
+      "bytes": 105555
+    },
+    "evm-final/result.json": {
+      "sha256": "66d295d73f3b986570939cf3fa8f831603dab48a8aac8f4a3be016091f7a0d3d",
+      "bytes": 2285
+    },
+    "owned11.json": {
+      "sha256": "c247cb29c17164daed5962273941298dcb15203b3e3768b00f4b9729b1963dfe",
+      "bytes": 1062
+    },
+    "owned14b.json": {
+      "sha256": "a1e076db15aec0cccc02cae19b4675fcc61ffcc43f3596c91da438ebd3aaa49b",
+      "bytes": 1062
+    },
+    "selection11.json": {
+      "sha256": "ecf4bb39342a6f1cd48518775cf356c5c4007a72e657400578c21cca08c81731",
+      "bytes": 2671
+    }
+  },
+  "independentReview": {
+    "schemaVersion": 1,
+    "reviewId": "ekubo-native-recipient-review02",
+    "createdUtc": "2026-10-15T04:14:22.168Z",
+    "reviewer": {
+      "agent": "/root/interface_protocols_b",
+      "role": "independent non-author",
+      "round": 2,
+      "maximumRounds": 3
+    },
+    "scope": {
+      "familyId": "custom-swap:ekubo-router-v1",
+      "stage": "implementation-and-offline-regression",
+      "baselineHead": "fd263e28c796b6caa2db3ec0c1a1cf2ab747f32d",
+      "candidateRoot": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-candidate"
+    },
+    "implementationReady": true,
+    "blockingFindings": [],
+    "conclusion": "本批 Ekubo native direct 收款实现与离线回归就绪，无提交实现阶段阻断；不代表历史、真实 TWAMM 扩展、Adapter Replay、机会或性能已验。",
+    "priorReview": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-review01.json",
+      "sha256": "5e7129c865a1b66ff3a5a5d16b0437920f81a09759597238d64a4cfd091155bc"
+    },
+    "hashVerification": {
+      "ownedFiles": 5,
+      "allCandidateAndBaselineHashesMatch": true,
+      "allCandidatesUnchangedFromPass1": true,
+      "commonPins": 57,
+      "familyPins": 20,
+      "all77PinsMatchCandidateOrExactHead": true,
+      "exactGitRefUsed": "fd263e28c796b6caa2db3ec0c1a1cf2ab747f32d",
+      "evmSourcePins": 16,
+      "allEvmPinsMatch": true,
+      "exportedFiles": 25,
+      "receiptLogHashesChecked": 11,
+      "allReceiptHashesMatch": true,
+      "programFixtures": 36,
+      "fixtureSha256": "539f67c70dd809ad8af375f670d15851bd1cd29f5466a7d59970a94d53a958c0",
+      "fixtureHashRecomputed": true,
+      "mismatches": [],
+      "evidenceReferences": [
+        {
+          "path": "ekubo-evidence13/base11.json",
+          "sha256": "491e623cd2f2f84f42d7d70fbd68a86c88e42e11a1698582a2c6a2f5b100feb9",
+          "bytes": 3210
+        },
+        {
+          "path": "ekubo-evidence13/catalog-receipt13.json",
+          "sha256": "43acde01849478fed87e5427844ba8ba188269819e483030663d122de5c0075a",
+          "bytes": 721
+        },
+        {
+          "path": "ekubo-evidence13/check13-catalog.log",
+          "sha256": "b942444916ace8040d457a8feb09830e844f7c60dff2c37b7bf1a47b9ac19726",
+          "bytes": 528
+        },
+        {
+          "path": "ekubo-evidence13/check13-diagnostic.log",
+          "sha256": "fc869ffce6caeeb09d146305c0756def332283ea3f71d82d75e1ac270a8b7869",
+          "bytes": 49026
+        },
+        {
+          "path": "ekubo-evidence13/checks12.json",
+          "sha256": "b5d4192825d365a5d598af0c7af5fb237263e2fb4c6047a0967e7822a0282133",
+          "bytes": 1201
+        },
+        {
+          "path": "ekubo-evidence13/checks13b.json",
+          "sha256": "5525d0e7961510b9daef8c70f882972dd6e72bc7698ef6e3a44aae33ca81f570",
+          "bytes": 277
+        },
+        {
+          "path": "ekubo-evidence13/current-source13.json",
+          "sha256": "822b38489d1e9d8d8082192387081e46e75973b8b0a589f86e5814bca4170ad7",
+          "bytes": 12418
+        },
+        {
+          "path": "ekubo-evidence13/evm/programs.json",
+          "sha256": "539f67c70dd809ad8af375f670d15851bd1cd29f5466a7d59970a94d53a958c0",
+          "bytes": 105555
+        },
+        {
+          "path": "ekubo-evidence13/evm/result.json",
+          "sha256": "197b376474c0015393627872651a6d8e866024052907085c499e6f2f7d051a02",
+          "bytes": 2285
+        },
+        {
+          "path": "ekubo-evidence13/owned11.json",
+          "sha256": "c247cb29c17164daed5962273941298dcb15203b3e3768b00f4b9729b1963dfe",
+          "bytes": 1062
+        },
+        {
+          "path": "ekubo-evidence13/selection11.json",
+          "sha256": "ecf4bb39342a6f1cd48518775cf356c5c4007a72e657400578c21cca08c81731",
+          "bytes": 2671
+        }
+      ]
+    },
+    "tests": [
+      {
+        "name": "family",
+        "passed": 37,
+        "failed": 0,
+        "skipped": 0,
+        "log": "ekubo-evidence13/check12-family.log"
+      },
+      {
+        "name": "boundary",
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "log": "ekubo-evidence13/check12-boundary.log"
+      },
+      {
+        "name": "all-family",
+        "passed": 301,
+        "failed": 0,
+        "skipped": 0,
+        "log": "ekubo-evidence13/check12-all-family.log"
+      },
+      {
+        "name": "strict",
+        "passed": 174,
+        "failed": 0,
+        "skipped": 0,
+        "log": "ekubo-evidence13/check12-strict.log"
+      },
+      {
+        "name": "real-local-EVM",
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0,
+        "log": "ekubo-evidence13/check12-evm.log"
+      }
+    ],
+    "buildAndCatalog": {
+      "workingBuild": "passed(check11)",
+      "ownedOnlyBuild": "passed(check13b)",
+      "ownedCatalogComparison": "passed(check13b)",
+      "remainingDifferences": "9项 peer custom-swap:uniswap-v1 capability；严格比较断言未放宽。",
+      "workingCatalogSha256": "b77ef26d312e30bda6819dfde2a9257597fcb257fea7e7a36b72558a4eb4b579",
+      "ownedCatalogSha256": "e17cc14c6e9f22a66624ecf726b9afad518d6838d6980fc8bf41702fbd6d1eec",
+      "interpretation": "已读比较脚本、原始日志/receipt与全部声明source pins；未重新生成。301全族测试来自实际工作基线，owned-only另完成catalog与build。"
+    },
+    "resolvedFailure": {
+      "id": "EKUBO-FREEZE13-DUPLICATE-SCRIPT-OVERWRITE",
+      "status": "resolved",
+      "actualCause": "freeze13.py 第12行写入正确Ekubo脚本后，第21行第二个旧base64再次覆盖同一路径；第二段指向Curve plain旧q、catalog-input16、curve-plain和*16.json，所以比较了错误快照。",
+      "sourceEvidence": {
+        "originalFreezeSha256": "734e917fff01a92fe7f45f5f6265d009fb8d3facd4a737d4b6a9008f200dc665",
+        "correctCatalogPayloadSha256": "7b615924f8e11059d671371e5317bda9bf146af3e507e1c35cad7ef2d3632354",
+        "stalePayloadSha256": "3e0d302a2a5a3d7169540dc0d68168ff0674456ea7e23dbb19f488dc3d9d7729"
+      },
+      "repaired": "freeze13b仅含1次脚本写入；解码hash与当前ekubo-catalog13.mts完全相同，复用正确snapshot，strict peer-only断言保持。",
+      "preservedEvidence": [
+        "ekubo-evidence13/check13-catalog.log",
+        "ekubo-evidence13/check13-diagnostic.log",
+        "ekubo-evidence13/checks13.json"
+      ],
+      "verifiedOutcome": "checks13b catalog与owned-build均exit 0；无Ekubo生产源码修改。",
+      "classification": "冻结编排脚本复制错误；不构成Ekubo生产或canonical generator缺陷。",
+      "priorUnderlyingCorrection": "freeze08原失败也含同类二次旧plain覆盖，不能仅归因catalog stale。最终freeze08b为单次当前脚本并已通过，先前Underlying最终有效性不受影响；父任务保留previousCauseDescription并更正原因。"
+    },
+    "retainedCodeConclusion": [
+      "native raw output只接受actor；common mapper/issuer恢复original recipient后按真实ETH新增包装并交付WETH。",
+      "native direct要求正值精确净扣款、实际receipt与旧库存保护；ERC20输入精确临时授权并清零。default/MAX_UINT原语句路径保持。",
+      "真实Router内部withdraw可先于payFrom，但内部Accountant→Router锁回调没有用户continuation；quote-output/deferred-input继续拒绝。"
+    ],
+    "evidenceBoundary": "真实BotVM/RuntimeAmountVM执行production emitter+common boundary，合成Router/token/wrapper及故障用于余额、授权、native与回滚验证。36为生成程序fixture数，不是历史正例数；测试中的vanilla/twamm分组不等于执行了真实TWAMM扩展，合成Router内部输入/输出顺序也不证明真实Router锁流程。",
+    "remainingAcceptance": [
+      {
+        "item": "真实历史receiver/debit/旧库存/native-WETH与正A相同calldata无输入回滚",
+        "status": "统一验收待做",
+        "implementationBlocker": false
+      },
+      {
+        "item": "真实Router/Core/TWAMM扩展同状态执行与身份绑定",
+        "status": "待统一历史验收",
+        "implementationBlocker": false
+      },
+      {
+        "item": "Adapter Replay、机会和性能",
+        "status": "未执行",
+        "implementationBlocker": false
+      }
+    ],
+    "reviewerActions": {
+      "testsRun": false,
+      "rpcCalls": false,
+      "buildRun": false,
+      "catalogGenerated": false,
+      "productionOrGitChanges": false,
+      "onlyWrite": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-review02.json"
+    }
+  },
+  "preservedFailedAttempts": [
+    {
+      "artifact": "check13-catalog.log",
+      "cause": "Scratch freezer overwrote its current catalog script with an embedded old Curve plain input script. Strict difference check rejected mixed scopes. Corrected freezer has one verified current script write; final catalog and owned-only build pass, without relaxing the gate."
+    },
+    {
+      "artifact": "commit14-diffcheck.log",
+      "cause": "git diff --check rejected trailing whitespace on two blank Solidity test lines. Only whitespace was removed; production code unchanged. Final-source EVM rerun passed with identical generated programs."
+    }
+  ],
+  "limits": [
+    "Actual local EVM uses a synthetic Router/token ledger; vanilla and TWAMM entries cover descriptor/encoding variants, not real TWAMM extension execution or Router lock order.",
+    "Default historical results keep their original source/state scope. New direct native historical execution, Adapter Replay, opportunity and 4A/4B remain pending.",
+    "No central production changes, live, deploy or broadcast. Peer dirty preserved."
+  ],
+  "independentReviewFinalFormatting": {
+    "schemaVersion": 1,
+    "familyId": "custom-swap:ekubo-router-v1",
+    "reviewPass": 3,
+    "scope": "Final whitespace-only test-source and saved execution-evidence addendum; no rerun by reviewer. Prior pass2 implementation and acceptance limits remain.",
+    "implementationReady": true,
+    "blockingFindings": [],
+    "whitespaceOnly": {
+      "path": "test/EkuboNativeRecipient.t.sol",
+      "changedLines": [
+        44,
+        71
+      ],
+      "beforeSha256": "1a1ab4295c491027d6689989f0760309f908660bd15b7a90c592010482a63198",
+      "afterSha256": "4df39b0afbf3ee3464bbcac1228372f7f7cf8bf7f08cfb31331d126cb08c15a5",
+      "originalBytesRecoveredFrom": "ekubo-apply11.py embedded apply payload; decoded only, never executed"
+    },
+    "finalEvidence": {
+      "ownedFilesMatched": 5,
+      "evmSourcePinsCompared": 16,
+      "onlyChangedPin": "test/EkuboNativeRecipient.t.sol",
+      "programBytesUnchanged": true,
+      "fixtureSha256": "539f67c70dd809ad8af375f670d15851bd1cd29f5466a7d59970a94d53a958c0",
+      "resultExitCode": 0,
+      "savedEvmResult": "3 passed; 0 failed",
+      "receiptLogHashMatched": true,
+      "refs": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-evidence13/owned14b.json",
+          "sha256": "a1e076db15aec0cccc02cae19b4675fcc61ffcc43f3596c91da438ebd3aaa49b"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-evidence13/checks14b.json",
+          "sha256": "de8ccfc3917efd3f3d27d6c4b3b1a93a71755a68abb8ce3bced246c735b17cac"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-evidence13/check14b-evm.log",
+          "sha256": "30208bb27bd644dab32903c7c8ce3fde84307be9b504d3d49f7e77e8f5c70292"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-evidence13/evm-final/result.json",
+          "sha256": "66d295d73f3b986570939cf3fa8f831603dab48a8aac8f4a3be016091f7a0d3d"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-evidence13/evm-final/forge.stdout.log",
+          "sha256": "f2d26058ec12f4721c81327d685b3393818bb10424826dca812e9eeb25c35e24"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-evidence13/evm-final/programs.json",
+          "sha256": "539f67c70dd809ad8af375f670d15851bd1cd29f5466a7d59970a94d53a958c0"
+        }
+      ]
+    },
+    "limitations": [
+      "Real local BotVM with synthetic Router/token behavior only; no new real Ekubo historical/TWAMM extension evidence.",
+      "Unified history, Adapter Replay and performance remain pending."
+    ]
+  }
+}

@@ -3367,7 +3367,7 @@
         "familyId": "custom-swap:ekubo-router-v1",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "85a9616e634105c4b65c4a0def3fa354c9e88135602ec9f1a6af1260a9d67845",
+        "contentHash": "2dc0b409be4decd7b356be42a08b2ea2f3c9d7fe71fa2a3c47430adea72abe5f",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -15885,5 +15885,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "4c9735cbc30d455488e3cd16790b87fadb071ab70dd28fc8b529ccdee32c5b14"
+  "artifactHash": "67a25e899b58acd4dbd1a59af4ee98c0cee209f24820ed66ba79ed3058da3fc5"
 }
