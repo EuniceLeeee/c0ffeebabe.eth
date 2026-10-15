@@ -1796,6 +1796,35 @@
       },
       "created_at": "2026-10-15T10:35:14.942187+00:00",
       "updated_at": "2026-10-15T10:35:14.942187+00:00"
+    },
+    {
+      "learning_case_id": "psm-shared-fixture-empty-return-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+      "target_block": 26029876,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Historical acceptance observer-only defect; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/psm-shared-fixture-repair-20261015.json",
+        "before": "docs/research/reports/psm-shared-fixture-repair-20261015.json",
+        "after": "docs/research/reports/psm-recipient-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:family-dual-execution",
+        "issue": "Shared direct PSM model returned empty bytes although actual sellGem returns net DAI output and buyGem returns actual DAI cost.",
+        "evidence": "Fresh non-author v1 confirmed actual ABI and raw40 positive executions. Owned dual71 failed word bounds; corrected model returns actual output/cost and asserts direct allowance zero. Actual canonical and owned dual72 pass; original failure retained.",
+        "codify_target": "listener/src/searcher/test/family-dual-execution.ts",
+        "codify_commit": "20b74b6f1bec533653a06be704515453c58057fd",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T10:59:46.772435+00:00",
+      "updated_at": "2026-10-15T10:59:46.772435+00:00"
     }
   ]
 }
