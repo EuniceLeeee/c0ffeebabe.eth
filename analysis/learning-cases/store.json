@@ -1680,6 +1680,35 @@
       },
       "created_at": "2026-10-15T07:24:16.968071+00:00",
       "updated_at": "2026-10-15T07:24:16.968071+00:00"
+    },
+    {
+      "learning_case_id": "yearn-callback-concurrent-rpc-correlation-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+      "target_block": 26152335,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Historical acceptance observer-only defect; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/yearn-callback-rpc-review-20261015.json",
+        "before": "docs/research/reports/yearn-callback-first-failure-20261015.json",
+        "after": "docs/research/reports/yearn-callback-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:yearn-auction-callback-historical",
+        "issue": "Concurrent local RPC responses were compared with a mutable global request counter and valid replies failed before any callback executed.",
+        "evidence": "Independent non-author review; preserved callback53 failure; immutable per-request correlation regressions; callback54 real 8 positives, 48 rollback rejections and 8 inactive-context no-ops.",
+        "codify_target": "listener/src/searcher/venues/protocols/yearn-auction-family/test/callback-evidence.ts and callback-evidence.test.ts",
+        "codify_commit": "021fb291dc144c63ce6ba6835cf83b0e1838d121",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T08:57:54.756708+00:00",
+      "updated_at": "2026-10-15T08:57:54.756708+00:00"
     }
   ]
 }
