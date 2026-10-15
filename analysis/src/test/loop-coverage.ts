@@ -4,11 +4,18 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildLoopCoverageOutput } from "../cli/venue-discovery-bq.js";
-import { classifyTxLoopCoverage, type TxLoopCoverage } from "../discovery/loop-coverage.js";
+
+import type { TxLoopCoverage } from "../discovery/loop-coverage.js";
 import { TOPICS } from "../registry/protocols.js";
 import { ADDR } from "../../../listener/src/shared/constants/addresses.js";
 import type { PoolEntry } from "../../../listener/src/searcher/planner/token-graph.js";
+
+// Pin this legacy receipt corpus to its declared capability configuration.
+// Enabled Balancer is tested separately against the actual Family registry.
+process.env.SEARCHER_FAMILY_CURVE_PLAIN_ENABLED = "1";
+process.env.SEARCHER_FAMILY_BALANCER_V2_ENABLED = "0";
+const { buildLoopCoverageOutput } = await import("../cli/venue-discovery-bq.js");
+const { classifyTxLoopCoverage } = await import("../discovery/loop-coverage.js");
 
 interface ExactFixture {
   source: string;
@@ -43,7 +50,7 @@ interface ExactFixture {
     dynamicAdmissionBoundary: {
       scope: "receipt_only_without_attested_runtime_universe";
       formerlyStaticErc4626Addresses: string[];
-      erc4626GapTxs: string[];
+      erc4626UnassessedTxs: string[];
       fluidUnassessedTxs: string[];
       changedTxCount: number;
     };
@@ -350,7 +357,7 @@ test("Coffee 0x52c2 observes DODO without attesting identity while Balancer Flas
     funding.fundingIdentity,
     funding.productionRoutability,
   ]), [[BALANCER_VAULT, "balancer-v2", "attested", "routable"]]);
-  assert.equal(result.protocolAdapterCandidate, true);
+  assert.equal(result.protocolAdapterCandidate, false);
   assert.equal(result.receiptRouteCoverageComplete, false);
 });
 
@@ -364,11 +371,11 @@ test("Coffee 0xf7a6 exposes a Balancer swap gap without inventing flashloan", ()
   assert.equal(swaps.get("balancer-v2")?.in_graph, false);
   assert.equal(swaps.get("univ3")?.productionRoutability, "unassessed");
   assert.equal(swaps.get("univ3")?.in_graph, null);
-  assert.equal(result.protocolAdapterCandidate, true);
+  assert.equal(result.protocolAdapterCandidate, false);
   assert.equal(result.receiptRouteCoverageComplete, false);
 });
 
-test("PSM support is event-specific and preserves multiple Liquity gaps on the same emitter", () => {
+test("protocol topics preserve distinct observations without attesting PSM or Liquity identity", () => {
   const psm = ADDR.SKY_PSM_LITE.toLowerCase();
   const receiptLogs = [
     { address: psm, topics: [TOPICS.psmSellGem] },
@@ -382,10 +389,10 @@ test("PSM support is event-specific and preserves multiple Liquity gaps on the s
   });
 
   assert.deepEqual(reverse, forward);
-  assert.deepEqual(forward.protocolVenues, [psm]);
-  assert.deepEqual(forward.protocolVenueGaps, [
-    TOPICS.liquityTroveOperation,
-    TOPICS.liquityBatchUpdated,
+  assert.deepEqual(forward.protocolVenues, []);
+  assert.deepEqual(forward.protocolVenueGaps, []);
+  assert.deepEqual(forward.unassessedProtocolVenues.map(({ addr, topic0 }) => ({ addr, topic0 })), [
+    TOPICS.psmSellGem, TOPICS.liquityTroveOperation, TOPICS.liquityBatchUpdated,
   ].map((topic0) => ({ addr: psm, topic0: topic0.toLowerCase() })).sort(compareGap));
   assert.deepEqual(forward.unclassifiedEmitters, []);
   assert.equal(forward.protocolAdapterCandidate, false);
@@ -404,7 +411,8 @@ test("an ERC4626 candidate hint is not admission without an attested runtime uni
 
   assert.deepEqual(result.vaults, []);
   assert.deepEqual(result.protocolVenues, []);
-  assert.deepEqual(result.protocolVenueGaps, [
+  assert.deepEqual(result.protocolVenueGaps, []);
+  assert.deepEqual(result.unassessedProtocolVenues.map(({ addr, topic0 }) => ({ addr, topic0 })), [
     { addr: vaultAddress, topic0: TOPICS.erc4626Deposit.toLowerCase() },
     { addr: vaultAddress, topic0: TOPICS.psmBuyGem.toLowerCase() },
   ].sort(compareGap));
@@ -419,7 +427,7 @@ test("funding identity and flash-adapter support are independent conservative as
     txHash: "0xclean-protocol-receipt",
     receiptLogs: [{ address: psm, topics: [TOPICS.psmSellGem] }],
   });
-  assert.equal(clean.receiptRouteCoverageComplete, true);
+  assert.equal(clean.receiptRouteCoverageComplete, false);
 
   const result = classifyTxLoopCoverage({
     txHash: "0xfunding-identities",
@@ -461,7 +469,7 @@ test("funding identity and flash-adapter support are independent conservative as
   assert.deepEqual(venue(result, ARBITRARY_FLASH_EMITTER).observedRoles, ["flashloan"]);
   assert.deepEqual(venue(result, ARBITRARY_FLASH_EMITTER).unrecognizedTopic0s, []);
   assert.deepEqual(result.unclassifiedEmitters, []);
-  assert.equal(result.protocolAdapterCandidate, true);
+  assert.equal(result.protocolAdapterCandidate, false);
   assert.equal(
     result.receiptRouteCoverageComplete,
     false,
@@ -524,7 +532,7 @@ test("loop-coverage output summarizes observed evidence and routability as schem
   assert.equal(summary.fundingIdentityGapCount, 0);
   assert.equal(summary.fundingRouteGapTxs, 0);
   assert.equal(summary.fundingRouteGapCount, 0);
-  assert.equal(summary.protocolAdapterCandidateTxCount, 2);
+  assert.equal(summary.protocolAdapterCandidateTxCount, 0);
   assert.equal(summary.requiresTraceTxCount, 5);
   assert.equal(summary.receiptRouteCoverageCompleteTxCount, 0);
   assert.deepEqual(summary.removed_v4_fields, [
@@ -611,10 +619,10 @@ function assertDynamicAdmissionBoundary(
   for (const address of boundary.formerlyStaticErc4626Addresses) {
     assert.match(address, /^0x[a-f0-9]{40}$/);
   }
-  assertEvidenceTxs(boundary.erc4626GapTxs, 29);
+  assertEvidenceTxs(boundary.erc4626UnassessedTxs, 29);
   assertEvidenceTxs(boundary.fluidUnassessedTxs, 8);
   assert.equal(
-    new Set([...boundary.erc4626GapTxs, ...boundary.fluidUnassessedTxs]).size,
+    new Set([...boundary.erc4626UnassessedTxs, ...boundary.fluidUnassessedTxs]).size,
     boundary.changedTxCount,
   );
   assert.equal(boundary.changedTxCount, 32);
@@ -624,14 +632,14 @@ function assertDynamicAdmissionBoundary(
     TOPICS.erc4626Deposit.toLowerCase(),
     TOPICS.erc4626Withdraw.toLowerCase(),
   ]);
-  const derivedErc4626GapTxs = perTx
-    .filter((tx) => tx.protocolVenueGaps.some((gap) =>
+  const derivedErc4626UnassessedTxs = perTx
+    .filter((tx) => tx.unassessedProtocolVenues.some((gap) =>
       formerlyStaticVaults.has(gap.addr) && erc4626Topics.has(gap.topic0)
     ))
     .map((tx) => tx.tx)
     .sort();
-  assert.deepEqual(derivedErc4626GapTxs, boundary.erc4626GapTxs);
-  for (const txHash of boundary.erc4626GapTxs) {
+  assert.deepEqual(derivedErc4626UnassessedTxs, boundary.erc4626UnassessedTxs);
+  for (const txHash of boundary.erc4626UnassessedTxs) {
     const tx = perTx.find((candidate) => candidate.tx === txHash);
     assert.ok(tx, `missing ERC4626 boundary transaction ${txHash}`);
     assert.equal(

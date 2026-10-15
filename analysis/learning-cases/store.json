@@ -653,7 +653,9 @@
       "learning_case_id": "tooldef-20260916-canonical-family-metadata-classified-as-dispatch",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -680,7 +682,9 @@
       "learning_case_id": "tooldef-20260916-runtime-session-stale-valuation-and-gas-fixtures",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -707,7 +711,9 @@
       "learning_case_id": "tooldef-20261007-blockscan-pass-latency-large-log",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -732,7 +738,9 @@
       "learning_case_id": "tooldef-20261007-redact-live-run-event-range-stack",
       "status": "manual_required",
       "strategy_kind": "block-scan",
-      "edge_kinds": ["swap"],
+      "edge_kinds": [
+        "swap"
+      ],
       "trigger": "competitor_not_seen",
       "comparable": false,
       "primary_gap": "manual_required",
@@ -787,6 +795,92 @@
       },
       "created_at": "2026-10-07T09:16:09Z",
       "updated_at": "2026-10-07T09:16:09Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-receipt-capability-and-instance-evidence",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x153a5d8a7a73d66c6796a8c4fa8930e99a621cb268c3cdae484af4f90c5d12db",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "receipt_capability_and_instance_evidence_misclassification",
+      "evidence": {
+        "scope": "Offline 27-TX receipt classification and manual Ready artifact. No live process/broadcast change; no strategy comparability assertion. Export tools cannot attest exact live window.",
+        "manual": "Enabled Balancer V2 owns custom-swap:balancer-v2 descriptor. Exact pool IDs verified. ERC4626 events alone cannot distinguish verified 0x395da89bdb9431621a75df4e2e3b993acc2cab3d from rejected 0x5fbaa3a3b489199338fbd85f7e3d444dc0504f33.",
+        "reviewer": "Fresh non-author Codex review confirmed both defects and found no blocking issue in fix. Mandated CLI review was first attempted but CLI rejected model version.",
+        "regression": "New tests: 0/2 before, 2/2 after. Full related suite: 20/20 after updating empty-registry assertions; original baseline was 9/18.",
+        "canonical_after": {
+          "schema_version": 4,
+          "coverage_scope": "receipt_log_emitters_only",
+          "routability_scope": "production_listener_descriptors_receipt_only",
+          "transactionCount": 27,
+          "txsWithVaultLeg": 0,
+          "txsWithProtocolLeg": 0,
+          "txsWithNamedProtocolEvidence": 2,
+          "txsWithObservedSwaps": 26,
+          "observedSwapVenueCount": 60,
+          "observedSwapEmitterCount": 60,
+          "swapRouteGapTxs": 0,
+          "swapRouteGapCount": 0,
+          "unassessedSwapTxs": 26,
+          "unassessedSwapVenueCount": 60,
+          "observedFundingVenueCount": 16,
+          "fundingIdentityGapTxs": 0,
+          "fundingIdentityGapCount": 0,
+          "fundingRouteGapTxs": 0,
+          "fundingRouteGapCount": 0,
+          "protocolAdapterCandidateTxCount": 0,
+          "requiresTraceTxCount": 27,
+          "knownProtocolGapTxs": 0,
+          "unassessedProtocolTxs": 2,
+          "unassessedProtocolVenueCount": 2,
+          "unclassifiedEmitterTxs": 17,
+          "removed_v4_fields": [
+            "perTx[].swapVenues",
+            "perTx[].fullyCovered",
+            "perTx[].gapVenues",
+            "summary.txs",
+            "summary.observedSwapVenues",
+            "summary.observedSwapEmitters",
+            "summary.swapRouteGaps",
+            "summary.unassessedSwapVenues",
+            "summary.observedFundingVenues",
+            "summary.fundingIdentityGaps",
+            "summary.fundingRouteGaps",
+            "summary.deprecated_aliases",
+            "summary.fullyCovered",
+            "summary.oneGapWithVault",
+            "summary.protocolAdapterCandidates",
+            "summary.requiresTrace"
+          ],
+          "receiptRouteCoverageCompleteTxCount": 0,
+          "singleProtocolVenueGapWithProtocolLegTxCount": 0
+        },
+        "capability_query": [
+          "historical-export",
+          "rebuild"
+        ],
+        "selected_tool_ids": [
+          "analysis:venue-discovery-bq",
+          "listener:searcher:universe-rebuild-status"
+        ],
+        "manifest_path": "/opt/mev-cloud/app-run2/logs/coffee-sql-20261015-UZMWgX/semantic-review/final-tool-manifest.json",
+        "manifest_sha256": "e7b4240fa872aafae10129db29626c0fc1aa475608af6452ea6e67b496b792a8"
+      },
+      "tooling_defect": {
+        "tool": "analysis:venue-discovery-bq",
+        "issue": "Namespaced swap capability falsely absent; unassessed receipt-only protocol identities falsely counted as known gaps.",
+        "evidence": "Same 27 TX export and diagnostic activations: 2 false Balancer gaps and 2 known protocol gaps become 0/0, preserving 2 unassessed protocol TXs and all 27 requires_trace.",
+        "codify_target": "analysis/src/discovery/loop-coverage.ts; analysis/src/cli/venue-discovery-bq.ts; boundary/corpus regressions",
+        "status": "open"
+      },
+      "created_at": "2026-10-15T05:16:27.751853Z",
+      "updated_at": "2026-10-15T05:16:27.751853Z"
     }
   ]
 }
