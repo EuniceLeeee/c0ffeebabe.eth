@@ -30,7 +30,7 @@ const actor = addr(101), recipient = addr(102), origin = addr(103), pool = addr(
 const token0 = addr(201), token1 = addr(202), amount = 37n, expectedOutput = 74n;
 const word = (n: bigint) => ethers.toBeHex(n, 32);
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-const token = new ethers.Interface(["function balanceOf(address) view returns(uint256)", "function transfer(address,uint256) returns(bool)"]);
+const token = new ethers.Interface(["function balanceOf(address) view returns(uint256)", "function transfer(address,uint256) returns(bool)", "function approve(address,uint256) returns(bool)", "function allowance(address,address) view returns(uint256)"]);
 const swaps = new ethers.Interface([
   "function exchange_received(int128,int128,uint256,uint256,address) returns(uint256)",
   "function exchange_received(uint256,uint256,uint256,uint256,address) returns(uint256)",
@@ -53,7 +53,7 @@ function runRecipientModel(input: {
   add(input.tokenIn, actor, 101n); add(input.tokenOut, actor, 103n);
   add(input.tokenOut, recipient, 107n); // More old output than the expected new receipt.
   add(input.tokenIn, input.custody, 1000n); add(input.tokenOut, input.custody, 1000n);
-  let native = 17n, swapCalls = 0;
+  let native = 17n, swapCalls = 0, approved = 0n;
   const debit = () => amount + (input.fault === "under-debit" ? -1n : input.fault === "over-debit" ? 1n : 0n);
   const base = input.build(); assert(base?.settlement?.directOutput);
   const direct = input.build({ kind: "direct-output", recipient }); assert(direct);
@@ -85,6 +85,14 @@ function runRecipientModel(input: {
     if (c.static && c.data.startsWith(token.getFunction("balanceOf")!.selector)) {
       const [owner] = token.decodeFunctionData("balanceOf", c.data); return word(get(c.target, owner));
     }
+    if (input.kind === "ekubo" && same(c.target, input.tokenIn) && c.data.startsWith(token.getFunction("approve")!.selector)) {
+      const [spender, value] = token.decodeFunctionData("approve", c.data); assert(same(spender, EKUBO_ROUTER));
+      assert.equal(c.static, false); approved = value; return word(1n);
+    }
+    if (input.kind === "ekubo" && same(c.target, input.tokenIn) && c.data.startsWith(token.getFunction("allowance")!.selector)) {
+      const [owner, spender] = token.decodeFunctionData("allowance", c.data); assert(same(owner, actor) && same(spender, EKUBO_ROUTER));
+      assert.equal(c.static, true); return word(approved);
+    }
     assert.equal(c.value, 0n); assert.equal(c.incoming, 0); assert.equal(c.outgoing, 0);
     if (same(c.target, recipient)) {
       const [value] = release.decodeFunctionData("fixtureRelease", c.data); assert.equal(value, amount + 1n);
@@ -96,11 +104,14 @@ function runRecipientModel(input: {
       add(input.tokenIn, actor, -debit()); add(input.tokenIn, input.custody, amount); return word(1n);
     }
     swapCalls++;
-    let to: string;
+    let to: string, returnWord = 999999n;
     if (input.kind === "ekubo") {
       assert(same(c.target, EKUBO_ROUTER));
       const q = ekuboRouterIface.decodeFunctionData("swap", c.data);
       assert.equal(q[2], amount); assert.equal(q[3], 0n); assert.equal(q[4], 0n); assert.equal(q[5], 1n);
+      assert.equal(approved, amount); approved -= amount;
+      returnWord = (BigInt.asUintN(128, q[1] ? -expectedOutput : amount) << 128n) |
+        BigInt.asUintN(128, q[1] ? amount : -expectedOutput);
       to = q[6]; add(input.tokenIn, actor, -debit()); add(input.tokenIn, input.custody, amount);
     } else {
       assert(same(c.target, pool));
@@ -120,13 +131,14 @@ function runRecipientModel(input: {
     add(input.tokenOut, input.custody, -received);
     add(input.tokenOut, input.fault === "wrong-recipient" ? actor : to, received);
     if (input.fault === "native") native--;
-    return word(999999n); // Deliberately untrusted; the composer measures balances.
+    return word(returnWord); // Ekubo additionally checks its packed ABI; all receipts remain independently measured.
   };
   const result = inspectRuntime(root.params.settlementProgram as string, amount, {
     call, nativeBalance: () => native,
     allowance(grant) { assert.equal(input.kind, "ekubo"); assert(same(grant.token, input.tokenIn));
       assert(same(grant.spender, EKUBO_ROUTER)); assert.equal(grant.minimum, amount); },
   });
+  if (input.kind === "ekubo") assert.equal(approved, 0n);
   assert.equal(swapCalls, 1); assert.equal(get(input.tokenIn, actor), 102n);
   assert.equal(get(input.tokenOut, actor), 103n); assert.equal(get(input.tokenOut, recipient), 107n + expectedOutput);
   assert.equal(get(input.tokenIn, input.custody), 1000n + amount);

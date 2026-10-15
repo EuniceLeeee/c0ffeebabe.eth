@@ -1812,7 +1812,7 @@
     },
     {
       "familyId": "custom-swap:ekubo-router-v1",
-      "coverage": "partial",
+      "coverage": "complete",
       "variants": [
         {
           "id": "vanilla ERC20/ERC20",
@@ -1821,18 +1821,28 @@
           "callback": "internal-only",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "真实原交易证明外部 receiver，且 Core/router 与 N25943731 Ready 代码相等；不等于当前新 direct 程序实际执行。",
-            "输出虽先于 payFrom，回调仅 Core→Router，选定 Router 没有 caller continuation，不能标 deferred。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidenceNote": "Core/router public deployed bytes hash-match N25943731 Ready; real original receipt proves distinct recipient",
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
               "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+            },
+            {
+              "path": "docs/research/reports/ekubo-erc20-recipient-correctness-20261015.json",
+              "sha256": "96941f48dd4d6b38d264cc6865438d6950ee2ac464c96f3adb6438e1b08799a0"
+            },
+            {
+              "path": "docs/research/reports/ekubo-default-native-reuse-20261015.json",
+              "sha256": "9821182e2a047e94a2bc282bb58ea21da25d47cb492d375c565b9fea67a11c07"
             }
-          ]
+          ],
+          "scope": "Actual no-extension USDC/0xd9fcd... both directions, self/external direct N25943731, amount-only donors retained.",
+          "executionEvidence": {
+            "path": "docs/research/reports/ekubo-erc20-recipient-behavior-20261015.json",
+            "sha256": "3812969b6a78db26fa4c31d5a53f3236e49588a844786a2f15e2f2c4bdf3ec5f"
+          }
         },
         {
           "id": "native-in or native-out",
@@ -1852,11 +1862,15 @@
             {
               "path": "docs/research/reports/ekubo-native-recipient-correctness-20261015.json",
               "sha256": "f533b5588c5f1db34261cab2b046376120ad50dee7333191a96bc47aa77bd25a"
+            },
+            {
+              "path": "docs/research/reports/ekubo-default-native-reuse-20261015.json",
+              "sha256": "9821182e2a047e94a2bc282bb58ea21da25d47cb492d375c565b9fea67a11c07"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/ekubo-native-recipient-behavior-20261015.json",
-            "sha256": "bfa797ccfd3dee833a84623954b75872a3048a50dece1b13cb916ad0688ac7cb"
+            "path": "docs/research/reports/ekubo-native-recipient-reuse-behavior-20261015.json",
+            "sha256": "3d6c63ac1b11144357c6dfd4b174a7264d9672db7bc601c59355207a16b07cf9"
           }
         }
       ],
@@ -1905,7 +1919,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/ekubo-family/execution.ts",
-          "sha256": "7e1e012180276cf7fa440b42a4ec7dcd49d3cf3caee7e1cbddc023a5876c3f5a"
+          "sha256": "24b8a8806b501fe9cd4bd78563b0d370d88d1664e4493705298cd8e04eda4530"
         },
         {
           "path": "listener/src/searcher/venues/swaps/ekubo-family/extension.ts",
@@ -1945,13 +1959,13 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/ekubo-native-recipient-interface-review-20261015.json",
-        "sha256": "04f4d9282a7531278ac075936b97f081544bd1eeb35a69a160fee5a59016b0cf"
+        "path": "docs/research/reports/ekubo-recipient-current-interface-review-20261015.json",
+        "sha256": "adb08f08ce966a693a9b1ae5a644e8d9b0d423be9d9068a7b46e594e5b3f7abe"
       },
       "preservedPriorSourceReport": "eight-family-interface-review-20261014.json",
       "currentScopedEvidence": {
-        "path": "docs/research/reports/ekubo-native-recipient-correctness-20261015.json",
-        "sha256": "f533b5588c5f1db34261cab2b046376120ad50dee7333191a96bc47aa77bd25a"
+        "path": "docs/research/reports/ekubo-erc20-recipient-correctness-20261015.json",
+        "sha256": "96941f48dd4d6b38d264cc6865438d6950ee2ac464c96f3adb6438e1b08799a0"
       }
     },
     {

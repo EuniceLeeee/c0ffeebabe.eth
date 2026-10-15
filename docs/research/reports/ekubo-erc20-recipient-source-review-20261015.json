@@ -1,0 +1,21 @@
+{
+  "reviewer": "root non-author",
+  "result": "source-review-pass-pending-execution",
+  "diffSha256": "a2e014475ed75a21eea13b0275611be447037e05d04e7073505107110c46d67a",
+  "scope": "ERC20 explicit direct only; original native/default emitter path preserved by branch",
+  "checks": [
+    "Full positive original r0 input remains unchanged and below signed127 limit.",
+    "Pre-input balance establishes funding, post-input exact debit independent of return.",
+    "Signed packed Router input equals r0 and negative output decoded to positive receipt; zero/bad signs reject.",
+    "Output return equals actual selected receiver increment; external actor output and receiver input inventory unchanged.",
+    "Exact temporary allowance clears and reads back zero; native actor balance restored.",
+    "No shared runtime register collision: approval helpers issue calls but do not overwrite saved registers."
+  ],
+  "pending": [
+    "Fresh production build/shared tests",
+    "Real ERC20 historical same-state direct matrix",
+    "Synthetic real BotVM fault and rollback checks",
+    "Byte compatibility certification of existing native/default selected evidence"
+  ],
+  "productionMutationApprovedWithinScope": true
+}

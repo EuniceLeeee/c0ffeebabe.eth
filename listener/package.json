@@ -414,7 +414,8 @@
     "searcher:infinifi-historical-dual": "node --import tsx src/searcher/venues/protocols/erc4626-family/test/infinifi-historical-dual.ts",
     "searcher:infinifi-historical-ready": "node --import tsx src/searcher/venues/protocols/erc4626-family/test/historical-ready.ts",
     "searcher:infinifi-recipient-safety": "node --import tsx --test src/searcher/venues/protocols/erc4626-family/test/infinifi-recipient-safety.ts",
-    "searcher:infinifi-recipient-evm": "node --import tsx src/searcher/venues/protocols/erc4626-family/test/infinifi-recipient-evm.ts"
+    "searcher:infinifi-recipient-evm": "node --import tsx src/searcher/venues/protocols/erc4626-family/test/infinifi-recipient-evm.ts",
+    "searcher:ekubo-erc20-recipient-evm": "node --import tsx src/searcher/venues/swaps/ekubo-family/test/erc20-recipient-evm.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

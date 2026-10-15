@@ -1,4 +1,4 @@
-// Supplementary direct-only native correctness. Reuses immutable natural Ready/production
+// Supplementary direct-only native/ERC20 correctness. Reuses immutable natural Ready/production
 // prices and the source-pinned local REVM transport; never runs live or signs.
 import assert from "node:assert/strict";
 import { closeSync, openSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -27,14 +27,14 @@ import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../../../production-infra-actions.js";
 import { sourcePin } from "../../../../test/family-integration/kyber-yb-compound/historical-dual.js";
-import { assertPriceInput, productionAmount, constructionGuard, assertExecutorCode, assertOriginAccountCode, json, sha, same } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
+import { assertPriceInput, productionAmount, splicedMissingProductionAmount, constructionGuard, assertExecutorCode, assertOriginAccountCode, json, sha, same } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 import { assertHistoricalDiscoveryReceipt } from "../../../../test/family-integration/three-family/historical-input-observations.js";
 import { EKUBO_FAMILY_ID as FAMILY } from "../manifest.js";
 import { EKUBO_CORE, EKUBO_ROUTER, parseEkuboCoreSwapLog } from "../../ekubo/abi.js";
 import { ekuboPoolId, ekuboGraphToken, ekuboPoolExtension } from "../../ekubo/pool-key.js";
 import { extensionRegistrationSlot, validateExtensionProof } from "../extension.js";
 import type { EkuboDescriptor as Descriptor, EkuboRoute as Route } from "../types.js";
-const TX = "0xed014b884a511a4abd1c0e5f218be8dbcd1209cd7bb645d440334fdfecf928f0";
+const NATIVE_TX = "0xed014b884a511a4abd1c0e5f218be8dbcd1209cd7bb645d440334fdfecf928f0";
 const ERC20 = new ethers.Interface(["function allowance(address,address) view returns(uint256)",
   "event Transfer(address indexed from,address indexed to,uint256 value)"]);
 
@@ -47,17 +47,24 @@ const requirements = { transports: ["effect-delta-simulation"] as const, caller:
 const definitionNativeInput = (route: Route) => route.executionAssets!.input === "native";
 
 async function main(argv = process.argv.slice(2)) {
-  const args = new Map<string, string>(), requiredNames = ["--ready", "--prices", "--pool", "--rpc-file", "--revm-bin", "--out"], names = [...requiredNames, "--executor", "--owner", "--cases"];
+  const args = new Map<string, string>(), requiredNames = ["--ready", "--prices", "--pool", "--rpc-file", "--revm-bin", "--out"], names = [...requiredNames, "--executor", "--owner", "--cases", "--profile", "--reference-prices", "--reference-edges"];
   for (let i = 0; i < argv.length; i += 2) {
     assert(names.includes(argv[i]!) && !args.has(argv[i]!) && argv[i + 1]); args.set(argv[i]!, argv[i + 1]!);
   }
   assert(requiredNames.every(name => args.has(name)));
+  const erc20 = args.get("--profile") === "erc20";
+  assert(!args.has("--profile") || erc20 || args.get("--profile") === "native");
+  assert.equal(args.has("--reference-prices"), args.has("--reference-edges"));
+  assert(!args.has("--reference-prices") || erc20);
+  const TX = erc20 ? "0x868b69ff429fea8ec1e483c8be1d9e236aabe00065e355ff5a60af0596a75847" : NATIVE_TX;
+  const secondaryLabel = erc20 ? "historical-or-twice-recorded-input-at-N-end" : "original-sized-at-N-end";
+  const primaryLabel = erc20 ? "recorded-input-at-N-end" : "production-effective";
   const selected: unknown = args.has("--cases") ? JSON.parse(args.get("--cases")!) : undefined;
   assert(selected === undefined || Array.isArray(selected) && selected.length > 0 && selected.every(x => typeof x === "string") && new Set(selected).size === selected.length);
   const wanted = selected === undefined ? undefined : new Set(selected as string[]);
   const wants = (id: string) => wanted === undefined || wanted.has(id);
   const fd = openSync(args.get("--out")!, "wx", 0o600), report: any = { result: "failed", samples: [],
-    claim: "Supplementary native direct-only at N end: production Exact and quoted construction are checked; only direct-self/direct-external execute. Prior quoted/default evidence is retained, not re-created here. No original-precall or full-loop claim.",
+    claim: "Supplementary direct-only at N end: production Exact and quoted construction are checked; only direct-self/direct-external execute. Prior quoted/default evidence is retained, not re-created here. No original-precall or full-loop claim.",
     performance: "NOT RUN", signing: false, broadcast: false, protocolOverrides: false, actorOnlyFunding: true,
     caseFilter: selected ?? null, unverified: [] };
   const abort = new AbortController(), deadlineAtMs = Date.now() + 1_200_000;
@@ -69,7 +76,12 @@ async function main(argv = process.argv.slice(2)) {
   let finalPins: (() => Promise<void>) | undefined;
   try {
     const readyPath = realpathSync(args.get("--ready")!), pricesPath = realpathSync(args.get("--prices")!);
-    const paths = [readyPath, pricesPath, resolve(dirname(pricesPath), "input.json"), fileURLToPath(import.meta.url)];
+    const referencePath = args.has("--reference-prices") ? realpathSync(args.get("--reference-prices")!) : undefined;
+    const declarationPath = referencePath ? realpathSync(resolve(dirname(referencePath), "declaration.json")) : undefined;
+    const referenceEdges = args.has("--reference-edges") ? JSON.parse(args.get("--reference-edges")!) : undefined;
+    assert(referenceEdges === undefined || Array.isArray(referenceEdges) && referenceEdges.length === 2 && referenceEdges.every(x => typeof x === "string"));
+    const donor = referencePath ? { prices: parseAtBlockJson(readFileSync(referencePath,"utf8")), declaration: parseAtBlockJson(readFileSync(declarationPath!,"utf8")) } : undefined;
+    const paths = [readyPath, pricesPath, resolve(dirname(pricesPath), "input.json"), fileURLToPath(import.meta.url), ...(referencePath ? [referencePath, declarationPath!] : [])];
     const pins = () => paths.map(path => ({ path, sha256: sha(readFileSync(path)) }));
     report.inputs = pins(); report.code = sourcePin(); report.revmSha256 = sha(readFileSync(args.get("--revm-bin")!));
     assert.equal(report.revmSha256, "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6");
@@ -89,11 +101,11 @@ async function main(argv = process.argv.slice(2)) {
     const family = asPricedFamily(catalog.forStrictFamily(FAMILY));
     const instance = wiring.rehydrateVerifiedInstance({ memo, cutoff: source }) as PreparedFamilyInstance;
     assertIssuedPreparedFamilyInstance({ family, instance, source, generation: source.generation });
-    const d = instance.descriptor as Descriptor; assert(same(d.poolId, TARGET) && same(ekuboPoolId(d.poolKey), TARGET)); assert.equal(d.poolKey.token0, ethers.ZeroAddress); assert.equal(instance.routes.length, 2);
+    const d = instance.descriptor as Descriptor; assert(same(d.poolId, TARGET) && same(ekuboPoolId(d.poolKey), TARGET)); assert.equal(d.poolKey.token0 === ethers.ZeroAddress, !erc20); assert.equal(instance.routes.length, 2);
     const validCases = new Set<string>();
     for (const direction of ["token0-to-token1", "token1-to-token0"]) {
-      for (const label of ["production-effective", "original-sized-at-N-end"]) for (const encoding of ["direct-self", "direct-external"])
-        for (const negative of label === "production-effective" ? ["none", "no-input", "post-execution-revert"] : ["none"])
+      for (const label of [primaryLabel, secondaryLabel]) for (const encoding of ["direct-self", "direct-external"])
+        for (const negative of label === primaryLabel ? ["none", "no-input", "post-execution-revert"] : ["none"])
           validCases.add(`${direction}/${label}/${encoding}/${negative}`);
     }
     if (wanted) assert([...wanted].every(id => validCases.has(id)), "unknown selected case");
@@ -113,7 +125,11 @@ async function main(argv = process.argv.slice(2)) {
     stage = "source-and-runtime";
     const header = await rpc("eth_getBlockByNumber", [ethers.toQuantity(N), false]); assert.equal(header.hash, HASH); report.header = header;
     assert.equal(BigInt(await rpc("eth_chainId", [])), 1n);
-    assert.equal(N, 26088150); assert.equal(HASH, "0xcd1606be5437c39dae2f04fd1709e6016827cd05323e81674ce8b378f46f86b6");
+    assert.equal(N, erc20 ? 25943731 : 26088150);
+    assert.equal(HASH, erc20 ? "0x265fd1d8bfa75ca4aa8ae34c486750b62c494be0695dc2893c5e74836aa63e41" : "0xcd1606be5437c39dae2f04fd1709e6016827cd05323e81674ce8b378f46f86b6");
+    report.discoveryScope = { historicalNaturalDiscoveryProven: provenance.historicalNaturalDiscoveryProven,
+      topologyContainsFutureDiscovery: provenance.topologyContainsFutureDiscovery,
+      claim: "Saved natural Ready reused then current production revalidation; not fresh-from-zero discovery" };
     report.tx = TX;
     const receipt = await rpc("eth_getTransactionReceipt", [TX]); assertHistoricalDiscoveryReceipt(receipt, { transactionHash: TX, blockNumber: N, blockHash: HASH }, source);
     const candidate: any = memo.candidateSnapshot;
@@ -201,8 +217,11 @@ async function main(argv = process.argv.slice(2)) {
       const handle = instance.routeHandles.find(h => h.routeKey === route.routeKey)!; assert(handle);
       const edges = graph.filter(e => same(e.instanceKey, TARGET) && same(e.tokenIn, route.tokenIn) && same(e.tokenOut, route.tokenOut)); assert.equal(edges.length, 1);
       const edgeId = blockScanEdgeKey(edges[0]!), reference = productionAmount(prices.runtime.pricing.effectiveMids.rows.get(edgeId), prices.runtime.pricing.mids.get(edgeId), edges[0], source, prices.runtime.generation);
-      assert.equal(reference.status, "met"); if (reference.status !== "met") throw new Error("production reference unavailable");
-      report.productionReferences.push({ direction, ...reference });
+      const borrowed = reference.status !== "met" && donor ? splicedMissingProductionAmount(
+        prices.runtime.pricing.effectiveMids.rows.get(edgeId), route.tokenIn, donor.prices, donor.declaration, referenceEdges!) : undefined;
+      if (reference.status !== "met" && !borrowed) throw new Error("production reference unavailable");
+      const referenceAmount = reference.status === "met" ? reference.amountIn : borrowed!.amountIn;
+      report.productionReferences.push({ direction, ...reference, borrowedInput: borrowed });
       const build = (settlement?: RuntimeSettlementRequest) => guard.build(() => buildFamilyRuntimeAmountLeg({
         family, route: handle, source, executor, runtime: guard.runtime(runtime), runtimeEvidence: [], actionOwnership: catalog,
         ...(settlement ? { settlement } : {}) }));
@@ -210,16 +229,16 @@ async function main(argv = process.argv.slice(2)) {
       assert.equal(build({ kind: "quote-output", recipient: executor }), null, "unimplemented quote-output must remain unavailable");
       assert.equal(build({ kind: "deferred-input", paymentAmount: 1n, paymentProgram: "0x0100" }), null,
         "Router internal lock callback is not a caller continuation");
-      const inputs: [string, bigint][] = [["production-effective", reference.amountIn], ["original-sized-at-N-end",
-        same(route.tokenIn, original.tokenIn) ? original.amountIn : original.amountOut]];
+      const inputs: [string, bigint][] = [[primaryLabel, referenceAmount], [secondaryLabel,
+        same(route.tokenIn, original.tokenIn) ? original.amountIn : erc20 ? referenceAmount * 2n : original.amountOut]];
       for (const [label, amountIn] of inputs) {
         if (wanted && ![...wanted].some(id => id.startsWith(`${direction}/${label}/`))) continue;
-        const trial: any = { label, direction, amountIn, tokenIn: route.tokenIn, tokenOut: route.tokenOut, status: "failed", executions: [] }; report.samples.push(trial);
+        const trial: any = { label, direction, amountIn, defaultRuntimeProgramHash: ethers.keccak256(leg.program), tokenIn: route.tokenIn, tokenOut: route.tokenOut, status: "failed", executions: [] }; report.samples.push(trial);
         stage = "production-exact";
         const quote = await guard.exact(() => executeFamilyExactQuote({ family, route: handle, amountIn, source, generation: source.generation,
           executor, runtimeEvidence: [], runtime, control: { signal: abort.signal, deadlineAtMs } }));
         trial.quote = quote; assert.equal(quote.status, "resolved"); if (quote.status !== "resolved") throw new Error("Exact unresolved");
-        if (label === "production-effective") assert.equal(quote.amountOut, reference.amountOut);
+        if (label === primaryLabel && reference.status === "met") assert.equal(quote.amountOut, reference.amountOut);
         const fragment = guard.quoted(() => buildFamilyExecutionFragment({ family, route: handle, exact: quote, minAmountOut: quote.amountOut,
           executor, runtimeEvidence: [], actionOwnership: catalog }));
         assert.equal(fragment.status, "resolved"); if (fragment.status !== "resolved") throw new Error("quoted fragment unresolved");
@@ -237,7 +256,7 @@ async function main(argv = process.argv.slice(2)) {
           scripts.push({ encoding: same(recipient, executor) ? "direct-self" : "direct-external", recipient,
             script: concatBytes(runtimeProgramScript(ethers.getBytes(direct.program), amountIn), allowanceCheck) });
         }
-        for (const { encoding, script, recipient } of scripts) for (const negative of label === "production-effective" ? ["none", "no-input", "post-execution-revert"] : ["none"]) {
+        for (const { encoding, script, recipient } of scripts) for (const negative of label === primaryLabel ? ["none", "no-input", "post-execution-revert"] : ["none"]) {
           const caseId = `${direction}/${label}/${encoding}/${negative}`;
           if (!wants(caseId)) continue;
           stage = encoding + ":" + negative;
@@ -289,7 +308,7 @@ async function main(argv = process.argv.slice(2)) {
       }
     }
     report.runtimeConstruction = { exactCalls: 0, quotedCalls: 0, rpcCalls: 0, quotedFallback: false, scope: "production issuer; direct-only production issuer; no fallback or new quoted-execution/market-path opportunity claim" };
-    report.invocationCounts = guard.counts; report.result = report.unverified.length ? "incomplete" : "pass";
+    report.invocationCounts = guard.counts; report.result = report.unverified.length ? "incomplete" : report.productionReferences.some((x: any) => x.status !== "met") ? "pass-with-spliced-reference" : "pass";
     if (report.unverified.length) process.exitCode = 1;
   } catch (e) { report.error = { stage, message: redact(e instanceof Error ? e.message : e) }; process.exitCode = 1; }
   finally {
@@ -300,4 +319,4 @@ async function main(argv = process.argv.slice(2)) {
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
-  main().catch(() => { console.error("invalid Ekubo native recipient arguments/output; no success claimed"); process.exitCode = 1; });
+  main().catch(() => { console.error("invalid Ekubo recipient arguments/output; no success claimed"); process.exitCode = 1; });

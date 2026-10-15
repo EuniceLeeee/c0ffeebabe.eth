@@ -1,0 +1,72 @@
+{
+  "schema": "ekubo-erc20-default-native-reuse-v1",
+  "result": "retained paths compatible; old actual executions retain original pins",
+  "ERC20": {
+    "defaultProgramsAndQuotedScripts": [
+      {
+        "direction": "token0-to-token1",
+        "amountIn": "5135191",
+        "amountOut": "4141218625718870892",
+        "defaultProgramHash": "0xaa52a8f1000eed604218e44f8a003109f140e7f5b2bb482bf0b295e42a85605f",
+        "quotedScriptHash": "0xcb1ceb89a1575e0d2835b489adaaea40a86701469f596571c05e35b2d34ebcf0",
+        "defaultAndQuotedEqualOldActual": true
+      },
+      {
+        "direction": "token0-to-token1",
+        "amountIn": "10270382",
+        "amountOut": "8281704184966020032",
+        "defaultProgramHash": "0xaa52a8f1000eed604218e44f8a003109f140e7f5b2bb482bf0b295e42a85605f",
+        "quotedScriptHash": "0xc65b42643e27feaf5ff1b438a463b58af32f669af13e0872424fdf9c6fe2ca11",
+        "defaultAndQuotedEqualOldActual": true
+      },
+      {
+        "direction": "token1-to-token0",
+        "amountIn": "3522741232389004055",
+        "amountOut": "4323986",
+        "defaultProgramHash": "0x8f937285f0a9b84f63cf942e8c9a6aa1f0bfe0026a9260848992b2f7c2607703",
+        "quotedScriptHash": "0x44dda00cdc59cabeccb52b2eccf4015e5f0d7fe8c8cadfcd0be0bf29fad5ea72",
+        "defaultAndQuotedEqualOldActual": true
+      },
+      {
+        "direction": "token1-to-token0",
+        "amountIn": "122255691783727626286",
+        "amountOut": "149684577",
+        "defaultProgramHash": "0x8f937285f0a9b84f63cf942e8c9a6aa1f0bfe0026a9260848992b2f7c2607703",
+        "quotedScriptHash": "0x292a135262879ddb7bb405a97c74b47ff5333eb6bfa1ee6557f5a6ebcddd0b0a",
+        "defaultAndQuotedEqualOldActual": true
+      }
+    ],
+    "oldEvidence": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo72/source/logs/ekubo-coffee-20261010.wauxqp/erc20-dual-1.json",
+      "sha256": "c6bc59ac02dd9f7f9a636de3649aa4e80d6709b045c25d76c215fc1d0389cb26"
+    },
+    "VMCompatibility": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/reuse-default06.json",
+      "sha256": "c2724d63c36d9101b1196bfee2a08aae0e59efb3b28c6f98333e7e21a745fd96"
+    },
+    "scope": "4 old same-N/same-input quoted/default executions preserved; new tests execute direct only"
+  },
+  "native": {
+    "identicalPrograms": 36,
+    "fixtureSha256": "539f67c70dd809ad8af375f670d15851bd1cd29f5466a7d59970a94d53a958c0",
+    "oldFixture": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo-evidence13/evm-final/programs.json",
+      "sha256": "539f67c70dd809ad8af375f670d15851bd1cd29f5466a7d59970a94d53a958c0"
+    },
+    "currentFixture": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo72/evidence09/native-evm/programs.json",
+      "sha256": "539f67c70dd809ad8af375f670d15851bd1cd29f5466a7d59970a94d53a958c0"
+    },
+    "currentRegression": "3/3 actual BotVM functions using production current emitter and synthetic Router/token/wrapper; not real TWAMM",
+    "retainedActualNative": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo60/handoff06.json",
+      "sha256": "950d7591ab50d3eefb60ba40d2dc46f9fcdc5f04be5ea4699dbb8048df531588"
+    },
+    "boundary": "ERC20-only branch does not change native/default bytes; current36-program equality certifies this, actual native history remains old hash-bound evidence"
+  },
+  "limits": [
+    "No repeated actual native or quoted/default historical execution",
+    "No opportunity/original-precall/performance claim",
+    "No actual TWAMM extension acceptance added"
+  ]
+}

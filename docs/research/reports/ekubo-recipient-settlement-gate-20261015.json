@@ -1,0 +1,28 @@
+[
+  {
+    "family": "custom-swap:ekubo-router-v1",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T11:33:04.723506+00:00",
+    "finishedAt": "2026-10-15T11:34:02.623369+00:00",
+    "logSha256": "7c1259e357b31ccd93cf2238800b543d57958e9e0cdf017d38bb1621df5bc913",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/ekubo-gate79-selection.json",
+    "manifestSha256": "df065b52b64c9dc65f9a97111f6364396df3f602615dfc0cda998852d7fbaef2",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "custom-swap:ekubo-router-v1",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  }
+]

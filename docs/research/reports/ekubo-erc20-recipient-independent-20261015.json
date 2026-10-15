@@ -1,0 +1,66 @@
+{
+  "reviewer": "root non-author",
+  "status": "pass",
+  "raw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo72/evidence09/direct07.json",
+    "sha256": "00dcf60fdc0c6b2580f16f1cdc8e6896159aee2c6129555d2708834b69eeebba"
+  },
+  "source": {
+    "number": 25943731,
+    "hash": "0x265fd1d8bfa75ca4aa8ae34c486750b62c494be0695dc2893c5e74836aa63e41",
+    "generation": 25943731
+  },
+  "counts": {
+    "fullInputPackets": 16,
+    "rawAndTransferTokenDeltas": 64,
+    "nativeInventoryChecks": 8,
+    "allowanceCleared": 8,
+    "positive": 8,
+    "declaredRejections": 8
+  },
+  "amounts": [
+    {
+      "direction": "token0-to-token1",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0xd9fcd98c322942075a5c3860693e9f4f03aae07b",
+      "amountIn": "5135191",
+      "actualReceived": "4141218625718870892",
+      "label": "recorded-input-at-N-end"
+    },
+    {
+      "direction": "token0-to-token1",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0xd9fcd98c322942075a5c3860693e9f4f03aae07b",
+      "amountIn": "10270382",
+      "actualReceived": "8281704184966020032",
+      "label": "historical-or-twice-recorded-input-at-N-end"
+    },
+    {
+      "direction": "token1-to-token0",
+      "tokenIn": "0xd9fcd98c322942075a5c3860693e9f4f03aae07b",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "3522741232389004055",
+      "actualReceived": "4323986",
+      "label": "recorded-input-at-N-end"
+    },
+    {
+      "direction": "token1-to-token0",
+      "tokenIn": "0xd9fcd98c322942075a5c3860693e9f4f03aae07b",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "122255691783727626286",
+      "actualReceived": "149684577",
+      "label": "historical-or-twice-recorded-input-at-N-end"
+    }
+  ],
+  "reuse": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/ekubo72/reuse-default-native10.json",
+    "sha256": "9821182e2a047e94a2bc282bb58ea21da25d47cb492d375c565b9fea67a11c07",
+    "method": "Checked immutable original raw; 4 default programs and quoted scripts match original actual executions; native fixture is byte-identical. Both EVM runs pass; ERC20 new driver explicitly verifies before/after sourceStable; native uses byte-identical frozen fixture."
+  },
+  "method": "Independent full request packet, raw strict attestation/executor binding, token deltas recomputed from Transfer, packed signed Core event, approval amount/clear and native inventory. Canonical actual run receipts hash-bound in author handoff; no historical rerun.",
+  "limits": [
+    "8 history negatives are declared revert, not independent post-revert storage. Synthetic BotVM EVM separately covers full rollback.",
+    "Historical external recipient native not independently observed.",
+    "Input-only donor and raw2/effective0 remain; no natural target valuation, opportunity or performance claim."
+  ]
+}
