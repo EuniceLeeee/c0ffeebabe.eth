@@ -46,14 +46,14 @@ export const erc4626Execution: ExecutionSemantics<
     const { descriptor: d, route: r, executor } = input;
     assertErc4626Invocation(d, r); runtimeExecutor(executor, d.vault);
     const request = input.settlement;
-    if (request && (request.kind !== "direct-output" || d.infinifi !== undefined)) return null;
+    if (request && (request.kind !== "direct-output")) return null;
     const recipient = request ? runtimeExecutor(request.recipient, d.vault, d.share, d.asset,
       ...(d.custodian ? [d.custodian.proxyAdmin] : [])) : executor;
     const settle = { settlement: { directOutput: true as const }, ...(request ? { settlementRequest: request } : {}) };
     if (d.infinifi !== undefined) {
       assertCustodianExecutionSource(input.source);
       if (input.runtimeEvidence.length) throw new Error("InfiniFi pending runtime evidence unsupported");
-      return runtimeLeg(r.adapterId, infinifiProgram(d.infinifi, executor, r.direction));
+      return { ...runtimeLeg(r.adapterId, infinifiProgram(d.infinifi, executor, r.direction, 1n, request ? recipient : undefined)), ...settle };
     }
     if (d.custodian !== undefined) {
       assertCustodianExecutionSource(input.source);

@@ -1,0 +1,859 @@
+{
+  "schemaVersion": 1,
+  "status": "implemented-local-regressions-reviewed; unified historical acceptance pending",
+  "familyId": "protocol:erc4626",
+  "variant": "infinifi-gateway-staking",
+  "directions": [
+    "deposit",
+    "redeem"
+  ],
+  "base": "8345acbe29dbb199bb6284cf8d698276728f639b",
+  "actualWorkspace": "/opt/mev-cloud/family-runtime-20261007",
+  "changes": [
+    "Explicit direct-output passes receiver to stake/unstake; caller continues to fund input.",
+    "Positive exact input debit, return versus actual receiver receipt, vault supply, reward/core/role and Gateway residual guards preserved.",
+    "Explicit receiver protects actor old output, receiver old input and actor native currency; exact approval and cleanup preserved.",
+    "Default emitter unchanged; quote-output and deferred-input remain unsupported; no caller continuation exists on selected Gateway."
+  ],
+  "validation": {
+    "actualBuild": "passed",
+    "ownedOnlyBuild": "passed",
+    "infinifiContractModel": "14/14 passed",
+    "erc4626Lifecycle": "passed",
+    "recipientModel": "17/17 passed",
+    "allFamily": "301/301 passed",
+    "scope": "Synthetic Family-builder program models and production construction tests. Not new historical Gateway EVM evidence."
+  },
+  "remaining": [
+    "New direct mode real historical execution and actual rollback in both directions.",
+    "Full production issuer new-direct integration.",
+    "Formal Adapter Replay, opportunities and phase4 local/representative performance."
+  ],
+  "evidenceRoot": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi-evidence17",
+  "cloudEvidenceRoot": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/infinifi16",
+  "owned": [
+    {
+      "path": "listener/package.json",
+      "before": "dc980133cbed2a74670e20da3395f0368364f3295a9b3eba6e59e472239a2640",
+      "after": "4bf548c36d692e77579a6a41e9e035d6ef82ee240b2244a1d7a32725f0ade2f2"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
+      "before": "42326ecb048e5e1d3b73a0e399632d507420dd3775e261a3c88287120b8a5d8c",
+      "after": "3af9e90c12046f093ed1d10cb1af23e54f12348d33baf05ab124260bb722ecba"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
+      "before": "a45f1262cac1072c29bf38ad2725bfcf872f8c425b393a552c1fe35b97143edf",
+      "after": "18f472bdc8ea14762195b84f4881d4514f8f52116abe5095e0ffc86c2c0d5d36"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/test/infinifi-contract.ts",
+      "before": "42d78ca2abd3db502fa8296999042565f368d97a47a37f30354c2f06f4a510de",
+      "after": "f4c5616a7c0932d2fef0d7f4d7c7cfbb3f34a6891892be81a248e7a7672096bc"
+    }
+  ],
+  "source": {
+    "commonSource": [
+      {
+        "path": "listener/src/adapters/registry.ts",
+        "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/compiler.ts",
+        "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-credit-runtime.ts",
+        "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+        "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+        "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+        "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+      },
+      {
+        "path": "listener/src/searcher/adapter-funding-runtime.ts",
+        "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+      },
+      {
+        "path": "listener/src/searcher/adapter-work-intent.ts",
+        "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+      },
+      {
+        "path": "listener/src/searcher/amount-quote-continuity.ts",
+        "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+      },
+      {
+        "path": "listener/src/searcher/blockscan-route-identity.ts",
+        "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+      },
+      {
+        "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+        "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+      },
+      {
+        "path": "listener/src/searcher/exact-prefix-plan.ts",
+        "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+      },
+      {
+        "path": "listener/src/searcher/exact-trial-state.ts",
+        "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+      },
+      {
+        "path": "listener/src/searcher/execution-asset-boundary.ts",
+        "sha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0"
+      },
+      {
+        "path": "listener/src/searcher/identity-asset-metadata.ts",
+        "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+      },
+      {
+        "path": "listener/src/searcher/runtime-evidence.ts",
+        "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+      },
+      {
+        "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+        "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+      },
+      {
+        "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+        "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+        "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+        "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-bounds.ts",
+        "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-propagation.ts",
+        "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-rejection.ts",
+        "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-builder.ts",
+        "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+        "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+      },
+      {
+        "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+        "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+      },
+      {
+        "path": "listener/src/searcher/strategy-taxonomy.ts",
+        "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+      },
+      {
+        "path": "listener/src/searcher/strict-production-runtime-session.ts",
+        "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+        "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+        "sha256": "34b545c41cf72f738da01aa38b9fcbb02b27268119c0e1e7cd67ce516761bb09"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+        "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-program.ts",
+        "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+      },
+      {
+        "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+        "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+        "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+        "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-instance-identity.ts",
+        "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/shared/constants/addresses.ts",
+        "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      },
+      {
+        "path": "listener/src/shared/executor/botvm-program-entry.ts",
+        "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+      },
+      {
+        "path": "listener/src/shared/state/state-backend.ts",
+        "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+      },
+      {
+        "path": "src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+      },
+      {
+        "path": "src/BotVMEncoder.sol",
+        "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+      },
+      {
+        "path": "src/BotVMScriptBuilder.sol",
+        "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+      },
+      {
+        "path": "src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+      },
+      {
+        "path": "src/FlashArb.sol",
+        "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+      },
+      {
+        "path": "src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+      },
+      {
+        "path": "src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+      },
+      {
+        "path": "src/interfaces/IFluidVault.sol",
+        "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+      },
+      {
+        "path": "src/interfaces/IMorpho.sol",
+        "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+      },
+      {
+        "path": "src/interfaces/ISwap.sol",
+        "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+      }
+    ],
+    "source": [
+      {
+        "path": "listener/src/adapters/protocol-legs.ts",
+        "sha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+        "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/production-families/erc4626.production.ts",
+        "sha256": "3a6d4a395d2961a1b387b94904cd51b1c3fd6e4276658561ae0c92d71e7b63a7"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/abi.ts",
+        "sha256": "947cd09e9876b001ec16ec07afbb5320000d301c06b184d63bbbd662c8c6fa96"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/action.ts",
+        "sha256": "51d0789b45ca22ab71602552b04a629c6b922ece97fc77f08834756ca3f823ef"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/binding.ts",
+        "sha256": "9a10b80d659ad840a7668bff0703fe45f4a25d58e871b5117e8c46d83bb41a53"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
+        "sha256": "41d02a0a7fc54130b689be5068aae38a9cf41296117737bf3254eb37ff340f87"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-identity.ts",
+        "sha256": "2784df27012996ea329ac9736f1782269d2da3f00485da59ec694af5b8064379"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian.ts",
+        "sha256": "0d5c0806203c498836853282676a736084bdce0be1a782971389eeefd21730cc"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
+        "sha256": "3af9e90c12046f093ed1d10cb1af23e54f12348d33baf05ab124260bb722ecba"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/identity.ts",
+        "sha256": "aaa7c0f8ba4595906beabfe3487c5a8eea148e6164c4c26fbbc14310b42281ae"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
+        "sha256": "18f472bdc8ea14762195b84f4881d4514f8f52116abe5095e0ffc86c2c0d5d36"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-identity.ts",
+        "sha256": "d6984ad533dc4a2df85db1bdc9d1041b5d7b49479b41a5407238fc21ae646da4"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+        "sha256": "56559ed4ed13939d32553cd37492be7f71a1e1e7c71e811f59dd985bfebcef3f"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/manifest.ts",
+        "sha256": "a92b6d40fee10678191e81da14a9c123ee6665ef5e561735e015fd783ab218af"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/routes.ts",
+        "sha256": "f02f44b874490a3dcb65c4d271a5b81b42bdd1c44dcc0c477391d07c2675eb77"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+        "sha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      }
+    ]
+  },
+  "catalog": {
+    "method": "Canonical generator on immutable HEAD plus hash-checked owned source. Ignored generator input artifact only; actual workspace and peer files are unchanged.",
+    "workingSha256": "87a16ed1c02480a1b00449df78985c65852211f1700df54eb4105e8a5a48193f",
+    "ownedSha256": "089b31ea595e493136b9832e3b0f4b3f96651f287a35dc4b52c8335c25517e21",
+    "peerOnlyDifferences": [
+      "custom-swap:uniswap-v1:capture",
+      "custom-swap:uniswap-v1:discovery",
+      "custom-swap:uniswap-v1:exact",
+      "custom-swap:uniswap-v1:execution",
+      "custom-swap:uniswap-v1:identity",
+      "custom-swap:uniswap-v1:instance",
+      "custom-swap:uniswap-v1:pricing",
+      "custom-swap:uniswap-v1:routes",
+      "custom-swap:uniswap-v1:victim"
+    ]
+  },
+  "checks": [
+    {
+      "name": "generate",
+      "exitCode": 0,
+      "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+      "at": "2026-10-15T04:23:42.124334+00:00"
+    },
+    {
+      "name": "index",
+      "exitCode": 0,
+      "sha256": "de69c78e1252889bb1ea49aac2ec3f75526f211d977bbde7128716ca4ec39e9f",
+      "at": "2026-10-15T04:23:42.470748+00:00"
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "at": "2026-10-15T04:23:50.639598+00:00"
+    },
+    {
+      "name": "contract",
+      "exitCode": 0,
+      "logSha256": "cdccb3c6b356153c26af98af72e1814cb06e11536b96765d30f4f561f2855070",
+      "startedAt": "2026-10-15T04:24:59.233139+00:00",
+      "completedAt": "2026-10-15T04:25:03.502548+00:00"
+    },
+    {
+      "name": "erc4626",
+      "exitCode": 0,
+      "logSha256": "813321d5adaf95ebde92d326bf913d5b3c094af3763420aa8022ff6aeb52105e",
+      "startedAt": "2026-10-15T04:25:03.502770+00:00",
+      "completedAt": "2026-10-15T04:25:04.126480+00:00"
+    },
+    {
+      "name": "recipient",
+      "exitCode": 0,
+      "logSha256": "2916bf01cbd7d323d95b1bdcdfc3165c3bc4ed49ea7afb2263bbdf0497819971",
+      "startedAt": "2026-10-15T04:25:04.126786+00:00",
+      "completedAt": "2026-10-15T04:25:04.970445+00:00"
+    },
+    {
+      "name": "all-family",
+      "exitCode": 0,
+      "logSha256": "5816bf1f192481403681b15454a99d287ec72df788d38038ebcfefc8588e19ac",
+      "startedAt": "2026-10-15T04:25:04.970752+00:00",
+      "completedAt": "2026-10-15T04:25:12.706013+00:00"
+    },
+    {
+      "name": "catalog",
+      "exitCode": 0,
+      "logSha256": "b4eabd7a3bb0b58bacb86c8f1f19eb2fb8ffe3d759db911baed1aaa3212b620e"
+    },
+    {
+      "name": "owned-build",
+      "exitCode": 0,
+      "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    }
+  ],
+  "toolReconciliation": {
+    "query": [
+      "infinifi"
+    ],
+    "selected": [
+      "listener:searcher:infinifi-contract"
+    ],
+    "reason": "Direct receiver implementation scope; existing historical cache tool was inspected in generated inventory, but rerunning history is deferred to unified acceptance. Contract model executed through tool-run, manifest contains machine receipt.",
+    "manifestSha256": "05ebfd14127ba2cd9344fcdd600fabd5745c0c3cd80b780a3c3c525e25f1e9bd"
+  },
+  "reviews": [
+    {
+      "path": "infinifi-review01.json",
+      "sha256": "7b765ce90c445cb6d207e22770ac57d0fbd49666f156a8f2d3b04ceddee01278",
+      "review": {
+        "schemaVersion": 1,
+        "reviewPass": 1,
+        "reviewer": "non-author /root/interface_protocols_b",
+        "scope": {
+          "familyId": "protocol:erc4626",
+          "variant": "infinifi-gateway-staking",
+          "directions": [
+            "deposit",
+            "redeem"
+          ],
+          "stage": "candidate-static-implementation-review",
+          "candidateRoot": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi-candidate",
+          "productionEditsByReviewer": false,
+          "testsBuildRpcByReviewer": false
+        },
+        "conclusion": "No concrete implementation blocker found in this four-file change. Ready for the parent-owned offline checks; not a historical or complete adaptation acceptance.",
+        "staticImplementationReady": true,
+        "blockingFindings": [],
+        "candidatePins": [
+          {
+            "path": "listener/package.json",
+            "sha256": "4bf548c36d692e77579a6a41e9e035d6ef82ee240b2244a1d7a32725f0ade2f2",
+            "baselineSha256": "dc980133cbed2a74670e20da3395f0368364f3295a9b3eba6e59e472239a2640"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
+            "sha256": "3af9e90c12046f093ed1d10cb1af23e54f12348d33baf05ab124260bb722ecba",
+            "baselineSha256": "42326ecb048e5e1d3b73a0e399632d507420dd3775e261a3c88287120b8a5d8c"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
+            "sha256": "18f472bdc8ea14762195b84f4881d4514f8f52116abe5095e0ffc86c2c0d5d36",
+            "baselineSha256": "a45f1262cac1072c29bf38ad2725bfcf872f8c425b393a552c1fe35b97143edf"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/test/infinifi-contract.ts",
+            "sha256": "f4c5616a7c0932d2fef0d7f4d7c7cfbb3f34a6891892be81a248e7a7672096bc",
+            "baselineSha256": "42d78ca2abd3db502fa8296999042565f368d97a47a37f30354c2f06f4a510de"
+          }
+        ],
+        "interfaceReview": {
+          "gateway": "0x3f04b65Ddbd87f9CE0A2e7Eb24d80e7fb87625b5",
+          "implementation": "0x750136aC021a7149F0EE38141d0bA920Cca1fC5D",
+          "abi": [
+            {
+              "signature": "stake(address,uint256)",
+              "selector": "0xadc9772e",
+              "stateMutability": "nonpayable"
+            },
+            {
+              "signature": "unstake(address,uint256)",
+              "selector": "0xc2a672e0",
+              "stateMutability": "nonpayable"
+            }
+          ],
+          "sourceUrl": "https://eth.blockscout.com/api/v2/smart-contracts/0x750136ac021a7149f0ee38141d0ba920cca1fc5d",
+          "sourceQualification": "Saved Blockscout response is_verified=true, is_fully_verified=false, is_changed_bytecode=false. Actual inherited V4 -> V3 -> V2 implementation was read; not proxy ABI alone.",
+          "payer": "Gateway first pulls receipt tokens or staked shares from msg.sender (the executor).",
+          "receiver": "stake sends minted shares to _to via deposit(amount,_to); unstake sends receipt tokens to _to via redeem(shares,_to,gateway).",
+          "order": "Input pull -> reward distribution and entry/exit toggle -> deposit or redeem -> return amount; all within nonReentrant Gateway call.",
+          "callback": "Internal yield-sharing/cache hooks only; no caller continuation or deferred input debt.",
+          "quoteSensitivity": "Selected implementation uses amount and vault/reward state, not _to for conversion rate. Redemption owner remains Gateway. Paused/loss/role checks remain applicable; this is not an assertion about arbitrary upgrades.",
+          "cachedHistoricalIdentity": {
+            "source": {
+              "generation": 25944594,
+              "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+              "number": 25944594
+            },
+            "gatewayCodeHash": "0xd9c95cf982a9ee16b79c99859e8d1f1cfd33479aadd5002a0c09ea5dfcb7fd20",
+            "gatewayImplementationCodeHash": "0x0eed8d83e9c7cd1e0d495aa9cf166b5eff10e55c621134d1bb58ce41599a0a55",
+            "ready": {
+              "sha256": "91a4f8286f1f0cfe60ecd6bb76cd7aeed911edc55d5d9ac7cd41fd4c8a8270c7",
+              "container": "cloud-historical-bindings.json"
+            },
+            "qualification": "Existing audit/Ready binding reused; no fresh RPC or new direct-recipient execution claimed."
+          },
+          "savedResponsesHashChecked": 5
+        },
+        "codeChecks": [
+          {
+            "file": "execution.ts:52",
+            "result": "Direct-output accepted and request echoed; invocation/source/runtime-evidence checks preserved. quote-output/deferred-input return null."
+          },
+          {
+            "file": "infinifi-execution.ts:6",
+            "result": "Rejects zero/malformed/infrastructure recipients. Normalized self alias; positive r0. Preserves registry/core/role/funds checks and exact zero/amount/zero approval readbacks."
+          },
+          {
+            "file": "infinifi-execution.ts:39",
+            "result": "Actor actual debit equals r0; chosen receiver fresh output equals positive return; vault supply and both Gateway residuals checked. External actor output/receiver input stay unchanged; explicit self/external native balance restores. Snapshot r7/r10/r11 do not collide; receipt r8 stays intact."
+          },
+          {
+            "file": "infinifi-execution.ts",
+            "result": "With recipient undefined, receiver is executor and all new guards are omitted; original emitter order/arguments/amount patch/minimum/approval are unchanged by static comparison. No program byte emission was executed by reviewer."
+          },
+          {
+            "file": "listener/package.json",
+            "result": "Adds existing contract-model test script only. No central production or quoted/Exact change."
+          }
+        ],
+        "testReview": {
+          "file": "listener/src/searcher/venues/protocols/erc4626-family/test/infinifi-contract.ts",
+          "executionStatus": "Not run by reviewer; parent results not yet reviewed in this pass.",
+          "positiveCoverage": "Both directions x self/external recipient x 1,91,10^18 model inputs, pre-existing actor/recipient/Gateway balances, exact allowance cleanup and native preservation.",
+          "negativeCoverage": "Missing funds; zero input; zero/short/excess debit; missing/incorrect receipt; supply and Gateway residual mismatch; lost role; false approval; wrong output destination; actor output/receiver input/native changes; invalid bound recipients; unsupported quote/deferred requests.",
+          "construction": "Calls actual erc4626Execution.buildRuntimeLeg using a synthetic admitted descriptor. Throwing amount/Exact/quoted/minimum getters are attached to the actual input object. No successful-execution postcondition runs inside the function wrapped by assert.throws for negative cases.",
+          "qualification": "inspectRuntime and synthetic balances are a contract model, not BotVM EVM or real Gateway rollback evidence. The existing production sim-selector test remains default-mode and does not independently establish new direct mode through the full issuer."
+        },
+        "remainingAcceptance": [
+          "Review parent-owned build/catalog/index and offline regressions when available.",
+          "Unified historical direct receiver execution in both directions at current source: debit/receipt/old inventory/allowance and actual failure rollback. Old default history does not cover new mode.",
+          "Full issuer direct construction and actual EVM rollback are not proven by this Family-builder model.",
+          "Adapter Replay, opportunity and representative performance deferred; no complete adaptation pass."
+        ],
+        "evidenceRefs": [
+          {
+            "path": "protocols-a-interface-audit.json",
+            "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+          },
+          {
+            "path": "cloud-historical-bindings.json",
+            "sha256": "22915651d15aeb2d2613f046a5ebb022c929b3ba68a3090899471151519f743b"
+          },
+          {
+            "path": "sources/0x750136ac021a7149f0ee38141d0ba920cca1fc5d/064-InfiniFiGatewayV2.sol",
+            "sha256": "6c314240a509526bb35c8af50968087736d9fe3867ba51905ad9a3a7b9a343ff"
+          },
+          {
+            "path": "sources/0x750136ac021a7149f0ee38141d0ba920cca1fc5d/017-InfiniFiGatewayV3.sol",
+            "sha256": "6355d08e0ee464e1b457f855bbe8e433cae924dcc452361f386e99bca1992636"
+          },
+          {
+            "path": "sources/0x750136ac021a7149f0ee38141d0ba920cca1fc5d/000-InfiniFiGatewayV4.sol",
+            "sha256": "9c39708e5e11e19aeb97dcf6c777ef4749aa0714bf40491dcb1ec3d6da25d572"
+          },
+          {
+            "path": "sources/0xdbdc1ef57537e34680b898e1febd3d68c7389bcb/000-StakedToken.sol",
+            "sha256": "fcd7abf49f93506a813fe1a49ce748e5c5a8c5284bfd1a747b7ed22f0e737b97"
+          },
+          {
+            "path": "sources/0xdbdc1ef57537e34680b898e1febd3d68c7389bcb/027-ERC4626.sol",
+            "sha256": "de84919008f65947ef586ebbb9d4dd8d024304a1a08a9d9e408dbe46ef3d2871"
+          }
+        ],
+        "evidenceRoot": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-a"
+      }
+    },
+    {
+      "path": "infinifi-review02.json",
+      "sha256": "34160f880fd5fc982c2d70bd54e8e0c289a153e68460913b3f5b31703b637b6b",
+      "review": {
+        "schemaVersion": 1,
+        "reviewPass": 2,
+        "reviewer": "non-author /root/interface_protocols_b",
+        "scope": {
+          "familyId": "protocol:erc4626",
+          "variant": "infinifi-gateway-staking",
+          "stage": "implementation-and-offline-regression",
+          "baselineHead": "8345acbe29dbb199bb6284cf8d698276728f639b",
+          "candidateRoot": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi-candidate"
+        },
+        "implementationReady": true,
+        "blockingFindings": [],
+        "conclusion": "Implementation and reviewed offline regression are complete for this scoped receiver change. No submission-stage implementation blocker found. This is not full adaptation/historical acceptance.",
+        "reviewMethod": "Local read-only source/hash/receipt/log inspection. Reviewer did not execute tests, build, generator, RPC, or production writes.",
+        "sourceVerification": {
+          "ownedFiles": [
+            {
+              "path": "listener/package.json",
+              "before": "dc980133cbed2a74670e20da3395f0368364f3295a9b3eba6e59e472239a2640",
+              "after": "4bf548c36d692e77579a6a41e9e035d6ef82ee240b2244a1d7a32725f0ade2f2"
+            },
+            {
+              "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
+              "before": "42326ecb048e5e1d3b73a0e399632d507420dd3775e261a3c88287120b8a5d8c",
+              "after": "3af9e90c12046f093ed1d10cb1af23e54f12348d33baf05ab124260bb722ecba"
+            },
+            {
+              "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
+              "before": "a45f1262cac1072c29bf38ad2725bfcf872f8c425b393a552c1fe35b97143edf",
+              "after": "18f472bdc8ea14762195b84f4881d4514f8f52116abe5095e0ffc86c2c0d5d36"
+            },
+            {
+              "path": "listener/src/searcher/venues/protocols/erc4626-family/test/infinifi-contract.ts",
+              "before": "42d78ca2abd3db502fa8296999042565f368d97a47a37f30354c2f06f4a510de",
+              "after": "f4c5616a7c0932d2fef0d7f4d7c7cfbb3f34a6891892be81a248e7a7672096bc"
+            }
+          ],
+          "candidateEqualsPass1": true,
+          "ownedBaselineMatchesExactGitHead": true,
+          "commonPinsMatched": 57,
+          "familyPinsMatched": 25,
+          "comparison": "Every current-source17 entry independently hashed from the candidate override or the exact baseline Git object; all 82 entries matched. Test/package pins separately match owned16.",
+          "defaultSemantics": "Pass1 static finding preserved: recipient omitted emits original program sequence; quoted/Exact remain unchanged, direct self/external adds scoped guards, quote/deferred rejected."
+        },
+        "offlineEvidence": {
+          "canonicalContract": {
+            "toolId": "listener:searcher:infinifi-contract",
+            "capabilityQuery": [
+              "infinifi"
+            ],
+            "result": "14/14; 0 failed/skipped",
+            "descriptorSha256": "627aa13238579f3518f7a9700c4056c1706dcb77688c6b72bbf06a7c66e1bb2d",
+            "exitCode": 0,
+            "stdoutSha256": "f5be4757df8ba1ad085c400490b6c0da8130206618ec41daea8ee50747be4337",
+            "stdoutBytes": 1920,
+            "stdoutMatchedRawLog": true,
+            "rawLogByteOffset": 224,
+            "stderrBytes": 0
+          },
+          "erc4626Lifecycle": "PASS: raw/registered direction-isolated identity, required failures, exact amount and round limits.",
+          "recipientRegression": "17/17; 0 failed/skipped",
+          "allFamilyRegression": "301/301; 0 failed/skipped in actual dirty working baseline, including preserved peer changes.",
+          "workingProductionBuild": "PASS (build:live)",
+          "ownedOnlyProductionBuild": "PASS on immutable HEAD plus hash-checked owned source; build log matches working build log.",
+          "logsIndependentlyHashChecked": 9,
+          "qualification": "InfiniFi direct mode evidence is actual Family builder + synthetic inspectRuntime contract model. Existing synthetic selector/coordinator tests are not real Gateway EVM or direct-recipient historical execution."
+        },
+        "catalogVerification": {
+          "method": "Canonical generator on immutable HEAD plus hash-checked owned source. Ignored generator input artifact only; actual workspace and peer files are unchanged.",
+          "workingSha256": "87a16ed1c02480a1b00449df78985c65852211f1700df54eb4105e8a5a48193f",
+          "ownedSha256": "089b31ea595e493136b9832e3b0f4b3f96651f287a35dc4b52c8335c25517e21",
+          "peerOnlyDifferences": [
+            "custom-swap:uniswap-v1:capture",
+            "custom-swap:uniswap-v1:discovery",
+            "custom-swap:uniswap-v1:exact",
+            "custom-swap:uniswap-v1:execution",
+            "custom-swap:uniswap-v1:identity",
+            "custom-swap:uniswap-v1:instance",
+            "custom-swap:uniswap-v1:pricing",
+            "custom-swap:uniswap-v1:routes",
+            "custom-swap:uniswap-v1:victim"
+          ],
+          "recordedOutcome": "PASS",
+          "sourceCountsMatchReceiptLog": true,
+          "peerOnlyDifferenceCount": 9,
+          "peerOnlyFamily": "custom-swap:uniswap-v1",
+          "qualification": "Canonical execution receipt and source closure reviewed. No generator or test was rerun by reviewer. Owned-only scope covers catalog/build; no separate owned-only all-family run is claimed."
+        },
+        "resolvedFindings": [],
+        "remainingAcceptance": [
+          "Real same-state new direct-recipient Gateway execution for deposit/redeem, including source/implementation/executor pins, exact debit, receiver receipt and inventories.",
+          "Actual EVM failure atomicity/rollback for new direct mode; model rejection is not EVM rollback.",
+          "Complete direct mode through production issuer remains a unified acceptance item; old default-mode sim-selector/history evidence does not substitute.",
+          "Formal Adapter Replay and representative performance remain unverified; no opportunity or full adaptation pass claimed."
+        ],
+        "evidenceRoot": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi-evidence17",
+        "evidenceRefs": [
+          {
+            "path": "base16.json",
+            "sha256": "4e8d803f61eba4cfb4753b7d28364ff4eb711a9d1c48e2706c7f5ae143044d5b"
+          },
+          {
+            "path": "owned16.json",
+            "sha256": "75c508ca6cf03b60e7d66b63df03ce686219be1fc4f41474f5608670ad25b55d"
+          },
+          {
+            "path": "current-source17.json",
+            "sha256": "d28c074257f304cc2c73742985a7e3bfd7b28e60a87656c4f78ec951b24113d7"
+          },
+          {
+            "path": "selection16.json",
+            "sha256": "05ebfd14127ba2cd9344fcdd600fabd5745c0c3cd80b780a3c3c525e25f1e9bd"
+          },
+          {
+            "path": "catalog-receipt17.json",
+            "sha256": "f3de8f3d25d55fc02add87724c92f71cb9250c5e5cfebc567d14e15ce036929e"
+          },
+          {
+            "path": "checks16.json",
+            "sha256": "e0090c19a476a975bba438f419bb0e0ae2a63d8480f110859310906acc87c07c"
+          },
+          {
+            "path": "checks17.json",
+            "sha256": "2051cd284f10a23b96cfbfddcee5311589539aab6df619d45ea8cc2461b61e53"
+          },
+          {
+            "path": "check17-contract.log",
+            "sha256": "cdccb3c6b356153c26af98af72e1814cb06e11536b96765d30f4f561f2855070"
+          },
+          {
+            "path": "check17-erc4626.log",
+            "sha256": "813321d5adaf95ebde92d326bf913d5b3c094af3763420aa8022ff6aeb52105e"
+          },
+          {
+            "path": "check17-recipient.log",
+            "sha256": "2916bf01cbd7d323d95b1bdcdfc3165c3bc4ed49ea7afb2263bbdf0497819971"
+          },
+          {
+            "path": "check17-all-family.log",
+            "sha256": "5816bf1f192481403681b15454a99d287ec72df788d38038ebcfefc8588e19ac"
+          },
+          {
+            "path": "check17-catalog.log",
+            "sha256": "b4eabd7a3bb0b58bacb86c8f1f19eb2fb8ffe3d759db911baed1aaa3212b620e"
+          },
+          {
+            "path": "check16-build.log",
+            "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+          },
+          {
+            "path": "check17-owned-build.log",
+            "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+          }
+        ],
+        "priorReview": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/infinifi-review01.json",
+          "sha256": "7b765ce90c445cb6d207e22770ac57d0fbd49666f156a8f2d3b04ceddee01278"
+        }
+      }
+    }
+  ],
+  "evidenceFiles": [
+    {
+      "path": "base16.json",
+      "sha256": "4e8d803f61eba4cfb4753b7d28364ff4eb711a9d1c48e2706c7f5ae143044d5b"
+    },
+    {
+      "path": "catalog-receipt17.json",
+      "sha256": "f3de8f3d25d55fc02add87724c92f71cb9250c5e5cfebc567d14e15ce036929e"
+    },
+    {
+      "path": "check16-build.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "path": "check16-generate.log",
+      "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+    },
+    {
+      "path": "check16-index.log",
+      "sha256": "de69c78e1252889bb1ea49aac2ec3f75526f211d977bbde7128716ca4ec39e9f"
+    },
+    {
+      "path": "check17-all-family.log",
+      "sha256": "5816bf1f192481403681b15454a99d287ec72df788d38038ebcfefc8588e19ac"
+    },
+    {
+      "path": "check17-catalog.log",
+      "sha256": "b4eabd7a3bb0b58bacb86c8f1f19eb2fb8ffe3d759db911baed1aaa3212b620e"
+    },
+    {
+      "path": "check17-contract.log",
+      "sha256": "cdccb3c6b356153c26af98af72e1814cb06e11536b96765d30f4f561f2855070"
+    },
+    {
+      "path": "check17-erc4626.log",
+      "sha256": "813321d5adaf95ebde92d326bf913d5b3c094af3763420aa8022ff6aeb52105e"
+    },
+    {
+      "path": "check17-owned-build.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "path": "check17-recipient.log",
+      "sha256": "2916bf01cbd7d323d95b1bdcdfc3165c3bc4ed49ea7afb2263bbdf0497819971"
+    },
+    {
+      "path": "checks16.json",
+      "sha256": "e0090c19a476a975bba438f419bb0e0ae2a63d8480f110859310906acc87c07c"
+    },
+    {
+      "path": "checks17.json",
+      "sha256": "2051cd284f10a23b96cfbfddcee5311589539aab6df619d45ea8cc2461b61e53"
+    },
+    {
+      "path": "current-source17.json",
+      "sha256": "d28c074257f304cc2c73742985a7e3bfd7b28e60a87656c4f78ec951b24113d7"
+    },
+    {
+      "path": "owned16.json",
+      "sha256": "75c508ca6cf03b60e7d66b63df03ce686219be1fc4f41474f5608670ad25b55d"
+    },
+    {
+      "path": "selection16.json",
+      "sha256": "05ebfd14127ba2cd9344fcdd600fabd5745c0c3cd80b780a3c3c525e25f1e9bd"
+    }
+  ],
+  "preservedFailures": [],
+  "completedAt": "2026-10-15T04:28:15.665268+00:00"
+}

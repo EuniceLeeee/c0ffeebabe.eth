@@ -3,12 +3,14 @@ import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-progra
 import { runtimeExecutor } from "../../runtime-execution.js";
 import { INFINIFI_ABI as ABI, INFINIFI_GATEWAY, INFINIFI_ROLE, infinifiAddress, type InfiniFiBinding } from "./infinifi.js";
 
-export function infinifiProgram(b: Pick<InfiniFiBinding, "vault" | "asset" | "gateway" | "yieldSharing" | "core">, executor: string, direction: "deposit" | "redeem", minimumOut = 1n): RuntimeAmountProgram {
+export function infinifiProgram(b: Pick<InfiniFiBinding, "vault" | "asset" | "gateway" | "yieldSharing" | "core">, executor: string, direction: "deposit" | "redeem", minimumOut = 1n, recipient?: string): RuntimeAmountProgram {
   const { vault, asset, gateway, yieldSharing, core } = b;
   for (const address of [vault, asset, gateway, yieldSharing, core]) infinifiAddress(address);
   if (gateway.toLowerCase() !== INFINIFI_GATEWAY || new Set([vault, asset, gateway, yieldSharing, core].map(a => a.toLowerCase())).size !== 5)
     throw new Error("InfiniFi runtime bindings");
   runtimeExecutor(executor, vault, asset, gateway, yieldSharing, core);
+  const receiver = recipient === undefined ? executor : runtimeExecutor(recipient, vault, asset, gateway, yieldSharing, core);
+  const external = receiver.toLowerCase() !== executor.toLowerCase();
   if (direction !== "deposit" && direction !== "redeem" || minimumOut < 0n || minimumOut > ethers.MaxUint256)
     throw new Error("InfiniFi runtime direction/minimum");
   const deposit = direction === "deposit", input = deposit ? asset : vault, output = deposit ? vault : asset;
@@ -25,7 +27,9 @@ export function infinifiProgram(b: Pick<InfiniFiBinding, "vault" | "asset" | "ga
   // No preview or chain-external amount goes into this program. r0 alone
   // determines the spend; final output is measured independently.
   read(input, "balanceOf", [executor], 1).math("sub", 12, 1, 0);
-  read(output, "balanceOf", [executor], 2); read(vault, "totalSupply", [], 3);
+  read(output, "balanceOf", [receiver], 2); read(vault, "totalSupply", [], 3);
+  if (recipient !== undefined) p.nativeBalance(10);
+  if (external) { read(output, "balanceOf", [executor], 7); read(input, "balanceOf", [receiver], 11); }
   read(input, "balanceOf", [gateway], 5); read(output, "balanceOf", [gateway], 6);
   const approve = (actual: boolean) => {
     p.call(input, ABI.encodeFunctionData("approve", [gateway, 0n]), actual ? { patches: [{ offset: 36, reg: 0 }] } : {})
@@ -33,13 +37,18 @@ export function infinifiProgram(b: Pick<InfiniFiBinding, "vault" | "asset" | "ga
     read(input, "allowance", [executor, gateway], 12).equal(12, actual ? 0 : 14);
   };
   approve(false); approve(true);
-  p.call(gateway, ABI.encodeFunctionData(deposit ? "stake" : "unstake", [executor, 0n]), { patches: [{ offset: 36, reg: 0 }] })
+  p.call(gateway, ABI.encodeFunctionData(deposit ? "stake" : "unstake", [receiver, 0n]), { patches: [{ offset: 36, reg: 0 }] })
     .load(4, 0).math("sub", 12, 4, 15);
   approve(false);
   read(input, "balanceOf", [executor], 8).math("sub", 8, 1, 8).equal(8, 0);
-  read(output, "balanceOf", [executor], 8).math("sub", 8, 8, 2).equal(8, 4);
+  read(output, "balanceOf", [receiver], 8).math("sub", 8, 8, 2).equal(8, 4);
   read(vault, "totalSupply", [], 9).math("sub", 9, deposit ? 9 : 3, deposit ? 3 : 9).equal(9, deposit ? 4 : 0);
   read(input, "balanceOf", [gateway], 9).equal(9, 5); read(output, "balanceOf", [gateway], 9).equal(9, 6);
+  if (external) {
+    read(output, "balanceOf", [executor], 9).equal(9, 7);
+    read(input, "balanceOf", [receiver], 9).equal(9, 11);
+  }
+  if (recipient !== undefined) p.nativeBalance(9).equal(9, 10);
   p.constant(10, minimumOut > 0n ? minimumOut : 1n).math("sub", 12, 8, 10);
   return p;
 }

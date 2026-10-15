@@ -376,7 +376,8 @@
     "searcher:mooniswap-historical-ready": "node --import tsx src/searcher/venues/swaps/mooniswap-family/test/historical-ready.ts",
     "searcher:mooniswap-historical-dual": "node --import tsx src/searcher/venues/swaps/mooniswap-family/test/historical-dual.ts",
     "searcher:mooniswap-runtime-recipient-evm": "FOUNDRY_PROFILE=mooniswap_recipient forge test --ffi --match-contract MooniswapRuntimeRecipientTest",
-    "searcher:ekubo-native-recipient-evm": "node --import tsx src/searcher/venues/swaps/ekubo-family/test/recipient-runtime-evm.ts"
+    "searcher:ekubo-native-recipient-evm": "node --import tsx src/searcher/venues/swaps/ekubo-family/test/recipient-runtime-evm.ts",
+    "searcher:infinifi-contract": "node --import tsx --test src/searcher/venues/protocols/erc4626-family/test/infinifi-contract.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

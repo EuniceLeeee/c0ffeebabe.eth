@@ -212,15 +212,26 @@ test("production Exact and raw pricing use Gateway quotes; snapshots keep source
   const snapshot = erc4626Pricing.current.decodeSnapshot({ descriptor: pricing, initialResults: reads(requests) } as any);
   assert.equal(Object.keys(snapshot.quotes).length, 2); assert.deepEqual(snapshot.source, source);
 });
-function model(deposit: boolean, n: bigint, options: { spent?: bigint; received?: bigint; returned?: bigint; funds?: bigint; supply?: bigint; leftover?: bigint; role?: boolean; approveFalse?: boolean } = {}) {
+function model(deposit: boolean, n: bigint, options: { spent?: bigint; received?: bigint; returned?: bigint; funds?: bigint; supply?: bigint; leftover?: bigint; role?: boolean; approveFalse?: boolean; recipient?: string; wrongRecipient?: boolean; oldOutput?: boolean; receiverInput?: boolean; nativeChanged?: boolean } = {}) {
   const { descriptor } = setup(), input = deposit ? asset : vault, output = deposit ? vault : asset;
+  const receiver = options.recipient ?? executor;
+  let native = 17n;
   const balances = new Map<string, bigint>();
   const key = (t: string, a: string) => lower(t) + ":" + lower(a);
   balances.set(key(input, executor), options.funds ?? n + 7n); balances.set(key(output, executor), 73n);
   balances.set(key(input, INFINIFI_GATEWAY), 13n); balances.set(key(output, INFINIFI_GATEWAY), 19n);
+  if (lower(receiver) !== lower(executor)) { balances.set(key(input, receiver), 109n); balances.set(key(output, receiver), 113n); }
   let allowance = 9n, supply = amount * 1000n, swaps = 0;
-  const prog = infinifiProgram(descriptor.infinifi!, executor, deposit ? "deposit" : "redeem");
-  const r = inspectRuntime(ethers.hexlify(prog.bytes()), n, { call(c) {
+  const route = erc4626Routes.project({ descriptor }).find(r => r.direction === (deposit ? "deposit" : "redeem"))!;
+  const buildInput = { descriptor, route, source, executor, runtimeEvidence: [],
+    ...(options.recipient ? { settlement: { kind: "direct-output" as const, recipient: options.recipient } } : {}) };
+  for (const key of ["amountIn", "quotedAmountOut", "exactEvidence", "minAmountOut"])
+    Object.defineProperty(buildInput, key, { get() { throw Error("unexpected runtime external " + key); } });
+  const leg = erc4626Execution.buildRuntimeLeg!(buildInput); assert(leg);
+  assert.equal(leg.settlement?.directOutput, true);
+  if (options.recipient) assert.deepEqual(leg.settlementRequest, buildInput.settlement);
+  const prog = ethers.getBytes(leg.program);
+  const r = inspectRuntime(ethers.hexlify(prog), n, { nativeBalance: () => native, call(c) {
     const call = ABI.parseTransaction({ data: c.data })!; let result: unknown[];
     switch (call.name) {
       case "getAddress": result = [call.args[0] === "stakedToken" ? vault : call.args[0] === "receiptToken" ? asset : ys]; break;
@@ -235,10 +246,14 @@ function model(deposit: boolean, n: bigint, options: { spent?: bigint; received?
         allowance = call.args[1]; result = [!options.approveFalse]; break;
       case "stake": case "unstake": {
         assert.equal(c.static, false); assert.equal(lower(c.target), lower(INFINIFI_GATEWAY));
-        assert.equal(call.args[0], executor); assert.equal(call.args[1], n); assert.equal(allowance, n);
+        assert.equal(call.args[0], receiver); assert.equal(call.args[1], n); assert.equal(allowance, n);
         const spent = options.spent ?? n, received = options.received ?? n * 2n;
         balances.set(key(input, executor), balances.get(key(input, executor))! - spent);
-        balances.set(key(output, executor), balances.get(key(output, executor))! + received);
+        const to = options.wrongRecipient ? addr(999) : receiver;
+        balances.set(key(output, to), (balances.get(key(output, to)) ?? 0n) + received);
+        if (options.oldOutput) balances.set(key(output, executor), balances.get(key(output, executor))! - 1n);
+        if (options.receiverInput) balances.set(key(input, receiver), balances.get(key(input, receiver))! - 1n);
+        if (options.nativeChanged) native--;
         if (options.leftover) balances.set(key(input, INFINIFI_GATEWAY), 13n + options.leftover);
         supply += options.supply ?? (deposit ? received : -spent); swaps++; result = [options.returned ?? n * 2n]; break;
       }
@@ -246,7 +261,7 @@ function model(deposit: boolean, n: bigint, options: { spent?: bigint; received?
     }
     return ABI.encodeFunctionResult(call.name, result);
   } });
-  return { r, allowance, swaps, balances, key, input, output };
+  return { r, allowance, swaps, balances, key, input, output, native };
 }
 test("runtime consumes r0, measures receipt, protects old inventory and cleans exact allowance", () => {
   for (const deposit of [false, true]) for (const n of [1n, 91n, amount]) {
@@ -263,6 +278,36 @@ test("runtime rejects missing funds, under/overspend, false return, missing outp
     for (const options of [{ funds: 0n }, { spent: 90n }, { spent: 92n }, { received: 0n }, { returned: 1n }, { supply: 0n }, { leftover: 1n }, { role: false }, { approveFalse: true }])
       assert.throws(() => model(deposit, 91n, options));
     assert.throws(() => model(deposit, 0n));
+  }
+});
+
+test("Gateway direct recipient preserves owner debit, supply, residuals and original balances", () => {
+  for (const deposit of [false, true]) for (const recipient of [executor, addr(108)]) for (const n of [1n, 91n, amount]) {
+    const m = model(deposit, n, { recipient }), external = recipient !== executor;
+    assert.equal(m.allowance, 0n); assert.equal(m.native, 17n); assert.equal(m.swaps, 1);
+    assert.equal(m.balances.get(m.key(m.input, executor)), 7n);
+    assert.equal(m.balances.get(m.key(m.output, executor)), 73n + (external ? 0n : n * 2n));
+    if (external) {
+      assert.equal(m.balances.get(m.key(m.input, recipient)), 109n);
+      assert.equal(m.balances.get(m.key(m.output, recipient)), 113n + n * 2n);
+    }
+  }
+});
+test("Gateway direct path rejects wrong recipient, input under/overdebit, old stock and native changes", () => {
+  for (const deposit of [false, true]) for (const recipient of [executor, addr(108)]) {
+    for (const fault of [{ funds: 0n }, { spent: 0n }, { spent: 90n }, { spent: 92n }, { received: 0n },
+      { returned: 1n }, { supply: 0n }, { leftover: 1n }, { role: false }, { approveFalse: true },
+      { wrongRecipient: true }, { oldOutput: true }, { receiverInput: true }, { nativeChanged: true }])
+      assert.throws(() => model(deposit, 91n, { ...fault, recipient }));
+    assert.throws(() => model(deposit, 0n, { recipient }));
+  }
+  const { descriptor, routes } = setup();
+  for (const route of routes) {
+    const input = { descriptor, route, source, executor, runtimeEvidence: [] };
+    for (const recipient of [vault, asset, INFINIFI_GATEWAY, core, ys, ethers.ZeroAddress])
+      assert.throws(() => erc4626Execution.buildRuntimeLeg!({ ...input, settlement: { kind: "direct-output", recipient } }));
+    assert.equal(erc4626Execution.buildRuntimeLeg!({ ...input, settlement: { kind: "quote-output" } }), null);
+    assert.equal(erc4626Execution.buildRuntimeLeg!({ ...input, settlement: { kind: "deferred-input", paymentAmount: 1n, paymentProgram: "0x" } }), null);
   }
 });
 
