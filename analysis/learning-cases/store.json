@@ -1738,6 +1738,64 @@
       },
       "created_at": "2026-10-15T09:55:00.791094+00:00",
       "updated_at": "2026-10-15T09:55:00.791094+00:00"
+    },
+    {
+      "learning_case_id": "few-native-provider-fixture-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+      "target_block": 26182689,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Historical acceptance fixture defect; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/few-recipient-tooling-defect62-20261015.json",
+        "before": "docs/research/reports/few-recipient-tooling-defect62-20261015.json",
+        "after": "docs/research/reports/few-vault-recipient-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:few-wrapped-contract",
+        "issue": "New direct contract fixture omitted nativeBalance required by runtime opcode5.",
+        "evidence": "Fresh non-author v4 review; original failures retained. Canonical run64 contract regressions and historical matrices passed; root independently verified raw balances and returned amounts.",
+        "codify_target": "listener/src/searcher/venues/protocols/few-wrapped-family/test/contract.ts",
+        "codify_commit": "130bd1250f9ba75ddd3dce78749e743333a537f0",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T10:35:14.942187+00:00",
+      "updated_at": "2026-10-15T10:35:14.942187+00:00"
+    },
+    {
+      "learning_case_id": "few-runtime-continuation-fixture-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+      "target_block": 26182689,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Historical acceptance fixture defect; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/few-recipient-tooling-defect63-20261015.json",
+        "before": "docs/research/reports/few-recipient-tooling-defect63-20261015.json",
+        "after": "docs/research/reports/few-vault-recipient-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:few-wrapped-recipient-historical",
+        "issue": "New direct acceptance fixture incorrectly constructed an empty RuntimeAmountProgram before actual execution.",
+        "evidence": "Fresh non-author v4 review; original failures retained. Canonical run64 contract regressions and historical matrices passed; root independently verified raw balances and returned amounts.",
+        "codify_target": "listener/src/searcher/venues/protocols/few-wrapped-family/test/recipient-historical.ts",
+        "codify_commit": "130bd1250f9ba75ddd3dce78749e743333a537f0",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T10:35:14.942187+00:00",
+      "updated_at": "2026-10-15T10:35:14.942187+00:00"
     }
   ]
 }
