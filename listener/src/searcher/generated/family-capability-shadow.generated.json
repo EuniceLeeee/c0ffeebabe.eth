@@ -11062,7 +11062,7 @@
         "familyId": "protocol:psm",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "a20b1a02a529c37a04b2a124548821ad8f2e0b1ce67fce16e35d6594207ee29d",
+        "contentHash": "147e18bf0ac53ad392dca367875d7992052b8c9ba01a19e6f9271aee85883059",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -11078,6 +11078,7 @@
           "src/searcher/venues/protocols/psm-family/action.ts",
           "src/searcher/venues/protocols/psm-family/binding.ts",
           "src/searcher/venues/protocols/psm-family/codec.ts",
+          "src/searcher/venues/protocols/psm-family/direct.ts",
           "src/searcher/venues/protocols/psm-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
           "src/searcher/venues/runtime-execution.ts",
@@ -16569,5 +16570,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "d05b12e5793fa4895cd59fbff26a8fd8e3ed11703239f9de469f6b4038ff4db6"
+  "artifactHash": "9a10e100a71ec72afffab4b5fbb97fa6011c505e5cbd7fafa888ee1f79ffbb70"
 }

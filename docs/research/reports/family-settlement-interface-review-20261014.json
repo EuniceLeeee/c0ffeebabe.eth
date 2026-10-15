@@ -4635,22 +4635,31 @@
         {
           "id": "DssLitePsm DAI/USDC sell and buy",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 target runtime、pocket/token/fee 状态绑定待补。",
-            "buyGem 参数是 GEM 输出，须保留最大 DAI 输入预算和退款语义。",
-            "当前 usr 接线已确认；双方向独立 receiver 当前源码回执待 join。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/psm-recipient-correctness-20261015.json",
+              "sha256": "87683596a5979a5ffd84a51ddc81f7c211d86b55d157d9c3f494cf4e029cc19f"
+            },
+            {
+              "path": "docs/research/reports/psm-recipient-identity-20261015.json",
+              "sha256": "e09fe7101d39ff020a2d58954ea8bae9cd83d4bcc905dc4ecba3a5d49dc10910"
             }
-          ]
+          ],
+          "scope": "Actual DssLitePsm DAI/USDC ordinary sell/buy, self/external direct at N26029876 fee0; nonzero fees are contract-only; no permissioned noFee or callback claim.",
+          "executionEvidence": {
+            "path": "docs/research/reports/psm-recipient-behavior-20261015.json",
+            "sha256": "bfe77e717564c7399a6b1e8cb5287504b17c8063b2e8f85bc3ec6b58b3465e34"
+          }
         }
       ],
       "domain": "protocol",
@@ -4661,7 +4670,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -4700,8 +4709,12 @@
           "sha256": "15c82c97ee1417713de459761ba4e969a60ed7abafc3e982ed774d14a9489e64"
         },
         {
+          "path": "listener/src/searcher/venues/protocols/psm-family/direct.ts",
+          "sha256": "bf0f05f15afc1a533313738cafd867eff1d191ec8bab86ea657061cc02e995a3"
+        },
+        {
           "path": "listener/src/searcher/venues/protocols/psm-family/execution.ts",
-          "sha256": "3d753fe3045362c50a7905c1a9e111c6d2adb09625e2c34153148e7f1d52a8b7"
+          "sha256": "f5e3a20792494885c4bee1b18cb1364dd14005e2fb67f6357cfde322cf93e539"
         },
         {
           "path": "listener/src/searcher/venues/protocols/psm-family/identity.ts",
@@ -4733,9 +4746,10 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
-        "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
-      }
+        "path": "docs/research/reports/psm-recipient-interface-review-20261015.json",
+        "sha256": "63238a6c0f75d81514d42b8b50c8a461a1fd517bb247804395e286be89343c9b"
+      },
+      "gaps": []
     },
     {
       "familyId": "protocol:psv",

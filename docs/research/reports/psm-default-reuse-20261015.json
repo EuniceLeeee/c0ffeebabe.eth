@@ -1,0 +1,183 @@
+{
+  "status": "prior-default-evidence-reusable-with-explicit-scope",
+  "priorEvidence": "psm-n-dual-attempt02.json",
+  "priorSha256": "c99da8729240f67f792375e4ea2ff4dba38ecbcd1bb47d5f6732b6c9120d288d",
+  "priorActualExecutions": 12,
+  "newDefaultEvmRuns": 0,
+  "defaultEmissionNormalization": {
+    "exactBodyEqual": true,
+    "normalizations": [
+      "recipient=executor when settlement absent",
+      "settlement capability metadata does not change program bytes"
+    ],
+    "oldBodySha256": "2d9ce39daff73da1eb8b6a43627893362eb20c801e5ceca2963619e38a5bbbf4"
+  },
+  "familySources": [
+    {
+      "path": "listener/src/adapters/psm.ts",
+      "current": "e455addd09dd2752361c09fe71ed000e986f0902a9da21905466a42ad8ef36b8",
+      "old": "e455addd09dd2752361c09fe71ed000e986f0902a9da21905466a42ad8ef36b8",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/psm.production.ts",
+      "current": "aa004a9f12cd00810e04501130e67333d7458161082ef322cf028e4f66c55c9d",
+      "old": "aa004a9f12cd00810e04501130e67333d7458161082ef322cf028e4f66c55c9d",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/action.ts",
+      "current": "1e57a950e8a6ba1bd296540ff00b55275c97d48ffb08f762d3be8e1bcdf74842",
+      "old": "1e57a950e8a6ba1bd296540ff00b55275c97d48ffb08f762d3be8e1bcdf74842",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/binding.ts",
+      "current": "b8629aa425674b1b00b6acab6b8adfd544de399c2d4c2682f0fc184723cb5bf4",
+      "old": "b8629aa425674b1b00b6acab6b8adfd544de399c2d4c2682f0fc184723cb5bf4",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/capture.ts",
+      "current": "c480860c1a59f609eaa294917ba86e0460902261ebb375508e77f169ea1debff",
+      "old": "c480860c1a59f609eaa294917ba86e0460902261ebb375508e77f169ea1debff",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/codec.ts",
+      "current": "15c82c97ee1417713de459761ba4e969a60ed7abafc3e982ed774d14a9489e64",
+      "old": "15c82c97ee1417713de459761ba4e969a60ed7abafc3e982ed774d14a9489e64",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/direct.ts",
+      "current": "bf0f05f15afc1a533313738cafd867eff1d191ec8bab86ea657061cc02e995a3",
+      "old": null,
+      "equal": false
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/discovery.ts",
+      "current": "186207685f358fe8dc9115a6675bd3e6c47c527f0bd20b92a88ad284fafc0181",
+      "old": "186207685f358fe8dc9115a6675bd3e6c47c527f0bd20b92a88ad284fafc0181",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/exact.ts",
+      "current": "695a8e15db01bbd5bfba74b9440f43601313f6efee2ae67378e78787c20f7635",
+      "old": "695a8e15db01bbd5bfba74b9440f43601313f6efee2ae67378e78787c20f7635",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/execution.ts",
+      "current": "f5e3a20792494885c4bee1b18cb1364dd14005e2fb67f6357cfde322cf93e539",
+      "old": "29528a9e6a1ac97813a37adbb455ba5795487d9a6938cac9870fd4a5bd5e8b0d",
+      "equal": false
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/identity.ts",
+      "current": "b6cc00eeef8a9edf74c70b09a5cd3212ded95dff5279ad4bd92253d6b46771f9",
+      "old": "b6cc00eeef8a9edf74c70b09a5cd3212ded95dff5279ad4bd92253d6b46771f9",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/instance.ts",
+      "current": "44ea8afead44d08808a723b0ccb1d5660b8a5e812f03fdd13939b544cdc767dd",
+      "old": "44ea8afead44d08808a723b0ccb1d5660b8a5e812f03fdd13939b544cdc767dd",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/local-model.ts",
+      "current": "1d5e1b90b03212fdb98d321a9cd2f3204e43a0cbd444bd0eede94329693617bf",
+      "old": "1d5e1b90b03212fdb98d321a9cd2f3204e43a0cbd444bd0eede94329693617bf",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/manifest.ts",
+      "current": "f564c134056bc43ca241ea9347b8f01e029ee5997703ef6ec7ad2fda41f342f4",
+      "old": "f564c134056bc43ca241ea9347b8f01e029ee5997703ef6ec7ad2fda41f342f4",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/pricing.ts",
+      "current": "e53f7ed0e810c6b989b17a3d11af267309735504c3ce7db95780535ccf268de0",
+      "old": "e53f7ed0e810c6b989b17a3d11af267309735504c3ce7db95780535ccf268de0",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/protocol.ts",
+      "current": "68959093bf86f5d4e430804591cbe078dfb20bac29ff2c8b8e4f7d1185df4441",
+      "old": "68959093bf86f5d4e430804591cbe078dfb20bac29ff2c8b8e4f7d1185df4441",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/routes.ts",
+      "current": "3ad27e12dbf16d084d4f38a2d722b64abe4a3ff0650f7a1cd04d3f1fe37745c9",
+      "old": "3ad27e12dbf16d084d4f38a2d722b64abe4a3ff0650f7a1cd04d3f1fe37745c9",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/trial-state.ts",
+      "current": "fd5c8254ebbc89f267fda07fbe50783d51c8614d154852aa44aac52f0d4915cb",
+      "old": "fd5c8254ebbc89f267fda07fbe50783d51c8614d154852aa44aac52f0d4915cb",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/types.ts",
+      "current": "864c23197e4eaf49843d44f42caa0cbab9fb7c73d47ad63b1f8525e9a6f71623",
+      "old": "864c23197e4eaf49843d44f42caa0cbab9fb7c73d47ad63b1f8525e9a6f71623",
+      "equal": true
+    }
+  ],
+  "commonSources": [
+    {
+      "path": "src/BotVM.sol",
+      "oldSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "currentSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "equal": true
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "oldSha256": "9dd2974a39370dcaca2bf5f031a4f5a147640bee6dc1988b9f7bc2446e8b2ff8",
+      "currentSha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+      "equal": false
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "oldSha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e",
+      "currentSha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872",
+      "equal": false
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "oldSha256": "5ab89da1040c55ffa7ecd74eafe781b9aa83c24f7b06987ffe0d8fbc91322ce6",
+      "currentSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+      "equal": false
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "oldSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+      "currentSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "oldSha256": "e9b3b94466dca4f232743bf08d83fcd83860f8400b794ab418cf77bb0e629a2d",
+      "currentSha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd",
+      "equal": false
+    }
+  ],
+  "impactReview": [
+    "Old PSM ABI/math/local/exact/action/identity/routes unchanged; new direct function never entered without request",
+    "Runtime emitter old math indexes unchanged; new eq/min/run/revertBytes only opt-in",
+    "PSM ordinary ERC20 call mode0 and top-level readOnly=false/depth0 runtime execute old opcode semantics; added branches not selected",
+    "Shared issuer omitted settlement maps undefined and requires undefined echo; new native mapper not selected by ordinary ERC20 PSM",
+    "BotVM entry and runtimeClearApproval/helper remain byte-identical; current BotVM artifact source metadata verified in actual66"
+  ],
+  "limitation": "Default claim is authenticated prior actual result plus source-impact review and current contract regression; not current EVM rerun. No global adapter_fixed/phase4 conclusion.",
+  "nonAuthorReview": {
+    "reviewer": "v4_accept26",
+    "verdict": "pass",
+    "evidence": "Direct old/current diff reviewed, not FRAX old hash borrowed and not new EVM",
+    "findings": []
+  }
+}

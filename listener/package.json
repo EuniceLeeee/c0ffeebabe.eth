@@ -407,7 +407,10 @@
     "searcher:ekubo-native-recipient-history": "tsx src/searcher/venues/swaps/ekubo-family/test/historical-recipient.ts",
     "searcher:ekubo-historical-ready": "tsx src/searcher/venues/swaps/ekubo-family/test/historical-ready.ts",
     "searcher:curve-underlying-recipient-ready": "tsx src/searcher/venues/swaps/curve-underlying-family/test/recipient-ready.ts",
-    "searcher:curve-underlying-recipient-historical": "tsx src/searcher/venues/swaps/curve-underlying-family/test/recipient-historical.ts"
+    "searcher:curve-underlying-recipient-historical": "tsx src/searcher/venues/swaps/curve-underlying-family/test/recipient-historical.ts",
+    "searcher:psm-recipient-contract": "tsx src/searcher/venues/protocols/psm-family/test/recipient-contract.ts",
+    "searcher:psm-recipient-ready": "tsx src/searcher/venues/protocols/psm-family/test/recipient-ready.ts",
+    "searcher:psm-recipient-historical": "tsx src/searcher/venues/protocols/psm-family/test/recipient-historical.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

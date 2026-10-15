@@ -1,0 +1,75 @@
+{
+  "source": {
+    "number": 26029876,
+    "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a",
+    "stateRoot": "0xa04992250908272d790929e4959de24ceafac3b374de55d5182abeb06321559a"
+  },
+  "target": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+  "runtimeCodeHash": "0xd351b6020bfa630893dc7a52b63c894643d52de5643d5d81bfc0305eab665b2a",
+  "verifiedSavedRuntimeExactMatch": true,
+  "getters": {
+    "gem": {
+      "selector": "0x7bd2bea7",
+      "raw": "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "value": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    },
+    "dai": {
+      "selector": "0xf4b9fa75",
+      "raw": "0x0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",
+      "value": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+    },
+    "pocket": {
+      "selector": "0xcccef9e2",
+      "raw": "0x00000000000000000000000037305b1cd40574e4c5ce33f8e8306be057fd7341",
+      "value": "0x37305B1cD40574E4C5Ce33f8e8306Be057fD7341"
+    },
+    "tin": {
+      "selector": "0x568d4b6f",
+      "raw": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "0"
+    },
+    "tout": {
+      "selector": "0xfae036d5",
+      "raw": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "0"
+    },
+    "to18ConversionFactor": {
+      "selector": "0x4010f777",
+      "raw": "0x000000000000000000000000000000000000000000000000000000e8d4a51000",
+      "value": "1000000000000"
+    }
+  },
+  "interface": [
+    {
+      "signature": "sellGem(address,uint256)",
+      "selector": "0x95991276",
+      "outputs": [
+        "uint256"
+      ]
+    },
+    {
+      "signature": "buyGem(address,uint256)",
+      "selector": "0x8d7ef9bb",
+      "outputs": [
+        "uint256"
+      ]
+    }
+  ],
+  "transactionsSubmitted": 0,
+  "claim": "Same-N read-only deployed code/getters bind saved verified interface; real execution evidence remains recipient66.",
+  "verifiedSourceProvenance": {
+    "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-a/blockscout/0xf6e72db5454dd049d0788e411b06cfaf16853042.json",
+    "sha256": "a94e212a2e4d2a96b77821ece20d07954c313142b5f4ac634fdfb0a9c109e275",
+    "contractName": "DssLitePsm",
+    "compilerVersion": "0.8.16+commit.07a7930e",
+    "fullyVerified": true,
+    "exactRuntimeBytesMatch": true,
+    "normalMethods": "sellGem returns DAI output; buyGem returns DAI actual cost; both take explicit receiver and transfer input before output",
+    "excluded": "permissioned noFee methods and deferred-input callback"
+  },
+  "runtimeBytes": 8414,
+  "rawIdentityEvidence": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/psm65/interface-binding66.json",
+    "sha256": "74a5daaba9e2fab925b06238b8945f1db05e7a687302559086d78600f9eb4e39"
+  }
+}

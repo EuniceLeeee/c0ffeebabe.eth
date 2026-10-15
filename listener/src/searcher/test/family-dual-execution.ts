@@ -812,7 +812,9 @@ test(`settlement: ${id} sends each direction's actual output to the requested re
       if (id !== "vault-spot") move(r.tokenIn, executor, pool, debit);
       balances.set(key(r.tokenOut, recipient), get(r.tokenOut, recipient) + expectedCredit);
       swapped = true;
-      return id === "protocol:psm" ? "0x" : protocolAbi.encodeFunctionResult(a.name, [expectedCredit]);
+      return id === "protocol:psm"
+        ? ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [r.direction === "buy-gem" ? debit : expectedCredit])
+        : protocolAbi.encodeFunctionResult(a.name, [expectedCredit]);
     } });
     assert.equal(protocolCalls, 1); assert.equal(trace.registers[0], cap);
     assert.equal(get(r.tokenOut, foreign) - 107n, expectedCredit); assert(expectedCredit > 0n);
@@ -822,7 +824,7 @@ test(`settlement: ${id} sends each direction's actual output to the requested re
       assert.equal(leg.inputMode, "maximum");
       if (d.decimalScale === 1000000000000n) assert(cap - debit > 1n);
     } else { assert.equal(debit, cap); assert.equal(leg.inputMode, undefined); }
-    if (id === "protocol:few-wrapped") assert.equal(allowance, 0n);
+    if (id === "protocol:few-wrapped" || id === "protocol:psm") assert.equal(allowance, 0n);
   }
 });
 

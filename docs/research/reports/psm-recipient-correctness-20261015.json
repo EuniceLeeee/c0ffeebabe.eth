@@ -1,0 +1,326 @@
+{
+  "family": "protocol:psm",
+  "scope": "Current direct-self/direct-external correctness only. Prior 12 real quoted/runtime executions certified for scoped reuse by old/current source-impact review and current contract regression; no new default EVM run, opportunity, natural valuation or performance claim.",
+  "headAtExecution": "6c02f0f983fe86eab881c54923f154b3d297844b",
+  "sourceTreeSha256": "37ccb00a4ebdf2d056858cef2f86c120890ac57894eb32788390ab1f0bdf3008",
+  "sourceSnapshot": "evidence66/source-current66.json",
+  "owned": [
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/direct.ts",
+      "before": null,
+      "after": "bf0f05f15afc1a533313738cafd867eff1d191ec8bab86ea657061cc02e995a3"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/execution.ts",
+      "before": "3d753fe3045362c50a7905c1a9e111c6d2adb09625e2c34153148e7f1d52a8b7",
+      "after": "f5e3a20792494885c4bee1b18cb1364dd14005e2fb67f6357cfde322cf93e539"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/test/recipient-contract.ts",
+      "before": null,
+      "after": "c5ce7360a5b3c2d8af3e84c8e1cabc8ee236ffdebaf2f277ed6ac2beef7f4643"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/test/recipient-historical.ts",
+      "before": null,
+      "after": "a75f90dc91204c8d843f07dde79c47e95705791ccc183c0a0ef914be49d8272f"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/test/recipient-ready.ts",
+      "before": null,
+      "after": "92b7d90e2a17a39a8412d0c3633ddee3752afea0bde4e6554cdd30dfe9045d21"
+    }
+  ],
+  "tx": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+  "source": {
+    "number": 26029876,
+    "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+  },
+  "actual": {
+    "samples": 20,
+    "positive": 40,
+    "faultRejections": 160,
+    "zeroAndNoWholeGemRejections": 6,
+    "drained": true,
+    "inputCostRefund": "Full original input is emitted; buy actual cost calculated separately; refund includes 0/1 and >1 raw units; exact debit/receipt comparisons tolerance0. No quote/request decrement.",
+    "fee": "All historical samples fee0; positive nonzero fee and HALTED/1unit boundaries are contract-only",
+    "balances": "six observed token balances, two total supplies, native actor, actual Transfer/Approval logs",
+    "negativeEvidence": "trusted production MainRevert and omitted effects; not independent storageDiff atomicity"
+  },
+  "canonical": [
+    {
+      "name": "index",
+      "exit": 0,
+      "started": "2026-10-15T10:24:29.039878+00:00",
+      "finished": "2026-10-15T10:24:29.392552+00:00"
+    },
+    {
+      "name": "family-contract",
+      "exit": 0,
+      "started": "2026-10-15T10:24:29.393012+00:00",
+      "finished": "2026-10-15T10:24:32.257912+00:00"
+    },
+    {
+      "name": "recipient-contract",
+      "exit": 0,
+      "started": "2026-10-15T10:24:32.258156+00:00",
+      "finished": "2026-10-15T10:24:33.528010+00:00"
+    },
+    {
+      "name": "ready",
+      "exit": 0,
+      "started": "2026-10-15T10:24:33.528280+00:00",
+      "finished": "2026-10-15T10:24:37.386075+00:00"
+    },
+    {
+      "name": "history",
+      "exit": 0,
+      "started": "2026-10-15T10:24:37.386335+00:00",
+      "finished": "2026-10-15T10:25:04.046381+00:00"
+    }
+  ],
+  "contracts": {
+    "oldFamily": {
+      "pass": 6,
+      "skipped": 2,
+      "skipReason": "cached external fixture tests already conditional"
+    },
+    "newRecipient": {
+      "pass": 6,
+      "skipped": 0
+    }
+  },
+  "raw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/psm65/evidence66/psm-recipient66.json",
+    "sha256": "c7a14dc80726922e2aa32935bc367f148f8ee29dfa4050ec68435a9069f88c3f"
+  },
+  "review": {
+    "path": "docs/research/reports/psm-recipient-independent-20261015.json",
+    "sha256": "8816b0ea4b6d04acd55817ac629debd6e87ae49befdb8fcafeb3a711691e0232"
+  },
+  "defaultReuseRelevantSources": [
+    {
+      "path": "listener/src/adapters/psm.ts",
+      "current": "e455addd09dd2752361c09fe71ed000e986f0902a9da21905466a42ad8ef36b8",
+      "old": "e455addd09dd2752361c09fe71ed000e986f0902a9da21905466a42ad8ef36b8",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/psm.production.ts",
+      "current": "aa004a9f12cd00810e04501130e67333d7458161082ef322cf028e4f66c55c9d",
+      "old": "aa004a9f12cd00810e04501130e67333d7458161082ef322cf028e4f66c55c9d",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/action.ts",
+      "current": "1e57a950e8a6ba1bd296540ff00b55275c97d48ffb08f762d3be8e1bcdf74842",
+      "old": "1e57a950e8a6ba1bd296540ff00b55275c97d48ffb08f762d3be8e1bcdf74842",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/binding.ts",
+      "current": "b8629aa425674b1b00b6acab6b8adfd544de399c2d4c2682f0fc184723cb5bf4",
+      "old": "b8629aa425674b1b00b6acab6b8adfd544de399c2d4c2682f0fc184723cb5bf4",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/capture.ts",
+      "current": "c480860c1a59f609eaa294917ba86e0460902261ebb375508e77f169ea1debff",
+      "old": "c480860c1a59f609eaa294917ba86e0460902261ebb375508e77f169ea1debff",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/codec.ts",
+      "current": "15c82c97ee1417713de459761ba4e969a60ed7abafc3e982ed774d14a9489e64",
+      "old": "15c82c97ee1417713de459761ba4e969a60ed7abafc3e982ed774d14a9489e64",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/direct.ts",
+      "current": "bf0f05f15afc1a533313738cafd867eff1d191ec8bab86ea657061cc02e995a3",
+      "old": null,
+      "equal": false
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/discovery.ts",
+      "current": "186207685f358fe8dc9115a6675bd3e6c47c527f0bd20b92a88ad284fafc0181",
+      "old": "186207685f358fe8dc9115a6675bd3e6c47c527f0bd20b92a88ad284fafc0181",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/exact.ts",
+      "current": "695a8e15db01bbd5bfba74b9440f43601313f6efee2ae67378e78787c20f7635",
+      "old": "695a8e15db01bbd5bfba74b9440f43601313f6efee2ae67378e78787c20f7635",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/execution.ts",
+      "current": "f5e3a20792494885c4bee1b18cb1364dd14005e2fb67f6357cfde322cf93e539",
+      "old": "29528a9e6a1ac97813a37adbb455ba5795487d9a6938cac9870fd4a5bd5e8b0d",
+      "equal": false
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/identity.ts",
+      "current": "b6cc00eeef8a9edf74c70b09a5cd3212ded95dff5279ad4bd92253d6b46771f9",
+      "old": "b6cc00eeef8a9edf74c70b09a5cd3212ded95dff5279ad4bd92253d6b46771f9",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/instance.ts",
+      "current": "44ea8afead44d08808a723b0ccb1d5660b8a5e812f03fdd13939b544cdc767dd",
+      "old": "44ea8afead44d08808a723b0ccb1d5660b8a5e812f03fdd13939b544cdc767dd",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/local-model.ts",
+      "current": "1d5e1b90b03212fdb98d321a9cd2f3204e43a0cbd444bd0eede94329693617bf",
+      "old": "1d5e1b90b03212fdb98d321a9cd2f3204e43a0cbd444bd0eede94329693617bf",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/manifest.ts",
+      "current": "f564c134056bc43ca241ea9347b8f01e029ee5997703ef6ec7ad2fda41f342f4",
+      "old": "f564c134056bc43ca241ea9347b8f01e029ee5997703ef6ec7ad2fda41f342f4",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/pricing.ts",
+      "current": "e53f7ed0e810c6b989b17a3d11af267309735504c3ce7db95780535ccf268de0",
+      "old": "e53f7ed0e810c6b989b17a3d11af267309735504c3ce7db95780535ccf268de0",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/protocol.ts",
+      "current": "68959093bf86f5d4e430804591cbe078dfb20bac29ff2c8b8e4f7d1185df4441",
+      "old": "68959093bf86f5d4e430804591cbe078dfb20bac29ff2c8b8e4f7d1185df4441",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/routes.ts",
+      "current": "3ad27e12dbf16d084d4f38a2d722b64abe4a3ff0650f7a1cd04d3f1fe37745c9",
+      "old": "3ad27e12dbf16d084d4f38a2d722b64abe4a3ff0650f7a1cd04d3f1fe37745c9",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/trial-state.ts",
+      "current": "fd5c8254ebbc89f267fda07fbe50783d51c8614d154852aa44aac52f0d4915cb",
+      "old": "fd5c8254ebbc89f267fda07fbe50783d51c8614d154852aa44aac52f0d4915cb",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/types.ts",
+      "current": "864c23197e4eaf49843d44f42caa0cbab9fb7c73d47ad63b1f8525e9a6f71623",
+      "old": "864c23197e4eaf49843d44f42caa0cbab9fb7c73d47ad63b1f8525e9a6f71623",
+      "equal": true
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "current": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+      "old": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+      "equal": true
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-executor.ts",
+      "current": "0725c2f4798b0a292dfec6f0ccad5cc4299da7e9187db2dc7635b0b895a4bfa0",
+      "old": "0725c2f4798b0a292dfec6f0ccad5cc4299da7e9187db2dc7635b0b895a4bfa0",
+      "equal": true
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "current": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0",
+      "old": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0",
+      "equal": true
+    }
+  ],
+  "limitations": [
+    "Default evidence is retained older EVM with source-impact review, not rerun",
+    "No deferred-input capability: actual ordinary LitePSM transfers input before output; permissioned noFee methods excluded",
+    "Formal Adapter Replay/family_local boundaries and phase4 remain under root task status"
+  ],
+  "inventorySuggestion": {
+    "scope": "PSM row only",
+    "implemented": "direct output full cost/receipt/native/old-inventory/allowance guards",
+    "correctness": "current two directions direct self/external actual PASS; existing defaults retained on source review",
+    "callback": "unsupported input-first LitePSM ordinary methods, preserved",
+    "naturalIntegration": "unchanged prior outcome; new Ready selective revalidation not natural valuation",
+    "opportunity": "unchanged; this run not opportunity replay",
+    "performance": "NOT RUN"
+  },
+  "defaultReuse": {
+    "path": "docs/research/reports/psm-default-reuse-20261015.json",
+    "sha256": "a45ffa387e41172c89d714220a9035fa0639950cca7ef51f41bc2a999cd6d8ca"
+  },
+  "harnessPinSemantics": {
+    "ownHistoricalCli": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/psm-family/test/recipient-historical.ts",
+      "sha256": "a75f90dc91204c8d843f07dde79c47e95705791ccc183c0a0ef914be49d8272f"
+    },
+    "commonSourcePinFunctionHost": {
+      "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+      "sha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a"
+    },
+    "finalChecks": "own inputs and sourcePin both rehashed in finally; distinct hash fields preserved"
+  },
+  "interfaceIdentitySupplement": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/psm65/interface-binding66.json",
+    "sha256": "74a5daaba9e2fab925b06238b8945f1db05e7a687302559086d78600f9eb4e39",
+    "runtimeCodeHash": "0xd351b6020bfa630893dc7a52b63c894643d52de5643d5d81bfc0305eab665b2a",
+    "sameState": true,
+    "readOnly": true,
+    "newExecutions": 0
+  },
+  "ownHarnessSha256": "a75f90dc91204c8d843f07dde79c47e95705791ccc183c0a0ef914be49d8272f",
+  "commonSourcePinHarnessSha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a",
+  "sourceReview": {
+    "path": "docs/research/reports/psm-recipient-source-review-20261015.json",
+    "sha256": "527fe0039c6e43eeec1966a4ac3cc63fa62a3f33f47ce5e0b7cd0eb6ca10893c"
+  },
+  "admission": {
+    "memoFingerprint": "aea7fa88c1af222d24f355fa113fc2e0cf7f6ae71c9f4beeb0ab199710018e5c",
+    "familyDefinitionHash": "95c328cf5f00123ee8d5fb24b79cd04eb537132f5d8a88dcdfa30491fb8839c6",
+    "candidate": {
+      "adapter": "psm",
+      "address": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "blockHash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a",
+      "blockNumber": 26029876,
+      "candidateKind": "lite-psm",
+      "familyId": "protocol:psm",
+      "pluginCandidateKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "target": "0xf6e72Db5454dd049d0788e411b06CfAF16853042",
+      "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72"
+    },
+    "descriptor": {
+      "dai": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "decimalScale": "1000000000000",
+      "familyId": "protocol:psm",
+      "gem": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "provenance": [
+        {
+          "evidenceHash": "e524bba0e54140a5f829f51606a110f4cad1347c7e2940d554574aa1df395d37",
+          "kind": "lite-psm-active-pair-proof",
+          "subject": "0xf6e72Db5454dd049d0788e411b06CfAF16853042"
+        }
+      ],
+      "runtimeRequirements": [
+        {
+          "freshness": "pinned-block",
+          "kind": "source-state"
+        }
+      ],
+      "target": "0xf6e72Db5454dd049d0788e411b06CfAF16853042"
+    },
+    "pocket": "0x37305B1cD40574E4C5Ce33f8e8306Be057fD7341"
+  },
+  "currentClosureBinding": {
+    "snapshotSha256": "960c8b62dcc097595a4893693e17a4119cd9d3f566d086c6dfa305101aef491c",
+    "sourceTreeSha256": "37ccb00a4ebdf2d056858cef2f86c120890ac57894eb32788390ab1f0bdf3008",
+    "familySourceMatchesExecutedSnapshot": true,
+    "priorInventoryPinsRetainedInGit": true
+  },
+  "identitySupplement": {
+    "path": "docs/research/reports/psm-recipient-identity-20261015.json",
+    "sha256": "e09fe7101d39ff020a2d58954ea8bae9cd83d4bcc905dc4ecba3a5d49dc10910"
+  }
+}

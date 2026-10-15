@@ -1,3 +1,4 @@
+import { psmDirectProgram } from "./direct.js";
 import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
 import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
 import { PSM_INTERFACE, PSM_WAD } from "./codec.js";
@@ -16,6 +17,10 @@ export const psmExecution = {
     assertPsmInvocation(d, r); runtimeExecutor(executor, d.target);
     const request=input.settlement;if(request&&request.kind!=="direct-output")return null;
     const recipient=request?runtimeExecutor(request.recipient,d.target,r.tokenIn,r.tokenOut):executor;
+    if(request){
+      const leg={...runtimeLeg("psm",psmDirectProgram(d,r,executor,recipient)),settlement:{directOutput:true as const},settlementRequest:request};
+      return r.direction==="sell-gem"?leg:{...leg,inputMode:"maximum" as const};
+    }
     const p = new RuntimeAmountProgram().allowance(r.tokenIn, d.target, 0, MAX_UINT256);
     const sell = r.direction === "sell-gem";
     if (!sell) {

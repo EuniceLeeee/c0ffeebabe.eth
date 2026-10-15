@@ -1,0 +1,31 @@
+{
+  "status": "source-review-pass",
+  "reviewer": "v4_accept26",
+  "actualExecutionRun": false,
+  "files": [
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/direct.ts",
+      "sha256": "bf0f05f15afc1a533313738cafd867eff1d191ec8bab86ea657061cc02e995a3"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/execution.ts",
+      "sha256": "f5e3a20792494885c4bee1b18cb1364dd14005e2fb67f6357cfde322cf93e539"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psm-family/test/recipient-contract.ts",
+      "sha256": "8ab02e5b5ac44d739e61a5b89009a46c0145354d1824b3674ee97cc629a215de"
+    }
+  ],
+  "findings": [],
+  "checks": [
+    "Default branch has no changed emission; only direct-output returns through new helper. Deferred-input and quote-output remain null.",
+    "Registers r0 budget, r1/2/3 snapshots, r6 cost, r7 output and r12/13 external inventories remain live across zero-approval helper (no register writes).",
+    "buyGem maximum cost inverse floor(((budget+1)*WAD-1)/(WAD+tout))/scale matches floor-fee cost; actual exact debit equals cost <= budget while unused budget is retained. sellGem uses full input and net output.",
+    "Source DssLitePsm sellGem returns output; buyGem returns DAI cost; both input first and no callback. tout/tin <= WAD or HALTED. WAD-fee guard rejects HALTED before approvals.",
+    "positive input/cost/output, exact debit/receipt/return, complete allowance zero and native/other-party inventories guarded. Fault ±1 does not use tolerance.",
+    "Contract source covers fee 0/1/0.1%, self/external, 0/debit/credit/return/native ±1, residual approvals, halted and subunit zero output. Canonical execution still pending."
+  ],
+  "limitations": [
+    "Read-only source review, no EVM or cloud changes performed. Parent retains ownership of actual canonical contract and historical acceptance."
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "classification": "tooling_defect",
+  "tool": "listener:searcher:family-dual-execution",
+  "firstFailure": "shared59/owned-dual71.log",
+  "firstFailureSha256": "1d2a6e7e9109da1f75949ee8b2b412eee719b50adf025d4b7b1e90086a67bf00",
+  "issue": "Old shared PSM model returned empty bytes instead of real uint net output or buy cost. New direct guard correctly detected missing return word.",
+  "freshReviewer": "v1_accept26",
+  "repair": "Only shared fixture uses ABI-encoded uint: sell net output or buy actual cost, plus direct allowance zero assertion. Production unchanged.",
+  "validation": "actual canonical family dual72 and owned dual72 both exit0; previous owned build71 passed",
+  "codification": "Actual source commit recorded by same-batch follow-up canonical LearningCase; not a fabricated precommit hash."
+}

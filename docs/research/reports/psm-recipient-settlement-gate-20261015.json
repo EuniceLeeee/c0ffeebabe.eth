@@ -1,0 +1,28 @@
+[
+  {
+    "family": "protocol:psm",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T10:57:39.820674+00:00",
+    "finishedAt": "2026-10-15T10:58:36.277037+00:00",
+    "logSha256": "1ee3141b2c1bbdc0d0f6d3c0013589bf6ff9ebb7df164d89f262ca91f886b5c6",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/psm-gate73-selection.json",
+    "manifestSha256": "d269a5c557e4e55d2aa76ec4d44055edc645cd49319d08509a4392a7de8e6073",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:psm",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  }
+]

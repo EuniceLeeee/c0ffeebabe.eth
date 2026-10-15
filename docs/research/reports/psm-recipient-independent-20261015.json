@@ -1,0 +1,256 @@
+{
+  "result": "pass-with-explicit-scope",
+  "reviewer": "v4_accept26",
+  "raw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/psm65/evidence66/psm-recipient66.json",
+    "sha256": "c7a14dc80726922e2aa32935bc367f148f8ee29dfa4050ec68435a9069f88c3f"
+  },
+  "method": "Independent integer binary-search buy cost; ABI decode full runtime input; recompute all six account/token effect deltas, two supplies/native, Transfer debit-before-credit and approval cleanup logs from actual trusted production StrictRevm receipt. No rerun.",
+  "counts": {
+    "positive": 40,
+    "rejections": 160,
+    "zeroOrNoGem": 6
+  },
+  "groups": [
+    {
+      "direction": "sell-gem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "requested": "5494762",
+      "cost": "5494762",
+      "retainedBudget": "0",
+      "actualOutput": "5494762000000000000",
+      "fee": "0"
+    },
+    {
+      "direction": "sell-gem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "requested": "10989524",
+      "cost": "10989524",
+      "retainedBudget": "0",
+      "actualOutput": "10989524000000000000",
+      "fee": "0"
+    },
+    {
+      "direction": "sell-gem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "requested": "8137414",
+      "cost": "8137414",
+      "retainedBudget": "0",
+      "actualOutput": "8137414000000000000",
+      "fee": "0"
+    },
+    {
+      "direction": "sell-gem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "requested": "1",
+      "cost": "1",
+      "retainedBudget": "0",
+      "actualOutput": "1000000000000",
+      "fee": "0"
+    },
+    {
+      "direction": "sell-gem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "requested": "2",
+      "cost": "2",
+      "retainedBudget": "0",
+      "actualOutput": "2000000000000",
+      "fee": "0"
+    },
+    {
+      "direction": "sell-gem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "requested": "5494762",
+      "cost": "5494762",
+      "retainedBudget": "0",
+      "actualOutput": "5494762000000000000",
+      "fee": "0"
+    },
+    {
+      "direction": "sell-gem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "requested": "10989524",
+      "cost": "10989524",
+      "retainedBudget": "0",
+      "actualOutput": "10989524000000000000",
+      "fee": "0"
+    },
+    {
+      "direction": "sell-gem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "requested": "8137414",
+      "cost": "8137414",
+      "retainedBudget": "0",
+      "actualOutput": "8137414000000000000",
+      "fee": "0"
+    },
+    {
+      "direction": "sell-gem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "requested": "1",
+      "cost": "1",
+      "retainedBudget": "0",
+      "actualOutput": "1000000000000",
+      "fee": "0"
+    },
+    {
+      "direction": "sell-gem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "requested": "2",
+      "cost": "2",
+      "retainedBudget": "0",
+      "actualOutput": "2000000000000",
+      "fee": "0"
+    },
+    {
+      "direction": "buy-gem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "requested": "5483517075214014766",
+      "cost": "5483517000000000000",
+      "retainedBudget": "75214014766",
+      "actualOutput": "5483517",
+      "fee": "0"
+    },
+    {
+      "direction": "buy-gem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "requested": "10967034150428029532",
+      "cost": "10967034000000000000",
+      "retainedBudget": "150428029532",
+      "actualOutput": "10967034",
+      "fee": "0"
+    },
+    {
+      "direction": "buy-gem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "requested": "8137414000000000000",
+      "cost": "8137414000000000000",
+      "retainedBudget": "0",
+      "actualOutput": "8137414",
+      "fee": "0"
+    },
+    {
+      "direction": "buy-gem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "requested": "1000000000000",
+      "cost": "1000000000000",
+      "retainedBudget": "0",
+      "actualOutput": "1",
+      "fee": "0"
+    },
+    {
+      "direction": "buy-gem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "requested": "1000000000001",
+      "cost": "1000000000000",
+      "retainedBudget": "1",
+      "actualOutput": "1",
+      "fee": "0"
+    },
+    {
+      "direction": "buy-gem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "requested": "5483517075214014766",
+      "cost": "5483517000000000000",
+      "retainedBudget": "75214014766",
+      "actualOutput": "5483517",
+      "fee": "0"
+    },
+    {
+      "direction": "buy-gem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "requested": "10967034150428029532",
+      "cost": "10967034000000000000",
+      "retainedBudget": "150428029532",
+      "actualOutput": "10967034",
+      "fee": "0"
+    },
+    {
+      "direction": "buy-gem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "requested": "8137414000000000000",
+      "cost": "8137414000000000000",
+      "retainedBudget": "0",
+      "actualOutput": "8137414",
+      "fee": "0"
+    },
+    {
+      "direction": "buy-gem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "requested": "1000000000000",
+      "cost": "1000000000000",
+      "retainedBudget": "0",
+      "actualOutput": "1",
+      "fee": "0"
+    },
+    {
+      "direction": "buy-gem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "requested": "1000000000001",
+      "cost": "1000000000000",
+      "retainedBudget": "1",
+      "actualOutput": "1",
+      "fee": "0"
+    }
+  ],
+  "source": {
+    "number": 26029876,
+    "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+  },
+  "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+  "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+  "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+  "sourceTree": {
+    "sourceTreeSha256": "37ccb00a4ebdf2d056858cef2f86c120890ac57894eb32788390ab1f0bdf3008",
+    "harnessSha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a",
+    "evidenceSha256": "21667eebf6b97b6e18ad9ec4230d615a1d8e46478fcd8fc19339f01ec9c800f4",
+    "observationHelpers": [
+      {
+        "path": "./v4-native-settlement.ts",
+        "sha256": "a12bf0f92a006a594cbec2caf5ba4cfa0a31faea28a912c7701b54e71be1c664"
+      },
+      {
+        "path": "../three-family/historical-input-observations.ts",
+        "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+      },
+      {
+        "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+        "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+      },
+      {
+        "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+        "sha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43"
+      },
+      {
+        "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+        "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+      },
+      {
+        "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+        "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+      },
+      {
+        "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+        "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+      },
+      {
+        "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+        "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+      },
+      {
+        "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+        "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+      },
+      {
+        "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+      }
+    ]
+  },
+  "limits": [
+    "Actual historical fees are zero; nonzero fee/HALTED/fault coverage is offline contract evidence, not claimed real-chain fee variants.",
+    "Negative proof is trusted production reverted-as-declared with omitted effects, not independent raw storageDiff/callTrace.",
+    "No callback support, opportunity, natural pricing, new discovery or performance claim. Existing default correctness remains separate evidence.",
+    "Actual method uses current issuer/transport. Whole-source stability/final pins are asserted by the pinned harness; matching run success and drain retained."
+  ]
+}
