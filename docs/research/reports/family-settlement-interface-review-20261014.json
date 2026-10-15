@@ -615,7 +615,7 @@
     },
     {
       "familyId": "balancer-v3",
-      "coverage": "partial",
+      "coverage": "complete",
       "variants": [
         {
           "id": "balancer-v3",
@@ -624,19 +624,47 @@
           "callback": "internal-only",
           "recipient": "no",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "原 StableSurge 验收是 8 池、33/36 已测方向、98 金额组/196 执行，仍是有效的既有普通 Router 实测事实；不是新执行。",
-            "当前 typed gate 尚未完成同 source/execution 的原证据 join，因此 gate execution 暂列 unverified；缺的是证据 join，不把它写成实现缺失或要求重跑原通过项。",
-            "原 3 未测方向与缺自然估值仍保留，不能写全路径完成。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidenceNote": "实际 Router sender=caller，输入先收后输出；内部 onlyVault 回调不能用 not-required 跳过执行。待父任务 join interface-root-evidence-index 中原 balancer-v3-stable-surge-acceptance-20261010.json；此处未重跑或独立重算那 196 次。",
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
               "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+            },
+            {
+              "path": "docs/research/reports/balancer-v3-current-correctness-20261015.json",
+              "sha256": "511cbdd63971ff0f56845919807c76ebcc076127028b7de6a463e6f5c8c68869"
+            },
+            {
+              "path": "docs/research/reports/balancer-v3-current-compatibility-20261015.json",
+              "sha256": "16757f74bd7b4f8e3d314e6fdaef1c8d2ff2db757f093e533f86ad5f3d49ea91"
+            },
+            {
+              "path": "docs/research/reports/balancer-v3-current-independent-raw-20261015.json",
+              "sha256": "fb58b9ff4ffd0c7c678938241454fcb1c946a654e1da23504864c64222e725b1"
+            },
+            {
+              "path": "docs/research/reports/balancer-v3-current-deployment-bindings-20261015.json",
+              "sha256": "042fab696e8312688b6c4e78f30d5dd9e173b41bfe25ed567a77fb3ca75dd1e1"
+            },
+            {
+              "path": "docs/research/reports/balancer-v3-current-current-programs-20261015.json",
+              "sha256": "7ffe9cae8f6a26dc47003d791dbfd0c53069c7734fb929699e8bf12a7c932b09"
             }
-          ]
+          ],
+          "scope": "Existing ERC20 Router exact-input operation, no-hook weighted and authenticated StableSurge models in the eight retained actual pools. Existing acceptance is reused; this review runs only source/hash/calldata and raw-balance checks.",
+          "limitations": [
+            "Original raw source hashes and artifact JSON hashes remain immutable. The matching initial recovered artifact has different JSON hash c41a vs reported 5b4; equivalence is exact owner-patched runtime plus metadata, never same-JSON provenance.",
+            "Initial 268 positive executions lack separate post-native read/negative controls; only the later 12 positive and 12 zero-input controls supply those extra observations. Do not multiply their count across all old cases.",
+            "Permit2 amount is zero after each operation; expiration can equal source timestamp. Do not claim all packed allowance fields are zero.",
+            "No full original-transaction prefix replay, complete Adapter Replay gate, live opportunity, scheduling, performance or fresh current historical execution conclusion.",
+            "Unknown or uninstalled hook/native/receiver alternatives are not silently promoted; this joins the existing selected variant only."
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/balancer-v3-current-compatible-behavior-20261015.json",
+            "sha256": "0c3c813a08ca9b6699d813c34a81282b5dc26de150a1eb9e933a4d8ce1b996ca"
+          }
         }
       ],
       "sourceReport": "root-eight-review-v2.json",
@@ -648,7 +676,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -748,8 +776,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
-        "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+        "path": "docs/research/reports/current-interface-balancer-v3-retained-20261015.json",
+        "sha256": "c6c23dfa0fe2c76c33f1b44f80e26fec934c15c560159004351e6252ffb34e41"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/balancer-v3-current-correctness-20261015.json",
+        "sha256": "511cbdd63971ff0f56845919807c76ebcc076127028b7de6a463e6f5c8c68869"
       }
     },
     {
@@ -8184,8 +8216,8 @@
     ]
   },
   "currentScopedUpdate": {
-    "scope": "Standard ERC4626 actual18 targets32 directions; source-compatible Frax/InfiniFi reuse, no original evidence rewritten.",
-    "priorInventorySha256": "a0ffc60b91ff9e9a5f7c79e5c3ac6a76b7e909b98bbe415771d1f27271f89ac4",
+    "scope": "Balancer V3 retained8pools36directions actual evidence and current compatibility join, no rerun.",
+    "priorInventorySha256": "eb47285c2a3340ce3327a6f548e2787b4c10cb902652b940b72363f85a0621c3",
     "allOtherVariantStatesPreserved": true,
     "allFamiliesPassed": false
   }

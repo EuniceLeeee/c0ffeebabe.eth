@@ -1,0 +1,2294 @@
+{
+  "result": "pass-exact-runtime-and-interface-bytecode-bindings",
+  "scope": "Historical runtime bytes certified using compiler immutables and matching source metadata; no recompile or new EVM. Current script compatibility uses only original operations.",
+  "artifacts": [
+    {
+      "recoveredArtifact": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/old-artifact-1e1bdbb6.json",
+        "sha256": "c41a91e9e76a47b615d2e53b36322dc2b358e80c74fc0bbf83d9d353924246ca"
+      },
+      "originalReportedArtifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+      "artifactJsonHashEqualsOriginal": false,
+      "owner": "0x1000000000000000000000000000000000000001",
+      "immutablePatchAlgorithm": "For every compiler declared deployedBytecode immutable reference (length exactly 32), replace that exact offset with the left-zero-padded recorded owner. No other runtime byte changed.",
+      "patches": [
+        {
+          "immutableId": "40501",
+          "start": 136,
+          "length": 32
+        },
+        {
+          "immutableId": "40501",
+          "start": 480,
+          "length": 32
+        },
+        {
+          "immutableId": "40501",
+          "start": 559,
+          "length": 32
+        }
+      ],
+      "runtimeKeccak256": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "metadata": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/balancer-v3-coffee-20261010.Au7gjP/staged.xOCB5Y/src/BotVM.sol",
+          "sha256": "5cc05fe179c3c39ffae2eadd4ae066c8498948f5fcdb42b705acbe44658b6c66",
+          "compilerSourcePath": "src/BotVM.sol",
+          "keccak256": "0x56b2c959bba3574e408f9c0eb7dfb7f889cda7298142a6a8affef7f106d24126"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/balancer-v3-coffee-20261010.Au7gjP/staged.xOCB5Y/src/Constants.sol",
+          "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "compilerSourcePath": "src/Constants.sol",
+          "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/balancer-v3-coffee-20261010.Au7gjP/staged.xOCB5Y/src/RuntimeAmountVM.sol",
+          "sha256": "2bd8c69bfdb5eff84e54af132d057b70f7f895e8b96b1787cd9ad47fb741c8c1",
+          "compilerSourcePath": "src/RuntimeAmountVM.sol",
+          "keccak256": "0x6f2f542db6ea71b86c2eeec88177062272ef41961b411554750b9e6845f6588f"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/balancer-v3-coffee-20261010.Au7gjP/staged.xOCB5Y/src/interfaces/IERC20.sol",
+          "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "compilerSourcePath": "src/interfaces/IERC20.sol",
+          "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+        }
+      ]
+    },
+    {
+      "recoveredArtifact": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/old-artifact-62a3d76f.json",
+        "sha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+      },
+      "originalReportedArtifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+      "artifactJsonHashEqualsOriginal": true,
+      "owner": "0x1000000000000000000000000000000000000001",
+      "immutablePatchAlgorithm": "For every compiler declared deployedBytecode immutable reference (length exactly 32), replace that exact offset with the left-zero-padded recorded owner. No other runtime byte changed.",
+      "patches": [
+        {
+          "immutableId": "40501",
+          "start": 136,
+          "length": 32
+        },
+        {
+          "immutableId": "40501",
+          "start": 480,
+          "length": 32
+        },
+        {
+          "immutableId": "40501",
+          "start": 559,
+          "length": 32
+        }
+      ],
+      "runtimeKeccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "metadata": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/BotVM.sol",
+          "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "compilerSourcePath": "src/BotVM.sol",
+          "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/Constants.sol",
+          "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "compilerSourcePath": "src/Constants.sol",
+          "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/RuntimeAmountVM.sol",
+          "sha256": "9dd2974a39370dcaca2bf5f031a4f5a147640bee6dc1988b9f7bc2446e8b2ff8",
+          "compilerSourcePath": "src/RuntimeAmountVM.sol",
+          "keccak256": "0xf8d87fc9d3286cf5e5d327e9a943ff60eccf1e8383739ccdb9ce7d32edfb8d19"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/interfaces/IERC20.sol",
+          "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "compilerSourcePath": "src/interfaces/IERC20.sol",
+          "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+        }
+      ]
+    }
+  ],
+  "interfaces": [
+    {
+      "address": "0xae563e3f8219521950555f5962419c8919758ea2",
+      "cache": {
+        "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0xae563e3f8219521950555f5962419c8919758ea2.json",
+        "sha256": "d0a316a02fa28a1062a394f5fe1d209233560c388e425633c8724c05943b9ab8"
+      },
+      "sourceUrl": "https://eth.blockscout.com/api/v2/smart-contracts/0xae563e3f8219521950555f5962419c8919758ea2",
+      "runtimeKeccak256": "0x76d58a2f13ee78e52e3f414f0181bc77ff0fcc65ae35b0d215a26b6fd2980a18",
+      "allElevenReadyBindingsMatch": true,
+      "proxyType": null,
+      "entry": {
+        "signature": "swapSingleTokenExactIn(address,address,address,uint256,uint256,uint256,bool,bytes)",
+        "selector": "0x750283bc"
+      }
+    },
+    {
+      "address": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+      "cache": {
+        "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0xba1333333333a1ba1108e8412f11850a5c319ba9.json",
+        "sha256": "7bea379ccd8047baf8f9576a2a5d6e858d6568bd68f64d6dba849117bed34308"
+      },
+      "sourceUrl": "https://eth.blockscout.com/api/v2/smart-contracts/0xba1333333333a1ba1108e8412f11850a5c319ba9",
+      "runtimeKeccak256": "0x4e7ec59a8b52b6afc9969c95d7f28c541aa3f643b5f4fe3577a1559e1c3beb4b",
+      "allElevenReadyBindingsMatch": true,
+      "proxyType": null
+    }
+  ],
+  "programInventory": {
+    "uniquePrograms": 36,
+    "outerQuotedCallsOnly": true,
+    "outerRuntimeOpcode": 14,
+    "maximumInputFlowOpcodeUsed": false,
+    "subprogramOrExpectedRevertUsed": false,
+    "callbackFieldsAllZero": true,
+    "programs": [
+      {
+        "programHash": "0x3da79952ae920979919875ef73e4a5c114a868c3907c401b242b9a61fb65cb90",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x652ff51a5e35a891b503ddecf89bffaccc583c42ec2d1532a2765cbbbaa67dd2",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x8099c7a6fc7d9dfec5d59c3f30502187716dbcbddf8e69ae28d2cef7624054a1",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xbc5b2593470429914a44a00079081acc28c87a284d4395be7ed216d87216ce90",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x99999999999999cc837c997b882957dafdcb1af9",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x99999999999999cc837c997b882957dafdcb1af9",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x99999999999999cc837c997b882957dafdcb1af9",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xe689eb7a6faa951ba8054442f15188d156cd5551e88750403b71d7595edaac2d",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x85bca000845c49b24540ea4b088c3dc1a450e80bdf03d7dc89354c407b7def8f",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x8c60466c6c9d533c7ba1f74826b0c17c4a66608449e338993cf2201366a2f5e2",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xccb13408bac7dd7cae21763749272dd2db58daad7145cfc9e47654971c86de96",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x61779a650d116aff0cd5db54b118b031ecdbbe118581243d7bfed7b6cd089271",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x88adfbc5e929168b0449345a509cc72f35d6b2340e29c182be96cd2a689c426d",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x13a5082e112521c3e298a982e8270e713cda44844d936b70a622d893a4a2b515",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xa7a2db50c6622eb4b64a418c42d7acc2a610982e3514e42e64abdfe1655501cd",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x0a118cd8cacc46118c28c13826db59d6de8401c65473ffe37edcf39a6d0156ea",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xe91088a97fb6889106e979398ad78b09f120c0901739e38340477c2cdee891b5",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x8dbbec0dc2fde7dd5d14843e58cf5209334ecfe5ed555bec2d888da45d7d956b",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xe5a35d1a2b861a88d5ecc949787afadc62106eab10a1190920510c1cd643210f",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x039a6fbaf881d03a7def75fa50cf6129399737ec6edfa9e60e0e3e66ca63d4a4",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x8ca7c654bf8c65209d8d6044b9ca3b105677a0c3d6c91f65138eaaf27b3555dc",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xa5f4383827a797790309e76bb61d6556aa79c20730d14c45a9d731292fdb2e8a",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xb68f62f0171592b711acbeddfb0c08c3e6b9a1beed4f09e2f4f29382bb24e6eb",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x2e2473749a27bcf0c661831594e1241342ee8c715e94e326b4fa05ddbe96ca0f",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x6aa604fb8ca0b91d0b14881facbabab46e29051847c835c9652d45bf04d1531e",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xd2b4498f6feac432de54a8a5844c86f95908835bda373102710ceba1be367240",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xcaf84666fff46fe4aba57410563058d260c6daaa33e567fa866084f2d6f36038",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x936f79f746c04d21380da66ae6fa8b7aad28bc3496b32c9821d569907f27399a",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x2b608ff8474b35b7e8f6ea828bedd56337029562851840f6cb53e9d5c3d5fe92",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x2fb23ad797e3f1ded9fc7f290ecc9a6d28d2407062217cb8efb7b17df5dd8814",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xa54e4beec8da7e22a19b4a8105d7b2d87cfa1eb4fc48e81f8b970963d5c6dc4a",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x7db04c0387b8185f205dbf8599b6aa311a251eaecc0182ba86407875180126e3",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xde57087f3a9626c9a464382dad4180dbf63c66892941525fa01272ac9bc4d68c",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae78736cd615f374d3085123a210448e74fc6393",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x639a414e3f568f98830311f99df580df5f830106c7c2d89d1733059a47869015",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xc43a74426261e77de45cd537d1543cf6d486cff7d4c02a0d6635157936b16e13",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0xd220b1c8c68ba476cbb2633c6867353d1bb5f15972c764dfe144dae44521381f",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x6e746a2d667584ea3f8ff37542b9afff8f803f4a5ffb6fe79328dd8d7f3ad71f",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x6147ec573edb1de037cf6621dd0cd7be112553e49f757368a406313dde7d6a59",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      },
+      {
+        "programHash": "0x343b12862dab87b947d83b1664ca6f0f8074ffd07968b5e194d3d938bc8bad37",
+        "opcodes": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "calls": [
+          {
+            "target": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x750283bc"
+          },
+          {
+            "target": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x87517c45"
+          },
+          {
+            "target": "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+            "mode": 0,
+            "valueReg": 255,
+            "incoming": 0,
+            "outgoing": 0,
+            "selector": "0x095ea7b3"
+          }
+        ]
+      }
+    ]
+  },
+  "currentCommonCompatibilityEvidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/default-reuse73.json",
+      "sha256": "3b5066292099162cd767c97f4f4c60bb893a5fe3155c77250ba06605b2082982"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/old-runtime76-binding.json",
+      "sha256": "14b62700342da938e15adf3b43056a5e5685437efeea5dabd0d8eff290b3e766"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/common-native-compatibility-v1-84.json",
+      "sha256": "b909b63f34bbcca86db3340d55cf3891cf7dae4874da25c3741969fe6263c93b"
+    }
+  ],
+  "limitations": [
+    "Recovered initial artifact JSON c41a differs from reported 5b4; only exact owner-patched runtime and compiler metadata are asserted equivalent. Original reported hash remains unchanged.",
+    "Initial staged whole-tree hash is not claimed equal to the historic aggregate; current file-level matches and complete actual program equality are separately explicit."
+  ]
+}

@@ -1,0 +1,3282 @@
+{
+  "result": "pass-read-only-raw-recalculation",
+  "scope": "280 retained positive executions across original and supplementary reports, including repeated directions; not 280 new runs. Twelve later zero-input controls independently show storage rollback.",
+  "counts": {
+    "positiveExecutions": 280,
+    "tokenBalanceDeltas": 560,
+    "nativeObservations": 12,
+    "inputTransfers": 280,
+    "outputTransfers": 280,
+    "routerReturns": 280,
+    "zeroInputReverts": 12,
+    "zeroInputStorageRollbacks": 12
+  },
+  "uniquePools": 8,
+  "uniqueDirections": 36,
+  "directionsByPool": {
+    "0x071828acc755314e687448703775f22194f56867": [
+      [
+        "0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+        "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb"
+      ],
+      [
+        "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+        "0x9d39a5de30e57443bff2a8307a4256c8797a3497"
+      ]
+    ],
+    "0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566": [
+      [
+        "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+        "0x99999999999999cc837c997b882957dafdcb1af9"
+      ],
+      [
+        "0x99999999999999cc837c997b882957dafdcb1af9",
+        "0x6440f144b7e50d6a8439336510312d2f54beb01d"
+      ]
+    ],
+    "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc": [
+      [
+        "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+        "0xae78736cd615f374d3085123a210448e74fc6393"
+      ],
+      [
+        "0xae78736cd615f374d3085123a210448e74fc6393",
+        "0x936facdf10c8c36294e7b9d28345255539d81bc7"
+      ]
+    ],
+    "0xe00e947decfe01692070e113002705bdf77ddbd3": [
+      [
+        "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf",
+        "0xe108fbc04852b5df72f9e44d7c29f47e7a993add"
+      ],
+      [
+        "0xe108fbc04852b5df72f9e44d7c29f47e7a993add",
+        "0xc0c17dd08263c16f6b64e772fb9b723bf1344ddf"
+      ]
+    ],
+    "0xae255db04ba78519f33871c557d8fd6bafdb83bd": [
+      [
+        "0x8399c8fc273bd165c346af74a02e65f10e4fd78f",
+        "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94"
+      ],
+      [
+        "0xe2fc85bfb48c4cf147921fbe110cf92ef9f26f94",
+        "0x8399c8fc273bd165c346af74a02e65f10e4fd78f"
+      ]
+    ],
+    "0x136fa856047918af169670d002ffd2dbbe8efbc9": [
+      [
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd"
+      ],
+      [
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "0xdac17f958d2ee523a2206206994597c13d831ec7"
+      ],
+      [
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d"
+      ],
+      [
+        "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      ],
+      [
+        "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "0xdac17f958d2ee523a2206206994597c13d831ec7"
+      ],
+      [
+        "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d"
+      ],
+      [
+        "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      ],
+      [
+        "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd"
+      ],
+      [
+        "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d"
+      ],
+      [
+        "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      ],
+      [
+        "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd"
+      ],
+      [
+        "0xe1753f2e00940cc31213dd92013cf019dfe4ca1d",
+        "0xdac17f958d2ee523a2206206994597c13d831ec7"
+      ]
+    ],
+    "0x6b31a94029fd7840d780191b6d63fa0d269bd883": [
+      [
+        "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+        "0x90551c1795392094fe6d29b758eccd233cfaa260"
+      ],
+      [
+        "0x90551c1795392094fe6d29b758eccd233cfaa260",
+        "0x2411802d8bea09be0af8fd8d08314a63e706b29c"
+      ]
+    ],
+    "0x93bd81fe5e0359cddce996e0785d9f6cb39295a7": [
+      [
+        "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+        "0x18084fba666a33d37592fa2633fd49a74dd93a88"
+      ],
+      [
+        "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+        "0xae78736cd615f374d3085123a210448e74fc6393"
+      ],
+      [
+        "0x0bfc9d54fc184518a81162f8fb99c2eaca081202",
+        "0xcdf7028ceab81fa0c6971208e83fa7872994bee5"
+      ],
+      [
+        "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+        "0x0bfc9d54fc184518a81162f8fb99c2eaca081202"
+      ],
+      [
+        "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+        "0xae78736cd615f374d3085123a210448e74fc6393"
+      ],
+      [
+        "0x18084fba666a33d37592fa2633fd49a74dd93a88",
+        "0xcdf7028ceab81fa0c6971208e83fa7872994bee5"
+      ],
+      [
+        "0xae78736cd615f374d3085123a210448e74fc6393",
+        "0x0bfc9d54fc184518a81162f8fb99c2eaca081202"
+      ],
+      [
+        "0xae78736cd615f374d3085123a210448e74fc6393",
+        "0x18084fba666a33d37592fa2633fd49a74dd93a88"
+      ],
+      [
+        "0xae78736cd615f374d3085123a210448e74fc6393",
+        "0xcdf7028ceab81fa0c6971208e83fa7872994bee5"
+      ],
+      [
+        "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+        "0x0bfc9d54fc184518a81162f8fb99c2eaca081202"
+      ],
+      [
+        "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+        "0x18084fba666a33d37592fa2633fd49a74dd93a88"
+      ],
+      [
+        "0xcdf7028ceab81fa0c6971208e83fa7872994bee5",
+        "0xae78736cd615f374d3085123a210448e74fc6393"
+      ]
+    ]
+  },
+  "reports": [
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/raw02/logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-0718-dual-1.json",
+        "sha256": "11cafcc5a24988d669ccb27d32ca9ce8ff8b6d4c080ab85003f77ba378ed5889"
+      },
+      "pool": "0x071828acc755314e687448703775f22194f56867",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+        "generation": 25944594
+      },
+      "directions": 2,
+      "executions": 12,
+      "runtimeCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "code": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "samples": [
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:0:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "4087650008190331620",
+          "amountOut": "4684956010688505528",
+          "encoding": "old-fragment",
+          "inputDebit": "4087650008190331620",
+          "outputReceipt": "4684956010688505528",
+          "scriptHash": "0x49d27646291f491d31e4a0b2d4f92b459b3b49e2dd78adfdd1f70b0adc59c818"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:0:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "4087650008190331620",
+          "amountOut": "4684956010688505528",
+          "encoding": "runtime-program",
+          "inputDebit": "4087650008190331620",
+          "outputReceipt": "4684956010688505528",
+          "scriptHash": "0x07cb65ccc400e82dfa1daf0d25b4d64a8c44a3a25941736799bd689fffe2cc62"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:0:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2043825004095165810",
+          "amountOut": "2342495994336743367",
+          "encoding": "old-fragment",
+          "inputDebit": "2043825004095165810",
+          "outputReceipt": "2342495994336743367",
+          "scriptHash": "0xb708b9a0470637ee6323252fef9d7cdd701347e5ed28892f6659c590fac763e6"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:0:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2043825004095165810",
+          "amountOut": "2342495994336743367",
+          "encoding": "runtime-program",
+          "inputDebit": "2043825004095165810",
+          "outputReceipt": "2342495994336743367",
+          "scriptHash": "0xe73cf8625367236abd50b734b1e5ee47e65106f61d0d4c1c766f90b5993f73df"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "252115476348976516213",
+          "amountOut": "267962563911657100421",
+          "encoding": "old-fragment",
+          "inputDebit": "252115476348976516213",
+          "outputReceipt": "267962563911657100421",
+          "scriptHash": "0xa1f990c5ae1894fd79c71f49d1989f1531924b2038bddbbe72bf9a53b00b0a52"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "252115476348976516213",
+          "amountOut": "267962563911657100421",
+          "encoding": "runtime-program",
+          "inputDebit": "252115476348976516213",
+          "outputReceipt": "267962563911657100421",
+          "scriptHash": "0x112eb6b8e1649c4923633274be2bf171b8b5be587dba45981ce78c0dc8a9a944"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "126057738174488258106",
+          "amountOut": "144406873585946241863",
+          "encoding": "old-fragment",
+          "inputDebit": "126057738174488258106",
+          "outputReceipt": "144406873585946241863",
+          "scriptHash": "0x21d3fe7fcece435073da00fbc44ffc458eec77275e1487a692b25fe1c6e2f48f"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "126057738174488258106",
+          "amountOut": "144406873585946241863",
+          "encoding": "runtime-program",
+          "inputDebit": "126057738174488258106",
+          "outputReceipt": "144406873585946241863",
+          "scriptHash": "0xe4b1d627f27d983f2ed0f73d9721770cfc81f7fe9950573a5e6ee399af97423d"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "787606233728059501656",
+          "amountOut": "252095676815688559901",
+          "encoding": "old-fragment",
+          "inputDebit": "787606233728059501656",
+          "outputReceipt": "252095676815688559901",
+          "scriptHash": "0x1a89912b02b61476332895d476aadf6305a89966034c61168ca2a361afc60e27"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "787606233728059501656",
+          "amountOut": "252095676815688559901",
+          "encoding": "runtime-program",
+          "inputDebit": "787606233728059501656",
+          "outputReceipt": "252095676815688559901",
+          "scriptHash": "0x702e8c58d65275e04be082391a32e88d1be7aecce15a685c8b0cfcbd589b0b23"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "393803116864029750828",
+          "amountOut": "251564113521856191764",
+          "encoding": "old-fragment",
+          "inputDebit": "393803116864029750828",
+          "outputReceipt": "251564113521856191764",
+          "scriptHash": "0x7e51b2dd61a074620a4a13a1473bad0709e593ddfced9f051e0d515ce1180870"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "393803116864029750828",
+          "amountOut": "251564113521856191764",
+          "encoding": "runtime-program",
+          "inputDebit": "393803116864029750828",
+          "outputReceipt": "251564113521856191764",
+          "scriptHash": "0xac61785a36a8c3995bbfdefc674952da6d45c384b5a07a1606500c16129d0029"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/raw02/logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-3e6c-dual-1.json",
+        "sha256": "bb895f161ffb39a44428304459c752f065ced7830a562fe4629db31618b3ea9a"
+      },
+      "pool": "0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566",
+      "source": {
+        "number": 25978385,
+        "hash": "0x3f539aa4f4cc2ac1752d883e7af0862e17371bd1e3d916893e74f1228cacd50f",
+        "generation": 25978385
+      },
+      "directions": 2,
+      "executions": 12,
+      "runtimeCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "code": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "samples": [
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:0:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "5156067822249628508",
+          "amountOut": "4153183100854597952",
+          "encoding": "old-fragment",
+          "inputDebit": "5156067822249628508",
+          "outputReceipt": "4153183100854597952",
+          "scriptHash": "0x03e77c78d914476d2132a6aa4e67203efb42cad6611e7a4d2a52166318d9df30"
+        },
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:0:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "5156067822249628508",
+          "amountOut": "4153183100854597952",
+          "encoding": "runtime-program",
+          "inputDebit": "5156067822249628508",
+          "outputReceipt": "4153183100854597952",
+          "scriptHash": "0x5dcb817836f73d554380d8fc8bc5881aaa931954fedd78c28b56d407bcc7f2ba"
+        },
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:0:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2578033911124814254",
+          "amountOut": "2076599887278753930",
+          "encoding": "old-fragment",
+          "inputDebit": "2578033911124814254",
+          "outputReceipt": "2076599887278753930",
+          "scriptHash": "0xc56f2b5fd2b66d21fd3bac10dae259b5fd3119cab2fcf465ab1fa320095e6d3d"
+        },
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:0:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2578033911124814254",
+          "amountOut": "2076599887278753930",
+          "encoding": "runtime-program",
+          "inputDebit": "2578033911124814254",
+          "outputReceipt": "2076599887278753930",
+          "scriptHash": "0x8b29d8172cb4abf6c6009ec84842d2eae0c148f0443982709b748172546b6a73"
+        },
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "805075241858952581651",
+          "amountOut": "616145564663736422665",
+          "encoding": "old-fragment",
+          "inputDebit": "805075241858952581651",
+          "outputReceipt": "616145564663736422665",
+          "scriptHash": "0x0ddbbfb4fb04f956f1e5e9b6e259ef7401a24f094e3cb49ade2f53c0d5ff9305"
+        },
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "805075241858952581651",
+          "amountOut": "616145564663736422665",
+          "encoding": "runtime-program",
+          "inputDebit": "805075241858952581651",
+          "outputReceipt": "616145564663736422665",
+          "scriptHash": "0x25131ce1f7f609d5a1c652f66f250a65f5a56509d2a76a202013752e680728f8"
+        },
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "402537620929476290825",
+          "amountOut": "317610666111943159481",
+          "encoding": "old-fragment",
+          "inputDebit": "402537620929476290825",
+          "outputReceipt": "317610666111943159481",
+          "scriptHash": "0x2ba5012e33af76ecb2f5af470cee4110ed5c4c321b4999046ab98cdae3893e06"
+        },
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "402537620929476290825",
+          "amountOut": "317610666111943159481",
+          "encoding": "runtime-program",
+          "inputDebit": "402537620929476290825",
+          "outputReceipt": "317610666111943159481",
+          "scriptHash": "0x6846435d920940cc0f2acc0c3abb4150728faeff6b2cd796929dbce1b1d96a76"
+        },
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "649239160219360122690",
+          "amountOut": "796028108083829733523",
+          "encoding": "old-fragment",
+          "inputDebit": "649239160219360122690",
+          "outputReceipt": "796028108083829733523",
+          "scriptHash": "0x8c78d9446f12f07df379e514aeb293025314fedac4ab2df987035f422ff346e9"
+        },
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "649239160219360122690",
+          "amountOut": "796028108083829733523",
+          "encoding": "runtime-program",
+          "inputDebit": "649239160219360122690",
+          "outputReceipt": "796028108083829733523",
+          "scriptHash": "0x4c5046a1842150451180e6c257490f669c90d3b07d2207a215ce32196a53b101"
+        },
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "324619580109680061345",
+          "amountOut": "402696835670300371329",
+          "encoding": "old-fragment",
+          "inputDebit": "324619580109680061345",
+          "outputReceipt": "402696835670300371329",
+          "scriptHash": "0xf0818dff3230621e98cf954878d6cb450d3d72c5340ede63291635fa98e651ee"
+        },
+        {
+          "routeKey": "balancer-v3:0x3e6c8f40d38d0b41c94862e6d4083c65ce0ce566:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "324619580109680061345",
+          "amountOut": "402696835670300371329",
+          "encoding": "runtime-program",
+          "inputDebit": "324619580109680061345",
+          "outputReceipt": "402696835670300371329",
+          "scriptHash": "0x4d74261911e8798b7ebb9690e1e6da42e83c34c7279213d6d5f8fc2e4f12fadb"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/raw02/logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-bb6f-dual-1.json",
+        "sha256": "0cf6405e39c0afabfbc6b8d7b5e5da459de0f7433f79e74aefa6bd8ad5ecc951"
+      },
+      "pool": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
+      "source": {
+        "number": 26073941,
+        "hash": "0x2058fcbae74c7dead9d719d83a27404a1ef33804ca4fe76c30a89b2e77b551d4",
+        "generation": 26073941
+      },
+      "directions": 2,
+      "executions": 12,
+      "runtimeCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "code": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "samples": [
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "791789990820519310",
+          "amountOut": "808581903312232127",
+          "encoding": "old-fragment",
+          "inputDebit": "791789990820519310",
+          "outputReceipt": "808581903312232127",
+          "scriptHash": "0x1d5409e65902aff88f3d1a5811ab7695a10c5a01a1bb43803b6cdff81e71d4e4"
+        },
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "791789990820519310",
+          "amountOut": "808581903312232127",
+          "encoding": "runtime-program",
+          "inputDebit": "791789990820519310",
+          "outputReceipt": "808581903312232127",
+          "scriptHash": "0xef6514d7fa7628a4a4087d52737191dd28a2de427c411b5ce89326b3d8e1187d"
+        },
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "395894995410259655",
+          "amountOut": "404351798617063004",
+          "encoding": "old-fragment",
+          "inputDebit": "395894995410259655",
+          "outputReceipt": "404351798617063004",
+          "scriptHash": "0xd76e0a8ca0843ba0c527eb657cd1ffdf4b0455caaf07c8f54ef6c14bdc09ef4c"
+        },
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "395894995410259655",
+          "amountOut": "404351798617063004",
+          "encoding": "runtime-program",
+          "inputDebit": "395894995410259655",
+          "outputReceipt": "404351798617063004",
+          "scriptHash": "0x289bf0dd62e1cadd21a9f238fe3f8381d117a2bc268b6834ba89e52599096ce7"
+        },
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:1:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "1709292688940108",
+          "amountOut": "1672948145462810",
+          "encoding": "old-fragment",
+          "inputDebit": "1709292688940108",
+          "outputReceipt": "1672948145462810",
+          "scriptHash": "0x3d80ef43b934f7cfbd6fcb7467c94a75ffdb8a40a20f9bdd85ca14314e4841c9"
+        },
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:1:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "1709292688940108",
+          "amountOut": "1672948145462810",
+          "encoding": "runtime-program",
+          "inputDebit": "1709292688940108",
+          "outputReceipt": "1672948145462810",
+          "scriptHash": "0xec1646ef67006706722428493d615ac2d0328a1a9cf93805e442087ab83292d7"
+        },
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:1:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "854646344470054",
+          "amountOut": "836474354562808",
+          "encoding": "old-fragment",
+          "inputDebit": "854646344470054",
+          "outputReceipt": "836474354562808",
+          "scriptHash": "0xd2e1269056b6a2c3800d62ed965100aa7b315919590bbad8615e227970743d2b"
+        },
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:1:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "854646344470054",
+          "amountOut": "836474354562808",
+          "encoding": "runtime-program",
+          "inputDebit": "854646344470054",
+          "outputReceipt": "836474354562808",
+          "scriptHash": "0xf94ae5c401e0944f929203f3f6f690ee80b3a9a788d6c31ead4e7035c2132c16"
+        },
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "809110644844043019",
+          "amountOut": "791631697233719400",
+          "encoding": "old-fragment",
+          "inputDebit": "809110644844043019",
+          "outputReceipt": "791631697233719400",
+          "scriptHash": "0x2d59c60df8eaabce20e2b545860fa742144375910319ae1b016032bbdbb99580"
+        },
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "809110644844043019",
+          "amountOut": "791631697233719400",
+          "encoding": "runtime-program",
+          "inputDebit": "809110644844043019",
+          "outputReceipt": "791631697233719400",
+          "scriptHash": "0x75df3f258bef004bfd8f01de43f6405c62d2d81c13620e748bd3f246baf6a20d"
+        },
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "404555322422021509",
+          "amountOut": "395888022968987170",
+          "encoding": "old-fragment",
+          "inputDebit": "404555322422021509",
+          "outputReceipt": "395888022968987170",
+          "scriptHash": "0x8f02d33e40fffcdcef038ce8cf1a3b20c0f1c1baeb1fccd17cfa930be8812fe0"
+        },
+        {
+          "routeKey": "balancer-v3:0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "404555322422021509",
+          "amountOut": "395888022968987170",
+          "encoding": "runtime-program",
+          "inputDebit": "404555322422021509",
+          "outputReceipt": "395888022968987170",
+          "scriptHash": "0xa569393e93aca2f335e2cf0ef0075049913a6e70b70c08e8de0c718d0e5ec676"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/raw02/logs/balancer-v3-coffee-20261010.Au7gjP/surge-coffee-e00e-dual-1.json",
+        "sha256": "b4363598bc5ec206f2429c11ac7bf456647804663ee3e0ee9e048e5258912a3d"
+      },
+      "pool": "0xe00e947decfe01692070e113002705bdf77ddbd3",
+      "source": {
+        "number": 25985457,
+        "hash": "0x2198a9b437e37b1f0e855be03b2989e7f725d2a67c232480f92a8e960975a80b",
+        "generation": 25985457
+      },
+      "directions": 2,
+      "executions": 12,
+      "runtimeCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "code": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "samples": [
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:0:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "8825534263706051102",
+          "amountOut": "3848089649040463058",
+          "encoding": "old-fragment",
+          "inputDebit": "8825534263706051102",
+          "outputReceipt": "3848089649040463058",
+          "scriptHash": "0x3281833cd4436ebc1aa7b95a23300816b811ae6dbd78964d73ffd34ceb721d3c"
+        },
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:0:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "8825534263706051102",
+          "amountOut": "3848089649040463058",
+          "encoding": "runtime-program",
+          "inputDebit": "8825534263706051102",
+          "outputReceipt": "3848089649040463058",
+          "scriptHash": "0x49aa01a27f65d03636fde7bdc5431c5e27557268c70aa0fd2e022efbb7d566ad"
+        },
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:0:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "4412767131853025551",
+          "amountOut": "1925452113761665231",
+          "encoding": "old-fragment",
+          "inputDebit": "4412767131853025551",
+          "outputReceipt": "1925452113761665231",
+          "scriptHash": "0xcc21a90aac4e78f8c2e09c80496368bf340fdfcd00f9535b1b0f7075e1caa3e0"
+        },
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:0:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "4412767131853025551",
+          "amountOut": "1925452113761665231",
+          "encoding": "runtime-program",
+          "inputDebit": "4412767131853025551",
+          "outputReceipt": "1925452113761665231",
+          "scriptHash": "0xc2b194f699fce31d56b6dc3a766b272aea6a389e3cff026219a8f073fdac7a7c"
+        },
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "71020708320963607005",
+          "amountOut": "30647711870842664650",
+          "encoding": "old-fragment",
+          "inputDebit": "71020708320963607005",
+          "outputReceipt": "30647711870842664650",
+          "scriptHash": "0x6e4e3411bfb4b9cea6f9b131bfa45fc1c2f99a95a5827973e2ce39cb7a0e5a2f"
+        },
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "71020708320963607005",
+          "amountOut": "30647711870842664650",
+          "encoding": "runtime-program",
+          "inputDebit": "71020708320963607005",
+          "outputReceipt": "30647711870842664650",
+          "scriptHash": "0xcafcd379c0f384058761958079eb2ef4c7fab2b5c2f309df306ece4de1516711"
+        },
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "35510354160481803502",
+          "amountOut": "15414725926463126920",
+          "encoding": "old-fragment",
+          "inputDebit": "35510354160481803502",
+          "outputReceipt": "15414725926463126920",
+          "scriptHash": "0x498910ebc1ddbe20302370ab2b427139bcb2b5372ee17ed4d57a8ea4f3a4f568"
+        },
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "35510354160481803502",
+          "amountOut": "15414725926463126920",
+          "encoding": "runtime-program",
+          "inputDebit": "35510354160481803502",
+          "outputReceipt": "15414725926463126920",
+          "scriptHash": "0xd095a22c633d26a7ab82ca1dde54ae6d5f23fdb48897ae83172eedfc0352b2ef"
+        },
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "31375174201309683957",
+          "amountOut": "69784213352450840027",
+          "encoding": "old-fragment",
+          "inputDebit": "31375174201309683957",
+          "outputReceipt": "69784213352450840027",
+          "scriptHash": "0xafa6fd05e44c70098df252667bab03eefe205cdf3a873d962c69ffce9253e6f9"
+        },
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "31375174201309683957",
+          "amountOut": "69784213352450840027",
+          "encoding": "runtime-program",
+          "inputDebit": "31375174201309683957",
+          "outputReceipt": "69784213352450840027",
+          "scriptHash": "0x35baaf5be7322c827b67c41693a7db7c30fcc1c5ce5af908d1e53bd747c2e625"
+        },
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "15687587100654841978",
+          "amountOut": "35094259499653387054",
+          "encoding": "old-fragment",
+          "inputDebit": "15687587100654841978",
+          "outputReceipt": "35094259499653387054",
+          "scriptHash": "0x6e5c256010847469bcf06e6fad9ac8d3e893965e5f9c47e801f9155ce1dae624"
+        },
+        {
+          "routeKey": "balancer-v3:0xe00e947decfe01692070e113002705bdf77ddbd3:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "15687587100654841978",
+          "amountOut": "35094259499653387054",
+          "encoding": "runtime-program",
+          "inputDebit": "15687587100654841978",
+          "outputReceipt": "35094259499653387054",
+          "scriptHash": "0x3bd33b4a25629a1c513345f50ed53b430cba7ddc64c1cf12e8621611e4d1e5fd"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/raw02/logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v2-dual-2.json",
+        "sha256": "0cffde692c628d649a358cae0909981963780408e4f97fb1d85eeefcef5a7ed3"
+      },
+      "pool": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+      "source": {
+        "number": 25936827,
+        "hash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+        "generation": 25936827
+      },
+      "directions": 2,
+      "executions": 8,
+      "runtimeCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "code": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b7b9aa47019ce637ba86b58b78fac5bed1a40c6d377c2f26f4cc3f28b2b105b7",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "samples": [
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "132890913",
+          "amountOut": "13804",
+          "encoding": "old-fragment",
+          "inputDebit": "132890913",
+          "outputReceipt": "13804",
+          "scriptHash": "0x756e44334f975102ef524aaf18e1f4048ba2bf96221a0d47f7cf8c064a982e8a"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "132890913",
+          "amountOut": "13804",
+          "encoding": "runtime-program",
+          "inputDebit": "132890913",
+          "outputReceipt": "13804",
+          "scriptHash": "0x1c147b7ed86330713e701e68294054ddb887a533093ffd35f984a55371d120a6"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "66445456",
+          "amountOut": "6902",
+          "encoding": "old-fragment",
+          "inputDebit": "66445456",
+          "outputReceipt": "6902",
+          "scriptHash": "0x9270deec4ae470efbc77a692be5d66225cfd197c8af8759a05f4cdcd4cc382b7"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "66445456",
+          "amountOut": "6902",
+          "encoding": "runtime-program",
+          "inputDebit": "66445456",
+          "outputReceipt": "6902",
+          "scriptHash": "0x343ff4079995af4d36b05f79a2dacb743bddc46e192d9c4bf0c7a7053d732363"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "15135",
+          "amountOut": "132890911",
+          "encoding": "old-fragment",
+          "inputDebit": "15135",
+          "outputReceipt": "132890911",
+          "scriptHash": "0xeb99d71f92742277a7a2812e27d0174e2f24bdb714e4328f776e899cf6076a35"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "15135",
+          "amountOut": "132890911",
+          "encoding": "runtime-program",
+          "inputDebit": "15135",
+          "outputReceipt": "132890911",
+          "scriptHash": "0x8819f52c3e5bc03a710a8e26fab5cc3bdbcfd80b224e433f31003d275b764d83"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "7567",
+          "amountOut": "66441065",
+          "encoding": "old-fragment",
+          "inputDebit": "7567",
+          "outputReceipt": "66441065",
+          "scriptHash": "0x41abfb49c80d9b1ea4ef439e1811ba5d5d3740eef1ec09b2d846c46b3b1869f4"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "7567",
+          "amountOut": "66441065",
+          "encoding": "runtime-program",
+          "inputDebit": "7567",
+          "outputReceipt": "66441065",
+          "scriptHash": "0x741d993faa409e4e7657f5445de3bbf342c4cace0c0282baddc5e89e4931a75f"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/raw02/logs/balancer-v3-coffee-20261010.Au7gjP/surge-pool-v3-four-token-dual-1.json",
+        "sha256": "52a2de55795d79432bafd77509b8f391d98400603ebb841f8e417fcc006b550a"
+      },
+      "pool": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+      "source": {
+        "number": 26105714,
+        "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+        "generation": 26105714
+      },
+      "directions": 9,
+      "executions": 60,
+      "runtimeCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "code": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b7b9aa47019ce637ba86b58b78fac5bed1a40c6d377c2f26f4cc3f28b2b105b7",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "samples": [
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "5135191",
+          "amountOut": "4616825346455235147",
+          "encoding": "old-fragment",
+          "inputDebit": "5135191",
+          "outputReceipt": "4616825346455235147",
+          "scriptHash": "0x3a4f937672b44652ec7c9899d152f7e361a477e888da7312a7eab83ef4f237f2"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "5135191",
+          "amountOut": "4616825346455235147",
+          "encoding": "runtime-program",
+          "inputDebit": "5135191",
+          "outputReceipt": "4616825346455235147",
+          "scriptHash": "0xb22b42429f5b59fe45b3b43e48df024d151680e205aec2037ef7b8e1218fa872"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2567595",
+          "amountOut": "2308831530007688580",
+          "encoding": "old-fragment",
+          "inputDebit": "2567595",
+          "outputReceipt": "2308831530007688580",
+          "scriptHash": "0x6efdb18b6ff6cbc380b9f59e51d08d228cd7c5571a3479a1580f4421613a921f"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2567595",
+          "amountOut": "2308831530007688580",
+          "encoding": "runtime-program",
+          "inputDebit": "2567595",
+          "outputReceipt": "2308831530007688580",
+          "scriptHash": "0xee8b337e499c7384686892897bce8afdb3eec11d1c6042aa78549745173a21c5"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1781143055020510820",
+          "encoding": "old-fragment",
+          "inputDebit": "1980684",
+          "outputReceipt": "1781143055020510820",
+          "scriptHash": "0xe152503e76571b014fd0ab7569d9110cfae4a3432380a60a4b8dd6b1e0ca4584"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1781143055020510820",
+          "encoding": "runtime-program",
+          "inputDebit": "1980684",
+          "outputReceipt": "1781143055020510820",
+          "scriptHash": "0x283e2f00afb5ef5404ea54129db7f7c16d157f8e1df4187af1132f1811be7c07"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "890633284321043825",
+          "encoding": "old-fragment",
+          "inputDebit": "990342",
+          "outputReceipt": "890633284321043825",
+          "scriptHash": "0xe031c54652633babe62c5123f4b26394552bdbdb5485fe15c52d48164b0f893e"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "890633284321043825",
+          "encoding": "runtime-program",
+          "inputDebit": "990342",
+          "outputReceipt": "890633284321043825",
+          "scriptHash": "0x2f7a934631d96201e67e57f7e71b4cf8e816248b0cbcc26f1ec83da0199ed738"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "donor-input-only",
+          "amountIn": "5135191",
+          "amountOut": "5134019",
+          "encoding": "old-fragment",
+          "inputDebit": "5135191",
+          "outputReceipt": "5134019",
+          "scriptHash": "0x998291de9871584b82bcb890290df8731002539da4461e7f1751f05a12fd136b"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "donor-input-only",
+          "amountIn": "5135191",
+          "amountOut": "5134019",
+          "encoding": "runtime-program",
+          "inputDebit": "5135191",
+          "outputReceipt": "5134019",
+          "scriptHash": "0x56f9698d0e172fd3d291cdd36e07a4961f5bbf125a0c014b8227086453ecc865"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2567595",
+          "amountOut": "2567416",
+          "encoding": "old-fragment",
+          "inputDebit": "2567595",
+          "outputReceipt": "2567416",
+          "scriptHash": "0xf1b7a417f52f95265ceff7b45e613afb80a71d7e7b19cefdc4cee444380b0f0f"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2567595",
+          "amountOut": "2567416",
+          "encoding": "runtime-program",
+          "inputDebit": "2567595",
+          "outputReceipt": "2567416",
+          "scriptHash": "0x303ff1e1e33179a699617d957349f44db8f02bc53a4f11fa2da4f0d0b8aa7619"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1980618",
+          "encoding": "old-fragment",
+          "inputDebit": "1980684",
+          "outputReceipt": "1980618",
+          "scriptHash": "0x608c9fbc082ab62314d6c9b69fb051e7b24ca57b9b499647c1840496b965c32f"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1980618",
+          "encoding": "runtime-program",
+          "inputDebit": "1980684",
+          "outputReceipt": "1980618",
+          "scriptHash": "0xc53ca2a1274e9fa373fd2a2f29f03cce7adaea191ef85244b852f777c330f5ce"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "990370",
+          "encoding": "old-fragment",
+          "inputDebit": "990342",
+          "outputReceipt": "990370",
+          "scriptHash": "0xab02c169c196ae7ee820aeb0aa44d9e5f43afc221afb3b17903c24d1675adfea"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "990370",
+          "encoding": "runtime-program",
+          "inputDebit": "990342",
+          "outputReceipt": "990370",
+          "scriptHash": "0xa5d4ce57422527c9bcae48ca1b684356308802428ac898610c2860f129dae1cd"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "5135191",
+          "amountOut": "5055224732608120957",
+          "encoding": "old-fragment",
+          "inputDebit": "5135191",
+          "outputReceipt": "5055224732608120957",
+          "scriptHash": "0xc6575ae38acdb617086bc187082138e78242c384f397a69d5e5ac2637982a06b"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "5135191",
+          "amountOut": "5055224732608120957",
+          "encoding": "runtime-program",
+          "inputDebit": "5135191",
+          "outputReceipt": "5055224732608120957",
+          "scriptHash": "0x620624a34f25411a9cca90c1b5fe1dd6bb54884d465811bc9de20ae0412f69be"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2567595",
+          "amountOut": "2527942326591365019",
+          "encoding": "old-fragment",
+          "inputDebit": "2567595",
+          "outputReceipt": "2527942326591365019",
+          "scriptHash": "0x5ca14cd179d657b920e461371f1cd41a03d51c6644db0528362275560160d6dc"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2567595",
+          "amountOut": "2527942326591365019",
+          "encoding": "runtime-program",
+          "inputDebit": "2567595",
+          "outputReceipt": "2527942326591365019",
+          "scriptHash": "0x844e328b16922b448280f6083b71fd2ba927a7bc05b712f492f6cf1c72fd2528"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1950155220767729195",
+          "encoding": "old-fragment",
+          "inputDebit": "1980684",
+          "outputReceipt": "1950155220767729195",
+          "scriptHash": "0xaffeba3780a9c2b49334e23e6a0b79e660b197f0e4d06d305efbc14d8e4748d7"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1950155220767729195",
+          "encoding": "runtime-program",
+          "inputDebit": "1980684",
+          "outputReceipt": "1950155220767729195",
+          "scriptHash": "0x2a845d55037d5237cc050d99a3a0a75e9bcc339f41adefbd70da9736d2013818"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "975128950853875287",
+          "encoding": "old-fragment",
+          "inputDebit": "990342",
+          "outputReceipt": "975128950853875287",
+          "scriptHash": "0x7cad43b71014b1f635e8bc2f4dd1fab47af666ab7cad84567cdbaf9bd03e7418"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "975128950853875287",
+          "encoding": "runtime-program",
+          "inputDebit": "990342",
+          "outputReceipt": "975128950853875287",
+          "scriptHash": "0xe3b5a28bf8a337094a1c4840943df7174df5f8f3cf98305e831ff2882f988910"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "4614002875920215811",
+          "amountOut": "5124239",
+          "encoding": "old-fragment",
+          "inputDebit": "4614002875920215811",
+          "outputReceipt": "5124239",
+          "scriptHash": "0x7f8b35a96defcb776c239127e6cc202c8a400ece9994057c097c98a22fb749fc"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "4614002875920215811",
+          "amountOut": "5124239",
+          "encoding": "runtime-program",
+          "inputDebit": "4614002875920215811",
+          "outputReceipt": "5124239",
+          "scriptHash": "0x55cbf19ce0ee6611b8dd71c63a5ce892b2476e0bb06f888f772098215059149f"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2307001437960107905",
+          "amountOut": "2562586",
+          "encoding": "old-fragment",
+          "inputDebit": "2307001437960107905",
+          "outputReceipt": "2562586",
+          "scriptHash": "0x3c852664dadca4cc20e3890798cd11d24993fb80eb5f2572cebca56e32d97dc5"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2307001437960107905",
+          "amountOut": "2562586",
+          "encoding": "runtime-program",
+          "inputDebit": "2307001437960107905",
+          "outputReceipt": "2562586",
+          "scriptHash": "0xbee4a298b96d9be69262e41ca5b960c7c64c717f4056bf318e5a7326fe705259"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:2",
+          "amountKind": "donor-input-only",
+          "amountIn": "4614002875920215811",
+          "amountOut": "5126989",
+          "encoding": "old-fragment",
+          "inputDebit": "4614002875920215811",
+          "outputReceipt": "5126989",
+          "scriptHash": "0x5bfe5743ebc436c46aee0a630ee5d2d48ac7cb8f86cb37104035249baa73ea6a"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:2",
+          "amountKind": "donor-input-only",
+          "amountIn": "4614002875920215811",
+          "amountOut": "5126989",
+          "encoding": "runtime-program",
+          "inputDebit": "4614002875920215811",
+          "outputReceipt": "5126989",
+          "scriptHash": "0x51417459a69c3c93fe76aa6cedb058565c97b7294f37a5b5291a1cc9eb1ba2fd"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:2",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2307001437960107905",
+          "amountOut": "2563898",
+          "encoding": "old-fragment",
+          "inputDebit": "2307001437960107905",
+          "outputReceipt": "2563898",
+          "scriptHash": "0x52ce846bfc53430dcd974c71c0c10310cfc3c337727013c6ccd82fc06e016968"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:2",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2307001437960107905",
+          "amountOut": "2563898",
+          "encoding": "runtime-program",
+          "inputDebit": "2307001437960107905",
+          "outputReceipt": "2563898",
+          "scriptHash": "0x2d37c48dca8ee86b8332b6fbabea771d86b453633340a867326a877d726d47e6"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "4614002875920215811",
+          "amountOut": "5048305662640278882",
+          "encoding": "old-fragment",
+          "inputDebit": "4614002875920215811",
+          "outputReceipt": "5048305662640278882",
+          "scriptHash": "0x597de319abc77abe0f31f3695cdf3035ad1bf6ae2ca0d60b2df977014a9b38b9"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "4614002875920215811",
+          "amountOut": "5048305662640278882",
+          "encoding": "runtime-program",
+          "inputDebit": "4614002875920215811",
+          "outputReceipt": "5048305662640278882",
+          "scriptHash": "0x7f98db2268e890af1a01bd912e5c205988d20d60db976364c3cbe7258d88509c"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2307001437960107905",
+          "amountOut": "2524478834929296627",
+          "encoding": "old-fragment",
+          "inputDebit": "2307001437960107905",
+          "outputReceipt": "2524478834929296627",
+          "scriptHash": "0x2d9ab04e2e9ed3103f58c4b0e656382eb7e8559802ed7a6172cf5fd63b938e40"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2307001437960107905",
+          "amountOut": "2524478834929296627",
+          "encoding": "runtime-program",
+          "inputDebit": "2307001437960107905",
+          "outputReceipt": "2524478834929296627",
+          "scriptHash": "0x6e082649f1f3b6ac42001edd2656895bc1a75d5d19f92cb220f4ecad6c50e24c"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "5133984",
+          "amountOut": "5127707",
+          "encoding": "old-fragment",
+          "inputDebit": "5133984",
+          "outputReceipt": "5127707",
+          "scriptHash": "0x1473851013e810a7ed895929e05249948f8ea5642f48b212500c7b163e124f05"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "5133984",
+          "amountOut": "5127707",
+          "encoding": "runtime-program",
+          "inputDebit": "5133984",
+          "outputReceipt": "5127707",
+          "scriptHash": "0x034cc7c5e35cc5b71c0e3bf3286839994d570ad11c93d8164dfcf9d1be426a64"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2566992",
+          "amountOut": "2564286",
+          "encoding": "old-fragment",
+          "inputDebit": "2566992",
+          "outputReceipt": "2564286",
+          "scriptHash": "0x350f82e86bb6611f5b7a56ba3469213d7eece807d3f26cf5170f84c70c095352"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2566992",
+          "amountOut": "2564286",
+          "encoding": "runtime-program",
+          "inputDebit": "2566992",
+          "outputReceipt": "2564286",
+          "scriptHash": "0x894c0c043316ef124c689958d1a7e6b92bba68c660f4f6fba1b9c8edf7ab4973"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1979099",
+          "encoding": "old-fragment",
+          "inputDebit": "1981113",
+          "outputReceipt": "1979099",
+          "scriptHash": "0xdb4f547ce4cdc15715eef07cb491cf04877c22f3670425f7caf2cfad77217fa5"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1979099",
+          "encoding": "runtime-program",
+          "inputDebit": "1981113",
+          "outputReceipt": "1979099",
+          "scriptHash": "0x38fec011abfc1e0e9735f288d50688910f562b7864e57a53175eb3dca2125cb0"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "989611",
+          "encoding": "old-fragment",
+          "inputDebit": "990556",
+          "outputReceipt": "989611",
+          "scriptHash": "0x39fb2612723b86616e6ae0e545dbb7e53b5968c2d419b4a3139224c0c596510d"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "989611",
+          "encoding": "runtime-program",
+          "inputDebit": "990556",
+          "outputReceipt": "989611",
+          "scriptHash": "0x9bae7162db42b69cb4851b31110354916f860f7f5cb03434ce8d25cd47071e59"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "5133984",
+          "amountOut": "4613624728733763744",
+          "encoding": "old-fragment",
+          "inputDebit": "5133984",
+          "outputReceipt": "4613624728733763744",
+          "scriptHash": "0xebdc42223911dd5acabb22a76016b1248b096372d9d7e0dcf5e8979509c384e6"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "5133984",
+          "amountOut": "4613624728733763744",
+          "encoding": "runtime-program",
+          "inputDebit": "5133984",
+          "outputReceipt": "4613624728733763744",
+          "scriptHash": "0x12cce1bb7a66f7fecfdfda93df84ec1a9fec26da166f43b2d0acc5d91fbdcbc6"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2566992",
+          "amountOut": "2307197530148397946",
+          "encoding": "old-fragment",
+          "inputDebit": "2566992",
+          "outputReceipt": "2307197530148397946",
+          "scriptHash": "0x997fd5c4cd23c917bcb6b676edf470c1a44c5ad225248c644d6aaba45443bf84"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2566992",
+          "amountOut": "2307197530148397946",
+          "encoding": "runtime-program",
+          "inputDebit": "2566992",
+          "outputReceipt": "2307197530148397946",
+          "scriptHash": "0xf3ccc0a0223af7b7d2af8a21e9a6dd85cae531350fbeb308da4daa3059102bb8"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1780679395518976460",
+          "encoding": "old-fragment",
+          "inputDebit": "1981113",
+          "outputReceipt": "1780679395518976460",
+          "scriptHash": "0x235e0c9e012a20387855b7e389f99b76a6f5464dbed0eac1355bbcb031c9df3d"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1780679395518976460",
+          "encoding": "runtime-program",
+          "inputDebit": "1981113",
+          "outputReceipt": "1780679395518976460",
+          "scriptHash": "0x2f491386da56eef6b37a9c320b46c036b898ba7c81bf354c412ef334f1f7fce3"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "890395017851654234",
+          "encoding": "old-fragment",
+          "inputDebit": "990556",
+          "outputReceipt": "890395017851654234",
+          "scriptHash": "0xd7b1ac6b0d5e90b38a95a34f4b7148590a9d31e0c46b47a18bb5273eeed4a155"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "890395017851654234",
+          "encoding": "runtime-program",
+          "inputDebit": "990556",
+          "outputReceipt": "890395017851654234",
+          "scriptHash": "0xfe74184e4d8c548996f6710c06f7a537465c0d926360657210d2019c9df56dfb"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "5133984",
+          "amountOut": "5051790552882954934",
+          "encoding": "old-fragment",
+          "inputDebit": "5133984",
+          "outputReceipt": "5051790552882954934",
+          "scriptHash": "0xc5a7662054eec6b856afa4b12ce4fe3b7127731b228af40fef797db8342b097c"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "5133984",
+          "amountOut": "5051790552882954934",
+          "encoding": "runtime-program",
+          "inputDebit": "5133984",
+          "outputReceipt": "5051790552882954934",
+          "scriptHash": "0x09eb5effc6780ef45bf443d026f212bd453ea1e21e557f7c9bd17b739f356e0b"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2566992",
+          "amountOut": "2526170872072314261",
+          "encoding": "old-fragment",
+          "inputDebit": "2566992",
+          "outputReceipt": "2526170872072314261",
+          "scriptHash": "0x5b587f8ce44a6ae531a5304784b1dc2bfde84a56e297813de12909cffd8afc6d"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "2566992",
+          "amountOut": "2526170872072314261",
+          "encoding": "runtime-program",
+          "inputDebit": "2566992",
+          "outputReceipt": "2526170872072314261",
+          "scriptHash": "0x183fde0412e1455913c4c9659486a5509a7022fa1b7977f0f6d6d95ed87c44b3"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1949658098623622491",
+          "encoding": "old-fragment",
+          "inputDebit": "1981113",
+          "outputReceipt": "1949658098623622491",
+          "scriptHash": "0x1a3868eb3d0b80a82585511b7f16882f47d59c1a175156125ab9d72e2fbb751f"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1949658098623622491",
+          "encoding": "runtime-program",
+          "inputDebit": "1981113",
+          "outputReceipt": "1949658098623622491",
+          "scriptHash": "0xcf35065e69f18302e884cec8b6e2c0c9b2f9315573c5351b3527c7df72df88c1"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "974870719767758537",
+          "encoding": "old-fragment",
+          "inputDebit": "990556",
+          "outputReceipt": "974870719767758537",
+          "scriptHash": "0x25cf1b6b9854c021679f4fcb75be7d3d069d18e9d55a09ebca659d183f865cca"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "974870719767758537",
+          "encoding": "runtime-program",
+          "inputDebit": "990556",
+          "outputReceipt": "974870719767758537",
+          "scriptHash": "0x1c340482eaeb19fb98a67759aaa7dee1a9a4a858f99d2a886e0c8ce04ae54ea6"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/raw02/logs/balancer-v3-coffee-20261010.Au7gjP/surge-v1-dual-5.json",
+        "sha256": "4ee25b9853d0706b3d391c8ac0c7c047609b1398045bd09dde29ef6e81dcbaf1"
+      },
+      "pool": "0x6b31a94029fd7840d780191b6d63fa0d269bd883",
+      "source": {
+        "number": 26030897,
+        "hash": "0x828d403abbfd3b30704129a575bbc9406609546f110f64e70ee5fc34d06735a6",
+        "generation": 26030897
+      },
+      "directions": 2,
+      "executions": 8,
+      "runtimeCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "code": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "samples": [
+        {
+          "routeKey": "balancer-v3:0x6b31a94029fd7840d780191b6d63fa0d269bd883:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "35837899392064323",
+          "amountOut": "42825868607247735",
+          "encoding": "old-fragment",
+          "inputDebit": "35837899392064323",
+          "outputReceipt": "42825868607247735",
+          "scriptHash": "0x9a5adc9a6b4771b5e792ddb4b4e9d7c6285c9b324be1e3ecd639d9101dd0bb94"
+        },
+        {
+          "routeKey": "balancer-v3:0x6b31a94029fd7840d780191b6d63fa0d269bd883:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "35837899392064323",
+          "amountOut": "42825868607247735",
+          "encoding": "runtime-program",
+          "inputDebit": "35837899392064323",
+          "outputReceipt": "42825868607247735",
+          "scriptHash": "0x5fa4dee2cb49ef297c2f0af2477a0b299f5847deff099b01d1dd367173939508"
+        },
+        {
+          "routeKey": "balancer-v3:0x6b31a94029fd7840d780191b6d63fa0d269bd883:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "17918949696032161",
+          "amountOut": "21414966898177382",
+          "encoding": "old-fragment",
+          "inputDebit": "17918949696032161",
+          "outputReceipt": "21414966898177382",
+          "scriptHash": "0x17088bea70d8343c587b1f4050f4f3aaa5ad55c329e1695828666254f99758b0"
+        },
+        {
+          "routeKey": "balancer-v3:0x6b31a94029fd7840d780191b6d63fa0d269bd883:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "17918949696032161",
+          "amountOut": "21414966898177382",
+          "encoding": "runtime-program",
+          "inputDebit": "17918949696032161",
+          "outputReceipt": "21414966898177382",
+          "scriptHash": "0x3e08d00341bad40abc47a066412fd59c658a54c2f2992e336784a149836c22d3"
+        },
+        {
+          "routeKey": "balancer-v3:0x6b31a94029fd7840d780191b6d63fa0d269bd883:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "42827581416880615",
+          "amountOut": "35822526733286632",
+          "encoding": "old-fragment",
+          "inputDebit": "42827581416880615",
+          "outputReceipt": "35822526733286632",
+          "scriptHash": "0x17c1c344b28f5935defa71f2f8972a32ef5f247e60e38cc924445a9326bfd8b1"
+        },
+        {
+          "routeKey": "balancer-v3:0x6b31a94029fd7840d780191b6d63fa0d269bd883:1:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "42827581416880615",
+          "amountOut": "35822526733286632",
+          "encoding": "runtime-program",
+          "inputDebit": "42827581416880615",
+          "outputReceipt": "35822526733286632",
+          "scriptHash": "0x0d29d1cd0a91d80e0fcd7b64791a4995baea96f892a3ce67f305fc8dc85acef8"
+        },
+        {
+          "routeKey": "balancer-v3:0x6b31a94029fd7840d780191b6d63fa0d269bd883:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "21413790708440307",
+          "amountOut": "17913500188934113",
+          "encoding": "old-fragment",
+          "inputDebit": "21413790708440307",
+          "outputReceipt": "17913500188934113",
+          "scriptHash": "0x64f81a0d81aa4dad24182c0476604cbe81728e3d50a8054e86eb905a2b6ce22f"
+        },
+        {
+          "routeKey": "balancer-v3:0x6b31a94029fd7840d780191b6d63fa0d269bd883:1:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "21413790708440307",
+          "amountOut": "17913500188934113",
+          "encoding": "runtime-program",
+          "inputDebit": "21413790708440307",
+          "outputReceipt": "17913500188934113",
+          "scriptHash": "0x2419cfaa978fbb5d85e03ca430285f638c934269a6c4ed501a1f9935e1a07b43"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/raw02/logs/balancer-v3-coffee-20261010.Au7gjP/weighted-nohook-dual-1.json",
+        "sha256": "35216a79a519e8cc3941ca3c2dc1607d99fb6a655c4ca9443c1466154f0e6bb7"
+      },
+      "pool": "0x93bd81fe5e0359cddce996e0785d9f6cb39295a7",
+      "source": {
+        "number": 26003625,
+        "hash": "0x9d417fc754cde217ca1ee8f6346f236c71ef1a449a84f0a7fb8ac887a3c38cea",
+        "generation": 26003625
+      },
+      "directions": 12,
+      "executions": 72,
+      "runtimeCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "code": {
+        "headAtStart": "921509cb7cdc4c4ed12688f90b6c88ee8bf80e64",
+        "sourceSha256": "d06e3b9d25e31b8c563796e8a3ba07bef7dd6bd92e225dbbef47fbef69eb5cd8",
+        "sourceTreeSha256": "7a9e4b6fb5b1d0c6b7f84c9d09ac2cc9546e004e7507e8c81e7225df2b96e0f6",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "samples": [
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "1866168422337445",
+          "amountOut": "63845702672393",
+          "encoding": "old-fragment",
+          "inputDebit": "1866168422337445",
+          "outputReceipt": "63845702672393",
+          "scriptHash": "0xd8b05dff9b8bd0043767de495edb41ccb09cc5707726438eb58cb98180cbfb4c"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "1866168422337445",
+          "amountOut": "63845702672393",
+          "encoding": "runtime-program",
+          "inputDebit": "1866168422337445",
+          "outputReceipt": "63845702672393",
+          "scriptHash": "0xb4d677cd02ae15dceecfed6b966be3cc3057ca1eed42717dd3310ed307618442"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "933084211168722",
+          "amountOut": "31975631804157",
+          "encoding": "old-fragment",
+          "inputDebit": "933084211168722",
+          "outputReceipt": "31975631804157",
+          "scriptHash": "0x2e3b822121ecb5772f705efe63379f9ed7f5973879e3292346b7cc287bc39f65"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "933084211168722",
+          "amountOut": "31975631804157",
+          "encoding": "runtime-program",
+          "inputDebit": "933084211168722",
+          "outputReceipt": "31975631804157",
+          "scriptHash": "0xa88a37a91ebb1e4e4cf299ec6a9fbaaedb76a95c537e3859d3aaffdefcb530c3"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:2",
+          "amountKind": "donor-input-only",
+          "amountIn": "1866168422337445",
+          "amountOut": "1688487995933192",
+          "encoding": "old-fragment",
+          "inputDebit": "1866168422337445",
+          "outputReceipt": "1688487995933192",
+          "scriptHash": "0x247f5b81a3f8b55015b4597237e8f5f9b60242f76b4917977dac0d2bed3cd709"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:2",
+          "amountKind": "donor-input-only",
+          "amountIn": "1866168422337445",
+          "amountOut": "1688487995933192",
+          "encoding": "runtime-program",
+          "inputDebit": "1866168422337445",
+          "outputReceipt": "1688487995933192",
+          "scriptHash": "0x015030487ea6714c321174e7feb7f0e71e543652f71b99929394a27a35b09ed2"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:2",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "933084211168722",
+          "amountOut": "846238071702502",
+          "encoding": "old-fragment",
+          "inputDebit": "933084211168722",
+          "outputReceipt": "846238071702502",
+          "scriptHash": "0x3e58c77a1dd947b69934a3a1b27ba5ce772eda69c9f7d40f3723e87f7a26c828"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:2",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "933084211168722",
+          "amountOut": "846238071702502",
+          "encoding": "runtime-program",
+          "inputDebit": "933084211168722",
+          "outputReceipt": "846238071702502",
+          "scriptHash": "0xc49a40988a085d7bd952573c5e0898b9c5ab4d8ac6f3d44a0b90a49b333a21c0"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "1866168422337445",
+          "amountOut": "1069280370023081415548",
+          "encoding": "old-fragment",
+          "inputDebit": "1866168422337445",
+          "outputReceipt": "1069280370023081415548",
+          "scriptHash": "0x8fbc039f5665748616c498161edf1faf338c7c3b9dfe896a26e94feac9f77047"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "1866168422337445",
+          "amountOut": "1069280370023081415548",
+          "encoding": "runtime-program",
+          "inputDebit": "1866168422337445",
+          "outputReceipt": "1069280370023081415548",
+          "scriptHash": "0x62dc3c017a1190eee6ffb966f8940898605269d15f8f73c5a0d5e2f54c67b9f4"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "933084211168722",
+          "amountOut": "536534382609200471682",
+          "encoding": "old-fragment",
+          "inputDebit": "933084211168722",
+          "outputReceipt": "536534382609200471682",
+          "scriptHash": "0x1105b32a532f7bd31b6b54386c62233b8bd3a1db1cc33c1c59d10ebd297f91cf"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:0:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "933084211168722",
+          "amountOut": "536534382609200471682",
+          "encoding": "runtime-program",
+          "inputDebit": "933084211168722",
+          "outputReceipt": "536534382609200471682",
+          "scriptHash": "0x5385c86a32b3dff834019db9c25bd035a4ce5378afcf991112e99095304f4b9d"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "61735062523676",
+          "amountOut": "1783849222761967",
+          "encoding": "old-fragment",
+          "inputDebit": "61735062523676",
+          "outputReceipt": "1783849222761967",
+          "scriptHash": "0xb4459845836ac6e031267cd8cf0d8bc612b19f543b1770bea9c07981fdb93acf"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "61735062523676",
+          "amountOut": "1783849222761967",
+          "encoding": "runtime-program",
+          "inputDebit": "61735062523676",
+          "outputReceipt": "1783849222761967",
+          "scriptHash": "0x1df6a32ea885db04d76eac80117267b9fcb22ef74d64e3d4bb1681e90567ecf4"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "30867531261838",
+          "amountOut": "893344347700833",
+          "encoding": "old-fragment",
+          "inputDebit": "30867531261838",
+          "outputReceipt": "893344347700833",
+          "scriptHash": "0x293d6d0624dd6827b09ac51f4860f5f1aacee2689c8e39c00fcd808f797d70f6"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "30867531261838",
+          "amountOut": "893344347700833",
+          "encoding": "runtime-program",
+          "inputDebit": "30867531261838",
+          "outputReceipt": "893344347700833",
+          "scriptHash": "0xca5e7a31be7ca70fcfd8fc8a93a4461abacc201704a12b57a7dd30c8a2ebb3cd"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:2",
+          "amountKind": "donor-input-only",
+          "amountIn": "61735062523676",
+          "amountOut": "1625713303404188",
+          "encoding": "old-fragment",
+          "inputDebit": "61735062523676",
+          "outputReceipt": "1625713303404188",
+          "scriptHash": "0x91125a2c4885304fe39633f856ff55d4129baf4d00e473c0245f3b2e3086e4c7"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:2",
+          "amountKind": "donor-input-only",
+          "amountIn": "61735062523676",
+          "amountOut": "1625713303404188",
+          "encoding": "runtime-program",
+          "inputDebit": "61735062523676",
+          "outputReceipt": "1625713303404188",
+          "scriptHash": "0x84f7c3bdae571dd96dfa52b4f1232fbda91d3ff9027b9bc65eb9fe6c90ae5e64"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:2",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "30867531261838",
+          "amountOut": "814150530239054",
+          "encoding": "old-fragment",
+          "inputDebit": "30867531261838",
+          "outputReceipt": "814150530239054",
+          "scriptHash": "0x1999b9b5885618e8146fa720929b38da2d74050b8c628451a9e30bec76943fd9"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:2",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "30867531261838",
+          "amountOut": "814150530239054",
+          "encoding": "runtime-program",
+          "inputDebit": "30867531261838",
+          "outputReceipt": "814150530239054",
+          "scriptHash": "0x93756ad25cb619d157d5ca3193e50fa5161e401a2fc778bf92a00440c7d4c0df"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "61735062523676",
+          "amountOut": "1029617016117533313229",
+          "encoding": "old-fragment",
+          "inputDebit": "61735062523676",
+          "outputReceipt": "1029617016117533313229",
+          "scriptHash": "0x5877bc2937e4f1a014f4efca5fd75de998c223b62288b0ff89882e2e99d26189"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "61735062523676",
+          "amountOut": "1029617016117533313229",
+          "encoding": "runtime-program",
+          "inputDebit": "61735062523676",
+          "outputReceipt": "1029617016117533313229",
+          "scriptHash": "0x58364b3c1a79f4140119dd3a741f5fe9f09aada1f8ff01e8f46c4ed99f4912d9"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "30867531261838",
+          "amountOut": "516213286490681623500",
+          "encoding": "old-fragment",
+          "inputDebit": "30867531261838",
+          "outputReceipt": "516213286490681623500",
+          "scriptHash": "0x68c218413804f8d8bc0d4f1dee754e4695d604810a4e308e23e7e14397787afc"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:1:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "30867531261838",
+          "amountOut": "516213286490681623500",
+          "encoding": "runtime-program",
+          "inputDebit": "30867531261838",
+          "outputReceipt": "516213286490681623500",
+          "scriptHash": "0xafb99931ffb7068507d06fab2a880afdec17a9e8190efe29eda4ac4102059655"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "1709292688940108",
+          "amountOut": "1862008440089789",
+          "encoding": "old-fragment",
+          "inputDebit": "1709292688940108",
+          "outputReceipt": "1862008440089789",
+          "scriptHash": "0xb25d19d05a592e3af5c1c7ef5dac856cd04922729339ba7f8f6482329f73c28e"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "1709292688940108",
+          "amountOut": "1862008440089789",
+          "encoding": "runtime-program",
+          "inputDebit": "1709292688940108",
+          "outputReceipt": "1862008440089789",
+          "scriptHash": "0xdde5b94735a9514810c130f96b91a11309675ed688932e97f8ea0337a6ef370e"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "854646344470054",
+          "amountOut": "933214256829125",
+          "encoding": "old-fragment",
+          "inputDebit": "854646344470054",
+          "outputReceipt": "933214256829125",
+          "scriptHash": "0xafe331dfbfd23ed4f6fe3d97bc7e5e558564194e88345860bfda7d957897ce91"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "854646344470054",
+          "amountOut": "933214256829125",
+          "encoding": "runtime-program",
+          "inputDebit": "854646344470054",
+          "outputReceipt": "933214256829125",
+          "scriptHash": "0xfc64beeac49cecc8e22e076e839665a18bebd90c0cc31e18e286c6ff5d6f4ec5"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "3825223353059921",
+          "amountOut": "4142696317594490",
+          "encoding": "old-fragment",
+          "inputDebit": "3825223353059921",
+          "outputReceipt": "4142696317594490",
+          "scriptHash": "0x2e9944612119ca3d2dafe99c1e808cd8c57b443088d235c0d9b8660bf09beb48"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "3825223353059921",
+          "amountOut": "4142696317594490",
+          "encoding": "runtime-program",
+          "inputDebit": "3825223353059921",
+          "outputReceipt": "4142696317594490",
+          "scriptHash": "0xae87d8236b6151f42dd05d7917bf43438dca0fb342abad15108e1ab7eedf122b"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "1912611676529960",
+          "amountOut": "2082319683740376",
+          "encoding": "old-fragment",
+          "inputDebit": "1912611676529960",
+          "outputReceipt": "2082319683740376",
+          "scriptHash": "0x62db92dc63ba329deb1bffb79fa9e8d4e876c3274c356ce5cfab8d2c50cdd35c"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "1912611676529960",
+          "amountOut": "2082319683740376",
+          "encoding": "runtime-program",
+          "inputDebit": "1912611676529960",
+          "outputReceipt": "2082319683740376",
+          "scriptHash": "0xfe89ae9e6e03bf4bd157b3963465ff94137fac20670076c5ed508ac15bd832a6"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "1709292688940108",
+          "amountOut": "64165892767676",
+          "encoding": "old-fragment",
+          "inputDebit": "1709292688940108",
+          "outputReceipt": "64165892767676",
+          "scriptHash": "0x60cc1a1cf8368bb9fdde5e19db6cb09a128441cbf8eb9a2506119138b90491b2"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "1709292688940108",
+          "amountOut": "64165892767676",
+          "encoding": "runtime-program",
+          "inputDebit": "1709292688940108",
+          "outputReceipt": "64165892767676",
+          "scriptHash": "0xeed08d94d3abe54f135bd5ec678534fa9f1e4eaffa27f30aa692fbc704b8ebb2"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "854646344470054",
+          "amountOut": "32136257825928",
+          "encoding": "old-fragment",
+          "inputDebit": "854646344470054",
+          "outputReceipt": "32136257825928",
+          "scriptHash": "0xf3d4c12d902d20a4093b781ce8b0d75de81af5ea34d57d2a813c53b48270632f"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "854646344470054",
+          "amountOut": "32136257825928",
+          "encoding": "runtime-program",
+          "inputDebit": "854646344470054",
+          "outputReceipt": "32136257825928",
+          "scriptHash": "0xfb024cc9ae30c6aebd4c35fbb872b0b55fd66474e663601636cdd10e34045a29"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "3825223353059921",
+          "amountOut": "143009867443895",
+          "encoding": "old-fragment",
+          "inputDebit": "3825223353059921",
+          "outputReceipt": "143009867443895",
+          "scriptHash": "0x882640f2ed82af3dc2831f0d1e37b1c787f393966bdb76f11092c2e989b94a03"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "3825223353059921",
+          "amountOut": "143009867443895",
+          "encoding": "runtime-program",
+          "inputDebit": "3825223353059921",
+          "outputReceipt": "143009867443895",
+          "scriptHash": "0xe2ffbc03a469fa99b90f242e2e5a2e0ebc44136c8c22e377d3b861cc31b716c4"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "1912611676529960",
+          "amountOut": "71770057941141",
+          "encoding": "old-fragment",
+          "inputDebit": "1912611676529960",
+          "outputReceipt": "71770057941141",
+          "scriptHash": "0xf58d88492b0631a076ee974f3f69c4d17a690f0fe976bb76cb74b835007b4e90"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "1912611676529960",
+          "amountOut": "71770057941141",
+          "encoding": "runtime-program",
+          "inputDebit": "1912611676529960",
+          "outputReceipt": "71770057941141",
+          "scriptHash": "0x40a6dae70e46d4f3d85142fd67fb4865f6109f7ed5a8e4008b734abcfa2d6dc2"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "1709292688940108",
+          "amountOut": "1074622528450221243199",
+          "encoding": "old-fragment",
+          "inputDebit": "1709292688940108",
+          "outputReceipt": "1074622528450221243199",
+          "scriptHash": "0x37499c108aac65223e054f1c2ccf1c6aaa79c382144fcf5844436ebced100175"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:3",
+          "amountKind": "donor-input-only",
+          "amountIn": "1709292688940108",
+          "amountOut": "1074622528450221243199",
+          "encoding": "runtime-program",
+          "inputDebit": "1709292688940108",
+          "outputReceipt": "1074622528450221243199",
+          "scriptHash": "0x98c837aff126c0784458fa1fe68c055da0cf5e2643bf3bb492db44784b7deae4"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "854646344470054",
+          "amountOut": "539224481269347945179",
+          "encoding": "old-fragment",
+          "inputDebit": "854646344470054",
+          "outputReceipt": "539224481269347945179",
+          "scriptHash": "0xacae2913e0cef6069db1754856588c628afd06cf4b6292391174c6a67bb2c9c7"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:3",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "854646344470054",
+          "amountOut": "539224481269347945179",
+          "encoding": "runtime-program",
+          "inputDebit": "854646344470054",
+          "outputReceipt": "539224481269347945179",
+          "scriptHash": "0x2423f72b8f90985d4d7225dd1fbd0e429b85e855a6a63ab86e09c02582d4bd7b"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:3",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "3825223353059921",
+          "amountOut": "2383926204873278808426",
+          "encoding": "old-fragment",
+          "inputDebit": "3825223353059921",
+          "outputReceipt": "2383926204873278808426",
+          "scriptHash": "0xb865b62ecbef3bee01d6f94ff408c656ae86e6d1bc1b36c51375c947a67c2827"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:3",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "3825223353059921",
+          "amountOut": "2383926204873278808426",
+          "encoding": "runtime-program",
+          "inputDebit": "3825223353059921",
+          "outputReceipt": "2383926204873278808426",
+          "scriptHash": "0xdcde77afd5083bd3ae279c13298778fc87fda56352b1db90136893530ae97595"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:3",
+          "amountKind": "original-leg-half",
+          "amountIn": "1912611676529960",
+          "amountOut": "1201433406029509011436",
+          "encoding": "old-fragment",
+          "inputDebit": "1912611676529960",
+          "outputReceipt": "1201433406029509011436",
+          "scriptHash": "0x8cbb772b3c435711f1f84c39e6e123fe27b507857fe066d0c1dd1a4740ede7a2"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:2:3",
+          "amountKind": "original-leg-half",
+          "amountIn": "1912611676529960",
+          "amountOut": "1201433406029509011436",
+          "encoding": "runtime-program",
+          "inputDebit": "1912611676529960",
+          "outputReceipt": "1201433406029509011436",
+          "scriptHash": "0xbbe94851a8dcc9fabf8dd2a2a6ea77439338af4f71eac71199c5ded0ca381af4"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "325506429856670357245",
+          "amountOut": "560066531683526",
+          "encoding": "old-fragment",
+          "inputDebit": "325506429856670357245",
+          "outputReceipt": "560066531683526",
+          "scriptHash": "0x7096c650febb5db2c86cf5743e0a5c355ac584a072cfe858f28c19edba7981a2"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:0",
+          "amountKind": "donor-input-only",
+          "amountIn": "325506429856670357245",
+          "amountOut": "560066531683526",
+          "encoding": "runtime-program",
+          "inputDebit": "325506429856670357245",
+          "outputReceipt": "560066531683526",
+          "scriptHash": "0xf80114d31a637a148bbf1192cf0eaf4584891fb7b5759349d13368a32d2a5a92"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "162753214928335178622",
+          "amountOut": "280332689652592",
+          "encoding": "old-fragment",
+          "inputDebit": "162753214928335178622",
+          "outputReceipt": "280332689652592",
+          "scriptHash": "0x65da5b4f73290e5f7b27744107d7cc54250f892be856a2084fde6cca2dd6e281"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:0",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "162753214928335178622",
+          "amountOut": "280332689652592",
+          "encoding": "runtime-program",
+          "inputDebit": "162753214928335178622",
+          "outputReceipt": "280332689652592",
+          "scriptHash": "0x6f315dfbdfe08bc136ca49219955d78174035c9051de17f00a639e16c78c328b"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "2395701299544926676059",
+          "amountOut": "4066881011522959",
+          "encoding": "old-fragment",
+          "inputDebit": "2395701299544926676059",
+          "outputReceipt": "4066881011522959",
+          "scriptHash": "0xce541f451905987d51922c5680aa8d26cf2444531a68257f70fc88dd9feb72d8"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "2395701299544926676059",
+          "amountOut": "4066881011522959",
+          "encoding": "runtime-program",
+          "inputDebit": "2395701299544926676059",
+          "outputReceipt": "4066881011522959",
+          "scriptHash": "0x9522ef2aee024b5776c359cf0765a8d294865c2f7abd3ea7b2c707e144f57f25"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "1197850649772463338029",
+          "amountOut": "2049299149533676",
+          "encoding": "old-fragment",
+          "inputDebit": "1197850649772463338029",
+          "outputReceipt": "2049299149533676",
+          "scriptHash": "0x643db23d2f518b845eeddde2533f21411abf69ae8e4919ffb8e92c85d0411db7"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "1197850649772463338029",
+          "amountOut": "2049299149533676",
+          "encoding": "runtime-program",
+          "inputDebit": "1197850649772463338029",
+          "outputReceipt": "2049299149533676",
+          "scriptHash": "0xa31377378a6bad39144c0e577cbe21d3202219e681028f3f4b8b52430f18ae1e"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "325506429856670357245",
+          "amountOut": "19281006986185",
+          "encoding": "old-fragment",
+          "inputDebit": "325506429856670357245",
+          "outputReceipt": "19281006986185",
+          "scriptHash": "0x72c5d83675bbdf4a04bbb9968986f3088cf9e99faf47c7b017a26f23b7844a75"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:1",
+          "amountKind": "donor-input-only",
+          "amountIn": "325506429856670357245",
+          "amountOut": "19281006986185",
+          "encoding": "runtime-program",
+          "inputDebit": "325506429856670357245",
+          "outputReceipt": "19281006986185",
+          "scriptHash": "0x848e70405a74f89b6c908290c2a98b6b675668bf7b19d77cbc6ec042d3826023"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "162753214928335178622",
+          "amountOut": "9648749931942",
+          "encoding": "old-fragment",
+          "inputDebit": "162753214928335178622",
+          "outputReceipt": "9648749931942",
+          "scriptHash": "0x573732a1421cd4907039f7574ccd0b0d43ef280931c81c75ec06248414060b87"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:1",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "162753214928335178622",
+          "amountOut": "9648749931942",
+          "encoding": "runtime-program",
+          "inputDebit": "162753214928335178622",
+          "outputReceipt": "9648749931942",
+          "scriptHash": "0xff7d2276f14706c197bab3cdc4c1b5645c16c2c57bc6aca0ab66224ea465ce3c"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "2395701299544926676059",
+          "amountOut": "140384462197587",
+          "encoding": "old-fragment",
+          "inputDebit": "2395701299544926676059",
+          "outputReceipt": "140384462197587",
+          "scriptHash": "0x03f5066e41cb1b62c92ead359a81be69e3d64e2d559bae4c6d0bc5d0eb4f8557"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "2395701299544926676059",
+          "amountOut": "140384462197587",
+          "encoding": "runtime-program",
+          "inputDebit": "2395701299544926676059",
+          "outputReceipt": "140384462197587",
+          "scriptHash": "0xe6666609f918c539f2a89497c3d9ebf3eb6e60beac965e5174d15cf44275a8e9"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "1197850649772463338029",
+          "amountOut": "70630172096144",
+          "encoding": "old-fragment",
+          "inputDebit": "1197850649772463338029",
+          "outputReceipt": "70630172096144",
+          "scriptHash": "0x75ddc00fb9b5a01d6c2136427bbd9af28e9e2777593c93b1d80f7b69a172ef40"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "1197850649772463338029",
+          "amountOut": "70630172096144",
+          "encoding": "runtime-program",
+          "inputDebit": "1197850649772463338029",
+          "outputReceipt": "70630172096144",
+          "scriptHash": "0x7bfd04603dce6988531deea2ce7dbdf778d54eea5ea3a679f451ac698db4686f"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:2",
+          "amountKind": "donor-input-only",
+          "amountIn": "325506429856670357245",
+          "amountOut": "510417360240567",
+          "encoding": "old-fragment",
+          "inputDebit": "325506429856670357245",
+          "outputReceipt": "510417360240567",
+          "scriptHash": "0xceaa3729aa8e0a4027c408aaeb4ab9a0b684598a92327c49cff7d81f3a22abe9"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:2",
+          "amountKind": "donor-input-only",
+          "amountIn": "325506429856670357245",
+          "amountOut": "510417360240567",
+          "encoding": "runtime-program",
+          "inputDebit": "325506429856670357245",
+          "outputReceipt": "510417360240567",
+          "scriptHash": "0x36151cf93b4c9aa76d998da3c9ad198cda604b2c115c23e59572788f654e15b0"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:2",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "162753214928335178622",
+          "amountOut": "255481560398733",
+          "encoding": "old-fragment",
+          "inputDebit": "162753214928335178622",
+          "outputReceipt": "255481560398733",
+          "scriptHash": "0x6f40ee1b89dc52af295ea225768b333811e282ec9d1061342f6806020d17a709"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:2",
+          "amountKind": "donor-input-only-half",
+          "amountIn": "162753214928335178622",
+          "amountOut": "255481560398733",
+          "encoding": "runtime-program",
+          "inputDebit": "162753214928335178622",
+          "outputReceipt": "255481560398733",
+          "scriptHash": "0x20214857639cb387a8d6765b1758c15b55f31eac3db0303081f0926d02b453be"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:2",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "2395701299544926676059",
+          "amountOut": "3706357285935813",
+          "encoding": "old-fragment",
+          "inputDebit": "2395701299544926676059",
+          "outputReceipt": "3706357285935813",
+          "scriptHash": "0x97e445c96d88096927c144f5bb9026c1ef39b41638ad7784de11e79f4a116507"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:2",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "2395701299544926676059",
+          "amountOut": "3706357285935813",
+          "encoding": "runtime-program",
+          "inputDebit": "2395701299544926676059",
+          "outputReceipt": "3706357285935813",
+          "scriptHash": "0x4124492941baa50ccffc00dd316b80bf9c7514c3eda4dd4a816dd91f1c7cd6da"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:2",
+          "amountKind": "original-leg-half",
+          "amountIn": "1197850649772463338029",
+          "amountOut": "1867631438543582",
+          "encoding": "old-fragment",
+          "inputDebit": "1197850649772463338029",
+          "outputReceipt": "1867631438543582",
+          "scriptHash": "0x8c7ce590429d05eeecc51e7e7e3af9de58b6b9ab9ad1bcc54c09edb1b28b9753"
+        },
+        {
+          "routeKey": "balancer-v3:0x93bd81fe5e0359cddce996e0785d9f6cb39295a7:3:2",
+          "amountKind": "original-leg-half",
+          "amountIn": "1197850649772463338029",
+          "amountOut": "1867631438543582",
+          "encoding": "runtime-program",
+          "inputDebit": "1197850649772463338029",
+          "outputReceipt": "1867631438543582",
+          "scriptHash": "0xc565ee2360f47ae600b95512300a50da75a03bffab1c3a8d393107ec899f7b90"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/raw02/logs/four-family-coverage-20261012.zHKuWX/v3-hook-N25936827-dual-attempt01.json",
+        "sha256": "586b7e1e6270cee2681c5b310e7e38e239d899a19b8c9a68be8e1a253f100ae1"
+      },
+      "pool": "0xae255db04ba78519f33871c557d8fd6bafdb83bd",
+      "source": {
+        "number": 25936827,
+        "hash": "0x91ab348d9856cbbedeb7c2ffb9e9de67e1d1a6f64956ca5115b5e6416caa9f24",
+        "generation": 25936827
+      },
+      "directions": 2,
+      "executions": 8,
+      "runtimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "code": {
+        "headAtStart": "f4f5f07b54bd1e0ab5c9356c08df73d704eba402",
+        "sourceSha256": "0a8f0e3358dfe7dbc5bf25ed5b6975128947dd4a2f5c94adb8346e31905bc102",
+        "sourceTreeSha256": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+        "fileCount": 1149,
+        "testSha256": "afc56eb3a4514d5db22d9432bf22aa1e0f432d7a92a7a3479b9c0755441eafd0",
+        "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+        "familyDefinitionHash": "e515ffc67c8020c03125fc903784b9bc25787e48faef76af072d7569946ff84d",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "samples": [
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:0:1",
+          "amountKind": "target-production-reference",
+          "amountIn": "871641832876",
+          "amountOut": "90539586",
+          "encoding": "old-fragment",
+          "inputDebit": "871641832876",
+          "outputReceipt": "90539586",
+          "scriptHash": "0x0b9cbd5a13d19c09292f75e2e06ec64c984fc26dd025a162df1143fefaeac97d"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:0:1",
+          "amountKind": "target-production-reference",
+          "amountIn": "871641832876",
+          "amountOut": "90539586",
+          "encoding": "runtime-program",
+          "inputDebit": "871641832876",
+          "outputReceipt": "90539586",
+          "scriptHash": "0x4633daf17c29399e9056a0aaa2c518e13fcbfa0c309b743b2878b746b2cfdaec"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:0:1",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "435820916438",
+          "amountOut": "45271164",
+          "encoding": "old-fragment",
+          "inputDebit": "435820916438",
+          "outputReceipt": "45271164",
+          "scriptHash": "0x7db8b6ddba4ce034c6af494b18bb844adaa9612fc7ff6ea9403ca6be36d9252a"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:0:1",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "435820916438",
+          "amountOut": "45271164",
+          "encoding": "runtime-program",
+          "inputDebit": "435820916438",
+          "outputReceipt": "45271164",
+          "scriptHash": "0x0576cf43be215010f0edfaa7450e70cd6896ab583b4d34f3901e5c44b051790a"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:1:0",
+          "amountKind": "target-production-reference",
+          "amountIn": "99278215",
+          "amountOut": "871641832876",
+          "encoding": "old-fragment",
+          "inputDebit": "99278215",
+          "outputReceipt": "871641832876",
+          "scriptHash": "0x4f0eb19641795aedcb0bf5734f39b09c5302b070fc4714dda7e45f4c5a2098e3"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:1:0",
+          "amountKind": "target-production-reference",
+          "amountIn": "99278215",
+          "amountOut": "871641832876",
+          "encoding": "runtime-program",
+          "inputDebit": "99278215",
+          "outputReceipt": "871641832876",
+          "scriptHash": "0xccb3a4adde17bc77f741d903c19bdfa888ddc3ab2e61542449be5bbea9142010"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:1:0",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "49639107",
+          "amountOut": "435835338830",
+          "encoding": "old-fragment",
+          "inputDebit": "49639107",
+          "outputReceipt": "435835338830",
+          "scriptHash": "0x3426e44dbaed66f767e3c083ccda4c5d08418eea5c3b88692db58954551a5e3c"
+        },
+        {
+          "routeKey": "balancer-v3:0xae255db04ba78519f33871c557d8fd6bafdb83bd:1:0",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "49639107",
+          "amountOut": "435835338830",
+          "encoding": "runtime-program",
+          "inputDebit": "49639107",
+          "outputReceipt": "435835338830",
+          "scriptHash": "0xccdc217d3f7f3140a845a3001ffdeed9a94343f3ef6d1070cdfbf473b861be12"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/raw02/logs/v3-four-token-natural-20261010.hNv3LA/dual-1.json",
+        "sha256": "e3b8448e42e803ba56eafc894c0b97ec9ccdd184dcbada4a30bf60a4688485ee"
+      },
+      "pool": "0x136fa856047918af169670d002ffd2dbbe8efbc9",
+      "source": {
+        "number": 26105714,
+        "hash": "0xba7d5ac6fd8e0dc4fc88f2da683d0ae0e14ad7a2228e939b92121908a3396d2d",
+        "generation": 26105714
+      },
+      "directions": 12,
+      "executions": 72,
+      "runtimeCodeHash": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "code": {
+        "headAtStart": "b5472f94ec649d15c1a65724fd2260ffa59d10c0",
+        "sourceSha256": "b7a005cf0a090a1a4f5e3199e00992b07866cd268156a7cd5b3d68107bf107ec",
+        "sourceTreeSha256": "90625d82049dc18e2406c1ae220120f62a1980b3c2c4d08b4ab12b00af2f07ca",
+        "fileCount": 1075,
+        "testSha256": "b154f7d2e126a14279c6a06e00618d99ef28051021bd9401a70bae7bfabfc83d",
+        "artifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+        "familyDefinitionHash": "dc134327f80d32838b416d273669d44977b7a66013cca2e5a7fce2b1b770ae22",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "samples": [
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "target-production-reference",
+          "amountIn": "5403584",
+          "amountOut": "4858032567779944518",
+          "encoding": "old-fragment",
+          "inputDebit": "5403584",
+          "outputReceipt": "4858032567779944518",
+          "scriptHash": "0x7452241c0652f58300ef6fd03bdd0e54d189bab0ff400eb1b7a549d8a3fccd01"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "target-production-reference",
+          "amountIn": "5403584",
+          "amountOut": "4858032567779944518",
+          "encoding": "runtime-program",
+          "inputDebit": "5403584",
+          "outputReceipt": "4858032567779944518",
+          "scriptHash": "0x0a9d8196b1d564dc1f93b6d29a43259b457015249a99ac359948d2e425abd561"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701792",
+          "amountOut": "2429481184003967264",
+          "encoding": "old-fragment",
+          "inputDebit": "2701792",
+          "outputReceipt": "2429481184003967264",
+          "scriptHash": "0xab59eb8efaa2de3772fc7c5bc3d1f7f7b60199b845c6526c04c5d2e15aa97bc9"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701792",
+          "amountOut": "2429481184003967264",
+          "encoding": "runtime-program",
+          "inputDebit": "2701792",
+          "outputReceipt": "2429481184003967264",
+          "scriptHash": "0x7b869f2fa7117b070a81f269f01bd0e6f4646e146b4336fde357250bd4d9f753"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1781143055020510820",
+          "encoding": "old-fragment",
+          "inputDebit": "1980684",
+          "outputReceipt": "1781143055020510820",
+          "scriptHash": "0xe152503e76571b014fd0ab7569d9110cfae4a3432380a60a4b8dd6b1e0ca4584"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1781143055020510820",
+          "encoding": "runtime-program",
+          "inputDebit": "1980684",
+          "outputReceipt": "1781143055020510820",
+          "scriptHash": "0x283e2f00afb5ef5404ea54129db7f7c16d157f8e1df4187af1132f1811be7c07"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "890633284321043825",
+          "encoding": "old-fragment",
+          "inputDebit": "990342",
+          "outputReceipt": "890633284321043825",
+          "scriptHash": "0xe031c54652633babe62c5123f4b26394552bdbdb5485fe15c52d48164b0f893e"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "890633284321043825",
+          "encoding": "runtime-program",
+          "inputDebit": "990342",
+          "outputReceipt": "890633284321043825",
+          "scriptHash": "0x2f7a934631d96201e67e57f7e71b4cf8e816248b0cbcc26f1ec83da0199ed738"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "target-production-reference",
+          "amountIn": "5403584",
+          "amountOut": "5402261",
+          "encoding": "old-fragment",
+          "inputDebit": "5403584",
+          "outputReceipt": "5402261",
+          "scriptHash": "0xf034ee89fd24c23d4760340abf817e8f9d0bd7118cb609a2ce6021a93f81b424"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "target-production-reference",
+          "amountIn": "5403584",
+          "amountOut": "5402261",
+          "encoding": "runtime-program",
+          "inputDebit": "5403584",
+          "outputReceipt": "5402261",
+          "scriptHash": "0xbbb4110aefb8a8f1022defe1c227ec9f3fa4968d035067bb79102c580f4b8f33"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701792",
+          "amountOut": "2701581",
+          "encoding": "old-fragment",
+          "inputDebit": "2701792",
+          "outputReceipt": "2701581",
+          "scriptHash": "0xe4a01f10453b608165aa0276c1f2ec3eb57c7792c112e46f50871b6b07512b08"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701792",
+          "amountOut": "2701581",
+          "encoding": "runtime-program",
+          "inputDebit": "2701792",
+          "outputReceipt": "2701581",
+          "scriptHash": "0x0b1a640b1a92ba429e43cca7061a8d62cae829b3e64ffc869a1265e730b493bb"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1980618",
+          "encoding": "old-fragment",
+          "inputDebit": "1980684",
+          "outputReceipt": "1980618",
+          "scriptHash": "0x608c9fbc082ab62314d6c9b69fb051e7b24ca57b9b499647c1840496b965c32f"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1980618",
+          "encoding": "runtime-program",
+          "inputDebit": "1980684",
+          "outputReceipt": "1980618",
+          "scriptHash": "0xc53ca2a1274e9fa373fd2a2f29f03cce7adaea191ef85244b852f777c330f5ce"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "990370",
+          "encoding": "old-fragment",
+          "inputDebit": "990342",
+          "outputReceipt": "990370",
+          "scriptHash": "0xab02c169c196ae7ee820aeb0aa44d9e5f43afc221afb3b17903c24d1675adfea"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:2",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "990370",
+          "encoding": "runtime-program",
+          "inputDebit": "990342",
+          "outputReceipt": "990370",
+          "scriptHash": "0xa5d4ce57422527c9bcae48ca1b684356308802428ac898610c2860f129dae1cd"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "target-production-reference",
+          "amountIn": "5403584",
+          "amountOut": "5319367263476035691",
+          "encoding": "old-fragment",
+          "inputDebit": "5403584",
+          "outputReceipt": "5319367263476035691",
+          "scriptHash": "0x7ac0901076b5224a43d0e52647ea638cdb4a14755105eea025b9250f8bd2fd30"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "target-production-reference",
+          "amountIn": "5403584",
+          "amountOut": "5319367263476035691",
+          "encoding": "runtime-program",
+          "inputDebit": "5403584",
+          "outputReceipt": "5319367263476035691",
+          "scriptHash": "0x004d52fe1a33204a8a8a68c8edfadf589b3c3a6c11c3c744a3a733d0f517edd6"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701792",
+          "amountOut": "2660048288438519822",
+          "encoding": "old-fragment",
+          "inputDebit": "2701792",
+          "outputReceipt": "2660048288438519822",
+          "scriptHash": "0x2ccbdc97944af8e1666e5f9599958958ce75608505d5410bbdb51005da823d2a"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701792",
+          "amountOut": "2660048288438519822",
+          "encoding": "runtime-program",
+          "inputDebit": "2701792",
+          "outputReceipt": "2660048288438519822",
+          "scriptHash": "0x1b9755e37ebc9296bb38eaae214621a3c96d9a28f8b695470e3e0022fb7efd1f"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1950155220767729195",
+          "encoding": "old-fragment",
+          "inputDebit": "1980684",
+          "outputReceipt": "1950155220767729195",
+          "scriptHash": "0xaffeba3780a9c2b49334e23e6a0b79e660b197f0e4d06d305efbc14d8e4748d7"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1980684",
+          "amountOut": "1950155220767729195",
+          "encoding": "runtime-program",
+          "inputDebit": "1980684",
+          "outputReceipt": "1950155220767729195",
+          "scriptHash": "0x2a845d55037d5237cc050d99a3a0a75e9bcc339f41adefbd70da9736d2013818"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "975128950853875287",
+          "encoding": "old-fragment",
+          "inputDebit": "990342",
+          "outputReceipt": "975128950853875287",
+          "scriptHash": "0x7cad43b71014b1f635e8bc2f4dd1fab47af666ab7cad84567cdbaf9bd03e7418"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:0:3",
+          "amountKind": "original-leg-half",
+          "amountIn": "990342",
+          "amountOut": "975128950853875287",
+          "encoding": "runtime-program",
+          "inputDebit": "990342",
+          "outputReceipt": "975128950853875287",
+          "scriptHash": "0xe3b5a28bf8a337094a1c4840943df7174df5f8f3cf98305e831ff2882f988910"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:0",
+          "amountKind": "target-production-reference",
+          "amountIn": "4858032567779944518",
+          "amountOut": "5395149",
+          "encoding": "old-fragment",
+          "inputDebit": "4858032567779944518",
+          "outputReceipt": "5395149",
+          "scriptHash": "0xbb3c4b6bb36d974ba20ee140f8c25489408c4bba5a6d30e257c17ef4e420e3fa"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:0",
+          "amountKind": "target-production-reference",
+          "amountIn": "4858032567779944518",
+          "amountOut": "5395149",
+          "encoding": "runtime-program",
+          "inputDebit": "4858032567779944518",
+          "outputReceipt": "5395149",
+          "scriptHash": "0x9959c81ca49739a278abda0c8896014864b6dd9c05b92037cf987365493f22ec"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:0",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2429016283889972259",
+          "amountOut": "2698092",
+          "encoding": "old-fragment",
+          "inputDebit": "2429016283889972259",
+          "outputReceipt": "2698092",
+          "scriptHash": "0xc08cda7a73fad3479e0c425ac5eeca348d1dcffde7998f3478b605f790ffe2ae"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:0",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2429016283889972259",
+          "amountOut": "2698092",
+          "encoding": "runtime-program",
+          "inputDebit": "2429016283889972259",
+          "outputReceipt": "2698092",
+          "scriptHash": "0x39e73467cdfec591d20cf10a4015e11ece2a0f709a8ff4deebbfde05c25050a9"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:2",
+          "amountKind": "target-production-reference",
+          "amountIn": "4858032567779944518",
+          "amountOut": "5398061",
+          "encoding": "old-fragment",
+          "inputDebit": "4858032567779944518",
+          "outputReceipt": "5398061",
+          "scriptHash": "0xbaa9ed4dbae5813a373928f5303bb4c0a2c4d291e7574fb6541a112fecf2249d"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:2",
+          "amountKind": "target-production-reference",
+          "amountIn": "4858032567779944518",
+          "amountOut": "5398061",
+          "encoding": "runtime-program",
+          "inputDebit": "4858032567779944518",
+          "outputReceipt": "5398061",
+          "scriptHash": "0xeb57789baae5732d905253caeaa882e0e1a75328b49f041ef3b5f7231b592c14"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:2",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2429016283889972259",
+          "amountOut": "2699477",
+          "encoding": "old-fragment",
+          "inputDebit": "2429016283889972259",
+          "outputReceipt": "2699477",
+          "scriptHash": "0xcc0130ed736755a0e2a951563c219deef0d100fab48ccbaa05244da61416c3ae"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:2",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2429016283889972259",
+          "amountOut": "2699477",
+          "encoding": "runtime-program",
+          "inputDebit": "2429016283889972259",
+          "outputReceipt": "2699477",
+          "scriptHash": "0xb405d91935d687dab5bd880cf3ef5ee1adf6888fc1834658c47a8db61eb23d8f"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:3",
+          "amountKind": "target-production-reference",
+          "amountIn": "4858032567779944518",
+          "amountOut": "5315234207251599318",
+          "encoding": "old-fragment",
+          "inputDebit": "4858032567779944518",
+          "outputReceipt": "5315234207251599318",
+          "scriptHash": "0xb6f8e0645cf521bfdfa40cc8acfb115859119a8d9eb51f46b1d99b5b29dda89b"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:3",
+          "amountKind": "target-production-reference",
+          "amountIn": "4858032567779944518",
+          "amountOut": "5315234207251599318",
+          "encoding": "runtime-program",
+          "inputDebit": "4858032567779944518",
+          "outputReceipt": "5315234207251599318",
+          "scriptHash": "0x06522358ef1619a001048f10a1f23ae97c7a3adce43d4f24532f9ca6c65ea5c9"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:3",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2429016283889972259",
+          "amountOut": "2657977292831229628",
+          "encoding": "old-fragment",
+          "inputDebit": "2429016283889972259",
+          "outputReceipt": "2657977292831229628",
+          "scriptHash": "0x5ac1ba5ae538f2f6bbf209aedbfbe110e002049c4377a94b392f217bd9a022df"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:1:3",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2429016283889972259",
+          "amountOut": "2657977292831229628",
+          "encoding": "runtime-program",
+          "inputDebit": "2429016283889972259",
+          "outputReceipt": "2657977292831229628",
+          "scriptHash": "0x0364e39c26603b8bb827344e8cab4c7ab7853c623082ac79670dd91c6e98d936"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "target-production-reference",
+          "amountIn": "5402991",
+          "amountOut": "5396287",
+          "encoding": "old-fragment",
+          "inputDebit": "5402991",
+          "outputReceipt": "5396287",
+          "scriptHash": "0x341e526e3ed2f8088049e60f480c24e845b305853bf4e90d0b16069dc541b795"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "target-production-reference",
+          "amountIn": "5402991",
+          "amountOut": "5396287",
+          "encoding": "runtime-program",
+          "inputDebit": "5402991",
+          "outputReceipt": "5396287",
+          "scriptHash": "0x6d0c55e259a50470b539e6d6577d10eed801683ee15404713104d304153c6812"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701495",
+          "amountOut": "2698624",
+          "encoding": "old-fragment",
+          "inputDebit": "2701495",
+          "outputReceipt": "2698624",
+          "scriptHash": "0x61ad10ea9650182f3d32b6744a75cc13a3a8c03cc253dbd7401c5b962761ad12"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701495",
+          "amountOut": "2698624",
+          "encoding": "runtime-program",
+          "inputDebit": "2701495",
+          "outputReceipt": "2698624",
+          "scriptHash": "0xab8c8372365745816e6a552c32b31a861a8dcc7c09e0505970e85bad15426151"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1979099",
+          "encoding": "old-fragment",
+          "inputDebit": "1981113",
+          "outputReceipt": "1979099",
+          "scriptHash": "0xdb4f547ce4cdc15715eef07cb491cf04877c22f3670425f7caf2cfad77217fa5"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1979099",
+          "encoding": "runtime-program",
+          "inputDebit": "1981113",
+          "outputReceipt": "1979099",
+          "scriptHash": "0x38fec011abfc1e0e9735f288d50688910f562b7864e57a53175eb3dca2125cb0"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "989611",
+          "encoding": "old-fragment",
+          "inputDebit": "990556",
+          "outputReceipt": "989611",
+          "scriptHash": "0x39fb2612723b86616e6ae0e545dbb7e53b5968c2d419b4a3139224c0c596510d"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:0",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "989611",
+          "encoding": "runtime-program",
+          "inputDebit": "990556",
+          "outputReceipt": "989611",
+          "scriptHash": "0x9bae7162db42b69cb4851b31110354916f860f7f5cb03434ce8d25cd47071e59"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "target-production-reference",
+          "amountIn": "5402991",
+          "amountOut": "4855279606848555006",
+          "encoding": "old-fragment",
+          "inputDebit": "5402991",
+          "outputReceipt": "4855279606848555006",
+          "scriptHash": "0xb27061d13ed6d55ce3520f02f1fccd1516b67b1225343ef091d665d281408a5f"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "target-production-reference",
+          "amountIn": "5402991",
+          "amountOut": "4855279606848555006",
+          "encoding": "runtime-program",
+          "inputDebit": "5402991",
+          "outputReceipt": "4855279606848555006",
+          "scriptHash": "0x703176bac7fbc0bd664b6dd737164a07c4a18d8d29782968f00862634dad8c7e"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701495",
+          "amountOut": "2428067139521774913",
+          "encoding": "old-fragment",
+          "inputDebit": "2701495",
+          "outputReceipt": "2428067139521774913",
+          "scriptHash": "0x34a970392daef9b418f96df91a479df4aef240930007f92551177daa1bdd6403"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701495",
+          "amountOut": "2428067139521774913",
+          "encoding": "runtime-program",
+          "inputDebit": "2701495",
+          "outputReceipt": "2428067139521774913",
+          "scriptHash": "0x57d8b8e23051fbb27ab67d122145cad4af3b71fe60a8c844cda9f672f01f8db5"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1780679395518976460",
+          "encoding": "old-fragment",
+          "inputDebit": "1981113",
+          "outputReceipt": "1780679395518976460",
+          "scriptHash": "0x235e0c9e012a20387855b7e389f99b76a6f5464dbed0eac1355bbcb031c9df3d"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1780679395518976460",
+          "encoding": "runtime-program",
+          "inputDebit": "1981113",
+          "outputReceipt": "1780679395518976460",
+          "scriptHash": "0x2f491386da56eef6b37a9c320b46c036b898ba7c81bf354c412ef334f1f7fce3"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "890395017851654234",
+          "encoding": "old-fragment",
+          "inputDebit": "990556",
+          "outputReceipt": "890395017851654234",
+          "scriptHash": "0xd7b1ac6b0d5e90b38a95a34f4b7148590a9d31e0c46b47a18bb5273eeed4a155"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:1",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "890395017851654234",
+          "encoding": "runtime-program",
+          "inputDebit": "990556",
+          "outputReceipt": "890395017851654234",
+          "scriptHash": "0xfe74184e4d8c548996f6710c06f7a537465c0d926360657210d2019c9df56dfb"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "target-production-reference",
+          "amountIn": "5402991",
+          "amountOut": "5316430892815954272",
+          "encoding": "old-fragment",
+          "inputDebit": "5402991",
+          "outputReceipt": "5316430892815954272",
+          "scriptHash": "0xc81304326c6d235b272d5387bbff601d3ccca040f73df70e71f9a391f37a32c2"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "target-production-reference",
+          "amountIn": "5402991",
+          "amountOut": "5316430892815954272",
+          "encoding": "runtime-program",
+          "inputDebit": "5402991",
+          "outputReceipt": "5316430892815954272",
+          "scriptHash": "0x59cc0228e639a44ca5c031e5ff5f11ab263984ae6c0f7c654a2b61dccd23fc0f"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701495",
+          "amountOut": "2658519565799644519",
+          "encoding": "old-fragment",
+          "inputDebit": "2701495",
+          "outputReceipt": "2658519565799644519",
+          "scriptHash": "0x062d4cc8d60614b415fd475fe04f5576501eb65720e82ad01029356a800e6f3c"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2701495",
+          "amountOut": "2658519565799644519",
+          "encoding": "runtime-program",
+          "inputDebit": "2701495",
+          "outputReceipt": "2658519565799644519",
+          "scriptHash": "0x3573d915a5446dc5c01fdd3b9478942c61737c8dca9e5dbc3353deebab0bd916"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1949658098623622491",
+          "encoding": "old-fragment",
+          "inputDebit": "1981113",
+          "outputReceipt": "1949658098623622491",
+          "scriptHash": "0x1a3868eb3d0b80a82585511b7f16882f47d59c1a175156125ab9d72e2fbb751f"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "original-leg-amount-at-N-not-original-prestate",
+          "amountIn": "1981113",
+          "amountOut": "1949658098623622491",
+          "encoding": "runtime-program",
+          "inputDebit": "1981113",
+          "outputReceipt": "1949658098623622491",
+          "scriptHash": "0xcf35065e69f18302e884cec8b6e2c0c9b2f9315573c5351b3527c7df72df88c1"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "974870719767758537",
+          "encoding": "old-fragment",
+          "inputDebit": "990556",
+          "outputReceipt": "974870719767758537",
+          "scriptHash": "0x25cf1b6b9854c021679f4fcb75be7d3d069d18e9d55a09ebca659d183f865cca"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:2:3",
+          "amountKind": "original-leg-half",
+          "amountIn": "990556",
+          "amountOut": "974870719767758537",
+          "encoding": "runtime-program",
+          "inputDebit": "990556",
+          "outputReceipt": "974870719767758537",
+          "scriptHash": "0x1c340482eaeb19fb98a67759aaa7dee1a9a4a858f99d2a886e0c8ce04ae54ea6"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:0",
+          "amountKind": "target-production-reference",
+          "amountIn": "5319367263476035691",
+          "amountOut": "5396042",
+          "encoding": "old-fragment",
+          "inputDebit": "5319367263476035691",
+          "outputReceipt": "5396042",
+          "scriptHash": "0xe8ee1944e652ee9c2b5e72a8994cb193e48c4c68e5b27a3affb84ebbb33ce853"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:0",
+          "amountKind": "target-production-reference",
+          "amountIn": "5319367263476035691",
+          "amountOut": "5396042",
+          "encoding": "runtime-program",
+          "inputDebit": "5319367263476035691",
+          "outputReceipt": "5396042",
+          "scriptHash": "0xefc66c602889020a32377fd84efd9463141ff9b5b19a192d92ff8a7bdbbdcf12"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:0",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2659683631738017845",
+          "amountOut": "2698460",
+          "encoding": "old-fragment",
+          "inputDebit": "2659683631738017845",
+          "outputReceipt": "2698460",
+          "scriptHash": "0xb3aab81c52041dc8885f67dfe6b2ad48021cf7ccf7b477226a6a15d3c35d658d"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:0",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2659683631738017845",
+          "amountOut": "2698460",
+          "encoding": "runtime-program",
+          "inputDebit": "2659683631738017845",
+          "outputReceipt": "2698460",
+          "scriptHash": "0x34553b0856605f41d3a45c96936baa0b303145141ae79f33ee1e5a4755af6dfe"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:1",
+          "amountKind": "target-production-reference",
+          "amountIn": "5319367263476035691",
+          "amountOut": "4855061757335513511",
+          "encoding": "old-fragment",
+          "inputDebit": "5319367263476035691",
+          "outputReceipt": "4855061757335513511",
+          "scriptHash": "0x28a68f8087436e30b8f63b2bf24924aac39b25e573bb577ec47eca9b56fe8513"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:1",
+          "amountKind": "target-production-reference",
+          "amountIn": "5319367263476035691",
+          "amountOut": "4855061757335513511",
+          "encoding": "runtime-program",
+          "inputDebit": "5319367263476035691",
+          "outputReceipt": "4855061757335513511",
+          "scriptHash": "0x63a5e4c1aedeca758eb122d46b39093eac268880d049e0f66d8ec10c379b9d5d"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:1",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2659683631738017845",
+          "amountOut": "2427920572861710574",
+          "encoding": "old-fragment",
+          "inputDebit": "2659683631738017845",
+          "outputReceipt": "2427920572861710574",
+          "scriptHash": "0x4a393faa42fb10307771d3d2c1b9f55a952990b4dba2d7188671dad664b298af"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:1",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2659683631738017845",
+          "amountOut": "2427920572861710574",
+          "encoding": "runtime-program",
+          "inputDebit": "2659683631738017845",
+          "outputReceipt": "2427920572861710574",
+          "scriptHash": "0xf9ec93f33eb0ee8ba5ccc75f3e58f6b40a5734b78c684340d554a4c7e1bf24b4"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:2",
+          "amountKind": "target-production-reference",
+          "amountIn": "5319367263476035691",
+          "amountOut": "5399037",
+          "encoding": "old-fragment",
+          "inputDebit": "5319367263476035691",
+          "outputReceipt": "5399037",
+          "scriptHash": "0x8b2e749ef8ee7fe0327549e2daa2d4a9153cb9ae31df8f769b5ec51f47f50028"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:2",
+          "amountKind": "target-production-reference",
+          "amountIn": "5319367263476035691",
+          "amountOut": "5399037",
+          "encoding": "runtime-program",
+          "inputDebit": "5319367263476035691",
+          "outputReceipt": "5399037",
+          "scriptHash": "0x39eae0f6f43f34145448dd436f80cd81db866dcd745681891c7a37e3a9496614"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:2",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2659683631738017845",
+          "amountOut": "2699865",
+          "encoding": "old-fragment",
+          "inputDebit": "2659683631738017845",
+          "outputReceipt": "2699865",
+          "scriptHash": "0x58ed95f787f92e21057a213acc42e0f7884589fd62f4f0f15111016c1e1d60ed"
+        },
+        {
+          "routeKey": "balancer-v3:0x136fa856047918af169670d002ffd2dbbe8efbc9:3:2",
+          "amountKind": "target-production-reference-half",
+          "amountIn": "2659683631738017845",
+          "amountOut": "2699865",
+          "encoding": "runtime-program",
+          "inputDebit": "2659683631738017845",
+          "outputReceipt": "2699865",
+          "scriptHash": "0x683b45abbdb4af18cb60f2d59ca9ebc42c1671c2fbfc36f849e19720b0dbc237"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source03/logs/manual-four-hop-20261013.ndkrq4vh/balancer-manual-dual-attempt01.json",
+        "sha256": "8b4d76801bfc2a222d9d21d2d31066f1fdf6d40a0e10e5ffd177753abee700ea"
+      },
+      "pool": "0x071828acc755314e687448703775f22194f56867",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+        "generation": 25944594
+      },
+      "directions": 1,
+      "executions": 4,
+      "runtimeCodeHash": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "code": {
+        "headAtStart": "388f9dceb9bc1c5cc6d752c3ee0380b257fcfc4b",
+        "sourceSha256": "4e39f8ba22dcbd07ec4e8e34bf5d798f1cece510190acd19ce0a162875e617cb",
+        "sourceTreeSha256": "853eb200841aa1af2a439c958132bc8a2fcd7b888d3ab5770307283568d2c9e8",
+        "fileCount": 1152,
+        "testSha256": "34e7d268caa68b61f7a76db7ecf854af04784af8c2119d36e4bbec967e93c395",
+        "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+        "familyDefinitionHash": "e515ffc67c8020c03125fc903784b9bc25787e48faef76af072d7569946ff84d",
+        "familyMemoDefinitionHash": "93fc9e2c5dcf8ed07e1f30c3470bab3031e512e016734532cae6efb9edba2b38"
+      },
+      "samples": [
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:1:0",
+          "amountKind": "manual-four-hop-output-input",
+          "amountIn": "4549931237571597530",
+          "amountOut": "3968925188898275615",
+          "encoding": "old-fragment",
+          "inputDebit": "4549931237571597530",
+          "outputReceipt": "3968925188898275615",
+          "scriptHash": "0xdea0ec2743624205cd4de3403989790719a69351d19d15433e5878d0659bd6ea"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:1:0",
+          "amountKind": "manual-four-hop-output-input",
+          "amountIn": "4549931237571597530",
+          "amountOut": "3968925188898275615",
+          "encoding": "runtime-program",
+          "inputDebit": "4549931237571597530",
+          "outputReceipt": "3968925188898275615",
+          "scriptHash": "0xe6bfa16e8e6be2fab3b01a72220142d3a3cc4608cca56b2adb310598c1975248"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:1:0",
+          "amountKind": "manual-four-hop-output-input-half",
+          "amountIn": "2274965618785798765",
+          "amountOut": "1984477614880721093",
+          "encoding": "old-fragment",
+          "inputDebit": "2274965618785798765",
+          "outputReceipt": "1984477614880721093",
+          "scriptHash": "0xe70f21737867a233a90a48df2041e47683b8fc23c535c50b81999b167858931f"
+        },
+        {
+          "routeKey": "balancer-v3:0x071828acc755314e687448703775f22194f56867:1:0",
+          "amountKind": "manual-four-hop-output-input-half",
+          "amountIn": "2274965618785798765",
+          "amountOut": "1984477614880721093",
+          "encoding": "runtime-program",
+          "inputDebit": "2274965618785798765",
+          "outputReceipt": "1984477614880721093",
+          "scriptHash": "0x48b7db463110af9847ea70f3f003fde98750e78f100a802b3b33acb4e53a8a55"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Initial 268 executions did not record a separate native-balance post-read or zero-input control; do not impute later controls to each old execution.",
+    "Permit2 amount is zero while expiration may equal the source timestamp; not all Permit2 fields zero.",
+    "The final manual four-hop siUSD input is not default three-hop natural valuation."
+  ]
+}

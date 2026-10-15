@@ -1,0 +1,28 @@
+[
+  {
+    "family": "balancer-v3",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T16:01:11.006705+00:00",
+    "finishedAt": "2026-10-15T16:02:01.317798+00:00",
+    "logSha256": "55a30be741bf6fb2ee72e5aacfaa810ee015d01761f1d2105a8834d81f9df94b",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/balancer-gate115-selection.json",
+    "manifestSha256": "5112e888e99bc13b7585b19f6db19731fbcee3928b51a55c4f1f548678f48d80",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "balancer-v3",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,187 @@
+{
+  "kind": "retained-family-evidence-join-v1",
+  "familyId": "balancer-v3",
+  "result": "pass-current-scoped-retained-evidence-join",
+  "implementationReady": true,
+  "blockingFindings": [],
+  "scope": "Existing ERC20 Router exact-input operation, no-hook weighted and authenticated StableSurge models in the eight retained actual pools. Existing acceptance is reused; this review runs only source/hash/calldata and raw-balance checks.",
+  "interface": {
+    "entry": {
+      "address": "0xae563e3f8219521950555f5962419c8919758ea2",
+      "cache": {
+        "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-swaps/0xae563e3f8219521950555f5962419c8919758ea2.json",
+        "sha256": "d0a316a02fa28a1062a394f5fe1d209233560c388e425633c8724c05943b9ab8"
+      },
+      "sourceUrl": "https://eth.blockscout.com/api/v2/smart-contracts/0xae563e3f8219521950555f5962419c8919758ea2",
+      "runtimeKeccak256": "0x76d58a2f13ee78e52e3f414f0181bc77ff0fcc65ae35b0d215a26b6fd2980a18",
+      "allElevenReadyBindingsMatch": true,
+      "proxyType": null,
+      "entry": {
+        "signature": "swapSingleTokenExactIn(address,address,address,uint256,uint256,uint256,bool,bytes)",
+        "selector": "0x750283bc"
+      }
+    },
+    "payer": "Router params.sender = msg.sender = executor; Permit2 moves requested A from executor to Vault.",
+    "recipient": "Router sends actual output to the same params.sender; no independently chosen receiver in this installed ABI.",
+    "callback": "Vault unlock calls Router swapSingleTokenHook under onlyVault. Vault accounting swap occurs first, then actual input is taken before actual output is sent. No caller continuation or debt callback to executor.",
+    "callbackClassification": "internal-only",
+    "recipientClassification": "no",
+    "nativeScope": "ABI bool wethIsEth supports a protocol native-asset option, but installed routes use false and actual selected directions are ERC20. No installed nativeAlias capability or actual native-instance execution is claimed.",
+    "identity": "All eleven Ready snapshots bind Router/Vault runtime hashes to verified actual cached nonproxy source. Admission remains reverse pool.getVault + Vault.isPoolRegistered, token info and hook/code proof; hook/pool templates mask only compiler immutable words. No pool address whitelist was added.",
+    "reviewedSourceFiles": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source/listener/src/searcher/venues/swaps/balancer-v3-family/identity.ts",
+        "sha256": "719555f905838d6edd43539ae60195cd792c53833927fb18813ac21b5feca3f3"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source/listener/src/searcher/venues/swaps/balancer-v3-family/stable-surge.ts",
+        "sha256": "0f29a175c2fb6e547b5acd4588399ad11f4f3bd5baeef8fbafbe0c58e2a3f0dc"
+      }
+    ]
+  },
+  "actualCoverage": {
+    "pools": 8,
+    "uniqueDirections": 36,
+    "originalInitialExecutions": 196,
+    "fourTokenSupplementExecutions": 72,
+    "laterCurrentVmExecutions": 8,
+    "manualFourHopExecutions": 4,
+    "totalRetainedExecutionsIncludingRepeatedDirections": 280,
+    "noInputRevertsWithIndependentStorageRollback": 12,
+    "balanceDeltaChecks": 560,
+    "inputTransfers": 280,
+    "outputTransfers": 280,
+    "routerReturnChecks": 280,
+    "laterNativeObservations": 12,
+    "currentByteEqualQuotedAndRuntimeCalldata": 280,
+    "currentByteEqualNegativeCalldata": 12,
+    "newRpcCalls": 0,
+    "newEvmExecutions": 0
+  },
+  "coverageCorrection": {
+    "oldInventory": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source/docs/research/reports/family-settlement-interface-review-20261014.json",
+      "sha256": "f26a6c7e9123ea0d86414268a9f560135657d79b6c844068ccb10f47912eb0c8"
+    },
+    "correction": "33/36 described the first report only. Later four-token raw covers all 12 directions, closing all three omitted e175-input directions. Across eight pools all 36 actual directions have execution evidence.",
+    "naturalValuation": "Default three-hop natural coverage remains 35/36; the siUSD to sUSDe direction additionally has explicit authorized four-hop manual forward input at the same N. Do not label this default 36/36 natural discovery or valuation."
+  },
+  "rawEvidenceRecalculation": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/raw-recalculation05.json",
+    "sha256": "fb58b9ff4ffd0c7c678938241454fcb1c946a654e1da23504864c64222e725b1"
+  },
+  "runtimeAndSourceBinding": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/bindings07.json",
+    "sha256": "042fab696e8312688b6c4e78f30d5dd9e173b41bfe25ed567a77fb3ca75dd1e1"
+  },
+  "compatibility": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/current-compat08.json",
+    "sha256": "16757f74bd7b4f8e3d314e6fdaef1c8d2ff2db757f093e533f86ad5f3d49ea91"
+  },
+  "runtimeArtifacts": [
+    {
+      "originalReportedArtifactSha256": "5b4fc9aa5056bf33cdfeb68b15f6e5cf1befca246a0dedb07565da3c6a0202f3",
+      "recoveredArtifact": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/old-artifact-1e1bdbb6.json",
+        "sha256": "c41a91e9e76a47b615d2e53b36322dc2b358e80c74fc0bbf83d9d353924246ca"
+      },
+      "runtimeKeccak256": "0x1e1bdbb659668e5af2f6fc061940affdd166e2e01c0a62b704d07a287e4f8123",
+      "artifactJsonHashEqualsOriginal": false,
+      "owner": "0x1000000000000000000000000000000000000001",
+      "immutablePatchAlgorithm": "For every compiler declared deployedBytecode immutable reference (length exactly 32), replace that exact offset with the left-zero-padded recorded owner. No other runtime byte changed.",
+      "metadata": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/balancer-v3-coffee-20261010.Au7gjP/staged.xOCB5Y/src/BotVM.sol",
+          "sha256": "5cc05fe179c3c39ffae2eadd4ae066c8498948f5fcdb42b705acbe44658b6c66",
+          "compilerSourcePath": "src/BotVM.sol",
+          "keccak256": "0x56b2c959bba3574e408f9c0eb7dfb7f889cda7298142a6a8affef7f106d24126"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/balancer-v3-coffee-20261010.Au7gjP/staged.xOCB5Y/src/Constants.sol",
+          "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "compilerSourcePath": "src/Constants.sol",
+          "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/balancer-v3-coffee-20261010.Au7gjP/staged.xOCB5Y/src/RuntimeAmountVM.sol",
+          "sha256": "2bd8c69bfdb5eff84e54af132d057b70f7f895e8b96b1787cd9ad47fb741c8c1",
+          "compilerSourcePath": "src/RuntimeAmountVM.sol",
+          "keccak256": "0x6f2f542db6ea71b86c2eeec88177062272ef41961b411554750b9e6845f6588f"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/balancer-v3-coffee-20261010.Au7gjP/staged.xOCB5Y/src/interfaces/IERC20.sol",
+          "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "compilerSourcePath": "src/interfaces/IERC20.sol",
+          "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+        }
+      ]
+    },
+    {
+      "originalReportedArtifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+      "recoveredArtifact": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/old-artifact-62a3d76f.json",
+        "sha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+      },
+      "runtimeKeccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "artifactJsonHashEqualsOriginal": true,
+      "owner": "0x1000000000000000000000000000000000000001",
+      "immutablePatchAlgorithm": "For every compiler declared deployedBytecode immutable reference (length exactly 32), replace that exact offset with the left-zero-padded recorded owner. No other runtime byte changed.",
+      "metadata": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/BotVM.sol",
+          "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "compilerSourcePath": "src/BotVM.sol",
+          "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/Constants.sol",
+          "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "compilerSourcePath": "src/Constants.sol",
+          "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/RuntimeAmountVM.sol",
+          "sha256": "9dd2974a39370dcaca2bf5f031a4f5a147640bee6dc1988b9f7bc2446e8b2ff8",
+          "compilerSourcePath": "src/RuntimeAmountVM.sol",
+          "keccak256": "0xf8d87fc9d3286cf5e5d327e9a943ff60eccf1e8383739ccdb9ce7d32edfb8d19"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/interfaces/IERC20.sol",
+          "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "compilerSourcePath": "src/interfaces/IERC20.sol",
+          "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+        }
+      ]
+    }
+  ],
+  "originalReports": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source/docs/research/reports/balancer-v3-stable-surge-acceptance-20261010.json",
+      "sha256": "4b5bae5d33e77234ee4e0ec54aa46bfcca0d9d7db4d463fd71fc4b8dbcfb4e20"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source/docs/research/reports/balancer-v3-four-token-natural-reference-20261010.json",
+      "sha256": "b6a82a184dd0d12fca8dc07d4b78d89bee24fd537dcd26692322e10ce7d84392"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source/docs/research/reports/v3-current-execution-20261012.json",
+      "sha256": "55c94d1cd22c51580ca7866284ed427f751b1cd1bda57b979c96373d448c0490"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source/docs/research/reports/v3-current-execution-independent-review-20261012.json",
+      "sha256": "08f06feea124c59d641a5aa2873267c69a463803683b53889275a1774f25bf5f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source/docs/research/reports/manual-four-hop-reference-20261013.json",
+      "sha256": "37fd38c6acdec65df2a38ba60942ff561076b402edf15ab4677eee03c6dc3829"
+    }
+  ],
+  "limitations": [
+    "Original raw source hashes and artifact JSON hashes remain immutable. The matching initial recovered artifact has different JSON hash c41a vs reported 5b4; equivalence is exact owner-patched runtime plus metadata, never same-JSON provenance.",
+    "Initial 268 positive executions lack separate post-native read/negative controls; only the later 12 positive and 12 zero-input controls supply those extra observations. Do not multiply their count across all old cases.",
+    "Permit2 amount is zero after each operation; expiration can equal source timestamp. Do not claim all packed allowance fields are zero.",
+    "No full original-transaction prefix replay, complete Adapter Replay gate, live opportunity, scheduling, performance or fresh current historical execution conclusion.",
+    "Unknown or uninstalled hook/native/receiver alternatives are not silently promoted; this joins the existing selected variant only."
+  ],
+  "mechanicalGate": "Parent owns final exact-current closure refresh and typed compatibility-view/gate. This local proposal does not modify the global inventory or source."
+}
