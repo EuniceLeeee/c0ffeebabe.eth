@@ -21,6 +21,7 @@ const DEFAULT_MAX_BATCH_BYTES = 2 * 1024 * 1024;
 // Evidence cap only; does not change the scanner's 512 / Solver's 100 caps.
 const DEFAULT_MAX_ROUTES = 2_048;
 const DEFAULT_MAX_LEGS = 8;
+const DEFAULT_MAX_ROUTE_FILE_BYTES = 10 * 1024 * 1024 * 1024;
 const DEFAULT_MAX_MID_FILE_BYTES = 16 * 1024 * 1024 * 1024;
 const DEFAULT_MAX_MID_RECORD_BYTES = 128 * 1024 * 1024;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 2_000;
@@ -953,7 +954,7 @@ export async function initBlockScanEnumerationSolverTelemetry(
         midHistoryPath,
         eventsPath,
         runId: options.runId,
-        maxFileBytes: options.maxFileBytes ?? 100 * 1024 * 1024,
+        maxFileBytes: options.maxFileBytes ?? DEFAULT_MAX_ROUTE_FILE_BYTES,
         maxMidFileBytes: options.maxMidFileBytes ??
           DEFAULT_MAX_MID_FILE_BYTES,
         maxMidRecordBytes: options.maxMidRecordBytes ??

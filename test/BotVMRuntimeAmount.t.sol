@@ -19,6 +19,18 @@ contract RuntimeTestSwap {
     function swapWithOtherTokenChange(RuntimeTestToken a, RuntimeTestToken b, uint256 amount, uint256 output, RuntimeTestToken other) external {
         a.burn(msg.sender, amount); b.mint(msg.sender, output); other.burn(msg.sender, 1);
     }
+    function swapTo(RuntimeTestToken a, RuntimeTestToken b, uint256 amount, uint256 output, uint256 extra, address recipient) external {
+        a.burn(msg.sender, amount + extra); b.mint(recipient, output);
+    }
+}
+contract RuntimeTestDeferredSwap {
+    function open(RuntimeTestToken input, RuntimeTestToken output, uint256 released, uint256 debt, bytes memory script) external {
+        uint256 beforeBalance = input.balanceOf(address(this));
+        output.mint(msg.sender, released);
+        (bool ok,) = msg.sender.call(abi.encodeWithSignature("settle(int256,bytes)", int256(debt), script));
+        require(ok, "deferred callback failed");
+        require(input.balanceOf(address(this)) - beforeBalance == debt, "deferred unpaid debt");
+    }
 }
 contract RuntimeTestCallback {
     bool public omit;
@@ -55,6 +67,10 @@ contract RuntimeTestNative {
 }
 contract RuntimeTestWrapped is RuntimeTestToken {
     function deposit() external payable { balanceOf[msg.sender] += msg.value; }
+    function withdraw(uint256 amount) external {
+        balanceOf[msg.sender] -= amount;
+        (bool ok,) = msg.sender.call{value: amount}(""); require(ok, "wrapped withdrawal");
+    }
 }
 contract BotVMRuntimeAmountTest is Test {
     BotVM bot;
@@ -239,5 +255,118 @@ contract BotVMRuntimeAmountTest is Test {
         RuntimeTestDebtCallback cb = new RuntimeTestDebtCallback(a);
         bot.execute(script(debtProgram(cb, int256(debt), available, 4), available));
         assertEq(cb.paid(), debt); assertEq(a.balanceOf(address(bot)), 1100 - debt);
+    }
+    function runOp(bytes memory child, uint8 inputReg, uint8 outputReg, uint8 mode) internal pure returns(bytes memory) {
+        return abi.encodePacked(uint8(8), inputReg, outputReg, mode, uint24(child.length), child);
+    }
+    function testSubprogramRegistersAreLocalAndOnlySelectedResultReturns() public {
+        bytes memory child = abi.encodePacked(hex"010001", uint256(333), hex"0200000001");
+        bytes memory p = abi.encodePacked(hex"010001", uint256(7), runOp(child, 0, 2, 0),
+            hex"0003", uint256(433), hex"030203", hex"0003", uint256(7), hex"030103",
+            hex"0003", uint256(100), hex"030003");
+        bot.execute(script(p, 100));
+    }
+    function testReadonlySubprogramAllowsStaticReads() public {
+        bytes memory data = abi.encodeWithSignature("balanceOf(address)", address(bot));
+        bytes memory child = abi.encodePacked(hex"0101", address(a), uint8(1), uint8(255),
+            uint24(0), uint24(0), uint8(0), uint24(data.length), data, hex"0600000000");
+        bytes memory p = abi.encodePacked(uint8(1), runOp(child, 0, 2, 1),
+            hex"0003", uint256(1100), hex"030203");
+        bot.execute(script(p, 100));
+    }
+    function testReadonlySubprogramRejectsCallsAndAllowanceTransitively() public {
+        bytes memory child = swapProgram(a, b, 20, 0);
+        bytes memory nested = abi.encodePacked(uint8(1), runOp(child, 0, 0, 0));
+        vm.expectRevert("runtime readonly call");
+        bot.execute(script(abi.encodePacked(uint8(1), runOp(nested, 0, 0, 1)), 10));
+        child = abi.encodePacked(hex"0104", address(a), address(pool), uint8(0), uint256(100));
+        vm.expectRevert("runtime readonly allowance");
+        bot.execute(script(abi.encodePacked(uint8(1), runOp(child, 0, 0, 1)), 10));
+        assertEq(a.balanceOf(address(bot)), 1100);
+    }
+    function testSubprogramDepthAndInputBounds() public {
+        bytes memory nested = abi.encodePacked(hex"010001", uint256(1));
+        for (uint256 i; i < 8; ++i) nested = abi.encodePacked(uint8(1), runOp(nested, 0, 0, 0));
+        bot.execute(script(nested, 1));
+        vm.expectRevert("runtime nesting limit");
+        bot.execute(script(abi.encodePacked(uint8(1), runOp(nested, 0, 0, 0)), 1));
+        vm.expectRevert("runtime subprogram header"); bot.execute(script(hex"0108", 1));
+        vm.expectRevert("runtime subprogram mode"); bot.execute(script(hex"0108000002000002", 1));
+        vm.expectRevert("runtime slice bounds"); bot.execute(script(hex"0108000000000002", 1));
+        vm.expectRevert(stdError.indexOOBError);
+        bot.execute(script(abi.encodePacked(uint8(1), runOp(hex"01030000", 16, 0, 0)), 1));
+    }
+    function testChildRevertRollsBackAllEarlierCalls() public {
+        bytes memory p = bytes.concat(swapProgram(a, b, 20, 0), runOp(hex"0108", 0, 1, 0));
+        vm.expectRevert("runtime subprogram header"); bot.execute(script(p, 10));
+        assertEq(a.balanceOf(address(bot)), 1100); assertEq(b.balanceOf(address(bot)), 777);
+        assertEq(pool.received(), 0);
+    }
+    function testNormalSelfCallRestoresLegacyCallbackState() public {
+        RuntimeTestCallback cb = new RuntimeTestCallback();
+        bytes memory clear = abi.encodeWithSelector(BotVM.execSubscript.selector, hex"05");
+        bytes memory p = abi.encodePacked(uint8(1), callOp(address(bot), clear, "", 0, 0));
+        bytes memory payload = abi.encodeCall(RuntimeTestCallback.run, (script(swapProgram(a, b, 20, 0), 10)));
+        bot.execute(abi.encodePacked(hex"02000044", script(p, 1), uint8(0), address(cb), uint24(payload.length), payload));
+        assertEq(pool.received(), 10);
+    }
+
+    function testSingleProgramFastPathMatchesLegacyWrappedEntry() public {
+        bytes memory p = script(swapProgram(a, b, 20, 0), 10);
+        bot.execute(p);
+        assertEq(a.balanceOf(address(bot)), 1090);
+        assertEq(b.balanceOf(address(bot)), 797);
+        bot.execute(bytes.concat(hex"05", p));
+        assertEq(a.balanceOf(address(bot)), 1080);
+        assertEq(b.balanceOf(address(bot)), 817);
+    }
+
+    function testRuntimeProgramTrailingRevertIsNotSkipped() public {
+        bytes memory p = script(swapProgram(a, b, 20, 0), 10);
+        vm.expectRevert(bytes(hex"ab"));
+        bot.execute(bytes.concat(p, hex"0d000001ab"));
+        assertEq(a.balanceOf(address(bot)), 1100);
+        assertEq(b.balanceOf(address(bot)), 777);
+    }
+
+    function testAdjacentRuntimeSlicesKeepTheirOwnInput() public {
+        bot.execute(bytes.concat(script(swapProgram(a, b, 20, 0), 10),
+            script(swapProgram(a, b, 30, 0), 20)));
+        assertEq(pool.received(), 20);
+        assertEq(a.balanceOf(address(bot)), 1070);
+        assertEq(b.balanceOf(address(bot)), 827);
+    }
+
+    function testRuntimeSliceBoundsCannotReadTrailingMemory() public {
+        vm.expectRevert("runtime program bounds");
+        bot.execute(abi.encodePacked(uint8(14), uint256(1), uint24(5), hex"01030000"));
+        vm.expectRevert("runtime program header");
+        bot.execute(abi.encodePacked(uint8(14), uint256(1)));
+    }
+
+    function testLegacyStateChangesCannotReopenConsumedRuntimeCallback() public {
+        RuntimeTestCallback cb = new RuntimeTestCallback();
+        cb.configure(false, false, true);
+        // Clear then restore the legacy resume offset. This must not clear
+        // the runtime one-use sentinel packed into the same transient word.
+        bytes memory child = hex"0502000044";
+        bytes memory payload = abi.encodeCall(RuntimeTestCallback.run, (child));
+        vm.expectRevert("runtime external call");
+        bot.execute(script(abi.encodePacked(uint8(1), callOp(address(cb), payload, "", 68, 68)), 1));
+    }
+
+    function testNestedPackedRuntimeCallbacksRestoreOuterFrame() public {
+        RuntimeTestCallback outer = new RuntimeTestCallback();
+        RuntimeTestCallback inner = new RuntimeTestCallback();
+        bytes memory innerPayload = abi.encodeCall(RuntimeTestCallback.run, (script(swapProgram(a, b, 20, 0), 10)));
+        bytes memory child = script(abi.encodePacked(uint8(1), callOp(address(inner), innerPayload, "", 68, 68)), 1);
+        bytes memory outerPayload = abi.encodeCall(RuntimeTestCallback.run, (child));
+        bot.execute(script(abi.encodePacked(uint8(1), callOp(address(outer), outerPayload, "", 68, 68)), 1));
+        assertEq(a.balanceOf(address(bot)), 1090);
+        assertEq(b.balanceOf(address(bot)), 797);
+        // A new sibling scope must work after both nested scopes unwind.
+        bot.execute(script(abi.encodePacked(uint8(1), callOp(address(outer), outerPayload, "", 68, 68)), 1));
+        assertEq(a.balanceOf(address(bot)), 1080);
+        assertEq(b.balanceOf(address(bot)), 817);
     }
 }

@@ -8,6 +8,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { cleanupOldRunLogs, MANUAL_RUNS } from './bounded-live-run-cleanup.mjs';
 
 const DEFAULT_PROFILE = '/opt/mev-cloud/manual-live/profile.json';
 const UNIT = 'mev-manual-bounded-live.service';
@@ -54,13 +55,16 @@ export function makeRunConfig(base, profile, run) {
     SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE: '0', SEARCHER_TEST_DISABLE_DOTENV: '1',
     SEARCHER_ENABLE_BACKRUN: '0', SEARCHER_ENABLE_MEMPOOL: '0',
     SEARCHER_ENABLE_MEV_SHARE: '0', SEARCHER_ENABLE_HASH_ONLY: '0',
-    SEARCHER_BRIBE_BPS: '5000', SEARCHER_BRIBE_ALL_ABOVE_GAS: '0',
+    SEARCHER_BRIBE_BPS: '9900', SEARCHER_BRIBE_ALL_ABOVE_GAS: '0',
+    SEARCHER_BRIBE_GAS_BASIS: 'measured-gas',
     MEV_LIVE_MAX_WALLET_ETH: '0.2', BOTVM_OWNER: profile.wallet, BOTVM_ADDRESS: profile.executor,
     SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH: join(run, 'checkpoint.json'),
     SEARCHER_REVM_SIM_BIN: join(profile.release, 'runtime/listener/revm-sim/target/release/revm-sim'),
     SEARCHER_EVENTS_PATH: join(run, 'events.jsonl'),
     SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH: join(run, 'routes.jsonl'),
     SEARCHER_BLOCKSCAN_MID_HISTORY_PATH: join(run, 'mids.jsonl'),
+    SEARCHER_BLOCKSCAN_SOLVER_INPUTS_PATH: join(run, 'solver-inputs.jsonl'),
+    SEARCHER_BLOCKSCAN_SOLVER_INPUTS_MAX_BYTES: String(10 * 1024 ** 3),
     SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH: join(run, 'reverts.jsonl'),
     SEARCHER_CREDIT_LIVE_MARKER_PATH: join(run, 'standing-credit-not-authorized'),
     SEARCHER_LIVE_SESSION_PATH: join(run, 'permit.json'),
@@ -143,7 +147,11 @@ function privateRegular(file) {
   const info = lstatSync(file);
   assert(info.isFile() && !info.isSymbolicLink() && info.nlink === 1 && (info.mode & 0o077) === 0, 'private regular file required');
 }
-function verifyRelease(profile) {
+function assertStartDisk(runs) {
+  const disk = statfsSync(runs);
+  assert(disk.bavail * disk.bsize >= 4 * 1024 ** 3, 'at least 4 GiB free required');
+}
+function verifyRelease(profile, checkDisk = true) {
   assert.equal(profile.schemaVersion, 1); assert.equal(profile.chainId, 1);
   assert(/^0x[0-9a-f]{40}$/i.test(profile.wallet) && /^0x[0-9a-f]{40}$/i.test(profile.executor));
   for (const key of ['release', 'ready', 'runs', 'node', 'rpcFile']) assert(isAbsolute(profile[key]));
@@ -158,8 +166,7 @@ function verifyRelease(profile) {
   }
   assert.equal(sha(readFileSync(profile.ready)), release.readySha256, 'Ready reference changed');
   assert.equal(json(join(profile.release, 'checks.json')).passed, true, 'release checks incomplete');
-  const disk = statfsSync(profile.runs);
-  assert(disk.bavail * disk.bsize >= 4 * 1024 ** 3, 'at least 4 GiB free required');
+  if (checkDisk) assertStartDisk(profile.runs);
   return release;
 }
 function assertNoSearcher() {
@@ -206,13 +213,26 @@ async function receiveKey() {
 
 async function start(options, profile, release) {
   assert.equal(process.getuid(), 0, 'root required');
+  assert.equal(profile.runs, MANUAL_RUNS, 'cleanup is limited to the manual-live runs directory');
   assertNoSearcher(); assert(!existsSync(MARKER), 'existing live marker: review active owner first');
   const check = await inspector(profile);
   try {
     const key = await receiveKey();
     assert.equal(new check.ethers.Wallet(key).address.toLowerCase(), profile.wallet.toLowerCase(), 'signer mismatch');
+    // Repeat after network/human input waits; never clean while a previous supervisor is starting/stopping.
+    assertNoSearcher(); assert(!existsSync(MARKER), 'existing live marker');
+    const service = spawnSync('/usr/bin/systemctl', ['show', UNIT, '-p', 'MainPID', '-p', 'ActiveState'],
+      { encoding: 'utf8', timeout: 10000 });
+    assert.equal(service.status, 0, 'cannot establish previous service state');
+    assert(service.stdout.split('\n').includes('MainPID=0') &&
+      service.stdout.split('\n').includes('ActiveState=inactive'), 'previous service is not inactive');
     const runId = 'live-' + new Date().toISOString().replace(/[:.]/g, '-') + '-' + randomUUID().slice(0, 8);
     const run = join(profile.runs, runId); mkdirSync(run, { mode: 0o700 });
+    const cleanup = cleanupOldRunLogs(profile.runs, run, { apply: true });
+    console.log(JSON.stringify({ oldRunCleanup: true, deletedFiles: cleanup.deletedFiles,
+      deletedBytes: cleanup.deletedBytes, deletedAllocatedBytes: cleanup.deletedAllocatedBytes, audit: cleanup.audit }));
+    // Cleanup may recover a low disk, but it never bypasses the existing startup/renewal disk guards.
+    assertStartDisk(profile.runs);
     const credential = '/run/' + runId + '.credential.json';
     exclusiveJson(credential, { OWNER_PRIVATE_KEY: key });
     try {
@@ -361,15 +381,20 @@ export async function main(args) {
     const result = spawnSync('/usr/bin/systemctl', ['show', UNIT, '-p', 'ActiveState', '-p', 'SubState', '-p', 'MainPID'], { encoding: 'utf8' });
     console.log(result.stdout.trim()); return;
   }
-  const profile = json(options.profile), release = verifyRelease(profile);
+  const profile = json(options.profile), release = verifyRelease(profile, options.mode !== 'broadcast');
   assert.equal(realpathSync(process.argv[1]), join(profile.release, 'bounded-live-launcher.mjs'), 'entry point differs from configured release');
   if (options.mode === 'supervise') return supervise(options, profile, release);
   assertNoSearcher(); assert(!existsSync(MARKER), 'existing live marker');
   if (options.mode === 'broadcast') return start(options, profile, release);
+  assert.equal(profile.runs, MANUAL_RUNS);
+  const cleanup = cleanupOldRunLogs(profile.runs);
   const check = await inspector(profile);
   try { console.log(JSON.stringify({ checkOnly: true, signing: false, broadcast: false, head: check.head,
     blocks: options.blocks, walletBalanceWei: check.balance.toString(), release: profile.release,
-    readyGeneration: release.readyGeneration, readyReused: true, automaticRestart: false })); }
+    bribeBps: 9900, bribeGasBasis: 'measured-gas', gasLimitBufferBps: 3000,
+    readyGeneration: release.readyGeneration, readyReused: true, automaticRestart: false,
+    oldRunCleanup: { mode: 'preview', eligibleFiles: cleanup.files.length,
+      eligibleAllocatedBytes: cleanup.eligibleAllocatedBytes, skipped: cleanup.skipped } })); }
   finally { check.provider.destroy(); }
 }
 

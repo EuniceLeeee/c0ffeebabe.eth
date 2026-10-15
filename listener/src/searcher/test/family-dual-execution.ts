@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { RuntimeAmountProgram } from "../../adapters/runtime-amount-program.js";
@@ -120,6 +120,38 @@ test("every installed swap/protocol Family, including disabled entries, has both
     assert(["funding", "credit"].includes(p.manifest.domain));
     assert(p[p.manifest.domain], entry.familyId + " must retain its own domain capability");
   }
+});
+
+test("settlement capability audit covers installed and disabled Families without central identity rules", () => {
+  const inventory = installed.map(entry => {
+    const p: any = entry.plugin;
+    const directions = fixtures.filter(d => d.familyId === entry.familyId).flatMap(d => routes(d).map(r => {
+      const leg = build(d, r), capabilities = leg.settlement ?? {};
+      const requests: any[] = [];
+      if (capabilities.quoteOutput) requests.push({ kind: "quote-output" });
+      if (capabilities.directOutput) requests.push({ kind: "direct-output", recipient: origin });
+      if (capabilities.settleOutput) requests.push({ kind: "settle-output", recipient: origin, amountIn: 19n });
+      if (capabilities.deferredDebtInput) {
+        assert(capabilities.deferredInput, "debt-input capability requires a deferred recipient");
+        requests.push({ kind: "deferred-input", paymentAmount: 19n, paymentInput: "debt",
+          paymentProgram: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()) });
+      }
+      if (capabilities.deferredInput) requests.push({ kind: "deferred-input", paymentAmount: 19n,
+        paymentProgram: ethers.hexlify(new RuntimeAmountProgram().constant(1, 0n).bytes()) });
+      for (const request of requests) {
+        const result = p.execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: request });
+        assert(result, entry.familyId); assert.deepEqual(result.settlementRequest, request);
+        assert.deepEqual(result.settlement, capabilities);
+      }
+      return { instance: d.instanceKey, direction: r.direction, capabilities, requestContracts: requests.map(r => r.kind) };
+    }));
+    if (["swap", "protocol"].includes(p.manifest.domain)) assert(directions.length > 0, entry.familyId);
+    return { familyId: entry.familyId, domain: p.manifest.domain,
+      enabled: load.plugins.includes(entry), directions,
+      evidence: "offline emitter/request contract; not new historical admission or every-instance execution" };
+  });
+  if (process.env.RUNTIME_SETTLEMENT_AUDIT_OUT) writeFileSync(process.env.RUNTIME_SETTLEMENT_AUDIT_OUT, JSON.stringify(inventory, null, 2) + "\n");
+  assert.equal(new Set(inventory.map(x => x.familyId)).size, installed.length);
 });
 
 for (const d of fixtures) test(d.familyId + (d.variant ? ":" + d.variant : "") + ": all projected directions construct without a quoted amount and reject foreign tokens", () => {

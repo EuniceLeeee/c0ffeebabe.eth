@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { ethers } from "ethers";
+import type { BuilderEvidence } from "../shared/builder-observations.js";
 
 /**
  * Desensitized, append-only JSONL event emitter for the live searcher.
@@ -12,7 +13,8 @@ import { ethers } from "ethers";
  *
  * Hard rules (hot-path safety):
  *  - Opt-in: disabled unless SEARCHER_EVENTS_PATH is set → zero impact by default.
- *  - NEVER throws into the hot path (all fs wrapped; failure is swallowed).
+ *  - Ordinary emitEvent stays fail-open. Submission evidence uses the existing
+ *    runtime-stop path when persistence fails, before any further submission.
  *  - NEVER writes private keys, raw env, or full calldata — calldata is hashed.
  */
 
@@ -86,6 +88,7 @@ export function makeBlockScanOpportunityId(input: {
 }
 
 export type SearcherEvent =
+  | BuilderEvidence
   | {
       type: "protocol_discovery";
       adapter_id: string;
@@ -294,6 +297,19 @@ export function emitEvent(ev: SearcherEvent): void {
     }) + "\n");
   } catch {
     // never let event logging break submission
+  }
+}
+
+/** Reuse the formal event stream, but never silently lose submission-only evidence. */
+export function emitSubmissionEvidence(ev: BuilderEvidence): void {
+  if (!eventsPath) throw new Error("submission evidence requires SEARCHER_EVENTS_PATH");
+  try {
+    appendFileSync(eventsPath, JSON.stringify({ ...ev,
+      schema_version: EVENT_SCHEMA_VERSION, run_id: runId || "unknown",
+      chain_id: chainId, emitted_at_ms: Date.now(),
+    }) + "\n");
+  } catch {
+    throw new Error("submission evidence write failed");
   }
 }
 

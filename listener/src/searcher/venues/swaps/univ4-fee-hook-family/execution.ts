@@ -41,7 +41,7 @@ export const univ4FeeHookExecution = {
       throw new Error("univ4 fee-hook runtime hook binding diverged");
     }
     return buildV4RuntimeProgram({ descriptor: d, route: r, executor, actionAdapterId: "univ4-fee-hook-unlock",
-      hookData: hookDataFor(d, executor, r.direction === "zero-for-one") });
+      hookData: hookDataFor(d, executor, r.direction === "zero-for-one"), settlement: input.settlement });
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
