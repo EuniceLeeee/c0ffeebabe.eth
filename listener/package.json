@@ -415,7 +415,22 @@
     "searcher:infinifi-historical-ready": "node --import tsx src/searcher/venues/protocols/erc4626-family/test/historical-ready.ts",
     "searcher:infinifi-recipient-safety": "node --import tsx --test src/searcher/venues/protocols/erc4626-family/test/infinifi-recipient-safety.ts",
     "searcher:infinifi-recipient-evm": "node --import tsx src/searcher/venues/protocols/erc4626-family/test/infinifi-recipient-evm.ts",
-    "searcher:ekubo-erc20-recipient-evm": "node --import tsx src/searcher/venues/swaps/ekubo-family/test/erc20-recipient-evm.ts"
+    "searcher:ekubo-erc20-recipient-evm": "node --import tsx src/searcher/venues/swaps/ekubo-family/test/erc20-recipient-evm.ts",
+    "searcher:curve-plain-recipient-ready": "tsx src/searcher/venues/swaps/curve-plain-family/test/recipient-ready.ts",
+    "searcher:curve-plain-recipient-historical": "tsx src/searcher/venues/swaps/curve-plain-family/test/recipient-historical.ts",
+    "searcher:curve-plain-recipient-nomination-contract": "tsx --test src/searcher/venues/swaps/curve-plain-family/test/recipient-nomination.test.ts",
+    "searcher:curve-underlying-classic-recipient-ready": "tsx src/searcher/venues/swaps/curve-underlying-family/test/classic-recipient-ready.ts",
+    "searcher:curve-underlying-classic-recipient-historical": "tsx src/searcher/venues/swaps/curve-underlying-family/test/classic-recipient-historical.ts",
+    "searcher:kyber-settlement-contract": "tsx --test src/searcher/venues/swaps/kyberswap-elastic-family/test/settlement-contract.ts",
+    "searcher:kyber-settlement-ready": "tsx src/searcher/venues/swaps/kyberswap-elastic-family/test/settlement-ready.ts",
+    "searcher:kyber-settlement-historical": "tsx src/searcher/venues/swaps/kyberswap-elastic-family/test/settlement-historical.ts",
+    "searcher:erc4626-silo-historical-ready": "node --import tsx src/searcher/venues/protocols/erc4626-silo-redeem-family/test/historical-ready.ts",
+    "searcher:erc4626-silo-historical-recipient": "node --import tsx src/searcher/venues/protocols/erc4626-silo-redeem-family/test/historical-recipient.ts",
+    "searcher:erc4626-silo-recipient-safety": "node --import tsx --test src/searcher/venues/protocols/erc4626-silo-redeem-family/test/recipient-safety.ts",
+    "searcher:erc4626-silo-recipient-evm": "node --import tsx src/searcher/venues/protocols/erc4626-silo-redeem-family/test/recipient-evm.ts",
+    "searcher:algebra-settlement-contract": "tsx src/searcher/venues/swaps/algebra-integral-family/test/settlement-contract.ts",
+    "searcher:algebra-settlement-ready": "tsx src/searcher/venues/swaps/algebra-integral-family/test/settlement-ready.ts",
+    "searcher:algebra-settlement-historical": "tsx src/searcher/venues/swaps/algebra-integral-family/test/settlement-historical.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

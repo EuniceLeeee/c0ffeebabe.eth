@@ -38,6 +38,16 @@ for (const nativeIn of [true, false]) {
     fixtures[`direct${side}${recipient === actor ? "Self" : "External"}`] = ethers.hexlify(runtimeProgramScript(ethers.getBytes(
       applyRuntimeAssetBoundary({ route, executor: actor, leg: { actionAdapterId: "fixture-native", program: ethers.hexlify(direct.bytes()),
         settlementRequest: { kind: "direct-output", recipient } } }).program), amount));
+    const exact = applyRuntimeAssetBoundary({ route, executor: actor, inputToleranceRawUnits: 0n,
+      leg: { actionAdapterId: "fixture-native", program: ethers.hexlify(direct.bytes()),
+        settlementRequest: { kind: "direct-output", recipient } } });
+    fixtures[`direct${side}${recipient === actor ? "Self" : "External"}Tolerance0`] =
+      ethers.hexlify(runtimeProgramScript(ethers.getBytes(exact.program), amount));
+    const rounded = applyRuntimeAssetBoundary({ route, executor: actor,
+      leg: { actionAdapterId: "fixture-native", program: ethers.hexlify(direct.bytes()),
+        settlementRequest: { kind: "direct-output", recipient } } });
+    fixtures[`direct${side}${recipient === actor ? "Self" : "External"}OneUnit`] =
+      ethers.hexlify(runtimeProgramScript(ethers.getBytes(rounded.program), 1n));
   }
   const fragment = applyQuotedAssetBoundary({ route, executor: actor, amountIn: amount, minimum: 200n,
     fragment: { requirements: [], nodes: [{ adapterId: leg.actionAdapterId, target, tokenIn: route.tokenIn,

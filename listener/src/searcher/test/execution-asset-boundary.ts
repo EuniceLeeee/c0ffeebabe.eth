@@ -149,3 +149,62 @@ test("quoted transfer/approval requirements stay inside the inventory boundary",
   assert.equal(result.nodes[0].children[0].params.minimumAllowance, 100n);
   assert.equal(result.nodes[0].children[1].amount, 100n);
 });
+
+// Independent synthetic Family: the common boundary alone enforces its input
+// tolerance. The requested input is unchanged and output is a measured 137.
+function directRounding(nativeIn: boolean, external: boolean, tolerance: bigint, amount: bigint, debit: bigint) {
+  const receiver = "0x4444444444444444444444444444444444444444", stock = 777n, received = 137n;
+  const route = { tokenIn: nativeIn ? weth : token, tokenOut: nativeIn ? token : weth,
+    executionAssets: { input: nativeIn ? "native" as const : "erc20" as const,
+      output: nativeIn ? "erc20" as const : "native" as const } };
+  const raw = new RuntimeAmountProgram().call(target, rawCall.encodeFunctionData("exchange", [0n]), {
+    patches: [{ offset: 4, reg: 0 }], ...(nativeIn ? { valueReg: 0 } : {}) });
+  const request = { kind: "direct-output" as const, recipient: external ? receiver : actor };
+  const leg = applyRuntimeAssetBoundary({ route, executor: actor, inputToleranceRawUnits: tolerance,
+    leg: { actionAdapterId: "synthetic-rounding", program: ethers.hexlify(raw.bytes()),
+      settlement: { directOutput: true }, settlementRequest: request } });
+  const balances = new Map<string, bigint>();
+  const key = (t: string, a: string) => t.toLowerCase() + a.toLowerCase();
+  const get = (t: string, a: string) => balances.get(key(t, a))!;
+  const add = (t: string, a: string, n: bigint) => balances.set(key(t, a), get(t, a) + n);
+  for (const t of [token, weth]) for (const a of [actor, receiver]) balances.set(key(t, a), a === actor ? stock : 109n);
+  add(route.tokenIn, actor, amount); let native = stock, calls = 0;
+  const call = (c: RuntimeCall): string => {
+    const address = c.target.toLowerCase();
+    if (address === actor) {
+      const script = ethers.getBytes(subscript.decodeFunctionData("execSubscript", c.data)[0]);
+      inspectRuntime(ethers.hexlify(script.slice(36)), BigInt(ethers.hexlify(script.slice(1,33))), { call, nativeBalance: () => native }); return "0x";
+    }
+    if (address === target) {
+      calls++; assert.equal(rawCall.decodeFunctionData("exchange", c.data)[0], amount);
+      if (nativeIn) { assert.equal(c.value, amount); native -= debit; add(token, request.recipient, received); }
+      else { add(token, actor, -debit); native += received; }
+      return word(999n); // A lying return amount cannot become the delivered output.
+    }
+    if (c.data.startsWith(RUNTIME_ERC20.getFunction("balanceOf")!.selector))
+      return word(get(address, RUNTIME_ERC20.decodeFunctionData("balanceOf", c.data)[0]));
+    if (c.data.startsWith(RUNTIME_ERC20.getFunction("transfer")!.selector)) {
+      const [to, value] = RUNTIME_ERC20.decodeFunctionData("transfer", c.data); assert.equal(value, received);
+      add(address, actor, -value); add(address, to, value); return word(1n);
+    }
+    assert.equal(address, weth); const wrapped = RUNTIME_WRAP.parseTransaction({ data: c.data }); assert(wrapped);
+    if (wrapped.name === "withdraw") { assert.equal(wrapped.args[0], amount); add(weth, actor, -amount); native += amount; }
+    else { assert.equal(wrapped.name, "deposit"); add(weth, actor, c.value); native -= c.value; }
+    return "0x";
+  };
+  inspectRuntime(leg.program, amount, { call, nativeBalance: () => native });
+  assert.equal(calls, 1); assert.equal(native, stock); assert.equal(get(route.tokenIn, actor), stock + amount - debit);
+  assert.equal(get(route.tokenIn, receiver), 109n);
+  assert.equal(get(route.tokenOut, actor), stock + (external ? 0n : received));
+  assert.equal(get(route.tokenOut, receiver), 109n + (external ? received : 0n));
+}
+test("common direct boundary preserves full input and measured output with explicit zero/one residue", () => {
+  for (const nativeIn of [false, true]) for (const external of [false, true]) for (const tolerance of [0n, 1n]) {
+    directRounding(nativeIn, external, tolerance, 100n, 100n);
+    if (tolerance === 1n) directRounding(nativeIn, external, tolerance, 100n, 99n);
+    else assert.throws(() => directRounding(nativeIn, external, tolerance, 100n, 99n));
+    for (const debit of [98n, 0n, 101n]) assert.throws(() => directRounding(nativeIn, external, tolerance, 100n, debit));
+    assert.throws(() => directRounding(nativeIn, external, tolerance, 1n, 0n));
+  }
+  assert.throws(() => directRounding(false, false, 2n, 100n, 100n));
+});

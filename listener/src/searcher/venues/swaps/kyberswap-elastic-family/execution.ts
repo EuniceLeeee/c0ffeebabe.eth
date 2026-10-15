@@ -1,3 +1,4 @@
+import { kyberDirectOpening, kyberDirectClosing } from "./direct.js";
 import { ethers } from "ethers";
 import {
   RuntimeAmountProgram,
@@ -83,6 +84,10 @@ function buildKyberSwapRuntimeLeg(input: RuntimeInput) {
     isToken0 ? KYSWAP_DELTA0_OFFSET : KYSWAP_DELTA1_OFFSET,
   );
   const program = new RuntimeAmountProgram();
+  if(request?.kind==="direct-output"){
+    if(same(recipient,r.tokenIn)||same(recipient,r.tokenOut))throw new Error("kyber direct recipient aliases token");
+    kyberDirectOpening(program,r,executor,recipient);
+  }
   if(request?.kind==="deferred-input")runtimeDeferredOpeningFloor(program,r.tokenOut,executor,request.paymentAmount);
   program
     // `isExactInput = swapQty > 0`: a high bit must never select exact output.
@@ -111,6 +116,7 @@ function buildKyberSwapRuntimeLeg(input: RuntimeInput) {
         },
       },
     );
+  if(request?.kind==="direct-output")kyberDirectClosing(program,r,executor,recipient);
   if(request?.kind==="deferred-input")program.load(1,isToken0?0:32).equal(1,0);
   return {
     settlement:{directOutput:true as const,deferredInput:d.pool},...(request?{settlementRequest:request}:{}),

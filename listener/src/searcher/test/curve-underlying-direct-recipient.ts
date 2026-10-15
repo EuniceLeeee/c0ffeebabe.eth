@@ -227,3 +227,28 @@ test("Curve underlying unmodeled entry stays default-only through production iss
     assert.equal(h.build(i, { kind: "direct-output", recipient }), null);
   }
 });
+
+import { assertClassicRecipientWrapping } from "../venues/swaps/curve-underlying-family/test/classic-recipient-observation.js";
+test("ordinary ERC20 asset declarations require no executor wrapping, even with internal pool wrapping", () => {
+  const actor = "0x1000000000000000000000000000000000000002", pool = "0x1000000000000000000000000000000000000003";
+  const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+  const route = { tokenIn: "0x1000000000000000000000000000000000000004", tokenOut: weth,
+    executionAssets: { input: "erc20" as const, output: "erc20" as const } };
+  const internal = { from: pool, to: weth, input: "0xd0e30db0", value: "0x89" };
+  assert.deepEqual(assertClassicRecipientWrapping([internal], actor, route, 100n, 137n, 0n), { withdrawals: 0, deposits: 0 });
+  assert.throws(() => assertClassicRecipientWrapping([{ ...internal, from: actor }], actor, route, 100n, 137n, 0n));
+  const nativeRoute = { ...route, executionAssets: { input: "erc20" as const, output: "native" as const } };
+  assert.deepEqual(assertClassicRecipientWrapping([{ ...internal, from: actor }], actor, nativeRoute, 100n, 137n, 0n), { withdrawals: 0, deposits: 1 });
+  assert.throws(() => assertClassicRecipientWrapping([{ ...internal, from: actor, value: "0x88" }], actor, nativeRoute, 100n, 137n, 0n));
+});
+
+import { CURVE_UNDERLYING_I128_RECEIVER_INTERFACE, CURVE_UNDERLYING_UINT_RECEIVER_INTERFACE } from "../venues/swaps/curve-underlying-family/codec.js";
+test("actual classic receiver calldata is int128 and retains full amount and recipient", () => {
+  // Cropped successful real call from c270 N26138094; no original output borrowed.
+  const data = "0x44ee1986000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000004894282955f41f2c00000000000000000000000000000000000000000000000000000000000000010000000000000000000000001000000000000000000000000000000000000002";
+  assert(data.startsWith(CURVE_UNDERLYING_I128_RECEIVER_INTERFACE.getFunction("exchange_underlying")!.selector));
+  assert(!data.startsWith(CURVE_UNDERLYING_UINT_RECEIVER_INTERFACE.getFunction("exchange_underlying")!.selector));
+  const args = CURVE_UNDERLYING_I128_RECEIVER_INTERFACE.decodeFunctionData("exchange_underlying", data);
+  assert.deepEqual([...args], [0n, 1n, 5229849225284820780n, 1n, "0x1000000000000000000000000000000000000002"]);
+  assert.equal(CURVE_UNDERLYING_I128_RECEIVER_INTERFACE.encodeFunctionData("exchange_underlying", args), data);
+});

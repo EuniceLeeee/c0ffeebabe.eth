@@ -1,3 +1,4 @@
+import { algebraDirectOpening, algebraDirectClosing } from "./direct.js";
 import { ethers } from "ethers";
 import {
   RuntimeAmountProgram,
@@ -99,7 +100,9 @@ function buildAlgebraIntegralLeg(
     : null;
   const payment = deferred ?? runtimeCallbackPayment(r.tokenIn, d.pool, zeroForOne ? 4 : 36);
   const balance = ERC20_BALANCE_INTERFACE.encodeFunctionData("balanceOf", [executor]);
+  const outputBalance = ERC20_BALANCE_INTERFACE.encodeFunctionData("balanceOf", [recipient]);
   const program = new RuntimeAmountProgram();
+  if(request?.kind==="direct-output")algebraDirectOpening(program,r,executor,recipient);
   if(request?.kind==="deferred-input")runtimeDeferredOpeningFloor(program,r.tokenOut,executor,request.paymentAmount);
   program
     // amountRequired is signed. A high bit must never turn exact-input into
@@ -107,7 +110,7 @@ function buildAlgebraIntegralLeg(
     .constant(1, 255n).math("shr", 2, 0, 1).constant(3, 0n).equal(2, 3)
     .call(r.tokenIn, balance, { static: true }).load(4, 0);
   if (minAmountOut !== undefined) {
-    program.call(r.tokenOut, balance, { static: true }).load(5, 0);
+    program.call(r.tokenOut, outputBalance, { static: true }).load(5, 0);
   }
   program.call(
       d.pool,
@@ -135,6 +138,7 @@ function buildAlgebraIntegralLeg(
     // requires full exact-input consumption. Check both the returned input
     // delta and the actual executor debit; a fabricated return is not payment.
     .load(1, zeroForOne ? 0 : 32).equal(1, 0);
+  if(request?.kind==="direct-output")algebraDirectClosing(program,r,executor,recipient);
   // Deferred input is paid directly to the pool by the measured payment
   // program; no executor input balance is consumed by this terminal leg.
   if(request?.kind!=="deferred-input")program.call(r.tokenIn, balance, { static: true }).load(1, 0)
@@ -142,7 +146,7 @@ function buildAlgebraIntegralLeg(
   if (minAmountOut !== undefined) {
     // Checked subtraction enforces the quoted minimum against NEW receipts.
     // Neither a nominal returned output nor pre-existing inventory can pay it.
-    program.call(r.tokenOut, balance, { static: true }).load(1, 0)
+    program.call(r.tokenOut, outputBalance, { static: true }).load(1, 0)
       .math("sub", 2, 1, 5).constant(3, minAmountOut).math("sub", 2, 2, 3);
   }
   return { actionAdapterId: ALGEBRA_INTEGRAL_ADAPTER_ID, program: ethers.hexlify(program.bytes()),

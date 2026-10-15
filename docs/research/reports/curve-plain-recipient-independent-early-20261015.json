@@ -1,0 +1,204 @@
+{
+  "reviewer": "root non-author",
+  "result": "pass",
+  "scope": "Curve plain int128390f and uint4149 actual instances, four selected directions",
+  "reviews": [
+    {
+      "source": {
+        "number": 26152335,
+        "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+        "generation": 26152335
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence67/historical-int12867.json",
+        "sha256": "72178819c4462f07097fb6961bd7b51a71ae6d2e82abf255fdfeb543c8bdf707"
+      },
+      "counts": {
+        "rawBalanceChecks": 64,
+        "positive": 16,
+        "rollbackRejections": 24,
+        "postSuccessRollback": 12,
+        "zeroInputRejections": 8
+      },
+      "amounts": [
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "4987972",
+          "actualReceived": "4986894511446331504",
+          "label": "saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "49879720",
+          "actualReceived": "49868945040591016687",
+          "label": "ten-times-saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "4986894511446331504",
+          "actualReceived": "4986974",
+          "label": "saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "49868945114463315040",
+          "actualReceived": "49869744",
+          "label": "ten-times-saved-production-input-only"
+        }
+      ],
+      "status": "pass"
+    },
+    {
+      "source": {
+        "number": 26152335,
+        "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+        "generation": 26152335
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence67/historical-uintclone67.json",
+        "sha256": "b4063f5f10279bad35061c532a97e3ac93a200d5b70475d1f506d21cf52b0bf0"
+      },
+      "counts": {
+        "rawBalanceChecks": 64,
+        "positive": 16,
+        "rollbackRejections": 24,
+        "postSuccessRollback": 12,
+        "zeroInputRejections": 8
+      },
+      "amounts": [
+        {
+          "tokenIn": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "106378642455288485047",
+          "actualReceived": "264864006680737445193",
+          "label": "original-transaction-token-quantity"
+        },
+        {
+          "tokenIn": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "tokenOut": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "amountIn": "1063786424552884850470",
+          "actualReceived": "2626398974869942023709",
+          "label": "ten-times-original-transaction-token-quantity"
+        },
+        {
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "amountIn": "265363627991310138877",
+          "actualReceived": "105451874310261430511",
+          "label": "original-transaction-token-quantity"
+        },
+        {
+          "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+          "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+          "amountIn": "2653636279913101388770",
+          "actualReceived": "1045694482663158335850",
+          "label": "ten-times-original-transaction-token-quantity"
+        }
+      ],
+      "status": "pass"
+    }
+  ],
+  "method": "Independent raw slot deltas, full input calldata/value, output returns, WETH conversion, actor native balances, zero/revert storage union and post-success forced revert. No new execution.",
+  "limitations": [
+    "Input-only old production reference; no new natural valuation or original opportunity.",
+    "Remaining three Curve plain samples not included; existing underlying evidence unchanged.",
+    "New direct allowance clears; old quoted/runtime MAX approval behavior is preserved, not claimed as cleared.",
+    "No performance or exchange_extended callback claim.",
+    "Original run67 subsequent received5018 nomination-log gate failure preserved; no successful case rerun."
+  ],
+  "canonicalReconciliation": {
+    "query": [
+      "curve",
+      "plain",
+      "recipient"
+    ],
+    "manifest": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence67/selection67.json",
+    "sha256": "25ce1098c178cbce1767eedbeab8f966cc3cdfc488d68a6ed70c728f35370801",
+    "toolIds": [
+      "listener:searcher:curve-plain-recipient-historical"
+    ],
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-plain-recipient-historical",
+        "descriptor_sha256": "e53638f64baf48c77629f23b82df1c2a74d92a48364fb6f56629b8908380bc36",
+        "started_at": "2026-10-15T10:28:20.436Z",
+        "finished_at": "2026-10-15T10:28:25.355Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "00b14587330f28d4e320148fdbaadc7a2836322ec7c89988be1eac6db9fc13b8",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-plain-recipient-historical",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-plain-recipient65/ready-yearn67/ready.json",
+          "--reference",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-recipient-20261015.4_896o2d/ready07/prices/prices.json",
+          "--pool",
+          "0x390f3595bca2df7d23783dfd126427cceb997bf4",
+          "--recipient",
+          "0x1000000000000000000000000000000000000065",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-plain-recipient65/historical-int12867.json",
+          "--port",
+          "18965",
+          "--input-only-reference",
+          "1",
+          "--amount-source",
+          "reference"
+        ],
+        "stdout_sha256": "9057613a7d547d5a1bea7f20dad2df32c109c872196ed337fb6ebb6eb2f4f69b",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1569,
+        "stderr_bytes": 0
+      },
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:curve-plain-recipient-historical",
+        "descriptor_sha256": "e53638f64baf48c77629f23b82df1c2a74d92a48364fb6f56629b8908380bc36",
+        "started_at": "2026-10-15T10:28:25.906Z",
+        "finished_at": "2026-10-15T10:28:31.135Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "1f703f70c54583b34a3b844184b7adf4a21d591055420323bbd3beb992018ebf",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:curve-plain-recipient-historical",
+          "--",
+          "--ready",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-plain-recipient65/ready-yearn67/ready.json",
+          "--reference",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-recipient-20261015.4_896o2d/ready07/prices/prices.json",
+          "--pool",
+          "0x4149d1038575ce235e03e03b39487a80fd709d31",
+          "--recipient",
+          "0x1000000000000000000000000000000000000065",
+          "--rpc-file",
+          "/tmp/ds-rpc.json",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/curve-plain-recipient65/historical-uintclone67.json",
+          "--port",
+          "18965",
+          "--input-only-reference",
+          "1",
+          "--amount-source",
+          "receipt"
+        ],
+        "stdout_sha256": "0d754c80e4e217a589ed8ce79f51726ab00066cd5a0c23ba2172c4851b7ca879",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 1605,
+        "stderr_bytes": 0
+      }
+    ],
+    "result": "Independent raw recomputation agrees with already executed same-source canonical tools; successful executions reused, not repeated."
+  }
+}

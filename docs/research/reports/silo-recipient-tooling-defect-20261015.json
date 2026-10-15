@@ -1,0 +1,38 @@
+{
+  "id": "tooldef-20261015-silo-evm-shared-fixture-source-scope",
+  "kind": "tooling_defect",
+  "status": "fixed-and-regression-passed-awaiting-root-codify-commit",
+  "codify_commit": null,
+  "problem": "EVM wrapper rejected completed Silo 5/5 due a concurrent change in an unrelated Curve test assertion in the same Solidity source file. The imported standalone token, actual Silo artifact compiler input and production source were unchanged.",
+  "originalFailure": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/evm06.log",
+    "sha256": "0b55a03003760ee20775ac529a26701e5f6b61d2c83c0f1948ab16470d36653d"
+  },
+  "actualRun": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evm06/result.json",
+    "sha256": "63d7333f57a062243979c1a3fa5b8606a63eee23b2fb253f6179fed041d8fe2d"
+  },
+  "independentReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/v1-evm-source-reuse09.json",
+    "sha256": "d68fe04d00e278ea69c3a63e5982b567ff24af8e14820bbd520a03b22a5b1c59"
+  },
+  "fix": "Pin the entire shared source header and standalone CurveRecipientToken dependency; retain both full raw files for audit. Fail closed on missing/ambiguous boundaries and pin the helper itself.",
+  "regressions": [
+    "token or compiler pragma change changes dependency pin",
+    "unrelated Curve assertion change preserves dependency pin",
+    "changed standalone declaration or duplicate boundaries reject"
+  ],
+  "canonicalRegression": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence10/safety09.log",
+    "sha256": "efe75dbba7520cc14e47fb201c48a7a0a30bcfbac62c43f1e88ba2323135539f"
+  },
+  "canonicalSelection": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence10/selection09.json",
+    "sha256": "c230194af29bc9445fd21c654eeea5ce488bc4495119c256dfc5aee30585f955"
+  },
+  "certifiedReuse": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evm-certified-reuse10.json",
+    "sha256": "c4534bb8ec88d51ea0113471f65853478900356165302aed1ff684bf78614db3"
+  },
+  "repeatedEvmRuns": 0
+}

@@ -71,6 +71,12 @@ for (const [name, mode, recipientMode] of [
       leg: { ...raw, ...(request ? { settlementRequest: request } : {}) } });
     for (const amount of [0n, 1n, 100n]) programs[`${name}_${i}_${suffix}_${amount}`] =
       ethers.hexlify(runtimeProgramScript(ethers.getBytes(leg.program), amount));
+    if (request) {
+      const strict = applyRuntimeAssetBoundary({ route, executor: actor, inputToleranceRawUnits: 0n,
+        leg: { ...raw, settlementRequest: request } });
+      for (const amount of [1n, 100n]) programs[`${name}_${i}_${suffix}Strict_${amount}`] =
+        ethers.hexlify(runtimeProgramScript(ethers.getBytes(strict.program), amount));
+    }
   }
 }
 const forgeIndex = process.argv.indexOf("--forge-bin"), forge = forgeIndex < 0 ? "forge" : process.argv[forgeIndex + 1];

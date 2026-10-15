@@ -1810,7 +1810,7 @@
         "familyId": "curve-plain",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "208d4c8a124602dd96d82c43a564a390ffe858c454484ed13c5657310f3042c9",
+        "contentHash": "374e9d580c7d6804844a299abd53cf2f43b6799a1fa2471185627cfed08dee2d",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -1873,7 +1873,7 @@
         "familyId": "curve-plain",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "e3cfa05b47aa3a5f7eb6775acb30de1190869c0dcf3b35e5dc869729f4828196",
+        "contentHash": "712e31ad864cabf46902f503f15015545821f28f8299f9c1cefdfb605bf70c72",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -4382,7 +4382,7 @@
         "familyId": "custom-swap:uniswap-v1",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "43ec1610f9cb44d4a5728ea0812b1efe7633611f723990fc144cf03e6b2a86f2",
+        "contentHash": "5d027de3b25887163d5d218e4a0109f88f5225ad15dc64b63a0a3a9287d187e3",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -5919,7 +5919,7 @@
         "familyId": "kyberswap-elastic",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "e31ee05c691568acd0feda9c877c32352e2ae46894e001ff0c86932101d4051b",
+        "contentHash": "539b23c17af70aa748c49bdff282cfae57b038a08846f4293b202f188127f41b",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -5936,6 +5936,7 @@
           "src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
           "src/searcher/venues/swaps/kyberswap-elastic-family/action.ts",
           "src/searcher/venues/swaps/kyberswap-elastic-family/codec.ts",
+          "src/searcher/venues/swaps/kyberswap-elastic-family/direct.ts",
           "src/searcher/venues/swaps/kyberswap-elastic-family/manifest.ts",
           "src/shared/executor/amount-rounding.ts"
         ],
@@ -14490,7 +14491,7 @@
         "familyId": "swap:algebra-integral",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "f095b07d94d7ae34c59c5078ab88a0987ffe75e92d984663d32daefb5a439727",
+        "contentHash": "7d716e6d16a42747b579f1b057dc105a62ef36d98cd22ba7be570dd1ab41972e",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -14504,6 +14505,7 @@
           "src/searcher/venues/swaps/algebra-integral-family/abi.ts",
           "src/searcher/venues/swaps/algebra-integral-family/action.ts",
           "src/searcher/venues/swaps/algebra-integral-family/codec.ts",
+          "src/searcher/venues/swaps/algebra-integral-family/direct.ts",
           "src/searcher/venues/swaps/algebra-integral-family/instance.ts",
           "src/searcher/venues/swaps/algebra-integral-family/manifest.ts",
           "src/searcher/venues/swaps/algebra-integral-family/routes.ts",
@@ -15557,7 +15559,7 @@
         "familyId": "univ4",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "4fb5c1804d446496d3f7be6a2355a6970fbb92e79421fe3cc501ca067f799fd6",
+        "contentHash": "34cc7d38077d6831ef92e8124ef3555180e8c6c396edbda0d834212b18acab6a",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -15904,7 +15906,7 @@
         "familyId": "univ4-fee-hook",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "bd1d467d861fb713ccfa9516c639fa8385ffe18d843eecd8e4e7e33fb9a3b6a0",
+        "contentHash": "7c141e91b2a7832744a73a8f0085cb0045d15df996fae646e0818b80477c61ef",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -15957,7 +15959,7 @@
         "familyId": "univ4-fee-hook",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "33d328704da6e5d3f01178b65d34c301be68b915a7050ff73506e6871d6a9fd4",
+        "contentHash": "13989ffb5bf5e68724e2be72389c100e70e16cd38e7dc78d666a275a3e70fec0",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -16570,5 +16572,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "40346478b3b767f32f540b1229806b1467ad4af93c2a5bbae5894a04cc896800"
+  "artifactHash": "b72d0cc3e3d2dfbef440d95a435b9bb89c5ab6bae8460329fb08857e7f65165d"
 }

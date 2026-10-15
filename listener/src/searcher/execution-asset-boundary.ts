@@ -7,7 +7,7 @@ import type { PlanFragment } from "./venues/route-leg-adapter.js";
 import type { FamilyRouteDescriptor } from "./venues/adapter-family-plugin.js";
 import { runtimeExecutor, runtimeNativeBoundary, RUNTIME_ERC20 } from "./venues/runtime-execution.js";
 import { planFragmentNodes } from "./solver/plan-fragment-requirements.js";
-import { assertExecutionRounding } from "../shared/executor/amount-rounding.js";
+import { assertExecutionRounding, MAX_EXECUTION_ROUNDING_RAW_UNITS } from "../shared/executor/amount-rounding.js";
 
 type RouteAssets = Pick<FamilyRouteDescriptor, "tokenIn" | "tokenOut" | "executionAssets">;
 const BOUNDARY_ACTION = "execution-asset-boundary";
@@ -179,9 +179,10 @@ function envelope(input: {
   // final repayment/conservation checks.
   p.call(input.route.tokenIn, balance, { static: true }).load(4, 0).math("sub", 4, 4, 2);
   if (input.recipient !== undefined) {
-    // Explicit direct settlement uses exact positive debit, as does the
-    // settlement composer. The default/quoted refund policy is unchanged.
-    p.constant(5, 0n).equal(4, 5);
+    // Retain only the declared 0/1 raw-unit rounding residue. A positive
+    // actual debit is mandatory; final composer conservation is unchanged.
+    p.constant(5, input.inputToleranceRawUnits ?? 0n).math("sub", 5, 5, 4)
+      .math("sub", 5, 0, 4).constant(6, 1n).math("sub", 5, 5, 6);
     if (external) {
       if (sides.output) p.call(input.route.tokenOut, balance, { static: true }).load(9, 0).math("sub", 9, 9, 3)
         .call(input.route.tokenOut, RUNTIME_ERC20.encodeFunctionData("transfer", [recipient, 0n]), {
@@ -211,7 +212,7 @@ function envelope(input: {
 
 /** Called unconditionally by the production execution issuer for every Family. */
 export function applyRuntimeAssetBoundary(input: {
-  route: RouteAssets; executor: string; leg: RuntimeAmountLeg;
+  route: RouteAssets; executor: string; leg: RuntimeAmountLeg; inputToleranceRawUnits?: bigint;
 }): RuntimeAmountLeg {
   if (!executionNativeSides(input.route)) return input.leg;
   if (input.leg.settlementRequest?.kind === "quote-output") return input.leg;
@@ -220,7 +221,8 @@ export function applyRuntimeAssetBoundary(input: {
     return Object.freeze({ ...input.leg, program: ethers.hexlify(deferredEnvelope(input.route, input.executor, input.leg).bytes()) });
   }
   const program = envelope({ ...input,
-    ...(input.leg.settlementRequest?.kind === "direct-output" ? { recipient: input.leg.settlementRequest.recipient } : {}),
+    ...(input.leg.settlementRequest?.kind === "direct-output" ? { recipient: input.leg.settlementRequest.recipient,
+      inputToleranceRawUnits: input.inputToleranceRawUnits ?? MAX_EXECUTION_ROUNDING_RAW_UNITS } : {}),
     script: runtimeProgramScript(ethers.getBytes(input.leg.program)),
     amountPatch: 1, minimum: 1n });
   return Object.freeze({ ...input.leg, program: ethers.hexlify(program.bytes()) });

@@ -1,0 +1,53 @@
+{
+  "reviewer": "root non-author",
+  "result": "source-approved-pending-build-canonical-EVM-and-historical-flip",
+  "files": [
+    {
+      "path": "test/CurvePlainRecipient.t.sol",
+      "before": "349f8b1aa5d607d2afe3dbd5fe17388a6574b4f3f47223930f1b0a8f76ae138b",
+      "after": "a8887e5bde09cdc2a1c604e1fe7662819a6129cce4fec5dfcf173d8699f007a9"
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "before": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872",
+      "after": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
+    },
+    {
+      "path": "listener/src/searcher/test/execution-asset-boundary.ts",
+      "before": "4476788648c85fce15625ecfbcf37ef4c223db9e5ec5960f7b0c1c5051dea6d9",
+      "after": "3ca92b2047cb83ce20ec3056e06ea68766f4436a7b41e2cc9b1d118b7b2202ea"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/native.ts",
+      "before": "5cccac5c3b91b76a9aa0e3964ae65848ca08ce549c66fe9485888f54ac2b4a98",
+      "after": "9197503b20ba1edef51c13cd864852409ac00326699b060fb9f2401fdd8ffee8"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-runtime-evm.ts",
+      "before": "0c124729c2ee9b302c3213fe4f02c0ac959d510fe89cee7659635fe9ef331111",
+      "after": "475f42a8e5636a83458228fbeba6dbcfc11910d7885d6e7e54ec93ae647be394"
+    }
+  ],
+  "firstFailure": {
+    "path": "evidence71/historical-native2171.json",
+    "sha256": "6e7ad7618cdf1f04c1be60bd78669e1e3e05065737cff815d6844ee1cd29078e"
+  },
+  "invariants": [
+    "A unchanged in quote/request/patch; residual=actualAfter−(actualBefore−A) is nonnegative, so no old stock spend",
+    "residual≤explicit0/1 (assertExecutionRounding); A−residual≥1 forbids zero debit",
+    "runtime direct uses existing MAX1; explicit0 remains exact; quoted/default/deferred existing branches untouched",
+    "Native received measured and equals actual WETH minted; chosen recipient measured, external actor output and receiver input old balances preserved",
+    "Common boundary contains no Curve ABI or protocol amount logic; Family token share rounding remains in native direct emitter",
+    "Composer final repayment/profit/conservation remains exact and unchanged"
+  ],
+  "validationPlan": [
+    "Current shared native boundary/rounding and all-family direct/runtime regression",
+    "Curve real BotVM EVM: self/external1 remainder accepted, explicit0 rejects1,2 rejects,zero-debit rejects; native/token inventory and approvals unchanged",
+    "SameN new actual four previously failed direct executions; prior12 positive evidence reuse requires documented semantic compatibility, not source hash rewriting"
+  ],
+  "scopeLimits": [
+    "Source review alone is not correctness acceptance",
+    "Central changed common source requires compatibility record for reused evidence; retain original source hashes",
+    "No natural pricing, opportunity or performance promotion"
+  ]
+}

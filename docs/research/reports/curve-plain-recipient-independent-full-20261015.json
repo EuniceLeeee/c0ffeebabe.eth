@@ -1,0 +1,141 @@
+{
+  "reviewer": "root non-author",
+  "result": "pass",
+  "scope": "Curve plain full runtime4ebdf actual six directions; 16 prior complete +32 reobserved old positives; no new positive EVM",
+  "reviews": [
+    {
+      "source": {
+        "number": 26152607,
+        "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+        "generation": 26152607
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence69/historical-uintfull69.json",
+        "sha256": "56071507eec4f1bea7faf8ad537bc92d8c51e5ff55d02bdbb36afb4852aff4b7"
+      },
+      "counts": {
+        "rawBalanceChecks": 64,
+        "positive": 16,
+        "rollbackRejections": 24,
+        "postSuccessRollback": 12,
+        "zeroInputRejections": 8
+      },
+      "amounts": [
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "4971888498478890783",
+          "actualReceived": "14425735980503005851",
+          "label": "saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "49718884984788907830",
+          "actualReceived": "144250363783204279621",
+          "label": "ten-times-saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "14426089979341487579",
+          "actualReceived": "4966641112142941478",
+          "label": "saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "144260899793414875790",
+          "actualReceived": "49663338394566158694",
+          "label": "ten-times-saved-production-input-only"
+        }
+      ],
+      "status": "pass"
+    },
+    {
+      "source": {
+        "number": 26152607,
+        "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+        "generation": 26152607
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence70/historical-uintfull70.json",
+        "sha256": "f5ac7d91c21648ce55cf560e2e8f6abd1b03e771d649befcd166e8c8ad8eccd9"
+      },
+      "counts": {
+        "rawBalanceChecks": 128,
+        "positive": 32,
+        "rollbackRejections": 48,
+        "postSuccessRollback": 24,
+        "zeroInputRejections": 16
+      },
+      "amounts": [
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "4971888498478890783",
+          "actualReceived": "1999215392738658",
+          "label": "saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "49718884984788907830",
+          "actualReceived": "19991517251080600",
+          "label": "ten-times-saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "2000000000000000",
+          "actualReceived": "4968490041421524814",
+          "label": "saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+          "amountIn": "20000000000000000",
+          "actualReceived": "49682947553271528135",
+          "label": "ten-times-saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "2000000000000000",
+          "actualReceived": "14423668742553113754",
+          "label": "saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "tokenOut": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "amountIn": "20000000000000000",
+          "actualReceived": "144232289437589142033",
+          "label": "ten-times-saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "14426089979341487579",
+          "actualReceived": "1998185021196129",
+          "label": "saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "144260899793414875790",
+          "actualReceived": "19981108931992680",
+          "label": "ten-times-saved-production-input-only"
+        }
+      ],
+      "status": "pass"
+    }
+  ],
+  "method": "Independent raw slot deltas, full input calldata/value, output returns, WETH conversion, actor native balances, zero/revert storage union and post-success forced revert. No new execution.",
+  "limitations": [
+    "Input-only old production reference; no new natural valuation or original opportunity.",
+    "Other four Curve plain sample reports separate. Pool-internal WETH wrapping is not executor wrapping.",
+    "New direct allowance clears; old quoted/runtime MAX approval behavior is preserved, not claimed as cleared.",
+    "No performance or exchange_extended callback claim.",
+    "Original uintfull69 failed observation report remains failed/immutable; later70 only reobserves its positives and adds previously unrun negative controls."
+  ]
+}

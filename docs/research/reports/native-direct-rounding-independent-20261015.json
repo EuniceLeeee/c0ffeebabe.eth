@@ -1,0 +1,37 @@
+{
+  "reviewer": "v1_accept26",
+  "scope": "Read-only common source compatibility and canonical EVM receipt/log review; no new historical run.",
+  "verdict": "compatible-with-explicit-policy-scope",
+  "before": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/source75/listener/src/searcher/execution-asset-boundary.ts",
+    "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+  },
+  "after": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/actual/listener/src/searcher/execution-asset-boundary.ts",
+    "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
+  },
+  "reasoning": [
+    "ERC20 executionNativeSides=false returns input.leg at line217 before new branch.",
+    "Only direct-native explicit recipient path changes residue==0 to declared0/1 checked subtraction and positive A-residue. Original r0/request input unchanged.",
+    "Default/quoted/deferred use unchanged branches; explicit0 keeps exact gate; any Family stricter exact-input check remains independently enforced.",
+    "Old fully debited native positive results satisfy new default1. Old1unit-residue rejection proves old policy only and cannot be promoted to a new-default rejection.",
+    "Inventory wrapper may reference unchanged historical behavior hash plus current common source/receipts; it must not rewrite raw source hashes or label unverified family behavior verified."
+  ],
+  "evidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/actual/shared82/boundary82-checks.json",
+      "sha256": "9c01e2ab44d03abd43ab1f3de10b9e509cd8fbad4bd04cfef000ef1886f0aa86"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/actual/shared82/boundary82-evm.log",
+      "sha256": "66f58cdea3dfeb347b4845ba2589b1d146ed3e5340c6ef6a20a98bd18b7585a0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/actual/shared82/boundary82-selection.json",
+      "sha256": "a891f377a8e9380e2f157e3dc4e6d83fc93327df4dc805f08ec299ecc6010143"
+    }
+  ],
+  "actualEvm": "10passed0failed canonical listener:searcher:execution-asset-boundary-evm, /opt/mev-cloud/family-runtime-20261007/logs/native-boundary-evm-JgQU27",
+  "originalFailure": "shared81 old default0 test assertion failure preserved; corrected test explicit0 and default1 matrix is separate82",
+  "limit": "Native over-debit case with debt>request can be refused by synthetic protocol itself; separate overspendNative regression independently verifies old-native-inventory protection."
+}

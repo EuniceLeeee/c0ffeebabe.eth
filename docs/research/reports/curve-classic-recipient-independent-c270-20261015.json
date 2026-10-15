@@ -1,0 +1,202 @@
+{
+  "reviewer": "root non-author",
+  "result": "pass",
+  "scope": "Curve classic c270 rateSlot16,12 directions P/10P,48 prior actual positives reobserved,48 zero+96 fault newly completed;0 new positive EVM",
+  "reviews": [
+    {
+      "source": {
+        "number": 26138094,
+        "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+        "generation": 26138094
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence77/historical-c27077.json",
+        "sha256": "4a3f8cc713fbf096c0c75041ae35a2b269a12c71af0ea6d374011f47746ca168"
+      },
+      "counts": {
+        "rawBalanceChecks": 192,
+        "positive": 48,
+        "zeroInputRejections": 48,
+        "rollbackRejections": 96,
+        "postSuccessRollback": 48
+      },
+      "amounts": [
+        {
+          "tokenIn": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "5229849225284820780",
+          "actualReceived": "5210396146358215826",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "52298492252848207800",
+          "actualReceived": "52092507451469353746",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "5229849225284820780",
+          "actualReceived": "5210375",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "52298492252848207800",
+          "actualReceived": "52092302",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "5229849225284820780",
+          "actualReceived": "5210787",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "52298492252848207800",
+          "actualReceived": "52096415",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "amountIn": "5214783887446096727",
+          "actualReceived": "5229011700113918919",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "amountIn": "52147838874460967270",
+          "actualReceived": "52280138294031307516",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "5214783887446096727",
+          "actualReceived": "5213983",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "52147838874460967270",
+          "actualReceived": "52139833",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "5214783887446096727",
+          "actualReceived": "5214339",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "52147838874460967270",
+          "actualReceived": "52143393",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "amountIn": "5215240",
+          "actualReceived": "5229485305763094675",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "amountIn": "52152400",
+          "actualReceived": "52284871602885283511",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "5215240",
+          "actualReceived": "5214476023658747892",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "52152400",
+          "actualReceived": "52144760222265780283",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "5215240",
+          "actualReceived": "5214813",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "52152400",
+          "actualReceived": "52148137",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "amountIn": "5215904",
+          "actualReceived": "5229849225284820780",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+          "amountIn": "52159040",
+          "actualReceived": "52288516475548732098",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "5215904",
+          "actualReceived": "5214783887446096727",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "52159040",
+          "actualReceived": "52147838862826396135",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "5215904",
+          "actualReceived": "5214765",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "52159040",
+          "actualReceived": "52147655",
+          "label": "ten-times-declared-input-only"
+        }
+      ],
+      "status": "pass"
+    }
+  ],
+  "method": "Raw balance slots, full input/receiver int128 calldata, actual return/output/native preservation, no executor wrapping, negative storage union and successful operation followed by rollback.",
+  "limitations": [
+    "Original75/76 failures preserved; observerABI and wrapping/allowance assumptions corrected, independent source review and canonical regressions bound separately.",
+    "Existing MAX or MAX−A approval retained; not claimed as zero.",
+    "No natural valuation/opportunity/performance upgrade. Other2 actual rateSlot10 instances pending."
+  ]
+}

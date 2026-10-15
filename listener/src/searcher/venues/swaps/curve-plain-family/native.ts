@@ -88,7 +88,11 @@ export function nativeRecipientProgram(pool: string, tokenIn: string, tokenOut: 
     runtimeClearApproval(p, tokenIn, pool);
     const approval = new ethers.Interface(["function allowance(address,address) view returns(uint256)"]);
     p.call(tokenIn, approval.encodeFunctionData("allowance", [actor, pool]), { static: true }).load(1, 0).equal(1, 15)
-      .call(tokenIn, balance, { static: true }).load(1, 0).equal(1, 6).nativeBalance(1);
+      .call(tokenIn, balance, { static: true }).load(1, 0);
+    // Token share conversion may retain one raw unit; never permit zero debit
+    // or spending pre-existing input inventory. The outer boundary selects 0/1.
+    p.math("sub", 2, 4, 1).constant(3, 1n).math("sub", 2, 2, 3)
+      .math("sub", 1, 1, 6).constant(2, MAX_EXECUTION_ROUNDING_RAW_UNITS).math("sub", 1, 2, 1).nativeBalance(1);
   }
   p.math("sub", 1, 1, 5).constant(2, minimum).math("sub", 1, 1, 2);
   if (external) p.call(tokenOut, balance, { static: true }).load(1, 0).equal(1, 7)

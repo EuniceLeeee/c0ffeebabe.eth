@@ -1,0 +1,98 @@
+{
+  "schema": "shared-active-callback-authentication-reuse/v1",
+  "status": "authenticated reuse; no new EVM execution",
+  "scope": "Shared BotVM active callback caller authentication using a synthetic Yearn auction; paired with separately proven valid historical Kyber/Algebra callbacks. Does not turn inactive historical no-op probes into active wrong-caller tests.",
+  "test": "YearnAuctionSettlementTest.testCallbackAuthenticationDebtReceiptsAndRollback",
+  "fault": 12,
+  "codeEvidence": {
+    "relay": "lines 22-24: external relay invokes actor with unchanged callback and propagates revert",
+    "activeScope": "lines 53-60: output has transferred, legitimate auction callback is pending; fault12 calls from new Relay instead of auction",
+    "assertions": "lines 169-177: fault1..20 expect revert, actor/protocol balances unchanged, prefix calls=0, auction stage=0"
+  },
+  "execution": {
+    "exitCode": 0,
+    "passed": 9,
+    "failed": 0,
+    "stdout": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/callback78/logs/yearn-settlement-evm-9zMZ0d/forge.stdout.log",
+      "sha256": "15ba0b84bbbcebe5067878467b01b5e64174e07edf7420de843b33db13a5fa67"
+    },
+    "result": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/callback78/logs/yearn-settlement-evm-9zMZ0d/result.json",
+      "sha256": "ba14992ae73255f3110e2c28eab0a9df99949ee845143f1392a0705e48f249bd"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/callback78/logs/yearn-settlement-evm-9zMZ0d/out/BotVM.sol/BotVM.json",
+      "sha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/callback78/logs/yearn-settlement-evm-9zMZ0d/out/YearnAuctionSettlement.t.sol/YearnAuctionSettlementTest.json",
+      "sha256": "567ad9e0f8312f6225af0e79b2b0f02a2a9745c700ce336a2523009dba001545"
+    }
+  ],
+  "testSource": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/callback78/test/YearnAuctionSettlement.t.sol",
+    "sha256": "ac9f4ed61f5aaaaec213d6023178f2f8f276b926bfbff8341dc92da87c1ea42a"
+  },
+  "compilerSourceBindings": [
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "compilerKeccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f",
+      "metadataMatches": true
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+      "compilerKeccak256": "0xf139ad9c54d2b073a8dfff0c39e5742d4c270e92daa957817be88f4a80355565",
+      "metadataMatches": true
+    },
+    {
+      "path": "src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+      "compilerKeccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751",
+      "metadataMatches": true
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+      "compilerKeccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d",
+      "metadataMatches": true
+    }
+  ],
+  "current": {
+    "Kyber": {
+      "snapshot": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/current77.json",
+        "sha256": "48d0f9df3f5dce4191ab2c7e8f74f8d944210f411e1607a12db047419774ece7"
+      },
+      "sameSources": {
+        "src/BotVM.sol": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+        "src/RuntimeAmountVM.sol": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+        "listener/src/adapters/runtime-amount-program.ts": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      }
+    },
+    "Algebra": {
+      "snapshot": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/source-current73.json",
+        "sha256": "6349b3c63360ee9ac2cfa31f0ed76d7da1235df6ad8b698a67df125d66e91c84"
+      },
+      "sameSources": {
+        "src/BotVM.sol": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+        "src/RuntimeAmountVM.sol": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+        "listener/src/adapters/runtime-amount-program.ts": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      }
+    }
+  },
+  "canonical": {
+    "tool": "listener:searcher:yearn-auction-family-callback-evm",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/selection06.json",
+    "manifestSha256": "03094109aafc94f26ef6e3590acd5019923b2d65b6347ec01e73a294ce1b2ab5",
+    "originalValidationReport": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yearn51/docs/research/reports/yearn-callback-validation-20261015.json",
+      "sha256": "a73aaa0e3e8d332842f4070029b0e563706f40a57f96f4b9f872bf3088c2d7ce"
+    }
+  }
+}

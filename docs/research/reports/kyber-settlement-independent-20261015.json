@@ -1,0 +1,192 @@
+{
+  "reviewer": "root non-author",
+  "status": "pass-scoped-new-direct-and-deferred-correctness",
+  "counts": {
+    "trials": 37,
+    "rawBalanceChecks": 1184,
+    "inactiveNoop": 148,
+    "positive": 148,
+    "deferred": 74,
+    "rejections": 740,
+    "direct-self": 37,
+    "direct-external": 37
+  },
+  "rawEvidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber-settlement70.json",
+      "sha256": "2045d73a88f5fd583467ee44243117c8dc7a17ca3c7bf7e6a44297d1a60b582b",
+      "source": {
+        "number": 25953136,
+        "hash": "0xb73f8d872cbdd73737bc1101674b9532685777189209f1fbe6b5cd6ebefc879a",
+        "generation": 25953136
+      },
+      "tx": "0x023fd22564532537a14977836049e12e8df706c4872020a9302fdfbb383230d5",
+      "pool": "0xf138462c76568cdfd77c6eb831e973d6963f2006",
+      "sourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+      "counts": {
+        "deferred": 8,
+        "rejections": 80,
+        "direct-self": 4,
+        "direct-external": 4
+      }
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber2-settlement70.json",
+      "sha256": "a4862355f8ad7aa359fff95f128c043f0171d27731f3d10a026d9c726d5d6d9a",
+      "source": {
+        "number": 26030898,
+        "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+        "generation": 26030898
+      },
+      "tx": "0x10b81a77dc9949d9ab1581a341d539de2ab0fbeae827b2a87d9ea6033c9b7549",
+      "pool": "0x952ffc4c47d66b454a8181f5c68b6248e18b66ec",
+      "sourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+      "counts": {
+        "deferred": 8,
+        "rejections": 80,
+        "direct-self": 4,
+        "direct-external": 4
+      }
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber3-settlement70.json",
+      "sha256": "575b04f2b6e3ea09483f17beb0fac9519136816574fb4c9333e76361485d5d67",
+      "source": {
+        "number": 26005915,
+        "hash": "0xf4caf43faa7a0c6fe62b6e72b9c4a7e606f15574f5227617dfff6836b7678c3c",
+        "generation": 26005915
+      },
+      "tx": "0x063cb9e8ddb89e7f516b2e690a722d058bf4ae5603eb243aecb5a87d1f53af8c",
+      "pool": "0xf8e8a26c991c502af2e105e2e13a8c17e0b023fc",
+      "sourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+      "counts": {
+        "deferred": 10,
+        "rejections": 100,
+        "direct-self": 5,
+        "direct-external": 5
+      }
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber4-settlement70.json",
+      "sha256": "1df9da8d4413ee57c7cc4919c78686fb22efb3c28edf0fed3757a3663ee24ec7",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+        "generation": 25944594
+      },
+      "tx": "0x0cee3de057693e9f0a5d5a560b75a465766828e42661f7bea4ae64a432f97ae5",
+      "pool": "0x7d697d789ee19bc376474e0167bade9535a28cf4",
+      "sourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+      "counts": {
+        "deferred": 8,
+        "rejections": 80,
+        "direct-self": 4,
+        "direct-external": 4
+      }
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber5-settlement70.json",
+      "sha256": "ad12bfac5efca284bc3e4c481d560af19b335994da6fcf2e6da32c70b712e0d8",
+      "source": {
+        "number": 26056774,
+        "hash": "0xe0dcbdd7d2032694612cdef6b22969475f21e194e5a2f8a754ec9ce1aaf10125",
+        "generation": 26056774
+      },
+      "tx": "0x9ba449c162417df21a12982f6762aa2ff7c52bbb18af4bf45c513a6d38072f1f",
+      "pool": "0xc5d2fcd426a648b2cabf14aabafc9a87801d4b40",
+      "sourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+      "counts": {
+        "deferred": 8,
+        "rejections": 80,
+        "direct-self": 4,
+        "direct-external": 4
+      }
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber6-settlement70.json",
+      "sha256": "58f9bae76271f7ffa0a5b455fdb217a6609890f0f3d1a0c17507a613755670fc",
+      "source": {
+        "number": 26143115,
+        "hash": "0x4872a838c097f5d2f1e19aecd85ac30a982ed6d2b5f27e73130f13b5ccf6614a",
+        "generation": 26143115
+      },
+      "tx": "0xbedbb4ec997899d15e3895e5ce698bc22ad2064d213a339d5a6902ee713c8363",
+      "pool": "0x81df0049443f5d037f92518fbb509e0ee50333ce",
+      "sourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+      "counts": {
+        "deferred": 8,
+        "rejections": 80,
+        "direct-self": 4,
+        "direct-external": 4
+      }
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber7-settlement70.json",
+      "sha256": "e48e492c534d2760e159a70e0918d53aaa905ddddf1e58b4d1eb3f48147e347d",
+      "source": {
+        "number": 26043137,
+        "hash": "0x4467ae30bbef9de8bb212af230e977d5ee2018350bd0007efa82d8956836fa8b",
+        "generation": 26043137
+      },
+      "tx": "0x32d2b7740192b1235a0a12975f04cdbb283820ae0f2b967e653787d75cd5d6e8",
+      "pool": "0x0d6154b875df5cc0a1cbb315065b6d2fdb364e8d",
+      "sourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+      "counts": {
+        "deferred": 8,
+        "rejections": 80,
+        "direct-self": 4,
+        "direct-external": 4
+      }
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber8-settlement70.json",
+      "sha256": "51cc0914ddb528a625066fc7f580a565d8cff2d26fd752bf330b5176525b264a",
+      "source": {
+        "number": 26013881,
+        "hash": "0xa310c7b1f99e8e8d969284661953a157640ea0c17d489f1bb2ddfd7c32148cfa",
+        "generation": 26013881
+      },
+      "tx": "0x38fff90705c91affd21f8fbca1d0e5861eccdc166a5547400c55402e47293769",
+      "pool": "0xaed94908236484f69ad4f748bfb856b378be21e8",
+      "sourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+      "counts": {
+        "deferred": 8,
+        "rejections": 80,
+        "direct-self": 4,
+        "direct-external": 4
+      }
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber9-settlement70.json",
+      "sha256": "10ccf06f68a7d1b52ed1b45407f53aa42c55f2e2877c71a30656f9f70076111d",
+      "source": {
+        "number": 26037069,
+        "hash": "0x4f8c0a000c63ed28a878eb22dc6802b2317cd032c43d1a2f134f66d079dba55a",
+        "generation": 26037069
+      },
+      "tx": "0xc30dc9101049767e50f2f56fe6031e8b341d47196a109021cad3d383a3e9ef82",
+      "pool": "0xfe4c6a8b22ee09592c01f801b791af0042ee69c0",
+      "sourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+      "counts": {
+        "deferred": 8,
+        "rejections": 80,
+        "direct-self": 4,
+        "direct-external": 4
+      }
+    }
+  ],
+  "checks": [
+    "Independent actual pool swap fullA and recipient, signed return deltas and callback debt words",
+    "Actual actor/funder/pool/receiver token balances independently read from raw storage diff and matched expected debit/output; non-spending old stock",
+    "Deferred begins with0 or101 opening input, actual fixture supplies fullA to real pool and consumes1 fresh output; production composer retained",
+    "All740 negatives raw trace reverted and union of storage/code/native state unchanged except transaction sender gas/nonce",
+    "148 inactive callbacks truly inert, separately scoped from active wrong-caller attacks",
+    "Exact quotes bind sameN and actual execution; runtime construction no Exact/quoted/RPC or fallback"
+  ],
+  "limits": [
+    "Funding fixture is synthetic second leg and not a market/profit/opportunity proof",
+    "Prior default execution reuse still needs old/common source compatibility record",
+    "Historical source fcc97af retained; no natural valuation, new block discovery or performance promotion"
+  ],
+  "canonicalReconciliation": "Original canonical tool-index/tool-run receipts included in compact-report70 and checks68/69/70; this raw review does not rerun execution."
+}

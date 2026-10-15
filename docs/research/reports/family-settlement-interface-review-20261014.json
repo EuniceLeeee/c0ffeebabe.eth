@@ -72,7 +72,7 @@
     },
     {
       "path": "listener/src/searcher/execution-asset-boundary.ts",
-      "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+      "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
     },
     {
       "path": "listener/src/searcher/identity-asset-metadata.ts",
@@ -287,8 +287,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/aqua-settlement-behavior-20261015.json",
-            "sha256": "de98223f149421d36be907350798df58fcce34598375d33c0c81c8521056d5d5"
+            "path": "docs/research/reports/current-native-boundary-reuse-f92817cd221ac997-20261015.json",
+            "sha256": "3d449bd4a2b64acba97493ee2f69cc02ec329cede7a95525de782e101ed943e2"
           }
         },
         {
@@ -312,8 +312,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/aqua-settlement-behavior-20261015.json",
-            "sha256": "de98223f149421d36be907350798df58fcce34598375d33c0c81c8521056d5d5"
+            "path": "docs/research/reports/current-native-boundary-reuse-f92817cd221ac997-20261015.json",
+            "sha256": "3d449bd4a2b64acba97493ee2f69cc02ec329cede7a95525de782e101ed943e2"
           }
         }
       ],
@@ -535,8 +535,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/balancer-v2-settlement-behavior-20261014.json",
-            "sha256": "bb97a0431d36a68d498e5be028b553d04aea4a5a13dcc3864851e81217d214ce"
+            "path": "docs/research/reports/current-native-boundary-reuse-c6af07b95b9ca690-20261015.json",
+            "sha256": "f9e1246d646547e2f2190a2547e14c288282999b9c8b50898f2d61997efb91b9"
           }
         }
       ],
@@ -884,16 +884,46 @@
           "callback": "none",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "缺本模式当前源码下指定收款方实际执行与拒绝证据。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
+              "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
             }
-          ]
+          ],
+          "scope": {
+            "modeScope": [
+              "quote+quoted",
+              "runtime",
+              "direct-self",
+              "direct-external"
+            ],
+            "rounding": "Full request A stays unchanged; native token-input actualdebit A−1 accepted at explicit tolerance1, tolerance0 rejects; actualdebit0/overdebit/2residue reject. Actual output feeds boundary; repayment/profit/conservation unchanged.",
+            "nativeRepair": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/repair76/handoff.json",
+              "sha256": "14b27bf60041899e8c428f8ff566631df980bcf648477cde8b4a2459d639a7ea"
+            },
+            "nativeCorrection": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/native81-corrected83.json",
+              "sha256": "8cb4c278cfdd6edd32c2b2472265eb97d121010bf8e91a68bcc94d3c0b477376"
+            },
+            "carriedNativeFacts": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/native71-carried-author-review76.json",
+              "sha256": "8e174d5e5dffb3ba1357513d77e47f4b0f28751a0ece6eb27d9feba6056b21d3"
+            },
+            "counting": "112 effective positive results, not112 newly rerun. native71 contributes12 successful rows, native81only4 new direct rows; uintfull70reobserved32 old successful traces.",
+            "approval": "New direct temporary approval clears0. Existing quoted/runtime ERC20 standingMAX/MAX−A retained. Native paths actualallowance0.",
+            "deferred": "No output-first/deferred-input declaration. Optimized implementations expose input-first exchange_extended; this round executes exchange receiver, not exchange_extended callback."
+          },
+          "executionEvidence": {
+            "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
+            "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+          }
         },
         {
           "id": "exchange int128 old caller-only implementations",
@@ -914,22 +944,50 @@
         {
           "id": "exchange int128 crvUSD factory clones",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "历史 clone runtime 绑定了实现地址，但缺同历史区块实现 runtime。",
-            "实际 5 参数 receiver 可用；当前 exchange 仅 4 参数且 directOutput 未接。",
-            "缺新收款方模式执行证据。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
+              "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
             }
-          ]
+          ],
+          "scope": {
+            "modeScope": [
+              "quote+quoted",
+              "runtime",
+              "direct-self",
+              "direct-external"
+            ],
+            "rounding": "Full request A stays unchanged; native token-input actualdebit A−1 accepted at explicit tolerance1, tolerance0 rejects; actualdebit0/overdebit/2residue reject. Actual output feeds boundary; repayment/profit/conservation unchanged.",
+            "nativeRepair": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/repair76/handoff.json",
+              "sha256": "14b27bf60041899e8c428f8ff566631df980bcf648477cde8b4a2459d639a7ea"
+            },
+            "nativeCorrection": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/native81-corrected83.json",
+              "sha256": "8cb4c278cfdd6edd32c2b2472265eb97d121010bf8e91a68bcc94d3c0b477376"
+            },
+            "carriedNativeFacts": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/native71-carried-author-review76.json",
+              "sha256": "8e174d5e5dffb3ba1357513d77e47f4b0f28751a0ece6eb27d9feba6056b21d3"
+            },
+            "counting": "112 effective positive results, not112 newly rerun. native71 contributes12 successful rows, native81only4 new direct rows; uintfull70reobserved32 old successful traces.",
+            "approval": "New direct temporary approval clears0. Existing quoted/runtime ERC20 standingMAX/MAX−A retained. Native paths actualallowance0.",
+            "deferred": "No output-first/deferred-input declaration. Optimized implementations expose input-first exchange_extended; this round executes exchange receiver, not exchange_extended callback."
+          },
+          "executionEvidence": {
+            "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
+            "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+          }
         },
         {
           "id": "exchange-uint optimized full runtime",
@@ -937,39 +995,95 @@
           "identity": "verified",
           "callback": "input-first",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "实际 receiver 与 exchange_extended 输入先付回调均未接线。",
-            "该回调先校验输入 delta==dx 再出款，不能声明 output-first/deferredInput。",
-            "缺收款方/回调模式的当前源码行为与拒绝证据；非 payable extended 不支持 native 输入。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
+              "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
             }
-          ]
+          ],
+          "scope": {
+            "modeScope": [
+              "quote+quoted",
+              "runtime",
+              "direct-self",
+              "direct-external"
+            ],
+            "rounding": "Full request A stays unchanged; native token-input actualdebit A−1 accepted at explicit tolerance1, tolerance0 rejects; actualdebit0/overdebit/2residue reject. Actual output feeds boundary; repayment/profit/conservation unchanged.",
+            "nativeRepair": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/repair76/handoff.json",
+              "sha256": "14b27bf60041899e8c428f8ff566631df980bcf648477cde8b4a2459d639a7ea"
+            },
+            "nativeCorrection": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/native81-corrected83.json",
+              "sha256": "8cb4c278cfdd6edd32c2b2472265eb97d121010bf8e91a68bcc94d3c0b477376"
+            },
+            "carriedNativeFacts": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/native71-carried-author-review76.json",
+              "sha256": "8e174d5e5dffb3ba1357513d77e47f4b0f28751a0ece6eb27d9feba6056b21d3"
+            },
+            "counting": "112 effective positive results, not112 newly rerun. native71 contributes12 successful rows, native81only4 new direct rows; uintfull70reobserved32 old successful traces.",
+            "approval": "New direct temporary approval clears0. Existing quoted/runtime ERC20 standingMAX/MAX−A retained. Native paths actualallowance0.",
+            "deferred": "No output-first/deferred-input declaration. Optimized implementations expose input-first exchange_extended; this round executes exchange receiver, not exchange_extended callback."
+          },
+          "executionEvidence": {
+            "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
+            "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+          }
         },
         {
           "id": "exchange-uint optimized clone",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "input-first",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "历史 clone runtime 已绑定，实现同历史区块 runtime 未绑定。",
-            "实际 receiver 与输入先付回调未接线；native 精确 msg.value 输入会绕过回调。",
-            "缺新收款方/回调模式执行证据，不能声明 deferredInput。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
+              "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
             }
-          ]
+          ],
+          "scope": {
+            "modeScope": [
+              "quote+quoted",
+              "runtime",
+              "direct-self",
+              "direct-external"
+            ],
+            "rounding": "Full request A stays unchanged; native token-input actualdebit A−1 accepted at explicit tolerance1, tolerance0 rejects; actualdebit0/overdebit/2residue reject. Actual output feeds boundary; repayment/profit/conservation unchanged.",
+            "nativeRepair": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/repair76/handoff.json",
+              "sha256": "14b27bf60041899e8c428f8ff566631df980bcf648477cde8b4a2459d639a7ea"
+            },
+            "nativeCorrection": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/native81-corrected83.json",
+              "sha256": "8cb4c278cfdd6edd32c2b2472265eb97d121010bf8e91a68bcc94d3c0b477376"
+            },
+            "carriedNativeFacts": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/native71-carried-author-review76.json",
+              "sha256": "8e174d5e5dffb3ba1357513d77e47f4b0f28751a0ece6eb27d9feba6056b21d3"
+            },
+            "counting": "112 effective positive results, not112 newly rerun. native71 contributes12 successful rows, native81only4 new direct rows; uintfull70reobserved32 old successful traces.",
+            "approval": "New direct temporary approval clears0. Existing quoted/runtime ERC20 standingMAX/MAX−A retained. Native paths actualallowance0.",
+            "deferred": "No output-first/deferred-input declaration. Optimized implementations expose input-first exchange_extended; this round executes exchange receiver, not exchange_extended callback."
+          },
+          "executionEvidence": {
+            "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
+            "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+          }
         },
         {
           "id": "exchange-uint Tricrypto2 legacy",
@@ -990,22 +1104,50 @@
         {
           "id": "native-exchange newer stETH clone",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "历史 clone 已绑定，缺同历史区块实现 runtime。",
-            "实际可指定 receiver，当前仅 4 参数；native 出款还须保留 WETH 边界。",
-            "缺新收款方模式执行证据；付款 raw_call 不是债务结算 continuation。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
+              "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
             }
-          ]
+          ],
+          "scope": {
+            "modeScope": [
+              "quote+quoted",
+              "runtime",
+              "direct-self",
+              "direct-external"
+            ],
+            "rounding": "Full request A stays unchanged; native token-input actualdebit A−1 accepted at explicit tolerance1, tolerance0 rejects; actualdebit0/overdebit/2residue reject. Actual output feeds boundary; repayment/profit/conservation unchanged.",
+            "nativeRepair": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/repair76/handoff.json",
+              "sha256": "14b27bf60041899e8c428f8ff566631df980bcf648477cde8b4a2459d639a7ea"
+            },
+            "nativeCorrection": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/native81-corrected83.json",
+              "sha256": "8cb4c278cfdd6edd32c2b2472265eb97d121010bf8e91a68bcc94d3c0b477376"
+            },
+            "carriedNativeFacts": {
+              "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/native71-carried-author-review76.json",
+              "sha256": "8e174d5e5dffb3ba1357513d77e47f4b0f28751a0ece6eb27d9feba6056b21d3"
+            },
+            "counting": "112 effective positive results, not112 newly rerun. native71 contributes12 successful rows, native81only4 new direct rows; uintfull70reobserved32 old successful traces.",
+            "approval": "New direct temporary approval clears0. Existing quoted/runtime ERC20 standingMAX/MAX−A retained. Native paths actualallowance0.",
+            "deferred": "No output-first/deferred-input declaration. Optimized implementations expose input-first exchange_extended; this round executes exchange receiver, not exchange_extended callback."
+          },
+          "executionEvidence": {
+            "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
+            "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+          }
         },
         {
           "id": "native-exchange legacy stETH pool",
@@ -1089,7 +1231,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -1121,19 +1263,19 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
-          "sha256": "f2d01a805f9a47e10900f52696ec89784365aeb7c567c68a3c7f338b13a735e2"
+          "sha256": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-plain-family/execution.ts",
-          "sha256": "df03913c60df766bd8e4c665fc506b4aac2db9fd0ee1fc972ca2182d4e690695"
+          "sha256": "35771544ec5276e38f6050076ef937a0155b997f436ccedd0cc49337d8d50fd8"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
-          "sha256": "e75201a70f15497e5feb423d04e9ea3c6e350bdceaa22a7c888e92ab784668b4"
+          "sha256": "62490e83fec328b0e9420e84cfea78b256d2c2d3568af362162288596e0a252b"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-plain-family/instance.ts",
-          "sha256": "da365034326e82a78e2e02a2871129dd7c934265ebdf93c6fbc933a0b6dda5ce"
+          "sha256": "d5e237eb1e2dd588c79ee2f5e6a142fe58c190e1ca0c03eeb84b5007aa03f210"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-plain-family/manifest.ts",
@@ -1145,11 +1287,15 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-plain-family/native.ts",
-          "sha256": "ac16f40a03cc658fa0d350d1299f736a20f771e414922954299da40a747d9714"
+          "sha256": "9197503b20ba1edef51c13cd864852409ac00326699b060fb9f2401fdd8ffee8"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/recipient.ts",
+          "sha256": "73780154dcc3828a8ec231a355f64b7319b33f14616d6999ba43498d1707ce7c"
         },
         {
           "path": "listener/src/searcher/venues/swaps/curve-plain-family/routes.ts",
-          "sha256": "f770fd40376e1a5ad2406816edaaf4b8e6e57e1349289c63d7a8e198fa4acff1"
+          "sha256": "f19cf1164c368af5334151fc600203a9e18aacd32a717330402268a30db460d0"
         },
         {
           "path": "listener/src/shared/constants/addresses.ts",
@@ -1165,8 +1311,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-        "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+        "path": "docs/research/reports/current-interface-curve-plain-20261015.json",
+        "sha256": "ebb61e9bad1921d875a47ac93a8535af7f47e0dfa9669917f5224d80b4e39e5b"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
+        "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
       }
     },
     {
@@ -1180,16 +1330,33 @@
           "callback": "none",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "实际 pool/implementation/base 及对应利率 profile 已绑定；缺当前 5 参数指定收款方模式执行与拒绝证据。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-underlying-classic-recipient-correctness-20261015.json",
+              "sha256": "f0646c7ad3ebc81083efd4d2f4e14d75b3223c44e95a8ff9f4bf368fc7c51f41"
             }
-          ]
+          ],
+          "scope": {
+            "modeScope": [
+              "direct-self",
+              "direct-external"
+            ],
+            "existingDefault": "Old default quoted/runtime, FRAX26direct and nativeAlias64positive outcomes retain their existing evidence, are not rerun or counted in144.",
+            "approval": "Existing classic standingMAX/MAX−A authorization retained; no temporaryclearance claim.",
+            "rounding": "All144actualinputdebit equals fullrequest; output equals same-statequote exactly.",
+            "counting": "48 c270positive EVMs originally75 are reobserved77 with new negatives; BAC/USTP79provide96new positives.",
+            "deferred": "Actual exchange_underlying pulls input before output, no deferred callback support claimed."
+          },
+          "executionEvidence": {
+            "path": "docs/research/reports/curve-underlying-classic-recipient-behavior-20261015.json",
+            "sha256": "a8b4eeb42f32d4c18816924743b2d1ffa0198ca66512e14bf1e9469448f35a27"
+          }
         },
         {
           "id": "classic meta/3pool 0x2c7796c0590cc100d70af473993890d457cb2ac9 rateSlot10",
@@ -1198,16 +1365,33 @@
           "callback": "none",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "实际 pool/implementation/base 及对应利率 profile 已绑定；缺当前 5 参数指定收款方模式执行与拒绝证据。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-underlying-classic-recipient-correctness-20261015.json",
+              "sha256": "f0646c7ad3ebc81083efd4d2f4e14d75b3223c44e95a8ff9f4bf368fc7c51f41"
             }
-          ]
+          ],
+          "scope": {
+            "modeScope": [
+              "direct-self",
+              "direct-external"
+            ],
+            "existingDefault": "Old default quoted/runtime, FRAX26direct and nativeAlias64positive outcomes retain their existing evidence, are not rerun or counted in144.",
+            "approval": "Existing classic standingMAX/MAX−A authorization retained; no temporaryclearance claim.",
+            "rounding": "All144actualinputdebit equals fullrequest; output equals same-statequote exactly.",
+            "counting": "48 c270positive EVMs originally75 are reobserved77 with new negatives; BAC/USTP79provide96new positives.",
+            "deferred": "Actual exchange_underlying pulls input before output, no deferred callback support claimed."
+          },
+          "executionEvidence": {
+            "path": "docs/research/reports/curve-underlying-classic-recipient-behavior-20261015.json",
+            "sha256": "a8b4eeb42f32d4c18816924743b2d1ffa0198ca66512e14bf1e9469448f35a27"
+          }
         },
         {
           "id": "legacy meta implementation 0x5f8908 (generic registry routes)",
@@ -1230,8 +1414,8 @@
           ],
           "scope": "Actual FRAX instance N14274089, 12 directions. Reuse 26 historical external direct and 26 zero controls after source compatibility review; no new EVM or hypothetical generic instance claim.",
           "executionEvidence": {
-            "path": "docs/research/reports/curve-underlying-frax-reused-behavior-20261015.json",
-            "sha256": "0b6b7151110ff2e3fdd2218b7f884e2cc1a2e661074d98ce681d7852e11ca351"
+            "path": "docs/research/reports/current-native-boundary-reuse-be442d7f802f8006-20261015.json",
+            "sha256": "8b4c9dbfd1945448b2943d790961a3840ce31e761abff4632e8db1df2b21cc5e"
           }
         },
         {
@@ -1254,8 +1438,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/curve-underlying-native-recipient-behavior-20261015.json",
-            "sha256": "375deb280b755e3ad0cc52745d953778087f2bd99fec763f2e62ef04a940f61b"
+            "path": "docs/research/reports/current-native-boundary-reuse-f3071cca6078f74d-20261015.json",
+            "sha256": "7f826b04039440a8da8cc5abc885f091b5176de5eff3d67a1e828719db9556c8"
           },
           "evidenceNote": "Actual selected-scope historical behavior independently reviewed; old evidence links retained."
         },
@@ -1283,8 +1467,8 @@
             "sha256": "8790134d094ccc7615425a5d40ac9d55237334f425aabad2ed3bd049aab470ad"
           },
           "executionEvidence": {
-            "path": "docs/research/reports/curve-underlying-native-recipient-behavior-20261015.json",
-            "sha256": "375deb280b755e3ad0cc52745d953778087f2bd99fec763f2e62ef04a940f61b"
+            "path": "docs/research/reports/current-native-boundary-reuse-f3071cca6078f74d-20261015.json",
+            "sha256": "7f826b04039440a8da8cc5abc885f091b5176de5eff3d67a1e828719db9556c8"
           },
           "evidenceNote": "Actual selected-scope historical behavior independently reviewed; old evidence links retained."
         },
@@ -1461,13 +1645,13 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/curve-underlying-native-recipient-interface-review-20261015.json",
-        "sha256": "3d6631cc314ebd3654d8b4435880abd0e69ea304b7d0b720a491ec2dfae35ee0"
+        "path": "docs/research/reports/current-interface-curve-underlying-20261015.json",
+        "sha256": "b72b71b735c88c9875d88bd1c5727ed8979bf771e0dfc2ddc6e8ddee0fa58e93"
       },
       "preservedPriorSourceReport": null,
       "currentScopedEvidence": {
-        "path": "docs/research/reports/curve-underlying-native-recipient-correctness-20261015.json",
-        "sha256": "8790134d094ccc7615425a5d40ac9d55237334f425aabad2ed3bd049aab470ad"
+        "path": "docs/research/reports/curve-underlying-classic-recipient-correctness-20261015.json",
+        "sha256": "f0646c7ad3ebc81083efd4d2f4e14d75b3223c44e95a8ff9f4bf368fc7c51f41"
       }
     },
     {
@@ -1840,8 +2024,8 @@
           ],
           "scope": "Actual no-extension USDC/0xd9fcd... both directions, self/external direct N25943731, amount-only donors retained.",
           "executionEvidence": {
-            "path": "docs/research/reports/ekubo-erc20-recipient-behavior-20261015.json",
-            "sha256": "3812969b6a78db26fa4c31d5a53f3236e49588a844786a2f15e2f2c4bdf3ec5f"
+            "path": "docs/research/reports/current-native-boundary-reuse-daa810016afa2bd5-20261015.json",
+            "sha256": "16373a1ccad67bf741dcdeee59e06d56e0e96d0db2962b54b89a0c23f3b3f0c3"
           }
         },
         {
@@ -1869,8 +2053,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/ekubo-native-recipient-reuse-behavior-20261015.json",
-            "sha256": "3d6c63ac1b11144357c6dfd4b174a7264d9672db7bc601c59355207a16b07cf9"
+            "path": "docs/research/reports/current-native-boundary-reuse-c5cdbde94254b038-20261015.json",
+            "sha256": "db64c163a83dd2b45ae74d1f850e717ee57ca040827e8b6f6d9c7c298c7cd515"
           }
         }
       ],
@@ -1992,8 +2176,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/univ1-settlement-behavior-20261015.json",
-            "sha256": "c723b87a5e379e5ce5e302226bc94b3a2d7b4d9ae055eb6417fc98ad71ffd140"
+            "path": "docs/research/reports/current-native-boundary-reuse-cc9a06b083883b8a-20261015.json",
+            "sha256": "e39637ac5c215fad7063f6964fec34b86652281c4f5550746fc1073e5e65e8f0"
           },
           "evidenceNote": "standard and issuerFee, both directions, quote/quoted/runtime plus self/external TransferInput. Sixteen historical zero-amount rejections (not unchanged-calldata missing-funding trials); 25 local EVM tests supply targeted faults and rollback. Standard identity extension remains pre-existing peer dirty work."
         },
@@ -2017,8 +2201,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/univ1-settlement-behavior-20261015.json",
-            "sha256": "c723b87a5e379e5ce5e302226bc94b3a2d7b4d9ae055eb6417fc98ad71ffd140"
+            "path": "docs/research/reports/current-native-boundary-reuse-cc9a06b083883b8a-20261015.json",
+            "sha256": "e39637ac5c215fad7063f6964fec34b86652281c4f5550746fc1073e5e65e8f0"
           },
           "evidenceNote": "standard and issuerFee, both directions, quote/quoted/runtime plus self/external TransferInput. Sixteen historical zero-amount rejections (not unchanged-calldata missing-funding trials); 25 local EVM tests supply targeted faults and rollback. Standard identity extension remains pre-existing peer dirty work."
         },
@@ -2042,8 +2226,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/univ1-settlement-behavior-20261015.json",
-            "sha256": "c723b87a5e379e5ce5e302226bc94b3a2d7b4d9ae055eb6417fc98ad71ffd140"
+            "path": "docs/research/reports/current-native-boundary-reuse-cc9a06b083883b8a-20261015.json",
+            "sha256": "e39637ac5c215fad7063f6964fec34b86652281c4f5550746fc1073e5e65e8f0"
           },
           "evidenceNote": "standard and issuerFee, both directions, quote/quoted/runtime plus self/external TransferInput. Sixteen historical zero-amount rejections (not unchanged-calldata missing-funding trials); 25 local EVM tests supply targeted faults and rollback. Standard identity extension remains pre-existing peer dirty work."
         },
@@ -2067,8 +2251,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/univ1-settlement-behavior-20261015.json",
-            "sha256": "c723b87a5e379e5ce5e302226bc94b3a2d7b4d9ae055eb6417fc98ad71ffd140"
+            "path": "docs/research/reports/current-native-boundary-reuse-cc9a06b083883b8a-20261015.json",
+            "sha256": "e39637ac5c215fad7063f6964fec34b86652281c4f5550746fc1073e5e65e8f0"
           },
           "evidenceNote": "standard and issuerFee, both directions, quote/quoted/runtime plus self/external TransferInput. Sixteen historical zero-amount rejections (not unchanged-calldata missing-funding trials); 25 local EVM tests supply targeted faults and rollback. Standard identity extension remains pre-existing peer dirty work."
         }
@@ -2085,7 +2269,7 @@
         },
         {
           "path": "listener/src/searcher/execution-asset-boundary.ts",
-          "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+          "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
         },
         {
           "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
@@ -2556,27 +2740,36 @@
     },
     {
       "familyId": "kyberswap-elastic",
-      "coverage": "partial",
+      "coverage": "complete",
       "variants": [
         {
           "id": "existing single/multitick exact-input pool",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "output-first",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "N25953136 反向 factory Ready/旧双执行已定位，但 Ready 无 poolCodeHash；当前代码不等于独立 N 字节绑定。",
-            "新 direct/deferred 实际执行未验证；单独 flash 入口未选用。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidenceNote": "deployed source f138 reviewed; saved N25953136 reverse factory Ready and old dual history located",
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
               "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+            },
+            {
+              "path": "docs/research/reports/kyber-settlement-actual-correctness-20261015.json",
+              "sha256": "7188426054396fed66b0cf9ef9f88241157fec6a7ae89a568d2dc98035936344"
+            },
+            {
+              "path": "docs/research/reports/kyber-settlement-independent-20261015.json",
+              "sha256": "7a794065245d51eb9f1f9293f6cea880979d73cf55c10441c214d9a617b61f6a"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/kyber-settlement-current-behavior-20261015.json",
+            "sha256": "164ef2daaf8a473c26cd482f00a525024be90a07dd6aa7c0464dfa2b20a65c54"
+          }
         }
       ],
       "sourceReport": "eight-family-interface-review-20261014.json",
@@ -2588,7 +2781,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -2635,8 +2828,12 @@
           "sha256": "f489f3eae03405d95c002e49366db210353ba079ca0564ff9f1f6534194b0e2f"
         },
         {
+          "path": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/direct.ts",
+          "sha256": "b850f95daee1d245308c0f1ae6d163d2954c64630b966318d3e22fe651be5b12"
+        },
+        {
           "path": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/execution.ts",
-          "sha256": "61ade0c68cb66cfc1b85b4c8ef5cb3beef7202da08d0dca621bbc3d16e431ab4"
+          "sha256": "ec8ed5308ef1812d40eaf22b5329cb13e3526e265e326aee93971e35498386cc"
         },
         {
           "path": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/identity.ts",
@@ -2656,8 +2853,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
-        "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+        "path": "docs/research/reports/current-interface-kyberswap-elastic-20261015.json",
+        "sha256": "99dd1ef3364afdc259976b685ff843342da194dea551f6c5f66b86e85ba96b78"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/kyber-settlement-actual-correctness-20261015.json",
+        "sha256": "7188426054396fed66b0cf9ef9f88241157fec6a7ae89a568d2dc98035936344"
       }
     },
     {
@@ -2684,8 +2885,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/mooniswap-recipient-correctness-20261014.json",
-            "sha256": "9def6c51e49fddb8755b1f4d99d77d9db4aaaa3bc28d38f901a929a5eaaa0805"
+            "path": "docs/research/reports/current-native-boundary-reuse-3b1c888fc54adef2-20261015.json",
+            "sha256": "d81f4d8a5654e9b19675dcceccf461170c7529900f661fac9afeac714c747d90"
           }
         }
       ],
@@ -3734,8 +3935,8 @@
           ],
           "scope": "Actual iUSD/staked-iUSD Gateway stake/unstake, self/external direct at N25944594 and N25944595. Other ERC4626 variants unchanged.",
           "executionEvidence": {
-            "path": "docs/research/reports/infinifi-recipient-behavior-20261015.json",
-            "sha256": "990e5f4d3007517b407947be4266b3899da118006af685957fae128dec3f62b4"
+            "path": "docs/research/reports/current-native-boundary-reuse-940d13f18e6d6a70-20261015.json",
+            "sha256": "b82943912e3d7bd6dfdf085d39cc666a8845377e071ac28d0861272bf5329dd5"
           }
         }
       ],
@@ -3849,47 +4050,65 @@
     },
     {
       "familyId": "protocol:erc4626-silo-redeem",
-      "coverage": "partial",
+      "coverage": "complete",
       "variants": [
         {
           "id": "Strata Tranche multi-token redeem 0xc58d044404d8b14e953c115e67823784dea53d8f",
-          "interface": "partial",
-          "identity": "partial",
+          "interface": "verified",
+          "identity": "verified",
           "callback": "internal-only",
-          "recipient": "conditional",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "Tranche 与 CDO 已确认传递 receiver，实际 strategy 出款实现待绑定。",
-            "历史 Tranche/CDO/strategy 代理及代码关系待补。",
-            "当前 receiver/owner 均固定 executor，独立 receiver 接线和新路径回执待补。"
-          ],
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/silo-recipient-actual-correctness-20261015.json",
+              "sha256": "9d0e4d6b034b7cf6ab2e04cf3c488e41b72c95fa4aa2f796267b3b8bbcc15284"
+            },
+            {
+              "path": "docs/research/reports/silo-recipient-independent-20261015.json",
+              "sha256": "f45f40ac96546e7a851e49373df0f85a1125cdbcd88d68355cf041d6507a5233"
             }
-          ]
+          ],
+          "scope": "Selected synchronous sUSDe payout, owner=executor, default/quoted/direct-self/direct-external at saved historical state",
+          "executionEvidence": {
+            "path": "docs/research/reports/silo-recipient-current-behavior-20261015.json",
+            "sha256": "236ffddc81c0df7722c53f9ebd43b172c686a4d8f1ebee99cca7add3160b27d8"
+          }
         },
         {
           "id": "Strata Tranche multi-token redeem 0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003",
-          "interface": "partial",
-          "identity": "partial",
+          "interface": "verified",
+          "identity": "verified",
           "callback": "internal-only",
-          "recipient": "conditional",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "Tranche 与 CDO 已确认传递 receiver，实际 strategy 出款实现待绑定。",
-            "历史 Tranche/CDO/strategy 代理及代码关系待补。",
-            "当前 receiver/owner 均固定 executor，独立 receiver 接线和新路径回执待补。"
-          ],
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/silo-recipient-actual-correctness-20261015.json",
+              "sha256": "9d0e4d6b034b7cf6ab2e04cf3c488e41b72c95fa4aa2f796267b3b8bbcc15284"
+            },
+            {
+              "path": "docs/research/reports/silo-recipient-independent-20261015.json",
+              "sha256": "f45f40ac96546e7a851e49373df0f85a1125cdbcd88d68355cf041d6507a5233"
             }
-          ]
+          ],
+          "scope": "Selected synchronous sUSDe payout, owner=executor, default/quoted/direct-self/direct-external at saved historical state",
+          "executionEvidence": {
+            "path": "docs/research/reports/silo-recipient-current-behavior-20261015.json",
+            "sha256": "236ffddc81c0df7722c53f9ebd43b172c686a4d8f1ebee99cca7add3160b27d8"
+          }
         }
       ],
       "domain": "protocol",
@@ -3900,7 +4119,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -3932,7 +4151,7 @@
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/execution.ts",
-          "sha256": "01c3eb49804829e5929d1423b83e03ccce1092f1f04de1a7712e331cf481576e"
+          "sha256": "c8814839d981899a93db0d238eeb7e8fa45ea12156816550eaaaed0bdead9fe8"
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/identity.ts",
@@ -3964,8 +4183,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
-        "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+        "path": "docs/research/reports/current-interface-protocol-erc4626-silo-redeem-20261015.json",
+        "sha256": "312ed34b65c2f7d292ab5d897073d3557445b48acb8fb48455e3ecc12b089477"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/silo-recipient-actual-correctness-20261015.json",
+        "sha256": "9d0e4d6b034b7cf6ab2e04cf3c488e41b72c95fa4aa2f796267b3b8bbcc15284"
       }
     },
     {
@@ -4101,8 +4324,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/few-recipient-behavior-20261015.json",
-            "sha256": "241b74fd512f581505a5dfc052b33c18f9fcd651dfca62d14dcfc7ca34d47305"
+            "path": "docs/research/reports/current-native-boundary-reuse-d4bd5948afa242ed-20261015.json",
+            "sha256": "3ba1120b89f43c92fd78537f96289c031c01957f0dc6f94afd6944a6d3e37d79"
           },
           "evidenceNote": "Actual selected-scope historical behavior independently reviewed; old evidence links retained."
         }
@@ -4679,8 +4902,8 @@
           ],
           "scope": "Actual DssLitePsm DAI/USDC ordinary sell/buy, self/external direct at N26029876 fee0; nonzero fees are contract-only; no permissioned noFee or callback claim.",
           "executionEvidence": {
-            "path": "docs/research/reports/psm-recipient-behavior-20261015.json",
-            "sha256": "bfe77e717564c7399a6b1e8cb5287504b17c8063b2e8f85bc3ec6b58b3465e34"
+            "path": "docs/research/reports/current-native-boundary-reuse-00649a537263ba9b-20261015.json",
+            "sha256": "fe0740ad539178e6265ff04b122e866290fb3128f7a2b2c6c2fb7e768d1196e9"
           }
         }
       ],
@@ -4805,8 +5028,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/psv-recipient-correctness-20261014.json",
-            "sha256": "589cd6976f04a04a4b1b0e8855ae58b1dc13fb92827f04377717d3384e0b1d87"
+            "path": "docs/research/reports/current-native-boundary-reuse-084266cd89ffa8a9-20261015.json",
+            "sha256": "58f569c62ad70b6aaba6f80b371fe71437e7ac5ef5656b0938252a991f29d3c6"
           },
           "notes": [
             "Recipient-bound quote/direct verified in both directions for executor, ordinary receiver and treasury. No deferred callback; input-first ERC20 payment.",
@@ -5754,8 +5977,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/yearn-settlement-behavior-20261015.json",
-            "sha256": "7eb99a99da70efe1b402332689358a1b6bfd595a52bac006934b98b5d8bab9d5"
+            "path": "docs/research/reports/current-native-boundary-reuse-19e142e2cc3f3583-20261015.json",
+            "sha256": "45de84e25e073964a3b70b4415a93a5f9630fb898cce21fd730121c9cab01cc7"
           }
         },
         {
@@ -5778,8 +6001,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/yearn-settlement-behavior-20261015.json",
-            "sha256": "7eb99a99da70efe1b402332689358a1b6bfd595a52bac006934b98b5d8bab9d5"
+            "path": "docs/research/reports/current-native-boundary-reuse-19e142e2cc3f3583-20261015.json",
+            "sha256": "45de84e25e073964a3b70b4415a93a5f9630fb898cce21fd730121c9cab01cc7"
           }
         },
         {
@@ -5802,8 +6025,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/yearn-settlement-behavior-20261015.json",
-            "sha256": "7eb99a99da70efe1b402332689358a1b6bfd595a52bac006934b98b5d8bab9d5"
+            "path": "docs/research/reports/current-native-boundary-reuse-19e142e2cc3f3583-20261015.json",
+            "sha256": "45de84e25e073964a3b70b4415a93a5f9630fb898cce21fd730121c9cab01cc7"
           }
         }
       ],
@@ -6077,22 +6300,31 @@
         {
           "id": "ordinary swap/cypher-bound-quoter",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "output-first",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "Cypher plugin 代码与 N26018534 原 getCode 相等；pool 自身 N bytecode 在此范围未定位。",
-            "旧双执行不等于新 direct/deferred 实际执行；不推广到 recipient-dependent 未知 plugin。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidenceNote": "Cypher actual public runtime hash matches N26018534 archived eth_getCode and Ready; original sample old dual acceptance retained",
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
               "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+            },
+            {
+              "path": "docs/research/reports/algebra-settlement-actual-correctness-20261015.json",
+              "sha256": "889f524cfcddcdd19b78e910878f331d22b9d94008dcd7608889c0c9291495e2"
+            },
+            {
+              "path": "docs/research/reports/algebra-settlement-independent-20261015.json",
+              "sha256": "958f75030fe663cc4c712f79faa504e03fda2c64201f554a6a89a0af88585bf1"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/algebra-settlement-current-behavior-20261015.json",
+            "sha256": "6273a44982d58091876bc96d81a39d7ead4857a46bd0fb71272e4928a3565431"
+          }
         },
         {
           "id": "swapWithPaymentInAdvance/unselected",
@@ -6120,7 +6352,7 @@
       "source": [
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -6155,8 +6387,12 @@
           "sha256": "6f333e350f3aeadd5f3b8061f00907dd67140014077e547c5020aa3a59f7984b"
         },
         {
+          "path": "listener/src/searcher/venues/swaps/algebra-integral-family/direct.ts",
+          "sha256": "ce0c619a4ac7e6c233e9e069795c1277982c2cd9e401b9862ec72ddc36d090d7"
+        },
+        {
           "path": "listener/src/searcher/venues/swaps/algebra-integral-family/execution.ts",
-          "sha256": "9bf490ef000446298342dbdba0f88b2db2a9a5441f292ce748c756c206249c56"
+          "sha256": "b7e0a7fb30a97ff51a5773211f424a6cf7393eeb86a9d1f81003edab721c9ea8"
         },
         {
           "path": "listener/src/searcher/venues/swaps/algebra-integral-family/identity.ts",
@@ -6184,8 +6420,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
-        "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+        "path": "docs/research/reports/current-interface-swap-algebra-integral-20261015.json",
+        "sha256": "1358e18382838ba3cf612491caedb6a8dcfe166bd55a0cf4fefa57e8ea50f60c"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/algebra-settlement-actual-correctness-20261015.json",
+        "sha256": "889f524cfcddcdd19b78e910878f331d22b9d94008dcd7608889c0c9291495e2"
       }
     },
     {
@@ -6522,8 +6762,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/univ4-settlement-behavior-20261015.json",
-            "sha256": "dd60e648370d79cd911390b345b7cad6b2487e6bb1a5d6e738c5334a88adc5a6"
+            "path": "docs/research/reports/current-native-boundary-reuse-225d7f29fd9cfbf1-20261015.json",
+            "sha256": "71662a63f65d199738a156f872fe78c3859d1154c4815eb3af095b3c33d47edc"
           }
         },
         {
@@ -6551,8 +6791,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/univ4-settlement-behavior-20261015.json",
-            "sha256": "dd60e648370d79cd911390b345b7cad6b2487e6bb1a5d6e738c5334a88adc5a6"
+            "path": "docs/research/reports/current-native-boundary-reuse-225d7f29fd9cfbf1-20261015.json",
+            "sha256": "71662a63f65d199738a156f872fe78c3859d1154c4815eb3af095b3c33d47edc"
           }
         }
       ],
@@ -6573,7 +6813,7 @@
         },
         {
           "path": "listener/src/searcher/execution-asset-boundary.ts",
-          "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+          "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
         },
         {
           "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
@@ -6690,8 +6930,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/univ4-fee-hook-settlement-behavior-20261015.json",
-            "sha256": "494f780bfafd0b753fbc0454e5703070d45ac6cc289b856d4fad501a1c2d78a7"
+            "path": "docs/research/reports/current-native-boundary-reuse-d8a2e69ec21160b2-20261015.json",
+            "sha256": "f6647b156979514b2c7007fa2a40634bb0670c87b46dc755cfb9ccb0e005692d"
           }
         },
         {
@@ -6719,8 +6959,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/univ4-fee-hook-settlement-behavior-20261015.json",
-            "sha256": "494f780bfafd0b753fbc0454e5703070d45ac6cc289b856d4fad501a1c2d78a7"
+            "path": "docs/research/reports/current-native-boundary-reuse-d8a2e69ec21160b2-20261015.json",
+            "sha256": "f6647b156979514b2c7007fa2a40634bb0670c87b46dc755cfb9ccb0e005692d"
           }
         }
       ],
@@ -6741,7 +6981,7 @@
         },
         {
           "path": "listener/src/searcher/execution-asset-boundary.ts",
-          "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+          "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
         },
         {
           "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
@@ -6865,8 +7105,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/vault-recipient-behavior-20261015.json",
-            "sha256": "e8c534e637c50f8237f11c14b6210d1bca543ca26dbf65c73b1fbd77c6537b75"
+            "path": "docs/research/reports/current-native-boundary-reuse-218192f59151491d-20261015.json",
+            "sha256": "e76deac43061bb02db0f7e91e185f7e94e1d14fdeee9171bef776b8b6aab2ab1"
           },
           "evidenceNote": "Actual selected-scope historical behavior independently reviewed; old evidence links retained."
         }
@@ -7084,8 +7324,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/oneswap-settlement-behavior-20261015.json",
-            "sha256": "6ad42883af189bc2a919a5688ed576c5976cc6d89f0a0d9755498f3ecaf6e3b8"
+            "path": "docs/research/reports/current-native-boundary-reuse-7d80bd330a14a57f-20261015.json",
+            "sha256": "3b4f0bf39c845adf49d1fde0fc83e3a8bc05b320dca7086e8f6b10ead31f8fa4"
           },
           "gaps": []
         },
@@ -7105,8 +7345,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/oneswap-settlement-behavior-20261015.json",
-            "sha256": "6ad42883af189bc2a919a5688ed576c5976cc6d89f0a0d9755498f3ecaf6e3b8"
+            "path": "docs/research/reports/current-native-boundary-reuse-7d80bd330a14a57f-20261015.json",
+            "sha256": "3b4f0bf39c845adf49d1fde0fc83e3a8bc05b320dca7086e8f6b10ead31f8fa4"
           },
           "gaps": []
         }
@@ -7229,8 +7469,8 @@
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/precision-pool-settlement-behavior-20261015.json",
-            "sha256": "e41e29841b7bfe0faf4832abfa61bca5aad51e5d807bb79210d24437b6030a47"
+            "path": "docs/research/reports/current-native-boundary-reuse-488de8773403e401-20261015.json",
+            "sha256": "af4f6157363f883628955aaa120f492c70dd3cb279a21cd859da6da543df34b0"
           },
           "gaps": []
         }
@@ -7300,5 +7540,12 @@
       "curve-underlying",
       "custom-swap:ekubo-router-v1"
     ]
+  },
+  "currentScopedUpdate": {
+    "scope": "Kyber, Algebra, Curve plain actual receiver variants, Curve underlying classic, Silo synchronous actual2 deployments; common native1raw boundary.",
+    "priorInventorySha256": "66067c11da6d37ec8b8eabaa4b4fc5fa83b1b301b9576d8e29c1c5abb4219042",
+    "previousCommonHashesPreserved": true,
+    "allOtherVariantStatesPreserved": true,
+    "unverifiedExtraVariantsAreNotMandatoryWithoutActualScope": true
   }
 }

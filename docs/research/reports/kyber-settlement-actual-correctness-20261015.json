@@ -1,0 +1,268 @@
+{
+  "family": "kyberswap-elastic",
+  "scope": "current direct-self/direct-external and actual deferred callback via existing production settlement composer; old default/quoted execution retained separately",
+  "headAtSnapshot": "ad9f0e9a510c28e504e32e11536f84521eaf8879",
+  "productionSourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+  "code": "minimum direct-only guards for positive input, exact debit, both signed returns/positive receipt, native and old inventories; no default/deferred bytecode branch change",
+  "oldBranchProof": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/default-branch-proof68.json",
+    "sha256": "0afff8ee5be5dfb975626c8cd79190c7b02fef008a2e90266237310bdf3ded2f",
+    "scope": "current before/after emitter equivalence; prior common closure reuse separately"
+  },
+  "coverage": {
+    "instances": 9,
+    "directions": 18,
+    "amountTrials": 37,
+    "positive": 148,
+    "directPositive": 74,
+    "deferredPositive": 74,
+    "rejected": 740,
+    "directRejected": 296,
+    "deferredRejected": 444,
+    "inactiveNoOp": 148,
+    "balanceRows": 1184,
+    "supplyObservations": 296,
+    "directInputTolerance": 0,
+    "quoteToGrossReceiptDelta": 0,
+    "runtimeConstructionExact": 0,
+    "runtimeConstructionQuotedFallback": false
+  },
+  "scopeLimits": [
+    "New callback uses declared fixed funding fixture consuming one raw new output and funding actual pool debt; not market return or opportunity",
+    "All prior amounts including tiny38-unit trial retained; only input borrowed from prior artifacts",
+    "No new default or quoted mode execution claim; no performance, opportunity, live, deployment or signing",
+    "Negative postconditions include full union-storage/native atomic rollback; inactive callback probes prove no pending scope inertness, not active wrong-caller authentication"
+  ],
+  "artifacts": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber-settlement70.json",
+      "sha256": "2045d73a88f5fd583467ee44243117c8dc7a17ca3c7bf7e6a44297d1a60b582b",
+      "source": {
+        "number": 25953136,
+        "hash": "0xb73f8d872cbdd73737bc1101674b9532685777189209f1fbe6b5cd6ebefc879a",
+        "generation": 25953136
+      },
+      "result": "pass-actual-settlement-with-funding-fixture",
+      "trials": 4,
+      "positive": 16,
+      "rejected": 80,
+      "inactive": 16,
+      "drained": true,
+      "forkDrained": true,
+      "sourceTree": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber2-settlement70.json",
+      "sha256": "a4862355f8ad7aa359fff95f128c043f0171d27731f3d10a026d9c726d5d6d9a",
+      "source": {
+        "number": 26030898,
+        "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+        "generation": 26030898
+      },
+      "result": "pass-actual-settlement-with-funding-fixture",
+      "trials": 4,
+      "positive": 16,
+      "rejected": 80,
+      "inactive": 16,
+      "drained": true,
+      "forkDrained": true,
+      "sourceTree": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber3-settlement70.json",
+      "sha256": "575b04f2b6e3ea09483f17beb0fac9519136816574fb4c9333e76361485d5d67",
+      "source": {
+        "number": 26005915,
+        "hash": "0xf4caf43faa7a0c6fe62b6e72b9c4a7e606f15574f5227617dfff6836b7678c3c",
+        "generation": 26005915
+      },
+      "result": "pass-actual-settlement-with-funding-fixture",
+      "trials": 5,
+      "positive": 20,
+      "rejected": 100,
+      "inactive": 20,
+      "drained": true,
+      "forkDrained": true,
+      "sourceTree": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber4-settlement70.json",
+      "sha256": "1df9da8d4413ee57c7cc4919c78686fb22efb3c28edf0fed3757a3663ee24ec7",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+        "generation": 25944594
+      },
+      "result": "pass-actual-settlement-with-funding-fixture",
+      "trials": 4,
+      "positive": 16,
+      "rejected": 80,
+      "inactive": 16,
+      "drained": true,
+      "forkDrained": true,
+      "sourceTree": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber5-settlement70.json",
+      "sha256": "ad12bfac5efca284bc3e4c481d560af19b335994da6fcf2e6da32c70b712e0d8",
+      "source": {
+        "number": 26056774,
+        "hash": "0xe0dcbdd7d2032694612cdef6b22969475f21e194e5a2f8a754ec9ce1aaf10125",
+        "generation": 26056774
+      },
+      "result": "pass-actual-settlement-with-funding-fixture",
+      "trials": 4,
+      "positive": 16,
+      "rejected": 80,
+      "inactive": 16,
+      "drained": true,
+      "forkDrained": true,
+      "sourceTree": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber6-settlement70.json",
+      "sha256": "58f9bae76271f7ffa0a5b455fdb217a6609890f0f3d1a0c17507a613755670fc",
+      "source": {
+        "number": 26143115,
+        "hash": "0x4872a838c097f5d2f1e19aecd85ac30a982ed6d2b5f27e73130f13b5ccf6614a",
+        "generation": 26143115
+      },
+      "result": "pass-actual-settlement-with-funding-fixture",
+      "trials": 4,
+      "positive": 16,
+      "rejected": 80,
+      "inactive": 16,
+      "drained": true,
+      "forkDrained": true,
+      "sourceTree": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber7-settlement70.json",
+      "sha256": "e48e492c534d2760e159a70e0918d53aaa905ddddf1e58b4d1eb3f48147e347d",
+      "source": {
+        "number": 26043137,
+        "hash": "0x4467ae30bbef9de8bb212af230e977d5ee2018350bd0007efa82d8956836fa8b",
+        "generation": 26043137
+      },
+      "result": "pass-actual-settlement-with-funding-fixture",
+      "trials": 4,
+      "positive": 16,
+      "rejected": 80,
+      "inactive": 16,
+      "drained": true,
+      "forkDrained": true,
+      "sourceTree": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber8-settlement70.json",
+      "sha256": "51cc0914ddb528a625066fc7f580a565d8cff2d26fd752bf330b5176525b264a",
+      "source": {
+        "number": 26013881,
+        "hash": "0xa310c7b1f99e8e8d969284661953a157640ea0c17d489f1bb2ddfd7c32148cfa",
+        "generation": 26013881
+      },
+      "result": "pass-actual-settlement-with-funding-fixture",
+      "trials": 4,
+      "positive": 16,
+      "rejected": 80,
+      "inactive": 16,
+      "drained": true,
+      "forkDrained": true,
+      "sourceTree": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/kyber9-settlement70.json",
+      "sha256": "10ccf06f68a7d1b52ed1b45407f53aa42c55f2e2877c71a30656f9f70076111d",
+      "source": {
+        "number": 26037069,
+        "hash": "0x4f8c0a000c63ed28a878eb22dc6802b2317cd032c43d1a2f134f66d079dba55a",
+        "generation": 26037069
+      },
+      "result": "pass-actual-settlement-with-funding-fixture",
+      "trials": 4,
+      "positive": 16,
+      "rejected": 80,
+      "inactive": 16,
+      "drained": true,
+      "forkDrained": true,
+      "sourceTree": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1"
+    }
+  ],
+  "sourceSnapshot": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/source-current70.json",
+    "sha256": "08b99347bc039225a747e3d14896469c0e04c1e6f6d14657a8a3149bd85708e4"
+  },
+  "owned": [
+    {
+      "path": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/direct.ts",
+      "beforeSha256": null,
+      "afterSha256": "b850f95daee1d245308c0f1ae6d163d2954c64630b966318d3e22fe651be5b12",
+      "candidate": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/candidate/listener/src/searcher/venues/swaps/kyberswap-elastic-family/direct.ts"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/execution.ts",
+      "beforeSha256": "61ade0c68cb66cfc1b85b4c8ef5cb3beef7202da08d0dca621bbc3d16e431ab4",
+      "afterSha256": "ec8ed5308ef1812d40eaf22b5329cb13e3526e265e326aee93971e35498386cc",
+      "candidate": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/candidate/listener/src/searcher/venues/swaps/kyberswap-elastic-family/execution.ts"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/test/settlement-contract.ts",
+      "beforeSha256": null,
+      "afterSha256": "ba0b75b390bc05909ab8b123003a25e58decaa19862f454f350c3fd9bb62681c",
+      "candidate": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/candidate/listener/src/searcher/venues/swaps/kyberswap-elastic-family/test/settlement-contract.ts"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/test/settlement-evidence.ts",
+      "beforeSha256": null,
+      "afterSha256": "9b3441b7058eb762e4602da72adbf81ea927dace4882fdef09a9f1622720e6eb",
+      "candidate": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/candidate/listener/src/searcher/venues/swaps/kyberswap-elastic-family/test/settlement-evidence.ts"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/test/settlement-historical.ts",
+      "beforeSha256": null,
+      "afterSha256": "5e79c883e47fd6366b1b5e2f16ae2c71aebd265c37ca496de7a8b0d7280711f5",
+      "candidate": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/candidate/listener/src/searcher/venues/swaps/kyberswap-elastic-family/test/settlement-historical.ts"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/test/settlement-ready.ts",
+      "beforeSha256": null,
+      "afterSha256": "4c2cc476ff614fef511b91ffb0f76aa0ee8578ccc00e4fcc324191924a2c3d81",
+      "candidate": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/candidate/listener/src/searcher/venues/swaps/kyberswap-elastic-family/test/settlement-ready.ts"
+    }
+  ],
+  "checks": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/checks68.json",
+      "sha256": "8b1b7bb7f1b1e241184f653ca60f7ff27663293d8dbbc9353753bed972e60082"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/checks69.json",
+      "sha256": "e78d5ac699c662b8e950122d16521dda584d4978ef0ff4571d2ea9c5aa01eff1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/evidence70/checks70.json",
+      "sha256": "1f7ae54679c9ce0db2368265bdc4febced31cb966144389c320e70d16d87c350"
+    }
+  ],
+  "retainedFailures": [
+    {
+      "run": 68,
+      "scope": "runner missing existing Kyber activation opt-in; constructor rejected before RPC/Ready",
+      "path": "check68-kyber-ready.log",
+      "resolution": "run69 process-specific SEARCHER_FAMILY_KYBERSWAP_ELASTIC_ENABLED=1, defaults unchanged"
+    },
+    {
+      "run": 69,
+      "scope": "runner wrong funding artifact path; inputs pin failed, samples0/fork not started",
+      "path": "kyber-settlement69.json",
+      "resolution": "run70 uses already verified fixture-out37; successful Ready69 reused"
+    }
+  ],
+  "configuration": {
+    "activation": "SEARCHER_FAMILY_KYBERSWAP_ELASTIC_ENABLED=1 for acceptance process only",
+    "sourceExecutionGasLimit": 16777216,
+    "ownedForkPort": 18967,
+    "portClosed": true
+  },
+  "independentReview": "pending parent raw review; peer source review completed, no claim raw independent passed"
+}

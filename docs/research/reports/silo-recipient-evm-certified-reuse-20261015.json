@@ -1,0 +1,119 @@
+{
+  "status": "certified-reuse-of-completed-five-EVM-tests",
+  "wrapperExitCode": 1,
+  "forgeExitCode": 0,
+  "tests": 5,
+  "rerun": false,
+  "oldFullSource": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/repair76/test/CurvePlainRecipient.t.sol",
+    "sha256": "a8887e5bde09cdc2a1c604e1fe7662819a6129cce4fec5dfcf173d8699f007a9"
+  },
+  "newFullSource": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/repair81/test/CurvePlainRecipient.t.sol",
+    "sha256": "43cef9cbecf35645a2f31818748f3719fbb330aeddd77a27061ebc8ee7117e0d"
+  },
+  "actualCompilerInput": "artifact metadata equals the complete old source exactly",
+  "sameImportedPrefixSha256": "f91253136a8ace714cad132f2c5b5660da1f84106826838ab34ef60fce47cb2a",
+  "allowedDifference": "only unrelated CurvePlainRecipient native test assertion explicitly widens 109 to uint256",
+  "productionPin": {
+    "sourceTreeSha256": "3683af082910aedab6ffba4ddc85a03fd753f8b50d2ceff921d546a567905d4c",
+    "harnessSha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a",
+    "evidenceSha256": "21667eebf6b97b6e18ad9ec4230d615a1d8e46478fcd8fc19339f01ec9c800f4",
+    "observationHelpers": [
+      {
+        "path": "./v4-native-settlement.ts",
+        "sha256": "a12bf0f92a006a594cbec2caf5ba4cfa0a31faea28a912c7701b54e71be1c664"
+      },
+      {
+        "path": "../three-family/historical-input-observations.ts",
+        "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+      },
+      {
+        "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+        "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+      },
+      {
+        "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+        "sha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43"
+      },
+      {
+        "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+        "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+      },
+      {
+        "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+        "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+      },
+      {
+        "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+        "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+      },
+      {
+        "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+        "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+      },
+      {
+        "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+        "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+      },
+      {
+        "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+      }
+    ]
+  },
+  "sourceBeforeAfterDiff": [
+    "test/CurvePlainRecipient.t.sol"
+  ],
+  "fixture": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evm06/programs.json",
+    "sha256": "f896217613baf1a12f7acd5b7ddbbf0097beabece66c8b753cb1e2f83d71071f"
+  },
+  "artifacts": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evm06/SiloRecipient.t.sol-SiloRecipientTest.json",
+      "sha256": "e03966fb76a0b1d20d088b1d55ffefe84840a53ba0c49f77fba8f7796f84017f",
+      "runtimeKeccak256": "0x27e5d3ff5763a49edf5a2ee5dc2ccc81fd0a275a41b9cc3ba5cfdb6c0f84b8da",
+      "runtimeBytes": 36415,
+      "compilerVersion": "0.8.24+commit.e11b9ed9",
+      "sharedSourceKeccak": "0x680bcf9471bd77b368fc640109682b813003fc34a4aa3398aa9cc93d4572ae4d"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evm06/SiloRecipient.t.sol-SiloRecipientTranche.json",
+      "sha256": "f2614f29c57799d52f0fab1f758efa479643c5e5c1bf0b19c5a8defff695ba81",
+      "runtimeKeccak256": "0xb7af9f40755ff64d1487da311bd4254827b5d2414df73588635bf56263f2ef1b",
+      "runtimeBytes": 2199,
+      "compilerVersion": "0.8.24+commit.e11b9ed9",
+      "sharedSourceKeccak": "0x680bcf9471bd77b368fc640109682b813003fc34a4aa3398aa9cc93d4572ae4d"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evm06/CurvePlainRecipient.t.sol-CurveRecipientToken.json",
+      "sha256": "11d9a4ad31a7c1ea33b870f80ebfccb0f629fd15ddd207a3e0fbbc486cc03357",
+      "runtimeKeccak256": "0xacf625bca6dc7fde62080bf82b84fe91ee15a9eef383ca4881e331f37da811e1",
+      "runtimeBytes": 878,
+      "compilerVersion": "0.8.24+commit.e11b9ed9",
+      "sharedSourceKeccak": "0x680bcf9471bd77b368fc640109682b813003fc34a4aa3398aa9cc93d4572ae4d"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evm06/BotVM.sol-BotVM.json",
+      "sha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "runtimeKeccak256": "0x2e38f0c12a1d33e634759e550302a0da6320abb6b5a2107694f56ab08fef1203",
+      "runtimeBytes": 18345,
+      "compilerVersion": "0.8.24+commit.e11b9ed9",
+      "sharedSourceKeccak": null
+    }
+  ],
+  "result": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evm06/result.json",
+    "sha256": "63d7333f57a062243979c1a3fa5b8606a63eee23b2fb253f6179fed041d8fe2d"
+  },
+  "stdout": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evm06/forge.stdout.log",
+    "sha256": "6f9fc0dc577648fc0efe4f81930e3d287102b58b5b447c3bd530bd2e3ee3b9b2"
+  },
+  "independentReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/v1-evm-source-reuse09.json",
+    "sha256": "d68fe04d00e278ea69c3a63e5982b567ff24af8e14820bbd520a03b22a5b1c59"
+  },
+  "scope": "real local BotVM and production-emitted Silo programs; synthetic Tranche/token, not historical contract rollback"
+}

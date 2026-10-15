@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 1,
+  "familyId": "protocol:erc4626-silo-redeem",
+  "result": "PASS-scoped-correctness",
+  "implementationReady": true,
+  "blockingFindings": [],
+  "scope": "Two existing admitted Tranche instances redeem to sUSDe synchronously. New direct-self/direct-external plus retained default and quoted paths; no production change in this batch.",
+  "variants": [
+    {
+      "id": "Strata Tranche multi-token redeem 0xc58d044404d8b14e953c115e67823784dea53d8f",
+      "interface": "verified",
+      "identity": "verified",
+      "callback": "internal-only",
+      "recipient": "yes",
+      "wiring": "verified",
+      "execution": "verified",
+      "gaps": [],
+      "scope": "Selected synchronous sUSDe payout, owner=executor, default/quoted/direct-self/direct-external at saved historical state",
+      "source": {
+        "number": 26130609,
+        "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc",
+        "generation": 26130609
+      },
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
+        "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a"
+      },
+      "cooldownSeconds": "0",
+      "notClaimed": [
+        "delayed cooldown claims",
+        "native transport",
+        "caller deferred-input continuation",
+        "performance or opportunity"
+      ]
+    },
+    {
+      "id": "Strata Tranche multi-token redeem 0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003",
+      "interface": "verified",
+      "identity": "verified",
+      "callback": "internal-only",
+      "recipient": "yes",
+      "wiring": "verified",
+      "execution": "verified",
+      "gaps": [],
+      "scope": "Selected synchronous sUSDe payout, owner=executor, default/quoted/direct-self/direct-external at saved historical state",
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+        "generation": 25462190
+      },
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
+        "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd"
+      },
+      "cooldownSeconds": "0",
+      "notClaimed": [
+        "delayed cooldown claims",
+        "native transport",
+        "caller deferred-input continuation",
+        "performance or opportunity"
+      ]
+    }
+  ],
+  "historical": {
+    "amountGroups": 6,
+    "positiveExecutions": 24,
+    "declaredReverts": 48,
+    "rawStrictCalls": 72,
+    "exactCalls": 6,
+    "quotedConstructions": 6,
+    "runtimeBuildForbiddenCalls": 0,
+    "quotedFallback": false,
+    "quoteDeltaAll": "0",
+    "sourceState": "actual original N, no protocol state override; actor funding and counterfactual executor only",
+    "inputControl": "same calldata with no input; forced post-execution revert separate",
+    "receipts": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
+        "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
+        "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd"
+      }
+    ]
+  },
+  "localEvm": {
+    "tests": 5,
+    "positiveExecutions": 6,
+    "faultRejections": 24,
+    "zeroInputRejections": 2,
+    "unfundedRejections": 2,
+    "unguardedMutationSentinels": 12,
+    "scope": "actual BotVM and production-emitted program, synthetic Tranche/token; not historical contract rollback",
+    "certifiedReuse": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evm-certified-reuse10.json",
+      "sha256": "c4534bb8ec88d51ea0113471f65853478900356165302aed1ff684bf78614db3"
+    },
+    "wrapperFailurePreserved": true,
+    "rerun": false
+  },
+  "canonical": {
+    "contractModel": "4/4",
+    "safetyBefore": "16/16",
+    "safetyAfterSourceScopeFix": "19/19",
+    "selectionInitial": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/selection05.json",
+      "sha256": "e98c68c8b0320018e01574c1e2ef75e288fdf499de127bf3b2a817ceda2edfea"
+    },
+    "selectionFinal": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence10/selection09.json",
+      "sha256": "c230194af29bc9445fd21c654eeea5ce488bc4495119c256dfc5aee30585f955"
+    },
+    "checksInitial": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/checks06.json",
+      "sha256": "f31820a303a346a62d74cdefa5e2d99c56dcfc6d6ac22e8c965b1109a7fffe4d"
+    },
+    "checksFinal": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence10/checks09.json",
+      "sha256": "8c44c209314834a21640c5f929ea28d0f8ea71634533b3e3399c3a01eb6ea0e8"
+    }
+  },
+  "code": {
+    "sourceTreeSha256": "3683af082910aedab6ffba4ddc85a03fd753f8b50d2ceff921d546a567905d4c",
+    "harnessSha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a",
+    "evidenceSha256": "21667eebf6b97b6e18ad9ec4230d615a1d8e46478fcd8fc19339f01ec9c800f4",
+    "observationHelpers": [
+      {
+        "path": "./v4-native-settlement.ts",
+        "sha256": "a12bf0f92a006a594cbec2caf5ba4cfa0a31faea28a912c7701b54e71be1c664"
+      },
+      {
+        "path": "../three-family/historical-input-observations.ts",
+        "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+      },
+      {
+        "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+        "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+      },
+      {
+        "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+        "sha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43"
+      },
+      {
+        "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+        "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+      },
+      {
+        "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+        "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+      },
+      {
+        "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+        "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+      },
+      {
+        "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+        "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+      },
+      {
+        "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+        "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+      },
+      {
+        "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+      }
+    ]
+  },
+  "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+  "executorArtifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+  "revmSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+  "finalSource": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence10/final-source10.json",
+    "sha256": "0fe1a8f798ed6297927b7027700882719adb68f5da20a743fbd9c7637b02f210"
+  },
+  "unrelatedLaterSourceChange": [
+    {
+      "path": "listener/src/searcher/venues/swaps/algebra-integral-family/execution.ts",
+      "before": "9bf490ef000446298342dbdba0f88b2db2a9a5441f292ce748c756c206249c56",
+      "after": "b7e0a7fb30a97ff51a5773211f424a6cf7393eeb86a9d1f81003edab721c9ea8"
+    }
+  ],
+  "interfaceBinding": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/verified-interface-bindings10.json",
+    "sha256": "0f4485ed813a433e44a9d1213ea4c94667ea1f6dc0dc39adeacbd3a63f56972e"
+  },
+  "independentRawReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/root-independent84.json",
+    "sha256": "f45f40ac96546e7a851e49373df0f85a1125cdbcd88d68355cf041d6507a5233"
+  },
+  "independentSourceReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/v1-source-review03.json",
+    "sha256": "f35d9e090cfb5d6df32c942ccfba70521312d2ba02b9290660c8f6309ac89c98"
+  },
+  "independentSourceScopeReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/v1-evm-source-reuse09.json",
+    "sha256": "d68fe04d00e278ea69c3a63e5982b567ff24af8e14820bbd520a03b22a5b1c59"
+  },
+  "toolingDefect": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/tooling-defect-source-scope10.json",
+    "sha256": "7c645299fa40f374d4e263b004500c8ef3cef65954bdb885cf8be4f807ebcd7b"
+  },
+  "remainingAcceptance": [
+    "Formal Adapter Replay, opportunity and performance intentionally outside this correctness batch.",
+    "Saved natural Ready copy was revalidated by current production, not fresh-from-zero discovery.",
+    "Production natural valuation gap remains honestly recorded; only saved input amount borrowed."
+  ],
+  "activeProcesses": [],
+  "productionModified": false,
+  "committedOrPushedBySubagent": false
+}

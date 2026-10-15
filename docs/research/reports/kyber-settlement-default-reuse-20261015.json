@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "claim": "Retain prior default correctness artifacts with narrowly audited source compatibility. Not a new default historical execution and not full old dirty-tree identity certification.",
+  "originalArtifacts": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/plan68.json",
+    "sha256": "eb2eb001cc96885980ecb369cbfc415c303be92829f8ba699ebdd0e9ff5df830"
+  },
+  "oldFamilySourceBinding": {
+    "report": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/actual/docs/research/reports/kyber-range-acceptance-20261012.json",
+    "executionReportedSha256": "42cc390efc2695e237d6fb16e307ccfec4f50ce4da6b2d7beb59700ee61d2612",
+    "matchingBlobCommit": "da1356db5c25e42b20bf4e9d6192b3a08c1ee3df",
+    "unchangedQuoteSources": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/actual/listener/src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+        "historicalReportSha256": "8011b7143f185a048a429a9787e8e5a81ea0ff2c6efce664629aad422cff9786",
+        "currentSha256": "8011b7143f185a048a429a9787e8e5a81ea0ff2c6efce664629aad422cff9786",
+        "identical": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/actual/listener/src/searcher/venues/swaps/kyberswap-elastic-family/types.ts",
+        "historicalReportSha256": "3afc7b1dba1c5145782f8746f9eaa66b171256b911ca6c52c0cf1e59fc0264d8",
+        "currentSha256": "3afc7b1dba1c5145782f8746f9eaa66b171256b911ca6c52c0cf1e59fc0264d8",
+        "identical": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/actual/listener/src/searcher/venues/swaps/kyberswap-elastic-family/state.ts",
+        "historicalReportSha256": "e9e8a780a1b8017b9f2cc19d5df4b5c1a6d36a703096ea9827d2b8c9f6ff6369",
+        "currentSha256": "e9e8a780a1b8017b9f2cc19d5df4b5c1a6d36a703096ea9827d2b8c9f6ff6369",
+        "identical": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/actual/listener/src/searcher/venues/swaps/kyberswap-elastic-family/math.ts",
+        "historicalReportSha256": "a7b3e3fa82af527da779cf93b2521b72953a3cec3e3d0f09e2f20a58137fd61a",
+        "currentSha256": "a7b3e3fa82af527da779cf93b2521b72953a3cec3e3d0f09e2f20a58137fd61a",
+        "identical": true
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/actual/listener/src/searcher/venues/swaps/kyberswap-elastic-family/exact.ts",
+        "historicalReportSha256": "1de0a5d0cb83e1629874038e499bef6497b29e380d84d611ff65c57710b184c3",
+        "currentSha256": "1de0a5d0cb83e1629874038e499bef6497b29e380d84d611ff65c57710b184c3",
+        "identical": true
+      }
+    ]
+  },
+  "currentPatchDefaultProof": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/default-branch-proof68.json",
+    "sha256": "0afff8ee5be5dfb975626c8cd79190c7b02fef008a2e90266237310bdf3ded2f"
+  },
+  "diffs": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/reuse73/diffs/listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "2c0d286f4ffaa77b08a50d63bbe91767546bc1549140e7c58a8c938730ed75a6"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/reuse73/diffs/listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "f97472144ee0a7043cb00148992247bfd6a362f6d781b88189b86b1634760b0b"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/reuse73/diffs/listener/src/searcher/venues/swaps/kyberswap-elastic-family/execution.ts",
+      "sha256": "25b1373bc5b5f5ad4cc3e2fdaf72a1b8f18da4cda686478a5a81dc023b75b594"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/reuse73/diffs/src/RuntimeAmountVM.sol",
+      "sha256": "b4bc8804c1ee25eae6081211418dbd8514780ca7fe9148749970784ff96cbe9b"
+    }
+  ],
+  "analysis": [
+    "Old default execution to pre-direct current only adds optional settlement branches/capability declaration. Undefined request retains executor recipient, existing callback payment, same patch offsets, original high-bit input guard and pool call bytes.",
+    "Current direct guards execute only for explicit direct-output; default branch proof removes only import and those two branches to recover exact prepatch source.",
+    "RuntimeAmountProgram ordinary math indexes0..6, mode0/1 calls, patch layout, callback script/payment helpers retain encoding. New run/op8, read-only return mode2, eq/min and settlementProgram are explicit-only.",
+    "RuntimeAmountVM old entry delegates false/depth0; old opcodes keep semantics, old mode0/1 call path, callback authentication and rollback remain; added modes/opcodes cannot be entered by old default program. BotVM.sol is byte-identical at sampled revisions.",
+    "Issuer undefined settlement maps to undefined; equality undefined==undefined preserves old builder; all nine Kyber routes are ERC20 and asset-boundary returns without native composition. No new opportunity/performance claim.",
+    "Located four identical old BotVM artifacts; canonical retained source/out artifact and all Solidity compilation inputs match metadata. Frozen RuntimeAmountVM SHA9dd2974a... equals the old blob used in the compatibility diff, closing the old VM source identity gap."
+  ],
+  "limitations": [
+    "Old TS aggregate source tree remains an aggregate, with no claimed per-file identity to sampled commit; frozen report-era TS common files separately read and match audited blobs. Solidity historical runtime source identity is now exact via artifact hash and compiler metadata.",
+    "New actual direct/deferred tests exercise current common executor and real pool; retained default samples remain original historical proofs, with compatibility scope above."
+  ],
+  "runtimeArtifactBinding": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/old-runtime76-binding.json",
+    "sha256": "14b62700342da938e15adf3b43056a5e5685437efeea5dabd0d8eff290b3e766",
+    "claim": "Exact artifact SHA matches old historical raw; all four compiler metadata source keccak values independently recomputed from frozen source."
+  },
+  "currentCommonAuditedPins": [
+    {
+      "path": "src/BotVM.sol",
+      "auditedCurrentSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "actualRun70Sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "equal": true
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "auditedCurrentSha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+      "actualRun70Sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+      "equal": true
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "auditedCurrentSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+      "actualRun70Sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "auditedCurrentSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+      "actualRun70Sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "auditedCurrentSha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd",
+      "actualRun70Sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd",
+      "equal": true
+    }
+  ]
+}

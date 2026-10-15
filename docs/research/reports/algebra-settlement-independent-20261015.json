@@ -1,0 +1,126 @@
+{
+  "result": "pass",
+  "reviewer": "v4_accept26 non-author",
+  "method": "independent raw ABI signed-word/transfer-order and storage slot recomputation; no EVM rerun",
+  "historical": [
+    {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra-settlement72.json",
+      "sha256": "a1183b5fd999f928db2e3bd718f491aeef2df5cc1cf6aa848585392b0fb23952",
+      "source": {
+        "number": 26018534,
+        "hash": "0xba26a0e4891db23e721b7d434b592622fb7842dc35b2dffc20bc1f7936a65a8a",
+        "generation": 26018534
+      },
+      "pool": "0x76a278bd71f566ee6ba2fe438f6099c8d8f98f43",
+      "counts": {
+        "positive": 16,
+        "negative": 80,
+        "inactive": 16
+      },
+      "runtimeCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "sourceTree": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    },
+    {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra2-settlement72.json",
+      "sha256": "567e025291cafc3e583f0a1dc48a3d71aa20986269f341f84a392083cfe34b82",
+      "source": {
+        "number": 26030898,
+        "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+        "generation": 26030898
+      },
+      "pool": "0x915fd34cadd63907b51eb64dddc2eadd114a0bed",
+      "counts": {
+        "positive": 16,
+        "negative": 80,
+        "inactive": 16
+      },
+      "runtimeCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "sourceTree": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    },
+    {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra3-settlement72.json",
+      "sha256": "ced3d87f1b8851eddcb4517cf5b2f34f14f6b568906851391366bb2afad08c0f",
+      "source": {
+        "number": 26013785,
+        "hash": "0x673de33446bcd9fdee4371c29d237c46402e2360186a3fb3fc3a2a3a37a33403",
+        "generation": 26013785
+      },
+      "pool": "0xc0cf00079741ab9db6aceb5f7fe2f69c243c1aae",
+      "counts": {
+        "positive": 16,
+        "negative": 80,
+        "inactive": 16
+      },
+      "runtimeCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "sourceTree": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    },
+    {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra4-settlement72.json",
+      "sha256": "4001a4ea90d924e9a50c3011b6c1f8388010370e4931b34de8b170727fc02ccb",
+      "source": {
+        "number": 25946003,
+        "hash": "0x5536c70b740995bfa6bcc158673726dc7372a87ddfc534203ef4f4ba02cd97ff",
+        "generation": 25946003
+      },
+      "pool": "0x65937a5421603612c243300b250f64e58afcdbc4",
+      "counts": {
+        "positive": 16,
+        "negative": 80,
+        "inactive": 16
+      },
+      "runtimeCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "sourceTree": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    },
+    {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra5-settlement72.json",
+      "sha256": "7ed7c5374a8ad17f789961606cbd962316624aa4789234e1c1c1be93de301c24",
+      "source": {
+        "number": 25930616,
+        "hash": "0x74738d6652e7cf663495912cc71099623b8ee9636aad5e1a8d0f58827f8651d5",
+        "generation": 25930616
+      },
+      "pool": "0x177f07c0843776b2a6342ed6c488af64e6f2fd65",
+      "counts": {
+        "positive": 16,
+        "negative": 80,
+        "inactive": 16
+      },
+      "runtimeCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "sourceTree": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    },
+    {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra6-settlement72.json",
+      "sha256": "d89f8b7268746c8af23ab04e063ac3408277f81830bb91c53d4bf77cda8037b7",
+      "source": {
+        "number": 25975130,
+        "hash": "0x58ac4d102bb4c31b585f078b50b3dbea9b0ffab35149c8659b0227aaec8ea466",
+        "generation": 25975130
+      },
+      "pool": "0xf53dcd757f208fb4f3631d16d8c17ddb21a9d98d",
+      "counts": {
+        "positive": 16,
+        "negative": 80,
+        "inactive": 16
+      },
+      "runtimeCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "sourceTree": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    }
+  ],
+  "counts": {
+    "positive": 96,
+    "negative": 480,
+    "inactive": 96,
+    "rawBalanceSlots": 768,
+    "postSuccessRollback": 144
+  },
+  "scope": [
+    "6 current production admitted instances; both directions; full reference input and 10x; direct self/external, deferred zero/old inventory",
+    "synthetic funding fixture consumes exactly 1 raw output and pays real pool debt; not market return/opportunity",
+    "inactive callback proves inert outside pending context only; active wrong-caller relies separate regression",
+    "input-only historical donor; no natural pricing/performance claim"
+  ],
+  "canonicalEvidence": {
+    "checks": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/checks72.json",
+    "selection": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/selection72.json"
+  }
+}

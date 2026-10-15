@@ -1,0 +1,217 @@
+{
+  "reviewer": "root non-author",
+  "result": "pass",
+  "scope": "12 old successful rows from71 plus4 new direct rows81, full input retained, only1 raw underdebit permitted; original failures untouched",
+  "reviews": [
+    {
+      "source": {
+        "number": 26139768,
+        "hash": "0xd7bdbad87da07f0885234e0a53200cf4ec3ae61d73dd7b71db79b2705cb634f5",
+        "generation": 26139768
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence71/historical-native2171.json",
+        "sha256": "6e7ad7618cdf1f04c1be60bd78669e1e3e05065737cff815d6844ee1cd29078e"
+      },
+      "counts": {
+        "rawBalanceChecks": 48,
+        "positive": 12,
+        "rollbackRejections": 16,
+        "postSuccessRollback": 8,
+        "zeroInputRejections": 4
+      },
+      "amounts": [
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "2000000000000000",
+          "mode": "quoted",
+          "actualSpent": "2000000000000000",
+          "quote": "2000303179930373",
+          "actualReceived": "2000303179930373",
+          "inputUnderdeduction": "0",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "2000000000000000",
+          "mode": "runtime",
+          "actualSpent": "2000000000000000",
+          "quote": "2000303179930373",
+          "actualReceived": "2000303179930373",
+          "inputUnderdeduction": "0",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "2000000000000000",
+          "mode": "direct-self",
+          "actualSpent": "2000000000000000",
+          "quote": "2000303179930373",
+          "actualReceived": "2000303179930373",
+          "inputUnderdeduction": "0",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "2000000000000000",
+          "mode": "direct-external",
+          "actualSpent": "2000000000000000",
+          "quote": "2000303179930373",
+          "actualReceived": "2000303179930374",
+          "inputUnderdeduction": "0",
+          "outputDelta": "1"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "20000000000000000",
+          "mode": "quoted",
+          "actualSpent": "20000000000000000",
+          "quote": "20003031741047751",
+          "actualReceived": "20003031741047751",
+          "inputUnderdeduction": "0",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "20000000000000000",
+          "mode": "runtime",
+          "actualSpent": "20000000000000000",
+          "quote": "20003031741047751",
+          "actualReceived": "20003031741047751",
+          "inputUnderdeduction": "0",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "20000000000000000",
+          "mode": "direct-self",
+          "actualSpent": "20000000000000000",
+          "quote": "20003031741047751",
+          "actualReceived": "20003031741047751",
+          "inputUnderdeduction": "0",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "20000000000000000",
+          "mode": "direct-external",
+          "actualSpent": "20000000000000000",
+          "quote": "20003031741047751",
+          "actualReceived": "20003031741047752",
+          "inputUnderdeduction": "0",
+          "outputDelta": "1"
+        },
+        {
+          "tokenIn": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+          "amountIn": "2000303179930373",
+          "mode": "quoted",
+          "actualSpent": "2000303179930372",
+          "quote": "1999680011505872",
+          "actualReceived": "1999680011505872",
+          "inputUnderdeduction": "1",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+          "amountIn": "2000303179930373",
+          "mode": "runtime",
+          "actualSpent": "2000303179930372",
+          "quote": "1999680011505872",
+          "actualReceived": "1999680011505872",
+          "inputUnderdeduction": "1",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+          "amountIn": "20003031799303730",
+          "mode": "quoted",
+          "actualSpent": "20003031799303729",
+          "quote": "19996800056825195",
+          "actualReceived": "19996800056825195",
+          "inputUnderdeduction": "1",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+          "amountIn": "20003031799303730",
+          "mode": "runtime",
+          "actualSpent": "20003031799303729",
+          "quote": "19996800056825195",
+          "actualReceived": "19996800056825195",
+          "inputUnderdeduction": "1",
+          "outputDelta": "0"
+        }
+      ],
+      "status": "pass",
+      "originalTopLevelResult": "failed"
+    },
+    {
+      "source": {
+        "number": 26139768,
+        "hash": "0xd7bdbad87da07f0885234e0a53200cf4ec3ae61d73dd7b71db79b2705cb634f5",
+        "generation": 26139768
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence81/logs/curve-plain-recipient65/historical-native2181.json",
+        "sha256": "e152769bf83508e125b41fafce7c2d88ee1fc2ff46c069044a445782d42182fd"
+      },
+      "counts": {
+        "rawBalanceChecks": 16,
+        "positive": 4,
+        "zeroInputRejections": 4,
+        "rollbackRejections": 8,
+        "postSuccessRollback": 4
+      },
+      "amounts": [
+        {
+          "tokenIn": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+          "amountIn": "2000303179930373",
+          "mode": "direct-self",
+          "actualSpent": "2000303179930372",
+          "quote": "1999680011505872",
+          "actualReceived": "1999680011505872",
+          "inputUnderdeduction": "1",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+          "amountIn": "2000303179930373",
+          "mode": "direct-external",
+          "actualSpent": "2000303179930372",
+          "quote": "1999680011505872",
+          "actualReceived": "1999680011505872",
+          "inputUnderdeduction": "1",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+          "amountIn": "20003031799303730",
+          "mode": "direct-self",
+          "actualSpent": "20003031799303729",
+          "quote": "19996800056825195",
+          "actualReceived": "19996800056825195",
+          "inputUnderdeduction": "1",
+          "outputDelta": "0"
+        },
+        {
+          "tokenIn": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+          "amountIn": "20003031799303730",
+          "mode": "direct-external",
+          "actualSpent": "20003031799303729",
+          "quote": "19996800056825195",
+          "actualReceived": "19996800056825195",
+          "inputUnderdeduction": "1",
+          "outputDelta": "0"
+        }
+      ],
+      "status": "pass",
+      "originalTopLevelResult": "failed"
+    }
+  ],
+  "method": "Independent raw stETH shares converted with same-N pooled/shares ratio and cross-checked actual balanceOf call returns; WETH raw slots, pool fullA calldata, transferFrom, native conversion and output actual recipient deltas; negatives storage union unchanged.",
+  "limits": [
+    "Old successful rows still need current-source compatibility certificate.",
+    "Report81 original aggregate failure corrected separately by canonical regression; this review does not rewrite it.",
+    "No original transaction opportunity or performance claim."
+  ]
+}

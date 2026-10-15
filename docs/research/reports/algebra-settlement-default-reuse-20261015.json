@@ -1,0 +1,218 @@
+{
+  "claim": "Retain original 96 default quoted/runtime executions with source compatibility, not new default EVM.",
+  "originalReport": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/actual/docs/research/reports/algebra-current-executor-acceptance-20261012.json",
+    "sha256": "f1bc9424fef2dc69208102d3a16c2bdd9da6dda74c16a457fb197623899ac7d0"
+  },
+  "originalSamples": [
+    {
+      "key": "algebra",
+      "reference": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra-dual.json",
+      "referenceSha256": "dfc6b6d429c103e9c33e46e43b504457574fdf5ebdca57f9587f83cba8f10f16",
+      "ready": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26018534-attempt01/ready.json",
+      "provenance": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra-prices/input.json",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "source": {
+        "number": 26018534,
+        "hash": "0xba26a0e4891db23e721b7d434b592622fb7842dc35b2dffc20bc1f7936a65a8a",
+        "generation": 26018534
+      },
+      "trials": 4
+    },
+    {
+      "key": "algebra2",
+      "reference": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra2-dual.json",
+      "referenceSha256": "9086063f5d9d6ef23e7f4175e01350171900ac95fdb1d046ec931a97547834eb",
+      "ready": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26030898-attempt01/ready.json",
+      "provenance": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra2-prices/input.json",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "source": {
+        "number": 26030898,
+        "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+        "generation": 26030898
+      },
+      "trials": 4
+    },
+    {
+      "key": "algebra3",
+      "reference": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra3-dual.json",
+      "referenceSha256": "c94fb01a61b831125a539b5eace77682fd708b1212332ec3677c22df82611be7",
+      "ready": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N26013785-attempt01/ready.json",
+      "provenance": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra3-prices/input.json",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "source": {
+        "number": 26013785,
+        "hash": "0x673de33446bcd9fdee4371c29d237c46402e2360186a3fb3fc3a2a3a37a33403",
+        "generation": 26013785
+      },
+      "trials": 4
+    },
+    {
+      "key": "algebra4",
+      "reference": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra4-dual.json",
+      "referenceSha256": "f0bc281e068c629b15cd2ce5f31fba1ec81bbcc895cc76b778edc90002e1e4c6",
+      "ready": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25946003-attempt01/ready.json",
+      "provenance": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra4-prices/input.json",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "source": {
+        "number": 25946003,
+        "hash": "0x5536c70b740995bfa6bcc158673726dc7372a87ddfc534203ef4f4ba02cd97ff",
+        "generation": 25946003
+      },
+      "trials": 4
+    },
+    {
+      "key": "algebra5",
+      "reference": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra5-dual.json",
+      "referenceSha256": "004bff0950efcfa2a829aee9c3683c777fc00eaaf63301520a97a8946247a289",
+      "ready": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25930616-attempt01/ready.json",
+      "provenance": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra5-prices/input.json",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "source": {
+        "number": 25930616,
+        "hash": "0x74738d6652e7cf663495912cc71099623b8ee9636aad5e1a8d0f58827f8651d5",
+        "generation": 25930616
+      },
+      "trials": 4
+    },
+    {
+      "key": "algebra6",
+      "reference": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra6-dual.json",
+      "referenceSha256": "133a8e80202c2bbfe765d23069e2ede8a8cc1ed4191417f72e0626e07f77a791",
+      "ready": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-integration-20261009.CuNyy3/algebra-current-N25975130-attempt01/ready.json",
+      "provenance": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/algebra-current-executor-20261012/algebra6-prices/input.json",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "source": {
+        "number": 25975130,
+        "hash": "0x58ac4d102bb4c31b585f078b50b3dbea9b0ffab35149c8659b0227aaec8ea466",
+        "generation": 25975130
+      },
+      "trials": 4
+    }
+  ],
+  "originalTotals": {
+    "samples": 6,
+    "passed": 6,
+    "directions": 12,
+    "amountTrials": 24,
+    "executions": 96,
+    "quotedExecutions": 48,
+    "runtimeExecutions": 48,
+    "oldInventoryControls": 48,
+    "noInputReverts": 48,
+    "directDualRpcCalls": 758
+  },
+  "sourceBinding": {
+    "frozenSourceRoot": "/opt/mev-cloud/family-runtime-20261007/logs/blockscan-direct-sync-20261012.MCA5F4/source",
+    "rows": [
+      {
+        "path": "listener/src/searcher/venues/swaps/algebra-integral-family/abi.ts",
+        "frozenOldSha256": "0ba10df5fbb9591d21439bb53725d4d90f77c83806198e189856c93e6c43b594",
+        "preDirectSha256": "0ba10df5fbb9591d21439bb53725d4d90f77c83806198e189856c93e6c43b594",
+        "currentSha256": "0ba10df5fbb9591d21439bb53725d4d90f77c83806198e189856c93e6c43b594",
+        "unchanged": true
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/algebra-integral-family/exact.ts",
+        "frozenOldSha256": "eda86229863264e5e3f126a27fc89ff49b0483bea2db116288688c4b092505bd",
+        "preDirectSha256": "eda86229863264e5e3f126a27fc89ff49b0483bea2db116288688c4b092505bd",
+        "currentSha256": "eda86229863264e5e3f126a27fc89ff49b0483bea2db116288688c4b092505bd",
+        "unchanged": true
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/algebra-integral-family/execution.ts",
+        "frozenOldSha256": "f868b8ab26f28aafd133e46923cf1b38a6aaf8175b0a0fc1f8583565d7f27b48",
+        "preDirectSha256": "9bf490ef000446298342dbdba0f88b2db2a9a5441f292ce748c756c206249c56",
+        "currentSha256": "b7e0a7fb30a97ff51a5773211f424a6cf7393eeb86a9d1f81003edab721c9ea8",
+        "unchanged": false
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/algebra-integral-family/math.ts",
+        "frozenOldSha256": "1d3df8dc2f4065c401b6c6491342ee452d5b5e8a61e399d30e2cdc7b202afb24",
+        "preDirectSha256": "1d3df8dc2f4065c401b6c6491342ee452d5b5e8a61e399d30e2cdc7b202afb24",
+        "currentSha256": "1d3df8dc2f4065c401b6c6491342ee452d5b5e8a61e399d30e2cdc7b202afb24",
+        "unchanged": true
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/algebra-integral-family/quoter-exact.ts",
+        "frozenOldSha256": "ab109bbdd2f16fb714da2a716d21941aa105675c7b6bc83e52c3c9a55fecc1ec",
+        "preDirectSha256": "ab109bbdd2f16fb714da2a716d21941aa105675c7b6bc83e52c3c9a55fecc1ec",
+        "currentSha256": "ab109bbdd2f16fb714da2a716d21941aa105675c7b6bc83e52c3c9a55fecc1ec",
+        "unchanged": true
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/algebra-integral-family/quoter-model.ts",
+        "frozenOldSha256": "1c5f135cd514d22275c964f13b4e22a711411e2733ac120e8de5a0ca9be2851c",
+        "preDirectSha256": "1c5f135cd514d22275c964f13b4e22a711411e2733ac120e8de5a0ca9be2851c",
+        "currentSha256": "1c5f135cd514d22275c964f13b4e22a711411e2733ac120e8de5a0ca9be2851c",
+        "unchanged": true
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/algebra-integral-family/state.ts",
+        "frozenOldSha256": "52215aa02cf621a30700e007e1a9a1f37f8b18bfeaa05a2a16c7696dbe1dd85c",
+        "preDirectSha256": "52215aa02cf621a30700e007e1a9a1f37f8b18bfeaa05a2a16c7696dbe1dd85c",
+        "currentSha256": "52215aa02cf621a30700e007e1a9a1f37f8b18bfeaa05a2a16c7696dbe1dd85c",
+        "unchanged": true
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/algebra-integral-family/types.ts",
+        "frozenOldSha256": "441b799c7b825d45dbcbba0e0438b7cea6a2481e36330a99d4384b9cfbac9a95",
+        "preDirectSha256": "441b799c7b825d45dbcbba0e0438b7cea6a2481e36330a99d4384b9cfbac9a95",
+        "currentSha256": "441b799c7b825d45dbcbba0e0438b7cea6a2481e36330a99d4384b9cfbac9a95",
+        "unchanged": true
+      }
+    ],
+    "limitation": "Original TypeScript source is aggregate-pinned. This is a narrow semantic comparison to retained report-era frozen sources, not an invented per-file old dirty-tree attestation."
+  },
+  "oldToPreDirectDiff": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/default79-execution.diff",
+    "sha256": "0b329000feacbb63470e798b3bf0b1737f658cbd0cf38f159a4b2912e9592450"
+  },
+  "currentDirectDefaultProof": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/default-branch-proof72.json",
+    "sha256": "b111fdb05dfb223ff3fe2a928fafb165dc6646cc7fe703fa143e4ab15bb5205b"
+  },
+  "compatibility": [
+    "No request retains recipient=executor; no deferred program/floor/patch emitted; runtimeCallbackPayment unchanged. Original signed full input return and actual debit guard remain; minimum output getter still executor.",
+    "Added recipient validity check does not reject existing six distinct executor/pool/token identities.",
+    "Seven quote/ABI/state/math/types/quoter sources are byte-identical to frozen source and current snapshot.",
+    "Old BotVM artifact hash exactly equals already metadata-bound Kyber original artifact1e3429...; same four Solidity compilation sources and audited old opcode compatibility apply.",
+    "Current common native boundary returns early on all selected ERC20 Algebra routes; new direct-native rounding does not execute."
+  ],
+  "sharedRuntimeBinding": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/old-runtime76-binding.json",
+    "sha256": "14b62700342da938e15adf3b43056a5e5685437efeea5dabd0d8eff290b3e766"
+  },
+  "commonOldToCurrentAudit": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/default-reuse73.json",
+    "sha256": "3b5066292099162cd767c97f4f4c60bb893a5fe3155c77250ba06605b2082982"
+  },
+  "currentNativeCompatibility": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/common-native-compatibility-v1-84.json",
+    "sha256": "b909b63f34bbcca86db3340d55cf3891cf7dae4874da25c3741969fe6263c93b"
+  },
+  "oldTracesReadback": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/old-traces74.jsonl",
+    "sha256": "a71a606dc987a4b35d7b9a84abc5639d36e6368ee51e46cdcf293b44c8417854"
+  },
+  "oldTraceObservation": "All96 retained ordinary executions were previously read back with only input/output transfer calls; no third-party fee transfer inferred.",
+  "rawHashPolicy": "No original hash, original raw result or policy rejection changed."
+}

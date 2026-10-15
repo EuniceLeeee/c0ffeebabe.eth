@@ -1,0 +1,391 @@
+{
+  "reviewer": "root non-author",
+  "result": "pass",
+  "scope": "Curve classic BAC and USTP rateSlot10; each12 directions P/10P,96 new actual positives total,96 zero+192 fault",
+  "reviews": [
+    {
+      "source": {
+        "number": 25982128,
+        "hash": "0x415fe0b4fdfe8fa670bec304f852df1d75c6812e5ce4296b6ef6449c73bfb9d1",
+        "generation": 25982128
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence79/historical-bac79.json",
+        "sha256": "62597abd2f440048307f54dd2d9213baebc1756fce604a23551819475cb76157"
+      },
+      "counts": {
+        "rawBalanceChecks": 192,
+        "positive": 48,
+        "zeroInputRejections": 48,
+        "rollbackRejections": 96,
+        "postSuccessRollback": 48
+      },
+      "amounts": [
+        {
+          "tokenIn": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "1877999685765050709030",
+          "actualReceived": "1921921230971978148",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "18779996857650507090300",
+          "actualReceived": "12904975186914068479",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "1877999685765050709030",
+          "actualReceived": "1921917",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "18779996857650507090300",
+          "actualReceived": "12904950",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "1877999685765050709030",
+          "actualReceived": "1922233",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "18779996857650507090300",
+          "actualReceived": "12907071",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "amountIn": "5214783887446096727",
+          "actualReceived": "4240597736356035581624",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "amountIn": "52147838874460967270",
+          "actualReceived": "21088760016351631236391",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "5214783887446096727",
+          "actualReceived": "5213992",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "52147838874460967270",
+          "actualReceived": "52139923",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "5214783887446096727",
+          "actualReceived": "5214736",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "52147838874460967270",
+          "actualReceived": "52147368",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "amountIn": "5215240",
+          "actualReceived": "4240929966137341335134",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "amountIn": "52152400",
+          "actualReceived": "21089634037211819400661",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "5215240",
+          "actualReceived": "5214467002303026945",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "52152400",
+          "actualReceived": "52144670003683574634",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "5215240",
+          "actualReceived": "5215202",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "52152400",
+          "actualReceived": "52152022",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "amountIn": "5215904",
+          "actualReceived": "4240953135345527821748",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x3449fc1cd036255ba1eb19d65ff4ba2b8903a69a",
+          "amountIn": "52159040",
+          "actualReceived": "21089694384788764377096",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "5215904",
+          "actualReceived": "5214386380002635844",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "52159040",
+          "actualReceived": "52143863785448561486",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "5215904",
+          "actualReceived": "5214377",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "52159040",
+          "actualReceived": "52143770",
+          "label": "ten-times-declared-input-only"
+        }
+      ],
+      "status": "pass"
+    },
+    {
+      "source": {
+        "number": 26015090,
+        "hash": "0x7126b90b9a23fd1bf1191f5d3fcb890102a1c199e3b4a348770be82a282f544a",
+        "generation": 26015090
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence79/historical-ustp79.json",
+        "sha256": "939c58cf196c76d162265ed44c485faaf45554b298ddd4caf21237c38cbd813a"
+      },
+      "counts": {
+        "rawBalanceChecks": 192,
+        "positive": 48,
+        "zeroInputRejections": 48,
+        "rollbackRejections": 96,
+        "postSuccessRollback": 48
+      },
+      "amounts": [
+        {
+          "tokenIn": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "40235013",
+          "actualReceived": "26324144053327578",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "402350130",
+          "actualReceived": "29328896279236869",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "40235013",
+          "actualReceived": "26324",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "402350130",
+          "actualReceived": "29329",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "40235013",
+          "actualReceived": "26331",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "402350130",
+          "actualReceived": "29336",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "amountIn": "5214783887446096727",
+          "actualReceived": "50315676",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "amountIn": "52147838874460967270",
+          "actualReceived": "50320754",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "5214783887446096727",
+          "actualReceived": "5214042",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "52147838874460967270",
+          "actualReceived": "52140429",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "5214783887446096727",
+          "actualReceived": "5215247",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "52147838874460967270",
+          "actualReceived": "52152470",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "amountIn": "5215240",
+          "actualReceived": "50315677",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "amountIn": "52152400",
+          "actualReceived": "50320754",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "5215240",
+          "actualReceived": "5214416385041017075",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "52152400",
+          "actualReceived": "52144163822758403706",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "5215240",
+          "actualReceived": "5215661",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "amountIn": "52152400",
+          "actualReceived": "52156618",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "amountIn": "5215904",
+          "actualReceived": "50315676",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xebe534c54a2ae65d5bedd5872824c2a5af855bb0",
+          "amountIn": "52159040",
+          "actualReceived": "50320754",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "5215904",
+          "actualReceived": "5213876292075148636",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "amountIn": "52159040",
+          "actualReceived": "52138762899580784317",
+          "label": "ten-times-declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "5215904",
+          "actualReceived": "5213917",
+          "label": "declared-input-only"
+        },
+        {
+          "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "52159040",
+          "actualReceived": "52139176",
+          "label": "ten-times-declared-input-only"
+        }
+      ],
+      "status": "pass"
+    }
+  ],
+  "method": "Raw balance slots, full input/receiver int128 calldata, actual return/output/native preservation, no executor wrapping, negative storage union and successful operation followed by rollback.",
+  "limitations": [
+    "Original75/76 failures preserved; observerABI and wrapping/allowance assumptions corrected, independent source review and canonical regressions bound separately.",
+    "Existing MAX or MAX−A approval retained; not claimed as zero.",
+    "No natural valuation/opportunity/performance upgrade. c270 separate reviewed evidence retained; all3 actual classic instances covered."
+  ]
+}

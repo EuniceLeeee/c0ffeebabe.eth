@@ -1,0 +1,24 @@
+{
+  "reviewer": "v1_accept26 non-author",
+  "result": "source-approved-pending-canonical-real-EVM",
+  "files": [
+    {
+      "path": "test/ExecutionAssetBoundary.t.sol",
+      "before": "8092f23d44f8d4628d9dc7307a7a9d62b2f02cbc0e7c7ecd5f99d19fa0ca5382",
+      "after": "81a74328d471d015bf242ac4630808f89d3844c9ffa2417e84b6a2addbb11949"
+    },
+    {
+      "path": "listener/src/searcher/test/execution-asset-boundary-evm.ts",
+      "before": "a0c165fd66ae60f17b01659588b546d4b7e6cf7336445cf828f2849ef0515bdd",
+      "after": "1a0e667605d577a88df544b72b0610770ad0b15952c43fd40008c451c8c43aab"
+    }
+  ],
+  "finding": "Old direct default assumed exact0; updated authorized default1 requires explicit0 fixture to retain old exact safety test plus true0/1 boundary coverage.",
+  "checks": [
+    "No production changes",
+    "Both native directions and self/external preserve requestedINPUT and measuredreceipt",
+    "Default1 accepts exactly1 residue; explicit0 rejects1;2/zero debit/overdebit reject;A1 zero-debit rejects",
+    "NativeInput debt>amount new row rejected by fixture; separate existing overspendNative case remains the independent common old-native inventory gate"
+  ],
+  "firstFailure": "shared59/shared81-execution-asset-boundary-evm.log"
+}

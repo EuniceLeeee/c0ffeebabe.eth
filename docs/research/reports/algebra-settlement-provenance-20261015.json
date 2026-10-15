@@ -1,0 +1,372 @@
+{
+  "schema": "algebra-settlement-final-handoff/v1",
+  "result": "Actual new settlement matrices passed; independent raw review passed. Prior default evidence retained by narrow compatibility.",
+  "scope": "Algebra Integral direct self/external and actual deferred callback with isolated1raw funding fixture; not market return, profitability, opportunity or performance. Prior default quoted/runtime proofs retained separately.",
+  "totals": {
+    "trials": 24,
+    "positive": 96,
+    "reject": 480,
+    "inactive": 96,
+    "rawBalanceRows": 768,
+    "supplyObservations": 192
+  },
+  "sourceTreeSha256": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c",
+  "snapshotHead": "767feeb1a3af4d2e83a108c7db547ce3f84786cf",
+  "owned": [
+    {
+      "path": "listener/src/searcher/venues/swaps/algebra-integral-family/direct.ts",
+      "beforeSha256": null,
+      "afterSha256": "ce0c619a4ac7e6c233e9e069795c1277982c2cd9e401b9862ec72ddc36d090d7"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/algebra-integral-family/execution.ts",
+      "beforeSha256": "9bf490ef000446298342dbdba0f88b2db2a9a5441f292ce748c756c206249c56",
+      "afterSha256": "b7e0a7fb30a97ff51a5773211f424a6cf7393eeb86a9d1f81003edab721c9ea8"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/algebra-integral-family/test/settlement-evidence.ts",
+      "beforeSha256": null,
+      "afterSha256": "8fb451df8e75a7e8b965d231e1d42c2c4b0f4116532852ed4afd92dbbcd2c2f2"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/algebra-integral-family/test/settlement-historical.ts",
+      "beforeSha256": null,
+      "afterSha256": "6add9cdd5283431d627edd8eb16391ce48f34cf104d116c66c85bb0e9cdca35a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/algebra-integral-family/test/settlement-contract.ts",
+      "beforeSha256": null,
+      "afterSha256": "74ff6e5dabe1b38e4465b40b2472385610ebd41af095cfe4173bc6c82b200011"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/algebra-integral-family/test/settlement-ready.ts",
+      "beforeSha256": null,
+      "afterSha256": "2f6efdc316e8a059d2268d88b96db13221d40319fe68b071812589c5d2758702"
+    }
+  ],
+  "currentSourceSnapshot": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/source-current73.json",
+    "sha256": "6349b3c63360ee9ac2cfa31f0ed76d7da1235df6ad8b698a67df125d66e91c84"
+  },
+  "sourceRecompute": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/snapshot-verification73.json",
+    "sha256": "fd8f871831e09df7a03bcf49c960e43911fc7a527c6e3c70404e0594cb6ba9fd"
+  },
+  "canonical": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/selection72.json",
+      "sha256": "891f09e6fbba67846f1c5f3dbb15b584f2d59770007feb1d598e10bd2a7a4359"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/checks72.json",
+      "sha256": "462d90973a844ba330d46190f6ae694497d017be60314b92e108ddd16df2aa2a"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/complete72.json",
+      "sha256": "767dabd789022f7f5e2abe25e99ed74198522729043810c1e899b7c4db3a8bfc"
+    }
+  ],
+  "build": "parent shared84 canonical production build/globaldual/direct PASS; no repeated build",
+  "samples": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra-settlement72.json",
+      "sha256": "a1183b5fd999f928db2e3bd718f491aeef2df5cc1cf6aa848585392b0fb23952",
+      "source": {
+        "number": 26018534,
+        "hash": "0xba26a0e4891db23e721b7d434b592622fb7842dc35b2dffc20bc1f7936a65a8a",
+        "generation": 26018534
+      },
+      "trials": 4,
+      "positive": 16,
+      "reject": 80,
+      "inactive": 16,
+      "rawBalanceRows": 128,
+      "supplyObservations": 32,
+      "sourceTreeSha256": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra2-settlement72.json",
+      "sha256": "567e025291cafc3e583f0a1dc48a3d71aa20986269f341f84a392083cfe34b82",
+      "source": {
+        "number": 26030898,
+        "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+        "generation": 26030898
+      },
+      "trials": 4,
+      "positive": 16,
+      "reject": 80,
+      "inactive": 16,
+      "rawBalanceRows": 128,
+      "supplyObservations": 32,
+      "sourceTreeSha256": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra3-settlement72.json",
+      "sha256": "ced3d87f1b8851eddcb4517cf5b2f34f14f6b568906851391366bb2afad08c0f",
+      "source": {
+        "number": 26013785,
+        "hash": "0x673de33446bcd9fdee4371c29d237c46402e2360186a3fb3fc3a2a3a37a33403",
+        "generation": 26013785
+      },
+      "trials": 4,
+      "positive": 16,
+      "reject": 80,
+      "inactive": 16,
+      "rawBalanceRows": 128,
+      "supplyObservations": 32,
+      "sourceTreeSha256": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra4-settlement72.json",
+      "sha256": "4001a4ea90d924e9a50c3011b6c1f8388010370e4931b34de8b170727fc02ccb",
+      "source": {
+        "number": 25946003,
+        "hash": "0x5536c70b740995bfa6bcc158673726dc7372a87ddfc534203ef4f4ba02cd97ff",
+        "generation": 25946003
+      },
+      "trials": 4,
+      "positive": 16,
+      "reject": 80,
+      "inactive": 16,
+      "rawBalanceRows": 128,
+      "supplyObservations": 32,
+      "sourceTreeSha256": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra5-settlement72.json",
+      "sha256": "7ed7c5374a8ad17f789961606cbd962316624aa4789234e1c1c1be93de301c24",
+      "source": {
+        "number": 25930616,
+        "hash": "0x74738d6652e7cf663495912cc71099623b8ee9636aad5e1a8d0f58827f8651d5",
+        "generation": 25930616
+      },
+      "trials": 4,
+      "positive": 16,
+      "reject": 80,
+      "inactive": 16,
+      "rawBalanceRows": 128,
+      "supplyObservations": 32,
+      "sourceTreeSha256": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra6-settlement72.json",
+      "sha256": "d89f8b7268746c8af23ab04e063ac3408277f81830bb91c53d4bf77cda8037b7",
+      "source": {
+        "number": 25975130,
+        "hash": "0x58ac4d102bb4c31b585f078b50b3dbea9b0ffab35149c8659b0227aaec8ea466",
+        "generation": 25975130
+      },
+      "trials": 4,
+      "positive": 16,
+      "reject": 80,
+      "inactive": 16,
+      "rawBalanceRows": 128,
+      "supplyObservations": 32,
+      "sourceTreeSha256": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c"
+    }
+  ],
+  "independentReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/independent-raw-review84.json",
+    "sha256": "958f75030fe663cc4c712f79faa504e03fda2c64201f554a6a89a0af88585bf1"
+  },
+  "independentSourceBinding": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/independent-source-binding84.json",
+    "sha256": "d88881d14ec4d3c7c41a268909d4931264efeb69d62b16464084665e2ac20171"
+  },
+  "defaultReuse": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/default-reuse79.json",
+    "sha256": "55171f2a2ec3acc1e970cc6de4b31cbdd62514e82ad09a19e18a3205d3e76eae"
+  },
+  "activeCallbackAuthenticationReuse": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/kyber67/callback-auth-reuse79.json",
+    "sha256": "072c11221032ba15abbec8322ada3b282c209cea58f988a5cbb0d1216f0aa148"
+  },
+  "variantMapping": {
+    "cypher-bound-quoter": {
+      "actualSelectedInstances": [
+        {
+          "tx": "0x02175d2ac2e806bc6e1033cae640cf45509b7ded4a2e64ebcbba9c425afff5b7",
+          "source": {
+            "number": 26018534,
+            "hash": "0xba26a0e4891db23e721b7d434b592622fb7842dc35b2dffc20bc1f7936a65a8a",
+            "generation": 26018534
+          },
+          "instance": "0x76a278bd71f566ee6ba2fe438f6099c8d8f98f43",
+          "executedFee": {
+            "fee": "500",
+            "kind": "cypher-bound-quoter",
+            "plugin": "0xe5e0235245E3C05f66447a513c4e4e673805964b",
+            "pluginConfig": 215,
+            "quoterBinding": {
+              "pluginCodeHash": "0x01ba467e7b29402e22be39c243e9141cb9f9cb9b345ed57abdccb082a83898c5",
+              "pluginFactory": "0xb6e39Ac5476FEff07933b5424204De95C95068A2",
+              "poolDeployer": "0x42ac1bEf3f25C29bbE5e06eF5DF3D00eAd7cf20F",
+              "quoter": "0x02f22D58d161d1C291ABfe88764d84120f20F723",
+              "quoterCodeHash": "0xc5b225dfa1929dac89ad0977a85a38ce262b565c96e170f8cd1f752ee5d9feb1"
+            }
+          },
+          "raw": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra-settlement72.json",
+            "sha256": "a1183b5fd999f928db2e3bd718f491aeef2df5cc1cf6aa848585392b0fb23952"
+          }
+        },
+        {
+          "tx": "0x006223028f05865619d07584c43cf67cb608705d04ebc732e15bf40869d030b8",
+          "source": {
+            "number": 26030898,
+            "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e",
+            "generation": 26030898
+          },
+          "instance": "0x915fd34cadd63907b51eb64dddc2eadd114a0bed",
+          "executedFee": {
+            "fee": "500",
+            "kind": "cypher-bound-quoter",
+            "plugin": "0xC9B5e4fDCEe51e2acAa54Dd2E147015aD7b9D428",
+            "pluginConfig": 215,
+            "quoterBinding": {
+              "pluginCodeHash": "0xa3eb944157576b623e2f1ebac819baf21a60abbda18998257cc389a1cb72f496",
+              "pluginFactory": "0xb6e39Ac5476FEff07933b5424204De95C95068A2",
+              "poolDeployer": "0x42ac1bEf3f25C29bbE5e06eF5DF3D00eAd7cf20F",
+              "quoter": "0x02f22D58d161d1C291ABfe88764d84120f20F723",
+              "quoterCodeHash": "0xc5b225dfa1929dac89ad0977a85a38ce262b565c96e170f8cd1f752ee5d9feb1"
+            }
+          },
+          "raw": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra2-settlement72.json",
+            "sha256": "567e025291cafc3e583f0a1dc48a3d71aa20986269f341f84a392083cfe34b82"
+          }
+        },
+        {
+          "tx": "0x1f0e69a9d9be232986b81216ce341e5d3dea9d6241074f2331cf8bb4d7ecaacc",
+          "source": {
+            "number": 26013785,
+            "hash": "0x673de33446bcd9fdee4371c29d237c46402e2360186a3fb3fc3a2a3a37a33403",
+            "generation": 26013785
+          },
+          "instance": "0xc0cf00079741ab9db6aceb5f7fe2f69c243c1aae",
+          "executedFee": {
+            "fee": "500",
+            "kind": "cypher-bound-quoter",
+            "plugin": "0x6850478aA438a25AadEe86d6d1df1FdC7bDec100",
+            "pluginConfig": 215,
+            "quoterBinding": {
+              "pluginCodeHash": "0xbb3073d803fcd470e880c8aaca1ad1954964dad3073d1c67e20a715827ba5c70",
+              "pluginFactory": "0xb6e39Ac5476FEff07933b5424204De95C95068A2",
+              "poolDeployer": "0x42ac1bEf3f25C29bbE5e06eF5DF3D00eAd7cf20F",
+              "quoter": "0x02f22D58d161d1C291ABfe88764d84120f20F723",
+              "quoterCodeHash": "0xc5b225dfa1929dac89ad0977a85a38ce262b565c96e170f8cd1f752ee5d9feb1"
+            }
+          },
+          "raw": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra3-settlement72.json",
+            "sha256": "ced3d87f1b8851eddcb4517cf5b2f34f14f6b568906851391366bb2afad08c0f"
+          }
+        },
+        {
+          "tx": "0x246160cdd6c0048a58076fc96a49d9ee18f4438a42e8bcb0727c6b42e06b86b8",
+          "source": {
+            "number": 25946003,
+            "hash": "0x5536c70b740995bfa6bcc158673726dc7372a87ddfc534203ef4f4ba02cd97ff",
+            "generation": 25946003
+          },
+          "instance": "0x65937a5421603612c243300b250f64e58afcdbc4",
+          "executedFee": {
+            "fee": "500",
+            "kind": "cypher-bound-quoter",
+            "plugin": "0x30004B64337B633CABd90F1de4F79920BCa6BB93",
+            "pluginConfig": 215,
+            "quoterBinding": {
+              "pluginCodeHash": "0x4b973d84be311b736f7e83e072b7341c50622b6bd3799dd4d2c45c8d8d967aab",
+              "pluginFactory": "0xb6e39Ac5476FEff07933b5424204De95C95068A2",
+              "poolDeployer": "0x42ac1bEf3f25C29bbE5e06eF5DF3D00eAd7cf20F",
+              "quoter": "0x02f22D58d161d1C291ABfe88764d84120f20F723",
+              "quoterCodeHash": "0xc5b225dfa1929dac89ad0977a85a38ce262b565c96e170f8cd1f752ee5d9feb1"
+            }
+          },
+          "raw": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra4-settlement72.json",
+            "sha256": "4001a4ea90d924e9a50c3011b6c1f8388010370e4931b34de8b170727fc02ccb"
+          }
+        },
+        {
+          "tx": "0x4a12dbe50e89057b07ccfc471d0db0c406be65e9d82d6e29a55284844e30cd85",
+          "source": {
+            "number": 25930616,
+            "hash": "0x74738d6652e7cf663495912cc71099623b8ee9636aad5e1a8d0f58827f8651d5",
+            "generation": 25930616
+          },
+          "instance": "0x177f07c0843776b2a6342ed6c488af64e6f2fd65",
+          "executedFee": {
+            "fee": "500",
+            "kind": "cypher-bound-quoter",
+            "plugin": "0x580E4Fe61c6551B3794C5d0DE94FBc0c699a6E6a",
+            "pluginConfig": 215,
+            "quoterBinding": {
+              "pluginCodeHash": "0x7e73b4b97857f9bd588ee43255cb74f3cf097728303807ca75bb8e176c9bedb2",
+              "pluginFactory": "0xb6e39Ac5476FEff07933b5424204De95C95068A2",
+              "poolDeployer": "0x42ac1bEf3f25C29bbE5e06eF5DF3D00eAd7cf20F",
+              "quoter": "0x02f22D58d161d1C291ABfe88764d84120f20F723",
+              "quoterCodeHash": "0xc5b225dfa1929dac89ad0977a85a38ce262b565c96e170f8cd1f752ee5d9feb1"
+            }
+          },
+          "raw": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra5-settlement72.json",
+            "sha256": "7ed7c5374a8ad17f789961606cbd962316624aa4789234e1c1c1be93de301c24"
+          }
+        },
+        {
+          "tx": "0xacc347b03f7b6fd9efe0f50035f2c63720ac2e2954229ac8fe7465dcc6f23ef0",
+          "source": {
+            "number": 25975130,
+            "hash": "0x58ac4d102bb4c31b585f078b50b3dbea9b0ffab35149c8659b0227aaec8ea466",
+            "generation": 25975130
+          },
+          "instance": "0xf53dcd757f208fb4f3631d16d8c17ddb21a9d98d",
+          "executedFee": {
+            "fee": "500",
+            "kind": "cypher-bound-quoter",
+            "plugin": "0x4c643647AfbE131C1A2231A6d973257d1e4769c5",
+            "pluginConfig": 215,
+            "quoterBinding": {
+              "pluginCodeHash": "0x14d5aba7b3817ff781c109561b965f8e28a0967e547753fa3e636ddba05b7c3f",
+              "pluginFactory": "0xb6e39Ac5476FEff07933b5424204De95C95068A2",
+              "poolDeployer": "0x42ac1bEf3f25C29bbE5e06eF5DF3D00eAd7cf20F",
+              "quoter": "0x02f22D58d161d1C291ABfe88764d84120f20F723",
+              "quoterCodeHash": "0xc5b225dfa1929dac89ad0977a85a38ce262b565c96e170f8cd1f752ee5d9feb1"
+            }
+          },
+          "raw": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/algebra71/evidence73/algebra6-settlement72.json",
+            "sha256": "d89f8b7268746c8af23ab04e063ac3408277f81830bb91c53d4bf77cda8037b7"
+          }
+        }
+      ],
+      "historicalValidated": true
+    },
+    "global-state-last-fee": {
+      "actualSelectedInstances": [],
+      "historicalValidated": false,
+      "coverage": "Existing static fixtures and implementation retained; six selected historical instances all dynamic bound-quoter. No synthetic fixture promoted to historical proof."
+    },
+    "paymentAdvance": {
+      "selected": false,
+      "historicalValidated": false,
+      "scope": "Unselected extra call variant; no fabricated instance or success."
+    }
+  },
+  "limitations": [
+    "All6 existing actual dynamic-plugin profiles accepted at their own historical N; no fabricated additional plugin/static instances.",
+    "Fixture consumes1raw fresh output and directly funds real pool debt; not profitable return route.",
+    "Exact/request input unmodified; direct/deferred actual input and receipt compared,0/1 short/extra false-return rejected.",
+    "Runtime construction Exact=0,quoted=0,RPC=0 via current issuer guard.",
+    "Inactive no-pending callback probe is inertness, not active wrong-caller proof.",
+    "Existing defaults are not re-executed by this run.",
+    "No performance or opportunity/live/broadcast claim."
+  ],
+  "failures": "None in actual Algebra run72; all raw preserved",
+  "process": {
+    "drained": true,
+    "forkDrained": true,
+    "port18971": 111
+  }
+}

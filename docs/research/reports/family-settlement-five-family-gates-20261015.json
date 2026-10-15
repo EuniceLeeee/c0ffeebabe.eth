@@ -1,0 +1,141 @@
+[
+  {
+    "family": "kyberswap-elastic",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T12:51:34.747163+00:00",
+    "finishedAt": "2026-10-15T12:52:24.621664+00:00",
+    "logSha256": "9ee18d6ee188a8b00aec1f893b3e7204c56c0019ae85527b6ad68e6e7a7b736a",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/five-gate87-selection.json",
+    "manifestSha256": "f08d0c13165ff481f8f0c4f18bdd68c34a9aeffc5ab5ba21513e82eaccca50ab",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "kyberswap-elastic",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  {
+    "family": "swap:algebra-integral",
+    "exitCode": 1,
+    "startedAt": "2026-10-15T12:52:24.622016+00:00",
+    "finishedAt": "2026-10-15T12:53:14.565766+00:00",
+    "logSha256": "a76bc0c1fcf8b4b8ba9f20f6d31ed33540f522e643fa2ed907b0bf0e5915fd33",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/five-gate87-selection.json",
+    "manifestSha256": "d04649ea05f8ce0165d9bc531341a33d7aaf5828fa695fbf675c56d924227867",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "swap:algebra-integral",
+          "passed": false,
+          "failures": [
+            "variant coverage is incomplete",
+            "ordinary swap/global-state-last-fee: deployment interface; deployment identity; callback semantics; capability wiring; execution evidence; \u5b9e\u9645\u5386\u53f2\u6837\u672c\u662f\u52a8\u6001 Cypher\uff1b\u672a\u5efa\u7acb\u9759\u6001 no-plugin/global-fee profile \u7684\u72ec\u7acb\u90e8\u7f72/\u5386\u53f2\u7ed1\u5b9a\u3002; \u8be5\u9759\u6001 profile \u65b0 direct/deferred \u5b9e\u9645\u6267\u884c\u672a\u9a8c\u8bc1\u3002",
+            "swapWithPaymentInAdvance/unselected: deployment identity; capability wiring; execution evidence; swapWithPaymentInAdvance \u662f\u5df2\u90e8\u7f72\u4f46\u672a\u88ab\u672c Family \u9009\u62e9\u7684\u5165\u53e3\uff1b\u4e0d\u4e3a\u8986\u76d6\u7387\u81ea\u52a8\u63a5\u5165\u3002; \u8be5\u5165\u53e3 input-first\uff0c\u4e0d\u80fd\u79f0\u4e3a\u666e\u901a deferred-input\uff1b\u5f53\u524d\u672a\u9a8c\u8bc1\u5176 Family \u63a5\u7ebf/\u6267\u884c\u3002"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "family": "curve-plain",
+    "exitCode": 1,
+    "startedAt": "2026-10-15T12:53:14.566193+00:00",
+    "finishedAt": "2026-10-15T12:54:04.643771+00:00",
+    "logSha256": "2f5f5711e84d5f1abfd57107ba92b743342434ee9891161436e5201b54faad8c",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/five-gate87-selection.json",
+    "manifestSha256": "2ef036ab7f136f972d2ab83ab7207139b560a7eaae2d895e62f7e3ab928a9e4d",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "curve-plain",
+          "passed": false,
+          "failures": [
+            "variant coverage is incomplete",
+            "received-no-receiver declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; \u8be5\u7cbe\u786e\u58f0\u660e mode \u65e0\u72ec\u7acb\u5b9e\u9645 Ready \u90e8\u7f72\u6837\u672c\uff0cinterface/\u5b9e\u73b0\u8eab\u4efd\u4e0e\u6536\u6b3e\u65b9/\u56de\u8c03\u8bed\u4e49\u5c1a\u672a\u6838\u5b9e\u3002; \u76f8\u90bb\u6a21\u5f0f ABI \u6216 codec \u5206\u652f\u5b58\u5728\u4e0d\u80fd\u4ee3\u66ff\u672c\u6a21\u5f0f\u6267\u884c\u9a8c\u6536\u3002",
+            "received-uint declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; \u8be5\u7cbe\u786e\u58f0\u660e mode \u65e0\u72ec\u7acb\u5b9e\u9645 Ready \u90e8\u7f72\u6837\u672c\uff0cinterface/\u5b9e\u73b0\u8eab\u4efd\u4e0e\u6536\u6b3e\u65b9/\u56de\u8c03\u8bed\u4e49\u5c1a\u672a\u6838\u5b9e\u3002; \u76f8\u90bb\u6a21\u5f0f ABI \u6216 codec \u5206\u652f\u5b58\u5728\u4e0d\u80fd\u4ee3\u66ff\u672c\u6a21\u5f0f\u6267\u884c\u9a8c\u6536\u3002",
+            "native-exchange-uint declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; \u8be5\u7cbe\u786e\u58f0\u660e mode \u65e0\u72ec\u7acb\u5b9e\u9645 Ready \u90e8\u7f72\u6837\u672c\uff0cinterface/\u5b9e\u73b0\u8eab\u4efd\u4e0e\u6536\u6b3e\u65b9/\u56de\u8c03\u8bed\u4e49\u5c1a\u672a\u6838\u5b9e\u3002; \u76f8\u90bb\u6a21\u5f0f ABI \u6216 codec \u5206\u652f\u5b58\u5728\u4e0d\u80fd\u4ee3\u66ff\u672c\u6a21\u5f0f\u6267\u884c\u9a8c\u6536\u3002"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "family": "curve-underlying",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T12:54:04.644223+00:00",
+    "finishedAt": "2026-10-15T12:54:54.641316+00:00",
+    "logSha256": "68f2d9b9c1f79620c5fdc182fe9a2aeb46c83cea30b6d52931e3411915890fe8",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/five-gate87-selection.json",
+    "manifestSha256": "f7ca0a9bbc685eab76e08cd68914e41265fced32001b90e690880927675218e3",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "curve-underlying",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  {
+    "family": "protocol:erc4626-silo-redeem",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T12:54:54.641852+00:00",
+    "finishedAt": "2026-10-15T12:55:44.498394+00:00",
+    "logSha256": "39b737ba7740532114e459b977081eca2065b01fdd0b7719e66cd4b5d0356c31",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/five-gate87-selection.json",
+    "manifestSha256": "69782488b2527b28b1120af1ef353e60fd7aa875e27be0298fc0e8a143d9b8c6",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:erc4626-silo-redeem",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  }
+]

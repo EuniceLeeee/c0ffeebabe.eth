@@ -150,8 +150,8 @@ contract CurveNativeRecipientPool {
         require(i < 2 && j == 1 - i && dx > 0); calls++;
         CurveRecipientToken t = CurveRecipientToken(TOKEN);
         if (i == 0) require(msg.value == dx); else { require(msg.value == 0); t.transferFrom(msg.sender, address(this), dx); }
-        if (fault == 1 || fault == 2) {
-            uint256 refund = fault == 1 ? 1 : dx;
+        if (fault == 1 || fault == 2 || fault == 11) {
+            uint256 refund = fault == 1 ? 1 : fault == 11 ? 2 : dx;
             if (i == 0) send(msg.sender, refund); else t.transfer(msg.sender, refund);
         }
         if (fault == 3) CurveRecipientToken(i == 0 ? WETH : TOKEN).change(msg.sender, -1);
@@ -210,7 +210,7 @@ contract CurveNativeRecipientTest is Test {
     }
     function testNativeDirectRejectsFaultsAndRollsBack() public {
         for (uint256 m; m < 3; ++m) for (uint256 i; i < 2; ++i) for (uint256 f = 1; f <= 9; ++f) {
-            if (m == 2 && i == 0 || i == 0 && f == 9 || i == 1 && f == 8) continue;
+            if (m == 2 && i == 0 || i == 0 && f == 9 || i == 1 && (f == 8 || f == 1)) continue;
             // Extra native output is real measured receipt, not a debit/refund error.
             prepare(i, 100, f); bytes memory program = script(m, i, "external", 100);
             vm.expectRevert(); BotVM(payable(ACTOR)).execute(program);
@@ -218,6 +218,23 @@ contract CurveNativeRecipientTest is Test {
             assertEq(token(i).balanceOf(RECEIVER), 109); assertEq(token(1 - i).balanceOf(RECEIVER), 109);
             assertEq(token(1).allowance(ACTOR, TARGET), 0); assertEq(ACTOR.balance, 17); assertEq(RECEIVER.balance, 23);
             assertEq(TARGET.balance, 10000); assertEq(CurveNativeRecipientPool(payable(TARGET)).calls(), 0);
+        }
+    }
+    function testTokenInputRoundingHasExplicitZeroOneBoundaryAndPositiveDebit() public {
+        for (uint256 m; m < 3; ++m) for (uint256 k; k < 2; ++k) {
+            string memory kind = k == 0 ? "self" : "external";
+            prepare(1, 100, 1); BotVM(payable(ACTOR)).execute(script(m, 1, kind, 100));
+            assertEq(token(1).balanceOf(ACTOR), STOCK + 1);
+            assertEq(token(0).balanceOf(ACTOR), STOCK + (k == 0 ? 200 : 0));
+            assertEq(token(0).balanceOf(RECEIVER), uint256(109) + (k == 1 ? 200 : 0));
+            assertEq(token(1).allowance(ACTOR, TARGET), 0); assertEq(ACTOR.balance, 17);
+            prepare(1, 100, 1); vm.expectRevert();
+            BotVM(payable(ACTOR)).execute(script(m, 1, string.concat(kind, "Strict"), 100));
+            prepare(1, 100, 11); vm.expectRevert(); BotVM(payable(ACTOR)).execute(script(m, 1, kind, 100));
+            prepare(1, 1, 1); vm.expectRevert(); BotVM(payable(ACTOR)).execute(script(m, 1, kind, 1));
+            assertEq(token(1).balanceOf(ACTOR), STOCK + 1); assertEq(token(0).balanceOf(ACTOR), STOCK);
+            assertEq(token(0).balanceOf(RECEIVER), 109); assertEq(token(1).allowance(ACTOR, TARGET), 0);
+            assertEq(ACTOR.balance, 17); assertEq(RECEIVER.balance, 23);
         }
     }
     function testNativeDirectZeroAndIgnoredReturnData() public {

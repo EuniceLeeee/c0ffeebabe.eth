@@ -1,0 +1,1118 @@
+{
+  "kind": "family-correctness-evidence-v1",
+  "familyId": "curve-underlying",
+  "result": "pass",
+  "scope": "Only named real deployment variants and tested historical states. Correctness, not opportunity or timing acceptance.",
+  "variantIds": [
+    "classic meta/3pool 0x213be373fdff327658139c7df330817dad2d5bbe rateSlot16",
+    "classic meta/3pool 0x2c7796c0590cc100d70af473993890d457cb2ac9 rateSlot10"
+  ],
+  "positiveExecutions": 144,
+  "zeroInputRejections": 144,
+  "otherRejections": 288,
+  "source": [
+    {
+      "path": "listener/src/adapters/curve.ts",
+      "sha256": "83720d256a907bcd60830c0ec7d57e9c0f76d432396c53676bbb8bd0c2ba92bf"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/curve-underlying.production.ts",
+      "sha256": "ddebbf5f112b8211332aa3fae8ab79f822b49a87283c4d6dc5bf82fc6d7b332c"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+      "sha256": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/action.ts",
+      "sha256": "95b808a9aebead4586060e75250ff78581b76e3834ebe63265b8e131ba57db22"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/codec.ts",
+      "sha256": "29f7e0be78cb03d084aa9ed358e44b19731882d2f112e3197d2f4567ad330d3d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts",
+      "sha256": "028f3f169ebb0397d8660a69dd720398a9a3c2bcf95ae4bc953e2f9d54d3f15a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/identity.ts",
+      "sha256": "42b27b56f5aaa1a9844cec6356194c9f4851f9a55be1317bcefbfb1714c1c900"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/instance.ts",
+      "sha256": "994eca6c0b42656dd832664cf74ed48291f9f057c95eb21c237e33189acc8137"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/legacy-factory.ts",
+      "sha256": "c3f4c7d6d6164b66b5afdfa53db4a24a103fa445cbeed87875e3bddc1a175558"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/legacy-plain.ts",
+      "sha256": "75cec2118ff1fbf6f083cdb69ed11a9a35a1d83b5d4b6e558db2dfb11625155f"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending-execution.ts",
+      "sha256": "67b526cc49977a19b176502062d87ae6753ef8bf94917f6681adeb21da073059"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending-identity.ts",
+      "sha256": "1523624a090e9ea7f8ad19cff92540b51c31ab30378e2e7f86c02b1fb850f491"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/lending.ts",
+      "sha256": "1f048ceb29e60678dbbbece083ff362612999338cc6c2552234734b851308c58"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/manifest.ts",
+      "sha256": "d968804233baf47e4df834e5708e8644eebe3dd145b01df086c6078e7d27306a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+      "sha256": "9e7ffc251b1f6ebe3d588de16112228fe7a9a68a13262615daca71519b75af9f"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
+      "sha256": "fdc3b5285e7652e0a3b2d6fd5f3ee04a1aa22004a429b3ef01762eab6806d554"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/quote-model.ts",
+      "sha256": "444c619922cfaab4c9d1f97075995ac0e21f07ba264433b2bc1b23f5b5a8c38e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/recipient-proof.ts",
+      "sha256": "0b80128ebc0b9ed7b8785a4b4cb0c9884372324d475b4398456105014e81996e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/routes.ts",
+      "sha256": "98e9923c0bda8639717a3fbe6a271df55def8a4bd4794575d09df2cde99719ba"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/scaled-behavior.ts",
+      "sha256": "d0ee4af46a75525c452a2e0c66816e87fcaa5f93b1125b9628df1ddeedac050d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-underlying-family/v1-factory.ts",
+      "sha256": "4380e1093ab742640dbc9def09015fb3af3718c25905638457395fb7003c3b91"
+    },
+    {
+      "path": "listener/src/shared/constants/addresses.ts",
+      "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+    }
+  ],
+  "sourceNote": "CurrentFamily source snapshot; exact per-run aggregate source/binary/statepins remain in raw. Parent owns common source compatibility certification and final gate.",
+  "raw": [
+    {
+      "name": "c270",
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence77/historical-c27077.json",
+      "sha256": "4a3f8cc713fbf096c0c75041ae35a2b269a12c71af0ea6d374011f47746ca168",
+      "original": {
+        "tx": "0x73f75256979894103b5bcb045266cf802103e23d0d937c907e50b035663e48e4",
+        "block": 26138094,
+        "blockHash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+        "pool": "0xc270b3b858c335b6ba5d5b10e2da8a09976005ad",
+        "preCallParity": "unverified; N-end is used"
+      },
+      "source": {
+        "number": 26138094,
+        "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+        "generation": 26138094
+      },
+      "sourcePin": {
+        "sourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+        "fileCount": 1242,
+        "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+        "packageSha256": "92a5f4666bcb865f28eee59b10ae91206ed899f6719e4d6f8c0b6e0a6c9017b7",
+        "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+        "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      },
+      "sourceAfter": {
+        "sourceTreeSha256": "fcc97af86a02866600a3ab44c76c2e00db6fbaaee43cb1461a2bdb25f4c76cc1",
+        "fileCount": 1242,
+        "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+        "packageSha256": "92a5f4666bcb865f28eee59b10ae91206ed899f6719e4d6f8c0b6e0a6c9017b7",
+        "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+        "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      },
+      "currentDescriptor": {
+        "coins": [
+          "0x8E870D67F660D95d5be530380D0eC0bd388289E1",
+          "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+          "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        ],
+        "familyId": "curve-underlying",
+        "instanceKey": "0xc270b3b858c335b6ba5d5b10e2da8a09976005ad",
+        "lineageId": "curve-underlying:metaregistry-member",
+        "pool": "0xc270b3B858c335B6BA5D5b10e2Da8a09976005ad",
+        "provenance": [
+          {
+            "evidenceHash": "26f6e2373df4305566ce2734ceba69468020e235032c550e921974529d01f36c",
+            "kind": "curve-metaregistry-reverse-behavior-proof",
+            "subject": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC"
+          }
+        ],
+        "quoteModel": {
+          "baseCodeHash": "0x954a1e212c557c85043985931498ffa3e2fcbe7dfe9cd61513f36eb47d6f4dfc",
+          "baseCoins": [
+            "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          ],
+          "baseLPToken": "0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490",
+          "basePool": "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+          "basePrecisions": [
+            "1",
+            "1000000000000",
+            "1000000000000"
+          ],
+          "implementation": "0x213be373FDff327658139C7df330817DAD2d5bBE",
+          "implementationCodeHash": "0x86092e83f01ab6d7a368475cdf5c75f0a18352f943cdc4de65248f10d4881267",
+          "kind": "classic-meta-base-3pool-v1",
+          "metaRateMultiplier": "1000000000000000000",
+          "poolCodeHash": "0xb03eac48901ed5f36399381b3bbbaa60db83ea38ea7b05acc2a46c42c9f6b6ce"
+        },
+        "registryBinding": {
+          "handlers": [
+            "0x127db66E7F0b16470Bec194d0f496F9Fa065d0A9"
+          ],
+          "lookupSemantics": "get_registry_handlers_from_pool+get_underlying_coins",
+          "registry": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC"
+        },
+        "runtimeRequirements": [
+          {
+            "freshness": "pinned-block",
+            "kind": "source-state"
+          },
+          {
+            "kind": "quote-completion",
+            "mode": "return-data"
+          }
+        ],
+        "verifiedDirections": [
+          {
+            "behaviorProbeAmountIn": "1000000",
+            "behaviorProbeAmountOut": "996304",
+            "i": 0,
+            "j": 1,
+            "tokenIn": "0x8E870D67F660D95d5be530380D0eC0bd388289E1",
+            "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000000000000000",
+            "behaviorProbeAmountOut": "996294",
+            "i": 0,
+            "j": 2,
+            "tokenIn": "0x8E870D67F660D95d5be530380D0eC0bd388289E1",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000000000000000",
+            "behaviorProbeAmountOut": "996373",
+            "i": 0,
+            "j": 3,
+            "tokenIn": "0x8E870D67F660D95d5be530380D0eC0bd388289E1",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000",
+            "behaviorProbeAmountOut": "1002753",
+            "i": 1,
+            "j": 0,
+            "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "tokenOut": "0x8E870D67F660D95d5be530380D0eC0bd388289E1"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000000000000000",
+            "behaviorProbeAmountOut": "999847",
+            "i": 1,
+            "j": 2,
+            "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000000000000000",
+            "behaviorProbeAmountOut": "999914",
+            "i": 1,
+            "j": 3,
+            "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "1002757576026",
+            "i": 2,
+            "j": 0,
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0x8E870D67F660D95d5be530380D0eC0bd388289E1"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "999853510829",
+            "i": 2,
+            "j": 1,
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "1",
+            "i": 2,
+            "j": 3,
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "1002689117503",
+            "i": 3,
+            "j": 0,
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0x8E870D67F660D95d5be530380D0eC0bd388289E1"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "999785250567",
+            "i": 3,
+            "j": 1,
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000",
+            "behaviorProbeAmountOut": "999782",
+            "i": 3,
+            "j": 2,
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          }
+        ]
+      },
+      "directions": 12,
+      "inputTrials": 24,
+      "positiveExecutions": 48,
+      "newPositiveEvmThisFinalPass": 0,
+      "zeroInputRejections": 48,
+      "faultRejections": 96,
+      "forcedPostSuccessRollback": 48,
+      "actualInputDifference": "0 in all48",
+      "actualOutputQuoteDifference": "0 in all48",
+      "allowancePolicy": "Existing standing MAX or MAX−A retained; not clearance; exact debit and old inventory enforced",
+      "runtimeConstruction": {
+        "directions": 12,
+        "rpcCalls": 0,
+        "exactCalls": 0,
+        "blocked": 0,
+        "quotedFallback": false
+      },
+      "inputReference": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-variants-ready-attempt01/prices/prices.json",
+        "sha256": "b584a08550d4349e3b6fb70238d03f116d22dc4fdc810447ff3c66410528672f",
+        "source": {
+          "number": 26138094,
+          "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+          "generation": 1
+        },
+        "targetSource": {
+          "number": 26138094,
+          "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+          "generation": 26138094
+        },
+        "targetSameBlock": true,
+        "configuration": "Preserved donor input.json hashed alongside prices; amounts only",
+        "oldReadyPath": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-variants-ready-attempt01/ready.json",
+        "oldReadySha256": "4d6091b0425fe3f2eceada239e39901a56b9988c83fd6d52d0888a5cb5472647",
+        "policy": "Only amountIn is borrowed. Old outputs, identity and admission are not reused. No current natural valuation claim."
+      },
+      "forkStopped": true,
+      "canonicalChecks": {
+        "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence77/checks77.json",
+        "sha256": "735ae0df2133a0c6b0c5c657c55b85338f948f76f8293a80dff183b3744e4146"
+      },
+      "canonicalManifest": {
+        "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence77/selection77.json",
+        "sha256": "ddc64d4f55624c00a8fdb9673373badedd2147fe2cf90921e401f73c7b065233"
+      }
+    },
+    {
+      "name": "bac",
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence79/historical-bac79.json",
+      "sha256": "62597abd2f440048307f54dd2d9213baebc1756fce604a23551819475cb76157",
+      "original": {
+        "tx": "0x69dd0aa5fa3237cd0fb76b93aba70b226cdb18b9b38104a47ed63440cb941a14",
+        "block": 25982128,
+        "blockHash": "0x415fe0b4fdfe8fa670bec304f852df1d75c6812e5ce4296b6ef6449c73bfb9d1",
+        "pool": "0x86dec049fc430d9eb7682a044cf105a570f226db",
+        "preCallParity": "unverified; N-end is used"
+      },
+      "source": {
+        "number": 25982128,
+        "hash": "0x415fe0b4fdfe8fa670bec304f852df1d75c6812e5ce4296b6ef6449c73bfb9d1",
+        "generation": 25982128
+      },
+      "sourcePin": {
+        "sourceTreeSha256": "3683af082910aedab6ffba4ddc85a03fd753f8b50d2ceff921d546a567905d4c",
+        "fileCount": 1242,
+        "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+        "packageSha256": "b1760d1aa596d9fabc3df9fcd1fb9a15b288f5de465dfb055556a67741e568fa",
+        "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+        "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      },
+      "sourceAfter": {
+        "sourceTreeSha256": "3683af082910aedab6ffba4ddc85a03fd753f8b50d2ceff921d546a567905d4c",
+        "fileCount": 1242,
+        "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+        "packageSha256": "b1760d1aa596d9fabc3df9fcd1fb9a15b288f5de465dfb055556a67741e568fa",
+        "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+        "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      },
+      "currentDescriptor": {
+        "coins": [
+          "0x3449FC1Cd036255BA1EB19d65fF4BA2b8903A69a",
+          "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+          "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        ],
+        "familyId": "curve-underlying",
+        "instanceKey": "0x86dec049fc430d9eb7682a044cf105a570f226db",
+        "lineageId": "curve-underlying:factory-v1-member",
+        "pool": "0x86DEc049FC430D9eB7682a044CF105A570f226Db",
+        "provenance": [
+          {
+            "evidenceHash": "2a39046a6c3172bd912d00bd5546ef21b526bb6cc20d2c848a22431309aa687c",
+            "kind": "curve-v1-factory-reverse-behavior-proof",
+            "subject": "0xfD6f33A0509ec67dEFc500755322aBd9Df1bD5B8"
+          }
+        ],
+        "quoteModel": {
+          "baseCodeHash": "0x954a1e212c557c85043985931498ffa3e2fcbe7dfe9cd61513f36eb47d6f4dfc",
+          "baseCoins": [
+            "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          ],
+          "baseLPToken": "0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490",
+          "basePool": "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+          "basePrecisions": [
+            "1",
+            "1000000000000",
+            "1000000000000"
+          ],
+          "implementation": "0x2c7796C0590CC100d70Af473993890d457cb2aC9",
+          "implementationCodeHash": "0xdf4543ae0cb4d3878072c1da2c56ebec96a64237051a7291429a2fb66d5f54da",
+          "kind": "classic-meta-base-3pool-v1",
+          "metaRateMultiplier": "1000000000000000000",
+          "poolCodeHash": "0x48294a11a0b6d48c835d64dbf0c45af0fa378ae6494b1e414ff6f761bfbb8be4"
+        },
+        "registryBinding": {
+          "handlers": [],
+          "lookupSemantics": "get_coins+get_underlying_coins",
+          "registry": "0xfD6f33A0509ec67dEFc500755322aBd9Df1bD5B8",
+          "wrappedCoins": [
+            "0x3449FC1Cd036255BA1EB19d65fF4BA2b8903A69a",
+            "0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490"
+          ]
+        },
+        "runtimeRequirements": [
+          {
+            "freshness": "pinned-block",
+            "kind": "source-state"
+          },
+          {
+            "kind": "quote-completion",
+            "mode": "return-data"
+          }
+        ],
+        "verifiedDirections": [
+          {
+            "behaviorProbeAmountIn": "1000000",
+            "behaviorProbeAmountOut": "1079",
+            "i": 0,
+            "j": 1,
+            "tokenIn": "0x3449FC1Cd036255BA1EB19d65fF4BA2b8903A69a",
+            "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000000000000000",
+            "behaviorProbeAmountOut": "1079",
+            "i": 0,
+            "j": 2,
+            "tokenIn": "0x3449FC1Cd036255BA1EB19d65fF4BA2b8903A69a",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000000000000000",
+            "behaviorProbeAmountOut": "1079",
+            "i": 0,
+            "j": 3,
+            "tokenIn": "0x3449FC1Cd036255BA1EB19d65fF4BA2b8903A69a",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000",
+            "behaviorProbeAmountOut": "925528210",
+            "i": 1,
+            "j": 0,
+            "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "tokenOut": "0x3449FC1Cd036255BA1EB19d65fF4BA2b8903A69a"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000000000000000",
+            "behaviorProbeAmountOut": "999849",
+            "i": 1,
+            "j": 2,
+            "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000000000000000",
+            "behaviorProbeAmountOut": "999991",
+            "i": 1,
+            "j": 3,
+            "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "925530455705134",
+            "i": 2,
+            "j": 0,
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0x3449FC1Cd036255BA1EB19d65fF4BA2b8903A69a"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "999851781034",
+            "i": 2,
+            "j": 1,
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "1",
+            "i": 2,
+            "j": 3,
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "925398324877510",
+            "i": 3,
+            "j": 0,
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0x3449FC1Cd036255BA1EB19d65fF4BA2b8903A69a"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "999709039923",
+            "i": 3,
+            "j": 1,
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000",
+            "behaviorProbeAmountOut": "999708",
+            "i": 3,
+            "j": 2,
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          }
+        ]
+      },
+      "directions": 12,
+      "inputTrials": 24,
+      "positiveExecutions": 48,
+      "newPositiveEvmThisFinalPass": 48,
+      "zeroInputRejections": 48,
+      "faultRejections": 96,
+      "forcedPostSuccessRollback": 48,
+      "actualInputDifference": "0 in all48",
+      "actualOutputQuoteDifference": "0 in all48",
+      "allowancePolicy": "Existing standing MAX or MAX−A retained; not clearance; exact debit and old inventory enforced",
+      "runtimeConstruction": {
+        "directions": 12,
+        "rpcCalls": 0,
+        "exactCalls": 0,
+        "blocked": 0,
+        "quotedFallback": false
+      },
+      "inputReference": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-variants-ready-attempt01/prices/prices.json",
+        "sha256": "b584a08550d4349e3b6fb70238d03f116d22dc4fdc810447ff3c66410528672f",
+        "source": {
+          "number": 26138094,
+          "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+          "generation": 1
+        },
+        "targetSource": {
+          "number": 25982128,
+          "hash": "0x415fe0b4fdfe8fa670bec304f852df1d75c6812e5ce4296b6ef6449c73bfb9d1",
+          "generation": 25982128
+        },
+        "targetSameBlock": false,
+        "configuration": "Preserved donor input.json hashed alongside prices; amounts only",
+        "oldReadyPath": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-variants-ready-attempt01/ready.json",
+        "oldReadySha256": "4d6091b0425fe3f2eceada239e39901a56b9988c83fd6d52d0888a5cb5472647",
+        "policy": "Only amountIn is borrowed. Old outputs, identity and admission are not reused. No current natural valuation claim."
+      },
+      "forkStopped": true,
+      "canonicalChecks": {
+        "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence79/checks79.json",
+        "sha256": "427bc418b711f404cdd121cfdac0d768fcfa61759b787c4c92dd5df7749d8178"
+      },
+      "canonicalManifest": {
+        "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence79/selection79.json",
+        "sha256": "220962bbf54f71b7d3bebe07f96e80c3a4d71c80e81604887427d2c358cfdf91"
+      }
+    },
+    {
+      "name": "ustp",
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence79/historical-ustp79.json",
+      "sha256": "939c58cf196c76d162265ed44c485faaf45554b298ddd4caf21237c38cbd813a",
+      "original": {
+        "tx": "0x269a7b2a4eee1cd0aa2368551ea72ccf6b9bcb5fbc0dd81e697a58c36d0d3ba7",
+        "block": 26015090,
+        "blockHash": "0x7126b90b9a23fd1bf1191f5d3fcb890102a1c199e3b4a348770be82a282f544a",
+        "pool": "0x87510ef3573122f8cd4e3035ded958822f6a381a",
+        "preCallParity": "unverified; N-end is used"
+      },
+      "source": {
+        "number": 26015090,
+        "hash": "0x7126b90b9a23fd1bf1191f5d3fcb890102a1c199e3b4a348770be82a282f544a",
+        "generation": 26015090
+      },
+      "sourcePin": {
+        "sourceTreeSha256": "3683af082910aedab6ffba4ddc85a03fd753f8b50d2ceff921d546a567905d4c",
+        "fileCount": 1242,
+        "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+        "packageSha256": "b1760d1aa596d9fabc3df9fcd1fb9a15b288f5de465dfb055556a67741e568fa",
+        "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+        "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      },
+      "sourceAfter": {
+        "sourceTreeSha256": "3683af082910aedab6ffba4ddc85a03fd753f8b50d2ceff921d546a567905d4c",
+        "fileCount": 1242,
+        "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+        "packageSha256": "b1760d1aa596d9fabc3df9fcd1fb9a15b288f5de465dfb055556a67741e568fa",
+        "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+        "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      },
+      "currentDescriptor": {
+        "coins": [
+          "0xeBe534c54a2Ae65D5bEdD5872824C2A5aF855Bb0",
+          "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+          "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        ],
+        "familyId": "curve-underlying",
+        "instanceKey": "0x87510ef3573122f8cd4e3035ded958822f6a381a",
+        "lineageId": "curve-underlying:factory-v1-member",
+        "pool": "0x87510eF3573122f8Cd4E3035dEd958822F6a381A",
+        "provenance": [
+          {
+            "evidenceHash": "fd839f1c1939ef9f3722a733cf7c070a37497de195f05035b173ddc62804b301",
+            "kind": "curve-v1-factory-reverse-behavior-proof",
+            "subject": "0xfD6f33A0509ec67dEFc500755322aBd9Df1bD5B8"
+          }
+        ],
+        "quoteModel": {
+          "baseCodeHash": "0x954a1e212c557c85043985931498ffa3e2fcbe7dfe9cd61513f36eb47d6f4dfc",
+          "baseCoins": [
+            "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          ],
+          "baseLPToken": "0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490",
+          "basePool": "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7",
+          "basePrecisions": [
+            "1",
+            "1000000000000",
+            "1000000000000"
+          ],
+          "implementation": "0x2c7796C0590CC100d70Af473993890d457cb2aC9",
+          "implementationCodeHash": "0xdf4543ae0cb4d3878072c1da2c56ebec96a64237051a7291429a2fb66d5f54da",
+          "kind": "classic-meta-base-3pool-v1",
+          "metaRateMultiplier": "10000000000000000000000000000",
+          "poolCodeHash": "0x48294a11a0b6d48c835d64dbf0c45af0fa378ae6494b1e414ff6f761bfbb8be4"
+        },
+        "registryBinding": {
+          "handlers": [],
+          "lookupSemantics": "get_coins+get_underlying_coins",
+          "registry": "0xfD6f33A0509ec67dEFc500755322aBd9Df1bD5B8",
+          "wrappedCoins": [
+            "0xeBe534c54a2Ae65D5bEdD5872824C2A5aF855Bb0",
+            "0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490"
+          ]
+        },
+        "runtimeRequirements": [
+          {
+            "freshness": "pinned-block",
+            "kind": "source-state"
+          },
+          {
+            "kind": "quote-completion",
+            "mode": "return-data"
+          }
+        ],
+        "verifiedDirections": [
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "2958625874",
+            "i": 0,
+            "j": 1,
+            "tokenIn": "0xeBe534c54a2Ae65D5bEdD5872824C2A5aF855Bb0",
+            "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000",
+            "behaviorProbeAmountOut": "2778",
+            "i": 0,
+            "j": 2,
+            "tokenIn": "0xeBe534c54a2Ae65D5bEdD5872824C2A5aF855Bb0",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000",
+            "behaviorProbeAmountOut": "2778",
+            "i": 0,
+            "j": 3,
+            "tokenIn": "0xeBe534c54a2Ae65D5bEdD5872824C2A5aF855Bb0",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000000000000000",
+            "behaviorProbeAmountOut": "50106919",
+            "i": 1,
+            "j": 0,
+            "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "tokenOut": "0xeBe534c54a2Ae65D5bEdD5872824C2A5aF855Bb0"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000000000000000",
+            "behaviorProbeAmountOut": "999857",
+            "i": 1,
+            "j": 2,
+            "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000000000000000",
+            "behaviorProbeAmountOut": "1000088",
+            "i": 1,
+            "j": 3,
+            "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "337",
+            "i": 2,
+            "j": 0,
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0xeBe534c54a2Ae65D5bEdD5872824C2A5aF855Bb0"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "999842075406",
+            "i": 2,
+            "j": 1,
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "1",
+            "i": 2,
+            "j": 3,
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "337",
+            "i": 3,
+            "j": 0,
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0xeBe534c54a2Ae65D5bEdD5872824C2A5aF855Bb0"
+          },
+          {
+            "behaviorProbeAmountIn": "1",
+            "behaviorProbeAmountOut": "999611245204",
+            "i": 3,
+            "j": 1,
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+          },
+          {
+            "behaviorProbeAmountIn": "1000000",
+            "behaviorProbeAmountOut": "999620",
+            "i": 3,
+            "j": 2,
+            "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          }
+        ]
+      },
+      "directions": 12,
+      "inputTrials": 24,
+      "positiveExecutions": 48,
+      "newPositiveEvmThisFinalPass": 48,
+      "zeroInputRejections": 48,
+      "faultRejections": 96,
+      "forcedPostSuccessRollback": 48,
+      "actualInputDifference": "0 in all48",
+      "actualOutputQuoteDifference": "0 in all48",
+      "allowancePolicy": "Existing standing MAX or MAX−A retained; not clearance; exact debit and old inventory enforced",
+      "runtimeConstruction": {
+        "directions": 12,
+        "rpcCalls": 0,
+        "exactCalls": 0,
+        "blocked": 0,
+        "quotedFallback": false
+      },
+      "inputReference": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-variants-ready-attempt01/prices/prices.json",
+        "sha256": "b584a08550d4349e3b6fb70238d03f116d22dc4fdc810447ff3c66410528672f",
+        "source": {
+          "number": 26138094,
+          "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+          "generation": 1
+        },
+        "targetSource": {
+          "number": 26015090,
+          "hash": "0x7126b90b9a23fd1bf1191f5d3fcb890102a1c199e3b4a348770be82a282f544a",
+          "generation": 26015090
+        },
+        "targetSameBlock": false,
+        "configuration": "Preserved donor input.json hashed alongside prices; amounts only",
+        "oldReadyPath": "/opt/mev-cloud/family-runtime-20261007/logs/four-family-coverage-20261012.zHKuWX/curve-variants-ready-attempt01/ready.json",
+        "oldReadySha256": "4d6091b0425fe3f2eceada239e39901a56b9988c83fd6d52d0888a5cb5472647",
+        "policy": "Only amountIn is borrowed. Old outputs, identity and admission are not reused. No current natural valuation claim."
+      },
+      "forkStopped": true,
+      "canonicalChecks": {
+        "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence79/checks79.json",
+        "sha256": "427bc418b711f404cdd121cfdac0d768fcfa61759b787c4c92dd5df7749d8178"
+      },
+      "canonicalManifest": {
+        "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/evidence79/selection79.json",
+        "sha256": "220962bbf54f71b7d3bebe07f96e80c3a4d71c80e81604887427d2c358cfdf91"
+      }
+    }
+  ],
+  "independentReviews": [
+    {
+      "path": "docs/research/reports/curve-classic-recipient-independent-c270-20261015.json",
+      "sha256": "fd0c4cdbe0b081fb4cafdfc23b7ac26b34155e03d9b32ce685cd6a2283c6473f"
+    },
+    {
+      "path": "docs/research/reports/curve-classic-recipient-independent-bac-ustp-20261015.json",
+      "sha256": "241100f6fdc0d5d75bfb35178d61541cb8109f78f89754db31ac7b4ae62d3c0f"
+    }
+  ],
+  "modeScope": [
+    "direct-self",
+    "direct-external"
+  ],
+  "existingDefault": "Old default quoted/runtime, FRAX26direct and nativeAlias64positive outcomes retain their existing evidence, are not rerun or counted in144.",
+  "approval": "Existing classic standingMAX/MAX−A authorization retained; no temporaryclearance claim.",
+  "rounding": "All144actualinputdebit equals fullrequest; output equals same-statequote exactly.",
+  "counting": "48 c270positive EVMs originally75 are reobserved77 with new negatives; BAC/USTP79provide96new positives.",
+  "deferred": "Actual exchange_underlying pulls input before output, no deferred callback support claimed.",
+  "notClaimed": [
+    "natural single-block valuation for borrowed input amounts",
+    "original transaction pre-call opportunity replay",
+    "profitable return path",
+    "4A local performance",
+    "4B representative large-graph performance",
+    "hypothetical unobserved deployment variants"
+  ],
+  "protected": [
+    "oldReady and prices unchanged",
+    "old hashes and failed runs retained",
+    "no signatures or broadcasts",
+    "no protocol code replacement",
+    "owned forks drained"
+  ],
+  "commonSource": [
+    {
+      "path": "listener/src/adapters/registry.ts",
+      "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/compiler.ts",
+      "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-credit-runtime.ts",
+      "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+      "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+      "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+      "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+    },
+    {
+      "path": "listener/src/searcher/adapter-funding-runtime.ts",
+      "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+    },
+    {
+      "path": "listener/src/searcher/adapter-work-intent.ts",
+      "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+    },
+    {
+      "path": "listener/src/searcher/amount-quote-continuity.ts",
+      "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+    },
+    {
+      "path": "listener/src/searcher/blockscan-route-identity.ts",
+      "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+    },
+    {
+      "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+      "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+    },
+    {
+      "path": "listener/src/searcher/exact-prefix-plan.ts",
+      "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+    },
+    {
+      "path": "listener/src/searcher/exact-trial-state.ts",
+      "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
+    },
+    {
+      "path": "listener/src/searcher/identity-asset-metadata.ts",
+      "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+    },
+    {
+      "path": "listener/src/searcher/runtime-evidence.ts",
+      "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+    },
+    {
+      "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+      "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+    },
+    {
+      "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+      "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+      "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+      "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-bounds.ts",
+      "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-propagation.ts",
+      "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-rejection.ts",
+      "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-builder.ts",
+      "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+      "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+    },
+    {
+      "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+      "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+    },
+    {
+      "path": "listener/src/searcher/strategy-taxonomy.ts",
+      "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+    },
+    {
+      "path": "listener/src/searcher/strict-production-runtime-session.ts",
+      "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+      "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-program.ts",
+      "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+    },
+    {
+      "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+      "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+      "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+      "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-instance-identity.ts",
+      "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/constants/addresses.ts",
+      "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+    },
+    {
+      "path": "listener/src/shared/state/state-backend.ts",
+      "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+    },
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "src/BotVMEncoder.sol",
+      "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+    },
+    {
+      "path": "src/BotVMScriptBuilder.sol",
+      "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+    },
+    {
+      "path": "src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+    },
+    {
+      "path": "src/FlashArb.sol",
+      "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+    },
+    {
+      "path": "src/interfaces/IFluidVault.sol",
+      "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+    },
+    {
+      "path": "src/interfaces/IMorpho.sol",
+      "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+    },
+    {
+      "path": "src/interfaces/ISwap.sol",
+      "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+    }
+  ],
+  "commonCompatibility": {
+    "path": "docs/research/reports/native-direct-rounding-current-20261015.json",
+    "sha256": "a73d4f8754d158731b56651c7723ce71ccd5a2c36d8211cb81819ef77bde867e"
+  }
+}

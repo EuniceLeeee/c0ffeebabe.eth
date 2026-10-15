@@ -1,0 +1,64 @@
+{
+  "reviewer": "root non-author",
+  "result": "pass",
+  "scope": "Curve plain exchange_received actual5018 instance, two selected directions",
+  "reviews": [
+    {
+      "source": {
+        "number": 26138094,
+        "hash": "0xa3f4d9edbb29d2dd2e4b437dee5f73f135d7eef242a31efc379f0cd687e5da0e",
+        "generation": 26138094
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence69/historical-received69.json",
+        "sha256": "87e1f68fc974d04a6f8a70fdeeb59cef2afa57077d2cb32fbdd2500d90bb6a85"
+      },
+      "counts": {
+        "rawBalanceChecks": 64,
+        "positive": 16,
+        "rollbackRejections": 24,
+        "postSuccessRollback": 12,
+        "zeroInputRejections": 8
+      },
+      "amounts": [
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x085780639cc2cacd35e474e71f4d000e2405d8f6",
+          "amountIn": "5215240",
+          "actualReceived": "5214873973498632722",
+          "label": "saved-production-input-only"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "tokenOut": "0x085780639cc2cacd35e474e71f4d000e2405d8f6",
+          "amountIn": "52152400",
+          "actualReceived": "52148739316443031944",
+          "label": "ten-times-saved-production-input-only"
+        },
+        {
+          "tokenIn": "0x085780639cc2cacd35e474e71f4d000e2405d8f6",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "5215374684697184207",
+          "actualReceived": "5214697",
+          "label": "saved-production-input-only"
+        },
+        {
+          "tokenIn": "0x085780639cc2cacd35e474e71f4d000e2405d8f6",
+          "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "52153746846971842070",
+          "actualReceived": "52146973",
+          "label": "ten-times-saved-production-input-only"
+        }
+      ],
+      "status": "pass"
+    }
+  ],
+  "method": "Independent raw slot deltas, full input calldata/value, output returns, WETH conversion, actor native balances, zero/revert storage union and post-success forced revert. No new execution.",
+  "limitations": [
+    "Input-only old production reference; no new natural valuation or original opportunity.",
+    "Other Curve plain sample reviews separate; existing underlying evidence unchanged.",
+    "Actual exchange_received uses direct pretransfer before exchange with zero token allowance.",
+    "No performance or exchange_extended callback claim.",
+    "Original run67 subsequent received5018 nomination-log gate failure preserved; no successful case rerun."
+  ]
+}

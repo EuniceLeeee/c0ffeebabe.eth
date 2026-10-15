@@ -1,0 +1,223 @@
+{
+  "reviewer": "root non-author",
+  "result": "pass",
+  "reviews": [
+    {
+      "source": {
+        "number": 26130609,
+        "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc",
+        "generation": 26130609
+      },
+      "transaction": "0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
+        "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a"
+      },
+      "counts": {
+        "rawTokenDeltaChecks": 30,
+        "positive": 12,
+        "declaredRejections": 24
+      },
+      "amounts": [
+        {
+          "amountIn": "4756507777847000000",
+          "actualReceived": "4103065183867850621",
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "spliced-production-input-only"
+        },
+        {
+          "amountIn": "4756507777847000000",
+          "actualReceived": "4103065183867850621",
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "spliced-production-input-only"
+        },
+        {
+          "amountIn": "4756507777847000000",
+          "actualReceived": "4103065183867850621",
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "spliced-production-input-only"
+        },
+        {
+          "amountIn": "4756507777847000000",
+          "actualReceived": "4103065183867850621",
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "label": "spliced-production-input-only"
+        },
+        {
+          "amountIn": "3774740356452332000000",
+          "actualReceived": "3256171640638212334590",
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "3774740356452332000000",
+          "actualReceived": "3256171640638212334590",
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "3774740356452332000000",
+          "actualReceived": "3256171640638212334590",
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "3774740356452332000000",
+          "actualReceived": "3256171640638212334590",
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "label": "original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "7549480712904664000000",
+          "actualReceived": "6512343281276424669180",
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "twice-original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "7549480712904664000000",
+          "actualReceived": "6512343281276424669180",
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "twice-original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "7549480712904664000000",
+          "actualReceived": "6512343281276424669180",
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "twice-original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "7549480712904664000000",
+          "actualReceived": "6512343281276424669180",
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "label": "twice-original-burned-shares-at-N"
+        }
+      ],
+      "cooldownSeconds": "0",
+      "result": "pass"
+    },
+    {
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+        "generation": 25462190
+      },
+      "transaction": "0xf391d02add5e6cbbd98836d9eacdb66de3e5d76ef3874134145a6563a126ee86",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
+        "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd"
+      },
+      "counts": {
+        "rawTokenDeltaChecks": 30,
+        "positive": 12,
+        "declaredRejections": 24
+      },
+      "amounts": [
+        {
+          "amountIn": "4967302987351000000",
+          "actualReceived": "4114280978444144340",
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "spliced-production-input-only"
+        },
+        {
+          "amountIn": "4967302987351000000",
+          "actualReceived": "4114280978444144340",
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "spliced-production-input-only"
+        },
+        {
+          "amountIn": "4967302987351000000",
+          "actualReceived": "4114280978444144340",
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "spliced-production-input-only"
+        },
+        {
+          "amountIn": "4967302987351000000",
+          "actualReceived": "4114280978444144340",
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "label": "spliced-production-input-only"
+        },
+        {
+          "amountIn": "934460889828731878592",
+          "actualReceived": "773988354226130246923",
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "934460889828731878592",
+          "actualReceived": "773988354226130246923",
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "934460889828731878592",
+          "actualReceived": "773988354226130246923",
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "934460889828731878592",
+          "actualReceived": "773988354226130246923",
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "label": "original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "1868921779657463757184",
+          "actualReceived": "1547976708452260493845",
+          "encoding": "quoted",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "twice-original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "1868921779657463757184",
+          "actualReceived": "1547976708452260493845",
+          "encoding": "runtime",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "twice-original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "1868921779657463757184",
+          "actualReceived": "1547976708452260493845",
+          "encoding": "direct-self",
+          "recipient": "0x1000000000000000000000000000000000000002",
+          "label": "twice-original-burned-shares-at-N"
+        },
+        {
+          "amountIn": "1868921779657463757184",
+          "actualReceived": "1547976708452260493845",
+          "encoding": "direct-external",
+          "recipient": "0x1000000000000000000000000000000000000001",
+          "label": "twice-original-burned-shares-at-N"
+        }
+      ],
+      "cooldownSeconds": "0",
+      "result": "pass"
+    }
+  ],
+  "method": "Actual raw strict source attestation, full requested input, 4 encoding modes, actual burned shares/supply, token receipt and transfer events, native preservation; 48 strict declared Reverts independently matched.",
+  "limits": [
+    "Historical negatives are strict declared Reverts, not independent full storage rollback observations; synthetic EVM evidence separate.",
+    "Production reference missing valuation is retained; donor input-only and original burned-share samples are not target natural prices or original opportunity replay.",
+    "Synchronous cooldown=0 actual deployments only; original senior withdraw assets and burned shares kept distinct.",
+    "No performance or full production amount selector claim from issuer-only construction."
+  ]
+}

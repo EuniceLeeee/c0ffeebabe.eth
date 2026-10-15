@@ -1,0 +1,78 @@
+{
+  "kind": "post-hoc-aggregation-correction-receipt",
+  "result": "aggregation-corrected; original historical row execution outcomes retained",
+  "original": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence81/logs/curve-plain-recipient65/historical-native2181.json",
+    "sha256": "e152769bf83508e125b41fafce7c2d88ee1fc2ff46c069044a445782d42182fd"
+  },
+  "originalTopLevelResult": "failed",
+  "originalRowResults": "4 pass, 4 zero rejection and 8 fault rejection; two sample statuses failed solely at fixed-index cross-mode comparison",
+  "originalUntouched": true,
+  "newHistoricalExecutionCount": 0,
+  "correction": "By encoding, only quoted/runtime/direct-self deliver to the same executor and share balance equality. direct-external independently passes exact recipient receipt and unchanged executor output inventory. Subset retry contains self/external, which intentionally have different executor output balances.",
+  "correctedCounts": {
+    "positiveExecutions": 4,
+    "zeroInputRejections": 4,
+    "faultRejections": 8
+  },
+  "source": {
+    "sourceTreeSha256": "3683af082910aedab6ffba4ddc85a03fd753f8b50d2ceff921d546a567905d4c",
+    "fileCount": 1242,
+    "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+    "packageSha256": "b1760d1aa596d9fabc3df9fcd1fb9a15b288f5de465dfb055556a67741e568fa",
+    "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+    "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+    "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+    "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+  },
+  "sourceAfter": {
+    "sourceTreeSha256": "3683af082910aedab6ffba4ddc85a03fd753f8b50d2ceff921d546a567905d4c",
+    "fileCount": 1242,
+    "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+    "packageSha256": "b1760d1aa596d9fabc3df9fcd1fb9a15b288f5de465dfb055556a67741e568fa",
+    "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+    "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+    "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+    "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+  },
+  "forkStopped": true,
+  "sameState": {
+    "number": 26139768,
+    "hash": "0xd7bdbad87da07f0885234e0a53200cf4ec3ae61d73dd7b71db79b2705cb634f5",
+    "generation": 26139768
+  },
+  "currentConstruction": {
+    "directions": 2,
+    "rpcCalls": 0,
+    "exactCalls": 0,
+    "blocked": 0,
+    "quotedFallback": false
+  },
+  "authorFacts": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/native81-author-facts.json",
+    "sha256": "5f137d897dc5c5a5e9e240ee70c116fa39f2af06082de9417f21cbd7068f8b2b"
+  },
+  "review": "root fresh source review approved aggregate82 and83; root independent raw review pending, kept separate",
+  "canonical": {
+    "query": "curve,plain,recipient",
+    "toolId": "listener:searcher:curve-plain-recipient-nomination-contract",
+    "checks": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate83/checks83.json",
+      "sha256": "da2305d2e16fccb47d21209c0ff7025d49f826760fae733ec2b00763aeecd6d8"
+    },
+    "manifest": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate83/selection83.json",
+      "sha256": "53eaa48138d028fb344765e8988a2e29e3ba2163e76d218852c1cdc586946fbc"
+    },
+    "log": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate83/nomination-contract83.log",
+      "sha256": "9267f9eadb43ace27d6656116aabf54993b30fcbe74719c6e572fbf9bdb18f81"
+    },
+    "testsPassed": 10
+  },
+  "retainedFailedRegression": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate82/nomination-contract82.log",
+    "sha256": "104f67412d1441d7eb5c4c3aac055fd2c253dc2dd1f95f342e31b0956804f89f"
+  },
+  "scope": "Not a new fork, new natural valuation, opportunity replay, performance result or overwrite of old source/hash."
+}

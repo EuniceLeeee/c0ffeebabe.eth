@@ -1,0 +1,158 @@
+{
+  "status": "ignored candidate; parent must map existing LearningCase schema, assign IDs and actual codify_commit before final closure",
+  "category": "tooling_defect",
+  "cases": [
+    {
+      "defect": "nomination-log-only",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/nomination-repair68.json",
+          "sha256": "2ac5ae33178f7c3f44aa8001793edb9feaf1396352381461738d00752cadd324"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/received-trace67.json",
+          "sha256": "9f3e4cec0c8ff8076a092e02dce5ff286bf9cdc8192f5cdb16a56b1318743e6b"
+        }
+      ],
+      "codifyCommit": "pending root exact scoped commit",
+      "oldFailureRetained": true,
+      "codify_commit": null
+    },
+    {
+      "defect": "empty-proxy-probe",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/observer-repair69.json",
+          "sha256": "48bbb06f3269833df97ea3a2a732921fb348a13c4b3c23dc6202a0e625b48dcb"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/observer-root-review70.json",
+          "sha256": "1a2b0b60549069d272fdb40f581e3289d1926a6de323f2c9996ac4597a87ca13"
+        }
+      ],
+      "codifyCommit": "pending root exact scoped commit",
+      "oldFailureRetained": true,
+      "codify_commit": null
+    },
+    {
+      "defect": "pool-internal-weth-observer",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/boundary-repair70.json",
+          "sha256": "3d7d9f375b5aefff8d80aba1cc628f744f1ce07c0f698325bd8527309d393ff8"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/boundary-root-review71.json",
+          "sha256": "be9973232fce25d393606c2892553c75a25c67a2a67352fa4209743cb1521114"
+        }
+      ],
+      "codifyCommit": "pending root exact scoped commit",
+      "oldFailureRetained": true,
+      "codify_commit": null
+    },
+    {
+      "defect": "typed-local-probe-revert",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/probe-repair71.json",
+          "sha256": "1cde50a7d538b2b1808be04cc7e812406be635bd2d78e224349eb0396ee3ddae"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/probe-root-review73.json",
+          "sha256": "a82a9266555dcf3ba6ac1b029e334030a3cf18009e035675ec5667fdbf1a8bfc"
+        }
+      ],
+      "codifyCommit": "pending root exact scoped commit",
+      "oldFailureRetained": true,
+      "codify_commit": null
+    },
+    {
+      "defect": "uint8-literal-expected-balance-overflow",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/repair81/handoff.json",
+          "sha256": "c0ca4f0f0d6f19f3ab82710bb36afa92ee8c3b4062652badcafd00defe8f09e1"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/diagnose80.log",
+          "sha256": "491891e22a8a10190c841ac2307855de0a7820432408bc2ec6147348096dd12c"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence81/logs/curve-plain-recipient65/curve-recipient-evm80.log",
+          "sha256": "c3d3b2c7dc018f439ad0e73605d659809f8271102d0de7b0a423523af107c524"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence81/logs/curve-plain-recipient65/curve-recipient-evm81.log",
+          "sha256": "76a61e3e06d2d7d1f5f0069923c94d8b74bae21365409cf662944955261d4c66"
+        }
+      ],
+      "note": "Production execution succeeded; expected uint8 literal109+200 overflow. Explicituint256 retains expected309. ActualcanonicalEVM7/8 before,8/8after.",
+      "codifyCommit": "pending root exact scoped commit",
+      "oldFailureRetained": true,
+      "codify_commit": null
+    },
+    {
+      "defect": "retry-subset-mode-positional-aggregation",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate82/handoff.json",
+          "sha256": "53c8caf2eaa59bbe9be6dec4a971cec89e8e97a041a24999007fd00717dae46f"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate82/diff.patch",
+          "sha256": "2a119591f3dd4ae124a743a66550a61b60eb012e93935a081621c90d97685cde"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence81/logs/curve-plain-recipient65/historical-native2181.json",
+          "sha256": "e152769bf83508e125b41fafce7c2d88ee1fc2ff46c069044a445782d42182fd"
+        }
+      ],
+      "note": "Four actual direct rows and their negatives passed; obsolete fixed-index parity compared self with external. New named-mode parity retains all per-row guards; no historical rerun needed.",
+      "codifyCommit": "pending root exact scoped commit",
+      "oldFailureRetained": true,
+      "codify_commit": null
+    },
+    {
+      "defect": "mode-parity-negative-fixture-shared-reference",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate82/nomination-contract82.log",
+          "sha256": "104f67412d1441d7eb5c4c3aac055fd2c253dc2dd1f95f342e31b0956804f89f"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate83/handoff.json",
+          "sha256": "b855f7251fe361c8a74548dd17ead554fa67d3d91501e78c782aab48a412996b"
+        }
+      ],
+      "note": "structuredClone(array) retains shared nested references; clone rows separately to mutate exactly one mode. Original9/10 retained, corrected canonical10/10 passed.",
+      "oldFailureRetained": true,
+      "codifyCommit": "pending root exact scoped commit",
+      "codify_commit": null
+    },
+    {
+      "defect": "classic-recipient-observer-ABI-and-mode-assumptions",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/root-observer-correction79.json",
+          "sha256": "c5cf71e5d838a63433e0b49ec1e01e63a79da51aa2a13319d1c687ad3ea05fad"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/root-abi-review79.json",
+          "sha256": "542788c5be24d140c11d6e8e958b35d9bf98e673cfbad61ee30aae08d746b6f0"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/repair77.json",
+          "sha256": "607fd2a97476efbae12613c3e20c261ef55b3aeeac5b0b24d8a58d477fb84d4b"
+        }
+      ],
+      "actualRootCause": "uint256selector copied into int128 recipient observer; actual48CALL selector44ee1986 plus separateproxyDELEGATECALL. TruthyERC20assets wrapping check was additional latent defect, not first failure. MAX approval is current productionpolicy, not temporaryclearance.",
+      "oldFailureRetained": true,
+      "codify_commit": null
+    }
+  ],
+  "canonicalRegression": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate83/selection83.json",
+    "sha256": "53eaa48138d028fb344765e8988a2e29e3ba2163e76d218852c1cdc586946fbc"
+  },
+  "noNewCapture": "No unrelated daily MethodTrace capture performed."
+}
