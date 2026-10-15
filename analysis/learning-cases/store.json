@@ -1825,6 +1825,267 @@
       },
       "created_at": "2026-10-15T10:59:46.772435+00:00",
       "updated_at": "2026-10-15T10:59:46.772435+00:00"
+    },
+    {
+      "learning_case_id": "curve-acceptance-nomination-log-only-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x646f27abba5a7709e895caf1d746e23dfaaae44120089ff38e3a28bff7e62f58",
+      "target_block": 26138094,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "before": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "after": "docs/research/reports/curve-plain-recipient-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-plain-recipient-nomination-contract",
+        "issue": "nomination-log-only",
+        "evidence": "Fresh non-author diagnosis and original failures are bound in docs/research/reports/curve-recipient-tooling-defects-20261015.json; current canonical regression and independent historical raw readback completed. Exact evidence refs: [{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/nomination-repair68.json\",\"sha256\":\"2ac5ae33178f7c3f44aa8001793edb9feaf1396352381461738d00752cadd324\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/received-trace67.json\",\"sha256\":\"9f3e4cec0c8ff8076a092e02dce5ff286bf9cdc8192f5cdb16a56b1318743e6b\"}]",
+        "codify_target": "listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-nomination.ts",
+        "codify_commit": "976d707c98521c623184da539f7264ba80f79c6e",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T12:59:29.369265+00:00",
+      "updated_at": "2026-10-15T12:59:29.369265+00:00"
+    },
+    {
+      "learning_case_id": "curve-acceptance-empty-proxy-probe-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x646f27abba5a7709e895caf1d746e23dfaaae44120089ff38e3a28bff7e62f58",
+      "target_block": 26138094,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "before": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "after": "docs/research/reports/curve-plain-recipient-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-plain-recipient-historical",
+        "issue": "empty-proxy-probe",
+        "evidence": "Fresh non-author diagnosis and original failures are bound in docs/research/reports/curve-recipient-tooling-defects-20261015.json; current canonical regression and independent historical raw readback completed. Exact evidence refs: [{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/observer-repair69.json\",\"sha256\":\"48bbb06f3269833df97ea3a2a732921fb348a13c4b3c23dc6202a0e625b48dcb\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/observer-root-review70.json\",\"sha256\":\"1a2b0b60549069d272fdb40f581e3289d1926a6de323f2c9996ac4597a87ca13\"}]",
+        "codify_target": "listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-observation.ts",
+        "codify_commit": "976d707c98521c623184da539f7264ba80f79c6e",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T12:59:29.369265+00:00",
+      "updated_at": "2026-10-15T12:59:29.369265+00:00"
+    },
+    {
+      "learning_case_id": "curve-acceptance-pool-internal-weth-observer-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xfcff09dd4374efe9aefe696000eddec1d5556c0eb0b35fc52a0c01d4a09158eb",
+      "target_block": 26152607,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "before": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "after": "docs/research/reports/curve-plain-recipient-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-plain-recipient-historical",
+        "issue": "pool-internal-weth-observer",
+        "evidence": "Fresh non-author diagnosis and original failures are bound in docs/research/reports/curve-recipient-tooling-defects-20261015.json; current canonical regression and independent historical raw readback completed. Exact evidence refs: [{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/boundary-repair70.json\",\"sha256\":\"3d7d9f375b5aefff8d80aba1cc628f744f1ce07c0f698325bd8527309d393ff8\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/boundary-root-review71.json\",\"sha256\":\"be9973232fce25d393606c2892553c75a25c67a2a67352fa4209743cb1521114\"}]",
+        "codify_target": "listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-observation.ts",
+        "codify_commit": "976d707c98521c623184da539f7264ba80f79c6e",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T12:59:29.369265+00:00",
+      "updated_at": "2026-10-15T12:59:29.369265+00:00"
+    },
+    {
+      "learning_case_id": "curve-acceptance-typed-local-probe-revert-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x646f27abba5a7709e895caf1d746e23dfaaae44120089ff38e3a28bff7e62f58",
+      "target_block": 26138094,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "before": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "after": "docs/research/reports/curve-plain-recipient-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-plain-recipient-historical",
+        "issue": "typed-local-probe-revert",
+        "evidence": "Fresh non-author diagnosis and original failures are bound in docs/research/reports/curve-recipient-tooling-defects-20261015.json; current canonical regression and independent historical raw readback completed. Exact evidence refs: [{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/probe-repair71.json\",\"sha256\":\"1cde50a7d538b2b1808be04cc7e812406be635bd2d78e224349eb0396ee3ddae\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/probe-root-review73.json\",\"sha256\":\"a82a9266555dcf3ba6ac1b029e334030a3cf18009e035675ec5667fdbf1a8bfc\"}]",
+        "codify_target": "listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-observation.ts",
+        "codify_commit": "976d707c98521c623184da539f7264ba80f79c6e",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T12:59:29.369265+00:00",
+      "updated_at": "2026-10-15T12:59:29.369265+00:00"
+    },
+    {
+      "learning_case_id": "curve-acceptance-uint8-literal-expected-balance-overflow-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xebb6fe3922d15893d02375807c892cfd3adf9c1560b8de95a75bbf0fcb553a95",
+      "target_block": 26139768,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "before": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "after": "docs/research/reports/curve-plain-recipient-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-plain-recipient-evm",
+        "issue": "Production execution succeeded; expected uint8 literal109+200 overflow. Explicituint256 retains expected309. ActualcanonicalEVM7/8 before,8/8after.",
+        "evidence": "Fresh non-author diagnosis and original failures are bound in docs/research/reports/curve-recipient-tooling-defects-20261015.json; current canonical regression and independent historical raw readback completed. Exact evidence refs: [{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/repair81/handoff.json\",\"sha256\":\"c0ca4f0f0d6f19f3ab82710bb36afa92ee8c3b4062652badcafd00defe8f09e1\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/diagnose80.log\",\"sha256\":\"491891e22a8a10190c841ac2307855de0a7820432408bc2ec6147348096dd12c\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence81/logs/curve-plain-recipient65/curve-recipient-evm80.log\",\"sha256\":\"c3d3b2c7dc018f439ad0e73605d659809f8271102d0de7b0a423523af107c524\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence81/logs/curve-plain-recipient65/curve-recipient-evm81.log\",\"sha256\":\"76a61e3e06d2d7d1f5f0069923c94d8b74bae21365409cf662944955261d4c66\"}]",
+        "codify_target": "test/CurvePlainRecipient.t.sol",
+        "codify_commit": "976d707c98521c623184da539f7264ba80f79c6e",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T12:59:29.369265+00:00",
+      "updated_at": "2026-10-15T12:59:29.369265+00:00"
+    },
+    {
+      "learning_case_id": "curve-acceptance-retry-subset-mode-positional-aggregation-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xebb6fe3922d15893d02375807c892cfd3adf9c1560b8de95a75bbf0fcb553a95",
+      "target_block": 26139768,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "before": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "after": "docs/research/reports/curve-plain-recipient-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-plain-recipient-nomination-contract",
+        "issue": "Four actual direct rows and their negatives passed; obsolete fixed-index parity compared self with external. New named-mode parity retains all per-row guards; no historical rerun needed.",
+        "evidence": "Fresh non-author diagnosis and original failures are bound in docs/research/reports/curve-recipient-tooling-defects-20261015.json; current canonical regression and independent historical raw readback completed. Exact evidence refs: [{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate82/handoff.json\",\"sha256\":\"53c8caf2eaa59bbe9be6dec4a971cec89e8e97a041a24999007fd00717dae46f\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate82/diff.patch\",\"sha256\":\"2a119591f3dd4ae124a743a66550a61b60eb012e93935a081621c90d97685cde\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence81/logs/curve-plain-recipient65/historical-native2181.json\",\"sha256\":\"e152769bf83508e125b41fafce7c2d88ee1fc2ff46c069044a445782d42182fd\"}]",
+        "codify_target": "listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-historical.ts",
+        "codify_commit": "976d707c98521c623184da539f7264ba80f79c6e",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T12:59:29.369265+00:00",
+      "updated_at": "2026-10-15T12:59:29.369265+00:00"
+    },
+    {
+      "learning_case_id": "curve-acceptance-mode-parity-negative-fixture-shared-reference-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0xebb6fe3922d15893d02375807c892cfd3adf9c1560b8de95a75bbf0fcb553a95",
+      "target_block": 26139768,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "before": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "after": "docs/research/reports/curve-plain-recipient-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-plain-recipient-nomination-contract",
+        "issue": "structuredClone(array) retains shared nested references; clone rows separately to mutate exactly one mode. Original9/10 retained, corrected canonical10/10 passed.",
+        "evidence": "Fresh non-author diagnosis and original failures are bound in docs/research/reports/curve-recipient-tooling-defects-20261015.json; current canonical regression and independent historical raw readback completed. Exact evidence refs: [{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate82/nomination-contract82.log\",\"sha256\":\"104f67412d1441d7eb5c4c3aac055fd2c253dc2dd1f95f342e31b0956804f89f\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/aggregate83/handoff.json\",\"sha256\":\"b855f7251fe361c8a74548dd17ead554fa67d3d91501e78c782aab48a412996b\"}]",
+        "codify_target": "listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-nomination.test.ts",
+        "codify_commit": "976d707c98521c623184da539f7264ba80f79c6e",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T12:59:29.369265+00:00",
+      "updated_at": "2026-10-15T12:59:29.369265+00:00"
+    },
+    {
+      "learning_case_id": "curve-acceptance-classic-recipient-observer-ABI-and-mode-assumptions-20261015",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x73f75256979894103b5bcb045266cf802103e23d0d937c907e50b035663e48e4",
+      "target_block": 26138094,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "before": "docs/research/reports/curve-recipient-tooling-defects-20261015.json",
+        "after": "docs/research/reports/curve-underlying-classic-recipient-correctness-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-underlying-classic-recipient-historical",
+        "issue": "uint256selector copied into int128 recipient observer; actual48CALL selector44ee1986 plus separateproxyDELEGATECALL. TruthyERC20assets wrapping check was additional latent defect, not first failure. MAX approval is current productionpolicy, not temporaryclearance.",
+        "evidence": "Fresh non-author diagnosis and original failures are bound in docs/research/reports/curve-recipient-tooling-defects-20261015.json; current canonical regression and independent historical raw readback completed. Exact evidence refs: [{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/root-observer-correction79.json\",\"sha256\":\"c5cf71e5d838a63433e0b49ec1e01e63a79da51aa2a13319d1c687ad3ea05fad\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/root-abi-review79.json\",\"sha256\":\"542788c5be24d140c11d6e8e958b35d9bf98e673cfbad61ee30aae08d746b6f0\"},{\"path\":\"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-classic70/repair77.json\",\"sha256\":\"607fd2a97476efbae12613c3e20c261ef55b3aeeac5b0b24d8a58d477fb84d4b\"}]",
+        "codify_target": "listener/src/searcher/venues/swaps/curve-underlying-family/test/classic-recipient-observation.ts",
+        "codify_commit": "976d707c98521c623184da539f7264ba80f79c6e",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T12:59:29.369265+00:00",
+      "updated_at": "2026-10-15T12:59:29.369265+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-silo-evm-shared-fixture-source-scope",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "competitor_tx": "0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01",
+      "target_block": 26130609,
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Acceptance observer/tool defect only; no opportunity or production lane classification inferred.",
+      "evidence": {
+        "independent_review": "docs/research/reports/silo-recipient-tooling-defect-20261015.json",
+        "before": "docs/research/reports/silo-recipient-tooling-defect-20261015.json",
+        "after": "docs/research/reports/silo-recipient-evm-certified-reuse-20261015.json"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:erc4626-silo-recipient-safety",
+        "issue": "EVM wrapper rejected completed Silo 5/5 due a concurrent change in an unrelated Curve test assertion in the same Solidity source file. The imported standalone token, actual Silo artifact compiler input and production source were unchanged.",
+        "evidence": "Pin the entire shared source header and standalone CurveRecipientToken dependency; retain both full raw files for audit. Fail closed on missing/ambiguous boundaries and pin the helper itself.; actual original EVM5/5 certified without rerun, canonical safety19/19 passes. Fresh review {\"path\": \"/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/v1-evm-source-reuse09.json\", \"sha256\": \"d68fe04d00e278ea69c3a63e5982b567ff24af8e14820bbd520a03b22a5b1c59\"}",
+        "codify_target": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/test/recipient-evm-source.ts",
+        "codify_commit": "976d707c98521c623184da539f7264ba80f79c6e",
+        "status": "codified"
+      },
+      "created_at": "2026-10-15T12:59:29.369265+00:00",
+      "updated_at": "2026-10-15T12:59:29.369265+00:00"
     }
   ]
 }
